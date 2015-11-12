@@ -1,0 +1,740 @@
+#include "CONSTANTS.H"
+
+      subroutine compute_gk_velocity(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_REAL[Z],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_REAL[larmor],
+     &     CHF_CONST_INT[include_drifts],
+     &     CHF_CONST_INT[include_par_streaming],
+     &     CHF_CONST_INT[include_gradb],
+     &     CHF_CONST_FRA[E],
+     &     CHF_CONST_FRA[Bvec],
+     &     CHF_CONST_FRA[gradB],
+     &     CHF_CONST_FRA[curlb],
+     &     CHF_FRA[velocity]
+     &     )
+
+c     local variables
+      double precision vpar, mu, Bmag, Bstar_par, G(0:2), b(0:2), Bstar(0:2),
+     &     bxG(0:2), Bstar_dot_G, fac
+      integer CHF_DDECL[i;j;k;l], m, n
+
+      if (include_drifts .ne. 0) then
+         fac = larmor / Z
+      else
+         fac = zero
+      endif
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+         vpar  = ( k + half*(1-CHF_ID(2,dir)) ) * h(2)
+         mu    = ( l + half*(1-CHF_ID(3,dir)) ) * h(3)
+
+         Bmag = zero
+         do n = 0, 2
+            Bmag = Bmag + Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],n)**2
+         enddo
+         Bmag = dsqrt(Bmag)
+
+         Bstar_par = zero
+         do n = 0, 2
+            G(n) = -Z * E(i,j,CHF_LBOUND[E;2],CHF_LBOUND[E;3],n)
+            b(n) = Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],n) / Bmag
+            Bstar(n) = Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],n)
+     &           + fac * mass * vpar * curlb(i,j,CHF_LBOUND[curlb;2],CHF_LBOUND[curlb;3],n)
+            Bstar_par = Bstar_par + b(n) * Bstar(n)
+         enddo
+
+         if (include_gradb .ne. 0) then
+            do n = 0, 2
+               G(n) = G(n) + half * mu * gradB(i,j,CHF_LBOUND[gradB;2],CHF_LBOUND[gradB;3],n)
+            enddo
+         endif
+
+         if (dir .eq. 0 .or. dir .eq. 1) then
+
+c           R_dot
+
+            bxG(0) = b(1)*G(2) - b(2)*G(1)
+            bxG(1) = b(2)*G(0) - b(0)*G(2)
+            bxG(2) = b(0)*G(1) - b(1)*G(0)
+
+            do n = 0, 1
+               velocity(CHF_IX[i;j;k;l],n)  = fac*bxG(2*n)
+               if (include_par_streaming .ne. 0) then
+                  velocity(CHF_IX[i;j;k;l],n) = velocity(CHF_IX[i;j;k;l],n) + vpar * Bstar(2*n)
+               endif
+               velocity(CHF_IX[i;j;k;l],n)  = velocity(CHF_IX[i;j;k;l],n) / Bstar_par
+            enddo
+
+            do n = 2, 3
+               velocity(CHF_IX[i;j;k;l],n)  = zero
+            enddo
+
+         else if (dir .eq. 2) then
+
+c           vpar_dot
+
+            Bstar_dot_G = zero
+            do n = 0, 2
+               Bstar_dot_G = Bstar_dot_G + Bstar(n) * G(n)
+            enddo
+
+            do n = 0, 3
+               if (n .eq. dir) then
+                  velocity(CHF_IX[i;j;k;l],dir)
+     &                 = - Bstar_dot_G / (mass * Bstar_par)
+               else
+                  velocity(CHF_IX[i;j;k;l],n) = zero
+               endif
+            enddo
+
+         else if (dir .eq. 3) then
+
+c           mu_dot
+
+            do n = 0, 3
+               velocity(CHF_IX[i;j;k;l],n) = zero
+            enddo
+
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+
+      subroutine compute_bfield_velocity(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[Bvec],
+     &     CHF_FRA[velocity]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l]
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+         velocity(CHF_IX[i;j;k;l],0) = Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],0)
+         velocity(CHF_IX[i;j;k;l],1) = Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],2)
+         velocity(CHF_IX[i;j;k;l],2) = zero
+         velocity(CHF_IX[i;j;k;l],3) = zero
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+
+      subroutine annulus_polvel_test(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_REAL[rmin],
+     &     CHF_CONST_REAL[rbar],
+     &     CHF_CONST_REAL[R0],
+     &     CHF_FRA[velocity],
+     &     CHF_INT[l_const_minorrad]
+     &     )
+
+c     local variables
+      double precision r, theta,Rmaj,costheta,radfac
+      integer CHF_DDECL[i;j;k;l], m
+
+c      print *, "R0, rbar = ", R0, rbar
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+         theta = ( j + half*(1-CHF_ID(1,dir)) )*h(1)
+         costheta = dcos(theta)
+         if (l_const_minorrad .eq. 1) then
+             r = rbar
+             Rmaj = R0
+         else
+             r     = ( i + half*(1-CHF_ID(0,dir)) )*h(0) + rmin
+            Rmaj = R0 + r*costheta
+         endif
+         radfac = r*R0/(rbar*Rmaj)
+
+         velocity(CHF_IX[i;j;k;l],0) = -radfac * dsin(theta)
+         velocity(CHF_IX[i;j;k;l],1) =  radfac * costheta
+c         velocity(CHF_IX[i;j;k;l],0) =  radfac * dsin(theta)
+c         velocity(CHF_IX[i;j;k;l],1) = -radfac * costheta
+         velocity(CHF_IX[i;j;k;l],2) = zero
+         velocity(CHF_IX[i;j;k;l],3) = zero
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+
+      subroutine annulus_radvel_test(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_REAL[rmin],
+     &     CHF_CONST_REAL[rbar],
+     &     CHF_CONST_REAL[R0],
+     &     CHF_FRA[velocity],
+     &     CHF_INT[l_const_minorrad]
+     &     )
+
+c     local variables
+      double precision r, theta,Rmaj,costheta,radfac
+      integer CHF_DDECL[i;j;k;l], m
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+         theta = ( j + half*(1-CHF_ID(1,dir)) )*h(1)
+         costheta = dcos(theta)
+         if (l_const_minorrad .eq. 1) then
+             r = rbar
+             Rmaj = R0
+         else
+             r     = ( i + half*(1-CHF_ID(0,dir)) )*h(0) + rmin
+            Rmaj = R0 + r*costheta
+         endif
+         radfac = (rbar*R0)/r*Rmaj
+
+         velocity(CHF_IX[i;j;k;l],0) = costheta*radfac
+         velocity(CHF_IX[i;j;k;l],1) = dsin(theta)*radfac
+         velocity(CHF_IX[i;j;k;l],2) = zero
+         velocity(CHF_IX[i;j;k;l],3) = zero
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+
+      subroutine annulus_radpolvel_test(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_REAL[rmin],
+     &     CHF_CONST_REAL[rbar],
+     &     CHF_CONST_REAL[R0],
+     &     CHF_FRA[velocity],
+     &     CHF_INT[l_const_minorrad]
+     &     )
+
+c     local variables
+      double precision r, theta,delta_r,polvelmult,radfac,sintheta,costheta
+      double precision Rmaj,radfac1
+      integer CHF_DDECL[i;j;k;l], m, imax
+
+c     rescale poloidal velocity to advance thru domain at same rate as radial
+c     To do this: the radial velocity remains as 1; multiply the poloidal by
+c     2 pi/delta_r, where delta_r = rmax - rmin
+
+      imax = CHF_UBOUND[gridbox;0]
+      delta_r = ( imax+half*(1-CHF_ID(0,dir)))*h(0)
+      polvelmult = 2.*3.14159/delta_r
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+         r     = ( i + half*(1-CHF_ID(0,dir)) )*h(0) + rmin
+         theta = ( j + half*(1-CHF_ID(1,dir)) )*h(1)
+         costheta = dcos(theta)
+         sintheta = dsin(theta)
+         if (l_const_minorrad .eq. 1) then
+             r = rbar
+             Rmaj = R0
+         else
+             r     = ( i + half*(1-CHF_ID(0,dir)) )*h(0) + rmin
+            Rmaj = R0 + r*costheta
+         endif
+         radfac = (rbar*R0)/r*Rmaj
+         radfac1 = r*R0/(rbar*Rmaj)
+
+         velocity(CHF_IX[i;j;k;l],0) = -radfac1*polvelmult*sintheta + costheta*radfac
+         velocity(CHF_IX[i;j;k;l],1) =  radfac1*polvelmult*costheta + sintheta*radfac
+         velocity(CHF_IX[i;j;k;l],2) = zero
+         velocity(CHF_IX[i;j;k;l],3) = zero
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+
+      subroutine major_radial_vel_test(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA[velocity]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l]
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+         velocity(CHF_IX[i;j;k;l],0) = one
+         velocity(CHF_IX[i;j;k;l],1) = zero
+         velocity(CHF_IX[i;j;k;l],2) = zero
+         velocity(CHF_IX[i;j;k;l],3) = zero
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+
+      subroutine free_stream_vel_test(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[component],
+     &     CHF_CONST_FRA1[major_radius],
+     &     CHF_CONST_INT[axisymmetric],
+     &     CHF_FRA[velocity]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l],n
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+         do n = 0, CHF_NCOMP[velocity]-1
+           velocity(CHF_IX[i;j;k;l],n) = component(n)
+         enddo
+      CHF_ENDDO
+
+      if (axisymmetric .ne. 0) then
+         CHF_MULTIDO[gridbox;i;j;k;l]
+            velocity(CHF_IX[i;j;k;l],0) = velocity(CHF_IX[i;j;k;l],0)
+     &         / major_radius(i,j,CHF_LBOUND[major_radius;2],CHF_LBOUND[major_radius;3])
+         CHF_ENDDO
+      endif
+
+      return
+      end
+
+
+
+      subroutine compute_bstar(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_REAL[prefactor],
+     &     CHF_CONST_FRA[B],
+     &     CHF_CONST_FRA1[B_magnitude],
+     &     CHF_CONST_FRA[curlb],
+     &     CHF_CONST_FRA1[bdotcurlb],
+     &     CHF_FRA[BStar],
+     &     CHF_FRA1[BStarPar]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], m
+      double precision v_par_avg, dv_parallel
+
+      dv_parallel = h(2)
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+         v_par_avg = (k + half)*dv_parallel
+
+         do m = 0, 2
+            BStar(CHF_IX[i;j;k;l],m) = B(i,j,CHF_LBOUND[B;2],CHF_LBOUND[B;3],m)
+     &           + prefactor * v_par_avg * curlb(i,j,CHF_LBOUND[curlb;2],CHF_LBOUND[curlb;3],m)
+         end do
+
+         BStarPar(CHF_IX[i;j;k;l]) = B_magnitude(i,j,CHF_LBOUND[B_magnitude;2],CHF_LBOUND[B_magnitude;3])
+     &           + prefactor * v_par_avg * bdotcurlb(i,j,CHF_LBOUND[bdotcurlb;2],CHF_LBOUND[bdotcurlb;3])
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+
+c --------------------------------------------------------------
+c  this subroutine computes the pointwise dot product of A
+c  (from astart.. astart+SpaceDim-1 )
+c  and B (from bstart..bstart+SpaceDim-1)
+c  and places the result in c.
+c
+c  INPUTS/OUTPUTS:
+c  c  <=  pointwise dot product of a and b
+c  a   =>
+c  astart => component of a at which to start
+c  b   =>
+c  bstart => component of b at which to start
+c  gridbox => box over which to operate
+c --------------------------------------------------------------
+      subroutine pscspointdotprodcfg(CHF_FRA1[c],
+     &                        CHF_CONST_FRA[a],
+     &                        CHF_CONST_INT[astart],
+     &                        CHF_CONST_FRA[b],
+     &                        CHF_CONST_INT[bstart],
+     &                        CHF_CONST_INT[ncomp],
+     &                        CHF_BOX[gridbox])
+
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer comp, na, nb
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+         c(CHF_IX[i;j;k;l;m;n]) = zero
+      CHF_ENDDO
+
+      do comp=0, ncomp-1
+         na = astart+comp
+         nb = bstart+comp
+         CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+           c(CHF_IX[i;j;k;l;m;n]) = c(CHF_IX[i;j;k;l;m;n])
+     &                     +a(CHF_IX[i;j;k;l;m;n],na)*b(i,j,CHF_LBOUND[b;2],CHF_LBOUND[b;3],nb)
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+
+
+c --------------------------------------------------------------
+c  this subroutine computes the pointwise dot product of A
+c  (from astart.. astart+SpaceDim-1 )
+c  and B (from bstart..bstart+SpaceDim-1)
+c  and places the result in c.
+c
+c  INPUTS/OUTPUTS:
+c  c  <=  pointwise dot product of a and b
+c  a   =>
+c  astart => component of a at which to start
+c  b   =>
+c  bstart => component of b at which to start
+c  gridbox => box over which to operate
+c --------------------------------------------------------------
+      subroutine pscspointdotprodvel(CHF_FRA1[c],
+     &                        CHF_CONST_FRA[a],
+     &                        CHF_CONST_INT[astart],
+     &                        CHF_CONST_FRA[b],
+     &                        CHF_CONST_INT[bstart],
+     &                        CHF_CONST_INT[ncomp],
+     &                        CHF_BOX[gridbox])
+
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer comp, na, nb
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+         c(CHF_IX[i;j;k;l;m;n]) = zero
+      CHF_ENDDO
+
+      do comp=0, ncomp-1
+         na = astart+comp
+         nb = bstart+comp
+         CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+           c(CHF_IX[i;j;k;l;m;n]) = c(CHF_IX[i;j;k;l;m;n])
+     &                     +a(CHF_IX[i;j;k;l;m;n],na)*b(CHF_LBOUND[b;0],CHF_LBOUND[b;1],k,l,nb)
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+
+
+c  -----------------------------------------------------------
+c    pointwise reduced-dimensional dot product
+c  -----------------------------------------------------------
+      subroutine pscspointwisereduceddotprodcfg(CHF_FRA1[c],
+     &                                   CHF_CONST_FRA[a],
+     &                                   CHF_CONST_INT[astart],
+     &                                   CHF_CONST_FRA[b],
+     &                                   CHF_CONST_INT[bstart],
+     &                                   CHF_CONST_INT[numcomp],
+     &                                   CHF_BOX[gridbox])
+
+
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer comp, na, nb
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+         c(CHF_IX[i;j;k;l;m;n]) = zero
+      CHF_ENDDO
+
+      do comp=0, numcomp-1
+         na = comp + astart;
+         nb = comp + bstart;
+         CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+           c(CHF_IX[i;j;k;l;m;n]) = c(CHF_IX[i;j;k;l;m;n])
+     &                     +a(i,j,CHF_LBOUND[a;2],CHF_LBOUND[a;3],na)*b(CHF_IX[i;j;k;l;m;n],nb)
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+
+
+      subroutine pscspointwisereduceddotprodvel(CHF_FRA1[c],
+     &                                   CHF_CONST_FRA[a],
+     &                                   CHF_CONST_INT[astart],
+     &                                   CHF_CONST_FRA[b],
+     &                                   CHF_CONST_INT[bstart],
+     &                                   CHF_CONST_INT[numcomp],
+     &                                   CHF_BOX[gridbox])
+
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer comp, na, nb
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+         c(CHF_IX[i;j;k;l;m;n]) = zero
+      CHF_ENDDO
+
+      do comp=0, numcomp-1
+         na = comp + astart;
+         nb = comp + bstart;
+         CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+           c(CHF_IX[i;j;k;l;m;n]) = c(CHF_IX[i;j;k;l;m;n])
+     &                     +a(CHF_LBOUND[a;0],CHF_LBOUND[a;1],k,l,na)*b(CHF_IX[i;j;k;l;m;n],nb)
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+
+
+      subroutine pscstangradface(CHF_FRA1[gradPhi],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_BOX[gradBox],
+     &     CHF_INT[gradDir],
+     &     CHF_CONST_REAL[dx])
+
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer CHF_DDECL[ii;jj;kk;ll;mm;nn]
+      REAL_T halfOnDx
+
+      halfOnDx = half/dx
+
+      CHF_DTERM[ii = CHF_ID(0,gradDir);
+                jj = CHF_ID(1,gradDir);
+                kk = CHF_ID(2,gradDir);
+                ll = CHF_ID(3,gradDir);
+                mm = CHF_ID(4,gradDir);
+                nn = CHF_ID(5,gradDir);
+                ]
+
+      CHF_MULTIDO[gradBox; i;j;k;l;m;n]
+      gradPhi(CHF_IX[i;j;k;l;m;n]) = halfOnDx*(phi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm;n+nn])
+     &                                    -phi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm;n-nn]))
+
+      CHF_ENDDO
+
+      return
+      end
+
+c -------------------------------------------------------
+c  this subroutine computes the cell-averaged divergence
+c  from the face-averaged flux field. Or, of fluxes are
+c  face-centered, then computes cell-centered divergence.
+c  Flux field is assumed to already contain metric/Jacobian
+c  values.
+c
+c  INPUTS/OUTPUTS:
+c  Flux   => Face-averaged(centered) field in dir direction
+c  div    <=  cell-averaged(centered) div(Flux)
+c  gridInt => box which defines interior of grid
+c  dx      => cell spacing in direction dir
+c  dir     => direction
+c -------------------------------------------------------
+      subroutine fluxnormaldivergence(CHF_CONST_FRA[Flux],
+     &                                CHF_FRA[div],
+     &                                CHF_BOX[gridInt],
+     &                                CHF_CONST_REALVECT[dx],
+     &                                CHF_INT[dir])
+
+c ::: local variables
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer CHF_DDECL[ii;jj;kk;ll;mm;nn]
+      integer comp
+
+      do comp=0,CHF_NCOMP[div]-1
+
+      CHF_MULTIDO[gridInt;i;j;k;l;m;n]
+
+      CHF_DTERM[
+      ii = i+CHF_ID(0,dir);
+      jj = j+CHF_ID(1,dir);
+      kk = k+CHF_ID(2,dir);
+      ll = l+CHF_ID(3,dir);
+      mm = m+CHF_ID(4,dir);
+      nn = n+CHF_ID(5,dir)]
+
+      div(CHF_IX[i;j;k;l;m;n],comp) = div(CHF_IX[i;j;k;l;m;n],comp)
+     &                              + ( Flux(CHF_IX[ii;jj;kk;ll;mm;nn],comp)
+     &                              -   Flux(CHF_IX[i;j;k;l;m;n],comp) )/dx(dir)
+
+      CHF_ENDDO
+
+      enddo
+
+      return
+      end
+
+
+c -------------------------------------------------------
+c  this subroutine computes the cell-centered divergence
+c  from the edge centered velocity field -- does this in
+c  a direction-by-direction basis; increments div with
+c  du/dx or dv/dy or dw/dz. actually assumes that dx=dy=dz
+c
+c  INPUTS/OUTPUTS:
+c  uEdge   => edge-centered vector field in direction dir
+c  div    <=  cell-centered divergence
+c  gridInt => box which defines interior of grid
+c  dx      => cell spacing in direction dir
+c  dir     => coordinate direction
+c -------------------------------------------------------
+      subroutine pscsdivergence(CHF_CONST_FRA[uEdge],
+     &                          CHF_FRA[div],
+     &                          CHF_BOX[gridInt],
+     &                          CHF_CONST_REAL[dx],
+     &                          CHF_INT[dir])
+
+c ::: local variables
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer CHF_DDECL[ii;jj;kk;ll;mm;nn]
+      integer comp
+      REAL_T one_on_dx
+
+      one_on_dx = one/dx
+
+      do comp=0,CHF_NCOMP[div]-1
+
+      CHF_MULTIDO[gridInt;i;j;k;l;m;n]
+      CHF_DTERM[
+      ii = i+CHF_ID(0,dir);
+      jj = j+CHF_ID(1,dir);
+      kk = k+CHF_ID(2,dir);
+      ll = l+CHF_ID(3,dir);
+      mm = m+CHF_ID(4,dir);
+      nn = n+CHF_ID(5,dir)]
+
+      div(CHF_IX[i;j;k;l;m;n],comp) = div(CHF_IX[i;j;k;l;m;n],comp)
+     &                      +one_on_dx*(uEdge(CHF_IX[ii;jj;kk;ll;mm;nn],comp)
+     &                                 -uEdge(CHF_IX[i;j;k;l;m;n],comp))
+
+      CHF_ENDDO
+
+      enddo
+
+      return
+      end
+
+
+
+      subroutine mult_cfg_nt(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[N],
+     &     CHF_FRA[velocity]
+     &     )
+
+c     local variables
+      double precision NT11, NT12, NT21, NT22, v0, v1
+      integer CHF_DDECL[i;j;k;l]
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+         NT11 = N(i,j,CHF_LBOUND[N;2],CHF_LBOUND[N;3],0)
+         NT12 = N(i,j,CHF_LBOUND[N;2],CHF_LBOUND[N;3],2)
+         NT21 = N(i,j,CHF_LBOUND[N;2],CHF_LBOUND[N;3],1)
+         NT22 = N(i,j,CHF_LBOUND[N;2],CHF_LBOUND[N;3],3)
+
+         v0 = NT11 * velocity(CHF_IX[i;j;k;l],0) + NT12 * velocity(CHF_IX[i;j;k;l],1)
+         v1 = NT21 * velocity(CHF_IX[i;j;k;l],0) + NT22 * velocity(CHF_IX[i;j;k;l],1)
+
+         velocity(CHF_IX[i;j;k;l],0) = v0
+         velocity(CHF_IX[i;j;k;l],1) = v1
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+
+      subroutine mult_vel_nt(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[TwoPirRmaj],
+     &     CHF_FRA[velocity]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], dir
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+         do dir = 2, 3
+            velocity(CHF_IX[i;j;k;l],dir) = velocity(CHF_IX[i;j;k;l],dir)
+     &           * TwoPirRmaj(i,j,CHF_LBOUND[TwoPirRmaj;2],CHF_LBOUND[TwoPirRmaj;3])
+         enddo
+      CHF_ENDDO
+
+      return
+      end
+
+
+
+      subroutine mult_cfg(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[factor],
+     &     CHF_FRA[data])
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n], comp
+
+      do comp = 0, CHF_NCOMP[data]-1
+         CHF_MULTIDO[gridBox; i;j;k;l;m;n]
+            data(CHF_IX[i;j;k;l;m;n],comp) = data(CHF_IX[i;j;k;l;m;n],comp)
+     &        * factor(i,j,CHF_LBOUND[factor;2],CHF_LBOUND[factor;3])
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+
+
+      subroutine mult_vel(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[factor],
+     &     CHF_FRA[data])
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n], comp
+
+      do comp = 0, CHF_NCOMP[data]-1
+         CHF_MULTIDO[gridBox; i;j;k;l;m;n]
+            data(CHF_IX[i;j;k;l;m;n],comp) = data(CHF_IX[i;j;k;l;m;n],comp)
+     &        * factor(CHF_LBOUND[factor;0],CHF_LBOUND[factor;1],k,l)
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+
+      subroutine mult_radial_component(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[factor],
+     &     CHF_FRA1[data])
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n]
+
+      CHF_MULTIDO[gridBox; i;j;k;l;m;n]
+         data(CHF_IX[i;j;k;l;m;n]) = data(CHF_IX[i;j;k;l;m;n])
+     &        * factor(i,j,CHF_LBOUND[factor;2],CHF_LBOUND[factor;3])
+      CHF_ENDDO
+
+      return
+      end

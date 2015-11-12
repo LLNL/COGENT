@@ -1,0 +1,105 @@
+#include "CONSTANTS.H"
+
+      subroutine set_poloidal_bc(
+     &     CHF_BOX[boundarybox],
+     &     CHF_CONST_FRA1[flipdist],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_R1D[vp], CHF_CONST_INT[vp_lo],
+     &     CHF_CONST_R1D[psi], CHF_CONST_INT[psilo],CHF_CONST_REAL[psi_lim],
+     &     CHF_FRA1[f],
+     &     CHF_CONST_REAL[charge],
+     &     CHF_CONST_INT[ilohi]
+     &     )
+c    For ilohi = 1 (2),  sets F in lower (upper)
+c    poloidal boundary box if psi > psi_lim, using sheath b.c.'s: Assuming phi is
+c     zero at wall, we take as phi_sheath the value of phi at the last physical cell.
+c    We assign f=0 if vparallel^2 > q phi, and reflect if vparallel^2 < q phi.
+c    Note reflection is done using the flipped distribution function flipdist.
+
+      double precision vploc,vpsq,df,phibndy
+c    local variables
+      integer CHF_DDECL[i;j;k;l]
+      integer jbndy,jbndy1,vp_hi,nvp,twojbndy1,jsrc,jbndy2,jbndygtr,jbndyless,iparsign
+c      print*, "IN FORTRAN, psi_lim, psi = ", psi_lim, psi(0),psi(1),psi(2)
+
+c    get poloidal index jbndy1 of first cell in physical domain, which is just outside the
+c     boundarybox.   First construct jbndy, the index of the first cell just inside the boundary
+c     box.   For lower end of poloidal index (ilohi=1), this is the upper bound of
+c     the boundary box; for upper end of poloidal index, this is the lower bound of the
+c     boundary box.   Then construct jbndy1,  which is 1 greater (lesser) for the lower (upper)
+c     ploidal boundary.
+      if (ilohi == 1) then
+c         lower end of poloidal domain
+           jbndy = CHF_UBOUND[boundarybox;1]
+           jbndy1 = jbndy+1
+           jbndy2 = jbndy+2
+           jbndygtr = jbndy2
+           jbndyless = jbndy1
+           iparsign = 1
+      else
+c         upper end of poloidal domain
+           jbndy = CHF_LBOUND[boundarybox;1]
+           jbndy1 = jbndy-1
+           jbndy2 = jbndy-2
+           jbndygtr = jbndy1
+           jbndyless = jbndy2
+           iparsign = -1
+      endif
+      twojbndy1 = jbndy+jbndy1
+c      print*, "IN FORTRAN, ilohi, boundaryboxlims = ", CHF_LBOUND[boundarybox;1],CHF_UBOUND[boundarybox;1]
+
+c    get upper index of vparallel array, used to find the index of vparallel with opposite
+c     sign.  Note vp_lo SHOULD be the same as CHF_LBOUND[boundarybox,2].  The coding
+c     below is just insurance.
+c      vp_hi = vp_lo+CHF_UBOUND[boundarybox;2]-CHF_LBOUND[boundarybox;2]
+c      print*, "in FORTRAN, vplo, vphi = ", vp_lo, vp_hi
+c      print*, "LOwer, upper vpar bounds = ", CHF_UBOUND[boundarybox;2],
+c     1   CHF_LBOUND[boundarybox;2]
+c      print*, "lower, upper poloidal bounds = ", CHF_LBOUND[boundarybox;1],
+c     1   CHF_UBOUND[boundarybox;1]
+
+      CHF_MULTIDO[boundarybox;i;j;k;l]
+
+c       Extract phi at boundary from its injection into phase space
+         phibndy = phi(i,jbndy,CHF_LBOUND[phi;2],CHF_LBOUND[phi;3])
+
+         if (psi(i-psilo) .ge. psi_lim) then
+c          increment of f in physical domain in moving to lower index (regardless of whether
+c          lower or upper limit of poloidal coordinate)
+            df = f(i,jbndyless,k,l)-f(i,jbndygtr,k,l)
+            vploc = iparsign*vp(k-vp_lo)
+            vpsq=vploc**2
+
+c          For now just imposing f=0 if contact with limiter, skipping outflow test.   Probably
+c          we should keep it this way until we implement a test on total velocity normal to
+c          limiter rather than vparallel.  hence the "if (1 .lt. 0)" below.
+c            if (vploc .lt. 0) then
+            if (1 .lt. 0) then
+c              outflow to limiter.  For now just use vparallel test; this SHOULD be a test on
+c              total flow including drifts.
+c              Construct f by extrapolation
+                f(i,j,k,l) = f(i,jbndy1,k,l)+(jbndy1-j)*df
+
+            else
+c              inflow from limiter, construct f by reflection if below potential boundary,
+c              or f = 0 if above potential boundary
+c              Find the index in the physical domain that mirrors the index in the ghost cell box
+                jsrc = twojbndy1-j
+                vpsq = vploc**2
+                if (vpsq .gt.  (-charge*phibndy)) then
+                     f(i,j,k,l) = 0.
+                else
+                    f(i,j,k,l) = flipdist(i,jsrc,-k,l)
+                endif
+            endif
+c          end of vploc (outflow/inflow) if test
+
+         endif
+c       end of psi > psilim if test
+
+      CHF_ENDDO
+c      print*, "f(1,-4,0,0),f(1,-1,0,0),f(1,0,0,0),f(1,3,0,0) = ", f(1,-4,0,0),f(1,-1,0,0),f(1,0,0,0),f(1,3,0,0)
+c      print*, "f(-1,-4,0,0),f(-1,-2,0,0),f(-1,0,0,0),f(1,-2,0,0) = ", f(-1,-4,0,0),f(-1,-2,0,0),f(-1,0,0,0),f(1,-2,0,0)
+c      print*, "f(1,1,0,0),f(2,0,0,0),f(3,0,0,0),f(1,0,1,1) = ", f(1,1,0,0),f(2,0,0,0),f(3,0,0,0),f(1,0,1,1)
+      return
+      end

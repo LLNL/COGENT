@@ -1,0 +1,114 @@
+#include "CONSTANTS.H"
+
+      subroutine get_slab_field_data(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[xix],
+     &     CHF_CONST_REAL[BzInner],
+     &     CHF_CONST_REAL[BzOuter],
+     &     CHF_CONST_REAL[ByInner],
+     &     CHF_CONST_REAL[xmax],
+     &     CHF_FRA[b_pt],
+     &     CHF_FRA1[Bmag_pt],
+     &     CHF_FRA[bunit_pt],
+     &     CHF_FRA[gradb_pt],
+     &     CHF_FRA[curlb_pt],
+     &     CHF_FRA1[bdotcurlb_pt]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], l
+      double precision
+     &     xi, By, Bz, ByBz, DelBz, maggradB,Bmag,
+     &     bunit(0:2), Bvec(0:2), gradB(0:2)
+
+      ByBz = ByInner/BzInner
+      DelBz = BzOuter-BzInner
+      maggradB = DelBz*sqrt(1.+ByBz**2)/xmax
+      gradB(0) = maggradB
+      gradB(1) = zero
+      gradB(2) = zero
+c     above assumes grads are with respect to physical coordinates
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+c        Local value of computational x
+         xi = xix(CHF_AUTOIX[i])
+c        Since xi runs from 0 to 1, it can be used directly as the interpolation coefficient
+
+         Bz = BzInner + DelBz*xi
+c        Shearless slab, so...
+         By = Bz*ByBz
+
+         Bmag = dsqrt(Bz*Bz + By*By)
+         Bmag_pt(CHF_AUTOIX[i]) = Bmag
+
+c        Compute the B field and its unit vector; its derivatives are zero.
+c        Vector directions: 0 is x, 1 is z, 2 is y.  This is attempt to follow conventions for
+c        the cylindrical & toroidal coords elsewhere in COGENT.
+         Bvec(0) = 0.
+         Bvec(1) = Bz
+         Bvec(2) = By
+
+         bunit(0) = 0.
+         bunit(1) = Bz/Bmag
+         bunit(2) = By/Bmag
+
+         do l = 0, 2
+            bunit_pt(CHF_AUTOIX[i],l) = bunit(l)
+            b_pt(CHF_AUTOIX[i],l)     = Bvec(l)
+            gradb_pt(CHF_AUTOIX[i],l)     = gradB(l)
+            curlb_pt(CHF_AUTOIX[i],l) = zero
+         end do
+c        curl B is zero for this model
+         bdotcurlb_pt(CHF_AUTOIX[i]) = zero
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine get_slab_cc_mapped_coords(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_FRA[xi]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      CHF_MULTIDO[box;i;j;k]
+         CHF_DTERM[
+            xi(CHF_IX[i;j;k],0) = (i + half)*dx(0);
+            xi(CHF_IX[i;j;k],1) = (j + half)*dx(1);
+            xi(CHF_IX[i;j;k],2) = (k + half)*dx(2);]
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine get_slab_fc_mapped_coords(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_FRA[xi]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision offset(0:2)
+
+      offset(0) = half
+      offset(1) = half
+      offset(2) = half
+      offset(dir) = zero
+
+      CHF_MULTIDO[box;i;j;k]
+         CHF_DTERM[
+           xi(CHF_IX[i;j;k],0) = (i + offset(0))*dx(0);
+           xi(CHF_IX[i;j;k],1) = (j + offset(1))*dx(1);
+           xi(CHF_IX[i;j;k],2) = (k + offset(2))*dx(2);]
+      CHF_ENDDO
+
+      return
+      end
+

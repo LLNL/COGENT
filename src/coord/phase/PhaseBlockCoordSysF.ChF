@@ -1,0 +1,82 @@
+      subroutine phase_block_project(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[vec_src],
+     &     CHF_FRA[vec_dst],
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], comp, ncomp
+      double precision dotprod
+
+      ncomp = CHF_NCOMP[vec_src]
+
+      CHF_MULTIDO[box;i;j;k;l]
+
+        dotprod = zero
+        do comp = 0, ncomp - 1
+          dotprod = dotprod + vec_src(i,j,CHF_LBOUND[vec_src;2],CHF_LBOUND[vec_src;3],comp)
+     &                      * vec_dst(CHF_IX[i;j;k;l],comp)
+        enddo     
+ 
+        do comp = 0, ncomp - 1
+          vec_dst(CHF_IX[i;j;k;l],comp) = dotprod * vec_src(i,j,CHF_LBOUND[vec_src;2],CHF_LBOUND[vec_src;3],comp)
+        enddo     
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine phase_block_psitheta_projections(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[vec_psi],
+     &     CHF_CONST_FRA[vec_theta],
+     &     CHF_FRA[vec_dst],
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], comp
+      double precision dotprod_psi, dotprod_theta 
+
+      CHF_MULTIDO[box;i;j;k;l]
+
+        dotprod_psi = zero
+        do comp = 0, 1
+          dotprod_psi = dotprod_psi + vec_psi(i,j,CHF_LBOUND[vec_psi;2],CHF_LBOUND[vec_psi;3],comp)
+     &                         * vec_dst(CHF_IX[i;j;k;l],comp)
+        enddo     
+
+        dotprod_theta = zero
+        do comp = 0, 1
+          dotprod_theta = dotprod_theta + vec_theta(i,j,CHF_LBOUND[vec_theta;2],CHF_LBOUND[vec_theta;3],comp)
+     &                         * vec_dst(CHF_IX[i;j;k;l],comp)
+        enddo     
+ 
+        vec_dst(CHF_IX[i;j;k;l],0) = dotprod_psi
+        vec_dst(CHF_IX[i;j;k;l],1) = dotprod_theta
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine phase_block_gradf_factor(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[vec_src],
+     &     CHF_FRA1[vec_dst],
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l]
+
+      CHF_MULTIDO[box;i;j;k;l]
+
+        vec_dst(CHF_IX[i;j;k;l]) = vec_src(i,j,CHF_LBOUND[vec_src;2],CHF_LBOUND[vec_src;3])
+
+      CHF_ENDDO
+
+      return
+      end
+

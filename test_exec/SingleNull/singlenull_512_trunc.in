@@ -1,0 +1,90 @@
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 1 
+gksystem.verbosity   = 1
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 2000
+simulation.max_time            = 0.16
+simulation.max_dt_grow         = 1.1
+simulation.initial_dt_fraction = 0.5
+#simulation.cfl_number          = 0.5
+#simulation.fixed_dt           = 0.0005
+#simulation.fixed_dt           = 0.001
+simulation.checkpoint_interval = 100000
+simulation.checkpoint_prefix   = "chk"
+#simulation.restart_file = "chk1500.4d.hdf5"
+simulation.plot_interval       = 10
+simulation.plot_prefix         = "plt"
+simulation.histories = true
+simulation.1.history_field = "potential"
+simulation.1.history_indices = 4 8
+
+
+#####################################################
+# Grid and Data Layout Definitions
+#####################################################
+
+singlenull.numcells.core         =  64  64
+singlenull.numcells.pf_radial    =  64
+singlenull.numcells.lpf_poloidal =  32
+singlenull.numcells.rpf_poloidal =  32
+singlenull.numcells.sol_radial   =  192
+
+singlenull.decomp.core.configuration =  1  1
+singlenull.decomp.lpf.configuration  =  1  1
+singlenull.decomp.rpf.configuration  =  1  1
+singlenull.decomp.csol.configuration  =  1  1
+singlenull.decomp.lsol.configuration  =  1  1
+singlenull.decomp.rsol.configuration  =  1  1
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "SingleNull"
+gksystem.magnetic_geometry_mapping.singlenull.verbose  = true
+gksystem.magnetic_geometry_mapping.singlenull.inner_radial_bdry = 0.1
+gksystem.magnetic_geometry_mapping.singlenull.outer_radial_bdry = 0.9
+gksystem.magnetic_geometry_mapping.singlenull.Btor_scale  = 25.65
+
+#####################################################
+# SNAdvect Operator Definitions
+#####################################################
+Advect.verbose = false
+Advect.velocity = 1 1
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gksystem.fixed_efield = true
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.function = "localized"
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.radial_core.function = "localized"
+BC.radial_sol.function = "localized"
+BC.radial_pf.function = "localized"
+BC.poloidal_inner_div.function = "localized"
+BC.poloidal_outer_div.function = "localized"
+
+#####################################################
+# Grid Function Definitions
+#####################################################
+grid_function_library.number = 1
+grid_function_library.verbosity = 1
+grid_function_library.list = "localized" 
+
+grid_function_library.localized.type = "localized"
+grid_function_library.localized.amplitude = 1.0
+grid_function_library.localized.location = 1.55 0.47
+grid_function_library.localized.width = 0.025 0.025
+grid_function_library.localized.floor = 1
+

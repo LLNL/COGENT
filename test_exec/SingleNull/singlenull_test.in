@@ -1,0 +1,140 @@
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 1 
+gksystem.verbosity   = 1
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 1
+simulation.max_time            = 3.14159
+simulation.max_dt_grow         = 1.1
+simulation.initial_dt_fraction = 0.5
+#simulation.cfl_number          = 0.5
+##simulation.fixed_dt           = 0.003
+#simulation.fixed_dt           = 0.09
+##simulation.fixed_dt           = 0.001
+simulation.checkpoint_interval = 100000
+simulation.checkpoint_prefix   = "chk"
+#simulation.restart_file = "chk1500.4d.hdf5"
+simulation.plot_interval       = -1
+simulation.plot_prefix         = "plt"
+simulation.histories = true
+simulation.1.history_field = "potential"
+simulation.1.history_indices = 4 8
+
+
+#####################################################
+# Grid and Data Layout Definitions
+#####################################################
+
+singlenull.numcells.core         =  16  256
+singlenull.numcells.pf_radial    =  16
+singlenull.numcells.lpf_poloidal =  128
+singlenull.numcells.rpf_poloidal =  128
+singlenull.numcells.sol_radial   =  64
+
+singlenull.decomp.core.configuration =  1  1
+singlenull.decomp.core.velocity      =        1  1
+singlenull.decomp.core.phase         =  1  1  1  1 
+
+singlenull.decomp.lpf.configuration  =  1  1
+singlenull.decomp.lpf.velocity       =        1  1
+singlenull.decomp.lpf.phase          =  1  1  1  1 
+
+singlenull.decomp.rpf.configuration  =  1  1
+singlenull.decomp.rpf.velocity       =        1  1
+singlenull.decomp.rpf.phase          =  1  1  1  1 
+
+singlenull.decomp.csol.configuration  =  1  1
+singlenull.decomp.csol.velocity       =        1  1
+singlenull.decomp.csol.phase          =  1  1  1  1 
+
+singlenull.decomp.lsol.configuration  =  1  1
+singlenull.decomp.lsol.velocity       =        1  1
+singlenull.decomp.lsol.phase          =  1  1  1  1 
+
+singlenull.decomp.rsol.configuration  =  1  1
+singlenull.decomp.rsol.velocity       =        1  1
+singlenull.decomp.rsol.phase          =  1  1  1  1 
+
+gksystem.num_velocity_cells =  4  4
+gksystem.velocity_decomp    =  1  1
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "SingleNull"
+gksystem.magnetic_geometry_mapping.singlenull.verbose  = true
+gksystem.magnetic_geometry_mapping.singlenull.visit_plotfile  = "MillerViz"
+gksystem.magnetic_geometry_mapping.singlenull.inner_radial_bdry = 0.1
+gksystem.magnetic_geometry_mapping.singlenull.outer_radial_bdry = 0.9
+gksystem.magnetic_geometry_mapping.singlenull.kappa   = 1.
+gksystem.magnetic_geometry_mapping.singlenull.delta   = 0.
+gksystem.magnetic_geometry_mapping.singlenull.dpsidr   = 1.71
+gksystem.magnetic_geometry_mapping.singlenull.drR0    = -0.0
+gksystem.magnetic_geometry_mapping.singlenull.s_kappa = 0.0
+gksystem.magnetic_geometry_mapping.singlenull.s_delta = 0.0
+gksystem.magnetic_geometry_mapping.singlenull.origin  = 1.7 0.
+gksystem.magnetic_geometry_mapping.singlenull.Btor_scale  = 25.65
+#gksystem.magnetic_geometry_mapping.singlenull.l_const_minorrad  = 1
+gksystem.magnetic_geometry_mapping.singlenull.l_const_minorrad  = 0
+
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 1.
+phase_space_mapping.mu_max = 1.
+phase_space_mapping.velocity_type = "annular_poloidal_velocity"
+phase_space_mapping.no_drifts = false
+
+#####################################################
+# SNAdvect Operator Definitions
+#####################################################
+SNAdvect.verbose = false
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gksystem.fixed_efield = true
+
+#####################################################
+# Species Definitions
+#####################################################
+kinetic_species.1.name   = "hydrogen"
+kinetic_species.1.mass   = 2.0
+kinetic_species.1.charge = 1.0
+kinetic_species.1.ics    = "localized"
+kinetic_species.1.bcs    = "localized"
+
+#kinetic_species.1.name   = "electron"
+#kinetic_species.1.mass   = 1.0
+#kinetic_species.1.charge = -1.0
+#kinetic_species.1.ics    = "localized"
+#kinetic_species.1.bcs    = "localized"
+
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IBC.amp = 1.0
+#IBC.psi_0 = 1.6
+IBC.psi_0 = 1.55
+#IBC.psi_0 = 2.33
+IBC.delpsi = 0.025
+#IBC.theta_0 = 0.5
+IBC.theta_0 = 0.47
+#IBC.theta_0 = 1.67
+IBC.deltheta = 0.025
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 1.0e20
+units.temperature    = 3.0e3
+units.length         = 1.0
+units.mass           = 1.0
+units.magnetic_field = 1.0 
+

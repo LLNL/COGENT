@@ -1,0 +1,40 @@
+# -*- Mode: Makefile;  -*- 
+
+## Define the variables needed by Make.example
+
+# trace the chain of included makefiles
+makefiles += locSFGeom
+
+# knowing this can be useful for things which are specific to 
+# specific machines
+UNAMEN = $(shell uname -n)
+
+# the base name(s) of the application(s) in this directory
+mdebase = cogent
+# in an example of true silliness, need to define ebase so that the 
+# realclean target will also remove my *.ex files...
+ebase = bogus
+
+# the location of Chombo lib dir
+CHOMBO_HOME = ../../Chombo/lib
+
+# names of Chombo libraries needed by this program, in order of search.
+1dLibNames =  BoxTools BaseTools
+2dLibNames = HOMappedGeometry HOAMRTools AMRTimeDependent AMRTools BoxTools
+
+# relative paths to source code directories
+base_dir = .
+
+1dsrc_dirs =
+2dsrc_dirs = ./src
+
+# input file for 'run' target
+INPUT = regression.inputs
+
+# shared code for building example programs
+include $(CHOMBO_HOME)/mk/Make.example.multidim
+
+# application-specific variables
+
+# application-specific targets
+

@@ -1,0 +1,62 @@
+#include "CONSTANTS.H"
+
+      subroutine fourth_order_outflow_bc(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_INTVECT[ng],
+     &     CHF_CONST_FRA[vn],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l]
+      integer CHF_DDECL[ii;jj;kk;ll]
+      integer CHF_DDECL[i1;j1;k1;l1]
+      integer CHF_DDECL[iv0;iv1;iv2;iv3]
+      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3]
+      integer isign
+      integer n
+c
+      isign = 2*iside-1
+c
+      CHF_DTERM[
+      i1 = isign * CHF_ID(idir,0);
+      j1 = isign * CHF_ID(idir,1);
+      k1 = isign * CHF_ID(idir,2);
+      l1 = isign * CHF_ID(idir,3)]
+c
+      CHF_DTERM[
+      ibeg0 = ibdryboxlo0+CHF_ID(idir,0)*(1-iside)*ng(0);
+      ibeg1 = ibdryboxlo1+CHF_ID(idir,1)*(1-iside)*ng(1);
+      ibeg2 = ibdryboxlo2+CHF_ID(idir,2)*(1-iside)*ng(2);
+      ibeg3 = ibdryboxlo3+CHF_ID(idir,3)*(1-iside)*ng(3)]
+c
+      do n=0,nfcomp-1
+      CHF_MULTIDO[bdrybox;i;j;k;l]
+c
+        CHF_DTERM[
+        iv0 = i+CHF_ID(idir,0)*(ibeg0-i);
+        iv1 = j+CHF_ID(idir,1)*(ibeg1-j);
+        iv2 = k+CHF_ID(idir,2)*(ibeg2-k);
+        iv3 = l+CHF_ID(idir,3)*(ibeg3-l)]
+c
+        if ( isign*vn(CHF_IX[iv0;iv1;iv2;iv3],0).gt.zero ) then
+c
+          CHF_DTERM[
+          ii = i+CHF_ID(idir,0)*(iside-1)*(2*i+ng(0)+1);
+          jj = j+CHF_ID(idir,1)*(iside-1)*(2*j+ng(0)+1);
+          kk = k+CHF_ID(idir,2)*(iside-1)*(2*k+ng(0)+1);
+          ll = l+CHF_ID(idir,3)*(iside-1)*(2*l+ng(0)+1);]
+c
+          f(CHF_IX[ii;jj;kk;ll],n) =
+     &                   4*f(CHF_IX[ii-  i1;jj-  j1;kk-  k1;ll-  l1],n)
+     &                 - 6*f(CHF_IX[ii-2*i1;jj-2*j1;kk-2*k1;ll-2*l1],n)
+     &                 + 4*f(CHF_IX[ii-3*i1;jj-3*j1;kk-3*k1;ll-3*l1],n)
+     &                 - 1*f(CHF_IX[ii-4*i1;jj-4*j1;kk-4*k1;ll-4*l1],n)
+        endif
+c
+      CHF_ENDDO
+      enddo
+c
+      return
+      end

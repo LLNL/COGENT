@@ -1,0 +1,19 @@
+      subroutine inspect(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[data]
+     &     )
+c
+c     Just dive on the passed-in data argument in Totalview.
+c     There are guaranteed to be no bugs in this subroutine,
+c     but there might be some in the function that calls it.
+c
+      integer CHF_DDECL[i;j;k;l],n
+      do n=0,ndatacomp-1
+      CHF_MULTIDO[gridbox;i;j;k;l]
+      data(CHF_IX[i;j;k;l],n)=data(CHF_IX[i;j;k;l],n)
+      CHF_ENDDO
+      enddo
+c
+      return
+      end
+

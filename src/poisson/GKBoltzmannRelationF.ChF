@@ -1,0 +1,16 @@
+      subroutine compute_electron_density(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_FRA1[te],
+     &     CHF_FRA1[ne]
+     &     )
+
+c     local variables:
+      integer CHF_DDECL[i;j;k]
+
+      CHF_MULTIDO[box;i;j;k]
+         ne(CHF_IX[i;j;k]) = dexp(phi(CHF_IX[i;j;k])/te(CHF_IX[i;j;k]))
+      CHF_ENDDO
+
+      return
+      end

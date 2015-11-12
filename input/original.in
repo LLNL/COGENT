@@ -1,0 +1,71 @@
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 1 
+gksystem.verbosity   = 1
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 1
+simulation.max_time            = 1.0
+simulation.max_dt_grow         = 1.1
+#simulation.fixed_dt           = 0.1
+simultaion.initial_dt_fraction = 0.1
+simulation.checkpoint_interval = 50
+simulation.checkpoint_prefix   = "chk"
+simulation.plot_interval       = 10
+simulation.plot_prefix         = "plt"
+
+#####################################################
+# Computational Grid Definitions
+#####################################################
+gksystem.num_cells   = 10 10 10 10
+gksystem.is_periodic =  0  1  0  0
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 1.0
+units.temperature    = 1.0
+units.length         = 1.0
+units.mass           = 1.0
+units.magnetic_field = 1.0 
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "Analytic Annulus"
+#analytic_annulus_map.parameter1 =
+#analytic_annulus_map.parameter2 =
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+#phase_space_mapping.v_parallel_max = 
+#phase_space_mapping.v_parallel_min = 
+#phase_space_mapping.mu_min = 
+
+#####################################################
+# Vlasov Operator Definitions
+#####################################################
+#gkvlasov.parameter1 = 
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+#gkpoisson.parameter1 = 
+
+#####################################################
+# Species Definitions
+#####################################################
+#kinetic_species1.name   = "hydrogen"
+#kinetic_species1.mass   = 1.0
+#kinetic_species1.charge = 1.0
+#kinetic_species1.ics    = "maxwellian"
+#kinetic_species1.bcs    = "standard_kinetic"
+
+#boltzmann_electron.mass              = 1.0
+#boltzmann_electron.charge            = 1.0
+#boltzmann_electron.temperature_shape = "uniform"
+#boltzmann_electron.temperature       = 1.0

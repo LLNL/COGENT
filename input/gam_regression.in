@@ -1,0 +1,170 @@
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 1 
+gksystem.verbosity   = 1
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 1
+simulation.max_time            = 100000.0
+simulation.max_dt_grow         = 1.1
+simulation.initial_dt_fraction = 0.5
+#simulation.cfl_number          = 0.9
+##simulation.fixed_dt           = 0.003
+#simulation.fixed_dt           = 0.09
+##simulation.fixed_dt           = 0.001
+simulation.checkpoint_interval = 60
+simulation.checkpoint_prefix   = "chk"
+#simulation.restart_file = "chk1500.4d.hdf5"
+simulation.plot_interval       = 60
+simulation.plot_prefix         = "plt"
+simulation.histories = true
+simulation.1.history_field = "potential"
+simulation.1.history_indices = 8 32
+
+
+#####################################################
+# Computational Grid Definitions
+#####################################################
+gksystem.num_cells   = 16 64 64 16
+gksystem.is_periodic =  1  1  0  0
+
+gksystem.configuration_decomp = 2 8
+gksystem.velocity_decomp      =     8 2
+gksystem.phase_decomp         = 1 4 4 1
+
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 1.0e20
+units.temperature    = 3.0e3
+units.length         = 1.0
+units.mass           = 1.0
+units.magnetic_field = 1.0 
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "Miller"
+gksystem.magnetic_geometry_mapping.miller.verbose  = true
+gksystem.magnetic_geometry_mapping.miller.visit_plotfile  = "MillerViz"
+gksystem.magnetic_geometry_mapping.miller.num_quad_points = 5
+#gksystem.magnetic_geometry_mapping.miller.inner_radial_bdry = 0.1
+#gksystem.magnetic_geometry_mapping.miller.outer_radial_bdry = 0.9
+gksystem.magnetic_geometry_mapping.miller.inner_radial_bdry = 0.324980503407
+gksystem.magnetic_geometry_mapping.miller.outer_radial_bdry = 0.359019496593
+gksystem.magnetic_geometry_mapping.miller.kappa   = 1.
+gksystem.magnetic_geometry_mapping.miller.delta   = 0.
+#gksystem.magnetic_geometry_mapping.miller.dpsidr  = 2.04
+gksystem.magnetic_geometry_mapping.miller.dpsidr  = 1.71
+gksystem.magnetic_geometry_mapping.miller.drR0    = 0.
+gksystem.magnetic_geometry_mapping.miller.s_kappa = 0.0
+gksystem.magnetic_geometry_mapping.miller.s_delta = 0.0
+gksystem.magnetic_geometry_mapping.miller.origin  = 1.7 0.
+gksystem.magnetic_geometry_mapping.miller.Btor_scale  = 25.65
+gksystem.magnetic_geometry_mapping.miller.l_const_minorrad  = 1
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 3.0
+phase_space_mapping.mu_max = 1.2
+phase_space_mapping.velocity_type = "gyrokinetic"
+#phase_space_mapping.velocity_type = "ExB"
+#phase_space_mapping.velocity_type = "annular_poloidal_velocity"
+#phase_space_mapping.velocity_type = "annular_radial_velocity"
+#phase_space_mapping.velocity_type = "annular_radpol_velocity"
+phase_space_mapping.no_drifts = false
+phase_space_mapping.physical_velocity_components = true
+
+
+#####################################################
+# Vlasov Operator Definitions
+#####################################################
+gkvlasov.verbose = false
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gksystem.fixed_efield = false
+
+#gkpoissonboltzmann.prefactor = global_neutrality
+#gkpoissonboltzmann.prefactor = global_neutrality_initial
+#gkpoissonboltzmann.prefactor = fs_neutrality
+#gkpoissonboltzmann.prefactor = fs_neutrality_initial
+gkpoissonboltzmann.prefactor = fs_neutrality_global_ni
+#gkpoissonboltzmann.prefactor = fs_neutrality_initial_fs_ni
+
+gkpoissonboltzmann.verbose = true
+gkpoissonboltzmann.nonlinear_relative_tolerance = 1.e-5
+gkpoissonboltzmann.nonlinear_maximum_iterations = 20
+
+#####################################################
+# Species Definitions
+#####################################################
+kinetic_species.1.name   = "hydrogen"
+kinetic_species.1.mass   = 2.0
+kinetic_species.1.charge = 1.0
+
+boltzmann_electron.name = "electron"
+boltzmann_electron.mass              = 1.0
+boltzmann_electron.charge            = -1.0
+#boltzmann_electron.temperature_shape = "uniform"
+boltzmann_electron.temperature       = 1.0
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.potential.function = "zero"
+IC.hydrogen.function = "maxwellian" 
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.hydrogen.radial_inner.function = "maxwellian"
+BC.hydrogen.radial_outer.function = "maxwellian"
+BC.hydrogen.vpar_lower.function = "maxwellian"
+BC.hydrogen.vpar_upper.function = "maxwellian"
+BC.hydrogen.mu_lower.function = "maxwellian"
+BC.hydrogen.mu_upper.function = "maxwellian"
+
+BC.potential.radial_inner.type = "neumann"
+BC.potential.radial_outer.type = "neumann"
+
+#####################################################
+# Kinetic Function Definitions
+#####################################################
+kinetic_function_library.number = 1
+kinetic_function_library.verbosity = 1
+kinetic_function_library.list = "maxwellian"
+
+kinetic_function_library.maxwellian.type = "maxwellian"
+kinetic_function_library.maxwellian.v_parallel_shift = 0.0 
+kinetic_function_library.maxwellian.temperature.function = "T0" 
+kinetic_function_library.maxwellian.density.function = "N0" 
+
+#####################################################
+# Grid Function Definitions
+#####################################################
+grid_function_library.number = 3
+grid_function_library.verbosity = 1
+grid_function_library.list = "zero" "T0" "N0"
+
+grid_function_library.zero.type = "zero" 
+
+grid_function_library.T0.type = "cosine"
+grid_function_library.T0.constant = 1.0
+grid_function_library.T0.amplitude = 0.
+grid_function_library.T0.mode = 1 0
+grid_function_library.T0.phase = 0 0
+
+grid_function_library.N0.type = "cosine"
+grid_function_library.N0.constant = 1.0
+grid_function_library.N0.amplitude = 0.001
+grid_function_library.N0.mode = 1 0
+grid_function_library.N0.phase = 0 0
+
+

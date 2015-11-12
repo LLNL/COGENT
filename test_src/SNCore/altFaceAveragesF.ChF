@@ -1,0 +1,102 @@
+C      _______              __
+C     / ___/ /  ___  __ _  / /  ___
+C    / /__/ _ \/ _ \/  V \/ _ \/ _ \
+C    \___/_//_/\___/_/_/_/_.__/\___/
+C    Please refer to Copyright.txt, in Chombo's root directory.
+
+#include "CONSTANTS.H"
+
+c ----------------------------------------------------------
+c  limits face values based on 2nd-derivatives of phi a la Colella & Sekora
+c
+c  facePhi <=> face-centered phi value
+c  cellPhi  => cell-centered phi
+c  faceVel  => normal velocity on faces
+c  faceBox  =>
+c  idir     =>
+c  -------------------------------------------------------------
+      subroutine ALTFACEVALUES(CHF_FRA[facePhi],
+     &                         CHF_CONST_FRA[cellPhi],
+     &                         CHF_CONST_FRA1[faceVel],
+     &                         CHF_BOX[faceBox],
+     &                         CHF_CONST_INT[idir],
+     &                         CHF_CONST_REAL[dx] )
+
+
+      integer n, CHF_DDECL[i;j;k;l]
+      integer CHF_DDECL[ii;jj;kk;ll]
+      REAL_T eps
+      REAL_T fl,fr,bl,br,al,ar,wl,wr
+      REAL_T c1l,c2l,c1r,c2r
+      REAL_T wmax,wmin
+      REAL_T onept5
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3)]
+
+      onept5 = one + half
+
+c.....small parameter for mapping the weights
+      eps = 1.d-6
+
+      do n=0, (CHF_NCOMP[facePhi]-1)
+         CHF_MULTIDO[faceBox;i;j;k;l]
+
+c.......get left and right 3rd order approximations
+        fl = sixth*(
+     &             - cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll],n)
+     &             + five*cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll],n)
+     &             + two*cellPhi(CHF_IX[i;j;k;l],n) )
+        fr = sixth*(
+     &               two*cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll],n)
+     &             + five*cellPhi(CHF_IX[i;j;k;l],n)
+     &             - cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll],n) )
+
+c.......get smoothness indicators
+        c1l = ( cellPhi(CHF_IX[i;j;k;l],n)
+     &        - two*cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll],n)
+     &        + cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll],n) )
+        c2l = ( cellPhi(CHF_IX[i;j;k;l],n)
+     &        - cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll],n) )
+        c1r = ( cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll],n)
+     &        - two*cellPhi(CHF_IX[i;j;k;l],n)
+     &        + cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll],n) )
+        c2r = ( cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll],n)
+     &        - cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll],n) )
+        bl  = four*(c1l**2)*third+half*c1l*c2l+fourth*c2l**2
+        br  = four*(c1r**2)*third-half*c1r*c2r+fourth*c2r**2
+
+c.......get weights
+        al = one/((eps+bl)**2)
+        ar = one/((eps+br)**2)
+        wl = al/(al+ar)
+        wr = ar/(al+ar)
+
+c.......perform mapping of the weights (mapped weno as in Henrick JCP 2005)
+        al = wl*(three*fourth+wl*(wl-onept5))
+        ar = wr*(three*fourth+wr*(wr-onept5))
+        wl = al/(al+ar)
+        wr = ar/(al+ar)
+
+        wmax = max(wl,wr)
+        wmin = min(wl,wr)
+        if( faceVel(CHF_IX[i;j;k;l]).gt.zero ) then
+          wl = wmax
+          wr = wmin
+        else
+          wl = wmin
+          wr = wmax
+        end if
+
+c.......assign face value
+        facePhi(CHF_IX[i;j;k;l],n) = ( wl*fl + wr*fr )
+
+        CHF_ENDDO
+      enddo
+
+      return
+      end
+

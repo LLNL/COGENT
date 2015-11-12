@@ -1,0 +1,53 @@
+#include "CONSTANTS.H"
+
+      subroutine set_poloidal_diverter_bc(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_FRA[f_rflct],
+     &     CHF_CONST_FRA[vn],
+     &     CHF_CONST_FRA1[qphi],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+c     We assign f=0 if vparallel^2 > q phi, and reflect if vparallel^2 < q phi.
+c     Note reflection is done using the reflected distribution function f_rflct.
+c
+c     local variables
+c
+      integer i,j,k,l
+      integer isign
+      integer n
+      integer jbdry,jsrc,jsrc_offset
+      REAL_T  pot_energy_min
+c
+c     First construct jbdry, the index of the first cell just inside the boundary box.
+c
+      if (iside.eq.0) then
+        jbdry = CHF_UBOUND[bdrybox;1]
+      else
+        jbdry = CHF_LBOUND[bdrybox;1]
+      endif
+      isign = 2*iside-1
+      jsrc_offset = 2 * jbdry + isign
+c
+      do n=0,CHF_NCOMP[f]-1
+      CHF_MULTIDO[bdrybox;i;j;k;l]
+c
+          pot_energy_min = (-qphi(i,jbdry,CHF_LBOUND[qphi;2],CHF_LBOUND[qphi;3]))
+c
+          if (isign*vn(i,jbdry,k,l,0).le.zero) then
+c
+c               Inflow from limiter: construct f by reflection if below potential boundary
+c               or set f = 0 otherwise
+c
+            if ((vn(i,jbdry,k,l,0)**2).gt.pot_energy_min) then
+              f(i,j,k,l,n) = zero
+            else
+              jsrc = jsrc_offset - j
+              f(i,j,k,l,n) = f_rflct(i,jsrc,-k,l,n)
+            endif
+          endif
+      CHF_ENDDO
+      enddo
+      return
+      end

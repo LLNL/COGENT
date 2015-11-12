@@ -1,0 +1,153 @@
+# This deck with parameters like banana.in
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 1 
+gksystem.verbosity   = 1
+
+gksystem.hdf_vparmu = true
+gksystem.fixed_plot_indices = 1 -24 0 0 0
+
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 10
+simulation.max_time            = 10000.
+simulation.max_dt_grow         = 1.1
+simulation.initial_dt_fraction = 0.5
+#simulation.cfl_number          = 0.5
+#simulation.fixed_dt           = 0.00025
+simulation.checkpoint_interval = 100
+simulation.checkpoint_prefix   = "chk"
+simulation.plot_interval       = 2
+simulation.plot_prefix         = "plt"
+simulation.histories           = false
+simulation.1.history_field     = "potential"
+simulation.1.history_indices   = 4 8
+simulation.history_frequency   = 5
+
+
+#####################################################
+# Grid and Data Layout Definitions
+#####################################################
+singlenull.numcells.core         =  8 16
+singlenull.numcells.pf_radial    =  8
+singlenull.numcells.lpf_poloidal =  4
+singlenull.numcells.rpf_poloidal =  4
+singlenull.numcells.sol_radial   =  12
+
+singlenull.decomp.core.configuration =  1  2
+singlenull.decomp.core.phase         =  1  2  1  1 
+
+singlenull.decomp.lpf.configuration  =  1  1
+singlenull.decomp.lpf.phase          =  1  1  1  1
+
+singlenull.decomp.rpf.configuration  =  1  1
+singlenull.decomp.rpf.phase          =  1  1  1  1
+
+singlenull.decomp.csol.configuration  =  1  2 
+singlenull.decomp.csol.phase          =  1  2  1  1
+
+singlenull.decomp.lsol.configuration  =  1  1
+singlenull.decomp.lsol.phase          =  1  1  1  1
+
+singlenull.decomp.rsol.configuration  =  1  1
+singlenull.decomp.rsol.phase          =  1  1  1  1
+
+singlenull.geometry_file = "../input/coarse_mapping"
+
+gksystem.num_velocity_cells =  40  20
+gksystem.velocity_decomp    =  4  2
+
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "SingleNull"
+gksystem.magnetic_geometry_mapping.singlenull.verbose  = true
+gksystem.magnetic_geometry_mapping.singlenull.inner_radial_bdry = 0.1
+gksystem.magnetic_geometry_mapping.singlenull.outer_radial_bdry = 0.9
+#gksystem.magnetic_geometry_mapping.singlenull.Btor_scale  = 25.65
+gksystem.magnetic_geometry_mapping.singlenull.Btor_scale  = 2.565
+gksystem.enforce_positivity = false
+
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 3.
+phase_space_mapping.mu_max = 45.
+phase_space_mapping.no_drifts = false
+
+
+#####################################################
+# GKVlasov Operator Definitions
+#####################################################
+gkvlasov.verbose = false
+gkvlasov.time_step_diagnostics = false
+
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gksystem.fixed_efield = true
+
+
+#####################################################
+# Species Definitions
+#####################################################
+kinetic_species.1.name   = "hydrogen"
+kinetic_species.1.mass   = 2.0
+kinetic_species.1.charge = 1.0
+
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.potential.function = "zero"
+IC.hydrogen.function = "blob"
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.hydrogen.radial_core.function = "blob"
+BC.hydrogen.radial_sol.function = "blob"
+BC.hydrogen.radial_pf.function = "blob"
+BC.hydrogen.poloidal_inner_div.function = "blob"
+BC.hydrogen.poloidal_outer_div.function = "blob"
+BC.hydrogen.vpar_lower.function = "blob"
+BC.hydrogen.vpar_upper.function = "blob"
+BC.hydrogen.mu_lower.function = "blob"
+BC.hydrogen.mu_upper.function = "blob"
+
+#####################################################
+# Kinetic Function Definitions
+#####################################################
+kinetic_function_library.number = 1
+kinetic_function_library.verbosity = 1
+kinetic_function_library.list = "blob"
+
+kinetic_function_library.blob.type = "localized"
+kinetic_function_library.blob.amplitude = 1.0
+kinetic_function_library.blob.location = 1.55 0.47 0.0 0.0
+kinetic_function_library.blob.width = 0.025 0.1 1000000.0 1000000.0 
+
+#####################################################
+# Grid Function Definitions
+#####################################################
+grid_function_library.number = 1
+grid_function_library.verbosity = 1
+grid_function_library.list = "zero" 
+
+grid_function_library.zero.type = "zero" 
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 1.0e20
+units.temperature    = 1.0e3
+units.length         = 1.0
+units.mass           = 1.0
+units.magnetic_field = 1.0 
+

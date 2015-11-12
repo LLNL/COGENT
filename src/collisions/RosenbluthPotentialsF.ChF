@@ -1,0 +1,329 @@
+#include "CONSTANTS.H"
+
+      subroutine impose_multipole_bc1(
+     &     CHF_FRA1[rhs],
+     &     CHF_CONST_FRA[mcoeff],
+     &     CHF_CONST_FRA1[bmag],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_INT[Nvpar],
+     &     CHF_CONST_INT[Nmu],
+     &     CHF_CONST_REAL[m],
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], n
+      double precision b, v_r, cos_theta, Y0, mult_coeff, mu_coeff_HiFace
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+               
+         if ((k.eq.-Nvpar/2).or.(k.eq.Nvpar/2-1)) then
+
+           b = bmag(i,j,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+
+           if (k.eq.-Nvpar/2) then
+             v_r=sqrt((k-0.5)*(k-0.5)*dx(0)*dx(0)+(l+0.5)*dx(1)*b/m)
+             cos_theta = (k-0.5)*dx(0) / v_r
+           else
+             v_r=sqrt((k+1.5)*(k+1.5)*dx(0)*dx(0)+(l+0.5)*dx(1)*b/m)
+             cos_theta = (k+1.5)*dx(0) / v_r
+           endif
+
+           
+           do n = 0, CHF_NCOMP[mcoeff]-1  
+
+             mult_coeff = mcoeff(i,j,CHF_LBOUND[mcoeff;2],CHF_LBOUND[mcoeff;3],n)
+
+             rhs(CHF_IX[i;j;k;l]) = rhs(CHF_IX[i;j;k;l]) 
+     &            - 1.0/(v_r**(n+1))/(2.0*n+1.0) 
+     &            * Y0(cos_theta,n) * (-mult_coeff) / (dx(0)*dx(0))
+           enddo   
+
+         endif
+
+         if (l.eq.Nmu-1) then
+
+           b = bmag(i,j,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+           v_r=sqrt((k+0.5)*(k+0.5)*dx(0)*dx(0)+(l+1.5)*dx(1)*b/m)
+           cos_theta = (k+0.5)*dx(0) / v_r
+           mu_coeff_HiFace = 4.0 * (m/b) * (l+1) * dx(1);
+
+           do n = 0, CHF_NCOMP[mcoeff]-1  
+  
+             mult_coeff = mcoeff(i,j,CHF_LBOUND[mcoeff;2],CHF_LBOUND[mcoeff;3],n)
+
+             rhs(CHF_IX[i;j;k;l]) = rhs(CHF_IX[i;j;k;l]) 
+     &            - 1.0/(v_r**(n+1))/(2.0*n+1.0) * mu_coeff_HiFace 
+     &            * Y0(cos_theta,n) * (-mult_coeff) / (dx(1)*dx(1))
+           enddo   
+
+c           if ((i.eq.2).and.(j.eq.2)) then
+c             print*, "magnetic_field=", b, mult_coeff
+c           endif
+
+         endif
+
+        
+      CHF_ENDDO
+      return
+      end
+
+
+      subroutine impose_multipole_bc2(
+     &     CHF_FRA1[rhs],
+     &     CHF_CONST_FRA[mcoeff_rho],
+     &     CHF_CONST_FRA[mcoeff_phi],
+     &     CHF_CONST_FRA1[bmag],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_INT[Nvpar],
+     &     CHF_CONST_INT[Nmu],
+     &     CHF_CONST_REAL[m],
+     &     )
+
+c     local variables
+
+      integer CHF_DDECL[i;j;k;l], n
+      double precision b, v_r, cos_theta, Y0, mult_coeff_phi, mult_coeff_rho, mu_coeff_HiFace
+      double precision vpar_max, vperp_max, inner_part, outer_part, vr_sep
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+      
+         if ((k.eq.-Nvpar/2).or.(k.eq.Nvpar/2-1)) then
+
+           b = bmag(i,j,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+           if (k.eq.-Nvpar/2) then
+             v_r=sqrt((k-0.5)*(k-0.5)*dx(0)*dx(0)+(l+0.5)*dx(1)*b/m)
+             cos_theta = (k-0.5)*dx(0) / v_r
+           else
+             v_r=sqrt((k+1.5)*(k+1.5)*dx(0)*dx(0)+(l+0.5)*dx(1)*b/m)
+             cos_theta = (k+1.5)*dx(0) / v_r
+           endif
+ 
+
+           vpar_max = (Nvpar/2 - 0.5) * dx(0)
+           vperp_max = sqrt((Nmu - 0.5) * dx(1) * b / m)
+           vr_sep = MIN(vpar_max, vperp_max)
+
+
+c          *** Setting the mutlipole BC 
+           do n = 0, CHF_NCOMP[mcoeff_phi]-1  
+
+              mult_coeff_phi = mcoeff_phi(i,j,CHF_LBOUND[mcoeff_phi;2],CHF_LBOUND[mcoeff_phi;3],n)
+              mult_coeff_rho = mcoeff_rho(i,j,CHF_LBOUND[mcoeff_phi;2],CHF_LBOUND[mcoeff_phi;3],n)
+
+              inner_part = 1.0/(v_r**(n+1))/(2.0*n+1.0)* (-mult_coeff_phi)   
+              outer_part = 0.5*(1/v_r**(n-1) - vr_sep**2/v_r**(n+1) + 2.0/v_r**(n-1)/(2.0*n-1.0)) * (mult_coeff_rho) /(2.0*n+1.0)**2 
+
+   
+              rhs(CHF_IX[i;j;k;l]) = rhs(CHF_IX[i;j;k;l]) 
+     &            - (inner_part + outer_part)
+     &            * Y0(cos_theta,n) / (dx(0)*dx(0))
+           enddo   
+
+         endif
+
+         if (l.eq.Nmu-1) then
+
+           b = bmag(i,j,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+           v_r=sqrt((k+0.5)*(k+0.5)*dx(0)*dx(0)+(l+1.5)*dx(1)*b/m)
+           cos_theta = (k+0.5)*dx(0) / v_r
+           mu_coeff_HiFace = 4.0 * (m/b) * (l+1) * dx(1)
+
+
+           vpar_max = (Nvpar/2 - 0.5) * dx(0)
+           vperp_max = sqrt((Nmu - 0.5) * dx(1) * b / m)
+           vr_sep = MIN(vpar_max, vperp_max)
+
+
+c          *** Setting the mutlipole BC 
+           do n = 0, CHF_NCOMP[mcoeff_phi]-1  
+
+              mult_coeff_phi = mcoeff_phi(i,j,CHF_LBOUND[mcoeff_phi;2],CHF_LBOUND[mcoeff_phi;3],n)
+              mult_coeff_rho = mcoeff_rho(i,j,CHF_LBOUND[mcoeff_phi;2],CHF_LBOUND[mcoeff_phi;3],n)
+
+              inner_part = 1.0/(v_r**(n+1))/(2.0*n+1.0)* (-mult_coeff_phi)   
+              outer_part = 0.5*(1/v_r**(n-1) - vr_sep**2/v_r**(n+1) + 2.0/v_r**(n-1)/(2.0*n-1.0)) * (mult_coeff_rho) /(2.0*n+1.0)**2 
+
+
+              rhs(CHF_IX[i;j;k;l]) = rhs(CHF_IX[i;j;k;l]) 
+     &            - (inner_part + outer_part)
+     &            * Y0(cos_theta,n)* mu_coeff_HiFace / (dx(1)*dx(1))
+           enddo  
+
+         endif
+
+      CHF_ENDDO
+      return
+      end
+
+      subroutine separate_phi1_inner(
+     &     CHF_FRA1[phi_inner],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_FRA1[bmag],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_INT[Nvpar],
+     &     CHF_CONST_INT[Nmu],
+     &     CHF_CONST_REAL[m],
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l]
+      integer n, bnd_index_se, bnd_index_be
+      double precision b, v_r, vr_sep, vr_cent, vr_min, vr_max
+      double precision mu_min, mu_max, vpar_min, vpar_max
+      double precision mu_se, mu_be, vpar_se, vpar_be, area_coeff,  vpar_global_max, vperp_global_max
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+        
+        b = bmag(i,j,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+
+c       ***Define R-separation (should be equivalent to other routines)
+        vpar_global_max = (Nvpar/2 - 0.5) * dx(0)
+        vperp_global_max = sqrt((Nmu - 0.5) * dx(1) * b / m)
+
+        vr_sep = MIN(vpar_global_max, vperp_global_max)
+c        vr_sep = 1.5
+
+c       ***Define  key cell parameters parameters of 
+        vr_cent = sqrt((k+0.5)*(k+0.5)*dx(0)*dx(0)+(l+0.5)*dx(1)*b/m)
+        mu_min = (l)*dx(1)
+        mu_max = (l+1)*dx(1)
+
+c       ***Use symmetry around v_par=0 to deal with vpar>0 
+        if (k.lt.0) then 
+           vpar_max=(k+1) * dx(0)
+           vpar_min=(k) * dx(0)
+        else 
+           vpar_min=(-k-1) * dx(0)
+           vpar_max=(-k) * dx(0)
+        endif
+
+        
+c       ***Check if the cell is intersected
+        vr_min =sqrt(vpar_max**2 + mu_min*b/m)
+        vr_max =sqrt(vpar_min**2 + mu_max*b/m)
+
+        if (vr_sep.gt.vr_max) then
+           phi_inner(CHF_IX[i;j;k;l]) = phi(CHF_IX[i;j;k;l]) 
+        
+        else if (vr_sep.lt.vr_min) then
+           phi_inner(CHF_IX[i;j;k;l]) = 0.0 
+
+        else 
+
+c        ***Find coordinates of an intersection near the small end of the cell
+         mu_se = (m/b) * (vr_sep**2 - vpar_min**2)
+         if (mu_se.ge.mu_min) then
+            vpar_se = vpar_min
+            bnd_index_se = 0
+         else
+            mu_se = mu_min
+            vpar_se = -sqrt(vr_sep**2-mu_min*b/m)    
+            bnd_index_se = 1                   
+         endif
+
+c        ***Find coordinates of an intersection near the big end of the cell
+         mu_be = (m/b) * (vr_sep**2 - vpar_max**2)
+         if (mu_be.le.mu_max) then
+            vpar_be = vpar_max
+            bnd_index_be = 0
+         else
+            mu_be = mu_max
+            vpar_be = -sqrt(vr_sep**2-mu_max*b/m)    
+            bnd_index_be = 1                   
+         endif
+
+c        ***Check the topology of the intersecting area
+c        *** NB: here we approximate the boundary of intersection by a stright line
+         if (bnd_index_se.ne.bnd_index_be) then
+            if (mu_se.gt.mu_min) then
+              area_coeff=1.0-0.5/(dx(0)*dx(1))*(mu_be-mu_se)*(vpar_be-vpar_se)
+            else
+              area_coeff =0.5/(dx(0)*dx(1))*(mu_be-mu_se)*(vpar_be-vpar_se)
+            endif  
+
+         else
+            if (bnd_index_se.eq.0) then
+              area_coeff = 0.5*(mu_be-mu_se)/dx(1) + (mu_se-mu_min)/dx(1)
+            else 
+              area_coeff = 0.5*(vpar_be-vpar_se)/dx(0) + (vpar_max-vpar_be)/dx(0)
+            endif
+  
+         endif
+
+         phi_inner(CHF_IX[i;j;k;l]) = area_coeff * phi(CHF_IX[i;j;k;l]) 
+ 
+        endif
+
+          
+      CHF_ENDDO
+
+      return
+
+      end
+
+      subroutine compute_mult_kernels(
+     &     CHF_FRA[kernel],
+     &     CHF_CONST_FRA1[rho],
+     &     CHF_CONST_FRA1[bmag],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[m],
+     &     )
+
+c     local variables 
+      integer CHF_DDECL[i;j;k;l]
+      integer n
+      double precision b, v_r, cos_theta, Y0, pi, scale_factor
+      
+      pi=3.14159265358979
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+c       ***Calculate spherical coordinates 
+        b = bmag(i,j,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+        v_r=sqrt((k+0.5)*(k+0.5)*dx(0)*dx(0)+(l+0.5)*dx(1)*b/m)
+        cos_theta = (k+0.5)*dx(0) / v_r
+        scale_factor = Pi * b
+
+c       ***Compute kernels 
+        do n = 0, CHF_NCOMP[kernel]-1  
+          kernel(CHF_IX[i;j;k;l],n) = scale_factor * v_r**n * Y0(cos_theta,n) * rho(CHF_IX[i;j;k;l])
+        enddo   
+
+      CHF_ENDDO
+      return
+      end
+
+      function Y0(x,n)
+      implicit none
+      double precision Y0, x, pi
+      integer n
+      pi=3.14159265358979
+      SELECT CASE (n)
+         CASE(0)
+            Y0=1.0
+         CASE(1)
+            Y0=x
+         CASE(2)
+            Y0=1.0/2.0*(3.0*x**2-1.0)
+         CASE(3)
+            Y0=1.0/2.0*(5.0*x**3-3.0*x)
+         CASE(4)
+            Y0=1.0/8.0*(35.0*x**4-30.0*x**2+3.0)
+         CASE(5)
+            Y0=1.0/8.0*(63.0*x**5-70.0*x**3+15.0*x)
+         CASE(6)
+            Y0=1.0/16.0*(231.0*x**6-315.0*x**4+105.0*x**2-5.0)
+         CASE(7)
+            Y0=1.0/16.0*(429.0*x**7-693.0*x**5+315.0*x**3-35.0*x)
+         CASE(8)
+            Y0=1.0/128.0*(6435.0*x**8-12012.0*x**6+6930.0*x**4-1260.0*x**2+35.0)
+      END SELECT
+
+      Y0=sqrt((2.0*n+1.0)/4.0/pi)*Y0
+      return
+      end
+

@@ -1,0 +1,168 @@
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 1 
+gksystem.verbosity   = 1
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 20
+simulation.max_time            = 100000.0
+simulation.max_dt_grow         = 1.1
+simulation.initial_dt_fraction = 0.5
+#simulation.cfl_number          = 0.9
+##simulation.fixed_dt           = 0.003
+#simulation.fixed_dt           = 0.09
+##simulation.fixed_dt           = 0.001
+simulation.checkpoint_interval = 100
+simulation.checkpoint_prefix   = "chk"
+#simulation.restart_file = "chk1500.4d.hdf5"
+simulation.plot_interval       = 2
+simulation.plot_prefix         = "plt"
+simulation.histories = true
+simulation.1.history_field = "potential"
+simulation.1.history_indices = 8 32
+
+#####################################################
+# What plots to make
+#####################################################
+gksystem.hdf_density = true
+gksystem.hdf_vpartheta = false
+gksystem.hdf_frtheta = false
+#gksystem.fixed_plot_indices = 2 2 0 1 1
+
+#####################################################
+# Computational Grid Definitions
+#####################################################
+gksystem.num_cells   = 8 32 16 4
+gksystem.is_periodic =  1  1  0  0
+
+gksystem.configuration_decomp = 1 2
+gksystem.velocity_decomp      =     1 2
+gksystem.phase_decomp         = 1 2 1 1
+
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 1.0e20
+units.temperature    = 10.0e3
+units.length         = 1.0
+units.mass           = 1.0
+units.magnetic_field = 1.0 
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "Slab"
+gksystem.magnetic_geometry_mapping.slab.verbose  = true
+gksystem.magnetic_geometry_mapping.slab.visit_plotfile  = "SlabViz"
+gksystem.magnetic_geometry_mapping.slab.num_quad_points = 5
+gksystem.magnetic_geometry_mapping.slab.x_max = 1.
+gksystem.magnetic_geometry_mapping.slab.y_max = 1.
+gksystem.magnetic_geometry_mapping.slab.Bz_inner = 10.
+gksystem.magnetic_geometry_mapping.slab.Bz_outer = 9.
+gksystem.magnetic_geometry_mapping.slab.By_inner = 0.0001
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 3.0
+phase_space_mapping.mu_max = 1.2
+phase_space_mapping.velocity_type = "gyrokinetic"
+#phase_space_mapping.velocity_type = "ExB"
+#phase_space_mapping.velocity_type = "annular_poloidal_velocity"
+#phase_space_mapping.velocity_type = "annular_radial_velocity"
+#phase_space_mapping.velocity_type = "annular_radpol_velocity"
+phase_space_mapping.no_drifts = false
+phase_space_mapping.physical_velocity_components = true
+
+
+#####################################################
+# Vlasov Operator Definitions
+#####################################################
+gkvlasov.verbose = false
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gksystem.fixed_efield = true
+
+#gkpoissonboltzmann.prefactor = global_neutrality
+#gkpoissonboltzmann.prefactor = global_neutrality_initial
+#gkpoissonboltzmann.prefactor = fs_neutrality
+#gkpoissonboltzmann.prefactor = fs_neutrality_initial
+gkpoissonboltzmann.prefactor = fs_neutrality_global_ni
+#gkpoissonboltzmann.prefactor = fs_neutrality_initial_fs_ni
+
+gkpoissonboltzmann.verbose = true
+gkpoissonboltzmann.nonlinear_relative_tolerance = 1.e-5
+gkpoissonboltzmann.nonlinear_maximum_iterations = 20
+
+#####################################################
+# Species Definitions
+#####################################################
+kinetic_species.1.name   = "hydrogen"
+kinetic_species.1.mass   = 2.0
+kinetic_species.1.charge = 1.0
+
+boltzmann_electron.name = "electron"
+boltzmann_electron.mass              = 1.0
+boltzmann_electron.charge            = -1.0
+#boltzmann_electron.temperature_shape = "uniform"
+boltzmann_electron.temperature       = 1.0
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.potential.function = "zero"
+IC.hydrogen.function = "maxwellian" 
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.hydrogen.radial_inner.function = "maxwellian"
+BC.hydrogen.radial_outer.function = "maxwellian"
+BC.hydrogen.vpar_lower.function = "maxwellian"
+BC.hydrogen.vpar_upper.function = "maxwellian"
+BC.hydrogen.mu_lower.function = "maxwellian"
+BC.hydrogen.mu_upper.function = "maxwellian"
+
+BC.potential.radial_inner.type = "neumann"
+BC.potential.radial_outer.type = "neumann"
+
+#####################################################
+# Kinetic Function Definitions
+#####################################################
+kinetic_function_library.number = 1
+kinetic_function_library.verbosity = 1
+kinetic_function_library.list = "maxwellian"
+
+kinetic_function_library.maxwellian.type = "maxwellian"
+kinetic_function_library.maxwellian.v_parallel_shift = 0.0 
+kinetic_function_library.maxwellian.temperature.function = "T0" 
+kinetic_function_library.maxwellian.density.function = "N0" 
+
+#####################################################
+# Grid Function Definitions
+#####################################################
+grid_function_library.number = 3
+grid_function_library.verbosity = 1
+grid_function_library.list = "zero" "T0" "N0"
+
+grid_function_library.zero.type = "zero" 
+
+grid_function_library.T0.type = "cosine"
+grid_function_library.T0.constant = 1.0
+grid_function_library.T0.amplitude = 0.
+grid_function_library.T0.mode = 1 0
+grid_function_library.T0.phase = 0 0
+
+grid_function_library.N0.type = "cosine"
+grid_function_library.N0.constant = 1.0
+grid_function_library.N0.amplitude = 0.1
+grid_function_library.N0.mode = 1 1
+grid_function_library.N0.phase = 0 0
+
+

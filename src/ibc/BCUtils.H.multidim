@@ -1,0 +1,36 @@
+#if CH_SPACEDIM==1
+#ifndef  _D1_BCUTILS_H_
+#define  _D1_BCUTILS_H_
+#include "BCUtils.H"
+#endif
+#endif
+#if CH_SPACEDIM==2
+#ifndef  _D2_BCUTILS_H_
+#define  _D2_BCUTILS_H_
+#include "BCUtils.H"
+#endif
+#endif
+#if CH_SPACEDIM==3
+#ifndef  _D3_BCUTILS_H_
+#define  _D3_BCUTILS_H_
+#include "BCUtils.H"
+#endif
+#endif
+#if CH_SPACEDIM==4
+#ifndef  _D4_BCUTILS_H_
+#define  _D4_BCUTILS_H_
+#include "BCUtils.H"
+#endif
+#endif
+#if CH_SPACEDIM==5
+#ifndef  _D5_BCUTILS_H_
+#define  _D5_BCUTILS_H_
+#include "BCUtils.H"
+#endif
+#endif
+#if CH_SPACEDIM==6
+#ifndef  _D6_BCUTILS_H_
+#define  _D6_BCUTILS_H_
+#include "BCUtils.H"
+#endif
+#endif

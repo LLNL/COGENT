@@ -1,0 +1,1195 @@
+      subroutine accum_field_stencil4(
+     &     CHF_CONST_INT[s],
+     &     CHF_CONST_INT[sprime],
+     &     CHF_CONST_INT[side],
+     &     CHF_CONST_I1D[boundary],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INTVECT[global],
+     &     CHF_CONST_INT[drop_order],
+     &     CHF_FRA1[sum]
+     &     )
+
+      integer
+     &     CHF_DDECL[i;j], CHF_DDECL[ii;jj], CHF_DDECL[it;jt], CHF_DDECL[ic;jc],
+     &     CHF_DDECL[lo0;lo1], CHF_DDECL[hi0;hi1], CHF_DDECL[iglobal;jglobal],
+     &     dir, tdir, dst_to_bndry, m, m_max, n, noffset, nlength, toffset
+      REAL_T hfac, n_stencil(0:3), gamma4(0:4), gamma4_lo(0:4), gamma4_hi(0:4),
+     &     flux(0:4)
+
+      dir = s
+      dst_to_bndry = boundary(dir+2*side)
+      iglobal = global(0)
+      jglobal = global(1)
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir)]
+
+      CHF_DTERM[
+      it = 1 - ii;
+      jt = 1 - jj]
+
+      if (drop_order .eq. 0) then
+         ic = 3
+         jc = 3
+      else
+         ic = 2
+         jc = 2
+      endif
+
+      tdir = 1 - dir
+
+c     Get normal direction stencil factors
+
+      if (dst_to_bndry .eq. 2) then
+
+c        Boundary is at least two cells away in the normal direction
+
+         noffset = side - 2
+         nlength = 4
+
+         if (s .eq. sprime) then
+
+c           fourth-order accurate first derivative (Eq. (20))
+            n_stencil(0) =   1.d0 / 24.d0
+            n_stencil(1) = -27.d0 / 24.d0
+            n_stencil(2) =  27.d0 / 24.d0
+            n_stencil(3) =  -1.d0 / 24.d0
+
+         else
+
+c           fourth-order accurate interpolation (Eq. (26))
+            n_stencil(0) = -1.d0 / 16.d0
+            n_stencil(1) =  9.d0 / 16.d0
+            n_stencil(2) =  9.d0 / 16.d0
+            n_stencil(3) = -1.d0 / 16.d0
+
+         endif
+
+      else if (dst_to_bndry .eq. -1) then
+
+c        Boundary is one cell away in the low normal direction
+
+         if (s .eq. sprime) then
+
+            noffset = side - 1
+
+            if (drop_order .eq. 0) then
+
+               nlength = 4
+
+c              fourth-order accurate first derivative
+               n_stencil(0) = -1085.d0 / 840.d0
+               n_stencil(1) =  1015.d0 / 840.d0
+               n_stencil(2) =   -63.d0 / 840.d0
+               n_stencil(3) =     5.d0 / 840.d0
+
+            else
+
+               nlength = 3
+
+c              third-order accurate first derivative (Eq. (36))
+               n_stencil(0) = -75.d0 / 60.d0
+               n_stencil(1) =  70.d0 / 60.d0
+               n_stencil(2) =  -3.d0 / 60.d0
+
+            endif
+
+         else
+
+            noffset = side - 1
+            nlength = 3
+
+c           fourth-order accurate interpolation (Eq. (37))
+            n_stencil(0) = 15.d0 / 20.d0
+            n_stencil(1) = 10.d0 / 20.d0
+            n_stencil(2) = -1.d0 / 20.d0
+
+         endif
+
+      else if (dst_to_bndry .eq. 1) then
+
+c        Boundary is one cell away in the high normal direction
+
+         if (s .eq. sprime) then
+
+            if (drop_order .eq. 0) then
+
+               noffset = side - 3
+               nlength = 4
+
+c              fourth-order accurate first derivative
+               n_stencil(0) =    -5.d0 / 840.d0
+               n_stencil(1) =    63.d0 / 840.d0
+               n_stencil(2) = -1015.d0 / 840.d0
+               n_stencil(3) =  1085.d0 / 840.d0
+
+            else
+
+               noffset = side - 2
+               nlength = 3
+
+c              third-order accurate first derivative (Eq. (36))
+               n_stencil(0) =   3.d0 / 60.d0
+               n_stencil(1) = -70.d0 / 60.d0
+               n_stencil(2) =  75.d0 / 60.d0
+
+            endif
+
+         else
+
+            noffset = side - 2
+            nlength = 3
+
+c           fourth-order accurate interpolation (Eq. (37))
+            n_stencil(0) = -1.d0 / 20.d0
+            n_stencil(1) = 10.d0 / 20.d0
+            n_stencil(2) = 15.d0 / 20.d0
+
+         endif
+
+      else if (dst_to_bndry .eq. 0) then
+
+c        On the boundary in the normal direction
+
+         if (s .eq. sprime) then
+
+            if (drop_order .eq. 0) then
+
+               nlength = 4
+
+c              fourth-order accurate first derivative (Eq. (34))
+               if (side .eq. 0) then
+                  n_stencil(0) =  3675.d0 / 840.d0
+                  n_stencil(1) = -1225.d0 / 840.d0
+                  n_stencil(2) =   441.d0 / 840.d0
+                  n_stencil(3) =   -75.d0 / 840.d0
+               else
+                  n_stencil(0) =    75.d0 / 840.d0
+                  n_stencil(1) =  -441.d0 / 840.d0
+                  n_stencil(2) =  1225.d0 / 840.d0
+                  n_stencil(3) = -3675.d0 / 840.d0
+               endif
+
+            else
+
+               nlength = 3
+
+c              third-order accurate first derivative (Eq. (35))
+               if (side .eq. 0) then
+                  n_stencil(0) =  225.d0 / 60.d0
+                  n_stencil(1) =  -50.d0 / 60.d0
+                  n_stencil(2) =    9.d0 / 60.d0
+               else
+                  n_stencil(0) =   -9.d0 / 60.d0
+                  n_stencil(1) =   50.d0 / 60.d0
+                  n_stencil(2) = -225.d0 / 60.d0
+               endif
+
+            endif
+
+            noffset = - (nlength - 1)*side
+
+         else
+
+c           There is nothing to do if the cell face on side "side"
+c           in direction "dir" is on the physical boundary, since
+c           we are assuming homogeneous Dirichlet boundary conditions.
+c           In that case, all tangential derivatives are zero and make
+c           no contribution to the stencil.
+
+            noffset = 0
+            nlength = 0
+
+         endif
+
+      endif
+
+c     Get transverse direction stencil factors
+
+      if (boundary(tdir+2*0) .eq. 0) then
+
+c        Low boundary in the transverse direction is physical
+
+         toffset = 0
+
+         if (drop_order .eq. 0) then
+
+            m_max = 3
+
+            if (s .eq. sprime) then
+
+c              exact function evaluations
+               gamma4_lo(0) = 1.d0
+               gamma4_lo(1) = 0.d0
+               gamma4_lo(2) = 0.d0
+               gamma4_lo(3) = 0.d0
+
+               gamma4(0)    = 0.d0
+               gamma4(1)    = 1.d0
+               gamma4(2)    = 0.d0
+               gamma4(3)    = 0.d0
+
+               gamma4_hi(0) = 0.d0
+               gamma4_hi(1) = 0.d0
+               gamma4_hi(2) = 1.d0
+               gamma4_hi(3) = 0.d0
+
+            else
+
+c              fourth-order accurate first derivative
+               gamma4_lo(0) =  35.d0 / 210.d0
+               gamma4_lo(1) = 210.d0 / 210.d0
+               gamma4_lo(2) = -63.d0 / 210.d0
+               gamma4_lo(3) =  10.d0 / 210.d0
+
+               gamma4(0)    = -210.d0 / 210.d0
+               gamma4(1)    =   35.d0 / 210.d0
+               gamma4(2)    =  126.d0 / 210.d0
+               gamma4(3)    =  -15.d0 / 210.d0
+
+               gamma4_hi(0) =  175.d0 / 210.d0
+               gamma4_hi(1) = -350.d0 / 210.d0
+               gamma4_hi(2) =  189.d0 / 210.d0
+               gamma4_hi(3) =   50.d0 / 210.d0
+
+            endif
+
+         else
+
+            m_max = 2
+
+            if (s .eq. sprime) then
+
+c              exact function evaluations
+               gamma4_lo(0) = 1.d0
+               gamma4_lo(1) = 0.d0
+               gamma4_lo(2) = 0.d0
+
+               gamma4(0)    = 0.d0
+               gamma4(1)    = 1.d0
+               gamma4(2)    = 0.d0
+
+               gamma4_hi(0) = 0.d0
+               gamma4_hi(1) = 0.d0
+               gamma4_hi(2) = 1.d0
+
+            else
+
+c              third-order accurate first derivative
+               gamma4_lo(0) = 15.d0 / 30.d0
+               gamma4_lo(1) = 20.d0 / 30.d0
+               gamma4_lo(2) = -3.d0 / 30.d0
+
+               gamma4(0)    = -45.d0 / 30.d0
+               gamma4(1)    =  20.d0 / 30.d0
+               gamma4(2)    =   9.d0 / 30.d0
+
+               gamma4_hi(0) =   75.d0 / 30.d0
+               gamma4_hi(1) = -100.d0 / 30.d0
+               gamma4_hi(2) =   57.d0 / 30.d0
+
+            endif
+
+         endif
+
+         do m = 0, m_max
+            flux(m) = gamma4_lo(m)
+         enddo
+
+      else if (boundary(tdir+2*0) .eq. -1) then
+
+c        Low boundary in the transverse direction is one cell away from the physical boundary
+
+         m_max = 3
+         toffset = -1
+
+         if (s .eq. sprime) then
+
+c           exact function evaluations
+            gamma4_lo(0) = 1.d0
+            gamma4_lo(1) = 0.d0
+            gamma4_lo(2) = 0.d0
+            gamma4_lo(3) = 0.d0
+
+            gamma4(0) = 0.d0
+            gamma4(1) = 1.d0
+            gamma4(2) = 0.d0
+            gamma4(3) = 0.d0
+
+            gamma4_hi(0) = 0.d0
+            gamma4_hi(1) = 0.d0
+            gamma4_hi(2) = 1.d0
+            gamma4_hi(3) = 0.d0
+
+         else
+
+c           fourth-order accurate first derivative
+            gamma4_lo(0)  =  35.d0 / 210.d0
+            gamma4_lo(1)  = 210.d0 / 210.d0
+            gamma4_lo(2)  = -63.d0 / 210.d0
+            gamma4_lo(3)  =  10.d0 / 210.d0
+
+            gamma4(0)    = -210.d0 / 210.d0
+            gamma4(1)    =   35.d0 / 210.d0
+            gamma4(2)    =  126.d0 / 210.d0
+            gamma4(3)    =  -15.d0 / 210.d0
+
+            gamma4_hi(0) =  175.d0 / 210.d0
+            gamma4_hi(1) = -350.d0 / 210.d0
+            gamma4_hi(2) =  189.d0 / 210.d0
+            gamma4_hi(3) =   50.d0 / 210.d0
+
+         endif
+
+         do m = 0, m_max
+            flux(m) = gamma4(m)
+         enddo
+
+      else if (boundary(tdir+2*1) .eq. 0) then
+
+c        High boundary in the transverse direction is physical
+
+         if (drop_order .eq. 0) then
+
+            m_max = 3
+            toffset = -3
+
+            if (s .eq. sprime) then
+
+c              exact function evaluations
+               gamma4_lo(0) = 0.d0
+               gamma4_lo(1) = 1.d0
+               gamma4_lo(2) = 0.d0
+               gamma4_lo(3) = 0.d0
+
+               gamma4(0)    = 0.d0
+               gamma4(1)    = 0.d0
+               gamma4(2)    = 1.d0
+               gamma4(3)    = 0.d0
+
+               gamma4_hi(0) = 0.d0
+               gamma4_hi(1) = 0.d0
+               gamma4_hi(2) = 0.d0
+               gamma4_hi(3) = 1.d0
+
+            else
+
+c              fourth-order accurate first derivative
+
+               gamma4_lo(0) =  -50.d0 / 210.d0
+               gamma4_lo(1) = -189.d0 / 210.d0
+               gamma4_lo(2) =  350.d0 / 210.d0
+               gamma4_lo(3) = -175.d0 / 210.d0
+
+               gamma4(0)    =   15.d0 / 210.d0
+               gamma4(1)    = -126.d0 / 210.d0
+               gamma4(2)    =  -35.d0 / 210.d0
+               gamma4(3)    =  210.d0 / 210.d0
+
+               gamma4_hi(0) =  -10.d0 / 210.d0
+               gamma4_hi(1) =   63.d0 / 210.d0
+               gamma4_hi(2) = -210.d0 / 210.d0
+               gamma4_hi(3) =  -35.d0 / 210.d0
+
+            endif
+
+         else
+
+            m_max = 2
+            toffset = -2
+
+            if (s .eq. sprime) then
+
+c              exact function evaluations
+               gamma4_lo(0) = 1.d0
+               gamma4_lo(1) = 0.d0
+               gamma4_lo(2) = 0.d0
+
+               gamma4(0)    = 0.d0
+               gamma4(1)    = 1.d0
+               gamma4(2)    = 0.d0
+
+               gamma4_hi(0) = 0.d0
+               gamma4_hi(1) = 0.d0
+               gamma4_hi(2) = 1.d0
+
+            else
+
+c              third-order accurate first derivative
+
+               gamma4_lo(0) =  -57.d0 / 30.d0
+               gamma4_lo(1) =  100.d0 / 30.d0
+               gamma4_lo(2) =  -75.d0 / 30.d0
+
+               gamma4(0)    =  -9.d0 / 30.d0
+               gamma4(1)    = -20.d0 / 30.d0
+               gamma4(2)    =  45.d0 / 30.d0
+
+c              Eq. (39)
+               gamma4_hi(0) =   3.d0 / 30.d0
+               gamma4_hi(1) = -20.d0 / 30.d0
+               gamma4_hi(2) = -15.d0 / 30.d0
+
+            endif
+
+         endif
+
+         do m = 0, m_max
+            flux(m) = gamma4_hi(m)
+         enddo
+
+      else if (boundary(tdir+2*1) .eq. 1) then
+
+c        High boundary in the transverse direction is one cell away from the physical boundary
+
+         m_max = 3
+         toffset = -2
+
+         if (s .eq. sprime) then
+
+c           exact function evaluations
+            gamma4_lo(0) =  0.d0
+            gamma4_lo(1) =  1.d0
+            gamma4_lo(2) =  0.d0
+            gamma4_lo(3) =  0.d0
+
+            gamma4(0) = 0.d0
+            gamma4(1) = 0.d0
+            gamma4(2) = 1.d0
+            gamma4(3) = 0.d0
+
+            gamma4_hi(0) =  0.d0
+            gamma4_hi(1) =  0.d0
+            gamma4_hi(2) =  0.d0
+            gamma4_hi(3) =  1.d0
+
+         else
+
+c           fourth-order accurate first derivative
+
+            gamma4_lo(0) =  -50.d0 / 210.d0
+            gamma4_lo(1) = -189.d0 / 210.d0
+            gamma4_lo(2) =  350.d0 / 210.d0
+            gamma4_lo(3) = -175.d0 / 210.d0
+
+            gamma4(0)    =   15.d0 / 210.d0
+            gamma4(1)    = -126.d0 / 210.d0
+            gamma4(2)    =  -35.d0 / 210.d0
+            gamma4(3)    =  210.d0 / 210.d0
+
+            gamma4_hi(0) =  -10.d0 / 210.d0
+            gamma4_hi(1) =   63.d0 / 210.d0
+            gamma4_hi(2) = -210.d0 / 210.d0
+            gamma4_hi(3) =  -35.d0 / 210.d0
+
+         endif
+
+         do m = 0, m_max
+            flux(m) = gamma4(m)
+         enddo
+
+      else
+
+c        Physical boundary is at least two cells away in the transverse directions
+
+         m_max = 4
+         toffset = -2
+
+         if (s .eq. sprime) then
+
+c           exact function evaluations
+            gamma4_lo(0) = 0.d0
+            gamma4_lo(1) = 1.d0
+            gamma4_lo(2) = 0.d0
+            gamma4_lo(3) = 0.d0
+            gamma4_lo(4) = 0.d0
+
+            gamma4(0) = 0.d0
+            gamma4(1) = 0.d0
+            gamma4(2) = 1.d0
+            gamma4(3) = 0.d0
+            gamma4(4) = 0.d0
+
+            gamma4_hi(0) = 0.d0
+            gamma4_hi(1) = 0.d0
+            gamma4_hi(2) = 0.d0
+            gamma4_hi(3) = 1.d0
+            gamma4_hi(4) = 0.d0
+
+         else
+
+c           fourth-order accurate first derivative
+
+c           Eq. (32) with the minus
+            gamma4_lo(0) =  -3.d0 / 12.d0
+            gamma4_lo(1) = -10.d0 / 12.d0
+            gamma4_lo(2) =  18.d0 / 12.d0
+            gamma4_lo(3) =  -6.d0 / 12.d0
+            gamma4_lo(4) =   1.d0 / 12.d0
+
+c           Eq. (27)
+            gamma4(0)     =  1.d0 / 12.d0
+            gamma4(1)     = -8.d0 / 12.d0
+            gamma4(2)     =  0.d0
+            gamma4(3)     =  8.d0 / 12.d0
+            gamma4(4)     = -1.d0 / 12.d0
+
+c           Eq. (32) with the plus
+            gamma4_hi(0) =  -1.d0 / 12.d0
+            gamma4_hi(1) =   6.d0 / 12.d0
+            gamma4_hi(2) = -18.d0 / 12.d0
+            gamma4_hi(3) =  10.d0 / 12.d0
+            gamma4_hi(4) =   3.d0 / 12.d0
+
+         endif
+
+         do m = 0, m_max
+            flux(m) = gamma4(m)
+         enddo
+
+      endif
+
+c     Accumulate the stencil contributions
+
+      if (dir .eq. 0) then
+         lo0 = ic + noffset
+         hi0 = lo0 + nlength - 1
+         lo1 = jc + toffset - 1
+         hi1 = lo1
+      else
+         lo0 = ic + toffset - 1
+         hi0 = lo0
+         lo1 = jc + noffset
+         hi1 = lo1 + nlength - 1
+      endif
+
+      if (s .eq. sprime) then
+         hfac = -1. / h(dir)
+      else
+         hfac = -1. / h(tdir)
+      endif
+
+      do m = 0, m_max
+         lo1 = lo1 + ii
+         hi1 = hi1 + ii
+         lo0 = lo0 + jj
+         hi0 = hi0 + jj
+
+         n = -1
+         do j = lo1, hi1
+            do i = lo0, hi0
+               n = n + 1
+               sum(CHF_IX[i;j]) = sum(CHF_IX[i;j]) + hfac * n_stencil(n) * flux(m)
+            enddo
+         enddo
+      enddo
+
+      return
+      end
+
+      subroutine accum_field_stencil2(
+     &     CHF_CONST_INT[s],
+     &     CHF_CONST_INT[sprime],
+     &     CHF_CONST_INT[side],
+     &     CHF_CONST_I1D[boundary],
+     &     CHF_CONST_I1D[bc_types],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INTVECT[global],
+     &     CHF_FRA1[sum]
+     &     )
+      integer
+     &     CHF_DDECL[i;j], CHF_DDECL[ii;jj], CHF_DDECL[ic;jc],
+     &     CHF_DDECL[lo0;lo1], CHF_DDECL[hi0;hi1],  CHF_DDECL[iglobal;jglobal],
+     &     dir, tdir, dst_to_bndry, m, m_max, n, noffset, toffset, nlength, bc_type
+      REAL_T hfac, n_stencil(0:1), t_stencil(0:2), norm_fac, trans_fac
+
+      dir = s
+      iglobal = global(0)
+      jglobal = global(1)
+
+      CHF_DTERM[
+      ic = 1;
+      jc = 1]
+
+      dst_to_bndry = boundary(dir+2*side)
+      bc_type = bc_types(dir+2*side)
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir)]
+      tdir = 1 - dir
+
+      if (s. eq. sprime) then
+         hfac = - one / h(dir)
+      else 
+         hfac = - one / h(tdir)
+      endif
+
+      if (dst_to_bndry .eq. 0) then
+
+c        On the physical boundary
+
+         if (s. eq. sprime) then
+
+            if (bc_type .eq. 0) then
+c              Homogeneous Dirichlet
+
+               noffset = 0
+               nlength = 1
+               m_max   = 0
+               toffset = 0
+
+               n_stencil(0) = - 2.d0 * (2*side - 1)
+               t_stencil(0) = 1.d0
+
+            else
+c              Homogeneous Neumann (normal derivative is zero)
+
+               noffset = 0
+               nlength = 0
+               m_max   = -1
+               toffset = 0
+            endif
+
+         else
+
+c           Tangential derivative
+            
+            if (bc_type .eq. 0) then
+c              Homogeneous Dirichlet
+
+               m_max = -1
+               toffset = 0
+               noffset = 0
+               nlength = 0
+
+            else
+c              Homogeneous Neumann
+
+               n_stencil(0) = 1.d0
+               noffset = 0
+               nlength = 1
+
+               if (boundary(tdir+2*0) .eq. 0) then
+
+c                 Low boundary in the transverse direction is physical
+
+c                 One-sided
+                  m_max   = 1
+                  toffset = 0
+                  t_stencil(0) = -1.d0
+                  t_stencil(1) =  1.d0
+
+               else if (boundary(tdir+2*1) .eq. 0) then
+
+c                 High boundary in the transverse direction is physical
+
+c                 One-sided
+                  m_max   = 1
+                  toffset = -1
+                  t_stencil(0) = -1.d0
+                  t_stencil(1) =  1.d0
+
+               else
+
+c                 Physical boundary is at least one cell away in the transverse directions
+
+                  m_max   = 2
+                  toffset = -1
+                  t_stencil(0) = -1.d0 / 2.d0
+                  t_stencil(1) =  0.d0
+                  t_stencil(2) =  1.d0 / 2.d0
+
+               endif
+
+            endif
+
+         endif
+
+      else
+
+c        Not on the physical boundary
+
+         if (s. eq. sprime) then
+
+            noffset = side - 1
+            nlength = 2
+            m_max   = 0
+            toffset = 0
+
+            n_stencil(0) = -1.d0
+            n_stencil(1) =  1.d0
+            t_stencil(0) =  1.d0
+
+         else
+
+            n_stencil(0) = 0.5d0
+            n_stencil(1) = 0.5d0
+
+            noffset = side - 1
+            nlength = 2
+
+            if (boundary(tdir+2*0) .eq. 0) then
+
+c              Low boundary in the transverse direction is physical
+
+               if (bc_types(tdir+2*0) .eq. 0) then
+                  m_max   = 1
+                  toffset = 0
+
+c                 One-sided
+                  t_stencil(0) = -1.d0
+                  t_stencil(1) =  1.d0
+
+               else
+                  m_max   = 1
+                  toffset = 0
+
+c                 One-sided
+                  t_stencil(0) = -1.d0
+                  t_stencil(1) =  1.d0
+               endif
+
+            else if (boundary(tdir+2*1) .eq. 0) then
+
+c              High boundary in the transverse direction is physical
+
+               if (bc_types(tdir+2*1) .eq. 0) then
+                  m_max   = 1
+                  toffset = -1
+
+c                 One-sided
+                  t_stencil(0) = -1.d0
+                  t_stencil(1) =  1.d0
+               else         
+                  m_max   = 1
+                  toffset = -1
+
+c                 One-sided
+                  t_stencil(0) = -1.d0
+                  t_stencil(1) =  1.d0
+
+               endif
+
+            else
+
+c              Physical boundary is at least one cell away in the transverse directions
+
+               m_max   = 2
+               toffset = -1
+
+               t_stencil(0) = -1.d0 / 2.d0
+               t_stencil(1) =  0.d0
+               t_stencil(2) =  1.d0 / 2.d0
+
+            endif
+
+         endif
+
+      endif
+
+c     Accumulate the stencil contributions
+
+      if (dir .eq. 0) then
+         lo0 = ic + noffset
+         hi0 = lo0 + nlength - 1
+         lo1 = jc + toffset - 1
+         hi1 = lo1
+      else
+         lo0 = ic + toffset - 1
+         hi0 = lo0
+         lo1 = jc + noffset
+         hi1 = lo1 + nlength - 1
+      endif
+
+      do m = 0, m_max
+         if (dir .eq. 0) then
+            lo1 = lo1 + 1
+            hi1 = hi1 + 1
+         else
+            lo0 = lo0 + 1
+            hi0 = hi0 + 1
+         endif
+
+         n = -1
+         do j = lo1, hi1
+            do i = lo0, hi0
+               n = n + 1
+               sum(CHF_IX[i;j]) = sum(CHF_IX[i;j]) + hfac * n_stencil(n) * t_stencil(m)
+            enddo
+         enddo
+      enddo
+
+      return
+      end
+
+      subroutine accum_field_bv_contrib2(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[s],
+     &     CHF_CONST_INT[sprime],
+     &     CHF_CONST_INT[side],
+     &     CHF_CONST_INT[bc_type],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_FRA1[bv],    
+     &     CHF_FRA1[Efield]
+     &     )
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+      REAL_T hfac, diff
+
+      CHF_DTERM[
+      ii = CHF_ID(0,sprime);
+      jj = CHF_ID(1,sprime);
+      kk = CHF_ID(2,sprime)]
+
+      hfac = - one / h(sprime)
+
+      CHF_MULTIDO[box;i;j;k]
+
+         if (s. eq. sprime) then
+
+            if (bc_type .eq. 0) then
+c              Dirichlet
+
+               diff = two * (2*side - 1) * bv(CHF_IX[i;j;k])
+
+            else
+c              Neumann (boundary value provides outward pointing derivative)
+
+               diff = h(s) * (2*side - 1) * bv(CHF_IX[i;j;k])
+
+            endif
+
+         else
+
+            if (bc_type .eq. 0) then
+c              Dirichlet (compute the tangential derivative of the boundary value)
+
+               diff = half * (bv(CHF_IX[i+ii;j+jj;k+kk]) - bv(CHF_IX[i-ii;j-jj;k-kk]))
+
+            else
+c              Neumann
+
+               diff = fourth * h(s) * (bv(CHF_IX[i+ii;j+jj;k+kk]) - bv(CHF_IX[i-ii;j-jj;k-kk]))
+
+            endif
+
+         endif
+
+         Efield(CHF_IX[i;j;k]) = Efield(CHF_IX[i;j;k]) + hfac * diff
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine set_extrap_radial_field_bv2(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[s],
+     &     CHF_CONST_INT[sprime],
+     &     CHF_CONST_INT[radial_side],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_FRA1[Efield]
+     &     )
+      integer CHF_DDECL[i;j;k], ii, n
+      REAL_T val
+
+      ii = (2*radial_side-1)
+
+      CHF_MULTIDO[box;i;j;k]
+
+c        Zeroth order extrapolation
+c         Efield(CHF_IX[i;j;k]) = Efield(CHF_IX[i-ii;j;k])
+
+c        Linear extrapolation
+         Efield(CHF_IX[i;j;k]) = two * Efield(CHF_IX[i-ii;j;k]) - Efield(CHF_IX[i-2*ii;j;k])
+
+c        Setting the values on the four outermost faces to the average
+c        of the values on the outermost three interior faces
+c         val = zero
+c         do n = 1, 3
+c            val = val + Efield(CHF_IX[i-n*ii;j;k])
+c         enddo
+c         val = val / three
+c
+c         do n = 0, 3
+c            Efield(CHF_IX[i-n*ii;j;k]) = val
+c         enddo
+
+
+c        Set all values within 3 cells to the value 3 cells in
+
+c         val = Efield(CHF_IX[i-3*ii;j;k])
+
+c         do n = 0, 2
+c            Efield(CHF_IX[i-n*ii;j;k]) = val
+c         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine mult_njinverse(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[efield_mapped],
+     &     CHF_CONST_FRA[njinverse],
+     &     CHF_FRA[efield]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision nji11, nji12, nji21, nji22
+
+      CHF_MULTIDO[box;i;j;k]
+
+         nji11 = njinverse(i,j,0)
+         nji12 = njinverse(i,j,1)
+         nji21 = njinverse(i,j,2)
+         nji22 = njinverse(i,j,3)
+
+         efield(CHF_IX[i;j;k],0) = nji11 * efield_mapped(CHF_IX[i;j;k],0)
+     &                           + nji12 * efield_mapped(CHF_IX[i;j;k],2)
+         efield(CHF_IX[i;j;k],1) = zero
+         efield(CHF_IX[i;j;k],2) = nji21 * efield_mapped(CHF_IX[i;j;k],0)
+     &                           + nji22 * efield_mapped(CHF_IX[i;j;k],2)
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine cell_centered_field_component(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_FRA1[Efield]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir)]
+
+      CHF_MULTIDO[box; i; j; k]
+      
+         Efield(CHF_IX[i;j;k]) = -(
+     &     phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
+     &     - eight * phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &     + eight * phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &     - phi(CHF_IX[i+2*ii;j+2*jj;k+2*kk])
+     &     ) / (twelve * h(dir))
+
+c     Second-order formula (for experimental purposes)
+c          Efield(CHF_IX[i;j;k]) = -(
+c     &     - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+c     &     + phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+c     &     ) / (two * h(dir))
+          
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine face_centered_field_component(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_FRA1[Efield]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir)]
+
+      CHF_MULTIDO[box; i; j; k]
+
+         Efield(CHF_IX[i;j;k]) = -(
+     &         27.d0 * (phi(CHF_IX[i     ;j     ;k     ])
+     &                - phi(CHF_IX[i-  ii;j-  jj;k-  kk]))
+     &                - phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &                + phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
+     &                            ) / (24.d0 * h(dir))
+
+c     Second-order formula (for experimental purposes)
+c         Efield(CHF_IX[i;j;k]) = -(
+c     &             - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+c     &             + phi(CHF_IX[i     ;j     ;k     ])
+c     &                    ) / h(dir)
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine face_interpolate(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_FRA1[data]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir)]
+
+      CHF_MULTIDO[box;i;j;k]
+
+         data(CHF_IX[i;j;k]) = (
+     &     9.d0 * (phi(CHF_IX[i     ;j     ;k     ])
+     &           + phi(CHF_IX[i-  ii;j-  jj;k-  kk]))
+     &          - (phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &           + phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk]))
+     &     ) / 16.d0
+
+c     Second-order formula (for experimental purposes)
+c         data(CHF_IX[i;j;k]) = (
+c     &            phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+c     &          + phi(CHF_IX[i     ;j     ;k     ])
+c     &     ) / 2.d0
+
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine extrap_for_cc_ops(
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[side],
+     &     CHF_BOX[facebox],
+     &     CHF_BOX[interiorbox],
+     &     CHF_FRA[array]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i,id,ni;j,jd,nj;k,kd,nk], m, n, comp, ncomp
+      double precision sum, coef(0:4,2)
+      data coef /  5.d0, -10.d0, 10.d0,  -5.d0, 1.d0,
+     &            15.d0, -40.d0, 45.d0, -24.d0, 5.d0 /
+
+c
+c     This routine fourth-order extrapolates to at most two ghost cells
+c
+
+      ncomp = CHF_NCOMP[array]
+
+      CHF_DTERM[
+      id = CHF_ID(0,dir)*side;
+      jd = CHF_ID(1,dir)*side;
+      kd = CHF_ID(2,dir)*side
+      ]
+
+      CHF_MULTIDO[facebox; i; j; k]
+
+        if (side .eq. -1) then
+           CHF_DTERM[
+           ni = id*(i-CHF_LBOUND[interiorbox;0])
+           n = ni;
+           nj = jd*(j-CHF_LBOUND[interiorbox;1])
+           n = n + nj;
+           nk = kd*(k-CHF_LBOUND[interiorbox;2])
+           n = n + nk
+           ]
+         else if (side .eq. 1) then
+            CHF_DTERM[
+            ni = id*(i-CHF_UBOUND[interiorbox;0])
+            n = ni;
+            nj = jd*(j-CHF_UBOUND[interiorbox;1])
+            n = n + nj;
+            nk = kd*(k-CHF_UBOUND[interiorbox;2])
+            n = n + nk
+            ]
+          endif
+
+          do comp = 0, ncomp-1
+
+             sum = zero
+             do m = 0, 4
+                sum = sum + coef(m,n)*array(CHF_DDECL[i-id*(ni+m);j-jd*(nj+m);k-kd*(nk+m)],comp)
+             enddo
+             array(CHF_IX[i;j;k],comp) = sum
+
+          enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine extrap_for_fc_ops(
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[side],
+     &     CHF_BOX[facebox],
+     &     CHF_BOX[interiorbox],
+     &     CHF_FRA[array]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i,id,ni;j,jd,nj;k,kd,nk], m, n, comp, ncomp
+      double precision sum, coef(0:4,2)
+      data coef /  4.625d0, -8.5d0, 7.75d0, -3.5d0, 0.625d0,
+     &             11.25d0, -25.d0, 22.5d0,  -9.d0, 1.25d0 /
+
+c
+c     This routine fourth-order extrapolates to at most two ghost cells
+c
+
+      ncomp = CHF_NCOMP[array]
+
+      CHF_DTERM[
+      id = CHF_ID(0,dir)*side;
+      jd = CHF_ID(1,dir)*side;
+      kd = CHF_ID(2,dir)*side
+      ]
+
+      CHF_MULTIDO[facebox; i; j; k]
+
+        if (side .eq. -1) then
+           CHF_DTERM[
+           ni = id*(i-CHF_LBOUND[interiorbox;0])
+           n = ni;
+           nj = jd*(j-CHF_LBOUND[interiorbox;1])
+           n = n + nj;
+           nk = kd*(k-CHF_LBOUND[interiorbox;2])
+           n = n + nk
+           ]
+         else if (side .eq. 1) then
+            CHF_DTERM[
+            ni = id*(i-CHF_UBOUND[interiorbox;0])
+            n = ni;
+            nj = jd*(j-CHF_UBOUND[interiorbox;1])
+            n = n + nj;
+            nk = kd*(k-CHF_UBOUND[interiorbox;2])
+            n = n + nk
+            ]
+          endif
+
+          do comp = 0, ncomp-1
+
+             sum = zero
+             do m = 0, 4
+                sum = sum + coef(m,n)*array(CHF_DDECL[i-id*(ni+m);j-jd*(nj+m);k-kd*(nk+m)],comp)
+             enddo
+             array(CHF_IX[i;j;k],comp) = sum
+
+          enddo
+
+      CHF_ENDDO
+
+      return
+      end

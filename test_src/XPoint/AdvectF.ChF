@@ -1,0 +1,118 @@
+      subroutine vel_test(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA[N],
+     &     CHF_FRA[velocity]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l]
+      double precision NT11, NT12, NT21, NT22, d
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+         NT11 = N(i,j,0)
+         NT12 = N(i,j,2)
+         NT21 = N(i,j,1)
+         NT22 = N(i,j,3)
+         d = NT11*NT22 - NT12*NT21
+
+c        poloidal ccw
+c         velocity(CHF_IX[i;j;k;l],0) = -NT12/d
+c         velocity(CHF_IX[i;j;k;l],1) =  NT11/d
+
+c         radial inward
+c         velocity(CHF_IX[i;j;k;l],0) = -NT22/d
+c         velocity(CHF_IX[i;j;k;l],1) =  NT21/d
+
+c         radial outward
+c         velocity(CHF_IX[i;j;k;l],0) = NT22/d
+c         velocity(CHF_IX[i;j;k;l],1) =  -NT21/d
+
+         velocity(CHF_IX[i;j;k;l],0) = -one
+         velocity(CHF_IX[i;j;k;l],1) = -.55d0
+
+c         velocity(CHF_IX[i;j;k;l],0) = -one
+c         velocity(CHF_IX[i;j;k;l],1) = zero
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine mult_cfg_nt(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[N],
+     &     CHF_FRA[velocity]
+     &     )
+
+c     local variables
+      double precision NT11, NT12, NT21, NT22, v0, v1
+      integer CHF_DDECL[i;j;k;l]
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+         NT11 = N(i,j,0)
+         NT12 = N(i,j,2)
+         NT21 = N(i,j,1)
+         NT22 = N(i,j,3)
+
+         v0 = NT11 * velocity(CHF_IX[i;j;k;l],0) + NT12 * velocity(CHF_IX[i;j;k;l],1)
+         v1 = NT21 * velocity(CHF_IX[i;j;k;l],0) + NT22 * velocity(CHF_IX[i;j;k;l],1)
+
+         velocity(CHF_IX[i;j;k;l],0) = v0
+         velocity(CHF_IX[i;j;k;l],1) = v1
+
+      CHF_ENDDO
+
+      return
+      end
+
+c -------------------------------------------------------
+c  this subroutine computes the cell-centered divergence
+c  from the edge centered velocity field -- does this in
+c  a direction-by-direction basis; increments div with
+c  du/dx or dv/dy or dw/dz. actually assumes that dx=dy=dz
+c
+c  INPUTS/OUTPUTS:
+c  uEdge   => edge-centered vector field in direction dir
+c  div    <=  cell-centered divergence
+c  gridInt => box which defines interior of grid
+c  dx      => cell spacing in direction dir
+c  dir     => coordinate direction
+c -------------------------------------------------------
+      subroutine cfgdivergence(CHF_CONST_FRA[uEdge],
+     &                          CHF_FRA[div],
+     &                          CHF_BOX[gridInt],
+     &                          CHF_CONST_REAL[dx],
+     &                          CHF_INT[dir])
+
+c ::: local variables
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer CHF_DDECL[ii;jj;kk;ll;mm;nn]
+      integer comp
+      REAL_T one_on_dx
+
+      one_on_dx = one/dx
+
+      do comp=0,CHF_NCOMP[div]-1
+
+      CHF_MULTIDO[gridInt;i;j;k;l;m;n]
+      CHF_DTERM[
+      ii = i+CHF_ID(0,dir);
+      jj = j+CHF_ID(1,dir);
+      kk = k+CHF_ID(2,dir);
+      ll = l+CHF_ID(3,dir);
+      mm = m+CHF_ID(4,dir);
+      nn = n+CHF_ID(5,dir)]
+
+      div(CHF_IX[i;j;k;l;m;n],comp) = div(CHF_IX[i;j;k;l;m;n],comp)
+     &                      +one_on_dx*(uEdge(CHF_IX[ii;jj;kk;ll;mm;nn],comp)
+     &                                 -uEdge(CHF_IX[i;j;k;l;m;n],comp))
+
+      CHF_ENDDO
+
+      enddo
+
+      return
+      end

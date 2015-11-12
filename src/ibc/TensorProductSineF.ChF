@@ -1,0 +1,33 @@
+#include "CONSTANTS.H"
+
+      subroutine set_tensorproductsine(
+     &     CHF_FRA[f],
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[coord],
+     &     CHF_CONST_REAL[t],
+     &     CHF_CONST_REAL[amp],
+     &     CHF_CONST_REALVECT[mode]
+     &     )
+c
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+      integer d,n
+      REAL_T product, x, dsin
+c
+      do n=0,CHF_NCOMP[f]-1
+      CHF_MULTIDO[box;i;j;k;l;m]
+c
+        product = one
+        do d=0,CHF_NCOMP[coord]-1
+          x = coord(CHF_IX[i;j;k;l;m],d)
+          if (d.eq.0) then
+            x = x - t
+          endif
+          product = product * dcos( two * Pi * mode(d) * x )
+        enddo
+        f(CHF_IX[i;j;k;l;m],n) = amp * product
+      CHF_ENDDO
+      enddo
+c
+      return
+      end

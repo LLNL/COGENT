@@ -1,0 +1,59 @@
+      subroutine compute_laplacian_coefficients(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[n],
+     &     CHF_CONST_FRA[njinverse],
+     &     CHF_FRA[coef]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], row, col, m
+      double precision n_mat(0:1,0:1), nji_mat(0:1,0:1), d_mat(0:1,0:1),
+     &       dnji_mat(0:1,0:1), coef_mat(0:1,0:1)
+
+      CHF_MULTIDO[box;i;j;k]
+
+c        Coefficients in cylindrical coordinate frame
+         d_mat(0,0) = one
+         d_mat(0,1) = zero
+         d_mat(1,0) = zero
+         d_mat(1,1) = one
+
+         nji_mat(0,0) = njinverse(CHF_IX[i;j;k],0)
+         nji_mat(0,1) = njinverse(CHF_IX[i;j;k],1)
+         nji_mat(1,0) = njinverse(CHF_IX[i;j;k],2)
+         nji_mat(1,1) = njinverse(CHF_IX[i;j;k],3)
+
+c        Multiply the coefficient matrix times the NJInverse matrix
+         do row = 0, 1
+            do col = 0, 1
+               dnji_mat(row,col) = zero
+               do m = 0, 1
+                  dnji_mat(row,col) = dnji_mat(row,col) + d_mat(row,m) * nji_mat(m,col)
+               enddo
+            enddo
+         enddo
+
+         n_mat(0,0) = n(CHF_IX[i;j;k],0)
+         n_mat(0,1) = n(CHF_IX[i;j;k],1)
+         n_mat(1,0) = n(CHF_IX[i;j;k],2)
+         n_mat(1,1) = n(CHF_IX[i;j;k],3)
+
+c        Premultiply by the NTranspose matrix
+         do row = 0, 1
+            do col = 0, 1
+               coef_mat(row,col) = zero
+               do m = 0, 1
+                  coef_mat(row,col) = coef_mat(row,col) + n_mat(m,row) * dnji_mat(m,col)
+               enddo
+            enddo
+         enddo
+
+         coef(CHF_IX[i;j;k],0) = coef_mat(0,0)
+         coef(CHF_IX[i;j;k],1) = coef_mat(0,1)
+         coef(CHF_IX[i;j;k],2) = coef_mat(1,0)
+         coef(CHF_IX[i;j;k],3) = coef_mat(1,1)
+
+      CHF_ENDDO
+
+      return
+      end

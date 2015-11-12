@@ -1,0 +1,24 @@
+#include "CONSTANTS.H"
+
+
+      subroutine compute_sc_ntr_freq(
+     &     CHF_BOX[box],
+     &     CHF_FRA1[ntr_freq],
+     &     CHF_CONST_FRA1[n],
+     &     CHF_CONST_FRA1[T]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l]
+
+      CHF_MULTIDO[box;i;j;k;l]
+
+       ntr_freq(CHF_IX[i;j;k;l]) = n(i,j,CHF_LBOUND[n;2],CHF_LBOUND[n;3]) 
+     &                          / (T(i,j,CHF_LBOUND[T;2],CHF_LBOUND[T;3])**(3.0/2.0)) 
+     
+      CHF_ENDDO
+
+      return
+
+      end
+

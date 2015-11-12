@@ -1,0 +1,264 @@
+      subroutine get_field_from_rbpol_rbtor(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REAL[RBtor],
+     &     CHF_CONST_FRA[RBpol],
+     &     CHF_CONST_FRA1[R],
+     &     CHF_FRA[B],
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      CHF_MULTIDO[gridbox;i;j;k]
+
+         B(CHF_IX[i;j;k],0) = RBpol(CHF_IX[i;j;k],0) / R(CHF_IX[i;j;k])
+         B(CHF_IX[i;j;k],1) = RBtor                  / R(CHF_IX[i;j;k])
+         B(CHF_IX[i;j;k],2) = RBpol(CHF_IX[i;j;k],1) / R(CHF_IX[i;j;k])
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine get_field_magnitude_and_unitvector(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[Bvec],
+     &     CHF_FRA1[Bmag],
+     &     CHF_FRA[bunit]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], l
+      double precision sum
+
+      CHF_MULTIDO[gridbox;i;j;k]
+
+         sum = zero
+         do l = 0, 2
+            sum = sum + Bvec(CHF_IX[i;j;k],l)**2
+         enddo
+         Bmag(CHF_IX[i;j;k]) = sqrt(sum)
+
+         do l = 0, 2
+            bunit(CHF_IX[i;j;k],l) = Bvec(CHF_IX[i;j;k],l) / Bmag(CHF_IX[i;j;k])
+         enddo             
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine get_field_derivative_data(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_INT[axisymmetric],
+     &     CHF_CONST_FRA1[RB],
+     &     CHF_CONST_FRA1[dRBdr],
+     &     CHF_CONST_FRA1[dRBdt],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_CONST_FRA1[dbunitRdr],
+     &     CHF_CONST_FRA1[dbunitRdt],
+     &     CHF_CONST_FRA1[dbunitphidr],
+     &     CHF_CONST_FRA1[dbunitphidt],
+     &     CHF_CONST_FRA1[dbunitZdr],
+     &     CHF_CONST_FRA1[dbunitZdt],
+     &     CHF_CONST_FRA1[R],
+     &     CHF_CONST_FRA1[Rr],
+     &     CHF_CONST_FRA1[Rt],
+     &     CHF_CONST_FRA1[Zr],
+     &     CHF_CONST_FRA1[Zt],
+     &     CHF_FRA[gradb],
+     &     CHF_FRA[curlb],
+     &     CHF_FRA1[bdotcurlb]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], l
+      double precision jac, fac
+
+      if (axisymmetric .ne. 0) then
+         fac = one
+      else
+         fac = zero
+      endif
+      
+
+      CHF_MULTIDO[gridbox;i;j;k]
+
+c        R, phi, Z components of grad B per equations (11), (12) of Ron's notes
+
+         jac = Rr(CHF_IX[i;j;k]) * Zt(CHF_IX[i;j;k]) - Zr(CHF_IX[i;j;k]) * Rt(CHF_IX[i;j;k])
+
+         gradb(CHF_IX[i;j;k],0) = (- RB(CHF_IX[i;j;k])/R(CHF_IX[i;j;k])
+     &                             + (Zt(CHF_IX[i;j;k])*dRBdr(CHF_IX[i;j;k])
+     &                             - Zr(CHF_IX[i;j;k])*dRBdt(CHF_IX[i;j;k])) / jac ) / R(CHF_IX[i;j;k])
+         gradb(CHF_IX[i;j;k],1) = zero
+         gradb(CHF_IX[i;j;k],2) = (-Rt(CHF_IX[i;j;k])*dRBdr(CHF_IX[i;j;k])
+     &                            + Rr(CHF_IX[i;j;k])*dRBdt(CHF_IX[i;j;k])) / (jac * R(CHF_IX[i;j;k]))
+
+c        R, phi, Z components of curl b per equations (8), (9) and (10) of Ron's notes
+
+         curlb(CHF_IX[i;j;k],0) = (Rt(CHF_IX[i;j;k]) * dbunitphidr(CHF_IX[i;j;k])
+     &                           - Rr(CHF_IX[i;j;k]) * dbunitphidt(CHF_IX[i;j;k])) / jac
+         curlb(CHF_IX[i;j;k],1) = (-Rt(CHF_IX[i;j;k]) * dbunitRdr(CHF_IX[i;j;k]) 
+     &                            + Rr(CHF_IX[i;j;k]) * dbunitRdt(CHF_IX[i;j;k])
+     &                            - Zt(CHF_IX[i;j;k]) * dbunitZdr(CHF_IX[i;j;k])
+     &                            + Zr(CHF_IX[i;j;k]) * dbunitZdt(CHF_IX[i;j;k])) / jac
+         curlb(CHF_IX[i;j;k],2)  = fac * bunit(CHF_IX[i;j;k],1)/R(CHF_IX[i;j;k])
+     &                           + (Zt(CHF_IX[i;j;k]) * dbunitphidr(CHF_IX[i;j;k])
+     &                            - Zr(CHF_IX[i;j;k]) * dbunitphidt(CHF_IX[i;j;k])) / jac
+
+c        b dotted with its curl
+
+         bdotcurlb(CHF_IX[i;j;k]) = zero
+         do l = 0, 2
+            bdotcurlb(CHF_IX[i;j;k]) = bdotcurlb(CHF_IX[i;j;k]) 
+     &                               + curlb(CHF_IX[i;j;k],l) * bunit(CHF_IX[i;j;k],l)
+         end do
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine get_field_data_spectral(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[RZ],
+     &     CHF_CONST_FRA[RB],
+     &     CHF_CONST_FRA[dRBdR],
+     &     CHF_CONST_FRA[dRBdZ],
+     &     CHF_CONST_REAL[RBtor],
+     &     CHF_FRA[B],
+     &     CHF_FRA1[Bmag],
+     &     CHF_FRA[bunit],
+     &     CHF_FRA[gradB],
+     &     CHF_FRA[curlb],
+     &     CHF_FRA1[bdotcurlb]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], n
+      double precision R, Z, Bmag2
+
+      CHF_MULTIDO[gridbox;i;j;k]
+
+         R = RZ(CHF_IX[i;j;k],0);
+         Z = RZ(CHF_IX[i;j;k],1);
+
+         B(CHF_IX[i;j;k],0) = RB(CHF_IX[i;j;k],0) / R
+         B(CHF_IX[i;j;k],1) = RBtor / R
+         B(CHF_IX[i;j;k],2) = RB(CHF_IX[i;j;k],1) / R
+
+         Bmag2 = zero
+         do n = 0, 2
+            Bmag2 = Bmag2 + B(CHF_IX[i;j;k],n)**2
+         enddo
+         Bmag(CHF_IX[i;j;k]) = sqrt(Bmag2)
+
+         do n = 0, 2
+            bunit(CHF_IX[i;j;k],n) = B(CHF_IX[i;j;k],n) / Bmag(CHF_IX[i;j;k])
+         enddo
+
+         gradB(CHF_IX[i;j;k],0) = (B(CHF_IX[i;j;k],0) * dRBdR(CHF_IX[i;j;k],0) + B(CHF_IX[i;j;k],2) * dRBdR(CHF_IX[i;j;k],1))
+     &                            / (R * Bmag(CHF_IX[i;j;k])) - Bmag(CHF_IX[i;j;k]) / R
+
+         gradB(CHF_IX[i;j;k],1) = zero
+
+         gradB(CHF_IX[i;j;k],2) = (B(CHF_IX[i;j;k],0) * dRBdZ(CHF_IX[i;j;k],0) + B(CHF_IX[i;j;k],2) * dRBdZ(CHF_IX[i;j;k],1))
+     &                            / (R * Bmag(CHF_IX[i;j;k]))
+
+         curlb(CHF_IX[i;j;k],0) =  bunit(CHF_IX[i;j;k],1) * gradB(CHF_IX[i;j;k],2) / Bmag(CHF_IX[i;j;k])
+
+         curlb(CHF_IX[i;j;k],1) = (dRBdZ(CHF_IX[i;j;k],0) - dRBdR(CHF_IX[i;j;k],1)) / (R * Bmag(CHF_IX[i;j;k]))
+     &                          + (bunit(CHF_IX[i;j;k],2) * gradB(CHF_IX[i;j;k],0) 
+     &                           - bunit(CHF_IX[i;j;k],0) * gradB(CHF_IX[i;j;k],2)) / Bmag(CHF_IX[i;j;k])
+     &                          + bunit(CHF_IX[i;j;k],2) / R
+
+         curlb(CHF_IX[i;j;k],2) = - bunit(CHF_IX[i;j;k],1) * gradB(CHF_IX[i;j;k],0) / Bmag(CHF_IX[i;j;k])
+
+         bdotcurlb(CHF_IX[i;j;k]) = zero
+         do n = 0, 2
+            bdotcurlb(CHF_IX[i;j;k]) = bdotcurlb(CHF_IX[i;j;k]) + bunit(CHF_IX[i;j;k],n) * curlb(CHF_IX[i;j;k],n) 
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine dct_interp(
+     &     CHF_CONST_FRA1[coef],
+     &     CHF_CONST_INT[deriv1],
+     &     CHF_CONST_INT[deriv2],
+     &     CHF_R1D[fac1],
+     &     CHF_R1D[fac2],
+     &     CHF_R1D[sinfac1],
+     &     CHF_R1D[cosfac1],
+     &     CHF_R1D[sinfac2],
+     &     CHF_R1D[cosfac2],
+     &     CHF_R1D[lambda],
+     &     CHF_REAL[value]
+     &     )
+
+c     local variables
+      integer Nminus1, Mminus1, i, j
+
+      Nminus1 = CHF_UBOUND[coef;0]
+      Mminus1 = CHF_UBOUND[coef;1]
+
+      value = zero
+
+      if (deriv1 .eq. 0 .and. deriv2 .eq. 0) then
+
+         do j = 0, Mminus1
+            do i = 0, Nminus1
+               value = value + lambda(i) * lambda(j) * coef(i,j) * cosfac1(i) * cosfac2(j)
+            enddo
+         enddo
+
+      else if (deriv1 .eq. 1 .and. deriv2 .eq. 0) then
+
+         do j = 0, Mminus1
+            do i = 0, Nminus1
+               value = value - lambda(i) * lambda(j) * coef(i,j) * sinfac1(i) * cosfac2(j) * fac1(i)
+            enddo
+         enddo
+
+      else if (deriv1 .eq. 0 .and. deriv2 .eq. 1) then
+
+         do j = 0, Mminus1
+            do i = 0, Nminus1
+               value = value - lambda(i) * lambda(j) * coef(i,j) * cosfac1(i) * sinfac2(j) * fac2(j)
+            enddo
+         enddo
+
+      else if (deriv1 .eq. 2 .and. deriv2 .eq. 0) then
+
+         do j = 0, Mminus1
+            do i = 0, Nminus1
+               value = value - lambda(i) * lambda(j) * coef(i,j) * cosfac1(i) * cosfac2(j) * fac1(i)**2
+            enddo
+         enddo
+
+      else if (deriv1 .eq. 0 .and. deriv2 .eq. 2) then
+
+         do j = 0, Mminus1
+            do i = 0, Nminus1
+               value = value - lambda(i) * lambda(j) * coef(i,j) * cosfac1(i) * cosfac2(j) * fac2(j)**2
+            enddo
+         enddo
+
+      else if (deriv1 .eq. 1 .and. deriv2 .eq. 1) then
+
+         do j = 0, Mminus1
+            do i = 0, Nminus1
+               value = value + lambda(i) * lambda(j) * coef(i,j) * sinfac1(i) * sinfac2(j) * fac1(i) * fac2(j)
+            enddo
+         enddo
+
+      endif
+
+      value = value * two / dsqrt((Nminus1+one)*(Mminus1+one))
+
+      return
+      end
+ 

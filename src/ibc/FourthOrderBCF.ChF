@@ -1,0 +1,212 @@
+#include "CONSTANTS.H"
+
+      subroutine fourth_order_outflow_bc(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_FRA[vn],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l]
+      integer CHF_DDECL[ii;jj;kk;ll]
+      integer CHF_DDECL[i1;j1;k1;l1]
+      integer CHF_DDECL[iv0;iv1;iv2;iv3]
+      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3]
+      integer CHF_DDECL[ng0;ng1;ng2;ng3]
+      integer isign
+      integer n,d,ng(0:CH_SPACEDIM-1)
+c
+      isign = 2*iside-1
+c
+      CHF_DTERM[
+      i1 = isign * CHF_ID(idir,0);
+      j1 = isign * CHF_ID(idir,1);
+      k1 = isign * CHF_ID(idir,2);
+      l1 = isign * CHF_ID(idir,3)]
+c
+      CHF_DTERM[
+      ng0 = CHF_UBOUND[bdrybox;0]-CHF_LBOUND[bdrybox;0]+1;
+      ng1 = CHF_UBOUND[bdrybox;1]-CHF_LBOUND[bdrybox;1]+1;
+      ng2 = CHF_UBOUND[bdrybox;2]-CHF_LBOUND[bdrybox;2]+1;
+      ng3 = CHF_UBOUND[bdrybox;3]-CHF_LBOUND[bdrybox;3]+1]
+c
+      CHF_DTERM[
+      ibeg0 = ibdryboxlo0+CHF_ID(idir,0)*(1-iside)*ng0;
+      ibeg1 = ibdryboxlo1+CHF_ID(idir,1)*(1-iside)*ng1;
+      ibeg2 = ibdryboxlo2+CHF_ID(idir,2)*(1-iside)*ng2;
+      ibeg3 = ibdryboxlo3+CHF_ID(idir,3)*(1-iside)*ng3]
+c
+      do n=0,nfcomp-1
+      CHF_MULTIDO[bdrybox;i;j;k;l]
+c
+        CHF_DTERM[
+        iv0 = i+CHF_ID(idir,0)*(ibeg0-i);
+        iv1 = j+CHF_ID(idir,1)*(ibeg1-j);
+        iv2 = k+CHF_ID(idir,2)*(ibeg2-k);
+        iv3 = l+CHF_ID(idir,3)*(ibeg3-l)]
+c
+c Check for outflow; if so, extrapolate out
+c
+        if ( isign*vn(CHF_IX[iv0;iv1;iv2;iv3],0).ge.zero ) then
+c
+          CHF_DTERM[
+          ii = i+CHF_ID(idir,0)*(iside-1)*(2*(i-ibeg0)+ng0+1);
+          jj = j+CHF_ID(idir,1)*(iside-1)*(2*(j-ibeg1)+ng1+1);
+          kk = k+CHF_ID(idir,2)*(iside-1)*(2*(k-ibeg2)+ng2+1);
+          ll = l+CHF_ID(idir,3)*(iside-1)*(2*(l-ibeg3)+ng3+1);]
+c
+
+c         A second order option for experimental purposes
+c          f(CHF_IX[ii;jj;kk;ll],n) = 
+c     &                   2*f(CHF_IX[ii-  i1;jj-  j1;kk-  k1;ll-  l1],n)
+c     &                 - 1*f(CHF_IX[ii-2*i1;jj-2*j1;kk-2*k1;ll-2*l1],n)
+
+          f(CHF_IX[ii;jj;kk;ll],n) =
+     &                   4*f(CHF_IX[ii-  i1;jj-  j1;kk-  k1;ll-  l1],n)
+     &                 - 6*f(CHF_IX[ii-2*i1;jj-2*j1;kk-2*k1;ll-2*l1],n)
+     &                 + 4*f(CHF_IX[ii-3*i1;jj-3*j1;kk-3*k1;ll-3*l1],n)
+     &                 - 1*f(CHF_IX[ii-4*i1;jj-4*j1;kk-4*k1;ll-4*l1],n)
+
+
+        endif
+c
+      CHF_ENDDO
+      enddo
+c
+      return
+      end
+
+
+      subroutine fourth_order_neumann_bc(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_INTVECT[ng],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l]
+      integer CHF_DDECL[is;js;ks;ls]
+      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3]
+      integer n
+c
+      CHF_DTERM[
+      ibeg0 = ibdryboxlo0+CHF_ID(idir,0)*((1-iside)*(ng(0)+1)-1);
+      ibeg1 = ibdryboxlo1+CHF_ID(idir,1)*((1-iside)*(ng(1)+1)-1);
+      ibeg2 = ibdryboxlo2+CHF_ID(idir,2)*((1-iside)*(ng(2)+1)-1);
+      ibeg3 = ibdryboxlo3+CHF_ID(idir,3)*((1-iside)*(ng(3)+1)-1)]
+c
+      do n=0,nfcomp-1
+      CHF_MULTIDO[bdrybox;i;j;k;l]
+c
+        CHF_DTERM[
+        is = i + CHF_ID(idir,0)*(2*(ibeg0-i)-1);
+        js = j + CHF_ID(idir,1)*(2*(ibeg1-j)-1);
+        ks = k + CHF_ID(idir,2)*(2*(ibeg2-k)-1);
+        ls = l + CHF_ID(idir,3)*(2*(ibeg3-l)-1)]
+c
+        f(CHF_IX[i;j;k;l],n) = f(CHF_IX[is;js;ks;ls],n)
+c
+      CHF_ENDDO
+      enddo
+c
+      return
+      end
+
+
+      subroutine fourth_order_dirichlet_bc(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_INTVECT[ng],
+     &     CHF_CONST_FRA[val],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l]
+      integer CHF_DDECL[ii;jj;kk;ll]
+      integer CHF_DDECL[i1;j1;k1;l1]
+      integer CHF_DDECL[iv0;iv1;iv2;iv3]
+      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3]
+      integer isign, gn(0:CH_SPACEDIM-1)
+      integer n
+      REAL_T thirteen
+c
+      parameter (thirteen=13.d0)
+c
+      isign = 2*iside-1
+c
+      CHF_DTERM[
+      i1 = isign * CHF_ID(idir,0);
+      j1 = isign * CHF_ID(idir,1);
+      k1 = isign * CHF_ID(idir,2);
+      l1 = isign * CHF_ID(idir,3)]
+c
+      CHF_DTERM[
+      ibeg0 = CHF_LBOUND[bdrybox;0]+CHF_ID(idir,0)*(1-iside)*ng(0);
+      ibeg1 = CHF_LBOUND[bdrybox;1]+CHF_ID(idir,1)*(1-iside)*ng(1);
+      ibeg2 = CHF_LBOUND[bdrybox;2]+CHF_ID(idir,2)*(1-iside)*ng(2);
+      ibeg3 = CHF_LBOUND[bdrybox;3]+CHF_ID(idir,3)*(1-iside)*ng(3)]
+c
+      do n=0,nfcomp-1
+      CHF_MULTIDO[bdrybox;i;j;k;l]
+c
+        CHF_DTERM[
+        iv0 = i+CHF_ID(idir,0)*(ibeg0-i);
+        iv1 = j+CHF_ID(idir,1)*(ibeg1-j);
+        iv2 = k+CHF_ID(idir,2)*(ibeg2-k);
+        iv3 = l+CHF_ID(idir,3)*(ibeg3-l)]
+c
+        CHF_DTERM[
+        ii = i+CHF_ID(idir,0)*(iside-1)*(2*i+ng(0)+1);
+        jj = j+CHF_ID(idir,1)*(iside-1)*(2*j+ng(1)+1);
+        kk = k+CHF_ID(idir,2)*(iside-1)*(2*k+ng(2)+1);
+        ll = l+CHF_ID(idir,3)*(iside-1)*(2*l+ng(3)+1);]
+c
+        CHF_DTERM[
+        gn(0) = ii-ibeg0;
+        gn(1) = jj-ibeg1;
+        gn(2) = kk-ibeg2;
+        gn(3) = ll-ibeg3]
+c
+        if (gn(idir).eq.1) then
+c
+          f(CHF_IX[ii;jj;kk;ll],n) =
+     *        third * (+ twelve   * val(CHF_IX[iv0;iv1;iv2;iv3],n)
+     &                 - thirteen * f(CHF_IX[ii-  i1;jj-  j1;kk-  k1;ll-  l1],n)
+     &                 + five     * f(CHF_IX[ii-2*i1;jj-2*j1;kk-2*k1;ll-2*l1],n)
+     &                 - one      * f(CHF_IX[ii-3*i1;jj-3*j1;kk-3*k1;ll-3*l1],n))
+c
+        else if (gn(idir).eq.2) then
+c
+          f(CHF_IX[ii;jj;kk;ll],n) =
+     &                 + seven  * f(CHF_IX[ii-  i1;jj-  j1;kk-  k1;ll-  l1],n)
+     &                 - twelve * val(CHF_IX[iv0;iv1;iv2;iv3],n)
+     &                 + seven  * f(CHF_IX[ii-2*i1;jj-2*j1;kk-2*k1;ll-2*l1],n)
+     &                 - one    * f(CHF_IX[ii-3*i1;jj-3*j1;kk-3*k1;ll-3*l1],n)
+c
+        else if (gn(idir).eq.3) then
+c
+          f(CHF_IX[ii;jj;kk;ll],n) =
+     &                 + five     * f(CHF_IX[ii-  i1;jj-  j1;kk-  k1;ll-  l1],n)
+     &                 - thirteen * f(CHF_IX[ii-2*i1;jj-2*j1;kk-2*k1;ll-2*l1],n)
+     *                 + twelve   * val(CHF_IX[iv0;iv1;iv2;iv3],n)
+     &                 - three    * f(CHF_IX[ii-3*i1;jj-3*j1;kk-3*k1;ll-3*l1],n)
+c
+        else
+c
+          f(CHF_IX[ii;jj;kk;ll],n) =
+     &                   four * f(CHF_IX[ii-  i1;jj-  j1;kk-  k1;ll-  l1],n)
+     &                 - six  * f(CHF_IX[ii-2*i1;jj-2*j1;kk-2*k1;ll-2*l1],n)
+     &                 + four * f(CHF_IX[ii-3*i1;jj-3*j1;kk-3*k1;ll-3*l1],n)
+     &                 - one  * f(CHF_IX[ii-4*i1;jj-4*j1;kk-4*k1;ll-4*l1],n)
+c
+        endif
+c
+c
+      CHF_ENDDO
+      enddo
+c
+      return
+      end

@@ -1,0 +1,45 @@
+Build hypre
+-----------
+A version of hypre is provided with the COGENT code.  To build it:
+
+1) Enter the hypre directory:
+ 
+     cd hypre-2.9.0b
+
+2) Create a "doconfig" script to configure the hypre makefiles.  You can base 
+   it off of one of the nearby scripts.  Name the new script something like 
+   doconfig-MACHINE-CXX-F77-OPT, where CXX is the C++ compiler, F77 is the 
+   fortran compiler, and OPT is either "dbg" or "opt".
+
+3) Execute your new script:
+
+     ./doconfig-MACHINE-CXX-F77-OPT
+
+4) Build and install hypre:
+
+     ./doinstall
+
+5) Leave the hypre directory
+
+     cd ..
+
+
+Build COGENT
+------------
+We assume that Chombo is already installed in a directory called "Chombo".  
+By default, it is assumed that Chombo is installed at the same level as 
+"COGENT-0.9".  If this is not the case, modify the "CHOMBO_HOME" variable in 
+GNUMakefile, GNUMakefile.multidim, and GNUmakefile.regression to point to the
+location of your Chombo installation.
+
+1) Enter the build directory:
+
+     cd exec
+
+2) Build COGENT:
+
+     gmake -j4
+
+   This should create an executable with a platform and compiler specific name,
+   e.g., cogent.Linux.mpicpc.ifort.OPT.MPI.ex.
+

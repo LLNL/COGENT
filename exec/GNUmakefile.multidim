@@ -1,0 +1,77 @@
+# -*- Mode: Makefile;  -*- 
+
+## Define the variables needed by Make.example
+
+# trace the chain of included makefiles
+makefiles += cogent
+
+# knowing this can be useful for things which are specific to 
+# specific machines
+UNAMEN = $(shell uname -n)
+
+
+# the base name(s) of the application(s) in this directory
+mdebase = cogent
+# in an example of true silliness, need to define ebase so that the 
+# realclean target will also remove my *.ex files...
+ebase = bogus
+
+# the location of Chombo lib dir
+CHOMBO_HOME = ../../Chombo/lib
+
+#this should be defined in your Make.defs.local file
+#LAPACKLIBS = -llapack  -lblas
+
+#LAPACKLIBS = -llapack-3 -llapack_atlas -lm
+
+# names of Chombo libraries needed by this program, in order of search.
+1dLibNames =  BoxTools BaseTools
+2dLibNames = HOMappedGeometry HOAMRTools AMRTimeDependent AMRTools BoxTools
+3dLibNames = HOMappedGeometry HOAMRTools AMRTimeDependent AMRTools BoxTools
+4dLibNames = HOMappedGeometry HOAMRTools BoxTools
+#5dLibNames = BoxTools
+#6dLibNames = BoxTools
+
+
+# relative paths to source code directories
+base_dir = .
+
+2dsrc_dirs =  ../src/coord/configuration ../src/coord/velocity 
+2dsrc_dirs += ../src/ibc/configuration ../src/poisson
+2dsrc_dirs += ../src/util ../src/ibc
+
+3dsrc_dirs += ../src/util ../src/ibc
+
+4dsrc_dirs =  ../src/core ../src/driver ../src/vlasov ../src/species 
+4dsrc_dirs +=  ../src/collisions ../src/transport ../src/neutrals
+#4dsrc_dirs +=  ../src/collisions 
+4dsrc_dirs += ../src/coord/phase ../src/ibc/phase ../src/util 
+4dsrc_dirs += ../src/advectUtil
+4dsrc_dirs += ../src/ibc
+
+#mdsrc_dirs = ../src/ibc
+
+# input file for 'run' target
+INPUT = regression.inputs
+
+
+# shared code for building example programs
+include $(CHOMBO_HOME)/mk/Make.example.multidim
+
+# application-specific variables
+
+CXXFLAGS += -DCFG_DIM=2 -std=c++0x
+
+ifeq ($(MPI),TRUE)
+HYPRE_LOC = ../hypre-2.9.0b/hypre_loc
+else
+HYPRE_LOC = ../hypre-2.9.0b/hypre_loc_serial
+endif
+
+XTRACPPFLAGS += -I$(HYPRE_LOC)/include
+XTRALIBFLAGS += -L$(HYPRE_LOC)/lib -lHYPRE $(LAPACKLIBS)
+
+
+
+# application-specific targets
+

@@ -1,0 +1,371 @@
+#include "FluxSurface.H"
+#include "FluxSurfaceF_F.H"
+#include "MagCoordSys.H"
+#include "SingleNullBlockCoordSys.H"
+#include "SingleNullCoordSys.H"
+#include "SNCoreCoordSys.H"
+
+#ifdef CH_MULTIDIM
+
+#undef CH_SPACEDIM
+#include "ReductionOps.H.multidim"
+#include "ReductionCopier.H.multidim"
+#include "SpreadingCopier.H.multidim"
+#ifdef CH_SPACEDIM
+#undef CH_SPACEDIM
+#endif
+#define CH_SPACEDIM CFG_DIM
+
+#include "Directions.H"
+
+#include "NamespaceHeader.H"
+
+
+
+FluxSurface::FluxSurface( const MagGeom& a_geom,
+                          const bool     a_shell_average )
+   : m_magnetic_geometry(&a_geom),
+     m_shell_average(a_shell_average)
+{
+   m_volume.define(m_magnetic_geometry->grids(), 1, 2*IntVect::Unit);
+   m_magnetic_geometry->getCellVolumes(m_volume);
+
+   adjCellLo(m_grids, m_magnetic_geometry->grids(), POLOIDAL_DIR, -1);
+   m_areas.define(m_grids, 1, IntVect::Zero);
+
+   const MagCoordSys& sn_coord_sys( *(m_magnetic_geometry->getCoordSys()) );
+   m_single_null = ( typeid(sn_coord_sys) == typeid(SingleNullCoordSys) );
+
+   if (m_single_null) {
+      m_areas_core.define(m_grids, 1, IntVect::Zero);
+      m_areas_pf.define(m_grids, 1, IntVect::Zero);
+   } 
+
+   computeAreas();
+
+}
+
+
+
+void
+FluxSurface::computeAreas()
+{
+   LevelData<FArrayBox> ones(m_magnetic_geometry->grids(), 1, IntVect::Zero);
+   DataIterator dit = ones.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+        ones[dit].setVal(1.);
+   }
+   
+   if (!m_shell_average) {
+      multGradPsi( ones );
+   }
+   integrate(ones, m_areas);
+
+   //get flux surface areas for the core and private flux regions
+   if ( m_single_null ) {
+    
+     LevelData<FArrayBox> ones_tmp(m_magnetic_geometry->grids(), 1, IntVect::Zero);
+
+     zeroBlockData(PF, ones, ones_tmp);
+     integrate(ones_tmp, m_areas_core);
+
+     zeroBlockData(CORE, ones, ones_tmp);
+     integrate(ones_tmp, m_areas_pf);
+   }
+
+}
+
+
+void
+FluxSurface::sum( const LevelData<FArrayBox>& a_src,
+                  LevelData<FArrayBox>&       a_dst ) const
+{
+   CH_assert(a_src.nComp() == a_dst.nComp());
+
+   int poloidal_dir = POLOIDAL_DIR;
+   const DisjointBoxLayout& dst_grids = a_dst.getBoxes();
+   const DisjointBoxLayout& src_grids = a_src.getBoxes();
+   const ProblemDomain& problem_domain = src_grids.physDomain();
+
+   // Define ReductionCopier to compute intersections (sum in the y-direction)
+   ReductionCopier reduceCopier(src_grids, dst_grids, problem_domain, poloidal_dir);
+
+   SumOp op(poloidal_dir);
+   op.scale = 1.0;
+
+   // Initialize the destination, since SumOp does not do that for us.
+   DataIterator dit = a_dst.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      a_dst[dit].setVal(0.);
+   }
+
+   // Do the summing operation -- sums data in src along the poloidal direction
+   // and places the result in dst
+   a_src.copyTo(a_src.interval(), a_dst, a_dst.interval(), reduceCopier, op);
+}
+
+
+
+void
+FluxSurface::spread( const LevelData<FArrayBox>& a_src,
+                     LevelData<FArrayBox>&       a_dst ) const
+{
+   CH_assert(a_src.nComp() == a_dst.nComp());
+
+   int poloidal_dir = POLOIDAL_DIR;
+   const DisjointBoxLayout& dst_grids = a_dst.getBoxes();
+   const DisjointBoxLayout& src_grids = a_src.getBoxes();
+   const ProblemDomain& problem_domain = dst_grids.physDomain();
+
+   // Define SpreadingCopier to spread in the poloidal direction
+   SpreadingCopier spreadCopier(src_grids, dst_grids, problem_domain, poloidal_dir);
+
+   const SpreadingOp spreadOp(poloidal_dir);
+
+   // Do the spreading
+   a_src.copyTo(a_src.interval(), a_dst, a_dst.interval(), spreadCopier, spreadOp);
+}
+
+
+
+void
+FluxSurface::integrate( const LevelData<FArrayBox>& a_src,
+                        LevelData<FArrayBox>&       a_dst ) const
+{
+   CH_assert(a_src.nComp() == a_dst.nComp());
+
+   int ncomp = a_src.nComp();
+
+   LevelData<FArrayBox> tmp(m_magnetic_geometry->grids(), ncomp, IntVect::Zero);
+   DataIterator dit = tmp.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      tmp[dit].copy(a_src[dit]);
+      for (int comp=0; comp<ncomp; ++comp) {
+         tmp[dit].mult(m_volume[dit],0,comp,1);
+      }
+   }
+
+   sum(tmp, a_dst);
+}
+
+
+
+void
+FluxSurface::average( const LevelData<FArrayBox>& a_src,
+                      LevelData<FArrayBox>&       a_dst ) const
+{
+
+   LevelData<FArrayBox> src_GradPsi(a_src.disjointBoxLayout(), a_src.nComp(), a_src.ghostVect());
+   DataIterator dit = a_dst.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+       src_GradPsi[dit].copy(a_src[dit]);
+   }
+
+    if (!m_shell_average) {
+     multGradPsi(src_GradPsi);
+   }
+    
+   CH_assert(a_src.nComp() == a_dst.nComp());
+
+   integrate(src_GradPsi, a_dst);
+
+   int ncomp = a_src.nComp();
+
+   for (dit.begin(); dit.ok(); ++dit) {
+      for (int comp=0; comp<ncomp; ++comp) {
+         a_dst[dit].divide(m_areas[dit],0,comp,1);
+      }
+   }
+}
+
+void
+FluxSurface::averageAndSpread( const LevelData<FArrayBox>& a_src,
+                               LevelData<FArrayBox>&       a_dst ) const
+{
+   LevelData<FArrayBox> flux_aver_tmp(m_grids, a_src.nComp(), a_src.ghostVect());
+   average(a_src, flux_aver_tmp);
+   spread(flux_aver_tmp, a_dst);  
+
+   if (m_single_null) {
+
+     int ncomp = a_src.nComp();
+     CH_assert(a_src.nComp() == a_dst.nComp());
+
+     LevelData<FArrayBox> src_GradPsi(a_src.disjointBoxLayout(),ncomp, a_src.ghostVect());
+     DataIterator dit = a_dst.dataIterator();
+     for (dit.begin(); dit.ok(); ++dit) {
+           src_GradPsi[dit].copy(a_src[dit]);
+     }
+     
+     if (!m_shell_average) {
+       multGradPsi(src_GradPsi);
+     }
+    
+     LevelData<FArrayBox> src_tmp(a_src.disjointBoxLayout(),ncomp, a_src.ghostVect());
+     LevelData<FArrayBox> dst_tmp(a_dst.disjointBoxLayout(),ncomp, a_dst.ghostVect());
+     LevelData<FArrayBox> flux_aver_tmp(m_grids, ncomp, a_src.ghostVect());
+
+     //Perform the average-and-spreading in the core region
+     zeroBlockData(PF, src_GradPsi, src_tmp);
+     integrate(src_tmp, flux_aver_tmp);
+     for (dit.begin(); dit.ok(); ++dit) {
+      for (int comp=0; comp<ncomp; ++comp) {
+         flux_aver_tmp[dit].divide(m_areas_core[dit],0,comp,1);
+      }
+     }
+     spread(flux_aver_tmp, dst_tmp);  
+     zeroBlockData(PF, dst_tmp, src_tmp); 
+     //Add flux-surface averages from the core region
+     for (dit.begin(); dit.ok(); ++dit) {
+         a_dst[dit].copy(src_tmp[dit]);
+     }
+
+
+     //Perform the average-and-spreading in the private flux region
+     zeroBlockData(CORE, src_GradPsi, src_tmp);
+     integrate(src_tmp, flux_aver_tmp);
+     for (dit.begin(); dit.ok(); ++dit) {
+      for (int comp=0; comp<ncomp; ++comp) {
+         flux_aver_tmp[dit].divide(m_areas_pf[dit],0,comp,1);
+      }
+     }
+     spread(flux_aver_tmp, dst_tmp);  
+     zeroBlockData(SOL, dst_tmp, src_tmp); 
+     zeroBlockData(CORE, src_tmp, dst_tmp); 
+     //Add flux-surface averages from the prvate-flux region
+     for (dit.begin(); dit.ok(); ++dit) {
+         a_dst[dit].plus(dst_tmp[dit]);
+     }
+
+   }
+
+}
+
+
+
+void
+FluxSurface::add( const LevelData<FArrayBox>& a_flux_surface_data,
+                  LevelData<FArrayBox>&       a_data              ) const
+{
+   const DisjointBoxLayout& grids = a_data.getBoxes();
+
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      FORT_ADD_FLUX_SURFACE_ARRAY(CHF_BOX(grids[dit]),
+                                  CHF_CONST_FRA1(a_flux_surface_data[dit],0),
+                                  CHF_FRA(a_data[dit]));
+   }
+}
+
+
+
+void
+FluxSurface::subtract( const LevelData<FArrayBox>& a_flux_surface_data,
+                       LevelData<FArrayBox>&       a_data              ) const
+{
+   const DisjointBoxLayout& grids = a_data.getBoxes();
+
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      FORT_SUBTRACT_FLUX_SURFACE_ARRAY(CHF_BOX(grids[dit]),
+                                       CHF_CONST_FRA1(a_flux_surface_data[dit],0),
+                                       CHF_FRA(a_data[dit]));
+   }
+}
+
+
+
+void
+FluxSurface::multiply( const LevelData<FArrayBox>& a_flux_surface_data,
+                       LevelData<FArrayBox>&       a_data              ) const
+{
+   const DisjointBoxLayout& grids = a_data.getBoxes();
+
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      FORT_MULTIPLY_FLUX_SURFACE_ARRAY(CHF_BOX(grids[dit]),
+                                       CHF_CONST_FRA1(a_flux_surface_data[dit],0),
+                                       CHF_FRA(a_data[dit]));
+   }
+}
+
+
+
+void
+FluxSurface::divide( const LevelData<FArrayBox>& a_flux_surface_data,
+                     LevelData<FArrayBox>&       a_data              ) const
+{
+   const DisjointBoxLayout& grids = a_data.getBoxes();
+
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      FORT_DIVIDE_FLUX_SURFACE_ARRAY(CHF_BOX(grids[dit]),
+                                     CHF_CONST_FRA1(a_flux_surface_data[dit],0),
+                                     CHF_FRA(a_data[dit]));
+   }
+}
+
+
+void
+FluxSurface::zeroBlockData( const int                   region_type,
+                            const LevelData<FArrayBox>& a_src,
+                            LevelData<FArrayBox>&       a_dst       ) const
+{
+   const DisjointBoxLayout& grids = a_src.getBoxes();
+   const MagCoordSys* coord_sys = m_magnetic_geometry->getCoordSys();
+   
+
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+     a_dst[dit].copy(a_src[dit]);
+     int block_number = coord_sys->whichBlock( grids[dit] );
+     switch (region_type) 
+      { 
+      case CORE:
+         if ((block_number == MCORE) || (block_number == RCORE) || (block_number == LCORE)) {a_dst[dit].setVal(0.0); }
+        break;
+      case PF:
+        if ((block_number == RPF) || (block_number == LPF)) {a_dst[dit].setVal(0.0);}
+        break;    
+      case SOL:
+        if ((block_number == MCSOL) || (block_number == RCSOL) || (block_number == LCSOL) ||
+            (block_number == RSOL) || (block_number == LSOL)) {a_dst[dit].setVal(0.0);}
+        break;    
+      default:
+         MayDay::Error("FluxSurface::zeroBlockData(): Invalid region_type encountered");
+      }
+   }
+}
+
+void
+FluxSurface::multGradPsi(LevelData<FArrayBox>& a_src ) const
+{
+    
+
+    //Later do a check for zero ghost layers
+    DataIterator dit = a_src.dataIterator();
+    int nComp =a_src.nComp();
+    for (dit.begin(); dit.ok(); ++dit) {
+        const MagBlockCoordSys& block_coords = m_magnetic_geometry->getBlockCoordSys(m_magnetic_geometry->grids()[dit]);
+        FArrayBox dXdxi(m_magnetic_geometry->grids()[dit], 4);
+        block_coords.getCellCentereddXdxi(dXdxi);
+        for (BoxIterator bit( m_magnetic_geometry->grids()[dit] ); bit.ok(); ++bit) {
+            IntVect iv( bit() );
+
+            double dZdR = dXdxi(iv,3)/dXdxi(iv,1);
+            double dPsidZ = 1.0/(dXdxi(iv,2) - dXdxi(iv,0)*dZdR);
+            double dPsidR = - dPsidZ * dZdR;
+            double gradPsi = sqrt(pow(dPsidR,2)+pow(dPsidZ,2));
+            
+            for (int n = 0; n < nComp; n++) {
+                a_src[dit](iv,n) *= gradPsi;
+            }
+        }
+        
+        
+    }
+}
+
+#include "NamespaceFooter.H"
+
+#endif // end ifdef Multidim

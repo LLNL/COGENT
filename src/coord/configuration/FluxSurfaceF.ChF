@@ -1,0 +1,85 @@
+      subroutine add_flux_surface_array(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[radial],
+     &     CHF_FRA[data]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], m, ncomp
+
+      ncomp = CHF_NCOMP[data]
+
+      do m = 0, ncomp-1
+         CHF_MULTIDO[gridbox;i;j;k;l]
+            data(CHF_IX[i;j;k;l],m) = data(CHF_IX[i;j;k;l],m)
+     &           + radial(i,CHF_LBOUND[radial;1])
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+      subroutine subtract_flux_surface_array(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[radial],
+     &     CHF_FRA[data]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], m, ncomp
+
+      ncomp = CHF_NCOMP[data]
+
+      do m = 0, ncomp-1
+         CHF_MULTIDO[gridbox;i;j;k;l]
+            data(CHF_IX[i;j;k;l],m) = data(CHF_IX[i;j;k;l],m)
+     &           - radial(i,CHF_LBOUND[radial;1])
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+      subroutine multiply_flux_surface_array(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[radial],
+     &     CHF_FRA[data]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], m, ncomp
+
+      ncomp = CHF_NCOMP[data]
+
+      do m = 0, ncomp-1
+         CHF_MULTIDO[gridbox;i;j;k;l]
+            data(CHF_IX[i;j;k;l],m) = data(CHF_IX[i;j;k;l],m)
+     &           * radial(i,CHF_LBOUND[radial;1])
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+      subroutine divide_flux_surface_array(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[radial],
+     &     CHF_FRA[data]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], m, ncomp
+
+      ncomp = CHF_NCOMP[data]
+
+      do m = 0, ncomp-1
+         CHF_MULTIDO[gridbox;i;j;k;l]
+            data(CHF_IX[i;j;k;l],m) = data(CHF_IX[i;j;k;l],m)
+     &           / radial(i,CHF_LBOUND[radial;1])
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+

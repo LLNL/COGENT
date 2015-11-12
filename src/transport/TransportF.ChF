@@ -1,0 +1,560 @@
+#include "CONSTANTS.H"
+
+c    2ND ORDER RADIAL DIFFUSION AT CONSTANT MU
+
+      subroutine eval_anom_flux(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_FRA[metrics_face],
+     &     CHF_CONST_VR[D_kinet],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_REAL[DN0],
+     &     CHF_CONST_INT[Nr],
+     &     CHF_CONST_FRA1[fB],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_FRA1[N],
+     &     CHF_CONST_FRA1[U],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_CONST_FRA1[C],
+     &     CHF_CONST_FRA1[P],
+     &     CHF_CONST_FRA1[Shape],
+     &     CHF_FRA1[flux]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], L2, L3
+      double precision hr, htheta, hphi, vparr2, vperp2, v2, coef
+      double precision fB_face, B_face, T_face, N_face, U_face, C_face
+      double precision dfB_dr, dB_dr, dT_dr, dn_dr
+      double precision DB, Upsi, Dpsi
+
+      L2 = CHF_LBOUND[B;2]
+      L3 = CHF_LBOUND[B;3]
+
+c        print*,"shape(fB) = ", shape(fB)
+c        print*,"DN0 = ", DN0
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+c      Define real space metrics on cell faces
+
+        DB = -two/three*D_kinet(0)*P(i,j,L2,L3)
+
+         hr     = metrics_face(i,j,L2,L3,0)
+         htheta = metrics_face(i,j,L2,L3,1)
+         hphi   = metrics_face(i,j,L2,L3,2)
+
+c      Create fB, B, N, U, P, T and derivatives on r-faces
+
+        dfB_dr  = (fB(i,j,k,l)-fB(i-1,j,k,l))/dx(0)
+        fB_face = (fB(i,j,k,l)+fB(i-1,j,k,l))/two
+        dB_dr   = (B(i,j,L2,L3)-B(i-1,j,L2,L3))/dx(0)
+        B_face  = (B(i,j,L2,L3)+B(i-1,j,L2,L3))/two
+
+        N_face  = (N(i,j,L2,L3)+N(i-1,j,L2,L3))/two
+        T_face  = (T(i,j,L2,L3)+T(i-1,j,L2,L3))/two
+        U_face  = (U(i,j,L2,L3)+U(i-1,j,L2,L3))/two
+        C_face  = (C(i,j,L2,L3)+C(i-1,j,L2,L3))/two
+        dN_dr   = (N(i,j,L2,L3)-N(i-1,j,L2,L3))/dx(0)
+        dT_dr   = (T(i,j,L2,L3)-T(i-1,j,L2,L3))/dx(0)
+
+
+c       if (i==0) then
+c         N_face  = (three*N(i,j,L2,L3)-N(i+1,j,L2,L3))/two
+c         T_face  = (three*T(i,j,L2,L3)-T(i+1,j,L2,L3))/two
+c         U_face  = (three*U(i,j,L2,L3)-U(i+1,j,L2,L3))/two
+c         C_face  = (three*C(i,j,L2,L3)-C(i+1,j,L2,L3))/two
+c         dN_dr   = (-two*N(i,j,L2,L3)+three*N(i+1,j,L2,L3)-N(i+2,j,L2,L3))/dx(0)
+c         dT_dr   = (-two*T(i,j,L2,L3)+three*T(i+1,j,L2,L3)-T(i+2,j,L2,L3))/dx(0)
+c       else
+c       if (i==Nr) then
+c         N_face  = (three*N(i-1,j,L2,L3)-N(i-2,j,L2,L3))/two
+c         T_face  = (three*T(i-1,j,L2,L3)-T(i-2,j,L2,L3))/two
+c         U_face  = (three*U(i-1,j,L2,L3)-U(i-2,j,L2,L3))/two
+c         C_face  = (three*C(i-1,j,L2,L3)-C(i-2,j,L2,L3))/two
+c         dN_dr   = (two*N(i-1,j,L2,L3)-three*N(i-2,j,L2,L3)+N(i-3,j,L2,L3))/dx(0)
+c         dT_dr   = (two*T(i-1,j,L2,L3)-three*T(i-2,j,L2,L3)+T(i-3,j,L2,L3))/dx(0)
+c       else
+c         N_face  = (N(i,j,L2,L3)+N(i-1,j,L2,L3))/two
+c         T_face  = (T(i,j,L2,L3)+T(i-1,j,L2,L3))/two
+c         U_face  = (U(i,j,L2,L3)+U(i-1,j,L2,L3))/two
+c         C_face  = (C(i,j,L2,L3)+C(i-1,j,L2,L3))/two
+c         dN_dr   = (N(i,j,L2,L3)-N(i-1,j,L2,L3))/dx(0)
+c         dT_dr   = (T(i,j,L2,L3)-T(i-1,j,L2,L3))/dx(0)
+c       endif
+c       endif
+
+c      Create normalized primed velocity squared: 0.5*m*(v-U)^2/T
+c      coef should equal unity for maxwellian
+
+       coef   = two*C_face/three-three/two
+       vparr2 = ((k+half)*dx(2)-U_face)**2
+       vperp2 = (l+half)*dx(3)*B_face
+       v2     = (mass*vparr2+vperp2)/two/T_face
+
+       Upsi = (DN0+D_kinet(2)/coef*(v2-three/two))*dN_dr/N_face + (D_kinet(1)+D_kinet(3)/coef*(v2-three/two))*dT_dr/T_face
+       Upsi = Upsi + DB/coef*(v2-three/two)*dB_dr/B_face
+       Dpsi = D_kinet(0) * (Shape(i,j,L2,L3) + Shape(i-1,j,L2,L3))/two
+
+c       if ( (dir==0) .and. (i==0) .and. (k==0) .and. (l==0) ) then
+c        print*,"j", j
+c        print*,"coef1 = ", coef1
+c       endif
+
+c        J/hr*B*Flux = J/hr*(-Upsi*fB_face + Dpsi*dfB_dr/hr) ( note that actually putting in -flux )
+
+       if (dir==0) then
+        flux(CHF_IX[i;j;k;l]) = htheta*hphi*(Dpsi*dfB_dr/hr-Upsi*fB_face)
+       else
+        flux(CHF_IX[i;j;k;l]) = zero
+       endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine eval_gkfluid_flux(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_FRA[metrics_face],
+     &     CHF_CONST_VR[D_kinet],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_INT[Nr],
+     &     CHF_CONST_FRA1[fB],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_FRA1[N],
+     &     CHF_CONST_FRA1[U],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_FRA1[flux]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], L2, L3
+      double precision hr, htheta, hphi, vparr2, vperp2, v2
+      double precision fB_face, B_face, T_face, N_face, U_face
+      double precision dfB_dr, dB_dr, dT_dr, dn_dr
+      double precision DB0, DB2, Upsi, Dpsi
+
+      L2 = CHF_LBOUND[B;2]
+      L3 = CHF_LBOUND[B;3]
+
+      DB0 = -D_kinet(2)
+      DB2 = -two/three*(D_kinet(0)+five*D_kinet(2))
+
+c        print*,"shape(fB) = ", shape(fB)
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+c      Define real space metrics on cell faces
+
+         hr     = metrics_face(i,j,L2,L3,0)
+         htheta = metrics_face(i,j,L2,L3,1)
+         hphi   = metrics_face(i,j,L2,L3,2)
+
+c      Create fB, B, N, U, P, T and derivatives on r-faces
+
+        dfB_dr  = (fB(i,j,k,l)-fB(i-1,j,k,l))/dx(0)
+        fB_face = (fB(i,j,k,l)+fB(i-1,j,k,l))/two
+        dB_dr   = (B(i,j,L2,L3)-B(i-1,j,L2,L3))/dx(0)
+        B_face  = (B(i,j,L2,L3)+B(i-1,j,L2,L3))/two
+
+       if (i==0) then
+         N_face  = (three*N(i,j,L2,L3)-N(i+1,j,L2,L3))/two
+         T_face  = (three*T(i,j,L2,L3)-T(i+1,j,L2,L3))/two
+         U_face  = (three*U(i,j,L2,L3)-U(i+1,j,L2,L3))/two
+         dN_dr   = (-two*N(i,j,L2,L3)+three*N(i+1,j,L2,L3)-N(i+2,j,L2,L3))/dx(0)
+         dT_dr   = (-two*T(i,j,L2,L3)+three*T(i+1,j,L2,L3)-T(i+2,j,L2,L3))/dx(0)
+       else
+       if (i==Nr) then
+         N_face  = (three*N(i-1,j,L2,L3)-N(i-2,j,L2,L3))/two
+         T_face  = (three*T(i-1,j,L2,L3)-T(i-2,j,L2,L3))/two
+         U_face  = (three*U(i-1,j,L2,L3)-U(i-2,j,L2,L3))/two
+         dN_dr   = (two*N(i-1,j,L2,L3)-three*N(i-2,j,L2,L3)+N(i-3,j,L2,L3))/dx(0)
+         dT_dr   = (two*T(i-1,j,L2,L3)-three*T(i-2,j,L2,L3)+T(i-3,j,L2,L3))/dx(0)
+       else
+         N_face  = (N(i,j,L2,L3)+N(i-1,j,L2,L3))/two
+         T_face  = (T(i,j,L2,L3)+T(i-1,j,L2,L3))/two
+         U_face  = (U(i,j,L2,L3)+U(i-1,j,L2,L3))/two
+         dN_dr   = (N(i,j,L2,L3)-N(i-1,j,L2,L3))/dx(0)
+         dT_dr   = (T(i,j,L2,L3)-T(i-1,j,L2,L3))/dx(0)
+       endif
+       endif
+
+c      Create normalized primed velocity squared: 0.5*m*(v-U)^2/T
+
+       vparr2 = ((k+half)*dx(2)-U_face)**2
+       vperp2 = (l+half)*dx(3)*B_face
+       v2     = (mass*vparr2+vperp2)/two/T_face
+
+       Upsi     = D_kinet(1)*dN_dr/N_face + D_kinet(3)*dT_dr/T_face
+       Upsi     = Upsi + ( DB0+DB2*(v2-three/two) )*dB_dr/B_face
+       Dpsi     = D_kinet(0) + D_kinet(2)*v2
+
+c        J/hr*B*Flux = J/hr*(-Upsi*fB_face + Dpsi*dfB_dr/hr) ( note that actually putting in -flux )
+
+       if (dir==0) then
+        flux(CHF_IX[i;j;k;l]) = htheta*hphi*(Dpsi*dfB_dr/hr-Upsi*fB_face)
+       else
+        flux(CHF_IX[i;j;k;l]) = zero
+       endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    2ND ORDER RADIAL DIFFUSION AT CONSTANT VELOCITY
+
+      subroutine eval_fluid_flux(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_FRA1[flux],
+     &     CHF_CONST_FRA[metrics_face],
+     &     CHF_CONST_FRA[metrics_cent],
+     &     CHF_CONST_FRA1[fB],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_FRA1[dfB_dmu_cc],
+     &     CHF_CONST_FRA1[dfB_dr_cc],
+     &     CHF_CONST_INT[nr],
+     &     CHF_CONST_INT[nmu],
+     &     CHF_CONST_REAL[D]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], L2, L3
+      double precision hr, htheta, hphi, hr_i, htheta_i, hphi_i, J_i, fB_avg, fB_avg_onmu
+      double precision dfB_dr, dfB_dr_onmu, dfB_dmu, dfB_dmu_onr, dB_dr, B_avg, dlnB_dr_onmu
+
+c        print*,"dx(3)  = ", dx(3)
+
+      L2 = CHF_LBOUND[B;2]
+      L3 = CHF_LBOUND[B;3]
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+c      Define real space metrics on CFG cell faces ( note that these are different for dir=0,1,2,3 )
+
+         hr     = metrics_face(i,j,L2,L3,0)
+         htheta = metrics_face(i,j,L2,L3,1)
+         hphi   = metrics_face(i,j,L2,L3,2)
+
+c      Define metrics on cell center
+
+         hr_i     = metrics_cent(i,j,L2,L3,0)
+         htheta_i = metrics_cent(i,j,L2,L3,1)
+         hphi_i   = metrics_cent(i,j,L2,L3,2)
+
+c      Define fB, B, dfB/dr, and dB/dr on r faces
+
+        fB_avg = (fB(i,j,k,l)+fB(i-1,j,k,l))/two
+        B_avg  = (B(i,j,L2,L3)+B(i-1,j,L2,L3))/two
+        dfB_dr = (fB(i,j,k,l)-fB(i-1,j,k,l))/dx(0)
+        dB_dr  = (B(i,j,L2,L3)-B(i-1,j,L2,L3))/dx(0)
+
+       if (dir==0) then
+         if (i==0) then
+           dfB_dmu_onr = ( three*dfB_dmu_cc(i,j,k,l)-dfB_dmu_cc(i+1,j,k,l) )/two
+         else
+         if (i==nr) then
+           dfB_dmu_onr = ( three*dfB_dmu_cc(i-1,j,k,l)-dfB_dmu_cc(i-2,j,k,l) )/two
+         else
+           dfB_dmu_onr = ( dfB_dmu_cc(i,j,k,l) + dfB_dmu_cc(i-1,j,k,l) )/two
+         endif
+         endif
+         flux(CHF_IX[i;j;k;l]) = htheta*hphi/hr*D*(dfB_dr-fB_avg*dB_dr/B_avg-(l+half)*dx(3)*dB_dr/B_avg*dfB_dmu_onr)
+       else
+       if (dir==3) then
+         dlnB_dr_onmu = (B(i+1,j,L2,L3)-B(i-1,j,L2,L3))/two/dx(0)/B(i,j,L2,L3)
+         if ((l==0) .or. (l==nmu)) then
+           flux(CHF_IX[i;j;k;l]) = zero
+         else
+           fB_avg_onmu = ( fB(i,j,k,l)+fB(i,j,k,l-1) )/two
+           dfB_dmu= ( fB(i,j,k,l)-fB(i,j,k,l-1) )/dx(3)
+           dfB_dr_onmu = ( dfB_dr_cc(i,j,k,l)-dfB_dr_cc(i-1,j,k,l) )/two
+           flux(CHF_IX[i;j;k;l]) = -hphi_i*htheta_i/hr_i*l*dx(3)*dlnB_dr_onmu*D*(dfB_dr_onmu-fB_avg_onmu*dlnB_dr_onmu-l*dx(3)*dfB_dmu*dlnB_dr_onmu)
+         endif
+       else
+         flux(CHF_IX[i;j;k;l]) = zero
+       endif
+       endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE dfB/dmu and dfB/dr AT CELL CENTERS
+
+      subroutine dfB_cell_center(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_INT[nr],
+     &     CHF_CONST_INT[nmu],
+     &     CHF_CONST_FRA1[fB],
+     &     CHF_FRA1[dfB_dmu],
+     &     CHF_FRA1[dfB_dr]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l]
+
+c        print*,"dx(3)  = ", dx(3)
+
+c     NOTE THAT BOUNDARY CONDITIONS IN MU DIRECTION ARE dF/dmu = 0 at mu=0 and mu=mu_max and F=0 at mu=mu_max
+c     HOWEVER, BECAUSE OF FINITE VELOCITY GRID USE ONE SIDED DIFFERENCING NEAR mu=mu_max BOUNDARY
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+       if (l==0) then
+         dfB_dmu(CHF_IX[i;j;k;l]) = ( zero + ( fB(i,j,k,l+1)-fB(i,j,k,l) )/dx(3) )/two
+       else
+       if (l==nmu-1) then
+         dfB_dmu(CHF_IX[i;j;k;l]) = ( three*fB(i,j,k,l)-four*fB(i,j,k,l-1)+fB(i,j,k,l-2) )/two/dx(3)
+       else
+         dfB_dmu(CHF_IX[i;j;k;l]) = ( fB(i,j,k,l+1)-fB(i,j,k,l-1) )/two/dx(3)
+       endif
+       endif
+
+         dfB_dr(CHF_IX[i;j;k;l]) = ( fB(i+1,j,k,l)-fB(i-1,j,k,l) )/two/dx(0)
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE dln(B)/dr at cell-centers
+
+      subroutine dlogB_dr(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REAL[dr],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_FRA1[dlnB_dr]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], L2, L3
+
+      L2 = CHF_LBOUND[B;2]
+      L3 = CHF_LBOUND[B;3]
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+       dlnB_dr(CHF_IX[i;j;k;l]) = ( eight*(B(i+1,j,L2,L3)-B(i-1,j,L2,L3))
+     &                          +         (B(i-2,j,L2,L3)-B(i+2,j,L2,L3)) )/twelve/dr/B(i,j,L2,L3)
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE hr, htheta, and hphi AT FACE CENTERS
+
+      subroutine metrics_faces(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[TwoPiR_face],
+     &     CHF_CONST_FRA[N_face],
+     &     CHF_FRA[metrics_faces]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], L2, L3
+
+      L2 = CHF_LBOUND[N_face;2]
+      L3 = CHF_LBOUND[N_face;3]
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+        metrics_faces(CHF_IX[i;j;k;l],0) = sqrt(N_face(i,j,L2,L3,1)**2+N_face(i,j,L2,L3,3)**2)/TwoPiR_face(i,j,L2,L3)
+        metrics_faces(CHF_IX[i;j;k;l],1) = sqrt(N_face(i,j,L2,L3,0)**2+N_face(i,j,L2,L3,2)**2)/TwoPiR_face(i,j,L2,L3)
+        metrics_faces(CHF_IX[i;j;k;l],2) = TwoPiR_face(i,j,L2,L3)
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE hr, htheta, and hphi AT FACE CENTERS
+
+      subroutine metrics_cells(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[TwoPiR_cent],
+     &     CHF_CONST_FRA[N_cent],
+     &     CHF_FRA[metrics_cent]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], L2, L3
+
+c        print*, "shape metrics_cent = ", shape(metrics_cent)
+c        print*, "shape N_cent       = ", shape(N_cent)
+c        print*, "shape TwoPiR_cent  = ", shape(TwoPiR_cent)
+
+      L2 = CHF_LBOUND[N_cent;2]
+      L3 = CHF_LBOUND[N_cent;3]
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+        metrics_cent(CHF_IX[i;j;k;l],0) = sqrt(N_cent(i,j,L2,L3,1)**2+N_cent(i,j,L2,L3,3)**2)/TwoPiR_cent(i,j,L2,L3)
+        metrics_cent(CHF_IX[i;j;k;l],1) = sqrt(N_cent(i,j,L2,L3,0)**2+N_cent(i,j,L2,L3,2)**2)/TwoPiR_cent(i,j,L2,L3)
+        metrics_cent(CHF_IX[i;j;k;l],2) = TwoPiR_cent(i,j,L2,L3)
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    2ND ORDER RADIAL DIFFUSION AT CONSTANT MU
+
+      subroutine eval_dpsi_and_beta(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_VR[D_kinet],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_INT[Nr],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_FRA1[N],
+     &     CHF_CONST_FRA1[U],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_FRA1[Dpsi],
+     &     CHF_FRA1[beta] )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], L2, L3
+      double precision vparr2, vperp2, v2, dlnB_dr, dlnN_dr, dlnT_dr
+      double precision DB0, DB2, Upsi
+
+      L2 = CHF_LBOUND[B;2]
+      L3 = CHF_LBOUND[B;3]
+
+c      Convert fluid flux matrix components to anomalous flux components
+
+      DB0 = -D_kinet(2)
+      DB2 = -two/three*(D_kinet(0)+five*D_kinet(2))
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+c      Create dB/dr, dN/dr, dT/dr on cell-centers
+
+       dlnB_dr   = (B(i+1,j,L2,L3)-B(i-1,j,L2,L3))/two/dx(0)/B(i,j,L2,L3)
+
+       if (i==0) then
+         dlnN_dr   = (-three*N(i,j,L2,L3)+four*N(i+1,j,L2,L3)-N(i+2,j,L2,L3))/two/dx(0)/N(i,j,L2,L3)
+         dlnT_dr   = (-three*T(i,j,L2,L3)+four*T(i+1,j,L2,L3)-T(i+2,j,L2,L3))/two/dx(0)/T(i,j,L2,L3)
+       else
+       if (i==Nr-1) then
+         dlnN_dr   = (three*N(i,j,L2,L3)-four*N(i-1,j,L2,L3)+N(i-2,j,L2,L3))/two/dx(0)/N(i,j,L2,L3)
+         dlnT_dr   = (three*T(i,j,L2,L3)-four*T(i-1,j,L2,L3)+T(i-2,j,L2,L3))/two/dx(0)/T(i,j,L2,L3)
+       else
+         dlnN_dr   = (N(i+1,j,L2,L3)-N(i-1,j,L2,L3))/two/dx(0)/N(i,j,L2,L3)
+         dlnT_dr   = (T(i+1,j,L2,L3)-T(i-1,j,L2,L3))/two/dx(0)/T(i,j,L2,L3)
+       endif
+       endif
+
+c       if ((j==0) .and. (k==0) .and. (l==0) ) then
+c        print*,"i = ", i
+c        print*,"N(i-1)  = ", N(i-1,j,L2,L3)
+c        print*,"N(i)    = ", N(i,j,L2,L3)
+c        print*,"N(i+1)  = ", N(i+1,j,L2,L3)
+c       endif
+
+c      Create normalized primed velocity squared: 0.5*m*(v-U)^2/T
+
+       vparr2 = ((k+half)*dx(2)-U(i,j,L2,L3))**2
+       vperp2 = (l+half)*dx(3)*B(i,j,L2,L3)
+       v2     = (mass*vparr2+vperp2)/two/T(i,j,L2,L3)
+
+       Upsi = D_kinet(1)*dlnN_dr + D_kinet(3)*dlnT_dr
+       Upsi = Upsi + ( DB0+DB2*(v2-three/two) )*dlnB_dr
+       Dpsi(CHF_IX[i;j;k;l]) = D_kinet(0) + D_kinet(2)*v2
+       beta(CHF_IX[i;j;k;l]) = Upsi**2/Dpsi(CHF_IX[i;j;k;l])
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    calculate Upsi/Dpsi for stability calculation
+
+      subroutine eval_beta(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_VR[D_kinet],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_INT[Nr],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_FRA1[N],
+     &     CHF_CONST_FRA1[U],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_CONST_FRA1[C],
+     &     CHF_CONST_FRA1[P],
+     &     CHF_FRA1[beta] )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l], L2, L3
+      double precision vparr2, vperp2, v2, coef, dlnB_dr, dlnN_dr, dlnT_dr
+      double precision DB, Upsi
+
+      L2 = CHF_LBOUND[B;2]
+      L3 = CHF_LBOUND[B;3]
+
+c      Convert fluid flux matrix components to anomalous flux components
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+       DB = -two/three*D_kinet(0)*P(i,j,L2,L3)
+
+c      Create dB/dr, dN/dr, dT/dr on cell-centers
+
+       dlnB_dr   = (B(i+1,j,L2,L3)-B(i-1,j,L2,L3))/two/dx(0)/B(i,j,L2,L3)
+
+       if (i==0) then
+         dlnN_dr   = (-three*N(i,j,L2,L3)+four*N(i+1,j,L2,L3)-N(i+2,j,L2,L3))/two/dx(0)/N(i,j,L2,L3)
+         dlnT_dr   = (-three*T(i,j,L2,L3)+four*T(i+1,j,L2,L3)-T(i+2,j,L2,L3))/two/dx(0)/T(i,j,L2,L3)
+       else
+       if (i==Nr-1) then
+         dlnN_dr   = (three*N(i,j,L2,L3)-four*N(i-1,j,L2,L3)+N(i-2,j,L2,L3))/two/dx(0)/N(i,j,L2,L3)
+         dlnT_dr   = (three*T(i,j,L2,L3)-four*T(i-1,j,L2,L3)+T(i-2,j,L2,L3))/two/dx(0)/T(i,j,L2,L3)
+       else
+         dlnN_dr   = (N(i+1,j,L2,L3)-N(i-1,j,L2,L3))/two/dx(0)/N(i,j,L2,L3)
+         dlnT_dr   = (T(i+1,j,L2,L3)-T(i-1,j,L2,L3))/two/dx(0)/T(i,j,L2,L3)
+       endif
+       endif
+
+c      Create normalized primed velocity squared: 0.5*m*(v-U)^2/T
+
+       coef   = two/three*C(i,j,L2,L3)-three/two
+       vparr2 = ((k+half)*dx(2)-U(i,j,L2,L3))**2
+       vperp2 = (l+half)*dx(3)*B(i,j,L2,L3)
+       v2     = (mass*vparr2+vperp2)/two/T(i,j,L2,L3)
+
+       Upsi   = D_kinet(2)/coef*(v2-three/two)*dlnN_dr + (D_kinet(1)+D_kinet(3)/coef*(v2-three/two))*dlnT_dr
+       Upsi   = Upsi + DB*coef*(v2-three/two)*dlnB_dr
+
+       beta(CHF_IX[i;j;k;l]) = Upsi**2/D_kinet(0)
+
+      CHF_ENDDO
+
+      return
+      end
+

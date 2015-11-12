@@ -1,0 +1,15 @@
+#!/bin/sh
+config=ANAG-mpicc-gfortran-opt
+
+cd src
+make -k distclean
+cd ..
+
+./doconfig-$config
+
+cd src
+make -j 8
+make install
+cd ..
+
+ln -s lib/$config hypre_loc

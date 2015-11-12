@@ -1,0 +1,62 @@
+#include "CONSTANTS.H"
+
+      subroutine set_maxwell4d(
+     &     CHF_FRA[f],
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[coords],
+     &     CHF_CONST_FRA1[dens],
+     &     CHF_CONST_FRA1[temp],
+     &     CHF_CONST_FRA1[vshift],
+     &     CHF_CONST_FRA1[b],
+     &     CHF_CONST_REAL[mass],
+
+     &     )
+c     Sets distribution function for 2D temperature and density
+      integer CHF_DDECL[i;j;k;l;m],n
+      integer ivp,imu
+      REAL_T denloc, temploc, vshiftloc, bloc
+      REAL_T vpar, mu
+      REAL_T eparnorm, munorm
+      REAL_T factor, val
+      REAL_T minf, maxf
+c
+      minf=1.0d30
+      maxf=zero
+c
+      factor = dsqrt(PI*(two/mass)**3)
+c
+      ivp = CHF_NCOMP[coords]-2
+      imu = CHF_NCOMP[coords]-1
+c
+      do n=0,CHF_NCOMP[f]-1
+      CHF_MULTIDO[box;i;j;k;l;m]
+c
+#if CH_SPACEDIM==4
+         vshiftloc = vshift(i,j,CHF_LBOUND[temp;2],CHF_LBOUND[temp;3])
+         temploc   = temp(i,j,CHF_LBOUND[temp;2],CHF_LBOUND[temp;3])
+         denloc    = dens(i,j,CHF_LBOUND[dens;2],CHF_LBOUND[dens;3])
+         bloc      = b(i,j,CHF_LBOUND[b;2],CHF_LBOUND[b;3])
+#else
+         vshiftloc = vshift(i,j,k,CHF_LBOUND[temp;3],CHF_LBOUND[temp;4])
+         temploc   = temp(i,j,k,CHF_LBOUND[temp;3],CHF_LBOUND[temp;4])
+         denloc    = dens(i,j,k,CHF_LBOUND[dens;3],CHF_LBOUND[dens;4])
+         bloc      = b(i,j,k,CHF_LBOUND[b;3],CHF_LBOUND[b;4])
+#endif
+c
+         vpar     = coords(CHF_IX[i;j;k;l;m],ivp)
+         mu       = coords(CHF_IX[i;j;k;l;m],imu)
+         eparnorm = half * mass * (vpar-vshiftloc)**2 / temploc
+         munorm   = half * bloc * mu / temploc
+         val      = dexp( -( eparnorm + munorm ) )
+c
+         val    = val * denloc / ( factor * dsqrt( temploc) * temploc )
+c
+         minf = min(minf,val)
+         maxf = max(maxf,val)
+         f(CHF_IX[i;j;k;l;m],n) = val
+c
+      CHF_ENDDO
+      enddo
+c
+      return
+      end
