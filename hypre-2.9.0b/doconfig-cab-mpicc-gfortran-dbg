@@ -1,0 +1,16 @@
+#!/bin/sh
+
+debug="--enable-debug"
+install_dir=$PWD/lib/cab-mpicc-gfortran-dbg
+
+cd src
+./configure $debug \
+            CC=mpicc \
+            CFLAGS="-O0 -g " \
+            CXX=mpicxx \
+            CXXFLAGS="-O0 -g " \
+            F77=mpif77 \
+            F77FLAGS="-O0 -g " \
+            --prefix=$install_dir
+cd ..
+
