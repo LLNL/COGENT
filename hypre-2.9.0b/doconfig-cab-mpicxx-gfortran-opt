@@ -1,0 +1,12 @@
+#!/bin/sh
+
+debug="--enable-opt";
+install_dir=$PWD/lib/cab-mpicxx-gfortran-opt
+
+cd src
+./configure $debug \
+            CC=mpicc \
+            CXX=mpicxx \
+            --prefix=$install_dir
+cd ..
+
