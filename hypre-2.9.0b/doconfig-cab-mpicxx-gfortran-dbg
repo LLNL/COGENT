@@ -1,0 +1,16 @@
+#!/bin/sh
+
+debug="--enable-debug"
+if test "dbg" = "opt"; then
+   debug="--enable-opt";
+fi
+
+install_dir=$PWD/lib/cab-mpicxx-gfortran-dbg
+
+cd src
+./configure $debug \
+            CC=mpicc \
+            CXX=mpicxx \
+            --prefix=$install_dir
+cd ..
+
