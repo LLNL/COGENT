@@ -1,7 +1,7 @@
 .svn
 *.o
 *.a
-*.H
+*_F.H
 exec/d/
 exec/f/
 exec/p/
