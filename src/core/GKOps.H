@@ -522,6 +522,9 @@ private:
    CFG::IntVect m_hist_indices; // for indexing watchpoints, now a temporary
    std::string m_hist_fieldname; // type of field, e.g. "potential", now a temporary
 
+   /* Time scales */
+   Real dt_Vlasov, dt_Collisions;
+
    // stores data pertaining to a watchpoint history
    typedef struct {
       int hist_index; // numerical index of this record, zero-based

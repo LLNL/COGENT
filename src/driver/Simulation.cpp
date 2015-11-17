@@ -318,14 +318,6 @@ void Simulation<SYSTEM>::parseParameters( ParmParse& a_ppsim )
 
 
 template <class SYSTEM>
-inline void Simulation<SYSTEM>::setFixedTimeStep( const Real& a_dt_stable )
-{
-   m_system->printTimeStep(m_cur_step,m_fixed_dt);
-   m_cur_dt = m_fixed_dt;
-}
-
-
-template <class SYSTEM>
 void Simulation<SYSTEM>::selectTimeStep()
 {
    Real dtStable = m_system->stableDt(m_cur_step) * m_cfl;
@@ -335,22 +327,20 @@ void Simulation<SYSTEM>::selectTimeStep()
       if ( m_adapt_dt ) { // adjustable time step
          m_cur_dt = std::min( dtStable, m_max_dt_grow * m_cur_dt );
       } else {                 // fixed time step
-         setFixedTimeStep( dtStable );
+         m_cur_dt = m_fixed_dt;
       }
 
    } else { // initial time step
 
-      if (procID()==0) {
-         cout << "dtStable = " << dtStable << endl;
-      }
-
       if ( m_adapt_dt ) { // adjustable time step
          m_cur_dt = m_init_dt_frac * dtStable;
       } else {                 // fixed time step
-         setFixedTimeStep( dtStable );
+         m_cur_dt = m_fixed_dt;
       }
 
    }
+
+   m_system->printTimeStep(m_cur_step,m_cur_dt);
 
    // If less than a time step from the final time, adjust time step
    // to end just over the final time.

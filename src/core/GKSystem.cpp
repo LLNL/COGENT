@@ -1437,13 +1437,19 @@ void GKSystem::printDiagnostics()
 void GKSystem::printTimeStep(int cur_step, Real dt)
 {
   if (procID() == 0) {
-    Real dt_Vlasov = stableDt_Vlasov(cur_step);
+    Real dt_Vlasov     = stableDt_Vlasov(cur_step);
     Real dt_Collisions = stableDt_Collisions(cur_step);
-    cout << "    Step: " << cur_step << "\tdt: " << dt;
-    cout << "\tCFL:  ";
+    cout << "  ----\n";
+    cout << "  dt: " << dt << std::endl;
+    cout << "    dt scales:  ";
+    cout << dt_Vlasov << " (Vlasov)  ";
+    cout << dt_Collisions << " (Collisions)  ";
+    cout << std::endl;
+    cout << "    CFL:  ";
     cout << dt/dt_Vlasov << " (Vlasov)  ";
     cout << dt/dt_Collisions << " (Collisions)";
     cout << std::endl;
+    cout << "  ----\n";
   }
 }
 
