@@ -206,6 +206,23 @@ GKOps::~GKOps()
    }
 }
 
+Real GKOps::stableDt_Vlasov( const KineticSpeciesPtrVect& a_soln,
+                             const int a_step_number )
+{
+   CH_assert( isDefined() );
+   LevelData<FluxBox> E_field;
+   computeElectricField( E_field, a_soln, a_step_number );
+   Real dt_vlasov( m_vlasov->computeDt( E_field, a_soln ) );
+   return dt_vlasov;
+}
+
+Real GKOps::stableDt_Collisions( const KineticSpeciesPtrVect& a_soln,
+                                 const int a_step_number )
+{
+   CH_assert( isDefined() );
+   Real dt_collisions( m_collisions->computeDt( a_soln ) );
+   return dt_collisions;
+}
 
 Real GKOps::stableDt( const KineticSpeciesPtrVect& a_soln,
                       const int a_step_number )

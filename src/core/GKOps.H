@@ -126,6 +126,18 @@ public:
     */
    virtual ~GKOps();
 
+   /// Compute a stable time step for the Vlasov time scale.
+   /**
+    * Computes and returns a stable time step estimate for the Vlasov time scale.
+    */
+   Real stableDt_Vlasov( const KineticSpeciesPtrVect& soln, const int step_number );
+
+   /// Compute a stable time step for the collisions time scale.
+   /**
+    * Computes and returns a stable time step estimate for the collisions time scale.
+    */
+   Real stableDt_Collisions( const KineticSpeciesPtrVect& soln, const int step_number );
+
    /// Compute a stable time step.
    /**
     * Computes and returns a stable time step estimate.
