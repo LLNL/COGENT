@@ -6,6 +6,7 @@ exec/d/
 exec/f/
 exec/p/
 cogent.Linux.*
+cogent.Darwin.*
 hypre-2.9.0b/hypre_loc
 hypre-2.9.0b/lib/
 hypre-2.9.0b/src/HYPRE_config.h
