@@ -201,6 +201,18 @@ class GKSystem
       virtual void copySolnData( KineticSpeciesPtrVect&       dstSoln,
                                  const KineticSpeciesPtrVect& srcSoln );
 
+      /// Compute a stable time step for the Vlasov time scale.
+      /**
+       * Computes and returns a stable time step estimate for the Vlasov time scale.
+       */
+      Real stableDt_Vlasov(const int step_number);
+
+      /// Compute a stable time step for the collisions time scale.
+      /**
+       * Computes and returns a stable time step estimate for the collisions time scale.
+       */
+      Real stableDt_Collisions(const int step_number);
+
       /// Compute a stable time step.
       /**
        * Computes and returns a stable time step estimate.
@@ -277,6 +289,8 @@ class GKSystem
                                               VEL::DisjointBoxLayout& grids );
 
       void printDiagnostics();
+
+      void printTimeStep(int,Real);
 
    private:
 

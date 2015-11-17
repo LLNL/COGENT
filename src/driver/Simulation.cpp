@@ -320,10 +320,7 @@ void Simulation<SYSTEM>::parseParameters( ParmParse& a_ppsim )
 template <class SYSTEM>
 inline void Simulation<SYSTEM>::setFixedTimeStep( const Real& a_dt_stable )
 {
-   if (!( m_fixed_dt <= a_dt_stable )) {
-      cout << "stable timestep is " << a_dt_stable << endl;
-      MayDay::Warning( "Fixed time step exceeds stable explicit time step!" );
-   }
+   m_system->printTimeStep(m_cur_step,m_fixed_dt);
    m_cur_dt = m_fixed_dt;
 }
 
