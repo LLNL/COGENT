@@ -209,19 +209,13 @@ GKOps::~GKOps()
 Real GKOps::stableDt_Vlasov( const KineticSpeciesPtrVect& a_soln,
                              const int a_step_number )
 {
-   CH_assert( isDefined() );
-   LevelData<FluxBox> E_field;
-   computeElectricField( E_field, a_soln, a_step_number );
-   Real dt_vlasov( m_vlasov->computeDt( E_field, a_soln ) );
-   return dt_vlasov;
+   return dt_Vlasov;
 }
 
 Real GKOps::stableDt_Collisions( const KineticSpeciesPtrVect& a_soln,
                                  const int a_step_number )
 {
-   CH_assert( isDefined() );
-   Real dt_collisions( m_collisions->computeDt( a_soln ) );
-   return dt_collisions;
+   return dt_Collisions;
 }
 
 Real GKOps::stableDt( const KineticSpeciesPtrVect& a_soln,
@@ -231,10 +225,9 @@ Real GKOps::stableDt( const KineticSpeciesPtrVect& a_soln,
    LevelData<FluxBox> E_field;
    computeElectricField( E_field, a_soln, a_step_number );
 
-   Real dt_stable( m_vlasov->computeDt( E_field, a_soln ) );
-
-   Real dt_collisions( m_collisions->computeDt( a_soln ) );
-   dt_stable = Min( dt_stable, dt_collisions );
+   dt_Vlasov      = m_vlasov->computeDt( E_field, a_soln );
+   dt_Collisions  = m_collisions->computeDt( a_soln );
+   Real dt_stable = Min( dt_Vlasov, dt_Collisions );
 
    if (m_transport_model_on) {
       Real dt_transport( m_transport->computeDt( a_soln ) );

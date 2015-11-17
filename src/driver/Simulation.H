@@ -179,14 +179,6 @@ class Simulation
        */
       void writeCheckpointFile();
 
-      /// Set fixed time step.
-      /**
-       * Private method to set fixed time step.
-       *
-       * \param[in] dt_stable maximum stable time step.
-       */
-      void setFixedTimeStep( const Real& dt_stable );
-
       /// Select time step.
       /**
        * Private method to set time step based on multiple controls.
