@@ -215,7 +215,7 @@ Real GKOps::stableDt_Vlasov( const KineticSpeciesPtrVect& a_soln,
 Real GKOps::stableDt_Collisions( const KineticSpeciesPtrVect& a_soln,
                                  const int a_step_number )
 {
-   return dt_Collisions;
+   return(m_collisions->computeDt( a_soln ));
 }
 
 Real GKOps::stableDt( const KineticSpeciesPtrVect& a_soln,

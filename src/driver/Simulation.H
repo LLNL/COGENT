@@ -182,10 +182,14 @@ class Simulation
       /// Select time step.
       /**
        * Private method to set time step based on multiple controls.
-       *
-       * \param[in] dt_stable maximum stable time step.
        */
       void selectTimeStep();
+
+      /// Post time step operations.
+      /**
+       * Private method called after time step has been completed.
+       */
+      void postTimeStep();
 
       int m_verbosity;
 

@@ -208,6 +208,8 @@ void Simulation<SYSTEM>::advance()
 
    m_cur_time = m_system->advance( m_cur_time, m_cur_dt, m_cur_step );
 
+   postTimeStep();
+
    if (m_verbosity >= 1) {
       m_system->printDiagnostics();
       pout() << "Step " << m_cur_step << " completed, simulation time is "
@@ -340,14 +342,19 @@ void Simulation<SYSTEM>::selectTimeStep()
 
    }
 
-   m_system->printTimeStep(m_cur_step,m_cur_dt);
-
    // If less than a time step from the final time, adjust time step
    // to end just over the final time.
    Real timeRemaining = m_max_time - m_cur_time;
    if ( m_cur_dt > timeRemaining ) {
       m_cur_dt = timeRemaining + m_max_time * s_DT_EPS;
    }
+}
+
+
+template <class SYSTEM>
+void Simulation<SYSTEM>::postTimeStep()
+{
+   m_system->printTimeStep(m_cur_step,m_cur_dt);
 }
 
 #include "NamespaceFooter.H"
