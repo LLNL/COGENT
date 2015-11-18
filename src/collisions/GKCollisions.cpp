@@ -67,6 +67,7 @@ GKCollisions::GKCollisions( const int a_verbose )
          m_collision_model.push_back( cls );
          typedef std::map<std::string,int>::value_type valType;
          m_species_map.insert( valType( species_name, count ) );
+         m_collision_model_name.insert( valType( cls_type, count ) );
          count++;
       }
       else {
@@ -109,7 +110,11 @@ void GKCollisions::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
 
 Real GKCollisions::computeDt( const KineticSpeciesPtrVect& soln )
 {
-   return DBL_MAX;
+   std::map<std::string,int>::iterator it;
+   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
+      if (it->first == "Krook") return ((Krook*)m_collision_model[it->second])->computeDt(soln);
+      else                      return DBL_MAX;
+   }
 }
 
 

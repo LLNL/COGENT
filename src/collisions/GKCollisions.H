@@ -59,6 +59,7 @@ class GKCollisions
       bool m_verbose;
       std::map<std::string,int> m_species_map;
       std::vector<CLSInterface*> m_collision_model;
+      std::map<std::string,int> m_collision_model_name;
 };
 
 #include "NamespaceFooter.H"

@@ -469,7 +469,18 @@ void Krook::printParameters()
 
 Real Krook::computeDt(const KineticSpeciesPtrVect& soln)
 {
-   return DBL_MAX;
+   if (m_fixed_cls_freq) return 1.0/m_cls_freq;
+   else {
+      Real max_freq = 0.0;
+      const DisjointBoxLayout & grids = m_sc_cls_freq.disjointBoxLayout();
+      for (DataIterator dit(m_sc_cls_freq.dataIterator()); dit.ok(); ++dit) {
+         FArrayBox& this_data = m_sc_cls_freq[dit];
+         Box box(grids[dit]);
+         cout << this_data.max(box) << endl;
+         if (this_data.max(box) > max_freq) max_freq = this_data.max(box);
+      }
+      return 1.0/max_freq;
+   } 
 }
 
 #include "NamespaceFooter.H"

@@ -124,7 +124,7 @@ void MyKrook::printParameters()
 
 Real MyKrook::computeDt(const KineticSpeciesPtrVect& soln)
 {
-   return DBL_MAX;
+   return 1.0/m_cls_freq;
 }
 
 
