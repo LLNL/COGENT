@@ -341,8 +341,8 @@ class GKSystem
 
       std::string m_mag_geom_type;
 
-      std::string ti_class;
-      std::string ti_method;
+      std::string m_ti_class;
+      std::string m_ti_method;
 
       GKUnits*                  m_units;
       CFG::MagGeom*             m_mag_geom;

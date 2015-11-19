@@ -88,8 +88,8 @@ GKSystem::GKSystem( ParmParse& a_pp )
      m_ghostVect(4*IntVect::Unit),
      m_state( GKState(m_ghostVect) ),
      m_verbosity(0),
-     ti_class("rk"),
-     ti_method("4")
+     m_ti_class("rk"),
+     m_ti_method("4")
 {
    ParmParse ppgksys("gksystem");
 
@@ -111,9 +111,9 @@ GKSystem::GKSystem( ParmParse& a_pp )
    m_state.define( m_kinetic_species, m_phase_geom );
 
    const Real BASE_DT( 1.0 );
-   if (ti_class == "rk") m_integrator = new TiRK<GKState, GKRHSData, GKOps>;
-   else MayDay::Error("Unrecognized input for ti_class.");
-   m_integrator->define(ti_method, m_state, BASE_DT);
+   if (m_ti_class == "rk") m_integrator = new TiRK<GKState, GKRHSData, GKOps>;
+   else MayDay::Error("Unrecognized input for m_ti_class.");
+   m_integrator->define(m_ti_method, m_state, BASE_DT);
    m_gk_ops = &(m_integrator->getOperators());
    m_integrator->setTimeStep(BASE_DT);
    
@@ -1565,6 +1565,10 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
       a_ppgksys.getarr( "velocity_decomp", m_velocity_decomposition, 0, VEL_DIM );
       for (int i=0; i<VEL_DIM; ++i) CH_assert( m_velocity_decomposition[i]>0 );
    }
+
+   // time integration method to use 
+   a_ppgksys.query("ti_class",m_ti_class);
+   a_ppgksys.query("ti_method",m_ti_method);
 
    // Should we make an hdf file for the potential?
    a_ppgksys.query("hdf_potential",m_hdf_potential);

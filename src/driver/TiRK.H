@@ -1,6 +1,7 @@
 #ifndef _TiRK_H_
 #define _TiRK_H_
 
+#include <iostream>
 #include <string>
 
 #include "REAL.H"
@@ -175,6 +176,8 @@ void TiRK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real 
   }
   m_Operators.define(a_state, m_dt);
   m_is_Defined = true;
+
+  if (!procID()) cout << "Time integration method: rk (" << m_name << ")\n" ;
 }
 
 template <class Solution, class RHS, class Ops>
