@@ -117,14 +117,6 @@ GKSystem::GKSystem( ParmParse& a_pp )
    m_gk_ops = &(m_integrator->getOperators());
    m_integrator->setTimeStep(BASE_DT);
    
-//   const bool DENSE_OUTPUT( false );
-//   m_integrator.define( m_state, BASE_DT, DENSE_OUTPUT );
-//#ifdef USE_ARK4
-//   m_gk_ops = &(m_integrator.getImExOp());
-//#else
-//   m_gk_ops = &(m_integrator.getEXOP());
-//#endif
-    
    if ( m_using_electrons && m_gk_ops->usingBoltzmannElectrons() ) {
       MayDay::Error( "GKSystem::createSpecies():  Electrons input as both kinetic and Boltzmann" );
    }

@@ -1,5 +1,5 @@
-#ifndef _GK_ARK4_H_
-#define _GK_ARK4_H_
+#ifndef _GK_TimeIntegration_H_
+#define _GK_TimeIntegration_H_
 
 #include "REAL.H"
 #include "RefCountedPtr.H"

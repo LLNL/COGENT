@@ -47,12 +47,7 @@
 #include "RefCountedPtr.H"
 #include "ProblemDomain.H"
 
-//#ifdef USE_ARK4
-//#include "ARK4DenseOutput.H"
-//#else
-//#include "RK4DenseOutput.H"
-//#endif
-#include "GKARK4.H"
+#include "GKTimeIntegration.H"
 #include "TimeIntegrator.H"
 #include "TiRK.H"
 

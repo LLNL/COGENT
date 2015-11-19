@@ -15,8 +15,6 @@
 #define VEL_NAMESPACE D2
 
 
-//#include "RK4Integrator.H"
-//#include "ODEInterface.H"
 #include "KineticSpecies.H"
 #include "GKVlasov.H"
 #include "PhaseGrid.H"
@@ -55,12 +53,7 @@
 #include "ProblemDomain.H"
 #include "PositivityPostProcessor.H"
 
-//#ifdef USE_ARK4
-//#include "ARK4DenseOutput.H"
-//#else
-//#include "RK4DenseOutput.H"
-//#endif
-#include "GKARK4.H"
+#include "GKTimeIntegration.H"
 #include "TimeIntegrator.H"
 #include "TiRK.H"
 
@@ -369,12 +362,6 @@ class GKSystem
       GKSystemBC* m_boundary_conditions;
 
       TimeIntegrator<GKState, GKRHSData, GKOps> *m_integrator;
-
-//#ifndef USE_ARK4
-//      RK4DenseOutput<GKState, GKRHSData, GKOps> m_integrator;
-//#else
-//      ARK4DenseOutput<GKState, GKRHSData, GKOps> m_integrator;
-//#endif
       GKState m_state;
 
      // Parameters to control plotting
