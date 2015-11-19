@@ -202,6 +202,10 @@ bool Simulation<SYSTEM>::notDone()
 template <class SYSTEM>
 void Simulation<SYSTEM>::advance()
 {
+   if (m_verbosity >= 1) {
+      pout() << endl << "Step " << m_cur_step << endl;
+      if(procID()==0) cout << endl << "Step " << m_cur_step << endl;
+   }
    selectTimeStep();
 
    m_cur_step++;
@@ -215,7 +219,7 @@ void Simulation<SYSTEM>::advance()
       pout() << "Step " << m_cur_step << " completed, simulation time is "
              << m_cur_time << endl;
       if(procID()==0) cout << "Step " << m_cur_step << " completed, simulation time is "
-                           << m_cur_time << endl;
+                           << m_cur_time << endl << "----" << endl;
    }
 
    if ( (m_cur_step % m_plot_interval)==0 ) {
