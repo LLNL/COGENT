@@ -40,7 +40,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_dt time step
      * @param[in] a_time current simulation time
-     * @param[out] Y solution
+     * @param[out] a_Y solution
      */
     void advance(Real a_time, Solution& a_Y);
 
@@ -96,7 +96,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
     std::string m_name;
     int         m_nstages;
     Real        *m_A, *m_b, *m_c;
-    Solution    *m_YStage;
+    Solution    m_YStage;
     RHS         *m_rhsStage;
     Ops         m_Operators;
     Real        m_time;
@@ -137,8 +137,7 @@ void TiRK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real 
   m_b = new Real[m_nstages];
   m_c = new Real[m_nstages];
 
-  /* allocate stage solution and RHS */
-  m_YStage    = new Solution[m_nstages];
+  /* allocate RHS */
   m_rhsStage  = new RHS[m_nstages];
 
   /* set Butcher coefficients */
@@ -170,8 +169,8 @@ void TiRK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real 
     m_b[3] = 1.0/6.0;
   }
 
+  m_YStage.define(a_state);
   for (int i=0; i<m_nstages; i++) {
-    m_YStage[i].define(a_state);
     m_rhsStage[i].define(a_state);
   }
   m_Operators.define(a_state, m_dt);
@@ -184,30 +183,27 @@ TiRK<Solution, RHS, Ops>::~TiRK()
   delete[] m_A;
   delete[] m_b;
   delete[] m_c;
-
-  delete[] m_YStage;
   delete[] m_rhsStage;
 }
 
 template <class Solution, class RHS, class Ops>
-void TiRK<Solution, RHS, Ops>::advance(Real a_time, Solution& Y)
+void TiRK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
 {
   //CH_TIMERS("TiRK::advance");
   CH_assert(isDefined());
+  CH_assert(m_time == a_time);
 
   /* Stage calculations */
   int i, j;
   for (i = 0; i < m_nstages; i++) {
-    m_YStage[i].copy(Y);
-    for (j=0; j<i; j++) m_YStage[i].increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
-
-    Real stage_time = m_time + m_c[i]*m_dt;
-    m_Operators.explicitOp(m_rhsStage[i],stage_time,m_YStage[i],i);
+    m_YStage.copy(a_Y);
+    for (j=0; j<i; j++) m_YStage.increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
+    m_Operators.explicitOp(m_rhsStage[i],(m_time+m_c[i]*m_dt),m_YStage,i);
   }
-
   /* Step completion */
-  for (i = 0; i < m_nstages; i++) Y.increment(m_rhsStage[j],(m_dt*m_b[i]));
+  for (i = 0; i < m_nstages; i++) a_Y.increment(m_rhsStage[i],(m_dt*m_b[i]));
 
+  /* update current time */
   m_time += m_dt; 
 }
 
