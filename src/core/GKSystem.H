@@ -55,12 +55,14 @@
 #include "ProblemDomain.H"
 #include "PositivityPostProcessor.H"
 
-#ifdef USE_ARK4
-#include "ARK4DenseOutput.H"
-#else
-#include "RK4DenseOutput.H"
-#endif
+//#ifdef USE_ARK4
+//#include "ARK4DenseOutput.H"
+//#else
+//#include "RK4DenseOutput.H"
+//#endif
 #include "GKARK4.H"
+#include "TimeIntegrator.H"
+#include "TiRK.H"
 
 #include "NamespaceHeader.H"
 namespace CFG = CFG_NAMESPACE;
@@ -346,6 +348,9 @@ class GKSystem
 
       std::string m_mag_geom_type;
 
+      std::string ti_class;
+      std::string ti_method;
+
       GKUnits*                  m_units;
       CFG::MagGeom*             m_mag_geom;
       CFG::MagCoordSys*         m_mag_geom_coords;
@@ -363,11 +368,13 @@ class GKSystem
       GKSystemIC* m_initial_conditions;
       GKSystemBC* m_boundary_conditions;
 
-#ifndef USE_ARK4
-      RK4DenseOutput<GKState, GKRHSData, GKOps> m_integrator;
-#else
-      ARK4DenseOutput<GKState, GKRHSData, GKOps> m_integrator;
-#endif
+      TimeIntegrator<GKState, GKRHSData, GKOps> *m_integrator;
+
+//#ifndef USE_ARK4
+//      RK4DenseOutput<GKState, GKRHSData, GKOps> m_integrator;
+//#else
+//      ARK4DenseOutput<GKState, GKRHSData, GKOps> m_integrator;
+//#endif
       GKState m_state;
 
      // Parameters to control plotting

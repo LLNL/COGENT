@@ -87,7 +87,9 @@ GKSystem::GKSystem( ParmParse& a_pp )
      m_hdf_vlasov_divergence(false),
      m_ghostVect(4*IntVect::Unit),
      m_state( GKState(m_ghostVect) ),
-     m_verbosity(0)
+     m_verbosity(0),
+     ti_class("rk"),
+     ti_method("4")
 {
    ParmParse ppgksys("gksystem");
 
@@ -106,15 +108,22 @@ GKSystem::GKSystem( ParmParse& a_pp )
 
    createSpecies();
 
-   const Real BASE_DT( 1.0 );
-   const bool DENSE_OUTPUT( false );
    m_state.define( m_kinetic_species, m_phase_geom );
-   m_integrator.define( m_state, BASE_DT, DENSE_OUTPUT );
-#ifdef USE_ARK4
-   m_gk_ops = &(m_integrator.getImExOp());
-#else
-   m_gk_ops = &(m_integrator.getEXOP());
-#endif
+
+   const Real BASE_DT( 1.0 );
+   if (ti_class == "rk") m_integrator = new TiRK<GKState, GKRHSData, GKOps>;
+   else MayDay::Error("Unrecognized input for ti_class.");
+   m_integrator->define(ti_method, m_state, BASE_DT);
+   m_gk_ops = &(m_integrator->getOperators());
+   m_integrator->setTimeStep(BASE_DT);
+   
+//   const bool DENSE_OUTPUT( false );
+//   m_integrator.define( m_state, BASE_DT, DENSE_OUTPUT );
+//#ifdef USE_ARK4
+//   m_gk_ops = &(m_integrator.getImExOp());
+//#else
+//   m_gk_ops = &(m_integrator.getEXOP());
+//#endif
     
    if ( m_using_electrons && m_gk_ops->usingBoltzmannElectrons() ) {
       MayDay::Error( "GKSystem::createSpecies():  Electrons input as both kinetic and Boltzmann" );
@@ -190,6 +199,7 @@ GKSystem::~GKSystem()
    delete m_mag_geom;
    delete m_mag_geom_coords;
    delete m_units;
+   delete m_integrator;
 }
 
 
@@ -946,9 +956,13 @@ Real GKSystem::advance( const Real a_cur_time,
                         const Real a_dt,
                         const int  a_step_number)
 {
-   m_integrator.resetDt( a_dt );
-   m_integrator.advance( a_cur_time, m_state );
-   Real new_time = a_cur_time + a_dt;
+   m_integrator->setCurrentTime( a_cur_time );
+
+   m_integrator->setTimeStep( a_dt );
+   m_integrator->advance( a_cur_time, m_state );
+
+   Real new_time;
+   m_integrator->getCurrentTime(&new_time);
    
    if (m_enforce_step_positivity) {
       enforcePositivity( m_state.data() );
