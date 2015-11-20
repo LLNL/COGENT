@@ -89,6 +89,18 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      */ 
     void getCurrentTime(Real *a_time) { *a_time = m_time; }
 
+    /// Set Butcher tableaux coefficients
+    /*
+     * set the Butcher tableaux coefficients for the method
+     *
+     * @param[in] a_nstages Number of stages
+     * @param[in] a_Ae Explicit stage calculation coefficients
+     * @param[in] a_Ai Implicit stage calculation coefficients
+     * @param[in] a_be Explicit step completion coefficients (if NULL, equal to a_be)
+     * @param[in] a_bi Implicit step completion coefficients (if NULL, last row of a_Ai) 
+     */ 
+    void setCoefficients(int a_nstages, const Real* a_Ae, const Real* a_Ai, const Real* a_be, const Real* a_bi);
+
   protected:
 
   private:
@@ -111,17 +123,33 @@ void TiARK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real
   m_dt = a_dt;
 
   if (a_name == "1bee") {
+
     m_name = a_name;
     m_nstages = 3;
+
+  } else if (a_name == "4") {
+
+    /* Fourth order ARK scheme with L-stable implicit part.
+       This method has one explicit stage and four implicit stages.
+       References: Kennedy and Carpenter 2003.
+    */
+
+    m_name = a_name;
+    m_nstages = 6;
+
   } else if (a_name == "rk4") {
+
     /* explicit RK4, disguised as an ARK method -- for debugging */
     m_name = a_name;
     m_nstages = 4;
+
   } else {
+
     /* default: forward Euler */
     m_name = "1bee";
     m_nstages = 3;
     //MayDay.Warning("Warning: Unrecognized ARK method. Defaulting to 1bee.");
+    //
   }
 
   /* allocate Butcher tableaux coefficients */
@@ -137,53 +165,47 @@ void TiARK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real
   m_rhsStage_imp  = new RHS[m_nstages];
 
   /* set Butcher coefficients */
-  for (int i=0; i<m_nstages*m_nstages; i++) m_Ae[i] = m_Ai[i] = 0; 
-  for (int i=0; i<m_nstages; i++) m_be[i] = m_bi[i] = m_ce[i] = m_ci[i] = 0; 
   if (m_name == "1bee") {
 
-    m_Ae[7] = 0.5;
+    const Real
+      Ae[3][3] = {{0.0,0.0,0.0},
+                  {0.0,0.0,0.0},
+                  {0.0,0.5,0.0}},
+      Ai[3][3] = {{1.0,0.0,0.0},
+                  {0.0,0.5,0.0},
+                  {0.0,0.5,0.5}},
+      be[3]    =  {0.0,0.5,0.5};
+    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],&be[0],NULL);
 
-    m_Ai[0] = 1.0;
-    m_Ai[4] = 0.5;
-    m_Ai[7] = 0.5;
-    m_Ai[8] = 0.5;
+  } else if (m_name == "4") {
 
-    m_ce[0] = 0.0;
-    m_ce[1] = 0.0;
-    m_ce[2] = 0.5;
-
-    m_ci[0] = 1.0;
-    m_ci[1] = 0.5;
-    m_ci[2] = 1.0;
-
-    m_be[1] = m_be[2] = m_bi[1] = m_bi[2]  = 0.5;
+    const Real 
+      Ae[6][6] = {{0,0,0,0,0,0},
+                 {1./2,0,0,0,0,0},
+                 {13861./62500.,6889./62500.,0,0,0,0},
+                 {-116923316275./2393684061468.,-2731218467317./15368042101831.,9408046702089./11113171139209.,0,0,0},
+                 {-451086348788./2902428689909.,-2682348792572./7519795681897.,12662868775082./11960479115383.,3355817975965./11060851509271.,0,0},
+                 {647845179188./3216320057751.,73281519250./8382639484533.,552539513391./3454668386233.,3354512671639./8306763924573.,4040./17871.,0}},
+      Ai[6][6] = {{0,0,0,0,0,0},
+                  {1./4,1./4,0,0,0,0},
+                  {8611./62500.,-1743./31250.,1./4,0,0,0},
+                  {5012029./34652500.,-654441./2922500.,174375./388108.,1./4,0,0},
+                  {15267082809./155376265600.,-71443401./120774400.,730878875./902184768.,2285395./8070912.,1./4,0},
+                  {82889./524892.,0,15625./83664.,69875./102672.,-2260./8211,1./4}};
+    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL);
 
   } else if (m_name == "rk4") {
 
-    m_Ae[4]  = 0.5;
-    m_Ae[9]  = 0.5;
-    m_Ae[14] = 1.0;
-
-    m_Ai[4]  = 0.5;
-    m_Ai[9]  = 0.5;
-    m_Ai[14] = 1.0;
-
-    m_ce[1] = m_ce[2] = 0.5;
-    m_ce[3] = 1.0;
-
-    m_ci[1] = m_ci[2] = 0.5;
-    m_ci[3] = 1.0;
-
-    m_be[0] = 1.0/6.0; 
-    m_be[1] = m_be[2] = 1.0/3.0; 
-    m_be[3] = 1.0/6.0;
-
-    m_bi[0] = 1.0/6.0; 
-    m_bi[1] = m_bi[2] = 1.0/3.0; 
-    m_bi[3] = 1.0/6.0;
-
+    const Real
+      A[4][4] = {{0,0,0,0},
+                 {0.5,0,0,0},
+                 {0,0.5,0,0},
+                 {0,0,1.0,0}},
+      b[4]    = {1.0/6.0,1.0/3.0,1.0/3.0,1.0/6.0};
+    setCoefficients(m_nstages,&A[0][0],&A[0][0],&b[0],&b[0]);
   }
 
+  /* define the work vectors and operators */
   m_YStage.define(a_state);
   m_work.define(a_state);
   for (int i=0; i<m_nstages; i++) {
@@ -191,9 +213,38 @@ void TiARK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real
     m_rhsStage_imp[i].define(a_state);
   }
   m_Operators.define(a_state, m_dt);
-  m_is_Defined = true;
 
+  /* done */
+  m_is_Defined = true;
   if (!procID()) cout << "Time integration method: ark (" << m_name << ")\n" ;
+}
+
+template <class Solution, class RHS, class Ops>
+void TiARK<Solution, RHS, Ops>::setCoefficients( int a_nstages,
+                                            const Real* a_Ae, const Real* a_Ai, 
+                                            const Real* a_be, const Real* a_bi
+                                          )
+{
+  CH_assert(!isDefined());
+  CH_assert(a_nstages == m_nstages);
+
+  int i, j;
+  for (i=0; i<m_nstages*m_nstages; i++) {
+    m_Ae[i] = a_Ae[i];
+    m_Ai[i] = a_Ai[i];
+  }
+  if (a_bi) for (i=0; i<m_nstages; i++) m_bi[i] = a_bi[i];
+  else                                  m_bi[i] = a_Ai[(m_nstages-1)*m_nstages+i];
+  if (a_be) for (i=0; i<m_nstages; i++) m_be[i] = a_be[i];
+  else                                  m_be[i] = a_bi[i];
+
+  for (i=0; i<m_nstages; i++) {
+    m_ce[i] = m_ci[i] = 0.0;
+    for(j=0; j<m_nstages; j++) { 
+      m_ce[i] += a_Ae[i*m_nstages+j]; 
+      m_ci[i] += a_Ai[i*m_nstages+j]; 
+    }
+  }
 }
 
 template <class Solution, class RHS, class Ops>
