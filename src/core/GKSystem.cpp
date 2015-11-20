@@ -110,12 +110,13 @@ GKSystem::GKSystem( ParmParse& a_pp )
 
    m_state.define( m_kinetic_species, m_phase_geom );
 
+   if (m_ti_class == "rk")        m_integrator = new TiRK   <GKState, GKRHSData, GKOps>;
+   else if (m_ti_class == "ark")  m_integrator = new TiARK  <GKState, GKRHSData, GKOps>;
+   else                           MayDay::Error("Unrecognized input for m_ti_class.");
+   
    const Real BASE_DT( 1.0 );
-   if (m_ti_class == "rk") m_integrator = new TiRK<GKState, GKRHSData, GKOps>;
-   else MayDay::Error("Unrecognized input for m_ti_class.");
    m_integrator->define(m_ti_method, m_state, BASE_DT);
    m_gk_ops = &(m_integrator->getOperators());
-   m_integrator->setTimeStep(BASE_DT);
    
    if ( m_using_electrons && m_gk_ops->usingBoltzmannElectrons() ) {
       MayDay::Error( "GKSystem::createSpecies():  Electrons input as both kinetic and Boltzmann" );

@@ -1,8 +1,6 @@
 #ifndef  _GKOPS_H_
 #define  _GKOPS_H_
 
-#undef USE_ARK4
-
 #undef BLOB_ERROR_TEST
 
 #if CFG_DIM==2
@@ -50,6 +48,7 @@
 #include "GKTimeIntegration.H"
 #include "TimeIntegrator.H"
 #include "TiRK.H"
+#include "TiARK.H"
 
 #include "NamespaceHeader.H"
 namespace CFG = CFG_NAMESPACE;
@@ -179,9 +178,7 @@ public:
       m_enforce_quasineutrality(false),
       m_verbosity(0) {;}   
    
-#ifdef USE_ARK4
-   void define( const GKState& a_state, const Real a_dt, const Real a_dt_scale );
-#endif
+   //void define( const GKState& a_state, const Real a_dt, const Real a_dt_scale );
    void define( const GKState& a_state, const Real a_dt );
    
    bool isDefined() const { return m_is_defined; }
@@ -193,11 +190,12 @@ public:
       m_dt = a_dt;
    }
    
-   void explicitOp( GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage );
+   void explicitOp    (GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage );
+   void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage );
+   void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage );
    
-   void implicitOp( GKRHSData& a_rhs, const Real a_time, const GKState& a_state , const int a_stage );
-   
-   void solve( GKState& a_state, const GKRHSData& a_rhs, const Real a_time, const int a_stage  );
+   //void solve( GKState& a_state, const GKRHSData& a_rhs, const Real a_time, const int a_stage  );
+   void solveImEx( GKState& a_state, const GKRHSData& a_rhs, const Real shift, const Real a_time, const int a_stage  );
    
    void computeElectricField( LevelData<FluxBox>&          a_E_field,
                               const KineticSpeciesPtrVect& a_kinetic_species,

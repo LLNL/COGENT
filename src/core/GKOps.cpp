@@ -61,6 +61,7 @@
 
 using namespace CH_MultiDim;
 
+#if 0
 #ifdef USE_ARK4
 void GKOps::define( const GKState& a_state,
                     const Real a_dt,
@@ -69,6 +70,7 @@ void GKOps::define( const GKState& a_state,
    m_dt_scale = a_dt_scale;
    define( a_state, a_dt );
 }
+#endif
 #endif
 
 
@@ -281,9 +283,7 @@ void GKOps::explicitOp( GKRHSData& a_rhs,
       applyNeutralsOperator( a_rhs.data(), species_comp, a_time );
    }
 
-#ifndef ARK4
    applyCollisionOperator( a_rhs.data(), species_comp, a_time );
-#endif
 
    if (m_consistent_potential_bcs && a_stage == 3) {
 
@@ -343,23 +343,116 @@ void GKOps::explicitOp( GKRHSData& a_rhs,
    }
 }
 
-void GKOps::implicitOp( GKRHSData& a_rhs,
-                        const Real a_time,
-                        const GKState& a_state,
-                        const int a_stage )
+void GKOps::explicitOpImEx( GKRHSData& a_rhs,
+                            const Real a_time,
+                            const GKState& a_state,
+                            const int a_stage )
 {
-#ifdef USE_ARK4
    CH_assert( isDefined() );
+
+   a_rhs.zero();
 
    const KineticSpeciesPtrVect& species_comp( a_state.data() );
    
-   a_rhs.zero();
+   LevelData<FluxBox> E_field;
+   if (m_consistent_potential_bcs) {
+      if (a_stage == 0) {
+         m_stage0_time = a_time;
+      }
 
-   applyCollisionOperator( a_rhs.data(), species_comp, a_time );
-#endif
+      // We're not fourth-order accurate with this option anyway,
+      // so only compute the field at the beginning of the step.
+      computeElectricField( E_field, species_comp, -1, -1 );
+   }
+   else {
+      computeElectricField( E_field, species_comp, -1, a_stage );
+   }
+
+   KineticSpeciesPtrVect species_phys;
+   createTemporarySpeciesVector( species_phys, species_comp );
+   fillGhostCells( species_phys, E_field, a_time );
+   applyVlasovOperator( a_rhs.data(), species_phys, E_field, a_time );
+
+   if (m_transport_model_on) {
+      applyTransportOperator( a_rhs.data(), species_phys, a_time );
+   }
+    
+   if (m_neutrals_model_on) {
+      applyNeutralsOperator( a_rhs.data(), species_comp, a_time );
+   }
+
+   /* The following is hard-coded for a 4-stage time integrator!! */
+   if (m_consistent_potential_bcs && a_stage == 3) {
+
+      double dt = a_time - m_stage0_time;
+
+      m_Er_lo += dt * (-m_lo_radial_flux_divergence_average / m_lo_radial_gkp_divergence_average);
+      m_Er_hi += dt * (-m_hi_radial_flux_divergence_average / m_hi_radial_gkp_divergence_average);
+
+      setCoreBC( m_Er_lo, -m_Er_hi, m_boundary_conditions->getPotentialBC() );
+
+      if (procID()==0) cout << "  Er_lo = " << m_Er_lo << ", Er_hi = " << m_Er_hi << endl;
+       
+      if (m_ampere_law) {
+
+         CFG::LevelData<CFG::FluxBox> E_tilde_mapped_face;
+         CFG::LevelData<CFG::FArrayBox> E_tilde_mapped_cell;
+         CFG::LevelData<CFG::FArrayBox> phi_tilde_fs_average;
+         double phi_tilde_fs_average_lo;
+         double phi_tilde_fs_average_hi;
+
+         if (!m_ampere_cold_electrons) {
+
+            const CFG::MagGeom& mag_geom = m_phase_geometry->magGeom();
+            const CFG::DisjointBoxLayout& mag_grids = mag_geom.grids();
+
+            // Compute the poloidal variation phi_tilde.  The poloidal variation of the
+            // current potential is used as the initial guess for the interative procedure.
+            int num_phi_ghosts_filled = m_poisson->numPotentialGhostsFilled();
+            CH_assert(num_phi_ghosts_filled >=2 );
+            CFG::LevelData<CFG::FArrayBox> phi_tilde(mag_grids, 1, num_phi_ghosts_filled*CFG::IntVect::Unit);
+
+            computePhiTilde( species_phys, *m_boltzmann_electron, phi_tilde );
+
+            // Fill the two ghost cell layers at block boundaries as required by the
+            // subsequent field calculations
+            m_poisson->fillGhosts( phi_tilde );
+
+            E_tilde_mapped_face.define(mag_grids, 3, CFG::IntVect::Zero);
+            m_poisson->computeMappedElectricField( phi_tilde, E_tilde_mapped_face );
+
+            E_tilde_mapped_cell.define(mag_grids, 3, CFG::IntVect::Zero);
+            m_poisson->computeMappedElectricField( phi_tilde, E_tilde_mapped_cell );
+
+            CFG::LevelData<CFG::FluxBox> Er_tilde_mapped(mag_grids, 1, CFG::IntVect::Zero);
+            m_poisson->extractNormalComponent(E_tilde_mapped_face, RADIAL_DIR, Er_tilde_mapped);
+
+            phi_tilde_fs_average.define(mag_grids, 1, CFG::IntVect::Zero);
+            m_poisson->computeRadialFSAverage( Er_tilde_mapped, phi_tilde_fs_average_lo, phi_tilde_fs_average_hi, phi_tilde_fs_average );
+         }
+
+         updateAveragedEfield( m_Er_average_face, m_Er_average_cell,
+                               m_radial_flux_divergence_average, m_lo_radial_flux_divergence_average, m_hi_radial_flux_divergence_average, dt );
+          
+         updateEfieldPoloidalVariation( E_tilde_mapped_face, E_tilde_mapped_cell, m_E_tilde_face, m_E_tilde_cell,
+                                        phi_tilde_fs_average, phi_tilde_fs_average_lo, phi_tilde_fs_average_hi );
+      }
+   }
 }
 
+void GKOps::implicitOpImEx( GKRHSData& a_rhs,
+                            const Real a_time,
+                            const GKState& a_state,
+                            const int a_stage )
+{
+   CH_assert( isDefined() );
 
+   const KineticSpeciesPtrVect& species_comp( a_state.data() );
+   a_rhs.zero();
+   applyCollisionOperator( a_rhs.data(), species_comp, a_time );
+}
+
+#if 0
 void GKOps::solve( GKState& a_state,
                    const GKRHSData& a_rhs,
                    const Real a_time,
@@ -396,6 +489,62 @@ void GKOps::solve( GKState& a_state,
          Real nu( krook->collisionFrequency() );
          CH_assert( nu>=0.0 );
          Real coeff( m_dt_scale * m_dt * nu );
+         Real factor( 1.0 / (1.0 + coeff) );
+         
+         LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
+         
+         const KineticSpecies& rhs_species( *(species_rhs[s]) );
+         const LevelData<FArrayBox>& rhs_dfn( rhs_species.distributionFunction() );
+         
+         rhs_dfn.copyTo( soln_dfn );
+         krook->addReferenceDfn( soln_species, a_time, coeff );
+         for (DataIterator sdit(soln_dfn.dataIterator()); sdit.ok(); ++sdit) {
+            soln_dfn[sdit].mult( factor );
+         }
+         
+      }
+      else {
+         MayDay::Error( "Implicit solution is currently limited to linear, non-conservative Krook operator!" );
+      }
+   }
+}
+#endif
+
+/* Solve for a_state in  (I - shift * FI) (a_state) = a_rhs. 
+   So we could think of this iteratively as
+
+      [G(phi_s+eps)-G(phi_s)]/eps * dphi_s = G(phi_s),
+
+   with phi_{s+1} = phi_s + dphi_s, where
+
+      G(a_state) = a_state - shift * f_I(a_state) - a_rhs = 0.
+
+   The only thing that is necessary from an operator treated implicitly is then
+   the implicit rhs function f_I(phi).
+ */
+void GKOps::solveImEx( GKState& a_state,
+                       const GKRHSData& a_rhs,
+                       const Real shift, 
+                       const Real a_time,
+                       const int a_stage )
+{
+   CH_assert( isDefined() );
+
+   KineticSpeciesPtrVect& species_comp( a_state.data() );
+   const KineticSpeciesPtrVect& species_rhs( a_rhs.data() );
+
+   const int num_kinetic_species( species_comp.size() );
+   for (int s(0); s<num_kinetic_species; s++) {
+      
+      KineticSpecies& soln_species( *(species_comp[s]) );
+      CLSInterface& cls_ref( m_collisions->collisionModel( soln_species.name() ) );
+      MyKrook* krook = NULL;
+      krook = dynamic_cast<MyKrook*>( &cls_ref );
+
+      if (krook) {
+         Real nu( krook->collisionFrequency() );
+         CH_assert( nu>=0.0 );
+         Real coeff( shift * nu );
          Real factor( 1.0 / (1.0 + coeff) );
          
          LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );

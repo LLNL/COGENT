@@ -56,6 +56,7 @@
 #include "GKTimeIntegration.H"
 #include "TimeIntegrator.H"
 #include "TiRK.H"
+#include "TiARK.H"
 
 #include "NamespaceHeader.H"
 namespace CFG = CFG_NAMESPACE;
