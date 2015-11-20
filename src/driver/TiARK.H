@@ -234,9 +234,9 @@ void TiARK<Solution, RHS, Ops>::setCoefficients( int a_nstages,
     m_Ai[i] = a_Ai[i];
   }
   if (a_bi) for (i=0; i<m_nstages; i++) m_bi[i] = a_bi[i];
-  else                                  m_bi[i] = a_Ai[(m_nstages-1)*m_nstages+i];
+  else      for (i=0; i<m_nstages; i++) m_bi[i] = a_Ai[(m_nstages-1)*m_nstages+i];
   if (a_be) for (i=0; i<m_nstages; i++) m_be[i] = a_be[i];
-  else                                  m_be[i] = a_bi[i];
+  else      for (i=0; i<m_nstages; i++) m_be[i] = m_bi[i];
 
   for (i=0; i<m_nstages; i++) {
     m_ce[i] = m_ci[i] = 0.0;
