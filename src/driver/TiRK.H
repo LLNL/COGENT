@@ -90,6 +90,16 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      */ 
     void getCurrentTime(Real *a_time) { *a_time = m_time; }
 
+    /// Set Butcher tableaux coefficients
+    /*
+     * set the Butcher tableaux coefficients for the method
+     *
+     * @param[in] a_nstages Number of stages
+     * @param[in] a_A Stage calculation coefficients
+     * @param[in] a_b Step completion coefficients
+     */ 
+    void setCoefficients(int a_nstages, const Real* a_A,const Real* a_b);
+
   protected:
 
   private:
@@ -110,65 +120,76 @@ void TiRK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real 
 {
   m_dt = a_dt;
 
+  /* set Butcher coefficients */
   if (a_name == "1fe") {
+
     /* forward Euler */
     m_name = a_name;
     m_nstages = 1;
+
+    const Real
+      A[1][1] = {{0.0}},
+      b[1]    = {1.0};
+    setCoefficients(m_nstages,&A[0][0],&b[0]);
+
   } else if (a_name == "2a") {
+
     /* 2nd order, 2-stage Runge-Kutta */
     m_name = a_name;
     m_nstages = 2;
+    
+    const Real
+      A[2][2]     = {{0.0,0.0},
+                    {1.0,0.0}},
+      b[2]        = {0.5,0.5};
+    setCoefficients(m_nstages,&A[0][0],&b[0]); 
+
   } else if (a_name == "3") {
+
     /* 3rd order, 3-stage Runge-Kutta */
     m_name = a_name;
     m_nstages = 3;
+    
+    const Real
+      A[3][3] = {{0,0,0},
+                 {2.0/3.0,0,0},
+                 {-1.0/3.0,1.0,0}},
+      b[3]    = {0.25,0.5,0.25};
+    setCoefficients(m_nstages,&A[0][0],&b[0]); 
+
   } else if (a_name == "4") {
+    
     /* 4th order, 4-stage Runge-Kutta */
     m_name = a_name;
     m_nstages = 4;
-  } else {
-    /* default: forward Euler */
-    m_name = "1fe";
-    m_nstages = 1;
-    //MayDay.Warning("Warning: Unrecognized RK method. Defaulting to forward Euler.");
-  }
+    
+    const Real
+      A[4][4] = {{0,0,0,0},
+                 {0.5,0,0,0},
+                 {0,0.5,0,0},
+                 {0,0,1.0,0}},
+      b[4]    = {1.0/6.0,1.0/3.0,1.0/3.0,1.0/6.0};
+    setCoefficients(m_nstages,&A[0][0],&b[0]); 
 
-  /* allocate Butcher tableaux coefficients */
-  m_A = new Real[m_nstages*m_nstages];
-  m_b = new Real[m_nstages];
-  m_c = new Real[m_nstages];
+  } else {
+    
+    /* default: RK4 */
+    if (!procID()) cout << "Warning: unknown RK method specified " << a_name << ". Using default.\n";
+    m_name = "4";
+    m_nstages = 4;
+    
+    const Real
+      A[4][4] = {{0,0,0,0},
+                 {0.5,0,0,0},
+                 {0,0.5,0,0},
+                 {0,0,1.0,0}},
+      b[4]    = {1.0/6.0,1.0/3.0,1.0/3.0,1.0/6.0};
+    setCoefficients(m_nstages,&A[0][0],&b[0]); 
+
+  }
 
   /* allocate RHS */
   m_rhsStage  = new RHS[m_nstages];
-
-  /* set Butcher coefficients */
-  for (int i=0; i<m_nstages*m_nstages; i++) m_A[i] = 0; 
-  for (int i=0; i<m_nstages; i++) m_b[i] = m_c[i] = 0; 
-  if (m_name == "1fe") {
-    m_b[0] = 1.0;
-  } else if (m_name == "2a") {
-    m_A[2] = 1.0;
-    m_c[1] = 1.0;
-    m_b[0] = m_b[1] = 0.5;
-  } else if (m_name == "3") {
-    m_A[3] = 2.0/3.0;
-    m_A[6] = 2.0/3.0 - 1.0/4.0;
-    m_A[7] = 1.0/4.0;
-    m_c[1] = 2.0/3.0;
-    m_c[2] = 2.0/3.0;
-    m_b[0] = 1.0/4.0;
-    m_b[1] = -1.0/4.0;
-    m_b[2] = 1.0;
-  } else if (m_name == "4") {
-    m_A[4] = 0.5;
-    m_A[9] = 0.5;
-    m_A[14] = 1.0;
-    m_c[1] = m_c[2] = 0.5;
-    m_c[3] = 1.0;
-    m_b[0] = 1.0/6.0; 
-    m_b[1] = m_b[2] = 1.0/3.0; 
-    m_b[3] = 1.0/6.0;
-  }
 
   m_YStage.define(a_state);
   for (int i=0; i<m_nstages; i++) {
@@ -178,6 +199,29 @@ void TiRK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real 
   m_is_Defined = true;
 
   if (!procID()) cout << "Time integration method: rk (" << m_name << ")\n" ;
+}
+
+template <class Solution, class RHS, class Ops>
+void TiRK<Solution, RHS, Ops>::setCoefficients( int a_nstages,
+                                                const Real* a_A, 
+                                                const Real* a_b
+                                              )
+{
+  CH_assert(!isDefined());
+  CH_assert(a_nstages == m_nstages);
+
+  /* allocate Butcher tableaux coefficients 
+   * deallocated in destructor */
+  m_A = new Real[m_nstages*m_nstages];
+  m_b = new Real[m_nstages];
+  m_c = new Real[m_nstages];
+
+  int i, j;
+  for (i=0; i<m_nstages*m_nstages; i++) m_A[i] = a_A[i];
+  for (i=0; i<m_nstages;           i++) m_b[i] = a_b[i];
+  for (i=0; i<m_nstages; i++) {
+    m_c[i] = 0.0; for(j=0; j<m_nstages; j++) m_c[i] += a_A[i*m_nstages+j]; 
+  }
 }
 
 template <class Solution, class RHS, class Ops>
