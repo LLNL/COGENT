@@ -278,13 +278,16 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
   /* Stage calculations */
   int i, j;
   for (i = 0; i < m_nstages; i++) {
-    m_work.copy(a_Y);
-    for (j=0; j<i; j++) m_work.increment(m_rhsStage_exp[j],(m_dt*m_Ae[i*m_nstages+j]));
-    for (j=0; j<i; j++) m_work.increment(m_rhsStage_imp[j],(m_dt*m_Ai[i*m_nstages+j]));
+    m_YStage.copy(a_Y);
+    for (j=0; j<i; j++) m_YStage.increment(m_rhsStage_exp[j],(m_dt*m_Ae[i*m_nstages+j]));
+    for (j=0; j<i; j++) m_YStage.increment(m_rhsStage_imp[j],(m_dt*m_Ai[i*m_nstages+j]));
 
     /* implicit stage */
     Real shift = m_Ai[i*m_nstages+j] * m_dt;
-    if (shift != 0.0) m_Operators.solveImEx(m_YStage,m_work,shift,(m_time+m_ci[i]*m_dt),i);
+    if (shift != 0.0) {
+      m_work.copy(m_YStage);
+      m_Operators.solveImEx(m_YStage,m_work,shift,(m_time+m_ci[i]*m_dt),i);
+    }
 
     m_Operators.explicitOpImEx(m_rhsStage_exp[i],(m_time+m_ce[i]*m_dt),m_YStage,i);
     m_Operators.implicitOpImEx(m_rhsStage_imp[i],(m_time+m_ci[i]*m_dt),m_YStage,i);
