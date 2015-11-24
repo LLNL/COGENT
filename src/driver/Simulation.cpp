@@ -203,8 +203,8 @@ template <class SYSTEM>
 void Simulation<SYSTEM>::advance()
 {
    if (m_verbosity >= 1) {
-      pout() << endl << "Step " << m_cur_step << endl;
-      if(procID()==0) cout << endl << "Step " << m_cur_step << endl;
+      pout() << endl << "Step " << m_cur_step+1 << endl;
+      if(procID()==0) cout << endl << "Step " << m_cur_step+1 << endl;
    }
    selectTimeStep();
 
