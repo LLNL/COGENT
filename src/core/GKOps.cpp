@@ -538,8 +538,8 @@ void GKOps::solveImEx( GKState& a_state,
       
       KineticSpecies& soln_species( *(species_comp[s]) );
       CLSInterface& cls_ref( m_collisions->collisionModel( soln_species.name() ) );
-      MyKrook* krook = NULL;
-      krook = dynamic_cast<MyKrook*>( &cls_ref );
+      Krook* krook = NULL;
+      krook = dynamic_cast<Krook*>( &cls_ref );
 
       if (krook) {
          Real nu( krook->collisionFrequency() );

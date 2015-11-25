@@ -60,7 +60,12 @@ public:
    */
   Real computeDt(const KineticSpeciesPtrVect& soln);
 
-   
+  Real collisionFrequency ();
+
+  void addReferenceDfn( KineticSpecies& result,
+                        const Real      time, 
+                        const Real      scale );
+
 private:
 
    int m_verbosity;

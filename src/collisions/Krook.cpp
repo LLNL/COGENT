@@ -466,6 +466,26 @@ void Krook::printParameters()
    }
 }
 
+Real Krook::collisionFrequency()
+{
+  /* implemented for fixed collision frequency for now */
+  CH_assert(m_fixed_cls_freq);
+  return m_cls_freq;
+}
+
+void Krook::addReferenceDfn( KineticSpecies& a_result,
+                             const Real      a_time, 
+                             const Real      a_scale )
+{
+   LevelData<FArrayBox>& result_dfn( a_result.distributionFunction() );
+         
+   KineticSpeciesPtr ref_species( a_result.clone( IntVect::Zero, false ) );
+   m_ref_func->assign( *ref_species, a_time );
+   const LevelData<FArrayBox>& ref_dfn( ref_species->distributionFunction() );
+   for (DataIterator dit(result_dfn.dataIterator()); dit.ok(); ++dit) {
+      result_dfn[dit].plus( ref_dfn[dit], a_scale );
+   }
+}
 
 Real Krook::computeDt(const KineticSpeciesPtrVect& soln)
 {
