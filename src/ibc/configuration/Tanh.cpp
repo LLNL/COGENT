@@ -20,6 +20,7 @@
 #include "SlabBlockCoordSys.H"
 #include "MultiBlockCoordSys.H"
 #include "Vector.H"
+#include "MagGeom.H"
 
 #include "NamespaceHeader.H"
 
@@ -80,6 +81,33 @@ void Tanh::assign( FArrayBox& a_data,
    else {
       setPointwise( a_data, getCoordSys( a_geometry, a_box ) );
    }
+}
+
+
+void Tanh::assign( LevelData<FArrayBox>& a_data,
+                   const MultiBlockLevelGeom& a_geometry,
+                   const BoundaryBoxLayout& a_bdry_layout,
+                   const Real& a_time ) const
+{
+   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
+   // NB: This is a cheat - there's one too many cells at the (dir,side) face
+   // of the boundary box, but it doesn't matter because one-sided difference
+   // will be used at that face to construct the cell average.  We do want the
+   // extra cell in all other directions.
+   LevelData<FArrayBox> data_tmp( grids, a_data.nComp(), IntVect::Unit );
+   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
+      const Box box( a_bdry_layout.interiorBox( dit ) );
+      const MagBlockCoordSys& coord_sys( ((MagGeom&)a_geometry).getBlockCoordSys( box ) );
+      setPointwise( data_tmp[dit], coord_sys );
+   }
+   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
+      Box domain_box( data_tmp[dit].box() );
+      domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
+      ProblemDomain domain( domain_box );
+      fourthOrderAverageCell( data_tmp[dit], domain, grids[dit] );
+   }
+   data_tmp.copyTo( a_data );
+   a_data.exchange();
 }
 
 
