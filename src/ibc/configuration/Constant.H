@@ -7,6 +7,7 @@
 #include "DataIterator.H"
 #include "LevelData.H"
 #include "MultiBlockLevelGeom.H"
+#include "FourthOrderUtil.H"
 
 #include <iostream>
 
@@ -108,6 +109,43 @@ class Constant : public GridFunction
                             const bool& cell_averages = true ) const
       {
          data.setVal( m_value );
+      }
+
+      /// Set the function on the boundary boxes.
+      /**
+       * Sets the cell-averaged function value for the grid function
+       * at the given time on the boxes specified in the BoundaryBoxLayout.
+       *
+       * NB: The cell-averaged values include the J and BStarParallel factors,
+       * i.e., the internal LevelData contains the average of fJB^*_{\parallel}
+       *
+       * @param[inout] data  Grid function to set.
+       * @param[in] bdry_layout BoundaryBoxLayout defining boxes to fill.
+       * @param[in] time Time value at which to evaluate the function.
+       */
+      virtual void assign( LevelData<FArrayBox>& a_data,
+                           const MultiBlockLevelGeom& a_geometry,
+                           const BoundaryBoxLayout& a_bdry_layout,
+                           const Real& a_time ) const
+      {
+         const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
+         // NB: This is a cheat - there's one too many cells at the (dir,side) face
+         // of the boundary box, but it doesn't matter because one-sided difference
+         // will be used at that face to construct the cell average.  We do want the
+         // extra cell in all other directions.
+         LevelData<FArrayBox> data_tmp( grids, a_data.nComp(), IntVect::Unit );
+         for (DataIterator dit( grids ); dit.ok(); ++dit) {
+            data_tmp[dit].setVal( m_value );
+         }
+
+         for (DataIterator dit( grids ); dit.ok(); ++dit) {
+            Box domain_box( data_tmp[dit].box() );
+            domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
+            ProblemDomain domain( domain_box );
+            fourthOrderAverageCell( data_tmp[dit], domain, grids[dit] );
+         }
+         data_tmp.copyTo( a_data );
+         a_data.exchange();
       }
 
       /// Print object parameters.

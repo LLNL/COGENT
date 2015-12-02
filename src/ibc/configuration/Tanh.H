@@ -112,6 +112,23 @@ class Tanh : public GridFunction
                            const Real& a_time,
                            const bool& cell_averages = true ) const;
 
+      /// Set the function on the boundary boxes.
+      /**
+       * Sets the cell-averaged function value for the grid function
+       * at the given time on the boxes specified in the BoundaryBoxLayout.
+       *
+       * NB: The cell-averaged values include the J and BStarParallel factors,
+       * i.e., the internal LevelData contains the average of fJB^*_{\parallel}
+       *
+       * @param[inout] data  Grid function to set.
+       * @param[in] bdry_layout BoundaryBoxLayout defining boxes to fill.
+       * @param[in] time Time value at which to evaluate the function.
+       */
+      virtual void assign( LevelData<FArrayBox>& data,
+                           const MultiBlockLevelGeom& geometry,
+                           const BoundaryBoxLayout& bdry_layout,
+                           const Real& time ) const;
+
       /// Print object parameters.
       /**
        */

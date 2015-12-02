@@ -19,6 +19,7 @@
 #include "SingleNullBlockCoordSys.H"
 #include "MultiBlockCoordSys.H"
 #include "Vector.H"
+#include "MagGeom.H"
 
 #include "NamespaceHeader.H"
 
@@ -34,8 +35,8 @@ const MagBlockCoordSys& getCoordSys( const MultiBlockLevelGeom& a_geometry,
 
 
 SingleNullDistr::SingleNullDistr( //const std::string& a_name,
-                          ParmParse& a_pp,
-                          const int& a_verbosity )
+                                 ParmParse& a_pp,
+                                 const int& a_verbosity )
    : //m_name(a_name),
      m_verbosity(a_verbosity),
      m_core_value(1.0),
@@ -57,9 +58,9 @@ SingleNullDistr::SingleNullDistr( //const std::string& a_name,
 
 
 void SingleNullDistr::assign( LevelData<FArrayBox>& a_data,
-                        const MultiBlockLevelGeom& a_geometry,
-                        const Real& a_time,
-                        const bool& a_cell_averages ) const
+                              const MultiBlockLevelGeom& a_geometry,
+                              const Real& a_time,
+                              const bool& a_cell_averages ) const
 {
    checkGeometryValidity( a_geometry );
 
@@ -82,10 +83,10 @@ void SingleNullDistr::assign( LevelData<FArrayBox>& a_data,
 
 
 void SingleNullDistr::assign( FArrayBox& a_data,
-                        const MultiBlockLevelGeom& a_geometry,
-                        const Box& a_box, // interior box
-                        const Real& a_time,
-                        const bool& a_cell_averages ) const
+                              const MultiBlockLevelGeom& a_geometry,
+                              const Box& a_box, // interior box
+                              const Real& a_time,
+                              const bool& a_cell_averages ) const
 {
    const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
    const int block_number( coord_sys.whichBlock( a_box ) );
@@ -96,6 +97,37 @@ void SingleNullDistr::assign( FArrayBox& a_data,
    else {
       setPointwise( a_data, coord_sys, getCoordSys( a_geometry, a_box ), block_number );
    }
+}
+
+
+void SingleNullDistr::assign( LevelData<FArrayBox>& a_data,
+                              const MultiBlockLevelGeom& a_geometry,
+                              const BoundaryBoxLayout& a_bdry_layout,
+                              const Real& a_time ) const
+{
+   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
+
+   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
+   // NB: This is a cheat - there's one too many cells at the (dir,side) face
+   // of the boundary box, but it doesn't matter because one-sided difference
+   // will be used at that face to construct the cell average.  We do want the
+   // extra cell in all other directions.
+   LevelData<FArrayBox> data_tmp( grids, a_data.nComp(), IntVect::Unit );
+   for (DataIterator dit( grids ); dit.ok(); ++dit) {
+      const Box box( a_bdry_layout.interiorBox( dit ) );
+      const MagBlockCoordSys& block_coord_sys( ((MagGeom&)a_geometry).getBlockCoordSys( box ) );
+      const int block_number( coord_sys.whichBlock( box ) );
+
+      setPointwise( data_tmp[dit], coord_sys, block_coord_sys, block_number );
+   }
+   for (DataIterator dit( grids ); dit.ok(); ++dit) {
+      Box domain_box( data_tmp[dit].box() );
+      domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
+      ProblemDomain domain( domain_box );
+      fourthOrderAverageCell( data_tmp[dit], domain, grids[dit] );
+   }
+   data_tmp.copyTo( a_data );
+   a_data.exchange();
 }
 
 
@@ -138,9 +170,9 @@ void SingleNullDistr::checkGeometryValidity( const MultiBlockLevelGeom& a_geomet
 
 inline
 void SingleNullDistr::setCellAverages( FArrayBox&        a_data,
-                               const MultiBlockCoordSys& a_coords,
-                               const MagBlockCoordSys&   a_block_coord,
-                               const int               block_number ) const
+                                       const MultiBlockCoordSys& a_coords,
+                                       const MagBlockCoordSys&   a_block_coord,
+                                       const int               block_number ) const
 
 {
    Box box( a_data.box() );
@@ -158,9 +190,9 @@ void SingleNullDistr::setCellAverages( FArrayBox&        a_data,
 
 inline
 void SingleNullDistr::setPointwise( FArrayBox&          a_data,
-                              const MultiBlockCoordSys& a_coords,
-                              const MagBlockCoordSys&   a_block_coords,
-                              const int                 block_number)  const
+                                    const MultiBlockCoordSys& a_coords,
+                                    const MagBlockCoordSys&   a_block_coords,
+                                    const int                 block_number)  const
 
 {
    Box box( a_data.box() );

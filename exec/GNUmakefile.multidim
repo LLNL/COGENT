@@ -49,7 +49,7 @@ base_dir = .
 4dsrc_dirs += ../src/advectUtil
 4dsrc_dirs += ../src/ibc
 
-#mdsrc_dirs = ../src/ibc
+mdsrc_dirs = ../src/ibc/multidim
 
 # input file for 'run' target
 INPUT = regression.inputs

@@ -110,6 +110,23 @@ class RZdata : public GridFunction
                            const Real& time,
                            const bool& cell_averages = true ) const;
 
+      /// Set the function on the boundary boxes.
+      /**
+       * Sets the cell-averaged function value for the grid function
+       * at the given time on the boxes specified in the BoundaryBoxLayout.
+       *
+       * NB: The cell-averaged values include the J and BStarParallel factors,
+       * i.e., the internal LevelData contains the average of fJB^*_{\parallel}
+       *
+       * @param[inout] data  Grid function to set.
+       * @param[in] bdry_layout BoundaryBoxLayout defining boxes to fill.
+       * @param[in] time Time value at which to evaluate the function.
+       */
+      virtual void assign( LevelData<FArrayBox>& data,
+                           const MultiBlockLevelGeom& geometry,
+                           const BoundaryBoxLayout& bdry_layout,
+                           const Real& time ) const;
+
       /// Print object parameters.
       /**
        */
@@ -133,9 +150,7 @@ class RZdata : public GridFunction
       /**
        */
       inline void setPointwise( FArrayBox&              data,
-                                const MultiBlockCoordSys& coords,
-                                const MagBlockCoordSys& block_coord_sys,
-                                const int               block_number ) const;
+                                const MagBlockCoordSys& block_coord_sys) const;
 
       /// Get geoemtry parameters
       void getGeomParameters(const MultiBlockCoordSys& a_coord_sys) const;

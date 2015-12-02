@@ -107,7 +107,6 @@ private:
                                     const bool                  second_order = false ) const;
 
    Real m_larmor_number;
-   bool m_limit_face_values;
 
    typedef enum {INVALID=-1, PPM, UW1, UW3, UW5, WENO5, BWENO, NUM_FLUX } FluxType;
    FluxType m_face_avg_type;
