@@ -126,13 +126,13 @@ public:
    /**
     * Computes and returns a stable time step estimate for the Vlasov time scale.
     */
-   Real stableDt_Vlasov( const KineticSpeciesPtrVect& soln, const int step_number );
+   Real dtScale_Vlasov( const KineticSpeciesPtrVect& soln, const int step_number );
 
    /// Compute a stable time step for the collisions time scale.
    /**
     * Computes and returns a stable time step estimate for the collisions time scale.
     */
-   Real stableDt_Collisions( const KineticSpeciesPtrVect& soln, const int step_number );
+   Real dtScale_Collisions( const KineticSpeciesPtrVect& soln, const int step_number );
 
    /// Compute a stable time step.
    /**
@@ -517,8 +517,9 @@ private:
    CFG::IntVect m_hist_indices; // for indexing watchpoints, now a temporary
    std::string m_hist_fieldname; // type of field, e.g. "potential", now a temporary
 
-   /* Time scales */
-   Real dt_Vlasov, dt_Collisions;
+   /* stable time step sizes and time scales */
+   Real m_dt_Vlasov, m_dt_Collisions;
+   Real m_TimeScale_Vlasov, m_TimeScale_Collisions;
 
    // stores data pertaining to a watchpoint history
    typedef struct {

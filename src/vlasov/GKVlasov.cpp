@@ -395,6 +395,31 @@ GKVlasov::computeDt( const LevelData<FluxBox>&    a_Efield,
    return dt;
 }
 
+Real
+GKVlasov::computeTimeScale( const LevelData<FluxBox>&    a_Efield,
+                            const KineticSpeciesPtrVect& a_species_vect )
+{
+   Real dt(BASEFAB_REAL_SETVAL);
+
+   for (int s(0); s<a_species_vect.size(); s++) {
+
+      const KineticSpecies& species( *(a_species_vect[s]) );
+      const LevelData<FArrayBox>& dfn( species.distributionFunction() );
+
+      LevelData<FluxBox> velocity( dfn.getBoxes(), SpaceDim, IntVect::Unit );
+      species.computeMappedVelocity( velocity, a_Efield );
+
+      const Real UNIT_CFL(1.0);
+      const PhaseGeom& geometry( species.phaseSpaceGeometry() );
+      Real speciesDt( computeMappedTimeScaleSpecies( velocity, geometry) );
+      CH_assert(speciesDt >= 0);
+
+      dt = Min( dt, speciesDt );
+   }
+
+   return dt;
+}
+
 
 void
 GKVlasov::initialize( KineticSpeciesPtrVect& soln,
@@ -593,6 +618,131 @@ GKVlasov::computeMappedDtSpecies( const LevelData<FluxBox>& a_faceVel,
    a_geom.plotAtVelocityIndex( "stabledt", a_geom.vel_restrict(maxind), stableDt );
    exit(1);
 #endif
+
+   return newDt;
+}
+
+Real
+GKVlasov::computeMappedTimeScaleSpecies( const LevelData<FluxBox>& a_faceVel,
+                                         const PhaseGeom&          a_geom )
+{
+   const DisjointBoxLayout grids = a_faceVel.getBoxes();
+   CH_assert(grids == a_geom.gridsFull());
+
+   MultiBlockCoordSys* coords = a_geom.coordSysPtr();
+
+   // Get velocities normal to cell faces and compute area-weighted normal
+   // velocities -- 2nd order should be good enough.
+   // Note: For axisymmetric 2-spatial-D configuration geometries, the area-weighted
+   // velocities returned by the following function call contain a factor
+   // of 2piR times major radius R; a consequence of the fact that this
+   // factor is included in all of the metric factors.  However, the
+   // physical cell volume being divided out below also contains
+   // a 2piR factor (having been derived from the metrics), and therefore
+   // this extra factor has no net effect (to second order).
+   // (Of course this is irrrelevant in 3D)
+
+   LevelData<FluxBox> faceNormalVel(grids, 1);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      int block_number = coords->whichBlock(grids[dit]);
+      const PhaseBlockCoordSys* block_coord_sys
+         = static_cast<const PhaseBlockCoordSys*>(coords->getCoordSys(block_number));
+      RealVect face_area = block_coord_sys->getMappedFaceArea();
+
+      const FluxBox& thisFaceVel = a_faceVel[dit];
+      FluxBox& thisNormalVel = faceNormalVel[dit];
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         FArrayBox& thisNormalVel_dir = thisNormalVel[dir];
+         thisNormalVel_dir.copy(thisFaceVel[dir],dir,0,1);
+         thisNormalVel_dir *= face_area[dir];
+      }
+   }
+
+   // now average back to cell-centers and divide by cell volumes.
+   // instead of averaging face->cell we pick
+   // the max absolute value on the two opposing faces.
+   LevelData<FArrayBox> cellVolumes(grids, 1, IntVect::Zero);
+   a_geom.getCellVolumes(cellVolumes);
+
+   struct {
+      double val;
+      int rank;
+   } pair_in, pair_out;
+
+   Real maxVelLoc = 0.;
+   int maxblockLoc(-1);
+   IntVect maxindLoc;
+   int maxDirLoc(-1);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      int block_number = coords->whichBlock(grids[dit]);
+
+      FArrayBox cellVel(grids[dit], 1);
+      FArrayBox cellVelDir(grids[dit],SpaceDim);
+      cellVel.setVal(0.);
+      for (int dir=0; dir<SpaceDim; dir++) {
+         // average face velocity on the two faces in this direction
+         int faceComp = 0;
+         int cellComp = dir;
+         EdgeToCell(faceNormalVel[dit], faceComp,
+                    cellVelDir, cellComp,
+                    dir);
+         cellVelDir.abs(dir,1);
+         cellVel.plus(cellVelDir, dir, 0, 1);
+      }
+
+      // Divide by the cell physical volume, which is J times the computational cell volume
+      cellVel.divide(cellVolumes[dit], 0, 0, 1);
+
+      // now compute maxVelLoc on this box
+      // note that this is essentially an estimate of max(vel/dx)
+      Real thisMax = cellVel.norm(0,0,1);
+      if (thisMax > maxVelLoc) {
+         maxVelLoc = thisMax;
+         if (m_time_step_diagnostics) {
+            maxblockLoc = block_number;
+            maxindLoc = cellVel.maxIndex();
+
+            // Figure out which direction made the biggest contribution
+            double max_cv = 0.;
+            for (int dir=0; dir<SpaceDim; ++dir) {
+               if (cellVelDir(maxindLoc,dir) > max_cv) {
+                  max_cv = cellVelDir(maxindLoc,dir);
+                  maxDirLoc = dir;
+               }
+            }
+         }
+      }
+   }
+
+   RealVect X;
+   if (m_time_step_diagnostics) {
+      RealVect dx = coords->getCoordSys(maxblockLoc)->dx();
+      RealVect xi = dx*maxindLoc;
+      xi += 0.5*dx;
+      X = coords->getCoordSys(maxblockLoc)->realCoord(xi);
+   }
+
+   Real maxVel = maxVelLoc;
+   IntVect maxind = maxindLoc;
+   int maxDir = maxDirLoc;
+#ifdef CH_MPI
+   if (m_time_step_diagnostics) {
+      pair_in.val = maxVel;
+      pair_in.rank = procID();
+      MPI_Allreduce(&pair_in, &pair_out, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
+      maxVel = pair_out.val;
+      MPI_Bcast(X.dataPtr(), SpaceDim, MPI_DOUBLE, pair_out.rank, MPI_COMM_WORLD);
+      MPI_Bcast(maxind.dataPtr(), SpaceDim, MPI_INT, pair_out.rank, MPI_COMM_WORLD);
+      MPI_Bcast(&maxDir, 1, MPI_INT, pair_out.rank, MPI_COMM_WORLD);
+   }
+   else {
+      MPI_Allreduce(&maxVelLoc, &maxVel, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+   }
+#endif
+
+   Real smallVal = 1.0e-15;
+   Real newDt = 0;
+   if (maxVel > smallVal) newDt = 1.0 / maxVel;
 
    return newDt;
 }

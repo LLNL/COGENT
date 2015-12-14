@@ -913,16 +913,16 @@ void GKSystem::copySolnData( KineticSpeciesPtrVect&       a_dstSoln,
 
 
 
-Real GKSystem::stableDt_Vlasov(const int a_step_number)
+Real GKSystem::dtScale_Vlasov(const int a_step_number)
 {
-   return m_gk_ops->stableDt_Vlasov( m_state.data(), a_step_number );
+   return m_gk_ops->dtScale_Vlasov( m_state.data(), a_step_number );
 }
 
 
 
-Real GKSystem::stableDt_Collisions(const int a_step_number)
+Real GKSystem::dtScale_Collisions(const int a_step_number)
 {
-   return m_gk_ops->stableDt_Collisions( m_state.data(), a_step_number );
+   return m_gk_ops->dtScale_Collisions( m_state.data(), a_step_number );
 }
 
 
@@ -1444,8 +1444,8 @@ void GKSystem::printDiagnostics()
 void GKSystem::printTimeStep(int cur_step, Real dt)
 {
   if (procID() == 0) {
-    Real dt_Vlasov     = stableDt_Vlasov(cur_step);
-    Real dt_Collisions = stableDt_Collisions(cur_step);
+    Real dt_Vlasov     = dtScale_Vlasov(cur_step);
+    Real dt_Collisions = dtScale_Collisions(cur_step);
     cout << "  ----\n";
     cout << "  dt: " << dt << std::endl;
     cout << "    dt scales:  ";

@@ -117,6 +117,13 @@ Real GKCollisions::computeDt( const KineticSpeciesPtrVect& soln )
    }
 }
 
-
+Real GKCollisions::computeTimeScale( const KineticSpeciesPtrVect& soln )
+{
+   std::map<std::string,int>::iterator it;
+   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
+      if (it->first == "Krook") return ((Krook*)m_collision_model[it->second])->TimeScale(soln);
+      else                      return DBL_MAX;
+   }
+}
 
 #include "NamespaceFooter.H"

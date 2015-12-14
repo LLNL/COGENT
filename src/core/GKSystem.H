@@ -201,13 +201,13 @@ class GKSystem
       /**
        * Computes and returns a stable time step estimate for the Vlasov time scale.
        */
-      Real stableDt_Vlasov(const int step_number);
+      Real dtScale_Vlasov(const int step_number);
 
       /// Compute a stable time step for the collisions time scale.
       /**
        * Computes and returns a stable time step estimate for the collisions time scale.
        */
-      Real stableDt_Collisions(const int step_number);
+      Real dtScale_Collisions(const int step_number);
 
       /// Compute a stable time step.
       /**

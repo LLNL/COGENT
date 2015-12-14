@@ -51,9 +51,19 @@ public:
    Real computeDt( const LevelData<FluxBox>& Efield,
                    const KineticSpeciesPtrVect& soln );
 
+   /// Compute the time scale.
+   /**
+    * Computes and returns an estimate of the Vlasov time scale.
+    */
+   Real computeTimeScale( const LevelData<FluxBox>& Efield,
+                          const KineticSpeciesPtrVect& soln );
+
    Real computeMappedDtSpecies(const LevelData<FluxBox>& faceVel,
                                const PhaseGeom&          geom,
                                Real                      cfl);
+
+   Real computeMappedTimeScaleSpecies(const LevelData<FluxBox>& faceVel,
+                                      const PhaseGeom&          geom);
 
    void applyMappedLimiter( LevelData<FluxBox>&         facePhi,
                             const LevelData<FArrayBox>& cellPhi,

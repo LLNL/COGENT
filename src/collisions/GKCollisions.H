@@ -44,6 +44,12 @@ class GKCollisions
        */
       Real computeDt( const KineticSpeciesPtrVect& soln );
 
+      /// Compute time scale.
+      /**
+       * Computes and returns an estimate of the time scale of the collision term.
+       */
+      Real computeTimeScale( const KineticSpeciesPtrVect& soln );
+
       /// returns the collision model associated with the input name
       /**
        * @param[in] name String name of the species.

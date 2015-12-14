@@ -60,6 +60,12 @@ public:
    */
   Real computeDt(const KineticSpeciesPtrVect& soln);
 
+  /// Compute the time scale.
+  /**
+   * Computes and returns an estimate of the collision term time scale.
+   */
+  Real TimeScale(const KineticSpeciesPtrVect& soln);
+
   Real collisionFrequency ();
 
   void addReferenceDfn( KineticSpecies& result,
