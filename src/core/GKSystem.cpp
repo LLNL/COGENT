@@ -949,9 +949,10 @@ Real GKSystem::advance( const Real a_cur_time,
                         const Real a_dt,
                         const int  a_step_number)
 {
-   m_integrator->setCurrentTime( a_cur_time );
+   m_integrator->setCurrentTime ( a_cur_time );
+   m_integrator->setTimeStep    ( a_step_number );
+   m_integrator->setTimeStepSize( a_dt );
 
-   m_integrator->setTimeStep( a_dt );
    m_integrator->advance( a_cur_time, m_state );
 
    Real new_time;

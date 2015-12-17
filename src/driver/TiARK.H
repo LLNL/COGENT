@@ -63,7 +63,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_dt the specified time step size
      */
-    void setTimeStep(Real a_dt) { m_dt = a_dt; }
+    void setTimeStepSize(Real a_dt) { m_dt = a_dt; }
 
     /// Get the time step size
     /**
@@ -71,7 +71,23 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[out] a_dt the time step size
      */ 
-    void getTimeStep(Real *a_dt) { *a_dt = m_dt; }
+    void getTimeStepSize(Real *a_dt) { *a_dt = m_dt; }
+
+    /// Set the time step 
+    /**
+     * set the time step for the time integrator
+     *
+     * @param[in] a_n the specified time step
+     */
+    void setTimeStep(int a_n) { m_cur_step = a_n; }
+
+    /// Get the time step
+    /**
+     * get the time step of the time integrator
+     *
+     * @param[out] a_n the time step
+     */ 
+    void getTimeStep(int *a_n) { *a_n = m_cur_step; }
 
     /// Set the current simulation time 
     /**
@@ -114,6 +130,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
     Ops         m_Operators;
     Real        m_time;
     Real        m_dt;
+    int         m_cur_step;
 };
 
 
