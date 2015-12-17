@@ -90,6 +90,10 @@ public:
    }
 
    
+   void increment( const GKState& a_state,
+                   Real a_factor = 1.0,
+                   bool a_update_flux_register = false );
+
    void increment( const GKRHSData& a_rhs,
                    Real a_factor = 1.0,
                    bool a_update_flux_register = false );

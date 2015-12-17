@@ -3,6 +3,18 @@
 
 #include "NamespaceHeader.H"
 
+void GKState::increment( const GKState& a_state,
+                         Real a_factor,
+                         bool a_update_flux_register )
+{
+   CH_assert( isDefined() );
+   const KineticSpeciesPtrVect& rhs_species( a_state.data() );
+   CH_assert( m_species_mapped.size()==rhs_species.size() );
+   for (int s(0); s<m_species_mapped.size(); s++) {
+      m_species_mapped[s]->addData( *(rhs_species[s]), a_factor );
+   }
+}
+
 void GKState::increment( const GKRHSData& a_rhs,
                          Real a_factor,
                          bool a_update_flux_register )
