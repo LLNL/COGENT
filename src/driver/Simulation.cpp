@@ -333,6 +333,14 @@ void Simulation<SYSTEM>::selectTimeStep()
       if ( m_adapt_dt ) { // adjustable time step
          m_cur_dt = std::min( dtStable, m_max_dt_grow * m_cur_dt );
       } else {                 // fixed time step
+         if (m_fixed_dt > dtStable) {
+           if (!procID()) {
+             cout << "  --\n";
+             cout << "  Warning: fixed time step may be higher than the stable time step.\n";
+             cout << "  Stable time step = " << dtStable << ".\n";
+             cout << "  --\n";
+           }
+         }
          m_cur_dt = m_fixed_dt;
       }
 
@@ -341,6 +349,14 @@ void Simulation<SYSTEM>::selectTimeStep()
       if ( m_adapt_dt ) { // adjustable time step
          m_cur_dt = m_init_dt_frac * dtStable;
       } else {                 // fixed time step
+         if (m_fixed_dt > dtStable) {
+           if (!procID()) {
+             cout << "  --\n";
+             cout << "  Warning: fixed time step may be higher than the stable time step.\n";
+             cout << "  Stable time step = " << dtStable << ".\n";
+             cout << "  --\n";
+           }
+         }
          m_cur_dt = m_fixed_dt;
       }
 
