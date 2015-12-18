@@ -19,7 +19,7 @@
 
 c     local variables
       double precision vpar, mu, Bmag, Bstar_par, G(0:2), b(0:2), Bstar(0:2),
-     &     bxG(0:2), Bstar_dot_G, fac
+     &     bxG(0:2), mag_drift_fac(0:2), Bstar_dot_G, fac
       integer CHF_DDECL[i;j;k;l], m, n
 
       if (include_drifts .ne. 0) then
@@ -43,8 +43,8 @@ c     local variables
          do n = 0, 2
             G(n) = -Z * E(i,j,CHF_LBOUND[E;2],CHF_LBOUND[E;3],n)
             b(n) = Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],n) / Bmag
-            Bstar(n) = Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],n)
-     &           + fac * mass * vpar * curlb(i,j,CHF_LBOUND[curlb;2],CHF_LBOUND[curlb;3],n)
+            mag_drift_fac(n) = fac * mass * vpar * curlb(i,j,CHF_LBOUND[curlb;2],CHF_LBOUND[curlb;3],n)
+            Bstar(n) = Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],n) + mag_drift_fac(n)
             Bstar_par = Bstar_par + b(n) * Bstar(n)
          enddo
 
@@ -63,9 +63,10 @@ c           R_dot
             bxG(2) = b(0)*G(1) - b(1)*G(0)
 
             do n = 0, 1
-               velocity(CHF_IX[i;j;k;l],n)  = fac*bxG(2*n)
+               velocity(CHF_IX[i;j;k;l],n)  = fac * bxG(2*n) + vpar * mag_drift_fac(2*n)
                if (include_par_streaming .ne. 0) then
-                  velocity(CHF_IX[i;j;k;l],n) = velocity(CHF_IX[i;j;k;l],n) + vpar * Bstar(2*n)
+                  velocity(CHF_IX[i;j;k;l],n) = velocity(CHF_IX[i;j;k;l],n) 
+     &                 + vpar * Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],2*n)
                endif
                velocity(CHF_IX[i;j;k;l],n)  = velocity(CHF_IX[i;j;k;l],n) / Bstar_par
             enddo
