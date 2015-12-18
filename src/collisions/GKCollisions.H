@@ -6,9 +6,25 @@
 #include "KineticSpecies.H"
 #include "ParmParse.H"
 
+#include "Krook.H"
+#include "MyKrook.H"
+#include "Lorentz.H"
+#include "Linearized.H"
+#include "FokkerPlanck.H"
+#include "ConsDragDiff.H"
+#include "NullCLS.H"
+
 #include <map>
 
 #include "NamespaceHeader.H"
+
+#define _CLS_KROOK_         "Krook"
+#define _CLS_MYKROOK_       "MyKrook"
+#define _CLS_LORENTZ_       "Lorentz"
+#define _CLS_LINEARIZED_    "Linearized"
+#define _CLS_FOKKERPLANCK_  "FokkerPlanck"
+#define _CLS_CONSDRAGDIFF_  "ConsDragDiff"
+#define _CLS_NONE_          "None"
 
 /**
  * Gyrokinetic collisions operator class.
@@ -55,6 +71,12 @@ class GKCollisions
        * @param[in] name String name of the species.
        */
       CLSInterface& collisionModel( const std::string& name );
+
+      /// returns the collision model name associated with the input name
+      /**
+       * @param[in] name String name of the species.
+       */
+      std::string collisionModelName( const std::string& name );
 
    private:
 
