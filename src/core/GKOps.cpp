@@ -12,8 +12,8 @@
 #include "SlabPhaseCoordSys.H"
 #include "Kernels.H"
 
-#include "Krook.H"
-#include "MyKrook.H"
+
+#include "GKCollisions.H"
 
 #include "LocalizedF_F.H"
 
@@ -541,30 +541,48 @@ void GKOps::solveImEx( GKState& a_state,
    for (int s(0); s<num_kinetic_species; s++) {
       
       KineticSpecies& soln_species( *(species_comp[s]) );
+      std::string CLSModelName (m_collisions->collisionModelName( soln_species.name() ));
       CLSInterface& cls_ref( m_collisions->collisionModel( soln_species.name() ) );
-      Krook* krook = NULL;
-      krook = dynamic_cast<Krook*>( &cls_ref );
 
-      if (krook) {
-         Real nu( krook->collisionFrequency() );
-         CH_assert( nu>=0.0 );
-         Real coeff( shift * nu );
-         Real factor( 1.0 / (1.0 + coeff) );
+      if (CLSModelName == _CLS_KROOK_) {
+        Krook* clsObject = dynamic_cast<Krook*>( &cls_ref );
+        Real nu( clsObject->collisionFrequency() );
+        CH_assert( nu>=0.0 );
+        Real coeff( shift * nu );
+        Real factor( 1.0 / (1.0 + coeff) );
          
-         LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
+        LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
          
-         const KineticSpecies& rhs_species( *(species_rhs[s]) );
-         const LevelData<FArrayBox>& rhs_dfn( rhs_species.distributionFunction() );
+        const KineticSpecies& rhs_species( *(species_rhs[s]) );
+        const LevelData<FArrayBox>& rhs_dfn( rhs_species.distributionFunction() );
          
-         rhs_dfn.copyTo( soln_dfn );
-         krook->addReferenceDfn( soln_species, a_time, coeff );
-         for (DataIterator sdit(soln_dfn.dataIterator()); sdit.ok(); ++sdit) {
-            soln_dfn[sdit].mult( factor );
-         }
+        rhs_dfn.copyTo( soln_dfn );
+        clsObject->addReferenceDfn( soln_species, a_time, coeff );
+        for (DataIterator sdit(soln_dfn.dataIterator()); sdit.ok(); ++sdit) {
+           soln_dfn[sdit].mult( factor );
+        }
+      } else if (CLSModelName == _CLS_MYKROOK_) {
+        MyKrook* clsObject = dynamic_cast<MyKrook*>( &cls_ref );
+        Real nu( clsObject->collisionFrequency() );
+        CH_assert( nu>=0.0 );
+        Real coeff( shift * nu );
+        Real factor( 1.0 / (1.0 + coeff) );
          
-      }
-      else {
-         MayDay::Error( "Implicit solution is currently limited to linear, non-conservative Krook operator!" );
+        LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
+         
+        const KineticSpecies& rhs_species( *(species_rhs[s]) );
+        const LevelData<FArrayBox>& rhs_dfn( rhs_species.distributionFunction() );
+         
+        rhs_dfn.copyTo( soln_dfn );
+        clsObject->addReferenceDfn( soln_species, a_time, coeff );
+        for (DataIterator sdit(soln_dfn.dataIterator()); sdit.ok(); ++sdit) {
+           soln_dfn[sdit].mult( factor );
+        }
+      } else if (CLSModelName == _CLS_NONE_) {
+        a_state.zero();
+        a_state.increment(a_rhs);
+      } else {
+        MayDay::Error( "Implicit solution solver is not yet implemented for the chosen collision model!" );
       }
    }
 }
