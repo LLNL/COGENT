@@ -122,6 +122,8 @@ Simulation<SYSTEM>::Simulation( ParmParse& a_pp )
        m_max_time(0.0),
        m_cur_dt(-1.0),
        m_fixed_dt(-1.0),
+       m_sub_dt(-1.0),
+       m_fixed_dt_subiteration(false),
        m_max_dt_grow(1.1),
        m_init_dt_frac(0.1),
        m_cfl(1.0),
@@ -205,8 +207,15 @@ void Simulation<SYSTEM>::advance()
    selectTimeStep();
 
    m_cur_step++;
-
-   m_cur_time = m_system->advance( m_cur_time, m_cur_dt, m_cur_step );
+   if ( !m_adapt_dt ) { //if using fixed time step
+       for(int sub_iter=1;sub_iter<=m_subiterations;sub_iter++){
+           m_cur_time = m_system->advance( m_cur_time, m_sub_dt, m_cur_step );
+           cout << " subiteration:" << sub_iter<<"/"<<m_subiterations<<endl;
+       }
+   }
+   else{
+       m_cur_time = m_system->advance( m_cur_time, m_cur_dt, m_cur_step );
+   }
 
    if (m_verbosity >= 1) {
       m_system->printDiagnostics();
@@ -275,6 +284,7 @@ void Simulation<SYSTEM>::parseParameters( ParmParse& a_ppsim )
    if ( a_ppsim.query( "fixed_dt", m_fixed_dt ) ) {
       CH_assert( m_fixed_dt>0.0 );
       m_adapt_dt = false;
+      a_ppsim.query( "fixed_dt_subiteration", m_fixed_dt_subiteration );//this member has false value by default in constructor 
    }
 
    // Multiply by which to increase dt each step
@@ -323,8 +333,20 @@ inline void Simulation<SYSTEM>::setFixedTimeStep( const Real& a_dt_stable )
    if (!( m_fixed_dt <= a_dt_stable )) {
       cout << "stable timestep is " << a_dt_stable << endl;
       MayDay::Warning( "Fixed time step exceeds stable explicit time step!" );
+//subiteration to satisfy stable dt
+      if (a_dt_stable!=0.0 && m_fixed_dt_subiteration==true){
+          m_subiterations=ceil(m_fixed_dt/a_dt_stable);
+          m_sub_dt=m_fixed_dt/m_subiterations;
+          cout<< m_subiterations<< " subiterations will be made with sub_dt = " << m_sub_dt<<endl;
+          cout<< "You may disable this by setting simulation.fixed_dt_subiteration = false." << endl;
+      }else{
+          cout<< "You can enable subiteration by setting simulation.fixed_dt_subiteration = true (default:false)." << endl;
+      }
+   }else{
+      m_subiterations=1;
+      m_sub_dt=m_fixed_dt;
+      m_cur_dt = m_fixed_dt; //m_cur_dt will not be used
    }
-   m_cur_dt = m_fixed_dt;
 }
 
 
