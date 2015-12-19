@@ -185,6 +185,14 @@ class Simulation
        */
       void selectTimeStep();
 
+      /// Set fixed time step
+      /**
+       * Private method to set the fixed time step
+       *
+       * \param[in] a_dt_stable stable time step size
+       */
+      void setFixedTimeStep(const Real& a_dt_stable);
+
       /// Post time step operations.
       /**
        * Private method called after time step has been completed.
@@ -195,12 +203,15 @@ class Simulation
 
       int m_cur_step;
       int m_max_step;
+      int m_subiterations;
 
       Real m_cur_time;
       Real m_max_time;
 
       Real m_cur_dt;
       Real m_fixed_dt;
+      bool m_fixed_dt_subiteration;
+      Real m_sub_dt;
       Real m_max_dt_grow;
       Real m_init_dt_frac;
       Real m_cfl;

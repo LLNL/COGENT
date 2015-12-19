@@ -122,6 +122,8 @@ Simulation<SYSTEM>::Simulation( ParmParse& a_pp )
        m_max_time(0.0),
        m_cur_dt(-1.0),
        m_fixed_dt(-1.0),
+       m_sub_dt(-1.0),
+       m_fixed_dt_subiteration(false),
        m_max_dt_grow(1.1),
        m_init_dt_frac(0.1),
        m_cfl(1.0),
@@ -209,8 +211,15 @@ void Simulation<SYSTEM>::advance()
    selectTimeStep();
 
    m_cur_step++;
-
-   m_cur_time = m_system->advance( m_cur_time, m_cur_dt, m_cur_step );
+   if (m_fixed_dt_subiteration) {
+      for (int sub_iter=1; sub_iter<=m_subiterations; sub_iter++) {
+         if (!procID()) {
+            cout << "  --\n";
+            cout << "  Subiteration:" << sub_iter << " of " << m_subiterations << endl;
+         }
+         m_cur_time = m_system->advance( m_cur_time, m_sub_dt, m_cur_step );
+      }
+   } else m_cur_time = m_system->advance( m_cur_time, m_cur_dt, m_cur_step );
 
    postTimeStep();
 
@@ -281,6 +290,7 @@ void Simulation<SYSTEM>::parseParameters( ParmParse& a_ppsim )
    if ( a_ppsim.query( "fixed_dt", m_fixed_dt ) ) {
       CH_assert( m_fixed_dt>0.0 );
       m_adapt_dt = false;
+      a_ppsim.query( "fixed_dt_subiteration", m_fixed_dt_subiteration ); //this member has false value by default in constructor 
    }
 
    // Multiply by which to increase dt each step
@@ -307,6 +317,9 @@ void Simulation<SYSTEM>::parseParameters( ParmParse& a_ppsim )
       }
    }
 
+   /* possibly redundant check */
+   if (m_adapt_dt) m_fixed_dt_subiteration = false;
+
    // Set up checkpointing
    a_ppsim.query( "checkpoint_interval", m_checkpoint_interval );
    a_ppsim.query( "checkpoint_prefix", m_checkpoint_prefix );
@@ -324,42 +337,60 @@ void Simulation<SYSTEM>::parseParameters( ParmParse& a_ppsim )
 
 
 template <class SYSTEM>
+inline void Simulation<SYSTEM>::setFixedTimeStep( const Real& a_dt_stable )
+{
+  if (m_fixed_dt > a_dt_stable) {
+    if (m_fixed_dt_subiteration) {
+      /* subiteration to satisfy stable dt */
+      m_subiterations = ceil(m_fixed_dt/a_dt_stable);
+      m_sub_dt = m_fixed_dt/m_subiterations;
+      if (!procID()) {
+        cout << "  --\n";
+        cout << "  Specified time step is higher than stable time step. Using subiterations.\n";
+        cout << "  " << m_subiterations << " subiterations will be made with sub_dt = ";
+        cout << m_sub_dt << endl;
+        cout << "  You may disable this by setting simulation.fixed_dt_subiteration = false.\n";
+        cout << "  --\n";
+      }
+    } else {
+      if (!procID()) {
+        cout << "  --\n";
+        cout << "  Warning: fixed time step may be higher than the stable time step.\n";
+        cout << "  Stable time step = " << a_dt_stable << ".\n";
+        cout << "  You may reduce the specified dt or enable subiteration by setting\n";
+        cout << "  simulation.fixed_dt_subiteration = true (default:false).\n";
+        cout << "  --\n";
+      }
+    }
+  } 
+  m_cur_dt = m_fixed_dt; 
+}
+
+
+template <class SYSTEM>
 void Simulation<SYSTEM>::selectTimeStep()
 {
    Real dtStable = m_system->stableDt(m_cur_step) * m_cfl;
+   CH_assert(dtStable > 1.0e-16);
 
-   if ( m_cur_time>0.0 ) { // not initial time step
-
-      if ( m_adapt_dt ) { // adjustable time step
+   if ( m_cur_time>0.0 ) { 
+      // not initial time step
+      if ( m_adapt_dt ) { 
+         // adjustable time step
          m_cur_dt = std::min( dtStable, m_max_dt_grow * m_cur_dt );
-      } else {                 // fixed time step
-         if (m_fixed_dt > dtStable) {
-           if (!procID()) {
-             cout << "  --\n";
-             cout << "  Warning: fixed time step may be higher than the stable time step.\n";
-             cout << "  Stable time step = " << dtStable << ".\n";
-             cout << "  --\n";
-           }
-         }
-         m_cur_dt = m_fixed_dt;
+      } else {                 
+         // fixed time step
+         setFixedTimeStep(dtStable);
       }
-
-   } else { // initial time step
-
-      if ( m_adapt_dt ) { // adjustable time step
+   } else { 
+      // initial time step
+      if ( m_adapt_dt ) { 
+         // adjustable time step
          m_cur_dt = m_init_dt_frac * dtStable;
-      } else {                 // fixed time step
-         if (m_fixed_dt > dtStable) {
-           if (!procID()) {
-             cout << "  --\n";
-             cout << "  Warning: fixed time step may be higher than the stable time step.\n";
-             cout << "  Stable time step = " << dtStable << ".\n";
-             cout << "  --\n";
-           }
-         }
-         m_cur_dt = m_fixed_dt;
+      } else {                 
+         // fixed time step
+         setFixedTimeStep(dtStable);
       }
-
    }
 
    // If less than a time step from the final time, adjust time step
