@@ -1,0 +1,12 @@
+This folder contains the configuration files for Chombo (Make.defs.local.*)
+and Hypre (doconfig.*).
+
+Chombo:-
++ Copy the appropriate Make.defs.local.* to /path/to/Chombo/lib/mk and 
+  rename it to Make.defs.local. The (*) indicates the name of the machine
+  (eg: cab).
+
+Hypre:-
++ Copy the appropriate doconfig.* to /path/to/COGENT/hypre-$VERSION/. The
+  (*) indicates the machine name and the compilers to use.
+
