@@ -219,7 +219,9 @@ void Simulation<SYSTEM>::advance()
          }
          m_cur_time = m_system->advance( m_cur_time, m_sub_dt, m_cur_step );
       }
-   } else m_cur_time = m_system->advance( m_cur_time, m_cur_dt, m_cur_step );
+   } else {
+      m_cur_time = m_system->advance( m_cur_time, m_cur_dt, m_cur_step );
+   }
 
    postTimeStep();
 
@@ -339,31 +341,33 @@ void Simulation<SYSTEM>::parseParameters( ParmParse& a_ppsim )
 template <class SYSTEM>
 inline void Simulation<SYSTEM>::setFixedTimeStep( const Real& a_dt_stable )
 {
-  if (m_fixed_dt > a_dt_stable) {
-    if (m_fixed_dt_subiteration) {
+   if (m_fixed_dt_subiteration) {
       /* subiteration to satisfy stable dt */
       m_subiterations = ceil(m_fixed_dt/a_dt_stable);
       m_sub_dt = m_fixed_dt/m_subiterations;
-      if (!procID()) {
-        cout << "  --\n";
-        cout << "  Specified time step is higher than stable time step. Using subiterations.\n";
-        cout << "  " << m_subiterations << " subiterations will be made with sub_dt = ";
-        cout << m_sub_dt << endl;
-        cout << "  You may disable this by setting simulation.fixed_dt_subiteration = false.\n";
-        cout << "  --\n";
+      if (m_fixed_dt > a_dt_stable) {
+         if (!procID()) {
+            cout << "  --\n";
+            cout << "  Specified time step is higher than stable time step. Using subiterations.\n";
+            cout << "  " << m_subiterations << " subiterations will be made with sub_dt = ";
+            cout << m_sub_dt << endl;
+            cout << "  You may disable this by setting simulation.fixed_dt_subiteration = false.\n";
+            cout << "  --\n";
+         }
       }
-    } else {
-      if (!procID()) {
-        cout << "  --\n";
-        cout << "  Warning: fixed time step may be higher than the stable time step.\n";
-        cout << "  Stable time step = " << a_dt_stable << ".\n";
-        cout << "  You may reduce the specified dt or enable subiteration by setting\n";
-        cout << "  simulation.fixed_dt_subiteration = true (default:false).\n";
-        cout << "  --\n";
+   } else {
+      if (m_fixed_dt > a_dt_stable) {
+         if (!procID()) {
+            cout << "  --\n";
+            cout << "  Warning: fixed time step may be higher than the stable time step.\n";
+            cout << "  Stable time step = " << a_dt_stable << ".\n";
+            cout << "  You may reduce the specified dt or enable subiteration by setting\n";
+            cout << "  simulation.fixed_dt_subiteration = true (default:false).\n";
+            cout << "  --\n";
+         }
       }
-    }
-  } 
-  m_cur_dt = m_fixed_dt; 
+      m_cur_dt = m_fixed_dt; 
+   }
 }
 
 
