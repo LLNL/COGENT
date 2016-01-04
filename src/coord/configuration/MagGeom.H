@@ -92,15 +92,17 @@ public:
 
    const LevelData<FluxBox>& getFCBFieldDirdotCurlBFieldDir() const {return m_BFieldDirdotcurlBFieldDir_fc;}
 
-   void plotFieldAlignment() const;
+   void plotFieldAlignment(const double& time) const;
 
    void plotCellData( const string&               file_name,  
-                      const LevelData<FArrayBox>& data ) const;
+                      const LevelData<FArrayBox>& data,
+                      const double&               time ) const;
 
    void plotFaceData( const string&             file_name,  
-                      const LevelData<FluxBox>& data ) const;
+                      const LevelData<FluxBox>& data,
+                      const double&             time ) const;
 
-   void writeGeometryData( const DisjointBoxLayout& grids ) const;
+   void writeGeometryData( const DisjointBoxLayout& grids, const double& time ) const;
 
    bool fullyPeriodic() const {return m_fully_periodic;}
 

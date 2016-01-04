@@ -1046,7 +1046,9 @@ std::string plotFileName( const std::string& a_prefix,
 }
 
 
-void GKSystem::writePlotFile(const char *prefix, const int cur_step )
+void GKSystem::writePlotFile(const char    *prefix,
+                             const int     cur_step,
+                             const double& cur_time )
 {
    // If the efield and potential are fixed, only consider plotting them at step 0
    if ( !m_gk_ops->fixedEField() || cur_step == 0 ) {
@@ -1055,14 +1057,14 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
          std::string filename( plotFileName( prefix,
                                              "potential",
                                              cur_step ) );
-         m_gk_ops->plotPotential( filename );
+         m_gk_ops->plotPotential( filename, cur_time );
       }
 
       if (m_hdf_efield) {
          std::string filename = plotFileName( prefix,
                                               "efield",
                                               cur_step );
-         m_gk_ops->plotEField( filename );
+         m_gk_ops->plotEField( filename, cur_time );
       }
    }
 
@@ -1090,7 +1092,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              cur_step,
                                              species + 1) );
 
-         m_gk_ops->plotDistributionFunction( filename, soln_species );
+         m_gk_ops->plotDistributionFunction( filename, soln_species, cur_time );
 
          // Write out BStarParallel at first step
          if (cur_step==0) {
@@ -1100,7 +1102,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                                 cur_step,
                                                 species + 1) );
 
-            m_gk_ops->plotBStarParallel( filename, soln_species );
+            m_gk_ops->plotBStarParallel( filename, soln_species, cur_time );
          }
       }
 
@@ -1113,7 +1115,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              cur_step,
                                              species + 1) );
 
-         m_gk_ops->plotDeltaF( filename, soln_species );
+         m_gk_ops->plotDeltaF( filename, soln_species, cur_time );
       }
 
       // Distribution function at a specified mu index
@@ -1125,7 +1127,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              cur_step,
                                              species + 1) );
 
-         m_gk_ops->plotDistributionFunctionAtMu( filename, soln_species, mu_index );
+         m_gk_ops->plotDistributionFunctionAtMu( filename, soln_species, mu_index, cur_time );
       }
 
       // Distribution function vparallel versus theta at specified configuration space point
@@ -1136,7 +1138,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              soln_species.name(),
                                              cur_step,
                                              species + 1) );
-         m_gk_ops->plotVParallelTheta( filename, soln_species, radial_index, toroidal_index, mu_index );
+         m_gk_ops->plotVParallelTheta( filename, soln_species, radial_index, toroidal_index, mu_index, cur_time );
       }
 
       // Distribution function r versus theta at specified velocity space point
@@ -1147,7 +1149,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              soln_species.name(),
                                              cur_step,
                                              species + 1) );
-         m_gk_ops->plotRTheta( filename, soln_species, vpar_index, mu_index );
+         m_gk_ops->plotRTheta( filename, soln_species, vpar_index, mu_index, cur_time );
       }
 
 
@@ -1160,7 +1162,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              cur_step,
                                              species + 1) );
 
-         m_gk_ops->plotVParallelMu( filename, soln_species, radial_index, poloidal_index );
+         m_gk_ops->plotVParallelMu( filename, soln_species, radial_index, poloidal_index, cur_time );
       }
 
       // Charge density
@@ -1172,7 +1174,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              cur_step,
                                              species + 1) );
 
-         m_gk_ops->plotChargeDensity( filename, soln_species );
+         m_gk_ops->plotChargeDensity( filename, soln_species, cur_time );
       }
 
       // Parallel momentum moment
@@ -1183,7 +1185,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              soln_species.name(),
                                              cur_step,
                                              species + 1) );
-         m_gk_ops->plotParallelMomentum( filename, soln_species );
+         m_gk_ops->plotParallelMomentum( filename, soln_species, cur_time );
       }
 
       // Poloidal momentum moment
@@ -1194,7 +1196,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              soln_species.name(),
                                              cur_step,
                                              species + 1) );
-         m_gk_ops->plotPoloidalMomentum( filename, soln_species );
+         m_gk_ops->plotPoloidalMomentum( filename, soln_species, cur_time );
       }
 
       // Pressure
@@ -1206,7 +1208,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              cur_step,
                                              species + 1) );
 
-         m_gk_ops->plotPressure( filename, soln_species );
+         m_gk_ops->plotPressure( filename, soln_species, cur_time );
       }
 
       // Temperature
@@ -1218,7 +1220,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              cur_step,
                                              species + 1) );
 
-         m_gk_ops->plotTemperature( filename, soln_species );
+         m_gk_ops->plotTemperature( filename, soln_species, cur_time );
       }
 
       // Fourth momemnt
@@ -1230,7 +1232,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              cur_step,
                                              species + 1) );
 
-         m_gk_ops->plotFourthMoment( filename, soln_species );
+         m_gk_ops->plotFourthMoment( filename, soln_species, cur_time );
       }
 
       // Particle flux moment
@@ -1241,7 +1243,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              soln_species.name(),
                                              cur_step,
                                              species + 1) );
-         m_gk_ops->plotParticleFlux( filename, soln_species );
+         m_gk_ops->plotParticleFlux( filename, soln_species, cur_time );
       }
 
       // Heat flux moment
@@ -1252,7 +1254,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              soln_species.name(),
                                              cur_step,
                                              species + 1) );
-         m_gk_ops->plotHeatFlux( filename, soln_species );
+         m_gk_ops->plotHeatFlux( filename, soln_species, cur_time );
       }
 
       // Vlasov divergence
@@ -1262,7 +1264,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                              soln_species.name(),
                                              cur_step,
                                              species + 1) );
-         m_gk_ops->plotVlasovDivergence( filename, soln_species );
+         m_gk_ops->plotVlasovDivergence( filename, soln_species, cur_time );
       }
    }
 
@@ -1273,7 +1275,7 @@ void GKSystem::writePlotFile(const char *prefix, const int cur_step )
                                           "charge_density",
                                           cur_step ) );
 
-      m_gk_ops->plotChargeDensity( filename, m_kinetic_species );
+      m_gk_ops->plotChargeDensity( filename, m_kinetic_species, cur_time );
    }
 }
 

@@ -235,7 +235,7 @@ class GKSystem
        * Write plotting data to HDF5 files with a common prefix.
        *
        */
-      void writePlotFile(const char *prefix, const int cur_step );
+      void writePlotFile(const char *prefix, const int cur_step, const double& cur_time );
 
       // Read history parameters from input file (see writeFieldHistory)
 

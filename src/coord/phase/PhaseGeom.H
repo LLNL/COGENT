@@ -340,30 +340,53 @@ public:
     *  Plotting routines
     */
 
-   void plotAtVelocityIndex(const string file_name, const VEL::IntVect& vspace_index,
-                            const LevelData<FluxBox>&  data) const;
+   void plotAtVelocityIndex(const string               file_name,
+                            const VEL::IntVect&        vspace_index,
+                            const LevelData<FluxBox>&  data,
+                            const double&              time) const;
 
-   void plotAtVelocityIndex(const string file_name, const VEL::IntVect& vspace_index,
-                            const LevelData<FArrayBox>&  data) const;
+   void plotAtVelocityIndex(const string                 file_name,
+                            const VEL::IntVect&          vspace_index,
+                            const LevelData<FArrayBox>&  data,
+                            const double&                time) const;
 
-   void plotAtConfigurationIndex(const string file_name, const CFG::IntVect& cspace_index,
-                                 const LevelData<FluxBox>&  data) const;
+   void plotAtConfigurationIndex(const string               file_name,
+                                 const CFG::IntVect&        cspace_index,
+                                 const LevelData<FluxBox>&  data,
+                                 const double&              time) const;
 
-   void plotAtConfigurationIndex(const string file_name, const CFG::IntVect& cspace_index,
-                                 const LevelData<FArrayBox>&  data) const;
+   void plotAtConfigurationIndex(const string                 file_name,
+                                 const CFG::IntVect&          cspace_index,
+                                 const LevelData<FArrayBox>&  data,
+                                 const double&                time) const;
 
-   void plotAtMuIndex( const string file_name, const int mu_index, const LevelData<FArrayBox>& data ) const;
+   void plotAtMuIndex( const string                file_name,
+                       const int                   mu_index,
+                       const LevelData<FArrayBox>& data,
+                       const double&               time) const;
 
-   void plotConfigurationData(const string file_name, const CFG::LevelData<CFG::FArrayBox>&  data) const;
+   void plotConfigurationData(const string                          file_name,
+                              const CFG::LevelData<CFG::FArrayBox>& data,
+                              const double&                         time) const;
 
-   void plotConfigurationData(const string file_name, const CFG::LevelData<CFG::FluxBox>&  data) const;
+   void plotConfigurationData(const string                        file_name,
+                              const CFG::LevelData<CFG::FluxBox>& data,
+                              const double&                       time) const;
 
-   void plotVelocityData(const string file_name, const VEL::LevelData<VEL::FArrayBox>&  data) const;
+   void plotVelocityData(const string                          file_name,
+                         const VEL::LevelData<VEL::FArrayBox>& data,
+                         const double&                         time) const;
 
-   void plotVParPoloidalData(const string file_name, const int radial_index, const int toroidal_index,
-                             const int mu_index, const LevelData<FArrayBox>& data) const;
+   void plotVParPoloidalData(const string                file_name,
+                             const int                   radial_index,
+                             const int                   toroidal_index,
+                             const int                   mu_index,
+                             const LevelData<FArrayBox>& data,
+                             const double&               time) const;
 
-   void plotData( const string& file_name, const LevelData<FArrayBox>& data ) const;
+   void plotData( const string&               file_name,
+                  const LevelData<FArrayBox>& data,
+                  const double&               time) const;
 
    CFG::Box configurationDomainBox(const CFG::DisjointBoxLayout& grids) const;
 

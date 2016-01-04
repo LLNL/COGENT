@@ -2445,7 +2445,8 @@ PhaseGeom::setVelocityData( const CFG::IntVect &                  a_cspace_index
 void
 PhaseGeom::plotAtVelocityIndex( const string               a_file_name,
                                 const VEL::IntVect&        a_vspace_index,
-                                const LevelData<FluxBox>&  a_data ) const
+                                const LevelData<FluxBox>&  a_data,
+                                const double&              a_time ) const
 {
    CH_assert( validVelocityIndex(a_vspace_index) );
 
@@ -2482,7 +2483,7 @@ PhaseGeom::plotAtVelocityIndex( const string               a_file_name,
    CFG::Box domain_box = configurationDomainBox(grids);
    domain_box.grow(4);
    const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom.coordSysPtr();
-   WriteMappedUGHDF5(a_file_name, grids, data_at_vpt, *mag_coord_sys, domain_box);
+   WriteMappedUGHDF5(a_file_name, grids, data_at_vpt, *mag_coord_sys, domain_box, a_time);
 }
 
 
@@ -2490,7 +2491,8 @@ PhaseGeom::plotAtVelocityIndex( const string               a_file_name,
 void
 PhaseGeom::plotAtVelocityIndex( const string                 a_file_name,
                                 const VEL::IntVect&          a_vspace_index,
-                                const LevelData<FArrayBox>&  a_data ) const
+                                const LevelData<FArrayBox>&  a_data,
+                                const double&                a_time ) const
 {
    CH_assert( validVelocityIndex(a_vspace_index) );
 
@@ -2503,7 +2505,7 @@ PhaseGeom::plotAtVelocityIndex( const string                 a_file_name,
    CFG::Box domain_box = configurationDomainBox(grids);
    domain_box.grow(4);
    const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom.coordSysPtr();
-   WriteMappedUGHDF5(a_file_name, grids, data_at_vpt, *mag_coord_sys, domain_box);
+   WriteMappedUGHDF5(a_file_name, grids, data_at_vpt, *mag_coord_sys, domain_box, a_time);
 }
 
 
@@ -2511,7 +2513,8 @@ PhaseGeom::plotAtVelocityIndex( const string                 a_file_name,
 void
 PhaseGeom::plotAtConfigurationIndex( const string               a_file_name,
                                      const CFG::IntVect&        cspace_index,
-                                     const LevelData<FluxBox>&  a_data ) const
+                                     const LevelData<FluxBox>&  a_data,
+                                     const double&              a_time ) const
 {
    CH_assert( validConfigurationIndex(cspace_index) );
 
@@ -2546,7 +2549,7 @@ PhaseGeom::plotAtConfigurationIndex( const string               a_file_name,
    }
 
    VEL::Box domain_box = velocityDomainBox(grids);
-   WriteMappedUGHDF5(a_file_name, grids, data_at_cpt, m_vel_coords, domain_box);
+   WriteMappedUGHDF5(a_file_name, grids, data_at_cpt, m_vel_coords, domain_box, a_time);
 }
 
 
@@ -2554,7 +2557,8 @@ PhaseGeom::plotAtConfigurationIndex( const string               a_file_name,
 void
 PhaseGeom::plotAtConfigurationIndex( const string                 a_file_name,
                                      const CFG::IntVect&          cspace_index,
-                                     const LevelData<FArrayBox>&  a_data ) const
+                                     const LevelData<FArrayBox>&  a_data,
+                                     const double&                a_time ) const
 {
    CH_assert( validConfigurationIndex(cspace_index) );
 
@@ -2565,20 +2569,21 @@ PhaseGeom::plotAtConfigurationIndex( const string                 a_file_name,
    const VEL::DisjointBoxLayout& grids = data_at_cpt.disjointBoxLayout();
 
    VEL::Box domain_box = velocityDomainBox(grids);
-   WriteMappedUGHDF5(a_file_name, grids, data_at_cpt, m_vel_coords, domain_box);
+   WriteMappedUGHDF5(a_file_name, grids, data_at_cpt, m_vel_coords, domain_box, a_time);
 }
 
 
 
 void
 PhaseGeom::plotConfigurationData( const string                           a_file_name,
-                                  const CFG::LevelData<CFG::FArrayBox>&  a_data ) const
+                                  const CFG::LevelData<CFG::FArrayBox>&  a_data,
+                                  const double&                          a_time ) const
 {
    const CFG::DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
    CFG::Box domain_box = configurationDomainBox(grids);
    const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom.coordSysPtr();
-   WriteMappedUGHDF5(a_file_name, grids, a_data, *mag_coord_sys, domain_box);
+   WriteMappedUGHDF5(a_file_name, grids, a_data, *mag_coord_sys, domain_box, a_time);
 }
 
 
@@ -2586,7 +2591,8 @@ PhaseGeom::plotConfigurationData( const string                           a_file_
 void
 PhaseGeom::plotAtMuIndex( const string                 a_file_name,
                           const int                    a_mu_index,
-                          const LevelData<FArrayBox>&  a_data ) const
+                          const LevelData<FArrayBox>&  a_data,
+                          const double&                a_time ) const
 {
    CH_assert( m_domain.domainBox().smallEnd(MU_DIR) <= a_mu_index && a_mu_index <= m_domain.domainBox().bigEnd(MU_DIR) );
 
@@ -2616,7 +2622,6 @@ PhaseGeom::plotAtMuIndex( const string                 a_file_name,
 
    double dvp = block_zero_coord_sys.dx()[VPARALLEL_DIR];
    double dt = 1.;
-   double time = 0.;
 
    Vector<int> ratiov;
    ratiov.push_back(1);
@@ -2631,7 +2636,7 @@ PhaseGeom::plotAtMuIndex( const string                 a_file_name,
                               domain_box,
                               dvp,
                               dt,
-                              time,
+                              a_time,
                               ratiov,
                               numlevels);
 }
@@ -2640,7 +2645,8 @@ PhaseGeom::plotAtMuIndex( const string                 a_file_name,
 
 void
 PhaseGeom::plotConfigurationData( const string                         a_file_name,
-                                  const CFG::LevelData<CFG::FluxBox>&  a_data ) const
+                                  const CFG::LevelData<CFG::FluxBox>&  a_data,
+                                  const double&                        a_time ) const
 {
    const CFG::DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
@@ -2666,18 +2672,19 @@ PhaseGeom::plotConfigurationData( const string                         a_file_na
 
    CFG::Box domain_box = configurationDomainBox(grids);
    const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom.coordSysPtr();
-   WriteMappedUGHDF5(a_file_name, grids, data_cell, *mag_coord_sys, domain_box);
+   WriteMappedUGHDF5(a_file_name, grids, data_cell, *mag_coord_sys, domain_box, a_time);
 }
 
 
 void
 PhaseGeom::plotVelocityData( const string                           a_file_name,
-                             const VEL::LevelData<VEL::FArrayBox>&  a_data ) const
+                             const VEL::LevelData<VEL::FArrayBox>&  a_data,
+                             const double&                          a_time ) const
 {
    const VEL::DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
    VEL::Box domain_box = velocityDomainBox(grids);
-   WriteMappedUGHDF5(a_file_name, grids, a_data, m_vel_coords, domain_box);
+   WriteMappedUGHDF5(a_file_name, grids, a_data, m_vel_coords, domain_box, a_time);
 }
 
 
@@ -2687,7 +2694,8 @@ PhaseGeom::plotVParPoloidalData( const string                a_file_name,
                                  const int                   a_radial_index,
                                  const int                   a_toroidal_index,
                                  const int                   a_mu_index,
-                                 const LevelData<FArrayBox>& a_data ) const
+                                 const LevelData<FArrayBox>& a_data,
+                                 const double&               a_time ) const
 {
   // Slice in the mu direction at the specified mu coordinate
 
@@ -2755,9 +2763,10 @@ PhaseGeom::plotVParPoloidalData( const string                a_file_name,
 
 void
 PhaseGeom::plotData( const string&                a_file_name,
-                     const LevelData<FArrayBox>&  a_data ) const
+                     const LevelData<FArrayBox>&  a_data,
+                     const double&                a_time ) const
 {
-   WriteMappedUGHDF5(a_file_name, m_gridsFull, a_data, m_phase_coords, m_domain.domainBox());
+   WriteMappedUGHDF5(a_file_name, m_gridsFull, a_data, m_phase_coords, m_domain.domainBox(), a_time);
 }
 
 

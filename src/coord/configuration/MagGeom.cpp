@@ -90,7 +90,8 @@ MagGeom::MagGeom(ParmParse&                 a_pp,
       if (plot_field_alignment) {
          // Plot the angle (in degrees) between the poloidal field component and the
          // mapped coordinate system vector in the poloidal direction.
-         plotFieldAlignment();
+         double time = 0.;
+         plotFieldAlignment(time);
       }
    }
 
@@ -842,19 +843,21 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
 
 
 void MagGeom::plotCellData( const string&               a_file_name,  
-                            const LevelData<FArrayBox>& a_data ) const
+                            const LevelData<FArrayBox>& a_data,
+                            const double&               a_time ) const
 {
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
    Box domain_box = grids.physDomain().domainBox();
    domain_box.grow(a_data.ghostVect());
-   WriteMappedUGHDF5(a_file_name.c_str(), grids, a_data, *m_coord_sys, domain_box);
+   WriteMappedUGHDF5(a_file_name.c_str(), grids, a_data, *m_coord_sys, domain_box, a_time);
 }
 
 
 
 void MagGeom::plotFaceData( const string&             a_file_name,  
-                            const LevelData<FluxBox>& a_data ) const
+                            const LevelData<FluxBox>& a_data,
+                            const double&             a_time ) const
 {
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
@@ -882,20 +885,21 @@ void MagGeom::plotFaceData( const string&             a_file_name,
 
    Box domain_box = grids.physDomain().domainBox();
    domain_box.grow(a_data.ghostVect());
-   WriteMappedUGHDF5(a_file_name.c_str(), grids, data_cell, *m_coord_sys, domain_box);
+   WriteMappedUGHDF5(a_file_name.c_str(), grids, data_cell, *m_coord_sys, domain_box, a_time);
 }
 
 
 
 void
-MagGeom::writeGeometryData( const DisjointBoxLayout& grids ) const
+MagGeom::writeGeometryData( const DisjointBoxLayout& a_grids,
+                            const double&            a_time ) const
 {
   IntVect geom_data_ghosts = 4*IntVect::Unit;
-  LevelData<FArrayBox> geom_data(grids, 6, geom_data_ghosts);
+  LevelData<FArrayBox> geom_data(a_grids, 6, geom_data_ghosts);
 
-  DataIterator dit = grids.dataIterator();
+  DataIterator dit = a_grids.dataIterator();
   for (dit.begin(); dit.ok(); ++dit) {
-    const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+    const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(a_grids[dit]);
 
     RealVect dx = block_coord_sys.dx();
     RealVect offset = 0.5*RealVect::Unit;
@@ -918,19 +922,19 @@ MagGeom::writeGeometryData( const DisjointBoxLayout& grids ) const
   }
 
 
-  Box domain_box = grids.physDomain().domainBox();
+  Box domain_box = a_grids.physDomain().domainBox();
   domain_box.grow(geom_data_ghosts);
 
-  WriteMappedUGHDF5("config_geom_data", grids, geom_data, *m_coord_sys, domain_box);
+  WriteMappedUGHDF5("config_geom_data", a_grids, geom_data, *m_coord_sys, domain_box, a_time);
 
-  LevelData<FArrayBox> volume(grids, 1, geom_data_ghosts);
+  LevelData<FArrayBox> volume(a_grids, 1, geom_data_ghosts);
   getCellVolumes(volume);
-  WriteMappedUGHDF5("volume", grids, volume, *m_coord_sys, domain_box);
+  WriteMappedUGHDF5("volume", a_grids, volume, *m_coord_sys, domain_box, a_time);
 
 
-  LevelData<FArrayBox> J(grids, 1, geom_data_ghosts);
+  LevelData<FArrayBox> J(a_grids, 1, geom_data_ghosts);
   getJ(J);
-  WriteMappedUGHDF5("J", grids, J, *m_coord_sys, domain_box);
+  WriteMappedUGHDF5("J", a_grids, J, *m_coord_sys, domain_box, a_time);
 }
 
 
@@ -1089,7 +1093,7 @@ MagGeom::maxBlockBoundaryDifference(LevelData<FluxBox>& a_data) const
 
 
 void
-MagGeom::plotFieldAlignment() const
+MagGeom::plotFieldAlignment(const double& a_time) const
 {
    const DisjointBoxLayout& grids = gridsFull();
    LevelData<FluxBox> dotprod(grids, 1, IntVect::Zero);
@@ -1129,7 +1133,7 @@ MagGeom::plotFieldAlignment() const
       }
    }
 
-   plotFaceData( string("field_alignment"), dotprod );
+   plotFaceData( string("field_alignment"), dotprod, a_time );
 }
 
 

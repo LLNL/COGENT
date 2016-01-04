@@ -262,68 +262,87 @@ public:
                                        double&                               a_phi_tilde_fs_average_lo,
                                        double&                               a_phi_tilde_fs_average_hi ) const;
     
-   void plotDistributionFunction( const std::string&    a_filename,
-                                  const KineticSpecies& a_soln_species ) const;
+   void plotDistributionFunction( const std::string&    filename,
+                                  const KineticSpecies& soln_species,
+                                  const double&         time ) const;
 
-   void plotDeltaF( const std::string&    a_filename,
-                    const KineticSpecies& a_soln_species ) const;
+   void plotDeltaF( const std::string&    filename,
+                    const KineticSpecies& soln_species,
+                    const double&         time ) const;
 
-   void plotDistributionFunctionAtMu( const std::string&    a_filename,
-                                      const KineticSpecies& a_soln_species,
-                                      const int             a_mu ) const;
+   void plotDistributionFunctionAtMu( const std::string&    filename,
+                                      const KineticSpecies& soln_species,
+                                      const int             mu,
+                                      const double&         time ) const;
 
-   void plotBStarParallel( const std::string&    a_filename,
-                           const KineticSpecies& a_soln_species ) const;
+   void plotBStarParallel( const std::string&    filename,
+                           const KineticSpecies& soln_species,
+                           const double&         time ) const;
 
-   void plotVParallelTheta( const std::string&    a_filename,
-                            const KineticSpecies& a_soln_species,
-                            const int             a_radial_index,
-                            const int             a_toroidal_index,
-                            const int             a_mu_index ) const;
+   void plotVParallelTheta( const std::string&    filename,
+                            const KineticSpecies& soln_species,
+                            const int             radial_index,
+                            const int             toroidal_index,
+                            const int             mu_index,
+                            const double&         time ) const;
 
-   void plotRTheta( const std::string&    a_filename,
-                    const KineticSpecies& a_soln_species,
-                    const int             a_vpar_index,
-                    const int             a_mu_index ) const;
+   void plotRTheta( const std::string&    filename,
+                    const KineticSpecies& soln_species,
+                    const int             vpar_index,
+                    const int             mu_index,
+                    const double&         time ) const;
 
-   void plotVParallelMu( const std::string&    a_filename,
-                         const KineticSpecies& a_soln_species,
-                         const int             a_radial_index,
-                         const int             a_poloidal_index ) const;
+   void plotVParallelMu( const std::string&    filename,
+                         const KineticSpecies& soln_species,
+                         const int             radial_index,
+                         const int             poloidal_index,
+                         const double&         time ) const;
 
-   void plotChargeDensity( const std::string&    a_filename,
-                           const KineticSpecies& a_soln_species ) const;
+   void plotChargeDensity( const std::string&    filename,
+                           const KineticSpecies& soln_species,
+                           const double&         time ) const;
 
-   void plotChargeDensity( const std::string&     a_filename,
-                           KineticSpeciesPtrVect& a_species ) const;
+   void plotChargeDensity( const std::string&     filename,
+                           KineticSpeciesPtrVect& species,
+                           const double&          time ) const;
 
-   void plotParallelMomentum( const std::string&    a_filename,
-                              const KineticSpecies& a_soln_species ) const;
+   void plotParallelMomentum( const std::string&    filename,
+                              const KineticSpecies& soln_species,
+                              const double&         time ) const;
 
-   void plotPoloidalMomentum( const std::string& filename,
-                              const KineticSpecies& kinetic_species ) const;
+   void plotPoloidalMomentum( const std::string&    filename,
+                              const KineticSpecies& kinetic_species,
+                              const double&         time ) const;
    
-   void plotPressure( const std::string&    a_filename,
-                      const KineticSpecies& a_soln_species ) const;
+   void plotPressure( const std::string&    filename,
+                      const KineticSpecies& soln_species,
+                      const double&         time ) const;
    
-   void plotTemperature( const std::string&    a_filename,
-                         const KineticSpecies& a_soln_species ) const;
+   void plotTemperature( const std::string&    filename,
+                         const KineticSpecies& soln_species,
+                         const double&         time ) const;
 
-   void plotFourthMoment( const std::string&    a_filename,
-                          const KineticSpecies& a_soln_species ) const;
+   void plotFourthMoment( const std::string&    filename,
+                          const KineticSpecies& soln_species,
+                          const double&         time ) const;
 
-   void plotParticleFlux( const std::string& a_filename,
-                          const KineticSpecies& a_soln_species ) const;
+   void plotParticleFlux( const std::string&    filename,
+                          const KineticSpecies& soln_species,
+                          const double&         time ) const;
 
-   void plotHeatFlux( const std::string& a_filename,
-                      const KineticSpecies& a_soln_species ) const;
+   void plotHeatFlux( const std::string&    filename,
+                      const KineticSpecies& soln_species,
+                      const double&         time ) const;
 
-   void plotPotential( const std::string& a_filename ) const;
+   void plotPotential( const std::string& filename,
+                       const double&      time ) const;
 
-   void plotEField( const std::string& a_filename ) const;
+   void plotEField( const std::string& filename,
+                    const double&      time ) const;
 
-   void plotVlasovDivergence( const std::string& a_filename,
-                              const KineticSpecies& a_kinetic_species );
+   void plotVlasovDivergence( const std::string&    filename,
+                              const KineticSpecies& kinetic_species,
+                              const double&         time );
 
    void setupFieldHistories( ParmParse& a_ppsim );
 

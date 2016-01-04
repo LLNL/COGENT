@@ -58,7 +58,7 @@ Simulation<SYSTEM>::writePlotFile()
 
    // HDF5Handle handle( iter_str, HDF5Handle::CREATE );
    // Instead of dummy file with prefix, use prefix for all plot files.
-   m_system->writePlotFile( iter_str, m_cur_step);
+   m_system->writePlotFile( iter_str, m_cur_step, m_cur_time);
    // handle.close();
 #else
    MayDay::Error( "plotting only defined with hdf5" );

@@ -1418,14 +1418,16 @@ void GKOps::createGKPoisson( const CFG::LevelData<CFG::FArrayBox>& a_initial_ion
 }
 
 
-void GKOps::plotPotential( const std::string& a_filename ) const
+void GKOps::plotPotential( const std::string& a_filename,
+                           const double&      a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
-   m_phase_geometry->plotConfigurationData( a_filename.c_str(), m_phi );
+   m_phase_geometry->plotConfigurationData( a_filename.c_str(), m_phi, a_time );
 }
 
-void GKOps::plotEField( const std::string& a_filename ) const
+void GKOps::plotEField( const std::string& a_filename,
+                        const double&      a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
@@ -1449,19 +1451,20 @@ void GKOps::plotEField( const std::string& a_filename ) const
         mag_geom.getBlockCoordSys(grids[dit]).computePsiThetaProjections(this_Efield);
       }
 
-      phase_geometry.plotConfigurationData( a_filename.c_str(), Efield );
-      //      phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell ); 
+      phase_geometry.plotConfigurationData( a_filename.c_str(), Efield, a_time );
+      //      phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell, a_time ); 
 
        
    }
    else { // Plot the unmapped field
-      phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell );
+      phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell, a_time );
    }
 }
 
 
 void GKOps::plotDistributionFunction( const std::string&    a_filename,
-                                      const KineticSpecies& a_soln_species ) const
+                                      const KineticSpecies& a_soln_species,
+                                      const double&         a_time ) const
 {
    const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
 
@@ -1472,22 +1475,24 @@ void GKOps::plotDistributionFunction( const std::string&    a_filename,
    }
 
    species_geometry.divideBStarParallel( dfn );
-   species_geometry.plotData( a_filename.c_str(), dfn );
+   species_geometry.plotData( a_filename.c_str(), dfn, a_time );
 }
 
 void GKOps::plotBStarParallel( const std::string&    a_filename,
-                               const KineticSpecies& a_soln_species ) const
+                               const KineticSpecies& a_soln_species,
+                               const double&         a_time ) const
 {
    const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
 
    LevelData<FArrayBox> BStarParallel( species_geometry.gridsFull(), 1, IntVect::Zero );
    species_geometry.getBStarParallel(BStarParallel);
 
-   species_geometry.plotData( a_filename.c_str(), BStarParallel );
+   species_geometry.plotData( a_filename.c_str(), BStarParallel, a_time );
 }
 
 void GKOps::plotDeltaF( const std::string&    a_filename,
-                        const KineticSpecies& a_soln_species ) const
+                        const KineticSpecies& a_soln_species,
+                        const double&         a_time ) const
 {
 
    CH_assert( isDefined() );
@@ -1516,14 +1521,15 @@ void GKOps::plotDeltaF( const std::string&    a_filename,
    DeltaFKernel DeltaF_Kernel(density, pressure, ParallelMom);
    DeltaF_Kernel.eval(deltaF, a_soln_species);
 
-   species_geometry.plotData( a_filename.c_str(), deltaF );
+   species_geometry.plotData( a_filename.c_str(), deltaF, a_time );
 
 }
 
 
 void GKOps::plotDistributionFunctionAtMu( const std::string&    a_filename,
                                           const KineticSpecies& a_soln_species,
-                                          const int             a_mu ) const
+                                          const int             a_mu,
+                                          const double&         a_time ) const
 {
    const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
 
@@ -1534,7 +1540,7 @@ void GKOps::plotDistributionFunctionAtMu( const std::string&    a_filename,
    }
 
    species_geometry.divideBStarParallel( dfn );
-   species_geometry.plotAtMuIndex( a_filename.c_str(), a_mu, soln_dfn );
+   species_geometry.plotAtMuIndex( a_filename.c_str(), a_mu, soln_dfn, a_time );
 }
 
 
@@ -1542,7 +1548,8 @@ void GKOps::plotVParallelTheta( const std::string&    a_filename,
                                 const KineticSpecies& a_soln_species,
                                 const int             a_radial_index,
                                 const int             a_toroidal_index,
-                                const int             a_mu_index ) const
+                                const int             a_mu_index,
+                                const double&         a_time ) const
 {
    const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
 
@@ -1554,14 +1561,15 @@ void GKOps::plotVParallelTheta( const std::string&    a_filename,
 
    species_geometry.divideBStarParallel( dfn );
    species_geometry.plotVParPoloidalData( a_filename.c_str(), a_radial_index,
-                                        a_toroidal_index, a_mu_index, dfn );
+                                          a_toroidal_index, a_mu_index, dfn, a_time );
 }
 
 
 void GKOps::plotRTheta( const std::string&    a_filename,
                         const KineticSpecies& a_soln_species,
                         const int             a_vpar_index,
-                        const int             a_mu_index ) const
+                        const int             a_mu_index,
+                        const double&         a_time ) const
 {
    const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
 
@@ -1574,7 +1582,7 @@ void GKOps::plotRTheta( const std::string&    a_filename,
    VEL::IntVect vspace_index(a_vpar_index, a_mu_index);
 
    species_geometry.divideBStarParallel( dfn );
-   species_geometry.plotAtVelocityIndex( a_filename.c_str(), vspace_index, dfn );
+   species_geometry.plotAtVelocityIndex( a_filename.c_str(), vspace_index, dfn, a_time );
 }
 
 
@@ -1582,7 +1590,8 @@ void GKOps::plotRTheta( const std::string&    a_filename,
 void GKOps::plotVParallelMu( const std::string&    a_filename,
                              const KineticSpecies& a_soln_species,
                              const int             a_radial_index,
-                             const int             a_poloidal_index ) const
+                             const int             a_poloidal_index,
+                             const double&         a_time ) const
 {
    const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
 
@@ -1595,13 +1604,14 @@ void GKOps::plotVParallelMu( const std::string&    a_filename,
    CFG::IntVect cspace_index(a_radial_index, a_poloidal_index);
    species_geometry.divideBStarParallel( dfn );
    species_geometry.plotAtConfigurationIndex( a_filename.c_str(),
-                                            cspace_index, dfn );
+                                              cspace_index, dfn, a_time );
 }
 
 
 
 void GKOps::plotChargeDensity( const std::string&    a_filename,
-                               const KineticSpecies& a_soln_species ) const
+                               const KineticSpecies& a_soln_species,
+                               const double&         a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
@@ -1611,12 +1621,13 @@ void GKOps::plotChargeDensity( const std::string&    a_filename,
    CFG::LevelData<CFG::FArrayBox> charge_density( mag_geom.grids(), 1, CFG::IntVect::Zero );
    a_soln_species.chargeDensity( charge_density );
 
-   phase_geometry.plotConfigurationData( a_filename.c_str(), charge_density );
+   phase_geometry.plotConfigurationData( a_filename.c_str(), charge_density, a_time );
 }
 
 
 void GKOps::plotChargeDensity( const std::string&     a_filename,
-                               KineticSpeciesPtrVect& a_species ) const
+                               KineticSpeciesPtrVect& a_species,
+                               const double&          a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
@@ -1646,12 +1657,13 @@ void GKOps::plotChargeDensity( const std::string&     a_filename,
       }
    }
 
-   phase_geometry.plotConfigurationData( a_filename.c_str(), charge_density );
+   phase_geometry.plotConfigurationData( a_filename.c_str(), charge_density, a_time );
 }
 
 
 void GKOps::plotParallelMomentum( const std::string&    a_filename,
-                                  const KineticSpecies& a_soln_species ) const
+                                  const KineticSpecies& a_soln_species,
+                                  const double&         a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
@@ -1659,12 +1671,13 @@ void GKOps::plotParallelMomentum( const std::string&    a_filename,
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
    CFG::LevelData<CFG::FArrayBox> parallel_mom( mag_geom.grids(), 1, CFG::IntVect::Zero );
    a_soln_species.ParallelMomentum(parallel_mom);
-   phase_geometry.plotConfigurationData( a_filename.c_str(), parallel_mom );
+   phase_geometry.plotConfigurationData( a_filename.c_str(), parallel_mom, a_time );
 }
 
 
-void GKOps::plotPoloidalMomentum( const std::string& a_filename,
-                                  const KineticSpecies& a_soln_species ) const
+void GKOps::plotPoloidalMomentum( const std::string&    a_filename,
+                                  const KineticSpecies& a_soln_species,
+                                  const double&         a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
@@ -1679,12 +1692,13 @@ void GKOps::plotPoloidalMomentum( const std::string& a_filename,
    CFG::LevelData<CFG::FArrayBox> poloidal_mom( mag_geom.grids(), 1, CFG::IntVect::Zero );
    a_soln_species.PoloidalMomentum( poloidal_mom, E_field_tmp, larmor_number );
 
-   phase_geometry.plotConfigurationData( a_filename.c_str(), poloidal_mom );
+   phase_geometry.plotConfigurationData( a_filename.c_str(), poloidal_mom, a_time );
 }
 
 
 void GKOps::plotPressure( const std::string&    a_filename,
-                          const KineticSpecies& a_soln_species ) const
+                          const KineticSpecies& a_soln_species,
+                          const double&         a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
@@ -1702,12 +1716,13 @@ void GKOps::plotPressure( const std::string&    a_filename,
    CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.grids(), 1, CFG::IntVect::Zero );
    a_soln_species.pressureMoment(pressure, ParallelMom);
 
-   phase_geometry.plotConfigurationData( a_filename.c_str(), pressure );
+   phase_geometry.plotConfigurationData( a_filename.c_str(), pressure, a_time );
 }
 
 
 void GKOps::plotTemperature( const std::string&    a_filename,
-                             const KineticSpecies& a_soln_species ) const
+                             const KineticSpecies& a_soln_species,
+                             const double&         a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
@@ -1732,12 +1747,13 @@ void GKOps::plotTemperature( const std::string&    a_filename,
       temperature[dit].divide(density[dit]);
    }
 
-   phase_geometry.plotConfigurationData( a_filename.c_str(), temperature );
+   phase_geometry.plotConfigurationData( a_filename.c_str(), temperature, a_time );
 }
 
 
 void GKOps::plotFourthMoment( const std::string&    a_filename,
-                              const KineticSpecies& a_soln_species ) const
+                              const KineticSpecies& a_soln_species,
+                              const double&         a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
@@ -1768,12 +1784,13 @@ void GKOps::plotFourthMoment( const std::string&    a_filename,
       fourthMoment[dit].mult(4.0/15.0);          // should be unity for Maxwellian!!!
    }
 
-   phase_geometry.plotConfigurationData(a_filename.c_str(), fourthMoment);
+   phase_geometry.plotConfigurationData(a_filename.c_str(), fourthMoment, a_time);
 }
 
 
-void GKOps::plotParticleFlux( const std::string& a_filename,
-                              const KineticSpecies& a_soln_species ) const
+void GKOps::plotParticleFlux( const std::string&    a_filename,
+                              const KineticSpecies& a_soln_species,
+                              const double&         a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
@@ -1787,12 +1804,13 @@ void GKOps::plotParticleFlux( const std::string& a_filename,
    CFG::LevelData<CFG::FArrayBox> particle_flux( mag_geom.grids(), 1, CFG::IntVect::Zero );
    a_soln_species.ParticleFlux( particle_flux, E_field_tmp );
 
-   phase_geometry.plotConfigurationData( a_filename.c_str(), particle_flux );
+   phase_geometry.plotConfigurationData( a_filename.c_str(), particle_flux, a_time );
 }
 
 
-void GKOps::plotHeatFlux( const std::string& a_filename,
-                          const KineticSpecies& a_soln_species ) const
+void GKOps::plotHeatFlux( const std::string&    a_filename,
+                          const KineticSpecies& a_soln_species,
+                          const double&         a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
@@ -1808,7 +1826,7 @@ void GKOps::plotHeatFlux( const std::string& a_filename,
    CFG::LevelData<CFG::FArrayBox> heat_flux( mag_geom.grids(), 1, CFG::IntVect::Zero );
    a_soln_species.HeatFlux( heat_flux, E_field_tmp, phi_injected_tmp );
 
-   phase_geometry.plotConfigurationData( a_filename.c_str(), heat_flux );
+   phase_geometry.plotConfigurationData( a_filename.c_str(), heat_flux, a_time );
 }
 
 
@@ -2008,8 +2026,9 @@ void GKOps::writeFieldHistory( const int a_cur_step,
 }
 
 
-void GKOps::plotVlasovDivergence( const std::string& a_filename,
-                                  const KineticSpecies& a_soln_species )
+void GKOps::plotVlasovDivergence( const std::string&    a_filename,
+                                  const KineticSpecies& a_soln_species,
+                                  const double&         a_time)
 {
    CH_assert( isDefined() );
 #if 0
@@ -2040,7 +2059,7 @@ void GKOps::plotVlasovDivergence( const std::string& a_filename,
     // Construct filename
     string filename("vlasov_divergence." + this_species.name());
 
-    geom.plotAtVelocityIndex( filename.c_str(), vpt, this_species.distributionFunction() );
+    geom.plotAtVelocityIndex( filename.c_str(), vpt, this_species.distributionFunction() a_time );
 
 #else
 
@@ -2063,7 +2082,6 @@ void GKOps::plotVlasovDivergence( const std::string& a_filename,
 
     double dx = 1.;
     double dt = 1.;
-    double time = 0.;
     Vector<int> ratio;
     for (int dir=0; dir<CFG_DIM+1; ++dir) {
       ratio.push_back(1);
@@ -2074,7 +2092,7 @@ void GKOps::plotVlasovDivergence( const std::string& a_filename,
     string filename("vlasov_divergence." + this_species.name() + ".hdf5");
 
     WriteAMRHierarchyHDF5(filename.c_str(), layouts, data, names, sliced_box,
-                          dx, dt, time, ratio, num_levels);
+                          dx, dt, a_time, ratio, num_levels);
 #endif
 #endif
 }
