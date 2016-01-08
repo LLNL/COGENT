@@ -98,6 +98,9 @@ public:
                    Real a_factor = 1.0,
                    bool a_update_flux_register = false );
 
+
+   void computeNorms( Real& a_norm_1, Real& a_norm_2, Real& a_norm_inf);
+
    
    inline
    bool isDefined() const
@@ -211,6 +214,9 @@ public:
    void increment( const GKRHSData& a_increment,
                    Real a_factor = 1.0,
                    bool a_update_flux_register = false );
+
+
+   void computeNorms( Real& a_norm_1, Real& a_norm_2, Real& a_norm_inf);
 
    
    inline
