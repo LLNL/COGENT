@@ -194,6 +194,10 @@ public:
    void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage );
    void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage );
    
+   void explicitOp    (GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage );
+   void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage );
+   void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage );
+
    //void solve( GKState& a_state, const GKRHSData& a_rhs, const Real a_time, const int a_stage  );
    void solveImEx( GKState& a_state, const GKRHSData& a_rhs, const Real shift, const Real a_time, const int a_stage  );
    
@@ -527,6 +531,8 @@ private:
    bool                           m_neutrals_model_on;
    bool                           m_initializedE;
    bool                           m_enforce_quasineutrality;
+
+   GKState                        m_Y;
 
    bool m_history;   // whether to write out histories
    int m_hist_freq;  // how often to write out field history

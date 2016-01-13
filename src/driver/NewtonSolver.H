@@ -9,7 +9,7 @@
 
 #include "NamespaceHeader.H"
 
-template <class Solution, class RHS, class Ops>
+template <class T, class Ops>
 class NewtonSolver
 {
   public:
@@ -18,7 +18,7 @@ class NewtonSolver
     /**
      * Constructor: set m_is_Defined to false.
      */ 
-    NewtonSolver<Solution,RHS,Ops>() { m_is_Defined = false; }
+    NewtonSolver<T,Ops>() { m_is_Defined = false; }
 
     /// Destructor
     /*
@@ -38,7 +38,7 @@ class NewtonSolver
      *
      * @param[in] a_state solution object
      */
-    void define(Solution& a_state);
+    void define(T& a_state);
 
     /// Get the number of iterations
     /**
@@ -53,13 +53,19 @@ class NewtonSolver
      * @param[in] a_Y initial guess; contains the solution at exit
      * @param[in] a_b right-hand side
      */
-    void solve(Solution& a_Y, RHS& a_b, Function<Solution,RHS,Ops>& a_Func);
+    void solve(T& a_Y, T& a_b);
 
     /// Get converged reason
     /**
      * Get the reason for Newton solver exit
      */
     std::string getConvergedReason() const {return m_convergedReason; }
+
+    /// Get the function object
+    /**
+     * Get the pointer to the function object
+     */
+    Function<T,Ops>* getFunction() { return m_Function; }
 
   protected:
 
@@ -69,21 +75,22 @@ class NewtonSolver
     int       m_its, m_maxits;
     Real      m_norm, m_norm0,
               m_rtol, m_atol;
-    Solution  m_dY;
-    RHS       m_F;
+    T         m_dY, m_F;
     bool      m_verbose;
 
     std::string m_convergedReason;
+    Function<T,Ops> *m_Function;
 };
 
-template <class Solution, class RHS, class Ops>
-NewtonSolver<Solution,RHS,Ops>::~NewtonSolver()
+template <class T, class Ops>
+NewtonSolver<T,Ops>::~NewtonSolver()
 {
+  delete m_Function;
   return;
 }
 
-template <class Solution, class RHS, class Ops>
-void NewtonSolver<Solution,RHS,Ops>::define(Solution& a_state)
+template <class T, class Ops>
+void NewtonSolver<T,Ops>::define(T& a_state)
 {
   CH_assert(!isDefined());
 
@@ -95,18 +102,20 @@ void NewtonSolver<Solution,RHS,Ops>::define(Solution& a_state)
   m_rtol    = 1e-6;
   m_atol    = 1e-6;
   m_verbose = true;
+  m_Function= NULL;
 
   m_is_Defined = true;
 }
 
-template <class Solution, class RHS, class Ops>
-void NewtonSolver<Solution,RHS,Ops>::solve(Solution& a_Y, RHS& a_b, Function<Solution,RHS,Ops>& a_Func)
+template <class T, class Ops>
+void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
 {
   CH_assert(isDefined());
+  CH_assert(m_Function);
 
   m_its = 0;
   while(1) {
-    a_Func.evalFunction(m_F,a_Y,a_b); /* F = F(Y) - b */
+    m_Function->evalFunction(m_F,a_Y,a_b); /* F = F(Y) - b */
     m_its++;
 
     /* compute norm of m_F */

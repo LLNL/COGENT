@@ -1,44 +1,44 @@
-#ifndef _ImplicitStage_H_
-#define _ImplicitStage_H_
+#ifndef _ImplicitStageFunction_H_
+#define _ImplicitStageFunction_H_
 
 #include "Function.H"
 
 #include "NamespaceHeader.H"
 
-template <class Solution, class RHS, class Ops>
-class ImplicitStage: public Function<Solution, RHS, Ops>
+template <class T, class Ops>
+class ImplicitStageFunction: public Function<T,Ops>
 {
   public:
-    ImplicitStage<Solution,RHS,Ops>() {m_is_Defined = false; m_shift = 0; }
-    ~ImplicitStage<Solution,RHS,Ops>() {}
+    ImplicitStageFunction<T,Ops>() {m_is_Defined = false; m_shift = 0; }
+    ~ImplicitStageFunction<T,Ops>() {}
 
-    void evalFunction(RHS& a_F, Solution& a_Y, RHS& a_b);
+    void evalFunction(T& a_F, T& a_Y, T& a_b);
 
     void setShift(Real a_shift) { m_shift = a_shift; }
     void setStageTime(Real a_time) { m_StageTime = a_time; }
     void setStageNumber(int a_Stage) { m_Stage = a_Stage; }
 
     bool isDefined() const{ return m_is_Defined; }
-    void define(Solution& a_state, Ops& a_ops);
+    void define(T& a_state, Ops& a_ops);
 
   private:
     bool m_is_Defined;
     int  m_Stage;
     Real m_shift, m_StageTime;
-    RHS  m_Z;
+    T    m_Z;
     Ops  *m_ops;
 };
 
-template <class Solution, class RHS, class Ops>
-void ImplicitStage<Solution,RHS,Ops>::define(Solution& a_state, Ops& a_ops)
+template <class T, class Ops>
+void ImplicitStageFunction<T,Ops>::define(T& a_state, Ops& a_ops)
 {
   m_Z.define(a_state);
   m_ops = &a_ops;
   m_is_Defined = true;
 }
 
-template <class Solution, class RHS, class Ops>
-void ImplicitStage<Solution,RHS,Ops>::evalFunction(RHS& a_F, Solution& a_Y, RHS& a_b)
+template <class T, class Ops>
+void ImplicitStageFunction<T,Ops>::evalFunction(T& a_F, T& a_Y, T& a_b)
 {
   CH_assert(isDefined());
   /* Compute ([Y - shift*G(Y)] - b) */

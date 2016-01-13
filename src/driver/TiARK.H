@@ -6,7 +6,7 @@
 
 #include "REAL.H"
 #include "TimeIntegrator.H"
-#include "ImplicitStage.H"
+#include "ImplicitStageFunction.H"
 #include "NewtonSolver.H"
 
 #include "NamespaceHeader.H"
@@ -128,14 +128,14 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
     Real          *m_Ae, *m_be, *m_ce;
     Real          *m_Ai, *m_bi, *m_ci;
     Solution      m_YStage;
-    RHS           *m_rhsStage_exp, *m_rhsStage_imp, m_work;
+    RHS           *m_rhsStage_exp, *m_rhsStage_imp, m_R, m_Z;
     Ops           m_Operators;
     Real          m_time;
     Real          m_dt;
     int           m_cur_step;
 
-    ImplicitStage<Solution,RHS,Ops> m_Ifunction;
-    NewtonSolver<Solution,RHS,Ops> m_NewtonSolver;
+    ImplicitStageFunction<RHS,Ops> *m_Ifunction;
+    NewtonSolver<RHS,Ops> m_NewtonSolver;
 };
 
 
@@ -228,18 +228,19 @@ void TiARK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real
 
   /* define the work vectors and operators */
   m_YStage.define(a_state);
-  m_work.define(a_state);
+  m_R.define(a_state);
+  m_Z.define(a_state);
   for (int i=0; i<m_nstages; i++) {
     m_rhsStage_exp[i].define(a_state);
     m_rhsStage_imp[i].define(a_state);
   }
   m_Operators.define(a_state, m_dt);
 
-  /* define the implicit stage object */
-  m_Ifunction.define(a_state,m_Operators);
-
   /* define the Newton solver */
-  m_NewtonSolver.define(a_state);
+  m_NewtonSolver.define(m_R);
+  Function<RHS,Ops> *m_NewtonSolverFunction = m_NewtonSolver.getFunction();
+  m_NewtonSolverFunction = new ImplicitStageFunction<RHS,Ops>;
+  m_NewtonSolverFunction->define(m_R,m_Operators);
 
   /* done */
   m_is_Defined = true;
@@ -302,6 +303,7 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
   //CH_TIMERS("TiARK::advance");
   CH_assert(isDefined());
   CH_assert(m_time == a_time);
+  m_Ifunction = (ImplicitStageFunction<RHS,Ops>*) m_NewtonSolver.getFunction();
 
   /* Stage calculations */
   int i, j;
@@ -313,14 +315,14 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
     /* implicit stage */
     Real shift = m_Ai[i*m_nstages+j] * m_dt;
     if (shift != 0.0) {
-      m_Ifunction.setShift(shift);
-      m_Ifunction.setStageNumber(i);
-      m_Ifunction.setStageTime(m_time+m_ce[i]*m_dt);
+      m_Ifunction->setShift(shift);
+      m_Ifunction->setStageNumber(i);
+      m_Ifunction->setStageTime(m_time+m_ce[i]*m_dt);
 
-      m_work.copy(m_YStage);  /* right-hand side */
-      m_YStage.copy(a_Y);     /* initial guess */
-      m_NewtonSolver.solve(m_YStage,m_work,m_Ifunction);
-      //m_Operators.solveImEx(m_YStage,m_work,shift,(m_time+m_ci[i]*m_dt),i);
+      m_R.copy(m_YStage);  /* right-hand side */
+      m_Z.copy(a_Y);       /* initial guess */
+      m_NewtonSolver.solve(m_Z,m_R);
+      m_YStage.copy(m_Z);
     }
 
     m_Operators.explicitOpImEx(m_rhsStage_exp[i],(m_time+m_ce[i]*m_dt),m_YStage,i);

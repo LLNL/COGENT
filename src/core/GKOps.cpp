@@ -103,6 +103,7 @@ void GKOps::define( const GKState& a_state,
       m_neutrals = new GKNeutrals( m_verbosity );
    }
  
+   m_Y.define(a_state);
 
    CFG::IntVect phi_ghost_vect( 4*CFG::IntVect::Unit );
    m_phi.define( m_phase_geometry->magGeom().grids(), 1, phi_ghost_vect );
@@ -347,6 +348,15 @@ void GKOps::explicitOp( GKRHSData& a_rhs,
    }
 }
 
+void GKOps::explicitOp( GKRHSData& a_rhs,
+                        const Real a_time,
+                        const GKRHSData& a_state,
+                        const int a_stage )
+{
+  m_Y.copy(a_state);
+  explicitOp(a_rhs,a_time,m_Y,a_stage);
+}
+
 void GKOps::explicitOpImEx( GKRHSData& a_rhs,
                             const Real a_time,
                             const GKState& a_state,
@@ -444,6 +454,15 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
    }
 }
 
+void GKOps::explicitOpImEx( GKRHSData& a_rhs,
+                            const Real a_time,
+                            const GKRHSData& a_state,
+                            const int a_stage )
+{
+  m_Y.copy(a_state);
+  explicitOpImEx(a_rhs,a_time,m_Y,a_stage);
+}
+
 void GKOps::implicitOpImEx( GKRHSData& a_rhs,
                             const Real a_time,
                             const GKState& a_state,
@@ -454,6 +473,15 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
    const KineticSpeciesPtrVect& species_comp( a_state.data() );
    a_rhs.zero();
    applyCollisionOperator( a_rhs.data(), species_comp, a_time );
+}
+
+void GKOps::implicitOpImEx( GKRHSData& a_rhs,
+                            const Real a_time,
+                            const GKRHSData& a_state,
+                            const int a_stage )
+{
+  m_Y.copy(a_state);
+  implicitOpImEx(a_rhs,a_time,m_Y,a_stage);
 }
 
 #if 0

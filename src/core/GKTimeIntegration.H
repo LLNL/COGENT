@@ -71,14 +71,9 @@ public:
    }
    
    
-   inline
-   void copy( const GKState& a_state )
-   {
-      m_species_mapped.resize( a_state.m_species_mapped.size() );
-      for (int s(0); s<m_species_mapped.size(); s++) {
-         m_species_mapped[s]->copy( *(a_state.m_species_mapped[s]) );
-      }
-   }
+   void copy( const GKState& a_state );
+
+   void copy( const GKRHSData& a_rhs );
    
    
    inline
@@ -182,24 +177,14 @@ public:
 
    
    inline
-   void copy( const GKRHSData& a_rhs )
+   void define( const GKRHSData& a_rhs )
    {
-      m_species_mapped.resize( a_rhs.m_species_mapped.size() );
-      for (int s(0); s<m_species_mapped.size(); s++) {
-         m_species_mapped[s]->copy( *(a_rhs.m_species_mapped[s]) );
-      }
+      define( a_rhs.data() );
    }
 
    
-   inline
-   void copy( const GKState& a_rhs )
-   {
-      const KineticSpeciesPtrVect& rhs_species_mapped( a_rhs.data() ); 
-      m_species_mapped.resize( rhs_species_mapped.size() );
-      for (int s(0); s<m_species_mapped.size(); s++) {
-         m_species_mapped[s]->copy( *(rhs_species_mapped[s]) );
-      }
-   }
+   void copy( const GKRHSData& a_rhs );
+   void copy( const GKState& a_rhs );
 
    
    inline
