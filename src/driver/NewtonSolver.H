@@ -6,6 +6,8 @@
 
 #include "REAL.H"
 #include "Function.H"
+#include "LinearFunction.H"
+#include "GMRES.H"
 
 #include "NamespaceHeader.H"
 
@@ -67,6 +69,12 @@ class NewtonSolver
      */
     Function<T,Ops>* getFunction() { return m_Function; }
 
+    /// Get the Jacobian object
+    /**
+     * Get the pointer to the Jacobian object
+     */
+    LinearFunction<T,Ops>* getJacobian() { return m_Jacobian; }
+
   protected:
 
   private:
@@ -78,8 +86,10 @@ class NewtonSolver
     T         m_dY, m_F;
     bool      m_verbose;
 
-    std::string m_convergedReason;
-    Function<T,Ops> *m_Function;
+    std::string           m_convergedReason;
+    Function<T,Ops>       *m_Function;
+    LinearFunction<T,Ops> *m_Jacobian;
+    GMRESSolver<T,Ops>    m_LinearSolver;
 };
 
 template <class T, class Ops>
@@ -96,6 +106,7 @@ void NewtonSolver<T,Ops>::define(T& a_state)
 
   m_F.define(a_state); 
   m_dY.define(a_state);
+  m_LinearSolver.define(m_Jacobian);
 
   /* default values */
   m_maxits  = 10000;
@@ -143,10 +154,11 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
       break;
     }
 
-    /* Compute step size */
+    /* Compute step size [Jac]dY = F */
+    m_LinearSolver.solve(m_dY,m_F);
 
-    /* Update solution */
-    a_Y.increment(m_dY);
+    /* Update solution Y = Y - dY */
+    a_Y.increment(m_dY,-1);
   }
 
 }

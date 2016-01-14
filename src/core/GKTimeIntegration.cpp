@@ -64,6 +64,17 @@ void GKState::increment( const GKRHSData& a_rhs,
 }
 
 
+void GKRHSData::scale(const Real& a_factor)
+{
+   CH_assert( isDefined() );
+   for (int s(0); s<m_species_mapped.size(); s++) {
+      LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
+      DataIterator dit = solution.dataIterator();
+      for (dit.begin(); dit.ok(); ++dit) solution[dit] *= a_factor;
+   }
+}
+
+
 void GKRHSData::increment( const GKRHSData& a_increment,
                            Real a_factor,
                            bool a_update_flux_register )
@@ -76,6 +87,28 @@ void GKRHSData::increment( const GKRHSData& a_increment,
       m_species_mapped[s]->addData( *(increment_species[s]), a_factor );
 //      inspect( m_species_mapped[s]->distributionFunction() );
    }
+}
+
+
+Real GKRHSData::dotProduct(GKRHSData& a_Y)
+{
+   CH_assert( isDefined() );
+   Real dotProduct_local = 0, dotProduct = 0;
+   const KineticSpeciesPtrVect& Y_species( a_Y.data() );
+   CH_assert( m_species_mapped.size()==Y_species.size() );
+   for (int s(0); s<m_species_mapped.size(); s++) {
+      const LevelData<FArrayBox>& vec_a = m_species_mapped[s]->distributionFunction();
+      const LevelData<FArrayBox>& vec_b = Y_species[s]->distributionFunction();
+      const DisjointBoxLayout& grids = vec_a.disjointBoxLayout();
+      DataIterator dit = vec_a.dataIterator();
+      for (dit.begin(); dit.ok(); ++dit) {
+        FArrayBox tmp(grids[dit],1);
+        tmp.copy(vec_a[dit]); 
+        tmp *= vec_b[dit];
+        dotProduct_local += tmp.sum(grids[dit],0,1);
+      }
+   }
+   MPI_Allreduce(&dotProduct_local,&dotProduct,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 }
 
 void GKState::computeNorms( Real& a_norm_1, Real& a_norm_2, Real& a_norm_inf)
@@ -148,6 +181,136 @@ void GKRHSData::computeNorms( Real& a_norm_1, Real& a_norm_2, Real& a_norm_inf)
   MPI_Allreduce(&local_sum1, &a_norm_1  , 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(&local_sum2, &a_norm_2  , 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD); 
   a_norm_2 = sqrt(a_norm_2);
+}
+
+Real GKState::computeNorm( int a_ord)
+{
+  CH_assert(isDefined());
+  CH_assert((a_ord <= 2) && (a_ord >= 0));
+  Real local_norm = 0, norm = 0;
+
+  if (a_ord == 0) {
+    /* max norm */
+    for (int s(0); s<m_species_mapped.size(); s++) {
+      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
+      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
+      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
+      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
+      geom.getCellVolumes(volume);
+      DataIterator dit = solution.dataIterator();
+      for (dit.begin(); dit.ok(); ++dit) {
+        FArrayBox tmp(grids[dit],1);
+        tmp.copy(solution[dit]);
+        tmp.abs();
+        double box_max = tmp.max(grids[dit]);
+        if (box_max > local_norm) local_norm = box_max;
+      }
+    }
+    MPI_Allreduce(&local_norm,&norm, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  } else if (a_ord = 1) {
+    /* L1 */
+    for (int s(0); s<m_species_mapped.size(); s++) {
+      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
+      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
+      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
+      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
+      geom.getCellVolumes(volume);
+      DataIterator dit = solution.dataIterator();
+      for (dit.begin(); dit.ok(); ++dit) {
+        FArrayBox tmp(grids[dit],1);
+        tmp.copy(solution[dit]);
+        tmp.abs();
+        tmp *= volume[dit];
+        local_norm += tmp.sum(grids[dit],0,1);
+      }
+    }
+    MPI_Allreduce(&local_norm, &norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  } else {
+    /* L2 */
+    for (int s(0); s<m_species_mapped.size(); s++) {
+      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
+      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
+      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
+      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
+      geom.getCellVolumes(volume);
+      DataIterator dit = solution.dataIterator();
+      for (dit.begin(); dit.ok(); ++dit) {
+        FArrayBox tmp(grids[dit],1);
+        tmp.copy(solution[dit]); 
+        tmp *= solution[dit];
+        tmp *= volume[dit];
+        local_norm += tmp.sum(grids[dit],0,1);
+      }
+    }
+    MPI_Allreduce(&local_norm, &norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  }
+
+  return(norm);
+}
+
+Real GKRHSData::computeNorm( int a_ord)
+{
+  CH_assert(isDefined());
+  CH_assert((a_ord <= 2) && (a_ord >= 0));
+  Real local_norm = 0, norm = 0;
+
+  if (a_ord == 0) {
+    /* max norm */
+    for (int s(0); s<m_species_mapped.size(); s++) {
+      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
+      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
+      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
+      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
+      geom.getCellVolumes(volume);
+      DataIterator dit = solution.dataIterator();
+      for (dit.begin(); dit.ok(); ++dit) {
+        FArrayBox tmp(grids[dit],1);
+        tmp.copy(solution[dit]);
+        tmp.abs();
+        double box_max = tmp.max(grids[dit]);
+        if (box_max > local_norm) local_norm = box_max;
+      }
+    }
+    MPI_Allreduce(&local_norm,&norm, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  } else if (a_ord = 1) {
+    /* L1 */
+    for (int s(0); s<m_species_mapped.size(); s++) {
+      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
+      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
+      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
+      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
+      geom.getCellVolumes(volume);
+      DataIterator dit = solution.dataIterator();
+      for (dit.begin(); dit.ok(); ++dit) {
+        FArrayBox tmp(grids[dit],1);
+        tmp.copy(solution[dit]);
+        tmp.abs();
+        tmp *= volume[dit];
+        local_norm += tmp.sum(grids[dit],0,1);
+      }
+    }
+    MPI_Allreduce(&local_norm, &norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  } else {
+    /* L2 */
+    for (int s(0); s<m_species_mapped.size(); s++) {
+      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
+      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
+      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
+      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
+      geom.getCellVolumes(volume);
+      DataIterator dit = solution.dataIterator();
+      for (dit.begin(); dit.ok(); ++dit) {
+        FArrayBox tmp(grids[dit],1);
+        tmp.copy(solution[dit]); 
+        tmp *= solution[dit];
+        tmp *= volume[dit];
+        local_norm += tmp.sum(grids[dit],0,1);
+      }
+    }
+    MPI_Allreduce(&local_norm, &norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  }
+
+  return(norm);
 }
 
 #include "NamespaceFooter.H"

@@ -2,6 +2,7 @@
 #define _ImplicitStageFunction_H_
 
 #include "Function.H"
+#include "ImplicitStageJacobian.H"
 
 #include "NamespaceHeader.H"
 
@@ -13,13 +14,14 @@ class ImplicitStageFunction: public Function<T,Ops>
     ~ImplicitStageFunction<T,Ops>() {}
 
     void evalFunction(T& a_F, T& a_Y, T& a_b);
-
-    void setShift(Real a_shift) { m_shift = a_shift; }
-    void setStageTime(Real a_time) { m_StageTime = a_time; }
-    void setStageNumber(int a_Stage) { m_Stage = a_Stage; }
-
-    bool isDefined() const{ return m_is_Defined; }
     void define(T& a_state, Ops& a_ops);
+
+    inline void setShift        (Real a_shift )       { m_shift = a_shift;    }
+    inline void setStageTime    (Real a_time  )       { m_StageTime = a_time; }
+    inline void setStageNumber  (int a_Stage  )       { m_Stage = a_Stage;    }
+    inline bool isDefined       ()              const { return m_is_Defined;  }
+
+    inline void setJac(ImplicitStageJacobian<T,Ops>* a_jac) { m_jac = a_jac; }
 
   private:
     bool m_is_Defined;
@@ -27,6 +29,7 @@ class ImplicitStageFunction: public Function<T,Ops>
     Real m_shift, m_StageTime;
     T    m_Z;
     Ops  *m_ops;
+    ImplicitStageJacobian<T,Ops> *m_jac;
 };
 
 template <class T, class Ops>
@@ -46,6 +49,8 @@ void ImplicitStageFunction<T,Ops>::evalFunction(T& a_F, T& a_Y, T& a_b)
   m_ops->implicitOpImEx(m_Z,m_StageTime,a_Y,m_Stage);
   a_F.increment(m_Z,-m_shift);
   a_F.increment(a_b,-1);
+  /* set base Y for Jacobian */
+  m_jac->setBaseSolution(a_Y);
 }
 
 #include "NamespaceFooter.H"

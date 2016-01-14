@@ -95,6 +95,7 @@ public:
 
 
    void computeNorms( Real& a_norm_1, Real& a_norm_2, Real& a_norm_inf);
+   Real computeNorm ( int a_ord); 
 
    
    inline
@@ -182,6 +183,8 @@ public:
       define( a_rhs.data() );
    }
 
+   void scale(const Real& a_factor);
+
    
    void copy( const GKRHSData& a_rhs );
    void copy( const GKState& a_rhs );
@@ -202,7 +205,9 @@ public:
 
 
    void computeNorms( Real& a_norm_1, Real& a_norm_2, Real& a_norm_inf);
+   Real computeNorm ( int a_ord );
 
+   Real dotProduct (GKRHSData& a_Y);
    
    inline
    bool isDefined() const
