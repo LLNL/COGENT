@@ -20,7 +20,7 @@ class NewtonSolver
     /**
      * Constructor: set m_is_Defined to false.
      */ 
-    NewtonSolver<T,Ops>() { m_is_Defined = false; }
+    NewtonSolver<T,Ops>() { m_is_Defined = false; m_Function = NULL; m_Jacobian = NULL; }
 
     /// Destructor
     /*
@@ -67,13 +67,13 @@ class NewtonSolver
     /**
      * Get the pointer to the function object
      */
-    Function<T,Ops>* getFunction() { return m_Function; }
+    Function<T,Ops>** getFunction() { return &m_Function; }
 
     /// Get the Jacobian object
     /**
      * Get the pointer to the Jacobian object
      */
-    LinearFunction<T,Ops>* getJacobian() { return m_Jacobian; }
+    LinearFunction<T,Ops>** getJacobian() { return &m_Jacobian; }
 
   protected:
 
@@ -109,11 +109,10 @@ void NewtonSolver<T,Ops>::define(T& a_state)
   m_LinearSolver.define(m_Jacobian);
 
   /* default values */
-  m_maxits  = 10000;
+  m_maxits  = 100;
   m_rtol    = 1e-6;
   m_atol    = 1e-6;
   m_verbose = true;
-  m_Function= NULL;
 
   m_is_Defined = true;
 }
@@ -133,7 +132,7 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     Real norm_1,norm_2,norm_inf;
     m_F.computeNorms(norm_1,norm_2,norm_inf);
     m_norm = norm_2; /* using the 2-norm */
-    if (m_its == 0) m_norm0 = m_norm;
+    if (m_its == 1) m_norm0 = m_norm;
 
     if (m_verbose && (!procID())) {
       cout << "    Newton iteration " << m_its << ", absolute residual norm " << m_norm;
@@ -155,6 +154,7 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     }
 
     /* Compute step size [Jac]dY = F */
+    m_dY.zero();
     m_LinearSolver.solve(m_dY,m_F);
 
     /* Update solution Y = Y - dY */

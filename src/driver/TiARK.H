@@ -239,18 +239,18 @@ void TiARK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real
   m_Operators.define(a_state, m_dt);
 
   /* define the Newton solver */
-  m_NewtonSolver.define(m_R);
-  Function<RHS,Ops>       *NewtonSolverFunction = m_NewtonSolver.getFunction();
-  LinearFunction<RHS,Ops> *NewtonSolverJacobian = m_NewtonSolver.getJacobian();
-  NewtonSolverFunction = new ImplicitStageFunction<RHS,Ops>;
-  NewtonSolverJacobian = new ImplicitStageJacobian<RHS,Ops>;
+  Function<RHS,Ops>       **NewtonSolverFunction = m_NewtonSolver.getFunction();
+  LinearFunction<RHS,Ops> **NewtonSolverJacobian = m_NewtonSolver.getJacobian();
+  *NewtonSolverFunction = new ImplicitStageFunction<RHS,Ops>;
+  *NewtonSolverJacobian = new ImplicitStageJacobian<RHS,Ops>;
   
-  m_Ifunction = (ImplicitStageFunction<RHS,Ops>*) m_NewtonSolver.getFunction();
-  m_IJacobian = (ImplicitStageJacobian<RHS,Ops>*) m_NewtonSolver.getJacobian();
+  m_Ifunction = dynamic_cast<ImplicitStageFunction<RHS,Ops>*>(*NewtonSolverFunction);
+  m_IJacobian = dynamic_cast<ImplicitStageJacobian<RHS,Ops>*>(*NewtonSolverJacobian);
   m_Ifunction->define(m_R,m_Operators);
   m_IJacobian->define(m_R,m_Operators);
   m_Ifunction->setJac(m_IJacobian);
 
+  m_NewtonSolver.define(m_R);
 
   /* done */
   m_is_Defined = true;
@@ -305,6 +305,8 @@ TiARK<Solution, RHS, Ops>::~TiARK()
   delete[] m_ci;
   delete[] m_rhsStage_exp;
   delete[] m_rhsStage_imp;
+  delete m_Ifunction;
+  delete m_IJacobian;
 }
 
 template <class Solution, class RHS, class Ops>
