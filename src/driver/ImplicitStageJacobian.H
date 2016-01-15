@@ -70,6 +70,7 @@ void ImplicitStageJacobian<T,Ops>::residual(
 template <class T, class Ops>
 void ImplicitStageJacobian<T,Ops>::preCond(T& a_cor, const T& a_residual)
 {
+  a_cor.copy(a_residual);
 }
 
 /* To compute: a_F = [L]a_y where [L] is the Jacobian of an implicit ARK stage,

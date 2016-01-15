@@ -174,7 +174,7 @@ GMRESSolver<T,Ops>::GMRESSolver()
   :m_homogeneous(false),
    m_op(NULL),
    m_restrtLen(30),
-   m_imax(1000),
+   m_imax(100),
    m_verbosity(3),
    m_eps(1.0E-50),
    m_reps(1.0E-12),
@@ -230,7 +230,8 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
 
   if (m_verbosity >= 3)
     {
-      pout() << "GMRESSolver::solve" << endl;
+      //pout() << "GMRESSolver::solve" << endl;
+      if (!procID()) cout << "      GMRESSolver::solve" << endl;
     }
 
   const int nwork = VEC_OFFSET + m_restrtLen + 1; // flex = VEC_OFFSET + 2*(m_restrtLen + 1);
@@ -270,7 +271,8 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
   {
     if (m_verbosity >= 3)
       {
-        pout() << "*";
+        //pout() << "*";
+        if (!procID()) cout << "      *";
       }
     ResidualGMRES( vv_0, a_xx, a_bb, VEC_TEMP_RHS );
     CycleGMRES( a_xx, m_exitStatus, it, rnorm0 );
@@ -293,7 +295,8 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
 
   if (m_verbosity >= 3)
     {
-      pout() << "GMRESSolver::solve done, status = " << m_exitStatus << endl;
+      //pout() << "GMRESSolver::solve done, status = " << m_exitStatus << endl;
+      if (!procID()) cout << "      GMRESSolver::solve done, status = " << m_exitStatus << endl;
     }
 
   CH_STOP(timeCleanup);
@@ -313,7 +316,6 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   T          &vv_0 = VEC_VV(0);
 
   /* scale VEC_VV (the initial residual) */
-  //ierr = vv_0->Normalize( &res_norm ); CHKERRQ(ierr);
   res_norm = m_op->norm( vv_0, m_normType );
   res = res_norm;
   *GRS(0) = res_norm;
@@ -323,12 +325,13 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   {
     if (m_verbosity >= 3)
       {
-        pout() << "GMRESSolver::solve zero residual!!!" << endl;
+        //pout() << "GMRESSolver::solve zero residual!!!" << endl;
+        if (!procID()) cout << "      GMRESSolver::solve zero residual!!!" << endl;
       }
     a_reason = 1; // 1 == converged,
     return;
   }
-  // normilize
+  /* normalize */
   tt = 1./res;
   m_op->scale( vv_0, tt);
 
@@ -338,9 +341,10 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   it = 0;
   while ( a_reason == -1 && it < m_restrtLen && a_itcount < m_imax )
   {
-    if ( m_verbosity>=4 && (it!=0 || a_itcount==0) )
+    if ( m_verbosity>=3 && (it!=0 || a_itcount==0) )
       {
-        pout() << a_itcount << ") GMRES residual = " << res << endl;
+        //pout() << a_itcount << ") GMRES residual = " << res << endl;
+        if (!procID()) cout << "      Iteration " << a_itcount << ", GMRES residual = " << res << endl;
       }
 
     const T &vv_it = VEC_VV(it);
@@ -355,17 +359,16 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
     TwoUnmodifiedGramSchmidtOrthogonalization(it);
 
     /* vv(i+1) . vv(i+1) */
-    //vv_it1->Normalize( &tt ); CHKERRQ(ierr);
     tt = m_op->norm( vv_it1, m_normType );
     /* check for the happy breakdown */
     //CH_assert( *GRS(it) != 0.0 );
-    //hapbnd  = Abs( tt / *GRS(it) );
     hapbnd = 1.e-99; // hard wired happy tol!!!
     if (tt < hapbnd)
     {
       if ( m_verbosity>=3 )
         {
-          pout() << "Detected happy breakdown, "<<it<<") current hapbnd = "<< tt << endl;
+          //pout() << "Detected happy breakdown, "<<it<<") current hapbnd = "<< tt << endl;
+          if (!procID()) cout << "      Detected happy breakdown, "<<it<<") current hapbnd = "<< tt << endl;
         }
       hapend = true;
     }
@@ -388,7 +391,8 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
     {
       if ( !conv && m_verbosity>=3)
       {
-        pout() << "You reached the happy break down, but convergence was not indicated. Residual norm=" << res << endl;
+        //pout() << "You reached the happy break down, but convergence was not indicated. Residual norm=" << res << endl;
+        if (!procID()) cout << "      You reached the happy break down, but convergence was not indicated. Residual norm=" << res << endl;
       }
       break;
     }
@@ -396,7 +400,8 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   /* Monitor if we know that we will not return for a restart */
   if ( (a_reason!=1 || a_itcount>=m_imax) && m_verbosity>=4 )
     {
-      pout() << a_itcount << ") GMRES residual = " << res << endl;
+      //pout() << a_itcount << ") GMRES residual = " << res << endl;
+      if (!procID()) cout << "      Iteration "<< a_itcount << ", GMRES residual = " << res << endl;
     }
 
   /*
@@ -433,7 +438,8 @@ void GMRESSolver<T,Ops>::BuildGMRESSoln( Real nrs[], T &a_xx, const int it,
   }
   if (*HH(it,it) == 0.0)
     {
-      pout() << "HH(it,it) is identically zero!!! GRS(it) = " << *GRS(it) << endl;
+      //pout() << "HH(it,it) is identically zero!!! GRS(it) = " << *GRS(it) << endl;
+      if (!procID()) cout << "      HH(it,it) is identically zero!!! GRS(it) = " << *GRS(it) << endl;
     }
   if (*HH(it,it) != 0.0)
   {
@@ -468,6 +474,7 @@ void GMRESSolver<T,Ops>::BuildGMRESSoln( Real nrs[], T &a_xx, const int it,
   m_op->preCond( temp_matop, temp );
   m_op->incr( a_xx, temp_matop, 1.0 );
 }
+
 /* GMRESSolver::UpdateGMRESHessenberg *****************************************
  *
  *   INPUT:
@@ -512,7 +519,8 @@ void GMRESSolver<T,Ops>::UpdateGMRESHessenberg( const int it, bool hapend, Real 
     tt = sqrt( *hh * *hh + *(hh+1) * *(hh+1) );
     if (tt == 0.0)
       {
-        pout() << "Your matrix or preconditioner is the null operator\n";
+        //pout() << "Your matrix or preconditioner is the null operator\n";
+        if (!procID()) cout << "      GMRESSolver: Your matrix or preconditioner is the null operator\n";
       }
     *cc       = *hh / tt;
     *ss       = *(hh+1) / tt;
