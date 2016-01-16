@@ -5,12 +5,20 @@
 #include "GKSystem.H"
 #include "Simulation.H"
 
+#ifdef with_petsc
+#include <PETScInterface.H>
+#endif
+
 #include "parstream.H"
 #ifdef CH_MPI
 #include "CH_Attach.H"
 #endif
 
 #include "UsingNamespace.H"
+
+#ifdef with_petsc
+static const char help[] = "COGENT";
+#endif
 
 inline int checkCommandLineArgs( int a_argc, char* a_argv[] )
 {
@@ -31,18 +39,22 @@ int main( int a_argc, char* a_argv[] )
    setChomboMPIErrorHandler();
 #endif
 
+#ifdef with_petsc
+  PetscInitialize(&a_argc,&a_argv,(char*)0,help);
+#endif
+
    int status = checkCommandLineArgs( a_argc, a_argv );
 
    if (status==0) {
       ParmParse pp( a_argc-2, a_argv+2, NULL, a_argv[1] );
       Simulation<GKSystem> simulation( pp );
-
-      while ( simulation.notDone() ) {
-         simulation.advance();
-      }
-
+      while ( simulation.notDone() ) simulation.advance();
       simulation.finalize();
    }
+
+#ifdef with_petsc
+  PetscFinalize();
+#endif
 
 #ifdef CH_MPI
    MPI_Finalize();
