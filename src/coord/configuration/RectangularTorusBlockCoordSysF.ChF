@@ -1,0 +1,321 @@
+#include "CONSTANTS.H"
+
+      subroutine get_rectangulartorus_field_data(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_INT[infmajorrad],
+     &     CHF_CONST_REAL[rmidreal],
+     &     CHF_CONST_FRA1[RBz],
+c     &     CHF_CONST_FRA1[dRBpoldt],
+     &     CHF_CONST_REAL[RBtor],
+     &     CHF_CONST_FRA1[Rmaj],
+     &     CHF_CONST_FRA1[Xr],
+     &     CHF_CONST_FRA1[Xz],
+     &     CHF_CONST_FRA1[Zr],
+     &     CHF_CONST_FRA1[Zz],
+c     &     CHF_CONST_FRA1[Rtt],
+c     &     CHF_CONST_FRA1[Ztt],
+     &     CHF_FRA[b_pt],
+     &     CHF_FRA1[Bmag_pt],
+     &     CHF_FRA[bunit_pt],
+     &     CHF_FRA[gradb_pt],
+     &     CHF_FRA[curlb_pt],
+     &     CHF_FRA1[bdotcurlb_pt]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], l
+      double precision
+     &     jac, RB, bdotcurlb, bunit(0:2),
+     &     bunitR,  bunitphi, bunitZ, 
+     &     wronsk, curlb(0:2)
+
+      if (infmajorrad .eq. 0) then
+
+      CHF_MULTIDO[gridbox;i;j;k]
+
+c        Rmaj times total field magnitude
+         RB = dsqrt(RBz(CHF_IX[i;j;k])**2 + RBtor**2)
+c        jacobian determinent 2d
+         jac = Xr(CHF_IX[i;j;k]) * Zz(CHF_IX[i;j;k]) - Zr(CHF_IX[i;j;k]) * Xz(CHF_IX[i;j;k])
+
+         bunitphi = RBtor / RB
+         bunitZ   = RBz(CHF_IX[i;j;k])/ RB
+         bunit(0) = 0.0  
+         bunit(1) = bunitphi
+         bunit(2) = bunitZ
+
+
+         do l = 0, 2
+            bunit_pt(CHF_IX[i;j;k],l) = bunit(l)
+            b_pt(CHF_IX[i;j;k],l)     = bunit(l) * (RB/Rmaj(CHF_IX[i;j;k]))
+         end do
+c        bporb = RBpol(CHF_IX[i;j;k])/(Rmaj(CHF_IX[i;j;k])*RB*jac)
+         gradb_pt(CHF_IX[i;j;k],0) = zero 
+         gradb_pt(CHF_IX[i;j;k],1) = zero
+         gradb_pt(CHF_IX[i;j;k],2) = zero
+
+c        R, phi, Z components of curl b
+         curlb(0) = 0.0
+         curlb(1) = 0.0
+         curlb(2) = 0.0
+         bdotcurlb = zero
+         do l=0, 2
+            curlb_pt(CHF_IX[i;j;k],l) = curlb(l)
+            bdotcurlb = bdotcurlb + curlb(l) * bunit(l)
+         end do
+         Bmag_pt(CHF_IX[i;j;k]) = RB/Rmaj(CHF_IX[i;j;k])
+         bdotcurlb_pt(CHF_IX[i;j;k]) = bdotcurlb
+
+      CHF_ENDDO
+      
+      else
+
+         RBtor = RBtor* rmidreal
+        
+      CHF_MULTIDO[gridbox;i;j;k]
+
+c        Rmaj times total field magnitude
+         RB = dsqrt(RBz(CHF_IX[i;j;k])**2 + RBtor**2)
+c        jacobian determinent 2d
+         jac = Xr(CHF_IX[i;j;k]) * Zz(CHF_IX[i;j;k]) - Zr(CHF_IX[i;j;k]) * Xz(CHF_IX[i;j;k])
+
+         bunitphi = RBtor / RB
+         bunitZ   = RBz(CHF_IX[i;j;k])/ RB
+         bunit(0) = 0.0  
+         bunit(1) = bunitphi
+         bunit(2) = bunitZ
+
+
+         do l = 0, 2
+            bunit_pt(CHF_IX[i;j;k],l) = bunit(l)
+            b_pt(CHF_IX[i;j;k],l)     = bunit(l) * (RB/rmidreal)
+         end do
+c        bporb = RBpol(CHF_IX[i;j;k])/(Rmaj(CHF_IX[i;j;k])*RB*jac)
+         gradb_pt(CHF_IX[i;j;k],0) = zero 
+         gradb_pt(CHF_IX[i;j;k],1) = zero
+         gradb_pt(CHF_IX[i;j;k],2) = zero
+
+c        R, phi, Z components of curl b
+         curlb(0) = 0.0
+         curlb(1) = 0.0
+         curlb(2) = 0.0
+         bdotcurlb = zero
+         do l=0, 2
+            curlb_pt(CHF_IX[i;j;k],l) = curlb(l)
+            bdotcurlb = bdotcurlb + curlb(l) * bunit(l)
+         end do
+         Bmag_pt(CHF_IX[i;j;k]) = RB/rmidreal
+         bdotcurlb_pt(CHF_IX[i;j;k]) = bdotcurlb
+
+      CHF_ENDDO
+ 
+      endif
+
+
+
+
+      return
+      end
+
+
+      subroutine get_rbvert_rectangulartorus(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_REAL[bzinner],
+     &     CHF_CONST_REAL[bzouter],
+     &     CHF_CONST_INT[infmajorrad],
+     &     CHF_CONST_REAL[innerradialbdry],
+     &     CHF_CONST_REAL[outerradialbdry],
+     &     CHF_FRA1[RBvert]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], l
+      double precision rfromaxis, BvertR, delbz, delbzdelbr, midrreal
+
+      delbz = bzouter - bzinner
+      delbzdelbr = delbz/(outerradialbdry-innerradialbdry)
+      
+      if (infmajorrad .eq. 0) then
+      
+      CHF_MULTIDO[gridbox;i;j;k]
+         rfromaxis = ( i + half*(1-CHF_ID(0,dir)) )*h(0)+innerradialbdry
+c        RBvert is R*vertical field
+         RBvert(CHF_IX[i;j;k])  = rfromaxis*(bzinner+delbzdelbr*( i + half*(1-CHF_ID(0,dir)) )*h(0)  )
+      CHF_ENDDO
+
+      else
+      
+      midrreal = (innerradialbdry+outerradialbdry)/2.0
+
+      CHF_MULTIDO[gridbox;i;j;k]
+c        RBvert is R*vertical field
+         RBvert(CHF_IX[i;j;k])  = midrreal*(bzinner+delbzdelbr*( i + half*(1-CHF_ID(0,dir)) )*h(0) )
+      CHF_ENDDO
+
+
+      endif
+
+      return
+      end
+
+      subroutine rectangulartorus_dxdxi(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[Xi],
+     &     CHF_CONST_INT[destComp],
+     &     CHF_CONST_INT[dirX],
+     &     CHF_CONST_INT[dirXi],
+     &     CHF_FRA[dXdXi]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision r, phi
+
+      if (CH_SPACEDIM .eq. 3) then
+
+          if (dirX .eq. 0) then
+              if (dirXi .eq. 0) then
+c             dx/dr = cos(phi)
+                  CHF_MULTIDO[box;i;j;k]
+c                    r     = Xi(CHF_IX[i;j;k],0)
+                     phi   = Xi(CHF_IX[i;j;k],1)
+                     dXdXi(CHF_IX[i;j;k],destComp) = dcos(phi)
+                  CHF_ENDDO
+              else if (dirXi .eq. 1) then
+c             dX/dphi = -rsin(phi)
+                  CHF_MULTIDO[box;i;j;k]
+                     r     = Xi(CHF_IX[i;j;k],0)
+                     phi    = Xi(CHF_IX[i;j;k],1)
+                     dXdXi(CHF_IX[i;j;k],destComp) = -r*dsin(phi)
+                  CHF_ENDDO
+              else if (dirXi .eq. 2) then
+                  CHF_MULTIDO[box;i;j;k]
+                     dXdXi(CHF_IX[i;j;k],destComp) = 0.0
+                  CHF_ENDDO
+              endif
+          else if (dirX .eq. 1) then
+              if (dirXi .eq. 0) then
+c             dy/dr = sin(phi)
+                  CHF_MULTIDO[box;i;j;k]
+                     phi = Xi(CHF_IX[i;j;k],1)
+                     dXdXi(CHF_IX[i;j;k],destComp) = dsin(phi)
+                  CHF_ENDDO
+              else if (dirXi .eq. 1) then
+c             dy/dphi = r cos(phi)
+                  CHF_MULTIDO[box;i;j;k]
+                     r     = Xi(CHF_IX[i;j;k],0)
+                     phi = Xi(CHF_IX[i;j;k],1)
+                     dXdXi(CHF_IX[i;j;k],destComp) = r * dcos(phi)
+                  CHF_ENDDO
+              else if (dirXi .eq. 2) then
+                  CHF_MULTIDO[box;i;j;k]
+                     dXdXi(CHF_IX[i;j;k],destComp) = 0.0
+                  CHF_ENDDO
+              endif
+          else if (dirX .eq. 2) then
+              if (dirXi .eq. 2) then
+                  CHF_MULTIDO[box;i;j;k]
+                     dXdXi(CHF_IX[i;j;k],destComp) = 1.0
+                  CHF_ENDDO
+              else 
+                  CHF_MULTIDO[box;i;j;k]
+                     dXdXi(CHF_IX[i;j;k],destComp) = 0.0
+                  CHF_ENDDO
+              endif
+          endif
+
+      else if (CH_SPACEDIM .eq. 2) then
+
+          if (dirX .eq. 0) then
+              if (dirXi .eq. 0) then
+c             dx/dr = 1.0
+                  CHF_MULTIDO[box;i;j;k]
+                     dXdXi(CHF_IX[i;j;k],destComp) = 1.0
+                  CHF_ENDDO
+              else 
+c             dX/dz = 0.0
+                  CHF_MULTIDO[box;i;j;k]
+                     dXdXi(CHF_IX[i;j;k],destComp) = 0.0
+                  CHF_ENDDO
+              endif
+          else if (dirX .eq. 1) then
+              if (dirXi .eq. 1) then
+c             dz/dz = 1.0
+                  CHF_MULTIDO[box;i;j;k]
+                     dXdXi(CHF_IX[i;j;k],destComp) = 1.0
+                  CHF_ENDDO
+
+              else 
+c             dz/dr = 0.0
+                  CHF_MULTIDO[box;i;j;k]
+                     dXdXi(CHF_IX[i;j;k],destComp) = 0.0
+                  CHF_ENDDO
+              endif
+          endif
+
+      endif
+
+
+      return
+      end
+
+      subroutine get_rectangulartorus_cc_mapped_coords(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[rmid],
+     &     CHF_CONST_INT[constminorrad],
+     &     CHF_FRA[xi]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      if (constminorrad .ne. 0) then
+         CHF_MULTIDO[box;i;j;k]
+            xi(CHF_IX[i;j;k],0) = rmid;
+            xi(CHF_IX[i;j;k],1) = (j + half)*dx(1);
+         CHF_ENDDO
+      else
+         CHF_MULTIDO[box;i;j;k]
+            xi(CHF_IX[i;j;k],0) = (i + half)*dx(0);
+            xi(CHF_IX[i;j;k],1) = (j + half)*dx(1);
+         CHF_ENDDO
+      endif
+
+      return
+      end
+
+      subroutine get_rectangulartorus_fc_mapped_coords(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[rmid],
+     &     CHF_CONST_INT[constminorrad],
+     &     CHF_FRA[xi]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision offset(0:1)
+
+      offset(0) = half
+      offset(1) = half
+      offset(dir) = zero
+
+      if (constminorrad .ne. 0) then
+         CHF_MULTIDO[box;i;j;k]
+            xi(CHF_IX[i;j;k],0) = rmid;
+            xi(CHF_IX[i;j;k],1) = (j + offset(1))*dx(1);
+         CHF_ENDDO
+      else
+         CHF_MULTIDO[box;i;j;k]
+            xi(CHF_IX[i;j;k],0) = (i + offset(0))*dx(0);
+            xi(CHF_IX[i;j;k],1) = (j + offset(1))*dx(1);
+         CHF_ENDDO
+      endif
+
+      return
+      end
+

@@ -1,0 +1,7 @@
+#!/bin/csh
+
+source /usr/local/tools/dotkit/init.csh
+use mvapich2-gnu-2.1
+use hdf5-gnu-parallel-mvapich2-1.8.10
+make -j all
+
