@@ -140,7 +140,7 @@ public:
 
    void subtractBcDivergence(LevelData<FArrayBox>& rhs) const;
 
-   void fillGhosts( LevelData<FArrayBox>& phi ) const;
+   void fillInternalGhosts( LevelData<FArrayBox>& phi ) const;
 
 #if 0
    void computeElectricFieldExtrap( const LevelData<FArrayBox>& phi,
@@ -182,16 +182,17 @@ public:
    void getUnmappedField(const LevelData<FluxBox>& a_mapped_E_field,
                          LevelData<FluxBox>&       a_E_field) const;
 
-   void extrapBoundaryGhostsForCC(FArrayBox&                              a_data,
-                                  const Box&                              a_interiorbox,
-                                  const Box&                              a_domain_box,
-                                  const int                               a_dir,
-                                  const Tuple<BlockBoundary, 2*SpaceDim>& a_block_boundaries) const;
+   void extrapBoundaryGhostsForCC(FArrayBox&                              data,
+                                  const Box&                              interiorbox,
+                                  const Box&                              domain_box,
+                                  const int                               dir,
+                                  const Tuple<BlockBoundary, 2*SpaceDim>& block_boundaries) const;
 
-   void extrapBoundaryGhostsForFC(FArrayBox&                              a_data,
-                                  const Box&                              a_interiorbox,
-                                  const Box&                              a_domain_box,
-                                  const int                               a_dir,
+   void extrapBoundaryGhostsForFC(FArrayBox&                              data,
+                                  const Box&                              interiorbox,
+                                  const Box&                              domain_box,
+                                  const int                               dir,
+                                  const int                               order,
                                   const Tuple<BlockBoundary, 2*SpaceDim>& a_block_boundaries) const;
 
    void extractNormalComponent( const LevelData<FluxBox>& in,

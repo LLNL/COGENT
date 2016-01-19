@@ -231,6 +231,34 @@ void SlabPhaseBC::parseParameters( ParmParse& a_pp )
       ParmParse fpp( prefix.c_str() );
       std::string function_name;
       fpp.query( "function", function_name );
+      
+      if (function_name.length()==0){ //make radial_inner or radial_lower compatible
+        if( m_bdry_name[i].compare("radial_outer")==0 ){
+            cout<<"m_bdry_name["<<i<<"] = \"radial_outer\" not found, trying \"radial_upper\""<<endl;
+            prefix.replace(prefix.end()-12,prefix.end(),"radial_upper");
+            ParmParse fpp( prefix.c_str() );
+            fpp.query( "function", function_name );
+        }
+        else if ( m_bdry_name[i].compare("radial_upper")==0 ){
+            cout<<"m_bdry_name["<<i<<"] = \"radial_upper\" not found, trying \"radial_outer\""<<endl;
+            prefix.replace(prefix.end()-12,prefix.end(),"radial_outer");
+            ParmParse fpp( prefix.c_str() );
+            fpp.query( "function", function_name );
+        }
+        else if ( m_bdry_name[i].compare("radial_inner")==0 ){
+            cout<<"m_bdry_name["<<i<<"] = \"radial_inner\" not found, trying \"radial_lower\""<<endl;
+            prefix.replace(prefix.end()-12,prefix.end(),"radial_lower");
+            ParmParse fpp( prefix.c_str() );
+            fpp.query( "function", function_name );
+        }
+        else if ( m_bdry_name[i].compare("radial_lower")==0 ){
+            cout<<"m_bdry_name["<<i<<"] = \"radial_lower\" not found, trying \"radial_inner\""<<endl;
+            prefix.replace(prefix.end()-12,prefix.end(),"radial_inner");
+            ParmParse fpp( prefix.c_str() );
+            fpp.query( "function", function_name );
+        } 
+      }
+
       m_inflow_function[i] = library->find( function_name );
    }
 

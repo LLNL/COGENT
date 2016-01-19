@@ -27,8 +27,8 @@ Real GKVlasov::s_stability_bound[NUM_FLUX] = {2.06,2.7852,1.7453,1.7320,1.7320,1
 GKVlasov::GKVlasov( ParmParse& a_pp,
                     const Real a_larmor_number )
   : m_larmor_number(a_larmor_number),
-    m_saved_dt(-1.0),
     m_face_avg_type(INVALID),
+    m_saved_dt(-1.0),
     m_dt_dim_factor(1.0)
 {
    if (a_pp.contains("limiter")) {
@@ -101,7 +101,7 @@ GKVlasov::evalRHS( KineticSpecies&           a_rhs_species,
    a_soln_species.computeVelocity( velocity, a_Efield );
 
    const PhaseGeom& geometry( a_rhs_species.phaseSpaceGeometry() );
-   LevelData<FluxBox> flux( dbl, SpaceDim, IntVect::Zero );
+   LevelData<FluxBox> flux( dbl, SpaceDim, IntVect::Unit );
    computeFlux( soln_dfn, velocity, flux, geometry );
 
    LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
@@ -139,7 +139,7 @@ GKVlasov::evalRHS( KineticSpecies&                 a_rhs_species,
    a_soln_species.computeVelocity( velocity, a_Efield );
     
    const PhaseGeom& geometry( a_rhs_species.phaseSpaceGeometry() );
-   LevelData<FluxBox> flux( dbl, SpaceDim, IntVect::Zero );
+   LevelData<FluxBox> flux( dbl, SpaceDim, IntVect::Unit );
    computeFlux( soln_dfn, velocity, flux, geometry );
     
    LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
@@ -172,8 +172,8 @@ GKVlasov::computeRadialFluxDivergence(const PhaseGeom&                a_geometry
    const DisjointBoxLayout& grids( a_flux.getBoxes() );
    const MultiBlockCoordSys* coords = a_geometry.coordSysPtr();
     
-   LevelData<FluxBox> flux_even(grids, SpaceDim, IntVect::Zero);
-   LevelData<FluxBox> flux_odd(grids, SpaceDim, IntVect::Zero);
+   LevelData<FluxBox> flux_even(grids, SpaceDim, IntVect::Unit);
+   LevelData<FluxBox> flux_odd(grids, SpaceDim, IntVect::Unit);
     
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       flux_even[dit].copy(a_flux[dit]);
@@ -357,12 +357,25 @@ GKVlasov::computeFlux( const LevelData<FArrayBox>& a_dist_fn,
    }
    else {
 
-      // Fill transverse ghosts at the block boundaries in preparation for
-      // computing the flux using the fourth-order product formula
-      a_phase_geom.fillTransverseGhosts(faceDist, false);
-
+      CH_assert(a_flux.ghostVect() == IntVect::Unit);
+      const DisjointBoxLayout& grids = a_flux.disjointBoxLayout();
+      LevelData<FluxBox> fourth_order_flux(grids, SpaceDim, IntVect::Zero);
+      
       // Compute computational-space fluxes; in mappedAdvectionFlux.cpp
-      computeCompFaceFluxes( a_flux, faceDist, a_velocity, true );
+      computeCompFaceFluxes( fourth_order_flux, faceDist, a_velocity, true );
+
+      // Compute the second-order flux in valid plus ghost cell faces,
+      // then overwrite with the fourth-order flux on the valid faces.
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         a_flux[dit].copy(a_velocity[dit]);
+
+         Box box = grow(grids[dit],1);
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            a_flux[dit].mult(faceDist[dit],box,0,dir,1);
+         }
+         
+         a_flux[dit].copy(fourth_order_flux[dit],grids[dit]);
+      }
    }
 
    a_flux.exchange();
@@ -409,7 +422,7 @@ GKVlasov::computeTimeScale( const LevelData<FluxBox>&    a_Efield,
       LevelData<FluxBox> velocity( dfn.getBoxes(), SpaceDim, IntVect::Unit );
       species.computeMappedVelocity( velocity, a_Efield );
 
-      const Real UNIT_CFL(1.0);
+      //      const Real UNIT_CFL(1.0);
       const PhaseGeom& geometry( species.phaseSpaceGeometry() );
       Real speciesDt( computeMappedTimeScaleSpecies( velocity, geometry) );
       CH_assert(speciesDt >= 0);

@@ -74,7 +74,7 @@ c     & CHF_R1D[b],CHF_R1D[c],CHF_R1D[d])
       nm1= n-1
       if (n.lt.2) return
       if (n.lt.3) go to 50
- 6    format (i5)
+c      format (i5)
 
       d(1) = x(2)-x(1)
       c(2) = (y(2)-y(1))/d(1)

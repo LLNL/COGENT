@@ -13,6 +13,7 @@
 #include "MayDay.H"
 #include "MillerPhaseCoordSys.H"
 #include "SlabPhaseCoordSys.H"
+#include "RectangularTorusPhaseCoordSys.H"
 #include "MultiBlockCoordSys.H"
 #include "PhaseBlockCoordSys.H"
 #include "SingleNullPhaseCoordSys.H"
@@ -139,6 +140,7 @@ void ArbitraryKineticFunction::checkGeometryValidity( const PhaseGeom& a_geometr
    const MultiBlockCoordSys& an_coord_sys( *(a_geometry.coordSysPtr()) );
    bool not_annular( typeid(an_coord_sys) != typeid(MillerPhaseCoordSys) );
    not_annular &= (typeid(an_coord_sys) != typeid(SlabPhaseCoordSys));
+   not_annular &= (typeid(an_coord_sys) != typeid(RectangularTorusPhaseCoordSys));
 
    const MultiBlockCoordSys& sn_coord_sys( *(a_geometry.coordSysPtr()) );
    bool not_single_null( typeid(sn_coord_sys) != typeid(SingleNullPhaseCoordSys) );
@@ -160,6 +162,10 @@ void ArbitraryKineticFunction::setPointValues( FArrayBox&                a_dfn,
    a_coord_sys.getCellCenteredRealCoords( cell_center_coords );
 
    RealVect a_amrDx = a_coord_sys.dx();
+// rescale a_amrDx so that x, y, z, vpar and mu span from 0 to 2*pi
+   IntVect hi_index = a_coord_sys.domain().domainBox().bigEnd();
+   hi_index = hi_index+1;
+   a_amrDx = a_amrDx*2.0*M_PI/(a_amrDx*hi_index); 
 
    a_dfn.setVal(0.0);
 

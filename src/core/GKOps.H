@@ -158,27 +158,26 @@ public:
       m_transport(NULL),
       m_poisson(NULL),
       m_boltzmann_electron(NULL),
-      m_ghost_vect(4*IntVect::Unit),
       m_units(NULL),
       m_initial_conditions(NULL),
       m_boundary_conditions(NULL),
-      m_fixed_efield(false),
-      m_initializedE(false),
       m_dt(0.0),
       m_dt_scale(1.0),
       m_is_defined(false),
+      m_ghost_vect(4*IntVect::Unit),
+      m_cfg_nghosts(2),
+      m_fixed_efield(false),
       m_transport_model_on(false),     
+      m_initializedE(false),
+      m_enforce_quasineutrality(false),
       m_history(false),
       m_hist_freq(1),
       m_last_hist(0),
       m_hist_count(0),
       m_expand_incr(100),
       m_hist_fieldname("field"),
-      m_cfg_nghosts(2),
-      m_enforce_quasineutrality(false),
       m_verbosity(0) {;}   
    
-   //void define( const GKState& a_state, const Real a_dt, const Real a_dt_scale );
    void define( const GKState& a_state, const Real a_dt );
    
    bool isDefined() const { return m_is_defined; }
@@ -531,6 +530,8 @@ private:
    bool                           m_neutrals_model_on;
    bool                           m_initializedE;
    bool                           m_enforce_quasineutrality;
+   bool                           m_Esol_extrapolation;
+   bool                           m_dealignment_corrections;
 
    GKState                        m_Y;
 

@@ -8,6 +8,7 @@
 #include "ParmParse.H"
 #include "MagBlockCoordSys.H"
 #include "MultiBlockLevelGeom.H"
+#include "MagGeom.H"
 #include "RealVect.H"
 
 #include "NamespaceHeader.H"
@@ -160,18 +161,20 @@ class SingleNullDistr : public GridFunction
       /**
        */
       inline void setCellAverages( FArrayBox&              data,
-                                   const MultiBlockCoordSys& coords,
-                                   const MagBlockCoordSys& block_coord_sys,
-                                   const int               block_number ) const;
-
+                                  const MultiBlockLevelGeom& geometry,
+                                  const MultiBlockCoordSys& coords,
+                                  const MagBlockCoordSys& block_coord_sys,
+                                  const int               block_number ) const;
+    
       /// Set pointwise values at cell centers.
       /**
        */
       inline void setPointwise( FArrayBox&              data,
-                                const MultiBlockCoordSys& coords,
-                                const MagBlockCoordSys& block_coord_sys,
-                                const int               block_number ) const;
-
+                               const MultiBlockLevelGeom& geometry,
+                               const MultiBlockCoordSys& coords,
+                               const MagBlockCoordSys& block_coord_sys,
+                               const int               block_number) const;
+    
       void getGeomParameters(const MultiBlockCoordSys& a_coord_sys) const;
 
       /// Set radial distribution for the CORE and SOL regions.
@@ -221,6 +224,7 @@ class SingleNullDistr : public GridFunction
       Real m_amplitude;
       Real m_floor; 
       bool m_boltzmann_equilibrium;
+      bool m_mag_surf_on;
 
 
 };

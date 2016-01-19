@@ -512,7 +512,6 @@ SNCoreBlockCoordSys::mappedCoordNewton( const RealVect& a_X,
    RealVect xi = a_xi_initial;
 
    RealVect residual;
-   int octant;
 
    double R = m_RZ_interp->interpolate(R_VAR, FUNCTION, xi);
    double Z = m_RZ_interp->interpolate(Z_VAR, FUNCTION, xi);

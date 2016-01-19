@@ -63,7 +63,6 @@ void MomentOp::computeIntegrand( LevelData<FArrayBox>& a_integrand,
                                  const LevelData<FArrayBox>& a_function,
                                  const Kernel& a_kernel ) const
 {
-   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
    int func_ncomp = a_function.nComp();
    int kernel_ncomp = a_kernel.nComponents();
    a_integrand.define( a_function.getBoxes(), func_ncomp*kernel_ncomp, a_function.ghostVect());

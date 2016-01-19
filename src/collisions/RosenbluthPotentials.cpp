@@ -17,8 +17,8 @@ RosenbluthPotentials::RosenbluthPotentials(LevelData<FArrayBox>& a_phi_one,
                       const int a_verbocity) 
 
 
-   : m_phase_geom(a_phase_geom),
-     m_verbosity(a_verbocity),
+   : m_verbosity(a_verbocity),
+     m_phase_geom(a_phase_geom),
      m_mass(a_mass),
      m_pcg_tol(a_pcg_tol),
      m_pcg_maxiter(a_pcg_maxiter),
@@ -195,10 +195,7 @@ void RosenbluthPotentials::solve(LevelData<FArrayBox>& a_solution,
    const DisjointBoxLayout& dbl = phase_grid.disjointBoxLayout();
 
    const VEL::VelCoordSys& vel_geom = m_phase_geom.velSpaceCoordSys();
-   const VEL::DisjointBoxLayout& vel_grids = vel_geom.grids();
    
-   const CFG::MagGeom& mag_geom( m_phase_geom.magGeom() );
-   const CFG::DisjointBoxLayout& cfg_grids = mag_geom.grids();
    const LevelData<FArrayBox>& injected_B = m_phase_geom.getBFieldMagnitude();
 
    int num_config_boxes = phase_grid.numConfigBoxes();
@@ -450,7 +447,7 @@ void RosenbluthPotentials::constructMatrix( const VEL::ProblemDomain&  a_domain,
    } 
 
    int nentries = 5;
-   int stencil_indices[nentries];
+   int* stencil_indices = new int[nentries];
    for (int j = 0; j < nentries; j++) {
       stencil_indices[j] = j;
    }
@@ -509,6 +506,8 @@ void RosenbluthPotentials::constructMatrix( const VEL::ProblemDomain&  a_domain,
    }
 
    HYPRE_StructMatrixAssemble(a_matrix);
+
+   delete [] stencil_indices;
 }
 
 void RosenbluthPotentials::destroyHypreData(HYPRE_StructMatrix& a_matrix,

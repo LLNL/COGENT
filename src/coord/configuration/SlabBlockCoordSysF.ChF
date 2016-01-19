@@ -18,11 +18,12 @@
 c     local variables
       integer CHF_AUTODECL[i], l
       double precision
-     &     xi, By, Bz, ByBz, DelBz, maggradB,Bmag,
+     &     xi, By, Bz, ByBz, DelBz, DelBzoverxmax, maggradB, Bmag,
      &     bunit(0:2), Bvec(0:2), gradB(0:2)
 
       ByBz = ByInner/BzInner
       DelBz = BzOuter-BzInner
+      DelBzoverxmax = DelBz/(2.0*PI)
       maggradB = DelBz*sqrt(1.+ByBz**2)/xmax
       gradB(0) = maggradB
       gradB(1) = zero
@@ -33,9 +34,9 @@ c     above assumes grads are with respect to physical coordinates
 
 c        Local value of computational x
          xi = xix(CHF_AUTOIX[i])
-c        Since xi runs from 0 to 1, it can be used directly as the interpolation coefficient
+c        Since xi runs from 0 to 2pi, it can be used directly as the interpolation coefficient
 
-         Bz = BzInner + DelBz*xi
+         Bz = BzInner + DelBzoverxmax*xi
 c        Shearless slab, so...
          By = Bz*ByBz
 

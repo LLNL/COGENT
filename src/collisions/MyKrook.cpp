@@ -17,8 +17,8 @@
 
 MyKrook::MyKrook( ParmParse& a_ppcls, const int a_verbosity )
    : m_verbosity(a_verbosity),
-     m_cls_freq(-1.0),
-     m_first_step(true)
+     m_first_step(true),
+     m_cls_freq(-1.0)
 {
    parseParameters( a_ppcls );
    if (m_verbosity>0) {

@@ -21,11 +21,11 @@ Anomalous::Anomalous( const string& a_species_name, ParmParse& a_pptpm, const in
     : D_fluid(4,0),
       D_kinet(4,0),
       DN0(0),
-      verbosity(0),
       model_only(false),
       const_coeff(true),
       moment_op( MomentOp::instance() ),
-      m_first_step(true)
+      m_first_step(true),
+      verbosity(0)
 {
 
    verbosity = a_verbosity;
@@ -68,7 +68,6 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
 
       // get coordinate system parameters
       const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
-      const MultiBlockCoordSys* coords = phase_geom.coordSysPtr();
       const CFG::MultiBlockLevelGeom & mag_geom = phase_geom.magGeom();
       const LevelData<FArrayBox>& inj_B = phase_geom.getBFieldMagnitude();
       const ProblemDomain& phase_domain = phase_geom.domain();
@@ -383,7 +382,6 @@ inline void Anomalous::printParameters( const KineticSpeciesPtrVect& soln )
    const LevelData<FArrayBox>& soln_fB = soln_species.distributionFunction();
    const DisjointBoxLayout& dbl = soln_fB.getBoxes();
    const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
-   const MultiBlockCoordSys* coords = phase_geom.coordSysPtr();
    const CFG::MultiBlockLevelGeom & mag_geom = phase_geom.magGeom();
    const LevelData<FArrayBox>& inj_B = phase_geom.getBFieldMagnitude();
    double mass = soln_species.mass();

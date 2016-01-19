@@ -4,7 +4,7 @@
 
 #include "NamespaceHeader.H"
 
-char* Poisson::pp_name = {"poisson"};
+const std::string Poisson::pp_name = "poisson";
 
 
 
@@ -27,7 +27,7 @@ Poisson::setOperatorCoefficients( const PotentialBC& a_bc )
 {
    computeCoefficients(m_mapped_coefficients);
 
-   m_solver.constructMatrix(m_mapped_coefficients, a_bc, false);
+   m_solver.constructMatrix(m_mapped_coefficients, a_bc, false, false);
 }
 
 

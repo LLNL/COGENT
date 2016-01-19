@@ -380,14 +380,6 @@ protected:
    int getConsequtiveRadialIndex( const int a_mapped_index,
                                   const int a_block_number ) const;
 
-#ifdef USE_PETSC
-   MBPETScSolver m_precond_Psolver;
-   MBPETScSolver m_precond_Qsolver;
-#else
-   MBHypreSolver m_precond_Psolver;
-   MBHypreSolver m_precond_Qsolver;
-#endif
-
    LevelData<FArrayBox> m_M;
    LevelData<FArrayBox> m_boltzmann_prefactor;
    LevelData<FArrayBox> m_boltzmann_prefactor_saved_numerator;
@@ -420,6 +412,14 @@ protected:
 
    bool m_compute_core_prefactor;
    LevelData<FArrayBox> m_core_prefactor_numerator;
+
+#ifdef USE_PETSC
+   MBPETScSolver m_precond_Psolver;
+   MBPETScSolver m_precond_Qsolver;
+#else
+   MBHypreSolver m_precond_Psolver;
+   MBHypreSolver m_precond_Qsolver;
+#endif
 
    double*  m_Zni_outer_plate;
    double*  m_Zni_inner_plate;

@@ -2644,9 +2644,6 @@ void f13_f0 ( int n, double x[], double y[], double f[] )
 //
 {
   int i;
-  static double pi = 3.141592653589793;
-  double r;
-  double t;
 
   for ( i = 0; i < n; i++ )
   {

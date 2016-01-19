@@ -42,9 +42,9 @@ const MagBlockCoordSys& getCoordSys( const MultiBlockLevelGeom& a_geometry,
 RZdata::RZdata( ParmParse& a_pp,
                 const int& a_verbosity )
    : m_verbosity(a_verbosity),
+     m_subtype("MBA"),
      m_data_grid(NULL),
      m_weights(NULL),
-     m_subtype("MBA"),
      m_MBA(NULL),
      m_init_lattice_MBA(10)
 

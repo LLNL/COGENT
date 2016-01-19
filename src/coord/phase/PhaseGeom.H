@@ -120,14 +120,14 @@ public:
     */
    void computeMetricTermProductAverage( LevelData<FluxBox>&       Product,
                                          const LevelData<FluxBox>& F,
-                                         bool                      fourthOrder=true ) const;
+                                         const bool                fourthOrder ) const;
 
    void computeTangentialGradSpecial( LevelData<FluxBox>&       gradPhi,
                                       const LevelData<FluxBox>& phiFace ) const;
 
    void mappedGridDivergence(LevelData<FArrayBox>&     divF,
                              const LevelData<FluxBox>& F,
-                             const bool                omit_NT=false) const;
+                             const bool                omit_NT) const;
 
    void zeroBoundaryFlux( const int dir, LevelData<FluxBox>& a_flux ) const;
 

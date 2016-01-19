@@ -54,8 +54,6 @@ void Krook::evalClsRHS( KineticSpeciesPtrVect&       a_rhs,
    //Create reference temperature distribution
    const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
 
-   static Real sol_val_0(0.0);
-   static Real ref_val(0.0);
    if (m_first_step) {
       const CFG::MultiBlockLevelGeom& mag_geom( phase_geom.magGeom() );
       CFG::LevelData<CFG::FArrayBox> ref_temperature( mag_geom.grids(), 1, CFG::IntVect::Zero );
@@ -388,7 +386,7 @@ void Krook::computeSelfConsistFreq(LevelData<FArrayBox>& a_cls_freq,
 
 {
     //Get normalization parameters (units)
-    double N, T, L, M, B;
+    double N, T, L;
     ParmParse ppunits( "units" );
     ppunits.get("number_density",N);  //[m^{-3}]
     ppunits.get("temperature",T);     //[eV]

@@ -137,10 +137,7 @@ class MillerBlockCoordSys
        */
       int getConstMinorrad() const { return m_const_minorrad; }
 
-//      virtual static const string& getParmParseName() {return pp_name;}
-
       // Object ParmParse name.
-//      static char* pp_name;
       static const std::string pp_name;
 
       virtual string geometryType() const {return "Miller";}

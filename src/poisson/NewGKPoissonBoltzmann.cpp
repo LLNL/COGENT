@@ -15,12 +15,12 @@ NewGKPoissonBoltzmann::NewGKPoissonBoltzmann( ParmParse&                  a_pp,
                                               const Real                  a_debye_number,
                                               const LevelData<FArrayBox>& a_initial_ion_charge_density )
    : GKPoisson(a_pp, a_geom, a_larmor_number, a_debye_number),
-     m_core_geometry(NULL),
-     m_core_coord_sys(NULL),
      m_Zni_outer_plate(NULL),
      m_Zni_inner_plate(NULL),
      m_phi_outer_plate(NULL),
      m_phi_inner_plate(NULL),
+     m_core_coord_sys(NULL),
+     m_core_geometry(NULL),
      m_bc_core(NULL)
 {
    if ( typeid(*(m_geometry.getCoordSys())) != typeid(SingleNullCoordSys ) ) {
@@ -120,7 +120,7 @@ NewGKPoissonBoltzmann::computePotentialAndElectronDensity( LevelData<FArrayBox>&
    copyFromCore(phi_core, a_phi);
    copyFromCore(ne_core.numberDensity(), a_ne.numberDensity());
 
-   fillGhosts(a_phi);
+   fillInternalGhosts(a_phi);
 }
 
 

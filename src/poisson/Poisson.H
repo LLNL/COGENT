@@ -54,7 +54,7 @@ public:
     * ParmParse object name.  Used to locate input file parameters of interest to
     * this class.
     */
-   static char* pp_name;
+   static const std::string pp_name;
 
 protected:
 

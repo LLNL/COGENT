@@ -9,8 +9,8 @@ SNCorePhaseCoordSys::SNCorePhaseCoordSys( ParmParse&                   a_pp,
                                           const CFG::SNCoreCoordSys&   a_mag_coords,
                                           const VEL::VelCoordSys&      a_vel_coords,
                                           const Vector<ProblemDomain>& a_domains)
-  : m_config_coords( a_mag_coords ),
-    PhaseCoordSys(a_mag_coords, a_vel_coords, a_domains)
+   : PhaseCoordSys(a_mag_coords, a_vel_coords, a_domains),
+     m_config_coords( a_mag_coords )
 {
    defineBoundaries();
 
@@ -105,7 +105,6 @@ SNCorePhaseCoordSys::defineBoundaries3()
    int numcells_lcore_poloidal = m_mappingBlocks[L_CORE].size(POLOIDAL_DIR);
    int numcells_rcore_poloidal = m_mappingBlocks[R_CORE].size(POLOIDAL_DIR);
 
-   int L0 = m_mappingBlocks[M_CORE].size(RADIAL_DIR);
    int lL1 = numcells_mcore_poloidal/2 + numcells_lcore_poloidal;
    int rL1 = numcells_mcore_poloidal/2 + numcells_rcore_poloidal;
 

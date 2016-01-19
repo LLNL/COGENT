@@ -13,6 +13,7 @@
 #include "MayDay.H"
 #include "MillerPhaseCoordSys.H"
 #include "SlabPhaseCoordSys.H"
+#include "RectangularTorusPhaseCoordSys.H"
 #include "MultiBlockCoordSys.H"
 #include "PhaseBlockCoordSys.H"
 #include "SingleNullPhaseCoordSys.H"
@@ -136,6 +137,7 @@ void TensorProductSineKineticFunction::checkGeometryValidity( const PhaseGeom& a
    const MultiBlockCoordSys& an_coord_sys( *(a_geometry.coordSysPtr()) );
    bool not_annular( typeid(an_coord_sys) != typeid(MillerPhaseCoordSys) );
    not_annular &= (typeid(an_coord_sys) != typeid(SlabPhaseCoordSys));
+   not_annular &= (typeid(an_coord_sys) != typeid(RectangularTorusPhaseCoordSys));
 
    const MultiBlockCoordSys& sn_coord_sys( *(a_geometry.coordSysPtr()) );
    bool not_single_null( typeid(sn_coord_sys) != typeid(SingleNullPhaseCoordSys) );

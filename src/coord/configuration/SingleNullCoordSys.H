@@ -47,10 +47,6 @@ public:
 
    virtual void definePotentialBC( PotentialBC& bc ) const;
 
-   // Extrapolate E-field into the open-field-line region
-   void extrapolateEfield( LevelData<FluxBox>&   Er_average_face,
-                           LevelData<FArrayBox>& Er_average_cell ) const;
-
    int blockType(int a_block) const {return ((SingleNullBlockCoordSys*)m_coordSysVect[a_block])->blockType();}
 
    int numCellsCoreRadial() const {return m_numcells_core_radial;}
@@ -60,7 +56,12 @@ public:
    int numCellsLcorePoloidal() const {return m_numcells_lcore_poloidal;}
 
    int numCellsRcorePoloidal() const {return m_numcells_rcore_poloidal;}
-
+    
+   //ABSOLETE: Extrapolate E-field into the open-field-line region
+   void extrapolateEfield( LevelData<FluxBox>&   Er_average_face,
+                           LevelData<FArrayBox>& Er_average_cell ) const;
+   RealVect m_Xpoint;
+    
 protected:
 
    void defineBoundaries8();
@@ -88,6 +89,8 @@ protected:
                                       const int                      n_valid,
                                       const SingleNullBlockCoordSys* src_cs,
                                       const SingleNullBlockCoordSys* valid_cs ) const;
+    
+    
 
    IntVect lo_mapped_index(int block) const;
 
@@ -117,8 +120,8 @@ protected:
    IntVect m_decomp_lsol;
    IntVect m_decomp_rsol;
 
-   RealVect m_Xpoint;
    double m_xpoint_radius;
+        
    double m_ray_angle[NUM_SINGLE_NULL_BLOCKS+1];
    RealVect m_ray[NUM_SINGLE_NULL_BLOCKS];
    int m_sector_block[NUM_SINGLE_NULL_BLOCKS];

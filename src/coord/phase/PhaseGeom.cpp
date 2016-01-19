@@ -62,11 +62,11 @@ PhaseGeom::PhaseGeom( ParmParse&                      a_parm_parse,
                       int                             a_ghosts,
                       double                          a_larmor_number )
    : MultiBlockLevelGeom(a_coord_sys, a_grids.disjointBoxLayout(), a_ghosts, Interval(CFG_DIM,SpaceDim-1), Vector<int>(VEL_DIM,0)),
-     m_phase_grid(a_grids),
      m_ghostVect(4*IntVect::Unit),
      m_mag_geom(a_mag_geom),
      m_vel_coords(a_vel_coords),
      m_phase_coords(*a_coord_sys),
+     m_phase_grid(a_grids),
      m_domain(a_grids.domain()),
      m_speciesDefined(false),
      m_larmor_number(a_larmor_number)
@@ -157,9 +157,9 @@ PhaseGeom::PhaseGeom( const PhaseGeom& a_phase_geom,
      m_no_drifts(a_phase_geom.m_no_drifts),
      m_no_parallel_streaming(a_phase_geom.m_no_parallel_streaming),
      m_speciesDefined(false),
+     m_freestream_components(a_phase_geom.m_freestream_components),
      m_second_order(a_phase_geom.m_second_order),
-     m_larmor_number(a_phase_geom.m_larmor_number),
-     m_freestream_components(a_phase_geom.m_freestream_components)
+     m_larmor_number(a_phase_geom.m_larmor_number)
 {
    defineSpeciesState(a_mass, a_charge);
 }
@@ -395,44 +395,34 @@ PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
                              LevelData<FluxBox>&       a_velocity,
                              const bool                a_apply_axisymmetric_correction ) const
 {
-   // This function expects the velocity to have one layer of ghost cells.  It fills
-   // the transverse faces at block boundaries by second-order extrapolation so that
-   // the velocity can be used in a fourth-order product to compute a flux (which
-   // should probably be the flux calculation's responsibility).
+   // This function expects a_Efield to contain the face-centered field including
+   // one layer of transverse cell faces on all block boundaries.
    CH_assert(a_velocity.ghostVect() == IntVect::Unit);
-   CH_assert(config_restrict(a_Efield.ghostVect()) == 2*CFG::IntVect::Unit);
+   CH_assert(config_restrict(a_Efield.ghostVect()) == CFG::IntVect::Unit);
    CH_assert(vel_restrict(a_Efield.ghostVect()) == VEL::IntVect::Zero);
 
-   const DisjointBoxLayout& grids = a_velocity.disjointBoxLayout();
-   LevelData<FluxBox> grown_velocity(grids, SpaceDim, 2*IntVect::Unit);
-
    if (m_velocity_type == "gyrokinetic" || m_velocity_type == "ExB") {
-      computeGKVelocities(a_Efield, grown_velocity);
+      computeGKVelocities(a_Efield, a_velocity);
    }
    else {
-      computeTestVelocities(grown_velocity);
+      computeTestVelocities(a_velocity);
    }
 
    if ( a_apply_axisymmetric_correction ) {
-      applyAxisymmetricCorrection(grown_velocity);
+      applyAxisymmetricCorrection(a_velocity);
    }
 
    if ( !m_second_order ) {
 
-      fillTransverseGhosts(grown_velocity, false);
-
-      // Convert face-centered values to face averages.  We lose a layer of ghost cells here.
-      fourthOrderAverage(grown_velocity);
-
-      fillTransverseGhosts(grown_velocity, false);
-   }
-
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-      a_velocity[dit].copy(grown_velocity[dit]);
+      // Convert face-centered values to face averages on valid cell faces.
+      // The values on ghost cell faces remain second-order.
+      fourthOrderAverage(a_velocity);
    }
 
    a_velocity.exchange();
 }
+
+
 
 void
 PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
@@ -799,68 +789,48 @@ PhaseGeom::computeMetricTermProductAverage( LevelData<FluxBox>&       a_Product,
                                             const LevelData<FluxBox>& a_F,
                                             bool                      a_fourthOrder ) const
 {
-  const DisjointBoxLayout& grids = a_F.getBoxes();
+   CH_assert( !a_fourthOrder || a_F.ghostVect() >= IntVect::Unit );
 
-  LevelData<FluxBox> F_tmp(grids, a_F.nComp(), a_Product.ghostVect()+IntVect::Unit);
-  for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-    F_tmp[dit].copy(a_F[dit]);
-  }
+   // Determine whether only face normals are being computed
+   bool face_normals_only;
+   if (a_F.nComp() == SpaceDim) {
+      face_normals_only = true;
+   }
+   else if (a_F.nComp() == m_configuration_metrics->nComp()
+                         + m_velocity_metrics->nComp()) {
+      face_normals_only = false;
+   }
+   else {
+      MayDay::Error("PhaseBlockCoordSys::computeMetricTermProductAverage: Improper number of components in a_F");
+   }
 
-  // If fourth order, extrapolate to transverse cell faces at block boundaries
-  if ( a_fourthOrder ) {
-     if ( a_Product.ghostVect() == IntVect::Zero) {
-        fillTransverseGhosts(F_tmp, false);
-     }
-     else {
-        // This is here for safety.  This function has assumed the responsibility for
-        // filling transverse face ghost cells (by creating the temporary F_tmp), but the
-        // fillTransverseGhosts() function only knows how to fill one ghost cell layer.
-        // If necessary, we could change the API to put the ghost cell filling responsibility
-        // on the caller side and remove the temporary here.
-        MayDay::Error("PhaseGeom::computeMetricTermProductAverage(): Cannot compute fourth-order product with ghost cells");
-     }
-  }
+   const DisjointBoxLayout& grids = a_F.getBoxes();
 
-  // Determine whether only face normals are being computed
-  bool face_normals_only;
-  if (a_F.nComp() == SpaceDim) {
-     face_normals_only = true;
-  }
-  else if (a_F.nComp() == m_configuration_metrics->nComp()
-                        + m_velocity_metrics->nComp()) {
-     face_normals_only = false;
-  }
-  else {
-     MayDay::Error("PhaseBlockCoordSys::computeMetricTermProductAverage: Improper number of components in a_F");
-  }
+   // temp storage
+   IntVect grownGhost2(a_Product.ghostVect());
+   grownGhost2 += 2*IntVect::Unit;
 
-  // temp storage
-  IntVect grownGhost2(a_Product.ghostVect());
-  grownGhost2 += 2*IntVect::Unit;
+   int nGradFTerms_cfg = CFG_DIM*CFG_DIM*(CFG_DIM-1);
+   int nGradFTerms_vel = VEL_DIM*VEL_DIM*(VEL_DIM-1);
+   int nGradFTerms = Max(nGradFTerms_cfg,nGradFTerms_vel);
 
-  int nGradFTerms_cfg = CFG_DIM*CFG_DIM*(CFG_DIM-1);
-  int nGradFTerms_vel = VEL_DIM*VEL_DIM*(VEL_DIM-1);
-  int nGradFTerms = Max(nGradFTerms_cfg,nGradFTerms_vel);
+   LevelData<FluxBox> tanGradF(grids,
+                               nGradFTerms,
+                               grownGhost2);
 
-  LevelData<FluxBox> tanGradF(m_gridsFull,
-                              nGradFTerms,
-                              grownGhost2);
+   LevelData<FluxBox> dotTanGrads(a_Product.getBoxes(),
+                                  a_Product.nComp(),
+                                  grownGhost2);
 
-  LevelData<FluxBox> dotTanGrads(a_Product.getBoxes(),
-                                 a_Product.nComp(),
-                                 grownGhost2);
-
-  if (a_fourthOrder)
-    {
+   if (a_fourthOrder) {
       // compute tangential gradients of F
-      computeTangentialGradSpecial(tanGradF, F_tmp);
-    }
+      computeTangentialGradSpecial(tanGradF, a_F);
+   }
 
-  for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit)
-    {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       const CFG::MagBlockCoordSys& mag_block_coord_sys = getMagBlockCoordSys(grids[dit]);
 
-      const FluxBox& thisF = F_tmp[dit];
+      const FluxBox& thisF = a_F[dit];
       FluxBox& thisFlux = a_Product[dit];
 
       // precomputed face-centered metrics
@@ -874,156 +844,152 @@ PhaseGeom::computeMetricTermProductAverage( LevelData<FluxBox>&       a_Product,
       FluxBox& thisGradF = tanGradF[dit];
       FluxBox& thisDotGrad = dotTanGrads[dit];
 
-      for (int dir=0; dir<SpaceDim; dir++)
-        {
-           bool configuration_dir = dir < CFG_DIM;
-           int rel_dir = configuration_dir? dir: dir-CFG_DIM;  // dir relative to cfg or vel space
+      for (int dir=0; dir<SpaceDim; dir++) {
+         bool configuration_dir = dir < CFG_DIM;
+         int rel_dir = configuration_dir? dir: dir-CFG_DIM;  // dir relative to cfg or vel space
 
-           FArrayBox& thisFluxDir = thisFlux[dir];
-           const FArrayBox& thisFDir = thisF[dir];
+         FArrayBox& thisFluxDir = thisFlux[dir];
+         const FArrayBox& thisFDir = thisF[dir];
 
-           // get the appropriate metrics for this direction
-           const FArrayBox * faceMetrics;
-           if (configuration_dir) {
-              faceMetrics = &thisFaceMetric_cfg[dir];
-           }
-           else {
-              faceMetrics = &thisFaceMetric_vel[dir];
-           }
-           const FArrayBox& thisFaceMetricDir = *faceMetrics;
+         // get the appropriate metrics for this direction
+         const FArrayBox * faceMetrics;
+         if (configuration_dir) {
+            faceMetrics = &thisFaceMetric_cfg[dir];
+         }
+         else {
+            faceMetrics = &thisFaceMetric_vel[dir];
+         }
+         const FArrayBox& thisFaceMetricDir = *faceMetrics;
 
-           // first part is easy -- dot product of F and metrics
-           int metricStartComp = -1;
-           int fStartComp = configuration_dir? 0: CFG_DIM;
-           int ncomp = -1;
+         // first part is easy -- dot product of F and metrics
+         int metricStartComp = -1;
+         int fStartComp = configuration_dir? 0: CFG_DIM;
+         int ncomp = -1;
 
-           // two possibilities here
-           if (face_normals_only)
-              {
-                 // one vector component of F
-                 // in this case, we only use the face-normal terms here if
-                 // there are only SpaceDim components to F.
-                 // note that since we're multiplying by N^T instead of N.
-                 // we're doing (0,dir) instead of (dir,0).
-                 // because of the way that the metric terms are indexed,
-                 // metricStartComp will multiply by F1,
-                 // metricStartComp+1 will multiply by F2, etc...
-                 if (configuration_dir) {
-                    metricStartComp = mag_block_coord_sys.getNcomponent(0,dir);
-                    ncomp = CFG_DIM;
-                 }
-                 else {
-                    metricStartComp = m_vel_coords.getNcomponent(0,rel_dir);
-                    ncomp = VEL_DIM;
-                 }
-              }
-           // otherwise, do all of the components
-           else
-              {
-                 metricStartComp = 0;
-                 if (configuration_dir) {
-                    ncomp = m_configuration_metrics->nComp();
-                 }
-                 else {
-                    ncomp = m_velocity_metrics->nComp();
-                 }
-              }
+         // two possibilities here
+         if (face_normals_only) {
+            // one vector component of F
+            // in this case, we only use the face-normal terms here if
+            // there are only SpaceDim components to F.
+            // note that since we're multiplying by N^T instead of N.
+            // we're doing (0,dir) instead of (dir,0).
+            // because of the way that the metric terms are indexed,
+            // metricStartComp will multiply by F1,
+            // metricStartComp+1 will multiply by F2, etc...
+            if (configuration_dir) {
+               metricStartComp = mag_block_coord_sys.getNcomponent(0,dir);
+               ncomp = CFG_DIM;
+            }
+            else {
+               metricStartComp = m_vel_coords.getNcomponent(0,rel_dir);
+               ncomp = VEL_DIM;
+            }
+         }
+         // otherwise, do all of the components
+         else {
+            metricStartComp = 0;
+            if (configuration_dir) {
+               ncomp = m_configuration_metrics->nComp();
+            }
+            else {
+               ncomp = m_velocity_metrics->nComp();
+            }
+         }
 
-           if (configuration_dir) {
-              FORT_PSCSPOINTDOTPRODCFG(CHF_FRA1(thisFluxDir, 0),
-                                       CHF_CONST_FRA(thisFDir),
-                                       CHF_CONST_INT(fStartComp),
-                                       CHF_CONST_FRA(thisFaceMetricDir),
-                                       CHF_CONST_INT(metricStartComp),
-                                       CHF_CONST_INT(ncomp),
-                                       CHF_BOX(thisFluxDir.box()) );
-           }
-           else {
-              FORT_PSCSPOINTDOTPRODVEL(CHF_FRA1(thisFluxDir, 0),
-                                       CHF_CONST_FRA(thisFDir),
-                                       CHF_CONST_INT(fStartComp),
-                                       CHF_CONST_FRA(thisFaceMetricDir),
-                                       CHF_CONST_INT(metricStartComp),
-                                       CHF_CONST_INT(ncomp),
-                                       CHF_BOX(thisFluxDir.box()) );
-           }
+         if (configuration_dir) {
+            FORT_PSCSPOINTDOTPRODCFG(CHF_FRA1(thisFluxDir, 0),
+                                     CHF_CONST_FRA(thisFDir),
+                                     CHF_CONST_INT(fStartComp),
+                                     CHF_CONST_FRA(thisFaceMetricDir),
+                                     CHF_CONST_INT(metricStartComp),
+                                     CHF_CONST_INT(ncomp),
+                                     CHF_BOX(thisFluxDir.box()) );
+         }
+         else {
+            FORT_PSCSPOINTDOTPRODVEL(CHF_FRA1(thisFluxDir, 0),
+                                     CHF_CONST_FRA(thisFDir),
+                                     CHF_CONST_INT(fStartComp),
+                                     CHF_CONST_FRA(thisFaceMetricDir),
+                                     CHF_CONST_INT(metricStartComp),
+                                     CHF_CONST_INT(ncomp),
+                                     CHF_BOX(thisFluxDir.box()) );
+         }
 
-           if (a_fourthOrder)
-              {
-                 // now compute correction term
-                 // first do pointwise dot products of gradF and gradN
+         if (a_fourthOrder) {
+            // now compute correction term
+            // first do pointwise dot products of gradF and gradN
 
-                 // get the appropriate metric transverse gradients for this direction
-                 const FArrayBox* gradNdir;
-                 if (configuration_dir) {
-                    gradNdir = &thisGradN_cfg[dir];
-                 }
-                 else {
-                    gradNdir = &thisGradN_vel[dir];
-                 }
-                 const FArrayBox& thisGradNDir = *gradNdir;
+            // get the appropriate metric transverse gradients for this direction
+            const FArrayBox* gradNdir;
+            if (configuration_dir) {
+               gradNdir = &thisGradN_cfg[dir];
+            }
+            else {
+               gradNdir = &thisGradN_vel[dir];
+            }
+            const FArrayBox& thisGradNDir = *gradNdir;
 
-                 FArrayBox& thisGradFDir = thisGradF[dir];
-                 FArrayBox& thisDotGradDir = thisDotGrad[dir];
-                 int fGradStartComp = 0;
-                 // this little bit of wierdness is due to the fact that
-                 // the tanGrad direction is not allowed to be the same as the
-                 // face direction (i.e. dir can't equal nGradDir)
-                 int nGradDir = 0;
-                 if (rel_dir == 0) nGradDir = 1;
-                 if (configuration_dir) {
-                    int nGradStartComp = mag_block_coord_sys.tanGradComp(rel_dir, nGradDir, metricStartComp);
-                    int nGradComp = ncomp*(CFG_DIM-1);
+            FArrayBox& thisGradFDir = thisGradF[dir];
+            FArrayBox& thisDotGradDir = thisDotGrad[dir];
+            int fGradStartComp = 0;
+            // this little bit of wierdness is due to the fact that
+            // the tanGrad direction is not allowed to be the same as the
+            // face direction (i.e. dir can't equal nGradDir)
+            int nGradDir = 0;
+            if (rel_dir == 0) nGradDir = 1;
+            if (configuration_dir) {
+               int nGradStartComp = mag_block_coord_sys.tanGradComp(rel_dir, nGradDir, metricStartComp);
+               int nGradComp = ncomp*(CFG_DIM-1);
 
-                    FORT_PSCSPOINTWISEREDUCEDDOTPRODCFG(CHF_FRA1(thisDotGradDir, 0),
-                                                        CHF_CONST_FRA(thisGradNDir),
-                                                        CHF_CONST_INT(nGradStartComp),
-                                                        CHF_CONST_FRA(thisGradFDir),
-                                                        CHF_CONST_INT(fGradStartComp),
-                                                        CHF_CONST_INT(nGradComp),
-                                                        CHF_BOX(thisDotGradDir.box()) );
-                 }
-                 else {
-                    int nGradStartComp = m_vel_coords.tanGradComp(rel_dir, nGradDir, metricStartComp);
-                    int nGradComp = ncomp*(VEL_DIM-1);
+               FORT_PSCSPOINTWISEREDUCEDDOTPRODCFG(CHF_FRA1(thisDotGradDir, 0),
+                                                   CHF_CONST_FRA(thisGradNDir),
+                                                   CHF_CONST_INT(nGradStartComp),
+                                                   CHF_CONST_FRA(thisGradFDir),
+                                                   CHF_CONST_INT(fGradStartComp),
+                                                   CHF_CONST_INT(nGradComp),
+                                                   CHF_BOX(thisDotGradDir.box()) );
+            }
+            else {
+               int nGradStartComp = m_vel_coords.tanGradComp(rel_dir, nGradDir, metricStartComp);
+               int nGradComp = ncomp*(VEL_DIM-1);
 
-                    FORT_PSCSPOINTWISEREDUCEDDOTPRODVEL(CHF_FRA1(thisDotGradDir, 0),
-                                                        CHF_CONST_FRA(thisGradNDir),
-                                                        CHF_CONST_INT(nGradStartComp),
-                                                        CHF_CONST_FRA(thisGradFDir),
-                                                        CHF_CONST_INT(fGradStartComp),
-                                                        CHF_CONST_INT(nGradComp),
-                                                        CHF_BOX(thisDotGradDir.box()) );
-                 }
+               FORT_PSCSPOINTWISEREDUCEDDOTPRODVEL(CHF_FRA1(thisDotGradDir, 0),
+                                                   CHF_CONST_FRA(thisGradNDir),
+                                                   CHF_CONST_INT(nGradStartComp),
+                                                   CHF_CONST_FRA(thisGradFDir),
+                                                   CHF_CONST_INT(fGradStartComp),
+                                                   CHF_CONST_INT(nGradComp),
+                                                   CHF_BOX(thisDotGradDir.box()) );
+            }
 
-                 // since we computed undivided differences for the tanGrad's,
-                 //dx should also be one
-                 Real mult = 1.0/12.0;
+            // since we computed undivided differences for the tanGrad's,
+            //dx should also be one
+            Real mult = 1.0/12.0;
 
-                 thisFluxDir.plus(thisDotGradDir, mult);
-              } // end if we're doing the 4th-order corrections
+            thisFluxDir.plus(thisDotGradDir, mult);
+         } // end if we're doing the 4th-order corrections
 
-           // Finish multiplication by face areas.  Like the base class from which it
-           // is derived, this function is to return a face integral (rather than
-           // a face average).  However, the configuration and velocity space metric
-           // factors don't know about phase space, and therefore the area factors
-           // included in them need to be augmented to phase space areas.  That
-           // happens here.
-           if (configuration_dir) {
-              const FArrayBox& thisvol = (*m_velocity_volumes)[dit];
-              FORT_MULT_VEL(CHF_BOX(thisFluxDir.box()),
-                            CHF_FRA1(thisvol,0),
-                            CHF_FRA(thisFluxDir));
-           }
-           else {
-              const FArrayBox& thisvol = (*m_configuration_volumes)[dit];
-              FORT_MULT_CFG(CHF_BOX(thisFluxDir.box()),
-                            CHF_FRA1(thisvol,0),
-                            CHF_FRA(thisFluxDir));
-           }
-        } // end loop over face directions
+         // Finish multiplication by face areas.  Like the base class from which it
+         // is derived, this function is to return a face integral (rather than
+         // a face average).  However, the configuration and velocity space metric
+         // factors don't know about phase space, and therefore the area factors
+         // included in them need to be augmented to phase space areas.  That
+         // happens here.
+         if (configuration_dir) {
+            const FArrayBox& thisvol = (*m_velocity_volumes)[dit];
+            FORT_MULT_VEL(CHF_BOX(thisFluxDir.box()),
+                          CHF_FRA1(thisvol,0),
+                          CHF_FRA(thisFluxDir));
+         }
+         else {
+            const FArrayBox& thisvol = (*m_configuration_volumes)[dit];
+            FORT_MULT_CFG(CHF_BOX(thisFluxDir.box()),
+                          CHF_FRA1(thisvol,0),
+                          CHF_FRA(thisFluxDir));
+         }
+      } // end loop over face directions
 
-    } // end loop over grids
+   } // end loop over grids
 }
 
 
@@ -1032,64 +998,59 @@ void
 PhaseGeom::computeTangentialGradSpecial( LevelData<FluxBox>&       a_gradPhi,
                                          const LevelData<FluxBox>& a_phiFace ) const
 {
-  // want to compute undivided differences here
-  Real fakeDx = 1.0;
-  int nPhiComp = a_phiFace.nComp();
-  CH_assert(a_gradPhi.nComp() >= (CFG_DIM-1)*nPhiComp && a_gradPhi.nComp() >= (VEL_DIM-1)*nPhiComp);
+   // want to compute undivided differences here
+   Real fakeDx = 1.0;
+   int nPhiComp = a_phiFace.nComp();
+   CH_assert(a_gradPhi.nComp() >= (CFG_DIM-1)*nPhiComp && a_gradPhi.nComp() >= (VEL_DIM-1)*nPhiComp);
 
-  const DisjointBoxLayout& grids = a_gradPhi.disjointBoxLayout();
+   const DisjointBoxLayout& grids = a_gradPhi.disjointBoxLayout();
 
-  for (DataIterator dit(a_gradPhi.dataIterator()); dit.ok(); ++dit)
-    {
-       const CFG::MagBlockCoordSys& mag_block_coord_sys = getMagBlockCoordSys(grids[dit]);
+   for (DataIterator dit(a_gradPhi.dataIterator()); dit.ok(); ++dit) {
+      const CFG::MagBlockCoordSys& mag_block_coord_sys = getMagBlockCoordSys(grids[dit]);
 
-       FluxBox& thisGradPhi = a_gradPhi[dit];
-       const FluxBox& thisPhi = a_phiFace[dit];
+      FluxBox& thisGradPhi = a_gradPhi[dit];
+      const FluxBox& thisPhi = a_phiFace[dit];
 
-       for (int faceDir=0; faceDir<SpaceDim; faceDir++)
-          {
-             bool configuration_dir = faceDir < CFG_DIM;
-             int gradDirlo, gradDirhi;
-             if (configuration_dir) {
-                gradDirlo = 0;
-                gradDirhi = CFG_DIM;
-             }
-             else {
-                gradDirlo = CFG_DIM;
-                gradDirhi = SpaceDim;
-             }
+      for (int faceDir=0; faceDir<SpaceDim; faceDir++) {
+         bool configuration_dir = faceDir < CFG_DIM;
+         int gradDirlo, gradDirhi;
+         if (configuration_dir) {
+            gradDirlo = 0;
+            gradDirhi = CFG_DIM;
+         }
+         else {
+            gradDirlo = CFG_DIM;
+            gradDirhi = SpaceDim;
+         }
 
-             FArrayBox& thisGradPhiDir = thisGradPhi[faceDir];
-             const FArrayBox& thisPhiDir = thisPhi[faceDir];
+         FArrayBox& thisGradPhiDir = thisGradPhi[faceDir];
+         const FArrayBox& thisPhiDir = thisPhi[faceDir];
 
-             // now loop over tangential directions
-             for (int gradDir=gradDirlo; gradDir<gradDirhi; gradDir++)
-                {
-                   if (gradDir != faceDir)
-                      {
-                         for (int n=0; n<nPhiComp; n++)
-                            {
-                               int gradComp;
-                               if (configuration_dir) {
-                                  gradComp = mag_block_coord_sys.tanGradComp(faceDir, gradDir, n);
-                               }
-                               else {
-                                  gradComp = m_vel_coords.tanGradComp(faceDir-CFG_DIM, gradDir-CFG_DIM, n);
-                               }
+         // now loop over tangential directions
+         for (int gradDir=gradDirlo; gradDir<gradDirhi; gradDir++) {
+            if (gradDir != faceDir) {
+               for (int n=0; n<nPhiComp; n++) {
+                  int gradComp;
+                  if (configuration_dir) {
+                     gradComp = mag_block_coord_sys.tanGradComp(faceDir, gradDir, n);
+                  }
+                  else {
+                     gradComp = m_vel_coords.tanGradComp(faceDir-CFG_DIM, gradDir-CFG_DIM, n);
+                  }
 
-                               Box gradBox(thisPhiDir.box());
-                               gradBox.grow(gradDir, -1);
-                               gradBox &= thisGradPhiDir.box();
-                               FORT_PSCSTANGRADFACE(CHF_FRA1(thisGradPhiDir, gradComp),
-                                                    CHF_CONST_FRA1(thisPhiDir, n),
-                                                    CHF_BOX(gradBox),
-                                                    CHF_INT(gradDir),
-                                                    CHF_CONST_REAL(fakeDx));
-                            } // end loop over components
-                      } // end if gradDir is a tangential dir
-                } // end loop over grad directions
-          } // end loop over face directions
-    } // end loop over boxes
+                  Box gradBox(thisPhiDir.box());
+                  gradBox.grow(gradDir, -1);
+                  gradBox &= thisGradPhiDir.box();
+                  FORT_PSCSTANGRADFACE(CHF_FRA1(thisGradPhiDir, gradComp),
+                                       CHF_CONST_FRA1(thisPhiDir, n),
+                                       CHF_BOX(gradBox),
+                                       CHF_INT(gradDir),
+                                       CHF_CONST_REAL(fakeDx));
+               } // end loop over components
+            } // end if gradDir is a tangential dir
+         } // end loop over grad directions
+      } // end loop over face directions
+   } // end loop over boxes
 }
 
 
@@ -1134,7 +1095,10 @@ PhaseGeom::mappedGridDivergence(LevelData<FArrayBox>&     a_divF,
    }
    else {
       // Compute the normal component of NTranspose times the input flux
-      computeMetricTermProductAverage(FluxNormal, a_F, !m_second_order);
+
+      bool fourth_order = !m_second_order && a_F.ghostVect() >= IntVect::Unit;
+
+      computeMetricTermProductAverage(FluxNormal, a_F, fourth_order);
    }
 
    // Enforce conservation
@@ -1325,7 +1289,6 @@ PhaseGeom::exchangeTransverseAtBlockBoundaries(LevelData<FluxBox>& a_data) const
       CH_assert(a_data.ghostVect() >= IntVect::Unit);
 
       const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
-      const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_phase_coords.boundaries();
 
       for ( int tdir=0; tdir<SpaceDim; ++tdir ) {   // Transverse directions
 

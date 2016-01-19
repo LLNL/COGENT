@@ -321,7 +321,6 @@ double dnrm2 ( int n, double x[], int incx )
   double norm;
   double scale;
   double ssq;
-  double value;
 
   if ( n < 1 || incx < 1 )
   {
@@ -1727,7 +1726,6 @@ double *r8mat_solve_svd ( int m, int n, double a[], double b[] )
   int ldu;
   int ldv;
   int job;
-  int lwork;
   double *s;
   double *sp;
   double *sdiag;

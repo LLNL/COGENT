@@ -133,7 +133,7 @@ PhaseGrid::PhaseGrid(const Vector<ProblemDomain>&      a_domains,
 
    ProblemDomain prob_domain;
 
-   if ( a_mag_geom_type == "Miller" || a_mag_geom_type == "Slab" ) {
+   if ( a_mag_geom_type == "Miller" || a_mag_geom_type == "Slab" || a_mag_geom_type == "RectangularTorus") {
       prob_domain = ProblemDomain(a_domains[0]);
    }
    else if ( a_mag_geom_type == "SingleNull" || a_mag_geom_type == "SNCore" ) {
@@ -204,14 +204,14 @@ PhaseGrid::assignPhaseDecompositionToProcs(const Vector<Box>& a_phase_boxes,
    MPI_Comm_group(MPI_COMM_WORLD, &world_group);
 
    int num_groups = a_config_boxes.length();
-   MPI_Group groups[num_groups];
+   MPI_Group* groups = new MPI_Group[num_groups];
 
    a_procMap.resize(a_phase_boxes.size());
 
    if ( nproc < num_groups ) {
 
       // First, assign processors to configuration boxes
-      int config_procs[num_groups];
+      int* config_procs = new int[num_groups];
 
       for (int group_number=0; group_number<num_groups; ++group_number) {
          config_procs[group_number] = group_number % nproc;
@@ -237,11 +237,13 @@ PhaseGrid::assignPhaseDecompositionToProcs(const Vector<Box>& a_phase_boxes,
          
          group_number++;
       }
+
+      delete [] config_procs;
    }
    else {
 
       // Figure out how many processors will be allocated to each group
-      int num_group_processors[num_groups];
+      int* num_group_processors = new int[num_groups];
 
       int min_procs_per_group = floor(nproc / num_groups);
       for (int group_number=0; group_number<num_groups; ++group_number) {
@@ -254,7 +256,7 @@ PhaseGrid::assignPhaseDecompositionToProcs(const Vector<Box>& a_phase_boxes,
       }
 
       int max_procs_per_group = ceil(nproc / num_groups);
-      int ranks[max_procs_per_group];
+      int* ranks = new int[max_procs_per_group];
       int proc = 0;
       group_number = 0;
       ListIterator<CFG::Box> it(a_config_boxes);
@@ -283,6 +285,9 @@ PhaseGrid::assignPhaseDecompositionToProcs(const Vector<Box>& a_phase_boxes,
          proc += num_group_processors[group_number];
          group_number++;
       }
+
+      delete [] ranks;
+      delete [] num_group_processors;
    }
 
    List<CFG::Box> box_list;
@@ -321,6 +326,8 @@ PhaseGrid::assignPhaseDecompositionToProcs(const Vector<Box>& a_phase_boxes,
    for (ListIterator<MPI_Comm> it(comm_list); it.ok(); ++it) {
       a_local_comm[index++] = it();
    }
+
+   delete [] groups;
 }
 #else
 

@@ -5,7 +5,6 @@
 #include "FourthOrderUtil.H"
 #include "Directions.H"
 #include "FluxSurface.H"
-#include "inspect.H"
 
 
 #include "NamespaceHeader.H"
@@ -181,6 +180,7 @@ FieldSolver::computeFaceCenteredField( const LevelData<FArrayBox>& a_phi,
 
    */
 
+   CH_assert(a_field.ghostVect() == IntVect::Unit);
    LevelData<FluxBox> mapped_field(m_geometry.grids(), SpaceDim, a_field.ghostVect());
    computeFaceCenteredMappedField(a_phi, a_bc, mapped_field, a_homogeneousBCs);
 
@@ -225,6 +225,7 @@ FieldSolver::computeFaceCenteredMappedField( const LevelData<FArrayBox>& a_phi,
 
    */
 
+   CH_assert(a_field.ghostVect() == IntVect::Unit);
    const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
    const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = mag_coord_sys->boundaries();
    const DisjointBoxLayout& grids = m_geometry.grids();
@@ -497,9 +498,9 @@ FieldSolver::applyOperator( const LevelData<FArrayBox>& a_in,
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
       phi[dit].copy(a_in[dit]);
    }
-   fillGhosts(phi);
+   fillInternalGhosts(phi);
 
-   LevelData<FluxBox> flux(grids, SpaceDim, 2*IntVect::Unit);
+   LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Unit);
    computeFaceCenteredField(phi, a_bc, flux, a_homogeneous_bcs);
 
    // Multiply the field by the unmapped, face-centered GKP coefficients
@@ -507,12 +508,10 @@ FieldSolver::applyOperator( const LevelData<FArrayBox>& a_in,
 
    m_geometry.applyAxisymmetricCorrection(flux);
 
-   m_geometry.fillTransverseGhosts(flux, false);
+   m_geometry.fillTransversePhysicalGhosts(flux);
 
    // Convert to face-averaged
    fourthOrderAverage(flux);
-
-   m_geometry.fillTransverseGhosts(flux, false);
 
    m_geometry.computeMappedGridDivergence(flux, a_out, true);
 
@@ -564,14 +563,13 @@ FieldSolver::setBcDivergence( const PotentialBC&    a_bc,
 
    m_geometry.applyAxisymmetricCorrection(flux);
 
-   m_geometry.fillTransverseGhosts(flux, false);
-
    // Convert to face-averaged
    fourthOrderAverage(flux);
 
-   m_geometry.fillTransverseGhosts(flux, false);
-
-   m_geometry.computeMappedGridDivergence(flux, a_out, true);
+   // We only compute this to second-order now since the flux has only
+   // been computed to second-order in accumMappedBoundaryField().
+   //   m_geometry.computeMappedGridDivergence(flux, a_out, true);
+   m_geometry.computeMappedGridDivergence(flux, a_out, false);
 
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
       a_out[dit] /= m_volume[dit];
@@ -673,22 +671,20 @@ FieldSolver::computeRadialFSAverage( const LevelData<FluxBox>& a_in,
    multiplyUnmappedCoefficients(flux_even);
    multiplyUnmappedCoefficients(flux_odd);
     
-   inspect(flux_even);
-   inspect(flux_odd);
-
    m_geometry.applyAxisymmetricCorrection(flux_even);
    m_geometry.applyAxisymmetricCorrection(flux_odd);
     
-   m_geometry.fillTransverseGhosts(flux_even, false);
-   m_geometry.fillTransverseGhosts(flux_odd, false);
-    
+   // At this point, we have face-centered fluxes including one
+   // ghost cell layer.
+
    // Convert to face-averaged
    fourthOrderAverage(flux_even);
    fourthOrderAverage(flux_odd);
     
-   m_geometry.fillTransverseGhosts(flux_even, false);
-   m_geometry.fillTransverseGhosts(flux_odd, false);
-    
+   // Now we have face-averaged fluxes on valid faces.  In one
+   // layer of ghost cells, we still have the face-centered values,
+   // which approximate face-averaged values to second-order.
+
    LevelData<FArrayBox> divergence_even(grids, 1, IntVect::Zero);
    m_geometry.computeMappedGridDivergence(flux_even, divergence_even, true);
     
@@ -904,7 +900,9 @@ FieldSolver::OperatorBasedGMRESSolve( const LevelData<FArrayBox>& a_rhs,
    for (int i=0; i<=m; ++i) {
       H[i] = new double[m];
    }
-   double s[m+1], cs[m+1], sn[m+1];
+   double* s = new double[m+1];
+   double* cs = new double[m+1];
+   double* sn = new double[m+1];
 
    setZero(w);
    solvePreconditioner(a_rhs, w);
@@ -934,6 +932,9 @@ FieldSolver::OperatorBasedGMRESSolve( const LevelData<FArrayBox>& a_rhs,
       for (int i=0; i<=m; i++) {
          if (H[i]) delete [] H[i];
       }
+      delete [] sn;
+      delete [] cs;
+      delete [] s;
       delete [] H;
       return itmax;
    }
@@ -1011,6 +1012,9 @@ FieldSolver::OperatorBasedGMRESSolve( const LevelData<FArrayBox>& a_rhs,
                if (v[i])  delete v[i];
                if (H[i]) delete [] H[i];
             }
+            delete [] sn;
+            delete [] cs;
+            delete [] s;
             delete [] H;
             return itmax;
          }
@@ -1034,6 +1038,9 @@ FieldSolver::OperatorBasedGMRESSolve( const LevelData<FArrayBox>& a_rhs,
             if (v[i])  delete v[i];
             if (H[i]) delete [] H[i];
          }
+         delete [] sn;
+         delete [] cs;
+         delete [] s;
          delete [] H;
          return itmax;
       }
@@ -1045,6 +1052,9 @@ FieldSolver::OperatorBasedGMRESSolve( const LevelData<FArrayBox>& a_rhs,
       if (v[i])  delete v[i];
       if (H[i]) delete [] H[i];
    }
+   delete [] sn;
+   delete [] cs;
+   delete [] s;
    delete [] H;
 
    return itmax;
@@ -1054,7 +1064,7 @@ FieldSolver::OperatorBasedGMRESSolve( const LevelData<FArrayBox>& a_rhs,
 void
 FieldSolver::Update(LevelData<FArrayBox> &x, int k, double** h, double* s, int size_s, Vector<LevelData<FArrayBox> *> &v) const
 {
-   double y[size_s];
+   double* y = new double[size_s];
    for (int i=0; i<size_s; ++i) y[i] = s[i];
 
    // Backsolve:
@@ -1069,6 +1079,8 @@ FieldSolver::Update(LevelData<FArrayBox> &x, int k, double** h, double* s, int s
          x[dit].plus((*v[j])[dit], y[j]);
       }
    }
+
+   delete [] y;
 }
 
 
@@ -1102,7 +1114,7 @@ FieldSolver::ApplyPlaneRotation (double &dx, double &dy, double &cs, double &sn)
 
 
 void
-FieldSolver::fillGhosts( LevelData<FArrayBox>& a_phi ) const
+FieldSolver::fillInternalGhosts( LevelData<FArrayBox>& a_phi ) const
 {
    a_phi.exchange();
 
@@ -1571,30 +1583,38 @@ FieldSolver::getUnmappedField(const LevelData<FluxBox>& a_mapped_E_field,
 }
 
 
+
 void
 FieldSolver::computeMappedElectricField( const LevelData<FArrayBox>& a_phi,
                                          LevelData<FArrayBox>&       a_E_field ) const
 {
+   /*
+     This function computes the field
+
+          E = - grad phi
+
+     to fourth-order accuracy in valid cells.  It also computes second-order accurate
+     values in one layer of interior/extrablock ghost cells and one layer of ghost cells
+     at the domain boundary.
+
+     Field values not set to valid values are deliberately set to NaNs to help
+     detect their inadvertent use.
+
+   */
+
+   CH_assert(a_E_field.ghostVect() == IntVect::Unit);
    CH_assert(a_E_field.nComp() == 3);
+   CH_assert(m_num_potential_ghosts_interpolated >= 2);
 
    const DisjointBoxLayout & grids = m_geometry.grids();
-
-   int nghost = 2;
-   CH_assert(m_num_potential_ghosts_interpolated >= nghost);
-   int n_phi_ghost = (m_num_potential_ghosts_interpolated > nghost)? m_num_potential_ghosts_interpolated: nghost;
-
-   LevelData<FArrayBox> phi_cell(grids, 1, n_phi_ghost*IntVect::Unit);
+   LevelData<FArrayBox> phi_cell(grids, 1, m_num_potential_ghosts_interpolated*IntVect::Unit);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       phi_cell[dit].copy(a_phi[dit]);
    }
-   phi_cell.exchange();
 
-   //  Fill the extrablock ghost cells
-   if (m_mblex_potential_Ptr) {
-      m_mblex_potential_Ptr->interpGhosts(phi_cell);
-   }
+   fillInternalGhosts(phi_cell);
 
-   // Extrapolate the potential to two cells at physical boundaries
+   // Extrapolate the potential to two ghost cells at physical boundaries
 
    const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
    const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
@@ -1605,7 +1625,7 @@ FieldSolver::computeMappedElectricField( const LevelData<FArrayBox>& a_phi,
       const ProblemDomain& domain = block_coord_sys.domain();
       for (int dir=0; dir<SpaceDim; ++dir) {
          if ( !domain.isPeriodic(dir) ) {
-            IntVect grow_vec = nghost*IntVect::Unit;
+            IntVect grow_vec = 2*IntVect::Unit;
             grow_vec[dir] = 0;
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
@@ -1615,51 +1635,85 @@ FieldSolver::computeMappedElectricField( const LevelData<FArrayBox>& a_phi,
       }
    }
 
-   // Compute the field components at cell centers
+   // We now have potential values in two ghost cell layers.  We next compute the field to
+   // second-order at valid cell centers and one ghost cell layer.
+
+   int order = 2;
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
       RealVect dx = block_coord_sys.dx();
+      Box box = grow(grids[dit],1);
 
-      a_E_field[dit].setVal(0.);
+      // Initializing to NaN to ensure that the field is actually computed everywhere it's used
+      a_E_field[dit].setVal(1./0.);
 
       for (int dir=0; dir<SpaceDim; dir++) {
-         FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(grids[dit]),
+         FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(box),
                                             CHF_CONST_INT(dir),
                                             CHF_CONST_FRA1(phi_cell[dit],0),
                                             CHF_CONST_REALVECT(dx),
+                                            CHF_CONST_INT(order),
                                             CHF_FRA1(a_E_field[dit],(2*dir)%3));
       }
    }
 
    a_E_field.exchange();
+
+   // Recompute the field at valid cell centers to fourth-order
+
+   order = 4;
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
+      RealVect dx = block_coord_sys.dx();
+
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(grids[dit]),
+                                            CHF_CONST_INT(dir),
+                                            CHF_CONST_FRA1(phi_cell[dit],0),
+                                            CHF_CONST_REALVECT(dx),
+                                            CHF_CONST_INT(order),
+                                            CHF_FRA1(a_E_field[dit],(2*dir)%3));
+      }
+   }
 }
+
 
 
 void
 FieldSolver::computeMappedElectricField( const LevelData<FArrayBox>& a_phi,
                                          LevelData<FluxBox>&         a_E_field ) const
 {
+   /*
+     This function computes the field
+
+          E = - grad phi
+
+     to fourth-order accuracy at valid cell faces.  It also computes second-order
+     accurate values on transverse faces at all block boundaries.
+
+     Since not all entries of a_E_field are set, those not set are returned
+     as NaN to help detect any inadvertent attempt to access them.
+
+   */
+
+   CH_assert(a_E_field.ghostVect() == IntVect::Unit);
    CH_assert(a_E_field.nComp() == 3);
+   CH_assert(m_num_potential_ghosts_interpolated >= 2);
 
    const DisjointBoxLayout & grids = m_geometry.grids();
 
-   int nghost = 2;
-   CH_assert(m_num_potential_ghosts_interpolated >= nghost);
-   int n_phi_ghost = (m_num_potential_ghosts_interpolated > nghost)? m_num_potential_ghosts_interpolated: nghost;
-
-   LevelData<FArrayBox> phi_cell(grids, 1, n_phi_ghost*IntVect::Unit);
+   LevelData<FArrayBox> phi_cell(grids, 1, m_num_potential_ghosts_interpolated*IntVect::Unit);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       phi_cell[dit].copy(a_phi[dit]);
    }
-   phi_cell.exchange();
 
-   //  Fill the extrablock ghost cells
-   if (m_mblex_potential_Ptr) {
-      m_mblex_potential_Ptr->interpGhosts(phi_cell);
-   }
+   fillInternalGhosts(phi_cell);
 
-   // Extrapolate the potential to two cells at physical boundaries
+   // Fourth-order extrapolate the potential to two cells at physical boundaries
+
+   int order = 4;
 
    const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
    const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
@@ -1670,73 +1724,55 @@ FieldSolver::computeMappedElectricField( const LevelData<FArrayBox>& a_phi,
       const ProblemDomain& domain = block_coord_sys.domain();
       for (int dir=0; dir<SpaceDim; ++dir) {
          if ( !domain.isPeriodic(dir) ) {
-            IntVect grow_vec = nghost*IntVect::Unit;
+            IntVect grow_vec = phi_cell.ghostVect();
             grow_vec[dir] = 0;
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
 
-            extrapBoundaryGhostsForFC(phi_cell[dit], interior_box, domain_box, dir, boundaries[block_number]);
+            extrapBoundaryGhostsForFC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
          }
       }
    }
 
-   // Fourth-order interpolate the potential to cell faces
+   // We now have potential values in two extrablock ghost cell layers and two physical ghost cell layers.
+   // We next compute the potential to fourth-order at valid cell faces and two layers of transverse cell faces.
 
-   LevelData<FluxBox> phi_face(grids, 1, nghost*IntVect::Unit);
+   LevelData<FluxBox> phi_face(grids, 1, 2*IntVect::Unit);
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       for (int dir=0; dir<SpaceDim; dir++) {
-         IntVect grow_vec = nghost*IntVect::Unit;
-         grow_vec[dir] = 0;
-         Box interior_box = grow(grids[dit],grow_vec);
+         IntVect grow_vect = 2*IntVect::Unit;
+         grow_vect[dir] = 0;
+         Box box = grow(grids[dit],grow_vect);
 
          FORT_FACE_INTERPOLATE(CHF_CONST_INT(dir),
-                               CHF_BOX(surroundingNodes(interior_box,dir)),
+                               CHF_BOX(surroundingNodes(box,dir)),
+                               CHF_CONST_INT(order),
                                CHF_CONST_FRA1(phi_cell[dit],0),
                                CHF_FRA1(phi_face[dit][dir],0));
-
       }
    }
    phi_face.exchange();
 
-   // Extrapolate the face-centered potentials to transverse cells at physical
-   // boundaries so that the fourth-order difference formula to be applied
-   // in FORT_CELL_CENTERED_FIELD_COMPONENT below can be used on all valid
-   // faces, including those normal to physical boundaries.
+   // Compute the field to second-order including one layer of transverse faces
 
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      int block_number = mag_coord_sys->whichBlock(grids[dit]);
-      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
-      const ProblemDomain& domain = block_coord_sys.domain();
-
-      // Fourth-order interpolate to faces
-      for (int dir=0; dir<SpaceDim; dir++) {
-         Box box_dir = surroundingNodes(grids[dit],dir);
-         Box domain_box_dir = surroundingNodes(domain.domainBox(),dir);
-
-         for (int tdir=0; tdir<SpaceDim; ++tdir) {
-            if (tdir != dir && !domain.isPeriodic(tdir) ) {
-               extrapBoundaryGhostsForCC(phi_face[dit][dir], box_dir, domain_box_dir, tdir, boundaries[block_number]);
-            }
-         }
-      }
-   }
-   phi_face.exchange();
-
-   // Finally, compute the field components normal and transverse to cell faces
+   order = 2;
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
       RealVect dx = block_coord_sys.dx();
+      Box box = grow(grids[dit],1);
 
-      a_E_field[dit].setVal(0.);
+      // Initializing to NaN to ensure that the field is actually computed everywhere it's used
+      a_E_field[dit].setVal(1./0.);
 
       for (int dir=0; dir<SpaceDim; dir++) {
-         Box box_dir = surroundingNodes(grids[dit],dir);
+         Box box_dir = surroundingNodes(box,dir);
          FORT_FACE_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
                                             CHF_CONST_INT(dir),
                                             CHF_CONST_FRA1(phi_cell[dit],0),
                                             CHF_CONST_REALVECT(dx),
+                                            CHF_CONST_INT(order),
                                             CHF_FRA1(a_E_field[dit][dir],(2*dir)%3));
 
          for (int tdir=0; tdir<SpaceDim; ++tdir) {
@@ -1745,6 +1781,41 @@ FieldSolver::computeMappedElectricField( const LevelData<FArrayBox>& a_phi,
                                                   CHF_CONST_INT(tdir),
                                                   CHF_CONST_FRA1(phi_face[dit][dir],0),
                                                   CHF_CONST_REALVECT(dx),
+                                                  CHF_CONST_INT(order),
+                                                  CHF_FRA1(a_E_field[dit][dir],(2*tdir)%3));
+            }
+         }
+      }
+   }
+   a_E_field.exchange();
+
+   // Second-order extrapolate the field to the transverse physical boundary ghosts
+   m_geometry.fillTransversePhysicalGhosts(a_E_field);
+
+   // Recompute the field to fourth-order on valid cell faces
+
+   order = 4;
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
+      RealVect dx = block_coord_sys.dx();
+
+      for (int dir=0; dir<SpaceDim; dir++) {
+         Box box_dir = surroundingNodes(grids[dit],dir);
+         FORT_FACE_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
+                                            CHF_CONST_INT(dir),
+                                            CHF_CONST_FRA1(phi_cell[dit],0),
+                                            CHF_CONST_REALVECT(dx),
+                                            CHF_CONST_INT(order),
+                                            CHF_FRA1(a_E_field[dit][dir],(2*dir)%3));
+
+         for (int tdir=0; tdir<SpaceDim; ++tdir) {
+            if (tdir != dir) {
+               FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
+                                                  CHF_CONST_INT(tdir),
+                                                  CHF_CONST_FRA1(phi_face[dit][dir],0),
+                                                  CHF_CONST_REALVECT(dx),
+                                                  CHF_CONST_INT(order),
                                                   CHF_FRA1(a_E_field[dit][dir],(2*tdir)%3));
             }
          }
@@ -1753,6 +1824,7 @@ FieldSolver::computeMappedElectricField( const LevelData<FArrayBox>& a_phi,
 
    a_E_field.exchange();
 }
+
 
 
 void
@@ -1812,6 +1884,7 @@ FieldSolver::extrapBoundaryGhostsForFC(FArrayBox&                              a
                                        const Box&                              a_interiorbox,
                                        const Box&                              a_domain_box,
                                        const int                               a_dir,
+                                       const int                               a_order,
                                        const Tuple<BlockBoundary, 2*SpaceDim>& a_block_boundaries) const
 {
    // This function fourth-order extrapolates to fill two layers of a_data ghost cells
@@ -1846,10 +1919,12 @@ FieldSolver::extrapBoundaryGhostsForFC(FArrayBox&                              a
             }
 
          if (isbc) {
-            CH_assert(a_interiorbox.size(a_dir)>=5);
+            CH_assert( (a_order==4 && a_interiorbox.size(a_dir)>=5)
+                    || (a_order==2 && a_interiorbox.size(a_dir)>=3));
             CH_assert(bx.contains(dstbox));
             FORT_EXTRAP_FOR_FC_OPS(CHF_CONST_INT(a_dir),
                                    CHF_CONST_INT(side),
+                                   CHF_CONST_INT(a_order),
                                    CHF_BOX(dstbox),
                                    CHF_BOX(a_interiorbox),
                                    CHF_FRA(a_data));

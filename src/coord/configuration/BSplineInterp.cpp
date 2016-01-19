@@ -69,10 +69,10 @@ BSplineInterp::BSplineInterp( const ParmParse& a_parm_parse,
     }
 
     m_icont[component] = 0;
-    double dummy = db2val_(m_x[0], m_y[0], 0, 0, m_radial_knots, m_poloidal_knots,
-                           dim(0), dim(1), m_bspline_order, m_bspline_order,
-                           m_data.dataPtr(component), dim(0), &m_icont[component],
-                           m_iwork[component], m_db2val_work[component], iflag );
+    db2val_(m_x[0], m_y[0], 0, 0, m_radial_knots, m_poloidal_knots,
+            dim(0), dim(1), m_bspline_order, m_bspline_order,
+            m_data.dataPtr(component), dim(0), &m_icont[component],
+            m_iwork[component], m_db2val_work[component], iflag );
     if (iflag != 0) {
       cout << "db2int returned " << iflag << endl;
       exit(1);

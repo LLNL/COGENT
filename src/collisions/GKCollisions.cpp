@@ -133,6 +133,8 @@ Real GKCollisions::computeDt( const KineticSpeciesPtrVect& soln )
       if (it->first == "Krook") return ((Krook*)m_collision_model[it->second])->computeDt(soln);
       else                      return DBL_MAX;
    }
+
+   return 0.;
 }
 
 Real GKCollisions::computeTimeScale( const KineticSpeciesPtrVect& soln )
@@ -142,6 +144,8 @@ Real GKCollisions::computeTimeScale( const KineticSpeciesPtrVect& soln )
       if (it->first == "Krook") return ((Krook*)m_collision_model[it->second])->TimeScale(soln);
       else                      return DBL_MAX;
    }
+
+   return 0.;
 }
 
 #include "NamespaceFooter.H"
