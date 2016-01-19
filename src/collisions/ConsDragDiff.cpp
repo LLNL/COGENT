@@ -13,9 +13,9 @@
 
 ConsDragDiff::ConsDragDiff( const string& a_species_name, ParmParse& a_ppcls, const int a_verbosity )
     : cls_freq(0),
-      verbosity(0),
       cls_only(false),
-      moment_op( MomentOp::instance() )
+      moment_op( MomentOp::instance() ),
+      verbosity(0)
 {
    verbosity = a_verbosity;
    ppcls = a_ppcls;
@@ -61,7 +61,6 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        rhs,
 
       // get coordinate system parameters
       const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
-      const MultiBlockCoordSys* coords = phase_geom.coordSysPtr();
       const CFG::MultiBlockLevelGeom & mag_geom = phase_geom.magGeom();
       const LevelData<FArrayBox>& inj_B = phase_geom.getBFieldMagnitude();
       const ProblemDomain& phase_domain = phase_geom.domain();

@@ -119,7 +119,7 @@ void FixedBckgr::computeSelfConsistFreq(LevelData<FArrayBox>& a_ntr_freq,
     
     
     //Get normalization parameters (units)
-    double N, T, L, M, B;
+    double N, T, L;
     ParmParse ppunits( "units" );
     ppunits.get("number_density",N);  //[m^{-3}]
     ppunits.get("temperature",T);     //[eV]

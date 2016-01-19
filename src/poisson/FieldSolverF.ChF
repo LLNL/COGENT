@@ -965,6 +965,7 @@ c     local variables
      &     CHF_CONST_INT[dir],
      &     CHF_CONST_FRA1[phi],
      &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INT[order],
      &     CHF_FRA1[Efield]
      &     )
 
@@ -976,22 +977,31 @@ c     local variables
       jj = CHF_ID(1,dir);
       kk = CHF_ID(2,dir)]
 
-      CHF_MULTIDO[box; i; j; k]
-      
-         Efield(CHF_IX[i;j;k]) = -(
-     &     phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
-     &     - eight * phi(CHF_IX[i-  ii;j-  jj;k-  kk])
-     &     + eight * phi(CHF_IX[i+  ii;j+  jj;k+  kk])
-     &     - phi(CHF_IX[i+2*ii;j+2*jj;k+2*kk])
-     &     ) / (twelve * h(dir))
+      if (order .eq. 4) then
 
-c     Second-order formula (for experimental purposes)
-c          Efield(CHF_IX[i;j;k]) = -(
-c     &     - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
-c     &     + phi(CHF_IX[i+  ii;j+  jj;k+  kk])
-c     &     ) / (two * h(dir))
+         CHF_MULTIDO[box; i; j; k]
+      
+            Efield(CHF_IX[i;j;k]) = -(
+     &        phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
+     &        - eight * phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + eight * phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &        - phi(CHF_IX[i+2*ii;j+2*jj;k+2*kk])
+     &        ) / (twelve * h(dir))
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box; i; j; k]
+
+            Efield(CHF_IX[i;j;k]) = -(
+     &        - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &        ) / (two * h(dir))
           
-      CHF_ENDDO
+         CHF_ENDDO
+
+      endif
 
       return
       end
@@ -1001,6 +1011,7 @@ c     &     ) / (two * h(dir))
      &     CHF_CONST_INT[dir],
      &     CHF_CONST_FRA1[phi],
      &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INT[order],
      &     CHF_FRA1[Efield]
      &     )
 
@@ -1012,22 +1023,31 @@ c     local variables
       jj = CHF_ID(1,dir);
       kk = CHF_ID(2,dir)]
 
-      CHF_MULTIDO[box; i; j; k]
+      if (order .eq. 4) then
 
-         Efield(CHF_IX[i;j;k]) = -(
-     &         27.d0 * (phi(CHF_IX[i     ;j     ;k     ])
-     &                - phi(CHF_IX[i-  ii;j-  jj;k-  kk]))
-     &                - phi(CHF_IX[i+  ii;j+  jj;k+  kk])
-     &                + phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
-     &                            ) / (24.d0 * h(dir))
+         CHF_MULTIDO[box; i; j; k]
 
-c     Second-order formula (for experimental purposes)
-c         Efield(CHF_IX[i;j;k]) = -(
-c     &             - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
-c     &             + phi(CHF_IX[i     ;j     ;k     ])
-c     &                    ) / h(dir)
+            Efield(CHF_IX[i;j;k]) = -(
+     &        27.d0 * (phi(CHF_IX[i     ;j     ;k     ])
+     &               - phi(CHF_IX[i-  ii;j-  jj;k-  kk]))
+     &               - phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &               + phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
+     &        ) / (24.d0 * h(dir))
 
-      CHF_ENDDO
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box; i; j; k]
+
+            Efield(CHF_IX[i;j;k]) = -(
+     &        - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + phi(CHF_IX[i     ;j     ;k     ])
+     &        ) / h(dir)
+
+         CHF_ENDDO
+
+      endif
 
       return
       end
@@ -1035,6 +1055,7 @@ c     &                    ) / h(dir)
       subroutine face_interpolate(
      &     CHF_CONST_INT[dir],
      &     CHF_BOX[box],
+     &     CHF_CONST_INT[order],
      &     CHF_CONST_FRA1[phi],
      &     CHF_FRA1[data]
      &     )
@@ -1047,23 +1068,31 @@ c     local variables
       jj = CHF_ID(1,dir);
       kk = CHF_ID(2,dir)]
 
-      CHF_MULTIDO[box;i;j;k]
+      if (order .eq. 4) then
+
+         CHF_MULTIDO[box;i;j;k]
+
+            data(CHF_IX[i;j;k]) = (
+     &        9.d0 * (phi(CHF_IX[i     ;j     ;k     ])
+     &              + phi(CHF_IX[i-  ii;j-  jj;k-  kk]))
+     &             - (phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &              + phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk]))
+     &        ) / 16.d0
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box;i;j;k]
 
          data(CHF_IX[i;j;k]) = (
-     &     9.d0 * (phi(CHF_IX[i     ;j     ;k     ])
-     &           + phi(CHF_IX[i-  ii;j-  jj;k-  kk]))
-     &          - (phi(CHF_IX[i+  ii;j+  jj;k+  kk])
-     &           + phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk]))
-     &     ) / 16.d0
+     &            phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &          + phi(CHF_IX[i     ;j     ;k     ])
+     &        ) / 2.d0
 
-c     Second-order formula (for experimental purposes)
-c         data(CHF_IX[i;j;k]) = (
-c     &            phi(CHF_IX[i-  ii;j-  jj;k-  kk])
-c     &          + phi(CHF_IX[i     ;j     ;k     ])
-c     &     ) / 2.d0
+         CHF_ENDDO
 
-
-      CHF_ENDDO
+      endif
 
       return
       end
@@ -1134,6 +1163,7 @@ c
       subroutine extrap_for_fc_ops(
      &     CHF_CONST_INT[dir],
      &     CHF_CONST_INT[side],
+     &     CHF_CONST_INT[order],
      &     CHF_BOX[facebox],
      &     CHF_BOX[interiorbox],
      &     CHF_FRA[array]
@@ -1141,8 +1171,10 @@ c
 
 c     local variables
       integer CHF_DDECL[i,id,ni;j,jd,nj;k,kd,nk], m, n, comp, ncomp
-      double precision sum, coef(0:4,2)
-      data coef /  4.625d0, -8.5d0, 7.75d0, -3.5d0, 0.625d0,
+      double precision sum, coef2(0:2,2), coef4(0:4,2)
+      data coef2 /  3.d0, -3.d0, 1.d0,
+     &             6.d0, -8.d0, 3.d0 /
+      data coef4 /  4.625d0, -8.5d0, 7.75d0, -3.5d0, 0.625d0,
      &             11.25d0, -25.d0, 22.5d0,  -9.d0, 1.25d0 /
 
 c
@@ -1182,10 +1214,21 @@ c
           do comp = 0, ncomp-1
 
              sum = zero
-             do m = 0, 4
-                sum = sum + coef(m,n)*array(CHF_DDECL[i-id*(ni+m);j-jd*(nj+m);k-kd*(nk+m)],comp)
-             enddo
-             array(CHF_IX[i;j;k],comp) = sum
+             if (order .eq. 4) then
+
+                do m = 0, 4
+                   sum = sum + coef4(m,n)*array(CHF_DDECL[i-id*(ni+m);j-jd*(nj+m);k-kd*(nk+m)],comp)
+                enddo
+                array(CHF_IX[i;j;k],comp) = sum
+
+             else if (order .eq. 2) then
+
+                do m = 0, 2
+                   sum = sum + coef2(m,n)*array(CHF_DDECL[i-id*(ni+m);j-jd*(nj+m);k-kd*(nk+m)],comp)
+                enddo
+                array(CHF_IX[i;j;k],comp) = sum
+
+             endif
 
           enddo
 

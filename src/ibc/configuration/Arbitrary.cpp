@@ -16,6 +16,8 @@
 #include "MillerBlockCoordSys.H"
 #include "SlabCoordSys.H"
 #include "SlabBlockCoordSys.H"
+#include "RectangularTorusCoordSys.H"
+#include "RectangularTorusBlockCoordSys.H"
 #include "MultiBlockCoordSys.H"
 #include "Vector.H"
 #include "MagGeom.H"
@@ -122,7 +124,7 @@ void Arbitrary::assign( LevelData<FArrayBox>& a_data,
 inline
 void Arbitrary::parseParameters( ParmParse& a_pp )
 {
-   bool enforce_positivity(false);
+   //   bool enforce_positivity(false);
 //   a_pp.query( "enforce_positivity", enforce_positivity );
    a_pp.get( "function", m_function);
 
@@ -141,6 +143,8 @@ void Arbitrary::checkGeometryValidity( const MultiBlockLevelGeom& a_geometry ) c
    not_annular &= (typeid(coord_sys) != typeid(MillerBlockCoordSys));
    not_annular &= (typeid(coord_sys) != typeid(SlabCoordSys));
    not_annular &= (typeid(coord_sys) != typeid(SlabBlockCoordSys));
+   not_annular &= (typeid(coord_sys) != typeid(RectangularTorusCoordSys));
+   not_annular &= (typeid(coord_sys) != typeid(RectangularTorusBlockCoordSys));
    if ( not_annular ) {
       const std::string msg( "Arbitrary: Attempt to use non-annular geometry. ");
       MayDay::Error( msg.c_str() );
@@ -176,6 +180,11 @@ void Arbitrary::setPointwise( FArrayBox&              a_data,
 
 //   cell_center_coords.plus( -0.5*( a_coord_sys.getOuterFluxLabel() + a_coord_sys.getInnerFluxLabel() ), RADIAL_DIR, 1 );
    RealVect a_amrDx = a_coord_sys.dx();
+
+// rescale a_amrDx so that x, y, z span from 0 to 2*pi
+   IntVect hi_index = a_coord_sys.domain().domainBox().bigEnd();
+   hi_index = hi_index+1;
+   a_amrDx = a_amrDx*2.0*M_PI/(a_amrDx*hi_index); 
 
    a_data.setVal(0.0);
 

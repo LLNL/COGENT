@@ -11,9 +11,9 @@ install_dir=$PWD/lib/atlas-mpiicpc-ifort-dbg
 
 cd src
 ./configure $debug \
-            --with-CC=/usr/local/bin/mpiicc \
+            --with-CC=/usr/local/bin/mpicxx \
             --with-CFLAGS="-g " \
-            --with-CXX=/usr/local/bin/mpiicpc \
+            --with-CXX=/usr/local/bin/mpicxx \
             --with-CXXFLAGS="-g " \
             --with-F77=/usr/local/tools/ifort-9.1.052/bin/ifort \
             --with-F77FLAGS="-g " \

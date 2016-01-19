@@ -51,7 +51,7 @@ namespace mba {
 /// Helper function for std::array creation.
 template <class T, class... X>
 inline std::array<T, sizeof...(X)> make_array(X... x) {
-    std::array<T, sizeof...(X)> p = {static_cast<T>(x)...};
+   std::array<T, sizeof...(X)> p = {{static_cast<T>(x)...}};
     return p;
 }
 
@@ -173,8 +173,6 @@ class cloud {
                         index i;
                         point s;
 
-                        bool valid = true;
-
                         for(size_t d = 0; d < NDIM; ++d) {
                             double u = ((*p)[d] - cmin[d]) * hinv[d];
                             i[d] = floor(u) - 1;
@@ -268,9 +266,9 @@ class cloud {
 
                 // Refine r and append it to the current control lattice.
                 void append_refined(const clattice &r) {
-                    static const std::array<double, 5> s = {
+                   static const std::array<double, 5> s = {{
                         0.125, 0.500, 0.750, 0.500, 0.125
-                    };
+                      }};
 
                     for(dcounter<NDIM> i(r.n); i.valid(); ++i) {
                         double f = r.phi[i];
@@ -344,9 +342,10 @@ class cloud {
                 class dcounter {
                     public:
                         dcounter(const std::array<size_t, M> &N)
-                            : idx(0), N(N),
+                            : idx(0),
                               size(std::accumulate(N.begin(), N.end(),
-                                        static_cast<size_t>(1), std::multiplies<size_t>()))
+                                                   static_cast<size_t>(1), std::multiplies<size_t>())),
+                              N(N)
                         {
                             std::fill(i.begin(), i.end(), static_cast<size_t>(0));
                         }
@@ -393,6 +392,8 @@ class cloud {
                         case 3:
                             return t * t * t / 6;
                     }
+
+                    return 0.;
                 }
 
                 // x is within [xmin, xmax].

@@ -2,7 +2,6 @@
      &     CHF_CONST_INT[s],
      &     CHF_CONST_INT[sprime],
      &     CHF_CONST_INT[side],
-     &     CHF_CONST_I1D[boundary],
      &     CHF_CONST_REALVECT[h],
      &     CHF_CONST_FRA1[Dtilde_av],
      &     CHF_CONST_INTVECT[global],
@@ -13,13 +12,12 @@
       integer
      &     CHF_DDECL[i;j], CHF_DDECL[ii;jj], CHF_DDECL[it;jt], CHF_DDECL[ic;jc],
      &     CHF_DDECL[lo0;lo1], CHF_DDECL[hi0;hi1], CHF_DDECL[iglobal;jglobal],
-     &     dir, tdir, dst_to_bndry, m, m_max, n, noffset, nlength, toffset
+     &     dir, tdir, m, m_max, n, noffset, nlength, toffset
       REAL_T hfac, n_stencil(0:3), gamma4(0:4), gamma2(0:4),
      &     gamma4_lo(0:4), gamma4_hi(0:4), gamma2_lo(0:4), gamma2_hi(0:4),
      &     d, trans_grad_d, flux(0:4), trans_grad_flux(0:4)
 
       dir = s
-      dst_to_bndry = boundary(dir+2*side)
       iglobal = global(0)
       jglobal = global(1)
 
@@ -43,650 +41,106 @@
 
 c     Get normal direction stencil factors
 
-      if (dst_to_bndry .eq. 2) then
+      noffset = side - 2
+      nlength = 4
 
-c        Boundary is at least two cells away in the normal direction
+      if (s .eq. sprime) then
 
-         noffset = side - 2
-         nlength = 4
+c        fourth-order accurate first derivative (Eq. (30))
+         n_stencil(0) =   1.d0 / 24.d0
+         n_stencil(1) = -27.d0 / 24.d0
+         n_stencil(2) =  27.d0 / 24.d0
+         n_stencil(3) =  -1.d0 / 24.d0
 
-         if (s .eq. sprime) then
+      else
 
-c           fourth-order accurate first derivative (Eq. (30))
-            n_stencil(0) =   1.d0 / 24.d0
-            n_stencil(1) = -27.d0 / 24.d0
-            n_stencil(2) =  27.d0 / 24.d0
-            n_stencil(3) =  -1.d0 / 24.d0
-
-         else
-
-c           fourth-order accurate interpolation (Eq. (35))
-            n_stencil(0) = -1.d0 / 16.d0
-            n_stencil(1) =  9.d0 / 16.d0
-            n_stencil(2) =  9.d0 / 16.d0
-            n_stencil(3) = -1.d0 / 16.d0
-
-         endif
-
-      else if (dst_to_bndry .eq. -1) then
-
-c        Boundary is one cell away in the low normal direction
-
-         if (s .eq. sprime) then
-
-            noffset = side - 1
-
-            if (drop_order .eq. 0) then
-
-               nlength = 4
-
-c              fourth-order accurate first derivative
-               n_stencil(0) = -1085.d0 / 840.d0
-               n_stencil(1) =  1015.d0 / 840.d0
-               n_stencil(2) =   -63.d0 / 840.d0
-               n_stencil(3) =     5.d0 / 840.d0
-
-            else
-
-               nlength = 3
-
-c              third-order accurate first derivative (Eq. (44))
-               n_stencil(0) = -75.d0 / 60.d0
-               n_stencil(1) =  70.d0 / 60.d0
-               n_stencil(2) =  -3.d0 / 60.d0
-
-            endif
-
-         else
-
-            noffset = side - 1
-            nlength = 3
-
-c           fourth-order accurate interpolation (Eq. (45))
-            n_stencil(0) = 15.d0 / 20.d0
-            n_stencil(1) = 10.d0 / 20.d0
-            n_stencil(2) = -1.d0 / 20.d0
-
-         endif
-
-      else if (dst_to_bndry .eq. 1) then
-
-c        Boundary is one cell away in the high normal direction
-
-         if (s .eq. sprime) then
-
-            if (drop_order .eq. 0) then
-
-               noffset = side - 3
-               nlength = 4
-
-c              fourth-order accurate first derivative
-               n_stencil(0) =    -5.d0 / 840.d0
-               n_stencil(1) =    63.d0 / 840.d0
-               n_stencil(2) = -1015.d0 / 840.d0
-               n_stencil(3) =  1085.d0 / 840.d0
-
-            else
-
-               noffset = side - 2
-               nlength = 3
-
-c              third-order accurate first derivative (Eq. (44))
-               n_stencil(0) =   3.d0 / 60.d0
-               n_stencil(1) = -70.d0 / 60.d0
-               n_stencil(2) =  75.d0 / 60.d0
-
-            endif
-
-         else
-
-            noffset = side - 2
-            nlength = 3
-
-c           fourth-order accurate interpolation (Eq. (45))
-            n_stencil(0) = -1.d0 / 20.d0
-            n_stencil(1) = 10.d0 / 20.d0
-            n_stencil(2) = 15.d0 / 20.d0
-
-         endif
-
-      else if (dst_to_bndry .eq. 0) then
-
-c        On the boundary in the normal direction
-
-         if (s .eq. sprime) then
-
-            if (drop_order .eq. 0) then
-
-               nlength = 4
-
-c              fourth-order accurate first derivative (Eq. (42))
-               if (side .eq. 0) then
-                  n_stencil(0) =  3675.d0 / 840.d0
-                  n_stencil(1) = -1225.d0 / 840.d0
-                  n_stencil(2) =   441.d0 / 840.d0
-                  n_stencil(3) =   -75.d0 / 840.d0
-               else
-                  n_stencil(0) =    75.d0 / 840.d0
-                  n_stencil(1) =  -441.d0 / 840.d0
-                  n_stencil(2) =  1225.d0 / 840.d0
-                  n_stencil(3) = -3675.d0 / 840.d0
-               endif
-
-            else
-
-               nlength = 3
-
-c              third-order accurate first derivative (Eq. (43))
-               if (side .eq. 0) then
-                  n_stencil(0) =  225.d0 / 60.d0
-                  n_stencil(1) =  -50.d0 / 60.d0
-                  n_stencil(2) =    9.d0 / 60.d0
-               else
-                  n_stencil(0) =   -9.d0 / 60.d0
-                  n_stencil(1) =   50.d0 / 60.d0
-                  n_stencil(2) = -225.d0 / 60.d0
-               endif
-
-            endif
-
-            noffset = - (nlength - 1)*side
-
-         else
-
-c           There is nothing to do if the cell face on side "side"
-c           in direction "dir" is on the physical boundary, since
-c           we are assuming homogeneous Dirichlet boundary conditions.
-c           In that case, all tangential derivatives are zero and make
-c           no contribution to the stencil.
-
-            noffset = 0
-            nlength = 0
-
-         endif
+c        fourth-order accurate interpolation (Eq. (35))
+         n_stencil(0) = -1.d0 / 16.d0
+         n_stencil(1) =  9.d0 / 16.d0
+         n_stencil(2) =  9.d0 / 16.d0
+         n_stencil(3) = -1.d0 / 16.d0
 
       endif
 
 c     Get transverse direction stencil factors
 
-      if (boundary(tdir+2*0) .eq. 0) then
-
-c        Low boundary in the transverse direction is physical
-
-         toffset = 0
-
-         if (drop_order .eq. 0) then
-
-            m_max = 3
-
-            if (s .eq. sprime) then
-
-c              exact function evaluations
-               gamma4_lo(0) = 1.d0
-               gamma4_lo(1) = 0.d0
-               gamma4_lo(2) = 0.d0
-               gamma4_lo(3) = 0.d0
-
-               gamma4(0)    = 0.d0
-               gamma4(1)    = 1.d0
-               gamma4(2)    = 0.d0
-               gamma4(3)    = 0.d0
-
-               gamma4_hi(0) = 0.d0
-               gamma4_hi(1) = 0.d0
-               gamma4_hi(2) = 1.d0
-               gamma4_hi(3) = 0.d0
-
-c              second-order accurate second derivative
-
-               gamma2_lo(0) =  1.d0
-               gamma2_lo(1) = -2.d0
-               gamma2_lo(2) =  1.d0
-               gamma2_lo(3) =  0.d0
-
-            else
-
-c              fourth-order accurate first derivative
-               gamma4_lo(0) =  35.d0 / 210.d0
-               gamma4_lo(1) = 210.d0 / 210.d0
-               gamma4_lo(2) = -63.d0 / 210.d0
-               gamma4_lo(3) =  10.d0 / 210.d0
-
-               gamma4(0)    = -210.d0 / 210.d0
-               gamma4(1)    =   35.d0 / 210.d0
-               gamma4(2)    =  126.d0 / 210.d0
-               gamma4(3)    =  -15.d0 / 210.d0
-
-               gamma4_hi(0) =  175.d0 / 210.d0
-               gamma4_hi(1) = -350.d0 / 210.d0
-               gamma4_hi(2) =  189.d0 / 210.d0
-               gamma4_hi(3) =   50.d0 / 210.d0
-
-c              second-order accurate third derivative
-               gamma2_lo(0) =  385.d0 / 35.d0
-               gamma2_lo(1) = -315.d0 / 35.d0
-               gamma2_lo(2) =  147.d0 / 35.d0
-               gamma2_lo(3) =  -25.d0 / 35.d0
-
-            endif
-
-         else
-
-            m_max = 2
-
-            if (s .eq. sprime) then
-
-c              exact function evaluations
-               gamma4_lo(0) = 1.d0
-               gamma4_lo(1) = 0.d0
-               gamma4_lo(2) = 0.d0
-
-               gamma4(0)    = 0.d0
-               gamma4(1)    = 1.d0
-               gamma4(2)    = 0.d0
-
-               gamma4_hi(0) = 0.d0
-               gamma4_hi(1) = 0.d0
-               gamma4_hi(2) = 1.d0
-
-c              second-order accurate second derivative
-
-               gamma2_lo(0) =  1.d0
-               gamma2_lo(1) = -2.d0
-               gamma2_lo(2) =  1.d0
-
-            else
-
-c              third-order accurate first derivative
-               gamma4_lo(0) = 15.d0 / 30.d0
-               gamma4_lo(1) = 20.d0 / 30.d0
-               gamma4_lo(2) = -3.d0 / 30.d0
-
-               gamma4(0)    = -45.d0 / 30.d0
-               gamma4(1)    =  20.d0 / 30.d0
-               gamma4(2)    =   9.d0 / 30.d0
-
-               gamma4_hi(0) =   75.d0 / 30.d0
-               gamma4_hi(1) = -100.d0 / 30.d0
-               gamma4_hi(2) =   57.d0 / 30.d0
-
-c              first-order accurate third derivative
-
-               gamma2_lo(0) =  30.d0 / 5.d0
-               gamma2_lo(1) = -20.d0 / 5.d0
-               gamma2_lo(2) =   6.d0 / 5.d0
-
-            endif
-
-         endif
-
-         do m = 0, m_max
-            flux(m) = gamma4_lo(m) + gamma2_lo(m) / 24.d0
-            trans_grad_flux(m) = 0.5d0 * (
-     &           - 3.d0 * gamma4_lo(m)
-     &           + 4.d0 * gamma4   (m)
-     &           -        gamma4_hi(m)
-     &           )
-         enddo
-
-         trans_grad_d = 0.5d0 * (
-     &        - 3.d0 * Dtilde_av(iglobal+ii*side     ,jglobal+jj*side     )
-     &        + 4.d0 * Dtilde_av(iglobal+ii*side+  it,jglobal+jj*side+  jt)
-     &        -        Dtilde_av(iglobal+ii*side+2*it,jglobal+jj*side+2*jt)
-     &        )
-
-      else if (boundary(tdir+2*0) .eq. -1) then
-
-c        Low boundary in the transverse direction is one cell away from the physical boundary
-
-         m_max = 3
-         toffset = -1
-
-         if (s .eq. sprime) then
-
-c           exact function evaluations
-            gamma4_lo(0) = 1.d0
-            gamma4_lo(1) = 0.d0
-            gamma4_lo(2) = 0.d0
-            gamma4_lo(3) = 0.d0
-
-            gamma4(0) = 0.d0
-            gamma4(1) = 1.d0
-            gamma4(2) = 0.d0
-            gamma4(3) = 0.d0
-
-            gamma4_hi(0) = 0.d0
-            gamma4_hi(1) = 0.d0
-            gamma4_hi(2) = 1.d0
-            gamma4_hi(3) = 0.d0
-
-c           second-order accurate second derivative
-
-            gamma2(0) =  1.d0
-            gamma2(1) = -2.d0
-            gamma2(2) =  1.d0
-            gamma2(3) =  0.d0
-
-         else
-
-c           fourth-order accurate first derivative
-            gamma4_lo(0)  =  35.d0 / 210.d0
-            gamma4_lo(1)  = 210.d0 / 210.d0
-            gamma4_lo(2)  = -63.d0 / 210.d0
-            gamma4_lo(3)  =  10.d0 / 210.d0
-
-            gamma4(0)    = -210.d0 / 210.d0
-            gamma4(1)    =   35.d0 / 210.d0
-            gamma4(2)    =  126.d0 / 210.d0
-            gamma4(3)    =  -15.d0 / 210.d0
-
-            gamma4_hi(0) =  175.d0 / 210.d0
-            gamma4_hi(1) = -350.d0 / 210.d0
-            gamma4_hi(2) =  189.d0 / 210.d0
-            gamma4_hi(3) =   50.d0 / 210.d0
-
-c           second-order accurate third derivative
-
-            gamma2(0)     = 105.d0 / 35.d0
-            gamma2(1)     = -35.d0 / 35.d0
-            gamma2(2)     = -21.d0 / 35.d0
-            gamma2(3)     =  15.d0 / 35.d0
-
-         endif
-
-         do m = 0, m_max
-            flux(m) = gamma4(m) + gamma2(m) / 24.d0
-            trans_grad_flux(m) = 0.5d0 * (gamma4_hi(m) - gamma4_lo(m))
-         enddo
-
-         trans_grad_d = 0.5d0 * (
-     &           Dtilde_av(iglobal+ii*side+it,jglobal+jj*side+jt)
-     &        -  Dtilde_av(iglobal+ii*side-it,jglobal+jj*side-jt)
-     &        )
-
-      else if (boundary(tdir+2*1) .eq. 0) then
-
-c        High boundary in the transverse direction is physical
-
-         if (drop_order .eq. 0) then
-
-            m_max = 3
-            toffset = -3
-
-            if (s .eq. sprime) then
-
-c              exact function evaluations
-               gamma4_lo(0) = 0.d0
-               gamma4_lo(1) = 1.d0
-               gamma4_lo(2) = 0.d0
-               gamma4_lo(3) = 0.d0
-
-               gamma4(0)    = 0.d0
-               gamma4(1)    = 0.d0
-               gamma4(2)    = 1.d0
-               gamma4(3)    = 0.d0
-
-               gamma4_hi(0) = 0.d0
-               gamma4_hi(1) = 0.d0
-               gamma4_hi(2) = 0.d0
-               gamma4_hi(3) = 1.d0
-
-c              second-order accurate second derivative
-
-               gamma2_hi(0) =  0.d0
-               gamma2_hi(1) =  1.d0
-               gamma2_hi(2) = -2.d0
-               gamma2_hi(3) =  1.d0
-
-            else
-
-c              fourth-order accurate first derivative
-
-               gamma4_lo(0) =  -50.d0 / 210.d0
-               gamma4_lo(1) = -189.d0 / 210.d0
-               gamma4_lo(2) =  350.d0 / 210.d0
-               gamma4_lo(3) = -175.d0 / 210.d0
-
-               gamma4(0)    =   15.d0 / 210.d0
-               gamma4(1)    = -126.d0 / 210.d0
-               gamma4(2)    =  -35.d0 / 210.d0
-               gamma4(3)    =  210.d0 / 210.d0
-
-               gamma4_hi(0) =  -10.d0 / 210.d0
-               gamma4_hi(1) =   63.d0 / 210.d0
-               gamma4_hi(2) = -210.d0 / 210.d0
-               gamma4_hi(3) =  -35.d0 / 210.d0
-
-c              second-order accurate third derivative
-
-               gamma2_hi(0) =   25.d0 / 35.d0
-               gamma2_hi(1) = -147.d0 / 35.d0
-               gamma2_hi(2) =  315.d0 / 35.d0
-               gamma2_hi(3) = -385.d0 / 35.d0
-
-            endif
-
-         else
-
-            m_max = 2
-            toffset = -2
-
-            if (s .eq. sprime) then
-
-c              exact function evaluations
-               gamma4_lo(0) = 1.d0
-               gamma4_lo(1) = 0.d0
-               gamma4_lo(2) = 0.d0
-
-               gamma4(0)    = 0.d0
-               gamma4(1)    = 1.d0
-               gamma4(2)    = 0.d0
-
-               gamma4_hi(0) = 0.d0
-               gamma4_hi(1) = 0.d0
-               gamma4_hi(2) = 1.d0
-
-c              second-order accurate second derivative
-
-               gamma2_hi(0) =  1.d0
-               gamma2_hi(1) = -2.d0
-               gamma2_hi(2) =  1.d0
-
-            else
-
-c              third-order accurate first derivative
-
-               gamma4_lo(0) =  -57.d0 / 30.d0
-               gamma4_lo(1) =  100.d0 / 30.d0
-               gamma4_lo(2) =  -75.d0 / 30.d0
-
-               gamma4(0)    =  -9.d0 / 30.d0
-               gamma4(1)    = -20.d0 / 30.d0
-               gamma4(2)    =  45.d0 / 30.d0
-
-c              Eq. (39)
-               gamma4_hi(0) =   3.d0 / 30.d0
-               gamma4_hi(1) = -20.d0 / 30.d0
-               gamma4_hi(2) = -15.d0 / 30.d0
-
-c              first-order accurate third derivative (Eq. (40))
-
-               gamma2_hi(0) =  -6.d0 / 5.d0
-               gamma2_hi(1) =  20.d0 / 5.d0
-               gamma2_hi(2) = -30.d0 / 5.d0
-
-            endif
-
-         endif
-
-         do m = 0, m_max
-            flux(m) = gamma4_hi(m) + gamma2_hi(m) / 24.d0
-            trans_grad_flux(m) = 0.5d0 * (
-     &             3.d0 * gamma4_hi(m)
-     &           - 4.d0 * gamma4   (m)
-     &           +        gamma4_lo(m)
-     &           )
-         enddo
-
-         trans_grad_d = 0.5d0 * (
-     &          3.d0 * Dtilde_av(iglobal+ii*side     ,jglobal+jj*side     )
-     &        - 4.d0 * Dtilde_av(iglobal+ii*side-  it,jglobal+jj*side-  jt)
-     &        +        Dtilde_av(iglobal+ii*side-2*it,jglobal+jj*side-2*jt)
-     &        )
-
-      else if (boundary(tdir+2*1) .eq. 1) then
-
-c        High boundary in the transverse direction is one cell away from the physical boundary
-
-         m_max = 3
-         toffset = -2
-
-         if (s .eq. sprime) then
-
-c           exact function evaluations
-            gamma4_lo(0) =  0.d0
-            gamma4_lo(1) =  1.d0
-            gamma4_lo(2) =  0.d0
-            gamma4_lo(3) =  0.d0
-
-            gamma4(0) = 0.d0
-            gamma4(1) = 0.d0
-            gamma4(2) = 1.d0
-            gamma4(3) = 0.d0
-
-            gamma4_hi(0) =  0.d0
-            gamma4_hi(1) =  0.d0
-            gamma4_hi(2) =  0.d0
-            gamma4_hi(3) =  1.d0
-
-c           second-order accurate second derivative
-
-            gamma2(0) =  0.d0
-            gamma2(1) =  1.d0
-            gamma2(2) = -2.d0
-            gamma2(3) =  1.d0
-
-         else
-
-c           fourth-order accurate first derivative
-
-            gamma4_lo(0) =  -50.d0 / 210.d0
-            gamma4_lo(1) = -189.d0 / 210.d0
-            gamma4_lo(2) =  350.d0 / 210.d0
-            gamma4_lo(3) = -175.d0 / 210.d0
-
-            gamma4(0)    =   15.d0 / 210.d0
-            gamma4(1)    = -126.d0 / 210.d0
-            gamma4(2)    =  -35.d0 / 210.d0
-            gamma4(3)    =  210.d0 / 210.d0
-
-            gamma4_hi(0) =  -10.d0 / 210.d0
-            gamma4_hi(1) =   63.d0 / 210.d0
-            gamma4_hi(2) = -210.d0 / 210.d0
-            gamma4_hi(3) =  -35.d0 / 210.d0
-
-c           second-order accurate third derivative
-
-            gamma2(0)     =  -15.d0 / 35.d0
-            gamma2(1)     =   21.d0 / 35.d0
-            gamma2(2)     =   35.d0 / 35.d0
-            gamma2(3)     = -105.d0 / 35.d0
-
-         endif
-
-         do m = 0, m_max
-            flux(m) = gamma4(m) + gamma2(m) / 24.d0
-            trans_grad_flux(m) = 0.5d0 * (gamma4_hi(m) - gamma4_lo(m))
-         enddo
-
-         trans_grad_d = 0.5d0 * (
-     &         Dtilde_av(iglobal+ii*side+it,jglobal+jj*side+jt)
-     &      -  Dtilde_av(iglobal+ii*side-it,jglobal+jj*side-jt)
-     &        )
+      m_max = 4
+      toffset = -2
+
+      if (s .eq. sprime) then
+
+c        exact function evaluations
+         gamma4_lo(0) = 0.d0
+         gamma4_lo(1) = 1.d0
+         gamma4_lo(2) = 0.d0
+         gamma4_lo(3) = 0.d0
+         gamma4_lo(4) = 0.d0
+
+         gamma4(0) = 0.d0
+         gamma4(1) = 0.d0
+         gamma4(2) = 1.d0
+         gamma4(3) = 0.d0
+         gamma4(4) = 0.d0
+
+         gamma4_hi(0) = 0.d0
+         gamma4_hi(1) = 0.d0
+         gamma4_hi(2) = 0.d0
+         gamma4_hi(3) = 1.d0
+         gamma4_hi(4) = 0.d0
+
+c        second-order accurate second derivative
+
+         gamma2(0) =  0.d0
+         gamma2(1) =  1.d0
+         gamma2(2) = -2.d0
+         gamma2(3) =  1.d0
+         gamma2(4) =  0.d0
 
       else
 
-c        Physical boundary is at least two cells away in the transverse directions
+c        fourth-order accurate first derivative
 
-         m_max = 4
-         toffset = -2
+c        Eq. (32) with the minus
+         gamma4_lo(0) =  -3.d0 / 12.d0
+         gamma4_lo(1) = -10.d0 / 12.d0
+         gamma4_lo(2) =  18.d0 / 12.d0
+         gamma4_lo(3) =  -6.d0 / 12.d0
+         gamma4_lo(4) =   1.d0 / 12.d0
 
-         if (s .eq. sprime) then
+c        Eq. (27)
+         gamma4(0)     =  1.d0 / 12.d0
+         gamma4(1)     = -8.d0 / 12.d0
+         gamma4(2)     =  0.d0
+         gamma4(3)     =  8.d0 / 12.d0
+         gamma4(4)     = -1.d0 / 12.d0
 
-c           exact function evaluations
-            gamma4_lo(0) = 0.d0
-            gamma4_lo(1) = 1.d0
-            gamma4_lo(2) = 0.d0
-            gamma4_lo(3) = 0.d0
-            gamma4_lo(4) = 0.d0
+c        Eq. (32) with the plus
+         gamma4_hi(0) =  -1.d0 / 12.d0
+         gamma4_hi(1) =   6.d0 / 12.d0
+         gamma4_hi(2) = -18.d0 / 12.d0
+         gamma4_hi(3) =  10.d0 / 12.d0
+         gamma4_hi(4) =   3.d0 / 12.d0
 
-            gamma4(0) = 0.d0
-            gamma4(1) = 0.d0
-            gamma4(2) = 1.d0
-            gamma4(3) = 0.d0
-            gamma4(4) = 0.d0
+c        second-order accurate third derivative (Eq. (28))
 
-            gamma4_hi(0) = 0.d0
-            gamma4_hi(1) = 0.d0
-            gamma4_hi(2) = 0.d0
-            gamma4_hi(3) = 1.d0
-            gamma4_hi(4) = 0.d0
-
-c           second-order accurate second derivative
-
-            gamma2(0) =  0.d0
-            gamma2(1) =  1.d0
-            gamma2(2) = -2.d0
-            gamma2(3) =  1.d0
-            gamma2(4) =  0.d0
-
-         else
-
-c           fourth-order accurate first derivative
-
-c           Eq. (32) with the minus
-            gamma4_lo(0) =  -3.d0 / 12.d0
-            gamma4_lo(1) = -10.d0 / 12.d0
-            gamma4_lo(2) =  18.d0 / 12.d0
-            gamma4_lo(3) =  -6.d0 / 12.d0
-            gamma4_lo(4) =   1.d0 / 12.d0
-
-c           Eq. (27)
-            gamma4(0)     =  1.d0 / 12.d0
-            gamma4(1)     = -8.d0 / 12.d0
-            gamma4(2)     =  0.d0
-            gamma4(3)     =  8.d0 / 12.d0
-            gamma4(4)     = -1.d0 / 12.d0
-
-c           Eq. (32) with the plus
-            gamma4_hi(0) =  -1.d0 / 12.d0
-            gamma4_hi(1) =   6.d0 / 12.d0
-            gamma4_hi(2) = -18.d0 / 12.d0
-            gamma4_hi(3) =  10.d0 / 12.d0
-            gamma4_hi(4) =   3.d0 / 12.d0
-
-c           second-order accurate third derivative (Eq. (28))
-
-            gamma2(0)      = -1.d0 / 2.d0
-            gamma2(1)      =  2.d0 / 2.d0
-            gamma2(2)      =  0.d0
-            gamma2(3)      = -2.d0 / 2.d0
-            gamma2(4)      =  1.d0 / 2.d0
-
-         endif
-
-         do m = 0, m_max
-            flux(m) = gamma4(m) + gamma2(m) / 24.d0
-            trans_grad_flux(m) = 0.5d0 * (gamma4_hi(m) - gamma4_lo(m))
-         enddo
-
-         trans_grad_d = 0.5d0 * (
-     &         Dtilde_av(iglobal+ii*side+it,jglobal+jj*side+jt)
-     &      -  Dtilde_av(iglobal+ii*side-it,jglobal+jj*side-jt)
-     &        )
+         gamma2(0)      = -1.d0 / 2.d0
+         gamma2(1)      =  2.d0 / 2.d0
+         gamma2(2)      =  0.d0
+         gamma2(3)      = -2.d0 / 2.d0
+         gamma2(4)      =  1.d0 / 2.d0
 
       endif
 
+      do m = 0, m_max
+         flux(m) = gamma4(m) + gamma2(m) / 24.d0
+         trans_grad_flux(m) = 0.5d0 * (gamma4_hi(m) - gamma4_lo(m))
+      enddo
+
+      trans_grad_d = 0.5d0 * (
+     &     Dtilde_av(iglobal+ii*side+it,jglobal+jj*side+jt)
+     &     -  Dtilde_av(iglobal+ii*side-it,jglobal+jj*side-jt)
+     &     )
+      
 c     Accumulate the stencil contributions
 
       if (dir .eq. 0) then
@@ -727,12 +181,11 @@ c     Accumulate the stencil contributions
       return
       end
 
+
       subroutine accum_flux_stencil2(
      &     CHF_CONST_INT[s],
      &     CHF_CONST_INT[sprime],
      &     CHF_CONST_INT[side],
-     &     CHF_CONST_I1D[boundary],
-     &     CHF_CONST_I1D[bc_types],
      &     CHF_CONST_REALVECT[h],
      &     CHF_CONST_FRA1[Dtilde_av],
      &     CHF_CONST_INTVECT[global],
@@ -741,7 +194,7 @@ c     Accumulate the stencil contributions
       integer
      &     CHF_DDECL[i;j], CHF_DDECL[ii;jj], CHF_DDECL[ic;jc],
      &     CHF_DDECL[lo0;lo1], CHF_DDECL[hi0;hi1],  CHF_DDECL[iglobal;jglobal],
-     &     dir, tdir, dst_to_bndry, m, m_max, n, noffset, toffset, nlength, bc_type
+     &     dir, tdir, m, m_max, n, noffset, toffset, nlength
       REAL_T hfac, n_stencil(0:1), t_stencil(0:2), norm_fac
 
       dir = s
@@ -751,9 +204,6 @@ c     Accumulate the stencil contributions
       CHF_DTERM[
       ic = 1;
       jc = 1]
-
-      dst_to_bndry = boundary(dir+2*side)
-      bc_type = bc_types(dir+2*side)
 
       CHF_DTERM[
       ii = CHF_ID(0,dir);
@@ -766,181 +216,32 @@ c     Accumulate the stencil contributions
          hfac = hfac * h(tdir) / h(dir)
       endif
 
-      if (dst_to_bndry .eq. 0) then
+      if (s. eq. sprime) then
 
-c        On the physical boundary
+         noffset = side - 1
+         nlength = 2
+         m_max   = 0
+         toffset = 0
 
-         if (s. eq. sprime) then
-
-            if (bc_type .eq. 0) then
-c              Homogeneous Dirichlet
-
-               noffset = 0
-               nlength = 1
-               m_max   = 0
-               toffset = 0
-
-               n_stencil(0) = - 2.d0 * (2*side - 1)
-               t_stencil(0) = 1.d0
-
-            else
-c              Homogeneous Neumann (normal derivative is zero)
-
-               m_max = -1
-               toffset = 0
-               noffset = 0
-               nlength = 0
-            endif
-
-        else
-
-c           Tangential derivative
-
-            if (bc_type .eq. 0) then
-c              Homogeneous Dirichlet
-
-               m_max = -1
-               toffset = 0
-               noffset = 0
-               nlength = 0
-
-            else
-c              Homogeneous Neumann
-
-               n_stencil(0) = 1.d0
-               noffset = 0
-               nlength = 1
-
-               if (boundary(tdir+2*0) .eq. 0) then
-
-c                 Low boundary in the transverse direction is physical
-
-c                 One-sided
-                  m_max   = 1
-                  toffset = 0
-                  t_stencil(0) = -1.d0
-                  t_stencil(1) =  1.d0
-
-               else if (boundary(tdir+2*1) .eq. 0) then
-
-c                 High boundary in the transverse direction is physical
-
-c                 One-sided
-                  m_max   = 1
-                  toffset = -1
-                  t_stencil(0) = -1.d0
-                  t_stencil(1) =  1.d0
-
-               else
-
-c                 Physical boundary is at least one cell away in the transverse directions
-
-                  m_max   = 2
-                  toffset = -1
-                  t_stencil(0) = -1.d0 / 2.d0
-                  t_stencil(1) =  0.d0
-                  t_stencil(2) =  1.d0 / 2.d0
-
-               endif
-
-            endif
-
-         endif
+         n_stencil(0) = -1.d0
+         n_stencil(1) =  1.d0
+         t_stencil(0) =  1.d0
 
       else
 
-c        Not on the physical boundary
+         n_stencil(0) = 0.5d0
+         n_stencil(1) = 0.5d0
+         
+         noffset = side - 1
+         nlength = 2
 
-         if (s. eq. sprime) then
+         m_max   = 2
+         toffset = -1
 
-            noffset = side - 1
-            nlength = 2
-            m_max   = 0
-            toffset = 0
-
-            n_stencil(0) = -1.d0
-            n_stencil(1) =  1.d0
-            t_stencil(0) =  1.d0
-
-         else
-
-            n_stencil(0) = 0.5d0
-            n_stencil(1) = 0.5d0
-
-            noffset = side - 1
-            nlength = 2
-
-            if (boundary(tdir+2*0) .eq. 0) then
-
-c              Low boundary in the transverse direction is physical
-
-               if (bc_types(tdir+2*0) .eq. 0) then
-                  m_max   = 1
-                  toffset = 0
-
-c                 Homogeneous Dirichlet
-c                  t_stencil(0) = 1.d0
-c                  t_stencil(1) = 1.d0 / 3.d0
-
-c                 One-sided
-                  t_stencil(0) = -1.d0
-                  t_stencil(1) =  1.d0
-               else
-                  m_max   = 1
-                  toffset = 0
-
-c                 Homogeneous Neumann
-c                  t_stencil(0) = -0.5d0
-c                  t_stencil(1) =  0.5d0
-
-c                 One-sided
-                  t_stencil(0) = -1.d0
-                  t_stencil(1) =  1.d0
-               endif
-
-            else if (boundary(tdir+2*1) .eq. 0) then
-
-c              High boundary in the transverse direction is physical
-
-               if (bc_types(tdir+2*1) .eq. 0) then
-                  m_max   = 1
-                  toffset = -1
-
-c                 Homogeneous Dirichlet
-c                  t_stencil(0) = -1.d0 / 3.d0
-c                  t_stencil(1) = -1.d0
-
-c                 One-sided
-                  t_stencil(0) = -1.d0
-                  t_stencil(1) =  1.d0
-               else         
-                  m_max   = 1
-                  toffset = -1
-
-c                 Homogeneous Neumann
-c                  t_stencil(0) = -0.5d0
-c                  t_stencil(1) =  0.5d0
-
-c                 One-sided
-                  t_stencil(0) = -1.d0
-                  t_stencil(1) =  1.d0
-               endif
-
-            else
-
-c              Physical boundary is at least one cell away in the transverse directions
-
-               m_max   = 2
-               toffset = -1
-
-               t_stencil(0) = -1.d0 / 2.d0
-               t_stencil(1) =  0.d0
-               t_stencil(2) =  1.d0 / 2.d0
-
-            endif
-
-         endif
-
+         t_stencil(0) = -1.d0 / 2.d0
+         t_stencil(1) =  0.d0
+         t_stencil(2) =  1.d0 / 2.d0
+         
       endif
 
 c     Accumulate the stencil contributions

@@ -214,7 +214,6 @@ SNCoreCoordSys::defineBoundaries3()
    CH_assert(gotMappingBlocks());
    m_boundaries.resize(numBlocks());
 
-   int L0 = m_numcells_core_radial;
    int lL1 = m_numcells_mcore_poloidal/2 + m_numcells_lcore_poloidal;
    int rL1 = m_numcells_mcore_poloidal/2 + m_numcells_rcore_poloidal;
 
@@ -750,7 +749,6 @@ SNCoreCoordSys::lo_mapped_index( int a_block ) const
    }
    else {
 
-      int L0 = m_numcells_core_radial;
       int lL1 = m_numcells_mcore_poloidal/2 + m_numcells_lcore_poloidal;
       int rL1 = m_numcells_mcore_poloidal/2 + m_numcells_rcore_poloidal;
 

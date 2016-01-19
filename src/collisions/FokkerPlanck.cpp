@@ -19,13 +19,13 @@ FokkerPlanck::FokkerPlanck( ParmParse& a_ppcls, const int a_verbosity )
    : m_verbosity(a_verbosity),
      m_ppcls(a_ppcls),
      m_cls_freq(-1.0),
-     m_subtract_background(false),
      m_pcg_tol(1.0e-5),
      m_pcg_maxiter(100),
      m_mult_num(1),
      m_update_freq(-1),
      m_it_counter(0),
-     m_first_step(true)
+     m_first_step(true),
+     m_subtract_background(false)
 {
    m_verbosity = true;
    parseParameters( a_ppcls );
@@ -422,7 +422,7 @@ void FokkerPlanck::computeClsNorm(Real&                       a_cls_norm,
 
 {
     //Get normalization parameters (units)
-    double N, T, L, M, B;
+    double N, T, L, M;
     ParmParse ppunits( "units" );
     ppunits.get("number_density",N);  //[m^{-3}]
     ppunits.get("length",L);          //[m]

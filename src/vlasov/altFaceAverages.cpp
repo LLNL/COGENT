@@ -19,13 +19,13 @@ bwenoFaceAverages( LevelData<FluxBox>&         a_face_phi,
                    const LevelData<FluxBox>&   a_face_vel,
                    const PhaseGeom&            a_geom)
 {
-   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit*2 );
+   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit );
 
    // In order to do upwinding, need normal velocities in
    // computational space.  We just need a sign, so we don't need fourth
    // order for this.
    const DisjointBoxLayout& grids( a_face_phi.getBoxes() );
-   LevelData<FluxBox> normal_vel( grids, 1, IntVect::Unit*2 );
+   LevelData<FluxBox> normal_vel( grids, 1, IntVect::Unit );
 #if 1
    // Enable this branch if the passed in velocity is in the physical frame (default)
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
@@ -56,12 +56,12 @@ bwenoFaceAverages( LevelData<FluxBox>&         a_face_phi,
 
       for (int dir(0); dir<SpaceDim; dir++) {
 
-         // for 4th order, we need two extra faces in the mapped-grid,
+         // for 4th order, we need an extra face in the mapped-grid,
          // transverse directions to handle 4th-order products
          Box face_box( grids[dit] );
          for (int tdir(0); tdir<SpaceDim; tdir++) {
             if (tdir!=dir) {
-               const int TRANSVERSE_GROW(2);
+               const int TRANSVERSE_GROW(1);
                face_box.grow( tdir, TRANSVERSE_GROW );
             }
          }
@@ -87,13 +87,13 @@ uw5FaceAverages( LevelData<FluxBox>&         a_face_phi,
                  const LevelData<FluxBox>&   a_face_vel,
                  const PhaseGeom&            a_geom )
 {
-   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit*2 );
+   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit );
 
    // In order to do upwinding, need normal velocities in
    // computational space.  We just need a sign, so we don't need fourth
    // order for this.
    const DisjointBoxLayout& grids( a_face_phi.getBoxes() );
-   LevelData<FluxBox> normal_vel( grids, 1, IntVect::Unit*2 );
+   LevelData<FluxBox> normal_vel( grids, 1, IntVect::Unit );
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       normal_vel[dit].setVal( 0.0 );
    }
@@ -106,12 +106,12 @@ uw5FaceAverages( LevelData<FluxBox>&         a_face_phi,
 
       for (int dir(0); dir<SpaceDim; dir++) {
 
-         // for 4th order, we need two extra faces in the mapped-grid,
+         // for 4th order, we need an extra face in the mapped-grid,
          // transverse directions to handle 4th-order products
          Box face_box( grids[dit] );
          for (int tdir(0); tdir<SpaceDim; tdir++) {
             if (tdir!=dir) {
-               const int TRANSVERSE_GROW(2);
+               const int TRANSVERSE_GROW(1);
                face_box.grow( tdir, TRANSVERSE_GROW );
             }
          }
@@ -137,13 +137,13 @@ uw3FaceAverages( LevelData<FluxBox>&         a_face_phi,
                  const LevelData<FluxBox>&   a_face_vel,
                  const PhaseGeom&            a_geom )
 {
-   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit*2 );
+   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit );
 
    // In order to do upwinding, need normal velocities in
    // computational space.  We just need a sign, so we don't need fourth
    // order for this.
    const DisjointBoxLayout& grids( a_face_phi.getBoxes() );
-   LevelData<FluxBox> normal_vel( grids, 1, IntVect::Unit*2 );
+   LevelData<FluxBox> normal_vel( grids, 1, IntVect::Unit );
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       normal_vel[dit].setVal( 0.0 );
    }
@@ -156,12 +156,12 @@ uw3FaceAverages( LevelData<FluxBox>&         a_face_phi,
 
       for (int dir(0); dir<SpaceDim; dir++) {
 
-         // for 4th order, we need two extra faces in the mapped-grid,
+         // for 4th order, we need an extra face in the mapped-grid,
          // transverse directions to handle 4th-order products
          Box face_box( grids[dit] );
          for (int tdir(0); tdir<SpaceDim; tdir++) {
             if (tdir!=dir) {
-               const int TRANSVERSE_GROW(2);
+               const int TRANSVERSE_GROW(1);
                face_box.grow( tdir, TRANSVERSE_GROW );
             }
          }
@@ -187,13 +187,13 @@ uw1FaceAverages( LevelData<FluxBox>&         a_face_phi,
                  const LevelData<FluxBox>&   a_face_vel,
                  const PhaseGeom&            a_geom )
 {
-   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit*2 );
+   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit );
 
    // In order to do upwinding, need normal velocities in
    // computational space.  We just need a sign, so we don't need fourth
    // order for this.
    const DisjointBoxLayout& grids( a_face_phi.getBoxes() );
-   LevelData<FluxBox> normal_vel( grids, 1, IntVect::Unit*2 );
+   LevelData<FluxBox> normal_vel( grids, 1, IntVect::Unit );
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       normal_vel[dit].setVal( 0.0 );
    }
@@ -206,12 +206,12 @@ uw1FaceAverages( LevelData<FluxBox>&         a_face_phi,
 
       for (int dir(0); dir<SpaceDim; dir++) {
 
-         // for 4th order, we need two extra faces in the mapped-grid,
+         // for 4th order, we need an extra face in the mapped-grid,
          // transverse directions to handle 4th-order products
          Box face_box( grids[dit] );
          for (int tdir(0); tdir<SpaceDim; tdir++) {
             if (tdir!=dir) {
-               const int TRANSVERSE_GROW(2);
+               const int TRANSVERSE_GROW(1);
                face_box.grow( tdir, TRANSVERSE_GROW );
             }
          }
@@ -237,13 +237,13 @@ weno5FaceAverages( LevelData<FluxBox>&         a_face_phi,
                    const LevelData<FluxBox>&   a_face_vel,
                    const PhaseGeom&            a_geom )
 {
-   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit*2 );
+   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit );
 
    // In order to do upwinding, need normal velocities in
    // computational space.  We just need a sign, so we don't need fourth
    // order for this.
    const DisjointBoxLayout& grids( a_face_phi.getBoxes() );
-   LevelData<FluxBox> normal_vel( grids, 1, IntVect::Unit*2 );
+   LevelData<FluxBox> normal_vel( grids, 1, IntVect::Unit );
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       normal_vel[dit].setVal( 0.0 );
    }
@@ -256,12 +256,12 @@ weno5FaceAverages( LevelData<FluxBox>&         a_face_phi,
 
       for (int dir(0); dir<SpaceDim; dir++) {
 
-         // for 4th order, we need two extra faces in the mapped-grid,
+         // for 4th order, we need an extra face in the mapped-grid,
          // transverse directions to handle 4th-order products
          Box face_box( grids[dit] );
          for (int tdir(0); tdir<SpaceDim; tdir++) {
             if (tdir!=dir) {
-               const int TRANSVERSE_GROW(2);
+               const int TRANSVERSE_GROW(1);
                face_box.grow( tdir, TRANSVERSE_GROW );
             }
          }

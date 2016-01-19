@@ -37,8 +37,6 @@ SlabCoordSys::SlabCoordSys( ParmParse&               a_pp,
 
   defineCoordSystemsAndBoundaries(coord_vec);
 
-  Tuple<BlockBoundary, 2*SpaceDim>& block_boundaries( m_boundaries[0] );
-
   int bc_type = 0;     // Homogeneous Dirichlet
   int bc_value = 0.;
   for (int dir=0; dir<SpaceDim; ++dir) {
@@ -100,8 +98,6 @@ SlabCoordSys::blockRemapping(RealVect&       a_xi_valid,
 // Don't need to do anything in Slab
 // { }
 {
-   const SlabBlockCoordSys* mag_coord_sys = (SlabBlockCoordSys*)getCoordSys(0);
-
    //   double radial_width = m_xmax;
    //   double poloidal_width = m_ymax;
    double radial_width = 1.0;

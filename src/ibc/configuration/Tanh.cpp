@@ -18,6 +18,8 @@
 #include "MillerBlockCoordSys.H"
 #include "SlabCoordSys.H"
 #include "SlabBlockCoordSys.H"
+#include "RectangularTorusCoordSys.H"
+#include "RectangularTorusBlockCoordSys.H"
 #include "MultiBlockCoordSys.H"
 #include "Vector.H"
 #include "MagGeom.H"
@@ -134,6 +136,8 @@ void Tanh::checkGeometryValidity( const MultiBlockLevelGeom& a_geometry ) const
    not_annular &= (typeid(coord_sys) != typeid(MillerBlockCoordSys));
    not_annular &= (typeid(coord_sys) != typeid(SlabCoordSys));
    not_annular &= (typeid(coord_sys) != typeid(SlabBlockCoordSys));
+   not_annular &= (typeid(coord_sys) != typeid(RectangularTorusCoordSys));
+   not_annular &= (typeid(coord_sys) != typeid(RectangularTorusBlockCoordSys));
 
    if ( not_annular ) {
       const std::string msg( "Tanh: Attempt to use non-annular geometry. ");

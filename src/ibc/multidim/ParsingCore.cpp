@@ -1302,7 +1302,7 @@ int ParsingCore::inToPostFix()
             }
         }
         else{//
-            while(manipStr.length()>i+1 && (manipStr[i+1]=='.'||'0'<=manipStr[i+1]&&manipStr[i+1]<='9') ){
+           while(manipStr.length()>i+1 && ( manipStr[i+1]=='.'|| ('0'<=manipStr[i+1]&&manipStr[i+1]<='9') ) ){
                 parserStr+=manipStr[++i];
             }
             //DEBUG

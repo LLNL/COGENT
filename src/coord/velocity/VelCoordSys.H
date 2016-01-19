@@ -59,7 +59,7 @@ class VelCoordSys : public CartesianCS
       /**
        * Object ParmParse name.
        */
-      static char* pp_name;
+      static const std::string pp_name;
 
    protected:
 

@@ -193,7 +193,6 @@ PerpEnergyKernel::eval( LevelData<FArrayBox>& a_result,
    const LevelData<FArrayBox>& B_injected = geometry.getBFieldMagnitude();
 
    const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
-   double mass = a_kinetic_species.mass();
 
    const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
    DataIterator dit = grids.dataIterator();
@@ -340,8 +339,6 @@ HeatFluxKernel::eval( LevelData<FArrayBox>& a_result,
       int vp_index = Bbox.smallEnd(VPARALLEL_DIR);
       int mu_index = Bbox.smallEnd(MU_DIR);
 
-      const Box& Phibox = this_m_phi.box();
-
       // Get the physical velocity coordinates for this part of phase space
       FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
       block_coord_sys.getVelocityRealCoords(velocityRealCoords);
@@ -405,10 +402,7 @@ PoloidalMomKernel::eval( LevelData<FArrayBox>& a_result,
    //Get magnetic field parameters in the configuration space
    const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldCell = mag_geom.getCCBField();
    const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldMagCell = mag_geom.getCCBFieldMag();
-   const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldDirCell = mag_geom.getCCBFieldDir();
-   const CFG::LevelData<CFG::FArrayBox>& cfg_gradBFieldMagCell = mag_geom.getCCGradBFieldMag();
    const CFG::LevelData<CFG::FArrayBox>& cfg_curlBFieldDirCell = mag_geom.getCCCurlBFieldDir();
-   const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldDirdotcurlBFieldDirCell = mag_geom.getCCBFieldDirdotCurlBFieldDir();
 
    //Create the 2-component (R, Z) transerve version of curlb 
    CFG::LevelData<CFG::FArrayBox> cfg_curlbTwoComp(mag_geom.grids(), 2, CFG::IntVect::Zero);

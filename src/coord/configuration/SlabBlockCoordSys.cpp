@@ -74,13 +74,13 @@ SlabBlockCoordSys::SlabBlockCoordSys( ParmParse&               a_parm_parse,
 #if CFG_DIM==3
         << ", cellSp[2] = " << cellSpacing[2]
 #endif  
-	<< endl;
+        << endl;
 
    cout << "**** dimensions = " << dimensions[0] <<", " << dimensions[1] 
 #if CFG_DIM==3
         << ", " << dimensions[2]
 #endif  
-	<< endl;
+        << endl;
 
    D_TERM(m_xmaxvec[0] = m_xmax;,
           m_xmaxvec[1] = m_ymax;,
@@ -120,9 +120,6 @@ Real SlabBlockCoordSys::dXdXi( const RealVect& a_Xi,
                                  int             a_dirXi ) const
 {
   Real value = 0.0;
-  // this is for test purposes
-  double x = a_Xi[0];
-  double y = a_Xi[1];
 #if CFG_DIM==3
   double z = a_Xi[2];
 #endif

@@ -5,6 +5,7 @@
 
 #include "Directions.H"
 #include "AnnulusPotentialBC.H"
+#include "RectangularTorusPotentialBC.H"
 #include "SlabPotentialBC.H"
 #include "SNCorePotentialBC.H"
 #include "newMappedGridIO.H"
@@ -30,8 +31,8 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
    : GKPoisson(a_pp, a_geom, a_larmor_number, a_debye_number),
      m_nonlinear_relative_tolerance(1.e-5),
      m_nonlinear_change_tolerance(1.e-5),
-     m_nonlinear_max_iterations(5),
      m_jacobian_solve_tolerance(1.e-4),
+     m_nonlinear_max_iterations(5),
      m_flux_surface(a_geom),
      m_precond_Psolver(a_geom,2),
      m_precond_Qsolver(a_geom,2),
@@ -209,7 +210,7 @@ GKPoissonBoltzmann::computePotentialAndElectronDensity(
       solve( a_ni, a_bc, a_ne, a_phi );
    }
 
-   fillGhosts(a_phi);
+   fillInternalGhosts(a_phi);
 }
 
 
@@ -290,7 +291,7 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron& a_ne,
          beta[dit].setVal(0.);
       }
 
-      m_precond_Psolver.constructMatrix(alpha, m_mapped_coefficients, beta, a_bc, true);
+      m_precond_Psolver.constructMatrix(alpha, m_mapped_coefficients, beta, a_bc, true, false);
 
    }
    else {
@@ -316,7 +317,7 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron& a_ne,
          beta[dit] += 1.;
       }
 
-      m_precond_Psolver.constructMatrix(alpha, m_mapped_coefficients, beta, a_bc, true);
+      m_precond_Psolver.constructMatrix(alpha, m_mapped_coefficients, beta, a_bc, true, false);
 
 #else
 
@@ -325,7 +326,7 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron& a_ne,
          beta[dit].setVal(0.);
       }
 
-      m_precond_Psolver.constructMatrix(alpha, m_mapped_coefficients, beta, a_bc, true);
+      m_precond_Psolver.constructMatrix(alpha, m_mapped_coefficients, beta, a_bc, true, false);
 
 #endif
 
@@ -349,7 +350,7 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron& a_ne,
          beta[dit].setVal(1.);
       }
 
-      m_precond_Qsolver.constructMatrix(alpha, m_mapped_coefficients, beta, a_bc, false);
+      m_precond_Qsolver.constructMatrix(alpha, m_mapped_coefficients, beta, a_bc, false, false);
 
 #else
 
@@ -364,7 +365,7 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron& a_ne,
       }
       multiplyM(beta);
 
-      m_precond_Qsolver.constructMatrix(alpha, m_mapped_coefficients, beta, a_bc, false);
+      m_precond_Qsolver.constructMatrix(alpha, m_mapped_coefficients, beta, a_bc, false, false);
 
 #endif
    }
@@ -529,7 +530,7 @@ GKPoissonBoltzmann::solveRadial( const LevelData<FArrayBox>& a_Zni,
 
    m_flux_surface.spread(phi_fs, a_phi );
 
-   fillGhosts(a_phi);
+   fillInternalGhosts(a_phi);
 
    computeElectronDensity(a_phi, a_Zni, a_ne);
 }
@@ -624,7 +625,7 @@ GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>& a_Zni,
          a_phi[dit].copy(phi_bar[dit]);
          a_phi[dit] += phi_tilde[dit];
       }
-      fillGhosts(a_phi);
+      fillInternalGhosts(a_phi);
 
       double norm_phi_new = L2Norm(a_phi);
 
@@ -1678,6 +1679,16 @@ GKPoissonBoltzmann::isCoreRadialPeriodicOrNeumannBC( const PotentialBC& a_bc ) c
    }
 
    if ( typeid(a_bc) == typeid(SlabPotentialBC) ) {
+      const ProblemDomain& domain = m_geometry.getBlockCoordSys(0).domain();
+
+      if ( domain.isPeriodic(RADIAL_DIR) ||
+           (a_bc.getBCType(0, RADIAL_DIR, 0) == PotentialBC::NEUMANN &&
+            a_bc.getBCType(0, RADIAL_DIR, 1) == PotentialBC::NEUMANN) ) {
+         flag = true;
+      }
+   }
+
+   if ( typeid(a_bc) == typeid(RectangularTorusPotentialBC) ) {
       const ProblemDomain& domain = m_geometry.getBlockCoordSys(0).domain();
 
       if ( domain.isPeriodic(RADIAL_DIR) ||

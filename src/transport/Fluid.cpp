@@ -22,8 +22,8 @@
 
 Fluid::Fluid( const string& a_species_name, ParmParse& a_pptpm, const int a_verbosity )
     : D_m(0),
-      m_verbosity(0),
       m_model_only(false),
+      m_verbosity(0),
       m_first_step(true)
 {
    m_verbosity = a_verbosity;
@@ -284,7 +284,6 @@ inline void Fluid::printParameters(const KineticSpeciesPtrVect& soln)
    const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
    const ProblemDomain& phase_domain = phase_geom.domain();
    const Box& domain_box = phase_domain.domainBox();
-   int num_r_cells = domain_box.size(0);
    int num_mu_cells = domain_box.size(3);
 
    // get dr and dlnB/dr, and hr

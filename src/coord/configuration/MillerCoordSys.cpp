@@ -39,8 +39,6 @@ MillerCoordSys::MillerCoordSys( ParmParse&               a_pp,
 
   m_spread_radially = block_coords->getConstMinorrad() != 0;
 
-  Tuple<BlockBoundary, 2*SpaceDim>& block_boundaries( m_boundaries[0] );
-
   int bc_type = 0;     // Homogeneous Dirichlet
   int bc_value = 0.;
   for (int dir=0; dir<SpaceDim; ++dir) {

@@ -181,7 +181,6 @@ void Lorentz::testPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
 
    // Get coordinate system parameters and injected B
    const DisjointBoxLayout& grids( a_rhs_coll.getBoxes() );
-   const MultiBlockCoordSys* coords = a_phase_geom.coordSysPtr();
    const LevelData<FArrayBox>& injected_B = a_phase_geom.getBFieldMagnitude();
 
    // Get velocity coordinate system parameters
@@ -435,7 +434,7 @@ void Lorentz::computeSelfConsistFreq(LevelData<FArrayBox>& a_cls_freq,
 
 {
     //Get normalization parameters (units)
-    double N, T, L, M, B;
+    double N, T, L;
     ParmParse ppunits( "units" );
     ppunits.get("number_density",N);  //[m^{-3}]
     ppunits.get("temperature",T);     //[eV]

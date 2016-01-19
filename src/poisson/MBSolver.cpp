@@ -3,18 +3,40 @@
 #include "MBStencilIterator.H"
 #include "BlockBaseRegister.H"
 
-
 #include "NamespaceHeader.H"
 
 
 
-MBSolver::MBSolver( const MagGeom& a_geom,
-                    const int      a_discretization_order )
+double
+L2Norm( const LevelData<FArrayBox>&  a_data )
+{
+   const DisjointBoxLayout& grids = a_data.getBoxes();
+
+   double local_sum = 0.;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      local_sum += a_data[dit].dotProduct(a_data[dit],grids[dit]);
+   }
+
+   double global_sum;
+#ifdef CH_MPI
+   MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+#else
+   global_sum = local_sum;
+#endif
+
+   return sqrt(global_sum);
+}
+
+
+
+MBSolver::MBSolver( const MagGeom&  a_geom,
+                    const int       a_discretization_order )
    : m_geometry(a_geom),
-     m_num_potential_ghosts_filled(2),
      m_discretization_order(a_discretization_order),
      m_dropOrder(true)
 {
+   CH_assert(m_discretization_order == 2 || m_discretization_order == 4);
+
    const DisjointBoxLayout& grids = m_geometry.grids();
 
    m_volume.define(grids, 1, IntVect::Zero);
@@ -23,12 +45,15 @@ MBSolver::MBSolver( const MagGeom& a_geom,
    m_A_diagonal.define(grids, 1, IntVect::Zero);
    m_A_radial.define(grids, 3, IntVect::Zero);
    m_diagonal_increment.define(grids, 1, IntVect::Zero);
+   m_rhs_from_bc.define(a_geom.grids(), 1, IntVect::Zero);
 
    // If there is more than one block, construct the multiblock exchange object
    if ( m_geometry.coordSysPtr()->numBlocks() > 1 ) {
      m_mblex_potential_Ptr = new MultiBlockLevelExchangeCenter();
-     int spaceOrder = 4;
-     m_mblex_potential_Ptr->define(&a_geom, m_num_potential_ghosts_filled, spaceOrder);
+     int num_ghosts_filled = m_discretization_order / 2;
+     int spaceOrder = m_discretization_order;
+
+     m_mblex_potential_Ptr->define(&a_geom, num_ghosts_filled, spaceOrder);
    }
    else {
      m_mblex_potential_Ptr = NULL;
@@ -38,9 +63,9 @@ MBSolver::MBSolver( const MagGeom& a_geom,
 
 
 IntVectSet
-MBSolver::getInterBlockCoupledCells( const int  a_block_number,
-                                     const int  a_radius,
-                                     const Box& a_box ) const
+MBSolver::getInterBlockCoupledCells( const int   a_block_number,
+                                     const int   a_radius,
+                                     const Box&  a_box ) const
 {
   MultiBlockCoordSys* coord_sys_ptr = m_geometry.coordSysPtr();
   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = coord_sys_ptr->boundaries();
@@ -67,9 +92,39 @@ MBSolver::getInterBlockCoupledCells( const int  a_block_number,
 
 
 
+IntVectSet
+MBSolver::getBoundaryCoupledCells( const int   a_block_number,
+                                   const int   a_radius,
+                                   const Box&  a_box ) const
+{
+  MultiBlockCoordSys* coord_sys_ptr = m_geometry.coordSysPtr();
+  const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = coord_sys_ptr->boundaries();
+
+  const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[a_block_number];
+  const ProblemDomain& domain = ((const MagBlockCoordSys*)coord_sys_ptr->getCoordSys(a_block_number))->domain();
+  const Box& domainBox = domain.domainBox();
+  CH_assert(domainBox.contains(a_box));
+
+  IntVectSet ivs;
+  for (int dir=0; dir<SpaceDim; ++dir) {
+    if ( this_block_boundaries[dir].isDomainBoundary() ) {
+      int d = a_box.smallEnd(dir) - domainBox.smallEnd(dir);
+      if ( d < a_radius ) ivs |= adjCellLo(a_box, dir, -(a_radius - d));
+    }
+    if ( this_block_boundaries[dir + SpaceDim].isDomainBoundary() ) {
+      int d = domainBox.bigEnd(dir) - a_box.bigEnd(dir);
+      if ( d < a_radius ) ivs |= adjCellHi(a_box, dir, -(a_radius - d));
+    }
+  }
+
+  return ivs;
+}
+
+
+
 void
-MBSolver::getUnstructuredCouplings(int                                a_radius,
-                                   LayoutData< BaseFab<IntVectSet> >& a_unstructured_couplings ) const
+MBSolver::getUnstructuredCouplings( int                                 a_radius,
+                                    LayoutData< BaseFab<IntVectSet> >&  a_unstructured_couplings ) const
 {
    if (m_mblex_potential_Ptr) {
   
@@ -82,7 +137,7 @@ MBSolver::getUnstructuredCouplings(int                                a_radius,
       const DisjointBoxLayout & grids = m_geometry.grids();
     
       all_couplings.define(grids);
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Box& box = grids[dit];
          for (int dir=0; dir<SpaceDim; ++dir) {
             Box dir_box = box;
@@ -92,22 +147,19 @@ MBSolver::getUnstructuredCouplings(int                                a_radius,
          }
       }
       
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          const IntVectSet& this_ghosts_fab = ghostCells[dit];
          const IVSFAB<MBStencil>& this_stencil_fab = *stencil[dit];
-         int block_number = coord_sys_ptr->whichBlock(grids[dit]);
-         const Box& domainBox = (coord_sys_ptr->blockDomainOfBox(grids[dit])).domainBox();
+         const Box& domain_box = (coord_sys_ptr->blockDomainOfBox(grids[dit])).domainBox();
       
          Vector< BaseFab<IntVectSet>* >& this_coupling = all_couplings[dit];
          for (int dir=0; dir<SpaceDim; ++dir) {
             BaseFab<IntVectSet>& this_coupling_dir = *this_coupling[dir];
             const Box& dir_box = this_coupling_dir.box();
-            Box valid_domain = domainBox;
-            valid_domain.enclosedCells(dir);
         
             Box template_box(IntVect(D_DECL6(-a_radius,-a_radius,-a_radius,-a_radius,-a_radius,-a_radius)),
                              IntVect(D_DECL6(a_radius,a_radius,a_radius,a_radius,a_radius,a_radius)));
-            template_box.growHi(dir, -1);
+            template_box.growLo(dir, 1);
         
             BoxIterator bit(dir_box);
             for (bit.begin();bit.ok();++bit) {
@@ -115,10 +167,7 @@ MBSolver::getUnstructuredCouplings(int                                a_radius,
                Box stencil_box = template_box + iv_face;
 
                // Find the cells in the current stencil that are valid in the current block
-               //               Box valid_box = dir_box;
-               //               valid_box.enclosedCells(dir);
-               //               IntVectSet valid_cells(valid_box & stencil_box);
-               IntVectSet valid_cells(valid_domain & stencil_box);
+               IntVectSet valid_cells(domain_box & stencil_box);
 
                // Find the cells in the current stencil corresponding to extra-block
                // ghost cells filled by interpolation from other blocks
@@ -149,7 +198,7 @@ MBSolver::getUnstructuredCouplings(int                                a_radius,
 
       BlockBaseRegister<BaseFab<SparseCoupling> > blockRegister(coord_sys_ptr, grids, 0);
 
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Vector< BaseFab<IntVectSet>* >& this_coupling = all_couplings[dit];
          int dst_block_number = coord_sys_ptr->whichBlock(grids[dit]);
 
@@ -182,7 +231,7 @@ MBSolver::getUnstructuredCouplings(int                                a_radius,
 
       blockRegister.exchange();
 
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Box& baseBox = grids[dit];
          Vector< BaseFab<IntVectSet>* >& this_coupling = all_couplings[dit];
          for (SideIterator sit; sit.ok(); ++sit) {
@@ -212,7 +261,7 @@ MBSolver::getUnstructuredCouplings(int                                a_radius,
                             IntVect(D_DECL6(a_radius,a_radius,a_radius,a_radius,a_radius,a_radius)));
 
       a_unstructured_couplings.define(grids);
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Vector< BaseFab<IntVectSet>* >& this_coupling = all_couplings[dit];
          int dst_block_number = coord_sys_ptr->whichBlock(grids[dit]);
          Box domain_box = m_geometry.getBlockCoordSys(dst_block_number).domain().domainBox();
@@ -237,9 +286,9 @@ MBSolver::getUnstructuredCouplings(int                                a_radius,
 
 
 IntVectSet
-MBSolver::getUnstructuredCouplingsForCell( const Vector< BaseFab<IntVectSet>* >& a_coupling,
-                                           const Box&                            a_stencil_box,
-                                           const IntVect&                        a_iv ) const
+MBSolver::getUnstructuredCouplingsForCell( const Vector< BaseFab<IntVectSet>* >&  a_coupling,
+                                           const Box&                             a_stencil_box,
+                                           const IntVect&                         a_iv ) const
 {
    IntVectSet unstructured_ivs;
 
@@ -266,67 +315,254 @@ MBSolver::getUnstructuredCouplingsForCell( const Vector< BaseFab<IntVectSet>* >&
 
 
 void
-MBSolver::accumStencilMatrixEntries(const IntVect                           a_index,
-                                    const int                               a_dir,
-                                    const int                               a_side,
-                                    const int                               a_s,
-                                    const Tuple<BlockBoundary, 2*SpaceDim>& a_block_boundaries,
-                                    const int*                              a_block_bc_types,
-                                    const FluxBox&                          a_mapped_coefs,
-                                    const RealVect&                         a_dx,
-                                    const Box&                              a_domainBox,
-                                    const bool                              a_fourthOrder,
-                                    const bool                              a_dropOrder,
-                                    FArrayBox&                              a_stencil_values) const
+MBSolver::accumStencilMatrixEntries(const IntVect    a_index,
+                                    const int        a_dir,
+                                    const int        a_side,
+                                    const int        a_dir2,
+                                    const FluxBox&   a_mapped_coefs,
+                                    const RealVect&  a_dx,
+                                    const bool       a_fourthOrder,
+                                    const bool       a_dropOrder,
+                                    FArrayBox&       a_stencil_values) const
 {
-   int dist2physbdry[] = {2, 2, 2, 2};
+   if (a_fourthOrder) {
+        
+      int dropOrder = a_dropOrder? 1: 0;
 
-   for (int dir=0; dir<SpaceDim; dir++) {
-      if ( a_block_boundaries[dir].isDomainBoundary() ) {
-         if (a_index[dir]==a_domainBox.smallEnd(dir)) {
-            dist2physbdry[dir] = 0;
-            dist2physbdry[dir+2] = -1;
+      FORT_ACCUM_FLUX_STENCIL4( CHF_CONST_INT(a_dir),
+                                CHF_CONST_INT(a_dir2),
+                                CHF_CONST_INT(a_side),
+                                CHF_CONST_REALVECT(a_dx),
+                                CHF_CONST_FRA1(a_mapped_coefs[a_dir],2*a_dir+a_dir2),
+                                CHF_CONST_INTVECT(a_index),
+                                CHF_CONST_INT(dropOrder),
+                                CHF_FRA1(a_stencil_values,0) );
+   }
+   else {
+
+      FORT_ACCUM_FLUX_STENCIL2( CHF_CONST_INT(a_dir),
+                                CHF_CONST_INT(a_dir2),
+                                CHF_CONST_INT(a_side),
+                                CHF_CONST_REALVECT(a_dx),
+                                CHF_CONST_FRA1(a_mapped_coefs[a_dir],2*a_dir+a_dir2),
+                                CHF_CONST_INTVECT(a_index),
+                                CHF_FRA1(a_stencil_values,0) );
+   }
+}
+
+
+
+void
+MBSolver::modifyStencilForBCs( const Vector<CoDim1Stencil>&  a_codim1_stencils,
+                               const Vector<CoDim2Stencil>&  a_codim2_stencils,
+                               const IntVect&                a_iv,
+                               FArrayBox&                    a_stencil_values,
+                               FArrayBox&                    a_rhs_from_bc,
+                               const bool                    a_rhs_from_bc_only,
+                               const bool                    a_force_codim2_condense ) const
+{
+   bool updating_rhs = a_rhs_from_bc.box().ok();  // FAB defined?
+
+   CH_assert((a_stencil_values.box().size(0)-1)%2 == 0);
+   int radius = (a_stencil_values.box().size(0) - 1) / 2;
+
+   Box stencil_box(-radius*IntVect::Unit, radius*IntVect::Unit);
+   stencil_box += a_iv;
+
+   IntVect stencil_shift = a_iv - radius*IntVect::Unit;
+   IntVectSet condensed_ivs;
+
+   // Condense the codim2 stencils into the codim1 stencils
+
+   for (int i=0; i<a_codim2_stencils.size(); ++i) {
+      const CoDim2Stencil& codim2_stencil = a_codim2_stencils[i];
+
+      Box overlap = stencil_box & codim2_stencil.box();
+
+      if (overlap.ok()) {
+
+         for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+            IntVect iv_ghost = bit();
+            IntVect stencil_iv = iv_ghost - stencil_shift;
+
+            if ( !a_rhs_from_bc_only || a_force_codim2_condense ) {
+
+               double stencil_value = a_stencil_values(stencil_iv,0);
+
+               vector<IntVect> points;
+               vector<double> weights;
+
+               codim2_stencil.getStencil(iv_ghost, points, weights);
+
+               for (int j=0; j<points.size(); ++j) {
+                  CH_assert(stencil_box.contains(points[j]));
+                  a_stencil_values(points[j] - stencil_shift,0) += stencil_value * weights[j];
+               }
+            }
+
+            // Remember this stencil_iv so that the corresponding stencil value can be zeroed
+            // later.  We can't zero it yet, because stencil_iv might be contained in multiple
+            // codim2_stencils.
+
+            condensed_ivs |= stencil_iv;
          }
-         if (a_index[dir]==a_domainBox.smallEnd(dir)+1) dist2physbdry[dir] = -1;
-      }
-      if ( a_block_boundaries[dir + SpaceDim].isDomainBoundary() ) {
-         if (a_index[dir]==a_domainBox.bigEnd(dir)) {
-            dist2physbdry[dir+2] = 0;
-            dist2physbdry[dir] = 1;
-         }
-         if (a_index[dir]==a_domainBox.bigEnd(dir)-1) dist2physbdry[dir+2] = 1;
       }
    }
 
-   for (int sprime=0; sprime<SpaceDim; sprime++) {
+   // Now that all of the codim2 stencils have been condensed out, zero them
 
-      // Add stencil contribution from flux on side in this direction 
+   for (IVSIterator it(condensed_ivs); it.ok(); ++it) {
+      a_stencil_values(it(),0) = 0.;
+   }
 
-      if (a_fourthOrder) {
-        
-         int dropOrder = a_dropOrder? 1: 0;
+   // Condense the codim1 stencils into the valid stencils and accumulate
+   // the contribution to the right hand-side due to inhomogeneous boundary
+   // values
 
-         FORT_ACCUM_FLUX_STENCIL4(CHF_CONST_INT(a_dir),
-                                  CHF_CONST_INT(sprime),
-                                  CHF_CONST_INT(a_side),
-                                  CHF_CONST_I1D(dist2physbdry,4),
-                                  CHF_CONST_REALVECT(a_dx),
-                                  CHF_CONST_FRA1(a_mapped_coefs[a_dir],2*a_s+sprime),
-                                  CHF_CONST_INTVECT(a_index),
-                                  CHF_CONST_INT(dropOrder),
-                                  CHF_FRA1(a_stencil_values,0));
+   for (int i=0; i<a_codim1_stencils.size(); ++i) {
+      const CoDim1Stencil& codim1_stencil = a_codim1_stencils[i];
+
+      Box overlap = stencil_box & codim1_stencil.box();
+
+      if (overlap.ok()) {
+
+         for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+            IntVect iv_ghost = bit();
+            IntVect stencil_iv = iv_ghost - stencil_shift;
+
+            double& stencil_value = a_stencil_values(stencil_iv,0);
+
+            vector<IntVect> points;
+            vector<double> weights;
+            double bv_contrib;
+
+            codim1_stencil.getStencil(iv_ghost, points, weights, bv_contrib);
+                  
+            if ( !a_rhs_from_bc_only ) {
+               for (int j=0; j<points.size(); ++j) {
+                  CH_assert(stencil_box.contains(points[j]));
+                  a_stencil_values(points[j] - stencil_shift,0) += stencil_value * weights[j];
+               }
+            }
+
+            if ( updating_rhs ) {
+               a_rhs_from_bc(a_iv,0) -= stencil_value * bv_contrib;
+            }
+
+            // We can zero the stencil value here since no other codim1 bc_stencil object
+            // will contain the current stencil_iv
+
+            stencil_value = 0.;
+         }
       }
-      else {
+   }
 
-         FORT_ACCUM_FLUX_STENCIL2(CHF_CONST_INT(a_dir),
-                                  CHF_CONST_INT(sprime),
-                                  CHF_CONST_INT(a_side),
-                                  CHF_CONST_I1D(dist2physbdry,4),
-                                  CHF_CONST_I1D(a_block_bc_types,4),
-                                  CHF_CONST_REALVECT(a_dx),
-                                  CHF_CONST_FRA1(a_mapped_coefs[a_dir],2*a_s+sprime),
-                                  CHF_CONST_INTVECT(a_index),
-                                  CHF_FRA1(a_stencil_values,0));
+   if ( a_rhs_from_bc_only ) {
+      a_stencil_values.setVal(0.);
+   }
+}
+
+
+
+void
+MBSolver::constructBoundaryStencils( const bool                        a_fourth_order,
+                                     const PotentialBC&                a_bc,
+                                     Vector< Vector<CoDim1Stencil> >&  a_codim1_stencils,
+                                     Vector< Vector<CoDim2Stencil> >&  a_codim2_stencils ) const
+{
+   CH_assert(a_codim1_stencils.size() == 0);
+   CH_assert(a_codim2_stencils.size() == 0);
+
+   int order = a_fourth_order? 4: 2;
+
+   const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
+
+   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = mag_coord_sys->boundaries();
+
+   int num_blocks = mag_coord_sys->numBlocks();
+   a_codim1_stencils.resize(num_blocks);
+   a_codim2_stencils.resize(num_blocks);
+
+   for (int block_number=0; block_number<num_blocks; ++block_number) {
+      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
+      const ProblemDomain& domain = block_coord_sys.domain();
+      Box domain_box = domain.domainBox();
+      RealVect dx = block_coord_sys.dx();
+
+      const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
+
+      Vector<CoDim1Stencil>& codim1_stencil = a_codim1_stencils[block_number];      
+      Vector<CoDim2Stencil>& codim2_stencil = a_codim2_stencils[block_number];      
+
+      int num_codim1_neighbors = 0;
+      int num_codim2_neighbors = 0;
+
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         for (SideIterator sit; sit.ok(); ++sit) {
+            Side::LoHiSide side = sit();
+
+            if (this_block_boundaries[dir + side*SpaceDim].isDomainBoundary()) {
+
+               codim1_stencil.resize(++num_codim1_neighbors);
+
+               Box box = bdryBox(domain_box, dir, side, 1);
+               FArrayBox bv(box,1);
+
+               RefCountedPtr<GridFunction> bc_func = a_bc.getBCFunction(block_number, dir, side );
+               if (bc_func) {
+                  bc_func->assign(bv, m_geometry, box, 0., false);
+               }
+               else {
+                  for (BoxIterator bit(box); bit.ok(); ++bit) {
+                     bv(bit(),0) = a_bc.getBCValue(block_number, dir, side);
+                  }
+               }
+               
+               int bc_type = a_bc.getBCType(block_number, dir, side);
+
+               codim1_stencil[num_codim1_neighbors-1].define(bv, bc_type, dx, dir, side, order);
+
+               Box codim1_box = codim1_stencil[num_codim1_neighbors-1].box();
+
+               for (int tdir=0; tdir < SpaceDim; ++tdir) {
+                  if ( tdir != dir ) {
+                     for (SideIterator sit2; sit2.ok(); ++sit2) {
+                        Side::LoHiSide side2 = sit2();
+
+                        bool transverse_boundary = this_block_boundaries[tdir + side2*SpaceDim].isDomainBoundary();
+
+                        codim2_stencil.resize(++num_codim2_neighbors);
+
+                        codim2_stencil[num_codim2_neighbors-1].
+                           define(codim1_box, dx, dir, side, tdir, side2, order, transverse_boundary);
+
+                        // Check to see if the new codim2 box overlaps another block
+
+                        const Box& new_codim2_box = codim2_stencil[num_codim2_neighbors-1].box();
+
+                        for (int block_number2=0; block_number2<num_blocks; ++block_number2) {
+                           if (block_number2 != block_number) {
+                              const MagBlockCoordSys& block_coord_sys2 = m_geometry.getBlockCoordSys(block_number2);
+                              const Box& domain_box2 = block_coord_sys2.domain().domainBox();
+
+                              Box overlap = new_codim2_box & domain_box2;
+                              if ( overlap == new_codim2_box ) {
+                                 // Codim2 box is contained in a valid block, so delete it
+
+                                 codim2_stencil.resize(--num_codim2_neighbors);
+                              }
+                              else if ( overlap.ok() ) {
+                                 // Codim2 box partially overlaps a valid block.  Need to exit and figure out
+                                 // what to do about it.
+                                 MayDay::Error("MBSolver::constructBoundaryStencils(): codim2 box partially overlaps a valid block");
+                              }
+                           }
+                        }
+                     }
+                  }
+               }
+            }
+         }
       }
    }
 }
@@ -334,7 +570,309 @@ MBSolver::accumStencilMatrixEntries(const IntVect                           a_in
 
 
 void
-MBSolver::setZero( LevelData<FArrayBox>& a_data ) const
+MBSolver::accumPhysicalGhosts( const Vector< Vector<CoDim1Stencil> >&  a_codim1_stencils,
+                               const Vector< Vector<CoDim2Stencil> >&  a_codim2_stencils,
+                               const bool                              a_extrapolate_from_interior,
+                               const bool                              a_include_bvs,
+                               LevelData<FArrayBox>&                   a_data ) const
+{
+   const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      int block_number = mag_coord_sys->whichBlock(grids[dit]);
+      FArrayBox& this_data = a_data[dit];
+      const Box& this_data_box = this_data.box();
+
+      // Fill the codim1 ghosts first, which are assumed to depend only upon valid data
+      // and boundary values
+
+      const Vector<CoDim1Stencil>& codim1_stencil = a_codim1_stencils[block_number];      
+
+      for (int i=0; i<codim1_stencil.size(); ++i) {
+         const CoDim1Stencil& bndry_stencil = codim1_stencil[i];
+         const Box overlap = bndry_stencil.box() & this_data_box;
+
+         for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+            IntVect iv = bit();
+
+            vector<IntVect> points;
+            vector<double> weights;
+            double bv_contrib;
+
+            bndry_stencil.getStencil(iv, points, weights, bv_contrib);
+                  
+            if (a_include_bvs) {
+               this_data(iv,0) += bv_contrib;
+            }
+            if (a_extrapolate_from_interior) {
+               for (int j=0; j<points.size(); ++j) {
+                  this_data(iv,0) += weights[j] * this_data(points[j],0);
+               }
+            }
+         }
+      }
+
+      // Fill the codim2 ghosts next, which are assumed to depend upon valid data
+      // and/or codim1 data
+
+      const Vector<CoDim2Stencil>& codim2_stencil = a_codim2_stencils[block_number];      
+
+      for (int i=0; i<codim2_stencil.size(); ++i) {
+         const CoDim2Stencil& bndry_stencil = codim2_stencil[i];
+         const Box overlap = bndry_stencil.box() & this_data_box;
+
+         for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+            IntVect iv = bit();
+
+            vector<IntVect> points;
+            vector<double> weights;
+
+            bndry_stencil.getStencil(iv, points, weights);
+
+            for (int j=0; j<points.size(); ++j) {
+               this_data(iv,0) += weights[j] * this_data(points[j],0);
+            }
+         }
+      }
+   }
+}
+
+
+
+void
+MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&                        a_in,
+                                        LevelData<FluxBox>&                                a_coefs,
+                                        const Vector< Tuple<BlockBoundary, 2*SpaceDim> >&  a_block_boundaries,
+                                        const Vector< Vector<CoDim1Stencil> >&             a_codim1_stencils,
+                                        const Vector< Vector<CoDim2Stencil> >&             a_codim2_stencils,
+                                        FArrayBox&                                         a_stencil_values,
+                                        const bool                                         a_fourthOrder,
+                                        const bool                                         a_dropOrder,
+                                        const bool                                         a_extrapolate_from_interior,
+                                        const bool                                         a_include_bvs,
+                                        LevelData<FluxBox>&                                a_flux_normal ) const
+{
+   CH_assert(a_flux_normal.ghostVect() == IntVect::Zero);
+
+   const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
+
+   CH_assert((a_stencil_values.box().size(0)-1)%2 == 0);
+   int radius = (a_stencil_values.box().size(0)-1)/2;
+
+   const DisjointBoxLayout& grids = a_in.disjointBoxLayout();
+
+   LevelData<FArrayBox> tmp(grids, 1, (m_discretization_order/2 + 1)*IntVect::Unit);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      a_flux_normal[dit].setVal(0.);
+   }
+
+   for (int dir_outer=0; dir_outer<SpaceDim; ++dir_outer) {
+      for (int dir_inner=0; dir_inner<SpaceDim; ++dir_inner) {
+
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            tmp[dit].setVal(0.);
+            tmp[dit].copy(a_in[dit],grids[dit]);
+         }
+
+         // Fill internal ghosts
+         if (m_mblex_potential_Ptr) {
+            m_mblex_potential_Ptr->interpGhosts(tmp);
+         }
+         tmp.exchange();
+
+         accumPhysicalGhosts( a_codim1_stencils, a_codim2_stencils, a_extrapolate_from_interior, a_include_bvs, tmp );
+
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            int block_number = mag_coord_sys->whichBlock(grids[dit]);
+            const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
+            const Box& domain_box = block_coord_sys.domain().domainBox();
+            RealVect dx = block_coord_sys.dx();
+            const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = a_block_boundaries[block_number];
+
+            FArrayBox& this_flux = a_flux_normal[dit][dir_outer];
+            const FluxBox& this_coef = a_coefs[dit];
+
+            bool lo_block_interface = this_block_boundaries[dir_outer].isInterface();
+            bool hi_block_interface = this_block_boundaries[dir_outer + SpaceDim].isInterface();
+
+            for (BoxIterator bit_face(this_flux.box()); bit_face.ok(); ++bit_face) {
+               IntVect iv_face = bit_face();
+
+               bool on_lo_block_interface = (lo_block_interface && iv_face[dir_outer] == domain_box.smallEnd(dir_outer));
+               bool on_hi_block_interface = (hi_block_interface && iv_face[dir_outer] == domain_box.bigEnd(dir_outer)+1);
+
+               for (SideIterator sit; sit.ok(); ++sit) {
+                  Side::LoHiSide side = sit();
+
+                  IntVect iv = iv_face;
+                  iv.shift(dir_outer, -side);
+
+                  a_stencil_values.setVal(0.);
+
+                  accumStencilMatrixEntries(iv, dir_outer, side, dir_inner, this_coef,
+                                            dx, a_fourthOrder, a_dropOrder, a_stencil_values);
+
+                  double flux_contrib = 0.;
+                  for (BoxIterator bit_cell(a_stencil_values.box()); bit_cell.ok(); ++bit_cell) {
+                     IntVect iv2 = iv + bit_cell() - radius * IntVect::Unit;
+                     flux_contrib += a_stencil_values(bit_cell(),0) * tmp[dit](iv2,0);
+                  }
+
+                  if ( on_lo_block_interface ) {
+                     if ( side == Side::LoHiSide::Lo ) {
+                        this_flux(iv_face,0) += (1 - 2*side) * flux_contrib;
+                     }
+                     else {
+                        continue;
+                     }
+                  }
+                  else if ( on_hi_block_interface ) {
+                     if ( side == Side::LoHiSide::Hi ) {
+                        this_flux(iv_face,0) += (1 - 2*side) * flux_contrib;
+                     }
+                     else {
+                        continue;
+                     }
+                  }
+                  else {
+                     this_flux(iv_face,0) += 0.5 * (1 - 2*side) * flux_contrib;
+                  }
+               }
+            }
+         }
+      }
+   }
+}
+
+
+
+void
+MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                              a_alpha_coefficient, 
+                               LevelData<FluxBox>&                                a_tensor_coefficient,
+                               LevelData<FArrayBox>&                              a_beta_coefficient,
+                               const Vector< Tuple<BlockBoundary, 2*SpaceDim> >&  a_block_boundaries,
+                               const Vector< Vector<CoDim1Stencil> >&             a_codim1_stencils,
+                               const Vector< Vector<CoDim2Stencil> >&             a_codim2_stencils,
+                               FArrayBox&                                         a_stencil_values,
+                               const bool                                         a_fourthOrder,
+                               const bool                                         a_dropOrder,
+                               const LevelData<FArrayBox>&                        a_rhs_from_bc ) const
+{
+   const DisjointBoxLayout& grids = a_rhs_from_bc.disjointBoxLayout();
+
+   LevelData<FArrayBox> solution(grids, 1, IntVect::Zero);
+
+   srand(time(NULL));
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for (BoxIterator bit(grids[dit]); bit.ok(); ++bit) {
+         IntVect iv = bit();
+         solution[dit](iv,0) = (double)rand() / (double)RAND_MAX;
+      }
+   }
+
+   bool extrapolate_from_interior, include_bvs;
+
+   // We compute the normal flux in two parts, the first omitting boundary value contributions and the
+   // second containing only boundary contributions.  This allows the flux with boundary value contributions
+   // omitted to be averaged at block interfaces.
+
+   LevelData<FluxBox> flux_normal_without_bvs(grids, 1, IntVect::Zero);
+   extrapolate_from_interior = true;
+   include_bvs = false;
+   computeFluxNormalFromStencil( solution, a_tensor_coefficient, a_block_boundaries, a_codim1_stencils,
+                                 a_codim2_stencils, a_stencil_values, a_fourthOrder,
+                                 a_dropOrder, extrapolate_from_interior, include_bvs, flux_normal_without_bvs );
+   m_geometry.averageAtBlockBoundaries(flux_normal_without_bvs);
+
+   LevelData<FArrayBox> zero(grids, 1, IntVect::Zero);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      zero[dit].setVal(0.);
+   }
+
+   LevelData<FluxBox> flux_normal_only_bvs(grids, 1, IntVect::Zero);
+   extrapolate_from_interior = false;
+   include_bvs = true;
+   computeFluxNormalFromStencil( zero, a_tensor_coefficient, a_block_boundaries, a_codim1_stencils,
+                                 a_codim2_stencils, a_stencil_values, a_fourthOrder,
+                                 a_dropOrder, extrapolate_from_interior, include_bvs, flux_normal_only_bvs );
+
+   LevelData<FArrayBox> operator_eval(grids, 1, IntVect::Zero);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const FArrayBox & this_volume = m_volume[dit];
+      FArrayBox & this_operator_eval = operator_eval[dit];
+      FluxBox & this_flux_normal = flux_normal_without_bvs[dit];
+
+      this_flux_normal += flux_normal_only_bvs[dit];
+
+      const FArrayBox* alpha = NULL;
+      if ( a_alpha_coefficient.isDefined() ) {
+         alpha = &a_alpha_coefficient[dit];
+      }
+
+      const FArrayBox* beta = NULL;
+      if ( a_beta_coefficient.isDefined() ) {
+         beta = &a_beta_coefficient[dit];
+      }
+
+      for (BoxIterator bit(grids[dit]); bit.ok(); ++bit) {
+         IntVect iv = bit();
+
+         this_operator_eval(iv,0) = 0.;
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            for (SideIterator sit; sit.ok(); ++sit) {
+               Side::LoHiSide side = sit();
+
+               IntVect iv_face = iv;
+               iv_face.shift(dir,side);
+
+               this_operator_eval(iv,0) += (1 - 2*side)*this_flux_normal[dir](iv_face,0);
+            }
+         }
+
+         this_operator_eval(iv,0) /= this_volume(iv);
+
+         if ( alpha ) {
+            this_operator_eval(iv,0) *= alpha->operator()(iv);
+         }
+
+         if ( beta ) {
+            this_operator_eval(iv,0) += beta->operator()(iv) * solution[dit](iv,0);
+         }
+      }
+   }
+
+   LevelData<FArrayBox> matvec(grids, 1, IntVect::Zero);
+   multiplyMatrix(solution, matvec);
+
+   m_geometry.plotCellData("matvec", matvec, 0.);
+   m_geometry.plotCellData("operator_eval", operator_eval, 0.);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      matvec[dit] -= a_rhs_from_bc[dit];
+   }
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      matvec[dit] -= operator_eval[dit];
+   }
+
+
+   m_geometry.plotCellData("diff", matvec, 0.);
+
+   double diff = L2Norm(matvec);
+
+   if (procID()==0) {
+      cout << "Matrix diff = " << diff << endl;
+   }
+}
+
+
+
+void
+MBSolver::setZero( LevelData<FArrayBox>&  a_data ) const
 {
    for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
       a_data[dit].setVal(0.);

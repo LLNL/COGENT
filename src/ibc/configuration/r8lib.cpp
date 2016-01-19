@@ -40654,7 +40654,6 @@ int *r8vec_sort_insert_index_a ( int n, double a[] )
   int i;
   int *indx;
   int j;
-  int k;
   double x;
 
   if ( n < 1 )

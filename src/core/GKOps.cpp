@@ -10,7 +10,9 @@
 #include "SingleNullPhaseCoordSys.H"
 #include "SNCorePhaseCoordSys.H"
 #include "SlabPhaseCoordSys.H"
+#include "RectangularTorusPhaseCoordSys.H"
 #include "Kernels.H"
+#include "newMappedGridIO.H"
 
 
 #include "GKCollisions.H"
@@ -35,6 +37,8 @@
 #include "MillerCoordSys.H"
 #include "SlabBlockCoordSys.H"
 #include "SlabCoordSys.H"
+#include "RectangularTorusBlockCoordSys.H"
+#include "RectangularTorusCoordSys.H"
 #include "SingleNullBlockCoordSys.H"
 #include "SNCoreBlockCoordSys.H"
 #include "newMappedGridIO.H"
@@ -150,10 +154,10 @@ GKOps::initialize( const KineticSpeciesPtrVect& a_kinetic_species,
       m_radial_flux_divergence_average.define( mag_grids, 1, CFG::IntVect::Zero );
     
       if (a_cur_step==0) {
-         m_Er_average_face.define( mag_grids, 3, 2*CFG::IntVect::Unit );
-         m_Er_average_cell.define( mag_grids, 3, 2*CFG::IntVect::Unit );
-         m_E_tilde_face.define( mag_grids, 3, 2*CFG::IntVect::Unit );
-         m_E_tilde_cell.define( mag_grids, 3, 2*CFG::IntVect::Unit );
+         m_Er_average_face.define( mag_grids, 3, CFG::IntVect::Unit );
+         m_Er_average_cell.define( mag_grids, 3, CFG::IntVect::Unit );
+         m_E_tilde_face.define( mag_grids, 3, CFG::IntVect::Unit );
+         m_E_tilde_cell.define( mag_grids, 3, CFG::IntVect::Unit );
 
          for (CFG::DataIterator dit(mag_grids); dit.ok(); ++dit) {
             m_Er_average_face[dit].setVal(0.);
@@ -171,8 +175,8 @@ GKOps::initialize( const KineticSpeciesPtrVect& a_kinetic_species,
     
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
-   m_E_field_face.define( mag_grids, 3, 2*CFG::IntVect::Unit );
-   m_E_field_cell.define( mag_grids, 3, 2*CFG::IntVect::Unit );
+   m_E_field_face.define( mag_grids, 3, CFG::IntVect::Unit );
+   m_E_field_cell.define( mag_grids, 3, CFG::IntVect::Unit );
    computeEField( m_E_field_face,
                   m_E_field_cell,
                   a_kinetic_species,
@@ -180,12 +184,12 @@ GKOps::initialize( const KineticSpeciesPtrVect& a_kinetic_species,
     
    if ( m_ampere_law && a_cur_step == 0 ) {
       //Initialize E-field
-      CFG::PotentialBC& bc = m_boundary_conditions->getPotentialBC();
-      m_poisson->fillGhosts( m_phi );
+      m_poisson->fillInternalGhosts( m_phi );
 #ifdef EXTRAPOLATE_FIELD
       m_poisson->computeElectricField( m_phi, m_Er_average_cell );
       m_poisson->computeElectricField( m_phi, m_Er_average_face );
 #else
+      CFG::PotentialBC& bc = m_boundary_conditions->getPotentialBC();
       m_poisson->computeElectricField( m_phi, bc, m_Er_average_cell );
       m_poisson->computeElectricField( m_phi, bc, m_Er_average_face );
 #endif
@@ -316,19 +320,19 @@ void GKOps::explicitOp( GKRHSData& a_rhs,
             // Compute the poloidal variation phi_tilde.  The poloidal variation of the
             // current potential is used as the initial guess for the interative procedure.
             int num_phi_ghosts_filled = m_poisson->numPotentialGhostsFilled();
-            CH_assert(num_phi_ghosts_filled >=2 );
+            CH_assert(num_phi_ghosts_filled >=3 );
             CFG::LevelData<CFG::FArrayBox> phi_tilde(mag_grids, 1, num_phi_ghosts_filled*CFG::IntVect::Unit);
 
             computePhiTilde( species_phys, *m_boltzmann_electron, phi_tilde );
 
-            // Fill the two ghost cell layers at block boundaries as required by the
+            // Fill the three ghost cell layers at block boundaries as required by the
             // subsequent field calculations
-            m_poisson->fillGhosts( phi_tilde );
+            m_poisson->fillInternalGhosts( phi_tilde );
 
-            E_tilde_mapped_face.define(mag_grids, 3, CFG::IntVect::Zero);
+            E_tilde_mapped_face.define(mag_grids, 3, CFG::IntVect::Unit);
             m_poisson->computeMappedElectricField( phi_tilde, E_tilde_mapped_face );
 
-            E_tilde_mapped_cell.define(mag_grids, 3, CFG::IntVect::Zero);
+            E_tilde_mapped_cell.define(mag_grids, 3, CFG::IntVect::Unit);
             m_poisson->computeMappedElectricField( phi_tilde, E_tilde_mapped_cell );
 
             CFG::LevelData<CFG::FluxBox> Er_tilde_mapped(mag_grids, 1, CFG::IntVect::Zero);
@@ -420,7 +424,7 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
 
             // Fill the two ghost cell layers at block boundaries as required by the
             // subsequent field calculations
-            m_poisson->fillGhosts( phi_tilde );
+            m_poisson->fillInternalGhosts( phi_tilde );
 
             E_tilde_mapped_face.define(mag_grids, 3, CFG::IntVect::Zero);
             m_poisson->computeMappedElectricField( phi_tilde, E_tilde_mapped_face );
@@ -878,6 +882,8 @@ void GKOps::computeEField( CFG::LevelData<CFG::FluxBox>&   a_E_field_face,
                            const KineticSpeciesPtrVect&    a_soln,
                            const int                       a_step_number )
 {
+   CH_assert(a_E_field_face.ghostVect() == CFG::IntVect::Unit);
+   CH_assert(a_E_field_cell.ghostVect() == CFG::IntVect::Unit);
    CH_assert( isDefined() );
 
    if (m_poisson) {
@@ -971,7 +977,7 @@ void GKOps::computeEField( CFG::LevelData<CFG::FluxBox>&   a_E_field_face,
       if (!m_fixed_efield || (m_initializedE==false)){
          // only calculate E if not fixed efield or if this is the first step in the simulation.
          //  Need to take care that this is done right for a restart
-         m_poisson->fillGhosts( m_phi );
+         m_poisson->fillInternalGhosts( m_phi );
 
          if (m_ampere_law) {
             for (CFG::DataIterator dit(a_E_field_cell.dataIterator()); dit.ok(); ++dit) {
@@ -1024,6 +1030,10 @@ GKOps::setCoreBC( const double      a_core_inner_bv,
       a_bc.setBCValue(0,RADIAL_DIR,0,a_core_inner_bv);
       a_bc.setBCValue(0,RADIAL_DIR,1,a_core_outer_bv);
    }
+   else if ( typeid(*(mag_geom.getCoordSys())) == typeid(CFG::RectangularTorusCoordSys) ) {
+      a_bc.setBCValue(0,RADIAL_DIR,0,a_core_inner_bv);
+      a_bc.setBCValue(0,RADIAL_DIR,1,a_core_outer_bv);
+   }
    else if ( typeid(*(mag_geom.getCoordSys())) == typeid(CFG::SNCoreCoordSys) ) {
       a_bc.setBCValue(L_CORE,RADIAL_DIR,0,a_core_inner_bv);
       a_bc.setBCValue(L_CORE,RADIAL_DIR,1,a_core_outer_bv);
@@ -1059,34 +1069,35 @@ GKOps::computePhiTilde( const KineticSpeciesPtrVect&          a_kinetic_species,
 
 void
 GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
-                             CFG::LevelData<CFG::FArrayBox>& a_Er_average_cell,
-                             CFG::LevelData<CFG::FArrayBox>& a_flux_divergence,
-                             double&                         a_flux_divergence_lo,
-                             double&                         a_flux_divergence_hi,
-                             const double                    dt ) const
+                            CFG::LevelData<CFG::FArrayBox>& a_Er_average_cell,
+                            CFG::LevelData<CFG::FArrayBox>& a_flux_divergence,
+                            double&                         a_flux_divergence_lo,
+                            double&                         a_flux_divergence_hi,
+                            const double                    dt ) const
 {
+   CH_assert(a_Er_average_face.ghostVect() == CFG::IntVect::Unit);
+   CH_assert(a_Er_average_cell.ghostVect() == CFG::IntVect::Unit);
+   CH_assert(a_flux_divergence.ghostVect() == CFG::IntVect::Zero);
+
     //Geometry parameters
     const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
     const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
-    const CFG::MagBlockCoordSys& block0_coord_sys = (const CFG::MagBlockCoordSys&)(*(coords.getCoordSys(0)));
-    int lo_radial_index = block0_coord_sys.domain().domainBox().smallEnd(RADIAL_DIR);
-    int hi_radial_index = block0_coord_sys.domain().domainBox().bigEnd(RADIAL_DIR);
     
     //Create face-centered increment for the mapped E-field (- grad Phi )
-    CFG::LevelData<CFG::FluxBox> Er_mapped_face(mag_geom.grids(), 3, 2*CFG::IntVect::Unit );
+    CFG::LevelData<CFG::FluxBox> Er_mapped_face(mag_geom.grids(), 3, CFG::IntVect::Unit );
     
     //Creating tmp arrays with extra layers of ghost cells
-    CFG::LevelData<CFG::FArrayBox> gkp_divergence_tmp( mag_geom.grids(), 1, 3*CFG::IntVect::Unit );
-    CFG::LevelData<CFG::FArrayBox> flux_divergence_tmp( mag_geom.grids(), 1, 3*CFG::IntVect::Unit );
+    CFG::LevelData<CFG::FArrayBox> gkp_divergence_tmp( mag_geom.grids(), 1, 2*CFG::IntVect::Unit );
+    CFG::LevelData<CFG::FArrayBox> flux_divergence_tmp( mag_geom.grids(), 1, 2*CFG::IntVect::Unit );
     
     setZero(gkp_divergence_tmp);
     setZero(flux_divergence_tmp);
     
     for (CFG::DataIterator dit(gkp_divergence_tmp.dataIterator()); dit.ok(); ++dit) {
-        gkp_divergence_tmp[dit].copy(m_radial_gkp_divergence_average[dit]);        
+        gkp_divergence_tmp[dit].copy(m_radial_gkp_divergence_average[dit]);
         flux_divergence_tmp[dit].copy(a_flux_divergence[dit]);
     }
-
+    
     gkp_divergence_tmp.exchange();
     flux_divergence_tmp.exchange();
     
@@ -1098,8 +1109,12 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
         CFG::FArrayBox& this_flux_divergence = flux_divergence_tmp[dit];
         
         int block_number( coords.whichBlock( mag_geom.grids()[dit] ) );
+        const CFG::MagBlockCoordSys& block_coord_sys = (const CFG::MagBlockCoordSys&)(*(coords.getCoordSys(block_number)));
+        int lo_radial_index = block_coord_sys.domain().domainBox().smallEnd(RADIAL_DIR);
+        int hi_radial_index = block_coord_sys.domain().domainBox().bigEnd(RADIAL_DIR);
         
-        if ( block_number < 2 ) {
+        //This is the main calculation of Er on closed flux surfaces (within the core).
+        if ( block_number <= RCORE || block_number == MCORE ) {
             
             for (int dir = 0; dir < 2; dir++) {
                 
@@ -1145,17 +1160,60 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
             }
         }
         
+        //Linear extrapolation of Er into the SOL blocks (here, assumed that the cut is vertical, i.e., dPsi/dz = dPsi/dr)
+        //To provide continuity, the mapped field is scaled by |grad_Psi|, i.e., Emapped_sol = Emapped_core * gradPsi_core / gradPsi_sol
+        //Fix later for 10 block and DIII-D
+        else if (m_Esol_extrapolation && ((block_number < LPF) || (block_number == MCORE) || (block_number == MCSOL)))
+        {
+            
+            const CFG::MagBlockCoordSys& lcore_coord_sys = (const CFG::MagBlockCoordSys&)(*(coords.getCoordSys(LCORE)));
+            const CFG::MagBlockCoordSys& lsol_coord_sys = (const CFG::MagBlockCoordSys&)(*(coords.getCoordSys(LCSOL)));
+            double lo_rad_end = block_coord_sys.lowerMappedCoordinate(0);
+            double hi_rad_end = block_coord_sys.upperMappedCoordinate(0);
+            
+            CFG::RealVect topSep_core;
+            topSep_core[0] = lcore_coord_sys.upperMappedCoordinate(0);
+            topSep_core[1] = lcore_coord_sys.lowerMappedCoordinate(1);
+            
+            CFG::RealVect topSep_sol;
+            topSep_sol[0] = lsol_coord_sys.lowerMappedCoordinate(0);
+            topSep_sol[1] = lsol_coord_sys.lowerMappedCoordinate(1);
+            
+            Real dZdR_core = lcore_coord_sys.dXdXi(topSep_core,1,1)/lcore_coord_sys.dXdXi(topSep_core,0,1);
+            Real dPsidZ_core = 1.0/(lcore_coord_sys.dXdXi(topSep_core,1,0) - lcore_coord_sys.dXdXi(topSep_core,0,0)*dZdR_core);
+            
+            Real dZdR_sol = lsol_coord_sys.dXdXi(topSep_sol,1,1)/lsol_coord_sys.dXdXi(topSep_sol,0,1);
+            Real dPsidZ_sol = 1.0/(lsol_coord_sys.dXdXi(topSep_sol,1,0) - lsol_coord_sys.dXdXi(topSep_sol,0,0)*dZdR_sol);
+            
+            for (int dir = 0; dir < 2; dir++) {
+                CFG::FArrayBox& this_Er_mapped_dir = Er_mapped_face[dit][dir];
+                
+                CFG::Box box( this_Er_mapped_dir.box() );
+                CFG::FArrayBox xi(box,2);
+                block_coord_sys.getFaceCenteredMappedCoords(dir, xi);
+                
+                CFG::BoxIterator bit(box);
+                for (bit.begin(); bit.ok(); ++bit) {
+                    CFG::IntVect iv = bit();
+                    double amplitude = -dt * m_hi_radial_flux_divergence_average / m_hi_radial_gkp_divergence_average;
+                    amplitude *= dPsidZ_core / dPsidZ_sol;
+                    this_Er_mapped_dir(iv,0) =  amplitude  * (1.0 - (xi(iv,0) - lo_rad_end)/(hi_rad_end - lo_rad_end) );
+                    
+                }
+            }
+        }
+        
         else {
-            //temporarily setting E-field to zero on open field lines
             double E_open = 0.0;
             Er_mapped_face[dit].setVal(E_open,RADIAL_DIR,0,1);
             Er_mapped_face[dit].setVal(E_open,POLOIDAL_DIR,0,1);
         }
     }
-    Er_mapped_face.exchange();
-    
+
+    mag_geom.fillTransverseGhosts(Er_mapped_face, false);
+
     //Compute cell-centered increment for the mapped E-field
-    CFG::LevelData<CFG::FArrayBox> Er_mapped_cell(mag_geom.grids(), 3, 2*CFG::IntVect::Unit );
+    CFG::LevelData<CFG::FArrayBox> Er_mapped_cell(mag_geom.grids(), 3, CFG::IntVect::Unit );
     CFG::DataIterator dit( Er_mapped_cell.dataIterator() );
     for (dit.begin(); dit.ok(); ++dit) {
         CFG::Box box( Er_mapped_cell[dit].box() );
@@ -1163,22 +1221,23 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
         for (bit.begin(); bit.ok(); ++bit) {
             CFG::IntVect iv = bit();
             CFG::IntVect iv_r = bit();
-            CFG::IntVect iv_th = bit();
             iv_r[0] = iv[0] + 1;
-            iv_th[1] = iv[1] + 1;
-            Er_mapped_cell[dit](iv,0) = 0.25*(Er_mapped_face[dit][1](iv,0)+Er_mapped_face[dit][1](iv_th,0)+Er_mapped_face[dit][0](iv,0)+Er_mapped_face[dit][0](iv_r,0));
-            Er_mapped_cell[dit](iv,1) = 0.25*(Er_mapped_face[dit][1](iv,1)+Er_mapped_face[dit][1](iv_th,1)+Er_mapped_face[dit][0](iv,1)+Er_mapped_face[dit][0](iv_r,1));
-            Er_mapped_cell[dit](iv,2) = 0.25*(Er_mapped_face[dit][1](iv,2)+Er_mapped_face[dit][1](iv_th,2)+Er_mapped_face[dit][0](iv,2)+Er_mapped_face[dit][0](iv_r,2));
+            Er_mapped_cell[dit](iv,0) = 0.5*(Er_mapped_face[dit][0](iv,0)+Er_mapped_face[dit][0](iv_r,0));
+            Er_mapped_cell[dit](iv,1) = 0.5*(Er_mapped_face[dit][0](iv,1)+Er_mapped_face[dit][0](iv_r,1));
+            Er_mapped_cell[dit](iv,2) = 0.5*(Er_mapped_face[dit][0](iv,2)+Er_mapped_face[dit][0](iv_r,2));
         }
     }
     
+    mag_geom.fillInternalGhosts(Er_mapped_cell);
+    mag_geom.fillTransversePhysicalGhosts(Er_mapped_cell);
+
     //Multiply by NJtranspose (E_fs_average = - NJInverse * grad Phi)
-    CFG::LevelData<CFG::FluxBox> Er_face_incr( mag_geom.grids(), 3, 2*CFG::IntVect::Unit );
+    CFG::LevelData<CFG::FluxBox> Er_face_incr( mag_geom.grids(), 3, CFG::IntVect::Unit );
     m_poisson->getUnmappedField(Er_mapped_face, Er_face_incr);
     
-    CFG::LevelData<CFG::FArrayBox> Er_cell_incr( mag_geom.grids(), 3, 2*CFG::IntVect::Unit );
+    CFG::LevelData<CFG::FArrayBox> Er_cell_incr( mag_geom.grids(), 3, CFG::IntVect::Unit );
     m_poisson->getUnmappedField(Er_mapped_cell, Er_cell_incr);
-
+    
     //Update E-field
     for (CFG::DataIterator dit(a_Er_average_face.dataIterator()); dit.ok(); ++dit) {
         if (dt>0) {
@@ -1187,20 +1246,34 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
         }
         
         else {
-          Real inv_dt = 1.0 / dt;
-           a_Er_average_face[dit].copy(Er_face_incr[dit]);
-           a_Er_average_face[dit] *= inv_dt;
-           a_Er_average_cell[dit].copy(Er_cell_incr[dit]);
-           a_Er_average_cell[dit].mult(inv_dt);
+            Real inv_dt = 1.0 / dt;
+            a_Er_average_face[dit].copy(Er_face_incr[dit]);
+            a_Er_average_face[dit] *= inv_dt;
+            a_Er_average_cell[dit].copy(Er_cell_incr[dit]);
+            a_Er_average_cell[dit].mult(inv_dt);
         }
     }
     
-    //Extrapolate E_field into the open-field-line region (presently, constant extrapolation)
-    if ( typeid(coords) == typeid(CFG::SingleNullCoordSys) ) {
-      // ((CFG::SingleNullCoordSys&)coords).extrapolateEfield(a_Er_average_face, a_Er_average_cell);
+    //Improve Er field calculation to take into accout the dealigment between the grid and magnetic surfaces
+    if ( (typeid(coords) == typeid(CFG::SingleNullCoordSys)) && (m_dealignment_corrections)) {
+        
+        mag_geom.interpolateErFromMagFS(a_Er_average_face, a_Er_average_cell);
+        
+        //If not doing extrapolation, zero out efield in the PF region,
+        //which appeares in the present version of interpolateFromMagFS
+        //as symmetric reflection of E in the core region
+        if (!m_Esol_extrapolation)
+        {
+            for (CFG::DataIterator dit(a_Er_average_face.dataIterator()); dit.ok(); ++dit) {
+                int block_number( coords.whichBlock( mag_geom.grids()[dit] ) );
+                if ((block_number == RPF) || (block_number == LPF)) {
+                  a_Er_average_face[dit].setVal(0.0);
+                  a_Er_average_cell[dit].setVal(0.0);
+                }
+            }
+        }
     }
 }
-
 
 void
 GKOps::updateEfieldPoloidalVariation( const CFG::LevelData<CFG::FluxBox>&   a_E_tilde_mapped_face,
@@ -1211,7 +1284,9 @@ GKOps::updateEfieldPoloidalVariation( const CFG::LevelData<CFG::FluxBox>&   a_E_
                                       double&                               a_phi_tilde_fs_average_lo,
                                       double&                               a_phi_tilde_fs_average_hi ) const
 {
-   //values in the ghost cells shold not matter since it's overwritten in the GK-velocity calculation
+   CH_assert(a_E_tilde_phys_face.ghostVect() == CFG::IntVect::Unit);
+   CH_assert(a_E_tilde_phys_cell.ghostVect() == CFG::IntVect::Unit);
+
    for (CFG::DataIterator dit(a_E_tilde_phys_face.dataIterator()); dit.ok(); ++dit) {
       a_E_tilde_phys_face[dit].setVal(0.0);
    }
@@ -1221,11 +1296,15 @@ GKOps::updateEfieldPoloidalVariation( const CFG::LevelData<CFG::FluxBox>&   a_E_
    }
 
    if ( !m_ampere_cold_electrons ) {
+      CH_assert(a_E_tilde_mapped_face.ghostVect() == CFG::IntVect::Unit);
+      CH_assert(a_E_tilde_mapped_cell.ghostVect() == CFG::IntVect::Unit);
+      CH_assert(a_phi_tilde_fs_average.ghostVect() == CFG::IntVect::Zero);
+
       m_poisson->getUnmappedField(a_E_tilde_mapped_face, a_E_tilde_phys_face);
       m_poisson->getUnmappedField(a_E_tilde_mapped_cell, a_E_tilde_phys_cell);
       
-      CFG::LevelData<CFG::FluxBox> Er_average_face_pol_contrib(m_phase_geometry->magGeom().grids(), 3, 2*CFG::IntVect::Unit);
-      CFG::LevelData<CFG::FArrayBox> Er_average_cell_pol_contrib(m_phase_geometry->magGeom().grids(), 3, 2*CFG::IntVect::Unit);
+      CFG::LevelData<CFG::FluxBox> Er_average_face_pol_contrib(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
+      CFG::LevelData<CFG::FArrayBox> Er_average_cell_pol_contrib(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
  
       updateAveragedEfield( Er_average_face_pol_contrib, Er_average_cell_pol_contrib,
                             a_phi_tilde_fs_average, a_phi_tilde_fs_average_lo, a_phi_tilde_fs_average_hi, -1.0 );
@@ -1240,28 +1319,28 @@ GKOps::updateEfieldPoloidalVariation( const CFG::LevelData<CFG::FluxBox>&   a_E_
 void
 GKOps::setErAverage( const LevelData<FluxBox>& Er_face_injected )
 {
-   m_Er_average_face.define(m_phase_geometry->magGeom().grids(), 3, 2*CFG::IntVect::Unit);
+   m_Er_average_face.define(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
    m_phase_geometry->projectPhaseToConfiguration(Er_face_injected, m_Er_average_face);
 }
 
 void
 GKOps::setErAverage( const LevelData<FArrayBox>& Er_cell_injected)
 {
-   m_Er_average_cell.define(m_phase_geometry->magGeom().grids(), 3, 2*CFG::IntVect::Unit);
+   m_Er_average_cell.define(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
    m_phase_geometry->projectPhaseToConfiguration(Er_cell_injected, m_Er_average_cell);
 }
 
 void
 GKOps::setETilde( const LevelData<FluxBox>& E_tilde_face_injected )
 {
-   m_E_tilde_face.define(m_phase_geometry->magGeom().grids(), 3, 2*CFG::IntVect::Unit);
+   m_E_tilde_face.define(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
    m_phase_geometry->projectPhaseToConfiguration(E_tilde_face_injected, m_E_tilde_face);
 }
 
 void
 GKOps::setETilde( const LevelData<FArrayBox>& E_tilde_cell_injected)
 {
-   m_E_tilde_cell.define(m_phase_geometry->magGeom().grids(), 3, 2*CFG::IntVect::Unit);
+   m_E_tilde_cell.define(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
    m_phase_geometry->projectPhaseToConfiguration(E_tilde_cell_injected, m_E_tilde_cell);
 }
 
@@ -1301,6 +1380,20 @@ void GKOps::parseParameters( ParmParse& a_ppgksys )
    }
    else {
       m_consistent_potential_bcs = false;
+   }
+
+   if (a_ppgksys.contains("extrapolated_sol_efield")) {
+     a_ppgksys.query( "extrapolated_sol_efield", m_Esol_extrapolation );
+   }
+   else {
+     m_Esol_extrapolation = true;
+   }
+
+   if (a_ppgksys.contains("efield_dealignment_corrections")) {
+     a_ppgksys.query( "efield_dealignment_corrections", m_dealignment_corrections );
+   }
+   else {
+     m_dealignment_corrections = false;
    }
 
    if (a_ppgksys.contains("ampere_law")) {
@@ -1435,7 +1528,7 @@ void GKOps::plotEField( const std::string& a_filename,
 
    if (m_poisson) { // Plot the psi and theta projections of the physical field
       const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-      CFG::LevelData<CFG::FluxBox> Efield( mag_geom.grids(), 2, CFG::IntVect::Zero);
+      CFG::LevelData<CFG::FluxBox> Efield( mag_geom.grids(), 2, CFG::IntVect::Unit);
 
       const CFG::PotentialBC& bc = m_boundary_conditions->getPotentialBC();
 

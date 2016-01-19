@@ -56,7 +56,7 @@ GKPoisson::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_mass_densi
 
    setBcDivergence( a_bc, m_bc_divergence );
 
-   m_solver.constructMatrix(m_mapped_coefficients, a_bc);
+   m_solver.constructMatrix(m_mapped_coefficients, a_bc, false, false);
 }
 
 
@@ -242,6 +242,8 @@ GKPoisson::solvePreconditioner( const LevelData<FArrayBox>& a_in,
 void
 GKPoisson::multiplyUnmappedCoefficients( LevelData<FluxBox>& a_data ) const
 {
+   CH_assert(a_data.ghostVect() <= m_unmapped_coefficients.ghostVect());
+
    for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
       FluxBox& this_data = a_data[dit];
       FluxBox saved_data(this_data.box(),SpaceDim);

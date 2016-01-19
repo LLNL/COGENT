@@ -8,6 +8,7 @@
 
 #include "MillerPhaseCoordSys.H"
 #include "SlabPhaseCoordSys.H"
+#include "RectangularTorusPhaseCoordSys.H"
 #include "SingleNullPhaseCoordSys.H"
 #include "SNCorePhaseCoordSys.H"
 
@@ -31,6 +32,8 @@
 #include "MillerCoordSys.H"
 #include "SlabBlockCoordSys.H"
 #include "SlabCoordSys.H"
+#include "RectangularTorusBlockCoordSys.H"
+#include "RectangularTorusCoordSys.H"
 #include "SingleNullBlockCoordSys.H"
 #include "SNCoreBlockCoordSys.H"
 #include "newMappedGridIO.H"
@@ -64,18 +67,18 @@ GKSystem::GKSystem( ParmParse& a_pp )
      m_enforce_stage_positivity(false),
      m_enforce_step_positivity(false),
      m_max_grid_size(0),
+     m_ghostVect(4*IntVect::Unit),
+     m_ti_class("rk"),
+     m_ti_method("4"),
+     m_gk_ops(NULL),
      m_initial_conditions(NULL),
      m_boundary_conditions(NULL),
-     m_gk_ops(NULL),
+     m_state( GKState(m_ghostVect) ),
      m_hdf_potential(false),
      m_hdf_efield(false),
-     m_hdf_dfn(false),
-     m_hdf_deltaF(false),
-     m_hdf_dfn_at_mu(false),
+     m_hdf_density(false),
      m_hdf_vpartheta(false),
      m_hdf_rtheta(false),
-     m_hdf_density(false),
-     m_hdf_total_density(false),
      m_hdf_pressure(false),
      m_hdf_temperature(false),
      m_hdf_fourthMoment(false),
@@ -85,11 +88,11 @@ GKSystem::GKSystem( ParmParse& a_pp )
      m_hdf_HeatFlux(false),
      m_hdf_vparmu(false),
      m_hdf_vlasov_divergence(false),
-     m_ghostVect(4*IntVect::Unit),
-     m_state( GKState(m_ghostVect) ),
-     m_verbosity(0),
-     m_ti_class("rk"),
-     m_ti_method("4")
+     m_hdf_total_density(false),
+     m_hdf_dfn(false),
+     m_hdf_deltaF(false),
+     m_hdf_dfn_at_mu(false),
+     m_verbosity(0)
 {
    ParmParse ppgksys("gksystem");
 
@@ -288,7 +291,18 @@ void GKSystem::createConfigurationSpace()
                                 m_is_periodic,
                                 m_configuration_decomposition);
   }
+  else if ( m_mag_geom_type == "RectangularTorus" ) {
 
+    string prefix = mag_geom_prefix + string(".")
+       + string(CFG::RectangularTorusBlockCoordSys::pp_name);
+    ParmParse pp( prefix.c_str() );
+
+    m_mag_geom_coords
+      = new CFG::RectangularTorusCoordSys(pp,
+                                m_num_cells,
+                                m_is_periodic,
+                                m_configuration_decomposition);
+  }
   // Construct the phase space DisjointBoxLayout
 
   CFG::DisjointBoxLayout grids;
@@ -312,7 +326,7 @@ void GKSystem::createConfigurationSpace()
 
 #if 0
   // For testing of metric data
-  m_mag_geom->writeGeometryData(grids);
+  m_mag_geom->writeGeometryData(grids,0);
   exit(1);
 #endif
 }
@@ -430,7 +444,7 @@ GKSystem::getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids 
 
   CFG::ProblemDomain prob_domain;
 
-  if ( m_mag_geom_type == "Miller" || m_mag_geom_type == "Slab" ) {
+  if ( m_mag_geom_type == "Miller" || m_mag_geom_type == "Slab" || m_mag_geom_type == "RectangularTorus") {
     const CFG::MagBlockCoordSys* mag_block_coords
       = (CFG::MagBlockCoordSys *)m_mag_geom_coords->getCoordSys(0);
     prob_domain = mag_block_coords->domain();
@@ -661,6 +675,12 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
   else if ( m_mag_geom_type == "Slab" ) {
     m_phase_coords = new SlabPhaseCoordSys( a_ppgksys,
                                               *(CFG::SlabCoordSys*)m_mag_geom_coords,
+                                              *m_velocity_coords,
+                                              domains );
+  }
+  else if ( m_mag_geom_type == "RectangularTorus" ) {
+    m_phase_coords = new RectangularTorusPhaseCoordSys( a_ppgksys,
+                                              *(CFG::RectangularTorusCoordSys*)m_mag_geom_coords,
                                               *m_velocity_coords,
                                               domains );
   }
@@ -1365,7 +1385,7 @@ void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
    a_cur_dt   = header.m_real["cur_dt"];
    m_gk_ops->setLoRadialField(header.m_real["Er_lo"]);
    m_gk_ops->setHiRadialField(header.m_real["Er_hi"]);
-   const int restart_version = header.m_int ["restart_version"];
+   //   const int restart_version = header.m_int ["restart_version"];
 
    if ( m_gk_ops->usingAmpereLaw() ) {
       a_handle.setGroup("Er_cell");

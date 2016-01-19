@@ -2030,6 +2030,7 @@ SingleNullCoordSys::readGridParams( ParmParse& a_pp )
 void SingleNullCoordSys::extrapolateEfield( LevelData<FluxBox>&   a_Er_average_face,
                                             LevelData<FArrayBox>& a_Er_average_cell ) const
 {
+    //Old extrapolation function. Now use something else, but this is left for the record.
     
     const DisjointBoxLayout& grids = a_Er_average_cell.disjointBoxLayout();
 
@@ -2039,7 +2040,6 @@ void SingleNullCoordSys::extrapolateEfield( LevelData<FluxBox>&   a_Er_average_f
     int hi_radial_index = block0_coord_sys.domain().domainBox().bigEnd(RADIAL_DIR);
     
     const MagBlockCoordSys& block1_coord_sys = (const MagBlockCoordSys&)(*(getCoordSys(1)));
-    int npol_RCORE = block1_coord_sys.domain().domainBox().size(POLOIDAL_DIR);
     int lo_pol_RCORE = block1_coord_sys.domain().domainBox().smallEnd(POLOIDAL_DIR);
     
     //Initialize 1D arrays to contain boundary data (i.e., physical E-field on the outer core boundary)
@@ -2191,7 +2191,6 @@ void SingleNullCoordSys::extrapolateEfield( LevelData<FluxBox>&   a_Er_average_f
     
     
 }
-
 
 
 #include "NamespaceFooter.H"

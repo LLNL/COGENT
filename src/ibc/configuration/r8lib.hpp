@@ -355,7 +355,7 @@ int r8poly_lagrange_val ( int npol, int ipol, double xpol[], double xval,
 int r8poly_order ( int na, double a[] );
 void r8poly_print ( int n, double a[], string title );
 void r8poly_shift ( double scale, double shift, int n, double poly_cof[] );
-double r8poly_value_horner ( int n, double a[], double x );;
+double r8poly_value_horner ( int n, double a[], double x );
 double *r8poly_values_horner ( int m, double c[], int n, double x[] );
 double *r8poly_value_2d ( int m, double c[], int n, double x[], double y[] );
 int r8poly2_ex ( double x1, double y1, double x2, double y2, double x3, double y3,

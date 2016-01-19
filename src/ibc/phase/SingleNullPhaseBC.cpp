@@ -94,7 +94,7 @@ KineticFunction& SingleNullPhaseBC::muInflowFunc( const Side::LoHiSide& a_side )
 
 inline
 KineticFunction& SingleNullPhaseBC::inflowFunc( const int& a_dir,
-                                                 const Side::LoHiSide& a_side )
+                                                const Side::LoHiSide& a_side )
 {
    KineticFunction* inflow_func;
    if (a_dir==RADIAL_DIR) {
@@ -119,7 +119,7 @@ KineticFunction& SingleNullPhaseBC::inflowFunc( const int& a_dir,
 
 
 SingleNullPhaseBC::SingleNullPhaseBC( const std::string& a_name,
-                                ParmParse& a_pp,
+                                      ParmParse& a_pp,
                                       const int& a_verbosity )
    : m_name(a_name),
      m_verbosity(a_verbosity)

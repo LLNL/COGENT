@@ -95,7 +95,6 @@ void GKTransport::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
                                   const Real                   a_time )
 {
    for (int species(0); species<a_rhs.size(); species++) {
-      const KineticSpecies& soln_species( *(a_soln[species]) );
       KineticSpecies& rhs_species( *(a_rhs[species]) );
       const std::string species_name( rhs_species.name() );
       TPMInterface& TPM( transportModel( species_name ) );
@@ -147,7 +146,6 @@ Real GKTransport::computeDt( const KineticSpeciesPtrVect& soln )
    dlnB_dr.exchange();
 
    // get the minimum value of dlnB/dr and hr
-   Real local_maximum(0);      // 0  is just a starting point
    Real local_minimum(10);     // 10 is just a starting point
    Real local_minimum_hr(10);  // 10 is just a starting point
    for (bdit.begin(); bdit.ok(); ++bdit)

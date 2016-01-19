@@ -49,8 +49,8 @@ SingleNullDistr::SingleNullDistr( //const std::string& a_name,
      m_radial_width(1.0),
      m_amplitude(1.0),
      m_floor(0.0),
-     m_boltzmann_equilibrium(false)
-
+     m_boltzmann_equilibrium(false),
+     m_mag_surf_on(false)
 
 {
    parseParameters( a_pp );
@@ -72,10 +72,10 @@ void SingleNullDistr::assign( LevelData<FArrayBox>& a_data,
       int block_number( coord_sys.whichBlock( grids[dit] ) );
 
       if (a_cell_averages) {
-         setCellAverages( a_data[dit], coord_sys, getCoordSys( a_geometry, grids[dit] ), block_number );
+         setCellAverages( a_data[dit], a_geometry,coord_sys, getCoordSys( a_geometry, grids[dit] ), block_number );
       }
       else {
-         setPointwise( a_data[dit], coord_sys, getCoordSys( a_geometry, grids[dit] ), block_number );
+         setPointwise( a_data[dit], a_geometry, coord_sys, getCoordSys( a_geometry, grids[dit] ), block_number );
       }
    }
    a_data.exchange();
@@ -92,10 +92,10 @@ void SingleNullDistr::assign( FArrayBox& a_data,
    const int block_number( coord_sys.whichBlock( a_box ) );
 
    if (a_cell_averages) {
-      setCellAverages( a_data, coord_sys, getCoordSys( a_geometry, a_box ), block_number );
+      setCellAverages( a_data, a_geometry, coord_sys, getCoordSys( a_geometry, a_box ), block_number );
    }
    else {
-      setPointwise( a_data, coord_sys, getCoordSys( a_geometry, a_box ), block_number );
+      setPointwise( a_data, a_geometry, coord_sys, getCoordSys( a_geometry, a_box ), block_number );
    }
 }
 
@@ -118,7 +118,7 @@ void SingleNullDistr::assign( LevelData<FArrayBox>& a_data,
       const MagBlockCoordSys& block_coord_sys( ((MagGeom&)a_geometry).getBlockCoordSys( box ) );
       const int block_number( coord_sys.whichBlock( box ) );
 
-      setPointwise( data_tmp[dit], coord_sys, block_coord_sys, block_number );
+      setPointwise( data_tmp[dit], a_geometry, coord_sys, block_coord_sys, block_number );
    }
    for (DataIterator dit( grids ); dit.ok(); ++dit) {
       Box domain_box( data_tmp[dit].box() );
@@ -145,6 +145,7 @@ void SingleNullDistr::parseParameters( ParmParse& a_pp )
    a_pp.query( "amplitude",          m_amplitude );
    a_pp.query( "floor",              m_floor );
    a_pp.query( "boltzmann_equilibrium",    m_boltzmann_equilibrium );
+   a_pp.query( "dealignment_correction",   m_mag_surf_on );
 
 
 
@@ -170,6 +171,7 @@ void SingleNullDistr::checkGeometryValidity( const MultiBlockLevelGeom& a_geomet
 
 inline
 void SingleNullDistr::setCellAverages( FArrayBox&        a_data,
+                                       const MultiBlockLevelGeom& a_geometry,
                                        const MultiBlockCoordSys& a_coords,
                                        const MagBlockCoordSys&   a_block_coord,
                                        const int               block_number ) const
@@ -180,7 +182,7 @@ void SingleNullDistr::setCellAverages( FArrayBox&        a_data,
    tmp_box.grow( IntVect::Unit );
    FArrayBox tmp( tmp_box, a_data.nComp() );
 
-   setPointwise( tmp, a_coords, a_block_coord, block_number );
+   setPointwise( tmp, a_geometry, a_coords, a_block_coord, block_number );
 
    fourthOrderAverageCell( tmp, a_block_coord.domain(), box );
 
@@ -190,14 +192,22 @@ void SingleNullDistr::setCellAverages( FArrayBox&        a_data,
 
 inline
 void SingleNullDistr::setPointwise( FArrayBox&          a_data,
+                                    const MultiBlockLevelGeom& a_geometry,
                                     const MultiBlockCoordSys& a_coords,
                                     const MagBlockCoordSys&   a_block_coords,
                                     const int                 block_number)  const
 
 {
+
+   const MagGeom& mag_geom = (const MagGeom&) a_geometry;
+    
    Box box( a_data.box() );
    FArrayBox cell_center_coords( box, SpaceDim );
    a_block_coords.getCellCenteredMappedCoords( cell_center_coords );
+    
+   FArrayBox cell_center_real_coords( box, SpaceDim );
+   a_block_coords.getCellCenteredRealCoords( cell_center_real_coords );
+
 
    //Set the distribution for (LCORE,RCORE,LCSOL,RCSOL,LSOL,RSOL) blocks 
    if (block_number <= RSOL) { 
@@ -221,6 +231,13 @@ void SingleNullDistr::setPointwise( FArrayBox&          a_data,
        else {
          this_Z = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCSOL))
                          ->realCoord(mapped_coord)[1];
+       }
+         
+       if (m_mag_surf_on && block_number<=RSOL) {
+           RealVect real_coord;
+           real_coord[0] = cell_center_real_coords(iv,0);
+           real_coord[1] = cell_center_real_coords(iv,1);
+           this_Z = mag_geom.getMagFS(real_coord);
        }
 
        a_data(iv,0) = radialCoreSol(this_Z, a_coords);

@@ -1,10 +1,9 @@
-//#ifndef _BC_UTILS_H_
-//#define _BC_UTILS_H_
+#ifndef _PHASE_BC_UTILS_H_
+#define _PHASE_BC_UTILS_H_
 
 #include "Box.H"
 #include "LoHiSide.H"
 #include "BlockBoundary.H"
-//#include "Tuple.H"
 #include "Vector.H"
 #include "MultiBlockCoordSys.H"
 #include "Directions.H"
@@ -69,7 +68,6 @@ namespace PhaseBCUtils {
                             const MultiBlockCoordSys& a_coord_sys,
                             const LevelData<FluxBox>& a_velocity )
    {
-      const DisjointBoxLayout& grids( a_BfJ.disjointBoxLayout() );
       for (int b(0); b<a_all_bdry_layouts.size(); b++) {
          const BoundaryBoxLayout& bdry_layout( *(a_all_bdry_layouts[b]) );
          const DisjointBoxLayout& bdry_grids( bdry_layout.disjointBoxLayout() );
@@ -77,14 +75,11 @@ namespace PhaseBCUtils {
             const Box fill_box( bdry_grids[dit] );
             
             FArrayBox& this_BfJ( a_BfJ[bdry_layout.dataIndex(dit)] );
-            const Box& this_box( this_BfJ.box() );
             const KineticSpecies& bdry_species( *(a_all_bdry_data[b]) );
             const LevelData<FArrayBox>& bdry_data( bdry_species.distributionFunction() );
             const FArrayBox& this_inflow_data( bdry_data[dit] );
             const DataIndex& interior_dit( bdry_layout.dataIndex(dit) );
             const FluxBox& this_face_vel( a_velocity[interior_dit] );
-            const Box& interior_box( grids[interior_dit] );
-            const NewCoordSys& block_coord_sys( *a_coord_sys.getCoordSys( interior_box ) );
             FourthOrderBC::setInflowOutflowBC( this_BfJ,
                                                fill_box,
                                                this_inflow_data,
@@ -98,4 +93,4 @@ namespace PhaseBCUtils {
 }
 #include "NamespaceFooter.H"
 
-//#endif
+#endif

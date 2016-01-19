@@ -2,8 +2,7 @@
 
 #include "NamespaceHeader.H"
 
-char* VelCoordSys::pp_name = {"velocity_coord_sys"};
-
+const std::string VelCoordSys::pp_name = "velocity_coord_sys";
 
 
 VelCoordSys::VelCoordSys( ParmParse&               a_parm_parse,

@@ -3,14 +3,14 @@
 #include "BlockRegister.H"
 #include "SparseCoupling.H"
 #include "FluxSurface.H"
-#include "inspect.H"
+#include "MBSolverF_F.H"
 
 #include "NamespaceHeader.H"
 
+const std::string MBHypreSolver::pp_name = "MBHypreSolver";
 
-
-MBHypreSolver::MBHypreSolver( const MagGeom& a_geom,
-                              const int      a_discretization_order )
+MBHypreSolver::MBHypreSolver( const MagGeom&  a_geom,
+                              const int       a_discretization_order )
    : MBSolver(a_geom, a_discretization_order),
      m_hypre_allocated(false),
      m_A(NULL)
@@ -28,8 +28,8 @@ MBHypreSolver::~MBHypreSolver()
 
 
 void
-MBHypreSolver::multiplyMatrix( const LevelData<FArrayBox>& a_in,
-                               LevelData<FArrayBox>&       a_out )
+MBHypreSolver::multiplyMatrix( const LevelData<FArrayBox>&  a_in,
+                               LevelData<FArrayBox>&        a_out ) const
 {
    if (!m_hypre_allocated) {
       MayDay::Error( "GKPoisson::applyOperator(): Operator has not yet been initialized!" );
@@ -56,7 +56,7 @@ MBHypreSolver::multiplyMatrix( const LevelData<FArrayBox>& a_in,
 
    const DisjointBoxLayout& grids = a_in.disjointBoxLayout();
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       const Box & box = grids[dit];
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
 
@@ -66,7 +66,8 @@ MBHypreSolver::multiplyMatrix( const LevelData<FArrayBox>& a_in,
       FArrayBox tmp(box,1);
       tmp.copy(a_in[dit]);
 
-      HYPRE_SStructVectorSetBoxValues(in_vector, block_number, lower.dataPtr(), upper.dataPtr(), var, tmp.dataPtr());
+      HYPRE_SStructVectorSetBoxValues(in_vector, block_number, lower.dataPtr(), upper.dataPtr(),
+                                      var, tmp.dataPtr());
    }
 
    HYPRE_SStructVectorAssemble(in_vector);
@@ -89,7 +90,7 @@ MBHypreSolver::multiplyMatrix( const LevelData<FArrayBox>& a_in,
 
    // Copy the output Hypre vector to its LevelData
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       const Box & box = grids[dit];
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
 
@@ -98,7 +99,8 @@ MBHypreSolver::multiplyMatrix( const LevelData<FArrayBox>& a_in,
 
       FArrayBox tmp(box,1);
 
-      HYPRE_SStructVectorGetBoxValues(out_vector, block_number, lower.dataPtr(), upper.dataPtr(), var, tmp.dataPtr());
+      HYPRE_SStructVectorGetBoxValues(out_vector, block_number,
+                                      lower.dataPtr(), upper.dataPtr(), var, tmp.dataPtr());
 
       a_out[dit].copy(tmp);
    }
@@ -110,7 +112,7 @@ MBHypreSolver::multiplyMatrix( const LevelData<FArrayBox>& a_in,
 
 
 void
-MBHypreSolver::updateMatrixDiagonals( const LevelData<FArrayBox>& a_diagonal_increment )
+MBHypreSolver::updateMatrixDiagonals( const LevelData<FArrayBox>&  a_diagonal_increment )
 {
    /*
      Add the passed-in data to the diagonals of the system matrix A
@@ -121,7 +123,7 @@ MBHypreSolver::updateMatrixDiagonals( const LevelData<FArrayBox>& a_diagonal_inc
 
    const DisjointBoxLayout & grids = a_diagonal_increment.disjointBoxLayout();
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       const Box& box = grids[dit];
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
       IntVect lower(box.loVect());
@@ -132,8 +134,8 @@ MBHypreSolver::updateMatrixDiagonals( const LevelData<FArrayBox>& a_diagonal_inc
       new_diagonal.copy(m_A_diagonal[dit]);
       new_diagonal.plus(a_diagonal_increment[dit]);
 
-      HYPRE_SStructMatrixSetBoxValues(m_A, block_number, lower.dataPtr(), upper.dataPtr(), var, 1,
-                                      &m_A_diagonal_offset, new_diagonal.dataPtr());
+      HYPRE_SStructMatrixSetBoxValues(m_A, block_number, lower.dataPtr(), upper.dataPtr(),
+                                      var, 1, &m_A_diagonal_offset, new_diagonal.dataPtr());
 
       m_diagonal_increment[dit].copy(a_diagonal_increment[dit]);
    }
@@ -146,52 +148,60 @@ MBHypreSolver::updateMatrixDiagonals( const LevelData<FArrayBox>& a_diagonal_inc
 
 
 void
-MBHypreSolver::constructMatrix( LevelData<FluxBox>&   a_diffusion_coefficient,
-                                const PotentialBC&    a_bc,
-                                const bool            a_poloidally_average )
+MBHypreSolver::constructMatrix( LevelData<FluxBox>&  a_tensor_coefficient,
+                                const PotentialBC&   a_bc,
+                                const bool           a_poloidally_average,
+                                const bool           a_test_matvec )
 {
    LevelData<FArrayBox> dummy;
-   constructMatrix(dummy, a_diffusion_coefficient, dummy, a_bc, a_poloidally_average);
+   constructMatrix(dummy, a_tensor_coefficient, dummy, a_bc, a_poloidally_average,
+                   a_test_matvec );
 }
 
 
 
 void
-MBHypreSolver::constructMatrix( LevelData<FArrayBox>& a_alpha_coefficient,
-                                LevelData<FluxBox>&   a_diffusion_coefficient,
-                                const PotentialBC&    a_bc,
-                                const bool            a_poloidally_average )
+MBHypreSolver::constructMatrix( LevelData<FArrayBox>&  a_alpha_coefficient,
+                                LevelData<FluxBox>&    a_tensor_coefficient,
+                                const PotentialBC&     a_bc,
+                                const bool             a_poloidally_average,
+                                const bool             a_test_matvec )
 {
    LevelData<FArrayBox> dummy;
-   constructMatrix(a_alpha_coefficient, a_diffusion_coefficient, dummy, a_bc, a_poloidally_average);
+   constructMatrix(a_alpha_coefficient, a_tensor_coefficient, dummy, a_bc,
+                   a_poloidally_average, a_test_matvec );
 }
 
 
 
 void
-MBHypreSolver::constructMatrix( LevelData<FluxBox>&   a_diffusion_coefficient,
-                                LevelData<FArrayBox>& a_beta_coefficient,
-                                const PotentialBC&    a_bc,
-                                const bool            a_poloidally_average )
+MBHypreSolver::constructMatrix( LevelData<FluxBox>&    a_tensor_coefficient,
+                                LevelData<FArrayBox>&  a_beta_coefficient,
+                                const PotentialBC&     a_bc,
+                                const bool             a_poloidally_average,
+                                const bool             a_test_matvec )
 {
    LevelData<FArrayBox> dummy;
-   constructMatrix(dummy, a_diffusion_coefficient, a_beta_coefficient, a_bc, a_poloidally_average);
+   constructMatrix(dummy, a_tensor_coefficient, a_beta_coefficient, a_bc,
+                   a_poloidally_average, a_test_matvec );
 }
 
 
 
 void
-MBHypreSolver::constructMatrix( LevelData<FArrayBox>& a_alpha_coefficient,
-                                LevelData<FluxBox>&   a_diffusion_coefficient,
-                                LevelData<FArrayBox>& a_beta_coefficient,
-                                const PotentialBC&    a_bc,
-                                const bool            a_poloidally_average )
+MBHypreSolver::constructMatrix( LevelData<FArrayBox>&  a_alpha_coefficient,
+                                LevelData<FluxBox>&    a_tensor_coefficient,
+                                LevelData<FArrayBox>&  a_beta_coefficient,
+                                const PotentialBC&     a_bc,
+                                const bool             a_poloidally_average,
+                                const bool             a_test_matvec )
 {
    bool fourthOrder = (m_discretization_order == 4);
 
-   constructMatrix(a_alpha_coefficient, a_diffusion_coefficient, a_beta_coefficient, a_bc, m_A_graph,
-                   m_A_stencil_size, m_A_stencil_values, m_A_radial, m_A_diagonal, m_A_diagonal_offset,
-                   m_A_unstructured_coupling, a_poloidally_average, fourthOrder, m_dropOrder, m_A);
+   constructMatrix(a_alpha_coefficient, a_tensor_coefficient, a_beta_coefficient, a_bc,
+                   m_A_graph, m_A_stencil_values, m_A_radial, m_A_diagonal,
+                   m_A_diagonal_offset, m_A_unstructured_coupling,
+                   a_poloidally_average, a_test_matvec, fourthOrder, m_dropOrder, m_A, m_rhs_from_bc);
 
    setZero(m_diagonal_increment);
 }
@@ -199,13 +209,20 @@ MBHypreSolver::constructMatrix( LevelData<FArrayBox>& a_alpha_coefficient,
 
 
 void
-MBHypreSolver::solveWithMultigrid( const LevelData<FArrayBox>& a_rhs,
-                                   const double                a_tol,
-                                   const int                   a_max_iter,
-                                   const bool                  a_verbose,
-                                   LevelData<FArrayBox>&       a_solution )
+MBHypreSolver::solveWithMultigrid( const LevelData<FArrayBox>&  a_rhs,
+                                   const double                 a_tol,
+                                   const int                    a_max_iter,
+                                   const bool                   a_verbose,
+                                   LevelData<FArrayBox>&        a_solution )
 {
-   copyToHypreVector(a_rhs, m_b);
+   LevelData<FArrayBox> rhs;
+   rhs.define(a_rhs);
+
+   for (DataIterator dit(rhs.dataIterator()); dit.ok(); ++dit) {
+      rhs[dit] += m_rhs_from_bc[dit];
+   }
+
+   copyToHypreVector(rhs, m_b);
    copyToHypreVector(a_solution, m_x);
 
    /* This is a collective call finalizing the vector assembly.
@@ -222,16 +239,23 @@ MBHypreSolver::solveWithMultigrid( const LevelData<FArrayBox>& a_rhs,
 
 
 
-int
-MBHypreSolver::solveWithGMRES( const LevelData<FArrayBox>& a_rhs,
-                               const double                a_tol,
-                               const int                   a_max_iter,
-                               const double                a_amg_tol,
-                               const int                   a_amg_max_iter,
-                               const bool                  a_verbose, 
-                               LevelData<FArrayBox>&       a_solution )
+void
+MBHypreSolver::solveWithGMRES( const LevelData<FArrayBox>&  a_rhs,
+                               const double                 a_tol,
+                               const int                    a_max_iter,
+                               const double                 a_amg_tol,
+                               const int                    a_amg_max_iter,
+                               const bool                   a_verbose, 
+                               LevelData<FArrayBox>&        a_solution )
 {
-   copyToHypreVector(a_rhs, m_b);
+   LevelData<FArrayBox> rhs;
+   rhs.define(a_rhs);
+
+   for (DataIterator dit(rhs.dataIterator()); dit.ok(); ++dit) {
+      rhs[dit] += m_rhs_from_bc[dit];
+   }
+
+   copyToHypreVector(rhs, m_b);
    copyToHypreVector(a_solution, m_x);
 
    /* This is a collective call finalizing the vector assembly.
@@ -239,21 +263,22 @@ MBHypreSolver::solveWithGMRES( const LevelData<FArrayBox>& a_rhs,
    HYPRE_SStructVectorAssemble(m_b);
    HYPRE_SStructVectorAssemble(m_x);
 
-   int num_iters = GMRESSolve_Hypre( m_A, m_A, m_b, a_tol, a_max_iter, a_amg_tol, a_amg_max_iter, a_verbose, m_x );
+   (void)GMRESSolve_Hypre( m_A, m_A, m_b, a_tol, a_max_iter, a_amg_tol,
+                           a_amg_max_iter, a_verbose, m_x );
 
    copyFromHypreVector(m_x, a_solution);
 
    a_solution.exchange();
-
-   return num_iters;
 }
+
 
 
 void
-MBHypreSolver::dumpMatrix(const string& a_file_name) const
+MBHypreSolver::dumpMatrix(const string&  a_file_name) const
 {
    HYPRE_SStructMatrixPrint(a_file_name.c_str(), m_A, 0);
 }
+
 
 
 void
@@ -267,16 +292,20 @@ MBHypreSolver::createHypreData()
 
    IntVect stencil_box_lo(IntVect::Zero);
    IntVect stencil_box_hi;
+   int radius;
    if (m_discretization_order == 4) {
       if (m_dropOrder) {
          stencil_box_hi = 4*IntVect::Unit;
+         radius = 2;
       }
       else {
          stencil_box_hi = 6*IntVect::Unit;
+         radius = 3;
       }
    }
    else {
       stencil_box_hi = 2*IntVect::Unit;
+      radius = 1;
    }
    Box stencil_box(stencil_box_lo, stencil_box_hi);
           
@@ -295,7 +324,7 @@ MBHypreSolver::createHypreData()
    {
       HYPRE_SStructGridCreate(MPI_COMM_WORLD, SpaceDim, num_blocks, &m_grid);
 
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Box & box = grids[dit];
          int block_number = coord_sys_ptr->whichBlock(box);
          IntVect lower(box.loVect());
@@ -310,7 +339,8 @@ MBHypreSolver::createHypreData()
          HYPRE_SStructGridSetVariables(m_grid, block, nvar, vartypes);
 
          // Set periodic shift vector and check whether the domain is fully periodic
-         const ProblemDomain& domain = ((const MagBlockCoordSys*)coord_sys_ptr->getCoordSys(block))->domain();
+         const ProblemDomain& domain
+            = ((const MagBlockCoordSys*)coord_sys_ptr->getCoordSys(block))->domain();
          IntVect periodic = domain.size();
 
          for (int dir=0; dir<SpaceDim; dir++) {
@@ -337,19 +367,7 @@ MBHypreSolver::createHypreData()
          }
       }
 
-      if (m_discretization_order == 4) {
-         if (m_dropOrder) {
-            m_A_radius = 2;
-         }
-         else {
-            m_A_radius = 3;
-         }
-      }
-      else {
-         m_A_radius = 1;
-      }
-
-      int num_ghost[] = {m_A_radius, m_A_radius, m_A_radius, m_A_radius, m_A_radius, m_A_radius};
+      int num_ghost[] = {radius, radius, radius, radius, radius, radius};
 
       HYPRE_SStructGridSetNumGhost(m_grid, num_ghost);
 
@@ -363,17 +381,7 @@ MBHypreSolver::createHypreData()
       /* Define the geometry of the stencil. Each represents a
          relative offset (in the index space). */
 
-      if (m_discretization_order == 4) {
-         if (m_dropOrder) {
-            m_A_stencil_size = 25;
-         }
-         else {
-            m_A_stencil_size = 49;
-         }
-      }
-      else {
-         m_A_stencil_size = 9;
-      }
+      int stencil_size = stencil_box.numPts();
 
       int offsets2[][2] = {{-1,-1}, {0,-1}, {1,-1},
                            {-1,0},  {0,0},  {1,0},
@@ -393,8 +401,9 @@ MBHypreSolver::createHypreData()
                            {-3, 2}, {-2, 2}, {-1, 2}, {0, 2}, {1, 2}, {2, 2}, {3, 2},
                            {-3, 3}, {-2, 3}, {-1, 3}, {0, 3}, {1, 3}, {2, 3}, {3, 3}};
 
-      int offsets[m_A_stencil_size][2];
-      for (int n=0; n<m_A_stencil_size; ++n) {
+      int** offsets = new int*[stencil_size];
+      for (int n=0; n<stencil_size; ++n) {
+         offsets[n] = new int[2];
          for (int m=0; m<2; ++m) {
             if (m_discretization_order == 4) {
                if (m_dropOrder) {
@@ -410,15 +419,20 @@ MBHypreSolver::createHypreData()
          }
       }
 
-      m_A_diagonal_offset = (m_A_stencil_size - 1) / 2;
+      m_A_diagonal_offset = (stencil_size - 1) / 2;
 
       /* Create an empty 2D stencil object */
-      HYPRE_SStructStencilCreate(SpaceDim, m_A_stencil_size, &m_A_stencil);
+      HYPRE_SStructStencilCreate(SpaceDim, stencil_size, &m_A_stencil);
 
       /* Assign each of the stencil entries */
       int entry;
-      for (entry = 0; entry < m_A_stencil_size; entry++)
+      for (entry = 0; entry < stencil_size; entry++)
         HYPRE_SStructStencilSetEntry(m_A_stencil, entry, offsets[entry], var);
+
+      for (int n=0; n<stencil_size; ++n) {
+         delete [] offsets[n];
+      }
+      delete [] offsets;
    }
 
    // Set up the graph
@@ -432,13 +446,13 @@ MBHypreSolver::createHypreData()
          HYPRE_SStructGraphSetStencil(m_A_graph, block, var, m_A_stencil);
       }
 
-      getUnstructuredCouplings(m_A_radius, m_A_unstructured_coupling);
-      addUnstructuredGraphEntries(m_A_radius, m_A_unstructured_coupling, m_A_graph);
+      getUnstructuredCouplings(radius, m_A_unstructured_coupling);
+      addUnstructuredGraphEntries(radius, m_A_unstructured_coupling, m_A_graph);
 
       HYPRE_SStructGraphAssemble(m_A_graph);
    }
 
-   // Set up vectors for b and x
+   // Set up vectors for b, x and bc
 
    {
       /* Create an empty vector object */
@@ -477,9 +491,9 @@ MBHypreSolver::destroyHypreData()
 
 
 void
-MBHypreSolver::addUnstructuredGraphEntries( const int                                a_radius,
-                                            const LayoutData< BaseFab<IntVectSet> >& a_unstructured_coupling,
-                                            HYPRE_SStructGraph&                      a_graph ) const
+MBHypreSolver::addUnstructuredGraphEntries( const int                                 a_radius,
+                                            const LayoutData< BaseFab<IntVectSet> >&  a_unstructured_coupling,
+                                            HYPRE_SStructGraph&                       a_graph ) const
 {
    if (m_mblex_potential_Ptr) {
 
@@ -489,7 +503,7 @@ MBHypreSolver::addUnstructuredGraphEntries( const int                           
       const MagCoordSys* coord_sys_ptr = m_geometry.getCoordSys();
       const DisjointBoxLayout & grids = m_geometry.grids();
 
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          int dst_block_number = coord_sys_ptr->whichBlock(grids[dit]);
 
          // Find all cells that may be coupled through a block interface
@@ -515,9 +529,9 @@ MBHypreSolver::addUnstructuredGraphEntries( const int                           
 
 
 int
-MBHypreSolver::findHypreEntry(const Box&        a_stencil_box,
-                              const IntVectSet& a_unstructured_ivs,
-                              const IntVect&    a_iv) const
+MBHypreSolver::findHypreEntry(const Box&         a_stencil_box,
+                              const IntVectSet&  a_unstructured_ivs,
+                              const IntVect&     a_iv) const
 {
    /*
      The Hypre matrix coefficients corresponding to the equation centered at cell a_iv are
@@ -547,6 +561,7 @@ MBHypreSolver::findHypreEntry(const Box&        a_stencil_box,
          }
          entry++;
       }
+
       CH_assert(found_entry);
    }
 
@@ -556,32 +571,34 @@ MBHypreSolver::findHypreEntry(const Box&        a_stencil_box,
 
 
 void
-MBHypreSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&              a_alpha_coefficient,
-                                            const LevelData<FluxBox>&                a_diffusion_coefficient,
-                                            const PotentialBC&                       a_bc,
-                                            FArrayBox&                               a_stencil_values,
-                                            const bool                               a_fourthOrder,
-                                            const bool                               a_dropOrder,
-                                            const LayoutData< BaseFab<IntVectSet> >& a_unstructured_coupling,
-                                            HYPRE_SStructMatrix&                     a_matrix) const
+MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&               a_alpha_coefficient,
+                                             const LevelData<FluxBox>&                 a_tensor_coefficient,
+                                             const PotentialBC&                        a_bc,
+                                             FArrayBox&                                a_stencil_values,
+                                             const bool                                a_fourthOrder,
+                                             const bool                                a_dropOrder,
+                                             const LayoutData< BaseFab<IntVectSet> >&  a_unstructured_coupling,
+                                             Vector< Vector<CoDim1Stencil> >&          a_codim1_stencils,
+                                             Vector< Vector<CoDim2Stencil> >&          a_codim2_stencils,
+                                             HYPRE_SStructMatrix&                      a_matrix ) const
 {
    if (m_mblex_potential_Ptr) {
 
+      const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
+      const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = mag_coord_sys->boundaries();
+
       Box stencil_offsets = a_stencil_values.box();
-      int stencil_size = stencil_offsets.numPts();
       int radius = (stencil_offsets.size(0)-1)/2;
       stencil_offsets -= radius*IntVect::Unit;
 
       const DisjointBoxLayout & grids = m_geometry.grids();
-      const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
-      const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = mag_coord_sys->boundaries();
 
       const LayoutData< IntVectSet >& ghosts = m_mblex_potential_Ptr->ghostCells();
       const LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& stencil = m_mblex_potential_Ptr->stencils();
 
       BlockBaseRegister<BaseFab<SparseCoupling> > blockRegister(mag_coord_sys, grids, 0);
 
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Box & box = grids[dit];
 
          int block_number = mag_coord_sys->whichBlock(box);
@@ -595,18 +612,6 @@ MBHypreSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
          for (int dir=0; dir<SpaceDim; ++dir) {
             lo_block_interface[dir] = this_block_boundaries[dir].isInterface();
             hi_block_interface[dir] = this_block_boundaries[dir + SpaceDim].isInterface();
-         }
-
-         int block_bc_types[2*SpaceDim];
-         for (int dir=0; dir<SpaceDim; ++dir) {
-            for (int side=0; side<2; ++side) {
-               if ( this_block_boundaries[dir+SpaceDim*side].isDomainBoundary() ) {
-                  block_bc_types[dir+2*side] = a_bc.getBCType(block_number, dir, side);
-               }
-               else {
-                  block_bc_types[dir+SpaceDim*side] = -1;
-               }
-            }
          }
 
          const FArrayBox* alphaPtr = NULL;
@@ -624,6 +629,7 @@ MBHypreSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
             data[dir].define(surroundingNodes(box, dir), 1);
          }
 
+         // Here, we loop over all cells whose stencil is affected by a block boundary
          IntVectSet interblock_ivs = getInterBlockCoupledCells(block_number, radius, box);
          for (IVSIterator ivsit(interblock_ivs); ivsit.ok(); ++ivsit) {
             IntVect iv = ivsit();
@@ -640,14 +646,16 @@ MBHypreSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
             for (int dir=0; dir<SpaceDim; ++dir) {
                bool at_lo_block_interface = lo_block_interface[dir] && (iv[dir] == domainBox.smallEnd(dir));
                bool at_hi_block_interface = hi_block_interface[dir] && (iv[dir] == domainBox.bigEnd(dir));
+               bool force_codim2_condense = lo_block_interface[dir] || hi_block_interface[dir];
                
-               for (int side=0; side<2; ++side) {
+               for (SideIterator sit; sit.ok(); ++sit) {
+                  Side::LoHiSide side = sit();
 
                   IntVect iv_face;
 
                   // Halve the contributions on face contained in block interfaces to effect averaging
                   double fac;
-                  if ( (at_lo_block_interface && side == 0) || (at_hi_block_interface && side == 1) ) {
+                  if ( (at_lo_block_interface && side == Side::LoHiSide::Lo) || (at_hi_block_interface && side == Side::LoHiSide::Hi) ) {
                      fac = 0.5;
                      iv_face = iv;
                      iv_face.shift(dir,side);
@@ -655,75 +663,89 @@ MBHypreSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
                   else {
                      fac = 1.;
                   }
-               
-                  // Get the matrix couplings to the cell iv associated with the current side
-                  a_stencil_values.setVal(0.);
-                  accumStencilMatrixEntries(iv, dir, side, dir, this_block_boundaries, block_bc_types, a_diffusion_coefficient[dit],
-                                            dx, domainBox, a_fourthOrder, a_dropOrder, a_stencil_values);
 
-                  BoxIterator bit(stencil_box);
-                  for (bit.begin(); bit.ok(); ++bit) {
-                     IntVect stencil_box_iv = bit();
+                  for (int dir2=0; dir2<SpaceDim; ++dir2) {
 
-                     double s = fac * a_stencil_values( stencil_box_iv - iv + radius*IntVect::Unit );
+                     a_stencil_values.setVal(0.);
 
-                     if ( s != 0. ) {
+                     accumStencilMatrixEntries(iv, dir, side, dir2, a_tensor_coefficient[dit],
+                                               dx, a_fourthOrder, a_dropOrder, a_stencil_values);
 
-                        if ( stencil_box_valid.contains(stencil_box_iv) ) {
-                           // If cell iv is on a block interface, add the stencil contribution to the BlockRegister data.
-                           // The minus sign accounts for the normal component, which is negated on the adacent cell.
-                           if ( (at_lo_block_interface && side == 0) || (at_hi_block_interface && side == 1) ) {
-                              data[dir](iv_face).add(stencil_box_iv, -s);
+                     FArrayBox dummy;
+                     modifyStencilForBCs( a_codim1_stencils[block_number], a_codim2_stencils[block_number],
+                                          iv, a_stencil_values, dummy, false, force_codim2_condense );
 
-                              int entry = findHypreEntry(stencil_box, unstructured_couplings, stencil_box_iv);
-                              double value = s * alpha / this_cell_volume;
+                     BoxIterator bit(stencil_box);
+                     for (bit.begin(); bit.ok(); ++bit) {
+                        IntVect stencil_box_iv = bit();
 
-                              int num_entries = 1;
-                              HYPRE_SStructMatrixAddToValues(a_matrix, block_number, iv.dataPtr(),
-                                                             0, num_entries, &entry, &value);
+                        double s = fac * a_stencil_values( stencil_box_iv - iv + radius*IntVect::Unit );
 
+                        if ( s != 0. ) {
+
+                           if ( stencil_box_valid.contains(stencil_box_iv) ) {
+
+                              // If the current side of cell iv is on a block interface, add the stencil contribution to the BlockRegister data.
+                              // The minus sign accounts for the normal component, which is negated on the adacent cell.  Also, since we have not
+                              // yet accounted for the regular stencil contributions, do that now.
+                              if ( (at_lo_block_interface && side == Side::LoHiSide::Lo) || (at_hi_block_interface && side == Side::LoHiSide::Hi) ) {
+                                 data[dir](iv_face).add(stencil_box_iv, -s);
+
+                                 int entry = findHypreEntry(stencil_box, unstructured_couplings, stencil_box_iv);
+                                 double value = s * alpha / this_cell_volume;
+
+                                 int num_entries = 1;
+                                 HYPRE_SStructMatrixAddToValues(a_matrix, block_number, iv.dataPtr(),
+                                                                0, num_entries, &entry, &value);
+                              }
                            }
-                        }
-                        else if ( extra_block_ghosts.contains(stencil_box_iv) ) {
+                           else if ( extra_block_ghosts.contains(stencil_box_iv) ) {
 
-                           const MBStencil& elements = this_stencil(stencil_box_iv, 0);
-                           int num_unstructured_entries = elements.size();
-                           double * values = new double[num_unstructured_entries];
-                           int * entries = new int[num_unstructured_entries];
+                              const MBStencil& elements = this_stencil(stencil_box_iv, 0);
+                              int num_unstructured_entries = elements.size();
+                              double * values = new double[num_unstructured_entries];
+                              int * entries = new int[num_unstructured_entries];
 
-                           MBStencilIterator stit(elements);
-                           int k = 0;
-                           for (stit.begin(); stit.ok(); ++stit) {
-                              const MBStencilElement& stencilElement = stit();
-                              IntVect interp_cell = stencilElement.cell();
+                              MBStencilIterator stit(elements);
+                              int k = 0;
+                              for (stit.begin(); stit.ok(); ++stit) {
+                                 const MBStencilElement& stencilElement = stit();
+                                 IntVect interp_cell = stencilElement.cell();
 
-                              entries[k] = findHypreEntry(stencil_box, unstructured_couplings, interp_cell);
-                              values[k] = s * stencilElement.weight();
+                                 entries[k] = findHypreEntry(stencil_box, unstructured_couplings, interp_cell);
+                                 values[k] = s * stencilElement.weight();
 
-                              // If we are on a block interface, add the stencil contribution to the BlockRegister data.
-                              // The minus sign accounts for the normal component, which is negated on the adacent cell.
-                              if ( (at_lo_block_interface && side == 0) || (at_hi_block_interface && side == 1) ) {
-                                 data[dir](iv_face).add(interp_cell, -values[k]);
+                                 // If we are on a block interface, add the stencil contribution to the BlockRegister data.
+                                 // The minus sign accounts for the normal component, which is negated on the adacent cell.
+                                 if ( (at_lo_block_interface && side == Side::LoHiSide::Lo) || (at_hi_block_interface && side == Side::LoHiSide::Hi) ) {
+                                    data[dir](iv_face).add(interp_cell, -values[k]);
+                                 }
+
+                                 values[k] *= (alpha / this_cell_volume);
+                                 k++;
                               }
 
-                              values[k] *= (alpha / this_cell_volume);
+                              HYPRE_SStructMatrixAddToValues(a_matrix, block_number, iv.dataPtr(),
+                                                             0, num_unstructured_entries, entries, values);
 
-                              k++;
+                              delete [] entries;
+                              delete [] values;
                            }
+                           else {
 
-                           HYPRE_SStructMatrixAddToValues(a_matrix, block_number, iv.dataPtr(),
-                                                          0, num_unstructured_entries, entries, values);
+                              // If we've landed here, then stencil_box_iv is neither a valid cell nor an extrablock
+                              // ghost cell (relative to the center cell iv).  The only remaining possibility is that
+                              // it's a ghost cell at a codim = 1 or codim = 2 physical boundary, in which case 
+                              // the stencil modification to account for boundary conditions should have zeroed
+                              // out the corresponding stencil entry (i.e., s = 0).  Something has therefore
+                              // gone wrong and needs to be investigated.
 
-                           delete [] entries;
-                           delete [] values;
-
-                        }
-                        else {
-                           MayDay::Error("Problem adding extra block matrix entries");
+                              MayDay::Error("MBHypreSolver::addUnstructuredMatrixEntries(): Invalid stencil_box_iv");
+                           }
                         }
                      }
-                  }
-               }
+                  } // dir2
+               }  // sit
             }
          }
 
@@ -742,7 +764,7 @@ MBHypreSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
 
       blockRegister.exchange();
 
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          int block_number = mag_coord_sys->whichBlock(grids[dit]);
          const FArrayBox& this_volume = m_volume[dit];
 
@@ -781,7 +803,7 @@ MBHypreSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
                         entries[k] = findHypreEntry(stencil_box, unstructured_couplings, index);
                         values[k] = coupling.weight(index) * alpha / this_volume(iv);
                         k++;
-                     }  // it
+                     }
 
                      HYPRE_SStructMatrixAddToValues(a_matrix, block_number, iv.dataPtr(),
                                                     0, num_entries, entries, values);
@@ -800,22 +822,27 @@ MBHypreSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
 
 
 void
-MBHypreSolver::constructMatrix( LevelData<FArrayBox>&              a_alpha_coefficient, 
-                                LevelData<FluxBox>&                a_diffusion_coefficient,
-                                LevelData<FArrayBox>&              a_beta_coefficient,
-                                const PotentialBC&                 a_bc,
-                                HYPRE_SStructGraph&                a_graph,
-                                const int                          a_stencil_size,
-                                FArrayBox&                         a_stencil_values,
-                                LevelData<FArrayBox>&              a_radial,
-                                LevelData<FArrayBox>&              a_diagonal,
-                                const int                          a_diagonal_offset,
-                                LayoutData< BaseFab<IntVectSet> >& a_unstructured_coupling,
-                                const bool                         a_average_poloidally,
-                                const bool                         a_fourthOrder,
-                                const bool                         a_dropOrder,
-                                HYPRE_SStructMatrix&               a_matrix ) const
+MBHypreSolver::constructMatrix( LevelData<FArrayBox>&               a_alpha_coefficient, 
+                                LevelData<FluxBox>&                 a_tensor_coefficient,
+                                LevelData<FArrayBox>&               a_beta_coefficient,
+                                const PotentialBC&                  a_bc,
+                                HYPRE_SStructGraph&                 a_graph,
+                                FArrayBox&                          a_stencil_values,
+                                LevelData<FArrayBox>&               a_radial,
+                                LevelData<FArrayBox>&               a_diagonal,
+                                const int                           a_diagonal_offset,
+                                LayoutData< BaseFab<IntVectSet> >&  a_unstructured_coupling,
+                                const bool                          a_average_poloidally,
+                                const bool                          a_test_matvec,
+                                const bool                          a_fourth_order,
+                                const bool                          a_dropOrder,
+                                HYPRE_SStructMatrix&                a_matrix,
+                                LevelData<FArrayBox>&               a_rhs_from_bc ) const
 {
+   const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
+
+   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = mag_coord_sys->boundaries();
+
    if (a_matrix == NULL) {
       HYPRE_SStructMatrixCreate(MPI_COMM_WORLD, a_graph, &a_matrix);
       HYPRE_SStructMatrixSetObjectType(a_matrix, m_hypre_object_type);
@@ -825,12 +852,9 @@ MBHypreSolver::constructMatrix( LevelData<FArrayBox>&              a_alpha_coeff
 
    int var = 0;
 
-   const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = mag_coord_sys->boundaries();
-
    // Make sure the coefficient ghost cell values are set.
    // The ghost cell values at physical boundaries aren't used.
-   a_diffusion_coefficient.exchange();
+   a_tensor_coefficient.exchange();
 
    /* Set the matrix coefficients.  Each processor assigns coefficients
       for the boxes in the grid that it owns. Note that the coefficients
@@ -839,16 +863,26 @@ MBHypreSolver::constructMatrix( LevelData<FArrayBox>&              a_alpha_coeff
       each grid point.  Then we make modifications to grid points near
       the boundary. */
 
-   int * entries = new int[a_stencil_size];
-   for (int n=0; n<a_stencil_size; n++) entries[n] = n;
+
+   int stencil_size = a_stencil_values.box().numPts();
+   int * entries = new int[stencil_size];
+   for (int n=0; n<stencil_size; n++) entries[n] = n;
     
    double * stencil_values = a_stencil_values.dataPtr(0);
 
-   const DisjointBoxLayout & grids = a_diffusion_coefficient.disjointBoxLayout();
+   const DisjointBoxLayout & grids = a_tensor_coefficient.disjointBoxLayout();
 
-   LevelData<FArrayBox> structured_values(grids, a_stencil_size, IntVect::Zero);
+   setZero(a_rhs_from_bc);
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   LevelData<FArrayBox> structured_values(grids, stencil_size, IntVect::Zero);
+   FArrayBox tmp_stencil_values(a_stencil_values.box(), a_stencil_values.nComp());
+
+   Vector< Vector<CoDim1Stencil> > codim1_stencils;
+   Vector< Vector<CoDim2Stencil> > codim2_stencils;
+
+   constructBoundaryStencils(a_fourth_order, a_bc, codim1_stencils, codim2_stencils );
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
      const Box & box = grids[dit];
 
      int block_number = mag_coord_sys->whichBlock(box);
@@ -871,18 +905,9 @@ MBHypreSolver::constructMatrix( LevelData<FArrayBox>&              a_alpha_coeff
         }
      }
 
-     int block_bc_types[2*SpaceDim];
-     for (int dir=0; dir<SpaceDim; ++dir) {
-        for (int side=0; side<2; ++side) {
-           if ( this_block_boundaries[dir+side*SpaceDim].isDomainBoundary() ) {
-              block_bc_types[dir+2*side] = a_bc.getBCType(block_number, dir, side);
-           }
-        }
-     }
-
      const Box& domainBox = block_coord_sys.domain().domainBox();
 
-     FluxBox& this_mapped_coefs = a_diffusion_coefficient[dit];
+     FluxBox& this_coef = a_tensor_coefficient[dit];
      const FArrayBox & this_volume = m_volume[dit];
 
      const FArrayBox* alpha = NULL;
@@ -903,28 +928,50 @@ MBHypreSolver::constructMatrix( LevelData<FArrayBox>&              a_alpha_coeff
 
        a_stencil_values.setVal(0.);
 
+       // Compute the stencil couplings to cell iv without regard to boundary conditions, skipping
+       // the contributions due to cell faces on block interfaces, which are handled later by
+       // addUnstructuredMatrixEntries().
+
        for (int dir=0; dir<SpaceDim; ++dir) {
           bool at_lo_interface = (lo_block_interface[dir] && iv[dir] == domainBox.smallEnd(dir));
           bool at_hi_interface = (hi_block_interface[dir] && iv[dir] == domainBox.bigEnd(dir));
-          for (int side=0; side<2; ++side) {
-             if( !(at_lo_interface && side == 0) && !(at_hi_interface && side == 1) ) {
-                accumStencilMatrixEntries(iv, dir, side, dir, this_block_boundaries, block_bc_types, this_mapped_coefs,
-                                          dx, domainBox, a_fourthOrder, a_dropOrder, a_stencil_values);
+          bool force_codim2_condense = lo_block_interface[dir] || hi_block_interface[dir];
+
+          for (SideIterator sit; sit.ok(); ++sit) {
+             Side::LoHiSide side = sit();
+
+             bool update_rhs_from_bc_only = (at_lo_interface && side == Side::LoHiSide::Lo)
+                || (at_hi_interface && side == Side::LoHiSide::Hi);
+
+             for (int dir2=0; dir2<SpaceDim; ++dir2) {
+
+                tmp_stencil_values.setVal(0.);
+
+                accumStencilMatrixEntries(iv, dir, side, dir2, this_coef, dx,
+                                          a_fourth_order, a_dropOrder, tmp_stencil_values);
+
+                modifyStencilForBCs( codim1_stencils[block_number], codim2_stencils[block_number],
+                                     iv, tmp_stencil_values, a_rhs_from_bc[dit],
+                                     update_rhs_from_bc_only, force_codim2_condense );
+
+                a_stencil_values += tmp_stencil_values;
              }
           }
        }
 
        a_stencil_values /= this_volume(iv);
+       a_rhs_from_bc[dit](iv,0) /= this_volume(iv);
 
        if ( alpha ) {
           a_stencil_values *= alpha->operator()(iv);
+          a_rhs_from_bc[dit](iv,0) *= alpha->operator()(iv);
        }
 
        if ( beta ) {
           stencil_values[a_diagonal_offset] += beta->operator()(iv);
        }
 
-       for (int jj=0; jj<a_stencil_size; jj++) {
+       for (int jj=0; jj<stencil_size; jj++) {
           structured_values[dit](iv,jj) = stencil_values[jj];
        }
      }
@@ -933,12 +980,12 @@ MBHypreSolver::constructMatrix( LevelData<FArrayBox>&              a_alpha_coeff
    if ( a_average_poloidally ) {
       FluxSurface flux_surface_op(m_geometry);
 
-      LevelData<FArrayBox> fs_average(flux_surface_op.grids(), a_stencil_size, IntVect::Zero);
+      LevelData<FArrayBox> fs_average(flux_surface_op.grids(), stencil_size, IntVect::Zero);
       flux_surface_op.average(structured_values, fs_average);
       flux_surface_op.spread(fs_average, structured_values);
    }
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
      const Box & box = grids[dit];
      IntVect lower(box.loVect());
      IntVect upper(box.hiVect());
@@ -947,7 +994,7 @@ MBHypreSolver::constructMatrix( LevelData<FArrayBox>&              a_alpha_coeff
 
      // Set the intra-block matrix entries
 
-     int nvalues  = a_stencil_size * box.numPts();
+     int nvalues  = stencil_size * box.numPts();
      double * values = new double[nvalues];
 
      double * radial_ldiag = a_radial[dit].dataPtr(0);
@@ -963,20 +1010,14 @@ MBHypreSolver::constructMatrix( LevelData<FArrayBox>&              a_alpha_coeff
      for (bit.begin();bit.ok();++bit) {
        IntVect iv = bit();
 
-       for (int jj=0; jj<a_stencil_size; jj++) {
+       for (int jj=0; jj<stencil_size; jj++) {
           stencil_values[jj] = structured_values[dit](iv,jj);
        }
 
        if ( a_average_poloidally ) {
-         for (int jj=0; jj<a_stencil_size; jj++) {
+         for (int jj=0; jj<stencil_size; jj++) {
            values[ii+jj] = 0.;
          }
-
-#if 0
-         values[ii+3] = radial_ldiag[diagonal_index] = stencil_values[3];
-         values[ii+4] = radial_diag[diagonal_index]  = stencil_values[4];
-         values[ii+5] = radial_udiag[diagonal_index] = stencil_values[5];
-#else
 
          values[ii+3] = radial_ldiag[diagonal_index]
             = stencil_values[0] + stencil_values[3] + stencil_values[6];
@@ -984,50 +1025,63 @@ MBHypreSolver::constructMatrix( LevelData<FArrayBox>&              a_alpha_coeff
             = stencil_values[1] + stencil_values[4] + stencil_values[7];
          values[ii+5] = radial_udiag[diagonal_index]
             = stencil_values[2] + stencil_values[5] + stencil_values[8];
-#endif
        }
        else {
-         for (int jj=0; jj<a_stencil_size; jj++) {
+         for (int jj=0; jj<stencil_size; jj++) {
             values[ii+jj] = stencil_values[jj];
          }
        }
 
        diagonal_values[diagonal_index] = stencil_values[a_diagonal_offset];
 
-       //       cout << iv << " " << radial_ldiag[diagonal_index] << " " << radial_diag[diagonal_index] << " " << radial_udiag[diagonal_index] << endl;
-
-       ii += a_stencil_size;
+       ii += stencil_size;
        diagonal_index++;
 
      }
 
      HYPRE_SStructMatrixSetBoxValues(a_matrix, block_number, lower.dataPtr(), upper.dataPtr(),
-                                     var, a_stencil_size, entries, values);
+                                     var, stencil_size, entries, values);
 
      delete [] values;
    }
 
    delete [] entries;
 
-   addUnstructuredMatrixEntries(a_alpha_coefficient, a_diffusion_coefficient, a_bc, a_stencil_values,
-                                a_fourthOrder, a_dropOrder, a_unstructured_coupling, a_matrix);
+   addUnstructuredMatrixEntries(a_alpha_coefficient, a_tensor_coefficient, a_bc, a_stencil_values,
+                                a_fourth_order, a_dropOrder, a_unstructured_coupling,
+                                codim1_stencils, codim2_stencils, a_matrix);
 
    /* This is a collective call finalizing the matrix assembly.
       The matrix is now ``ready to be used'' */
    HYPRE_SStructMatrixAssemble(a_matrix);
 
-   //   HYPRE_SStructMatrixPrint("struct.out.A", a_matrix, 0);
+   //   dumpMatrix("HYPRE_MATRIX.A");
+
+   if ( a_test_matvec ) {
+
+      testMatrixConstruct( a_alpha_coefficient, 
+                           a_tensor_coefficient,
+                           a_beta_coefficient,
+                           block_boundaries,
+                           codim1_stencils,
+                           codim2_stencils,
+                           a_stencil_values,
+                           a_fourth_order,
+                           a_dropOrder,
+                           a_rhs_from_bc );
+   }
 }
 
 
 
+
 void
-MBHypreSolver::MultigridSolve_Hypre( const HYPRE_SStructMatrix& a_matrix,
-                                     const HYPRE_SStructVector& a_b,
-                                     const double               a_tol,
-                                     const int                  a_max_iter,
-                                     const bool                 a_verbose,
-                                     const HYPRE_SStructVector& a_x ) const
+MBHypreSolver::MultigridSolve_Hypre( const HYPRE_SStructMatrix&  a_matrix,
+                                     const HYPRE_SStructVector&  a_b,
+                                     const double                a_tol,
+                                     const int                   a_max_iter,
+                                     const bool                  a_verbose,
+                                     const HYPRE_SStructVector&  a_x ) const
 {
    HYPRE_Solver          par_solver;
    HYPRE_ParCSRMatrix    par_A;
@@ -1145,8 +1199,8 @@ MBHypreSolver::GMRESSolve_Hypre( const HYPRE_SStructMatrix&  a_matrix,
 
 
 void
-MBHypreSolver::copyToHypreVector( const LevelData<FArrayBox>& a_in,
-                                  HYPRE_SStructVector&        a_out )
+MBHypreSolver::copyToHypreVector( const LevelData<FArrayBox>&  a_in,
+                                  HYPRE_SStructVector&         a_out ) const
 {
    const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
 
@@ -1154,7 +1208,7 @@ MBHypreSolver::copyToHypreVector( const LevelData<FArrayBox>& a_in,
 
    const DisjointBoxLayout & grids = a_in.disjointBoxLayout();
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       const Box & box = grids[dit];
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
 
@@ -1171,8 +1225,8 @@ MBHypreSolver::copyToHypreVector( const LevelData<FArrayBox>& a_in,
 
 
 void
-MBHypreSolver::copyFromHypreVector( const HYPRE_SStructVector& a_in,
-                                    LevelData<FArrayBox>&      a_out ) const
+MBHypreSolver::copyFromHypreVector( const HYPRE_SStructVector&  a_in,
+                                    LevelData<FArrayBox>&       a_out ) const
 {
    const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
 
@@ -1180,7 +1234,7 @@ MBHypreSolver::copyFromHypreVector( const HYPRE_SStructVector& a_in,
 
    const DisjointBoxLayout & grids = a_out.disjointBoxLayout();
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       const Box & box = grids[dit];
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
 
