@@ -6,7 +6,7 @@
 #include "Simulation.H"
 
 #ifdef with_petsc
-#include <PETScInterface.H>
+#include "PETScTimeIntegration.H"
 #endif
 
 #include "parstream.H"
@@ -15,10 +15,6 @@
 #endif
 
 #include "UsingNamespace.H"
-
-#ifdef with_petsc
-static const char help[] = "COGENT";
-#endif
 
 inline int checkCommandLineArgs( int a_argc, char* a_argv[] )
 {
@@ -30,6 +26,18 @@ inline int checkCommandLineArgs( int a_argc, char* a_argv[] )
    }
    return 0;
 }
+
+#ifdef with_petsc
+static const char help[] = "COGENT";
+
+bool parseParams( ParmParse &a_pp)
+{
+  /* default: don't use PETSc */
+  bool flag = false;
+  a_pp.query("use_petsc",flag);
+  return flag;
+}
+#endif
 
 int main( int a_argc, char* a_argv[] )
 {
@@ -47,9 +55,20 @@ int main( int a_argc, char* a_argv[] )
 
    if (status==0) {
       ParmParse pp( a_argc-2, a_argv+2, NULL, a_argv[1] );
-      Simulation<GKSystem> simulation( pp );
-      while ( simulation.notDone() ) simulation.advance();
-      simulation.finalize();
+#ifdef with_petsc
+      bool usePetsc = parseParams(pp);
+      if (usePetsc) {
+        PetscTimeIntegrator<GKSystem> petsc(pp,usePetsc);
+//        petsc.solve();
+        petsc.finalize();
+      } else {
+#endif
+        Simulation<GKSystem> simulation( pp );
+        while ( simulation.notDone() ) simulation.advance();
+        simulation.finalize();
+#ifdef with_petsc
+      }
+#endif
    }
 
 #ifdef with_petsc

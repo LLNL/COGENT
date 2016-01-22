@@ -89,6 +89,8 @@ public:
       }
    }
 
+   int getVectorSize();
+
    
    void increment( const GKState& a_state,
                    Real a_factor = 1.0,
@@ -133,6 +135,9 @@ public:
       CH_assert( isDefined() );
       return m_geometry;
    }
+
+   void copyTo    (Real*);
+   void copyFrom  (Real*);
 
 private:
 
@@ -234,6 +239,9 @@ public:
       return m_species_mapped;
    }
    
+   void copyTo    (Real*);
+   void copyFrom  (Real*);
+
 private:
 
    // Disallowed for all the usual reasons
