@@ -25,13 +25,33 @@ class PetscTimeIntegrator
   public: 
     PetscTimeIntegrator<System>(ParmParse&,bool);
     ~PetscTimeIntegrator<System>();
-    void finalize();
 
-  private:
+    void finalize();
+    void solve() { TSSolve(m_ts, NULL); }
+
+    void  copyStateToPetsc    (Vec& a_Y, System* a_System);
+    void  copyStateFromPetsc  (Vec& a_Y, System* a_System);
+    void  copyRHSToPetsc      (Vec& a_Y, System* a_System);
+    void  copyRHSFromPetsc    (Vec& a_Y, System* a_System);
+
+    inline System* getSystem()        { return m_system; }
+    inline int     getVerbosity()     { return m_verbosity; }
+    inline int     getPlotInterval()  { return m_plot_interval; }
+    inline int     getChkptInterval() { return m_checkpoint_interval; }
+
+    inline void    setLastPlot  (int a_int) { m_last_plot = a_int; }      
+    inline void    setLastChkpt (int a_int) { m_last_checkpoint = a_int; }      
+
+    inline void    setTime            (Real a_t)    { m_cur_time = a_t; }
+    inline void    setTimeStep        (Real a_dt)   { m_dt = a_dt; }
+    inline void    setTimeStepNumber  (int a_iter)  { m_cur_step = a_iter; }
 
     void writeHistFile(bool);
     void writePlotFile();
     void writeCheckpointFile();
+
+  private:
+
     void parseParametersSimulation( ParmParse& );
     void parseParametersPetsc     ( ParmParse& );
 
@@ -54,15 +74,85 @@ class PetscTimeIntegrator
 
     int         m_local_size;
 
-    std::string m_ts_type, m_ts_subtype;
+    std::string m_ts_type, 
+                m_ts_subtype,
+                m_ts_adapt_type;
     
     Vec   m_Y;
     TS    m_ts;
-
-    void  copyStateToPetsc    (Vec& a_Y, System* a_System);
-    void  copyStateFromPetsc  (Vec& a_Y, System* a_System);
-
 };
+
+static PetscErrorCode RHSFunction(TS ts, PetscReal t, Vec Y, Vec F, void* ctxt)
+{
+  PetscTimeIntegrator<GKSystem> *context = (PetscTimeIntegrator<GKSystem>*) ctxt;
+  GKSystem *system = context->getSystem();
+
+  context->copyStateFromPetsc(Y,system);
+  system->computeRHSFunctionExp((Real)t);
+  context->copyRHSToPetsc(F,system);
+
+  return(0);
+}
+
+static PetscErrorCode PreTimeStep(TS ts)
+{
+  PetscTimeIntegrator<GKSystem> *context;
+  TSGetApplicationContext(ts,&context);
+
+  int cur_step;
+  Real cur_time, dt;
+
+  TSGetTime(ts,&cur_time);
+  TSGetTimeStep(ts,&dt);
+  TSGetTimeStepNumber(ts,&cur_step);
+
+  if (context->getVerbosity() >= 1) {
+    if (procID()==0) cout << endl << "Step " << cur_step+1 << endl;
+  }
+  return(0);
+}
+
+static PetscErrorCode PostTimeStep(TS ts)
+{
+  PetscTimeIntegrator<GKSystem> *context;
+  TSGetApplicationContext(ts,&context);
+  GKSystem *system = context->getSystem();
+
+  int cur_step, 
+      verbosity = context->getVerbosity(),
+      plot_interval = context->getPlotInterval();
+  Real cur_time, dt;
+
+  TSGetTime           (ts,&cur_time);
+  TSGetTimeStep       (ts,&dt);
+  TSGetTimeStepNumber (ts,&cur_step);
+
+  context->setTime(cur_time);
+  context->setTimeStep(dt);
+  context->setTimeStepNumber(cur_step);
+
+  system->printTimeStep(cur_step,dt);
+
+  if (verbosity >= 1) {
+    system->printDiagnostics();
+    if(procID()==0) cout << "Step " << cur_step << " completed, simulation time is "
+                         << cur_time << endl << "----" << endl;
+  }
+
+  if ( (cur_step % plot_interval)==0 ) {
+    context->writePlotFile();
+    context->setLastPlot(cur_step);
+  }
+
+  context->writeHistFile(false);
+
+  if ( (cur_step % context->getChkptInterval())==0 ) {
+    context->writeCheckpointFile();
+    context->setLastChkpt(cur_step);
+  }
+
+  return(0);
+}
 
 template <class System>
 inline void PetscTimeIntegrator<System>::writeHistFile(bool flag)
@@ -125,7 +215,8 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_system(NULL),
     m_local_size(0),
     m_ts_type("rk"),
-    m_ts_subtype("4")
+    m_ts_subtype("4"),
+    m_ts_adapt_type("none")
 {
   ParmParse ppsim( "simulation" );
   parseParametersSimulation( ppsim );
@@ -161,18 +252,27 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
   TSSetInitialTimeStep(m_ts,0.0,m_dt);
   TSSetExactFinalTime(m_ts,TS_EXACTFINALTIME_MATCHSTEP);
   TSSetSolution(m_ts,m_Y);
-  TSSetApplicationContext(m_ts,m_system);
+  TSSetApplicationContext(m_ts,this);
+
+  /* Set time step adapter */
+  TSAdapt adapt; TSGetAdapt(m_ts,&adapt);
+  TSAdaptSetType(adapt,m_ts_adapt_type.c_str());
 
   TSSetType(m_ts,m_ts_type.c_str());
   if (!strcmp(m_ts_type.c_str(),TSRK)) {
     TSRKSetType(m_ts,m_ts_subtype.c_str());
-    //TSSetRHSFunction(m_ts,PETSC_NULL,RHSFunction,NULL);
+    TSSetRHSFunction(m_ts,PETSC_NULL,RHSFunction,this);
   } else {
     if (!procID()) {
       cout << "ts_type (" << m_ts_type << ") is invalid or ";
       cout << "not yet supported.\n";
     }
   }
+
+  /* set pre- and post-step functions */
+  TSSetPreStep(m_ts,PreTimeStep);
+  TSSetPostStep(m_ts,PostTimeStep);
+
   TSSetUp(m_ts);
 }
 
@@ -190,11 +290,33 @@ void PetscTimeIntegrator<System>::copyStateToPetsc( Vec& a_Y, System* a_System )
 template <class System>
 void PetscTimeIntegrator<System>::copyStateFromPetsc( Vec& a_Y, System* a_System )
 {
-  PetscErrorCode  ierr;
-  const PetscScalar     *Yarr;
+  PetscErrorCode    ierr;
+  const PetscScalar *Yarr;
 
   ierr = VecGetArrayRead(a_Y,&Yarr);
   a_System->copyStateFromArray((Real*)Yarr);
+  ierr = VecRestoreArrayRead(a_Y,&Yarr);
+}
+
+template <class System>
+void PetscTimeIntegrator<System>::copyRHSToPetsc( Vec& a_Y, System* a_System )
+{
+  PetscErrorCode  ierr;
+  PetscScalar     *Yarr;
+
+  ierr = VecGetArray(a_Y,&Yarr);
+  a_System->copyRHSToArray((Real*)Yarr);
+  ierr = VecRestoreArray(a_Y,&Yarr);
+}
+
+template <class System>
+void PetscTimeIntegrator<System>::copyRHSFromPetsc( Vec& a_Y, System* a_System )
+{
+  PetscErrorCode    ierr;
+  const PetscScalar *Yarr;
+
+  ierr = VecGetArrayRead(a_Y,&Yarr);
+  a_System->copyRHSFromArray((Real*)Yarr);
   ierr = VecRestoreArrayRead(a_Y,&Yarr);
 }
 
@@ -231,12 +353,14 @@ void PetscTimeIntegrator<System>::parseParametersPetsc( ParmParse& a_pppet )
    // This determines the amount of diagnositic output generated
    a_pppet.query( "ts_type", m_ts_type );
    a_pppet.query( "ts_subtype", m_ts_subtype );
+   a_pppet.query( "ts_adapt_type", m_ts_adapt_type );
 }
 
 template <class System>
 void PetscTimeIntegrator<System>::finalize()
 {
-  /* copy final solution from PETSc vector to system */
+  /* Get the final solution and copy from PETSc vector to system */
+  TSGetSolution(m_ts,&m_Y);
   copyStateFromPetsc(m_Y,m_system);
 
   TSGetTime(m_ts,&m_cur_time);

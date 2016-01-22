@@ -59,7 +59,7 @@ int main( int a_argc, char* a_argv[] )
       bool usePetsc = parseParams(pp);
       if (usePetsc) {
         PetscTimeIntegrator<GKSystem> petsc(pp,usePetsc);
-//        petsc.solve();
+        petsc.solve();
         petsc.finalize();
       } else {
 #endif

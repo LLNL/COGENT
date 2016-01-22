@@ -189,9 +189,9 @@ public:
       m_dt = a_dt;
    }
    
-   void explicitOp    (GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage );
-   void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage );
-   void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage );
+   void explicitOp    (GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1);
+   void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1);
+   void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1);
    
    //void solve( GKState& a_state, const GKRHSData& a_rhs, const Real a_time, const int a_stage  );
    void solveImEx( GKState& a_state, const GKRHSData& a_rhs, const Real shift, const Real a_time, const int a_stage  );

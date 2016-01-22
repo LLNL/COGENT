@@ -1742,8 +1742,6 @@ void GKSystem::postStageAdvance( KineticSpeciesPtrVect& a_soln )
    }
 }
 
-
-
 #ifdef BLOB_ERROR_TEST
 
 static bool dir_created = false;

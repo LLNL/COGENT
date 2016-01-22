@@ -297,6 +297,8 @@ class GKSystem
       inline void copyRHSToArray     (Real *Y) { m_rhs.copyTo(Y);   }
       inline void copyRHSFromArray   (Real *Y) { m_rhs.copyFrom(Y); }
 
+      inline void computeRHSFunctionExp(Real t) { m_gk_ops->explicitOp(m_rhs,t,m_state); }
+
    private:
 
       void createSpecies();
