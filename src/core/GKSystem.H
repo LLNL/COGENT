@@ -296,8 +296,13 @@ class GKSystem
       inline void copyStateFromArray (Real *Y) { m_state.copyFrom(Y); }
       inline void copyRHSToArray     (Real *Y) { m_rhs.copyTo(Y);   }
       inline void copyRHSFromArray   (Real *Y) { m_rhs.copyFrom(Y); }
+      inline void addStateFromArray  (Real *Y, Real a_scale = 1.0) { m_state.addFrom(Y,a_scale); }
 
-      inline void computeRHSFunctionExp(Real t) { m_gk_ops->explicitOp(m_rhs,t,m_state); }
+      inline void computeRHSFunctionExp (Real t) { m_gk_ops->explicitOp     (m_rhs,t,m_state); }
+      inline void computeRHSFunctionImEx(Real t) { m_gk_ops->explicitOpImEx (m_rhs,t,m_state); }
+      inline void computeIFunctionImEx  (Real t) { m_gk_ops->implicitOpImEx (m_rhs,t,m_state); }
+
+      inline bool isLinear()  { return m_gk_ops->isLinear(); }
 
    private:
 

@@ -31,6 +31,7 @@ class PetscTimeIntegrator
 
     void  copyStateToPetsc    (Vec& a_Y, System* a_System);
     void  copyStateFromPetsc  (Vec& a_Y, System* a_System);
+    void  addStateFromPetsc   (Vec& a_Y, System* a_System, Real a_scale = 1.0);
     void  copyRHSToPetsc      (Vec& a_Y, System* a_System);
     void  copyRHSFromPetsc    (Vec& a_Y, System* a_System);
 
@@ -38,6 +39,10 @@ class PetscTimeIntegrator
     inline int     getVerbosity()     { return m_verbosity; }
     inline int     getPlotInterval()  { return m_plot_interval; }
     inline int     getChkptInterval() { return m_checkpoint_interval; }
+    inline Real    getShift()         { return m_shift; }
+    inline Real    getTime()          { return m_cur_time; }
+    inline Real    getEpsilonJFNK()   { return m_epsilon_jfnk; }
+    inline bool    isLinear()         { return m_is_linear; }
 
     inline void    setLastPlot  (int a_int) { m_last_plot = a_int; }      
     inline void    setLastChkpt (int a_int) { m_last_checkpoint = a_int; }      
@@ -45,10 +50,13 @@ class PetscTimeIntegrator
     inline void    setTime            (Real a_t)    { m_cur_time = a_t; }
     inline void    setTimeStep        (Real a_dt)   { m_dt = a_dt; }
     inline void    setTimeStepNumber  (int a_iter)  { m_cur_step = a_iter; }
+    inline void    setShift           (Real a_a)    { m_shift = a_a; }
 
     void writeHistFile(bool);
     void writePlotFile();
     void writeCheckpointFile();
+
+    Vec   m_Yref, m_Fref;
 
   private:
 
@@ -77,9 +85,14 @@ class PetscTimeIntegrator
     std::string m_ts_type, 
                 m_ts_subtype,
                 m_ts_adapt_type;
+
+    Real  m_shift,
+          m_epsilon_jfnk;
+    bool  m_is_linear;
     
     Vec   m_Y;
     TS    m_ts;
+    Mat   m_Jac;
 };
 
 static PetscErrorCode RHSFunction(TS ts, PetscReal t, Vec Y, Vec F, void* ctxt)
@@ -90,6 +103,77 @@ static PetscErrorCode RHSFunction(TS ts, PetscReal t, Vec Y, Vec F, void* ctxt)
   context->copyStateFromPetsc(Y,system);
   system->computeRHSFunctionExp((Real)t);
   context->copyRHSToPetsc(F,system);
+
+  return(0);
+}
+
+static PetscErrorCode RHSFunctionIMEX(TS ts, PetscReal t, Vec Y, Vec F, void* ctxt)
+{
+  PetscTimeIntegrator<GKSystem> *context = (PetscTimeIntegrator<GKSystem>*) ctxt;
+  GKSystem *system = context->getSystem();
+
+  context->copyStateFromPetsc(Y,system);
+  system->computeRHSFunctionImEx((Real)t);
+  context->copyRHSToPetsc(F,system);
+
+  return(0);
+}
+
+static PetscErrorCode IFunctionIMEX(TS ts, PetscReal t, Vec Y, Vec Ydot, Vec F, void* ctxt)
+{
+  PetscTimeIntegrator<GKSystem> *context = (PetscTimeIntegrator<GKSystem>*) ctxt;
+  GKSystem *system = context->getSystem();
+
+  context->copyStateFromPetsc(Y,system);
+  system->computeIFunctionImEx((Real)t);
+  context->copyRHSToPetsc(F,system);
+
+  VecCopy(Y,context->m_Yref);
+  VecCopy(F,context->m_Fref);
+
+  VecAYPX(F,-1.0,Ydot);
+
+  return(0);
+}
+
+static PetscErrorCode IJacobianIMEX(TS ts, PetscReal t, Vec Y, Vec Ydot, PetscReal a,
+                                    Mat A, Mat B, void* ctxt)
+{
+  PetscTimeIntegrator<GKSystem> *context = (PetscTimeIntegrator<GKSystem>*) ctxt;
+
+  context->setShift((Real)a);
+  context->setTime((Real)t);
+
+  return(0);
+}
+
+static PetscErrorCode JacobianFunctionIMEX(Mat A, Vec Y, Vec F)
+{
+  PetscTimeIntegrator<GKSystem> *context;
+  MatShellGetContext(A,&context);
+  GKSystem *system = context->getSystem();
+
+  PetscReal normY;
+  VecNorm(Y,NORM_2,&normY);
+
+  if (normY < 1e-15) {
+
+    VecZeroEntries(F);
+    VecAXPBY(F,context->getShift(),0,Y);
+
+  } else {
+
+    Real epsilon;
+    if (context->isLinear()) epsilon = 1.0;
+    else                     epsilon = context->getEpsilonJFNK() / normY;
+
+    context->copyStateFromPetsc(context->m_Yref,system);
+    context->addStateFromPetsc(Y,system,epsilon);
+    system->computeIFunctionImEx(context->getTime());
+    context->copyRHSToPetsc(F,system);
+    VecAXPY(F,-1.0,context->m_Fref);
+    VecAXPBY(F,(PetscReal)context->getShift(),(-1.0/epsilon),Y);
+  }
 
   return(0);
 }
@@ -216,7 +300,9 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_local_size(0),
     m_ts_type("rk"),
     m_ts_subtype("4"),
-    m_ts_adapt_type("none")
+    m_ts_adapt_type("none"),
+    m_is_linear("true"),
+    m_epsilon_jfnk(1e-6) 
 {
   ParmParse ppsim( "simulation" );
   parseParametersSimulation( ppsim );
@@ -231,6 +317,7 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_last_plot = m_cur_step;
   }
   writeHistFile(true);
+  m_is_linear = m_system->isLinear();
   
   if (!procID()) {
     cout << "Using PETSc time integrator: " << m_ts_type;
@@ -242,6 +329,10 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
   VecCreate(MPI_COMM_WORLD,&m_Y);
   VecSetSizes(m_Y,m_local_size,PETSC_DECIDE);
   VecSetUp(m_Y);
+
+  /* set up reference vectors */
+  VecDuplicate(m_Y,&m_Yref);
+  VecDuplicate(m_Y,&m_Fref);
 
   /* copy initial solution to PETSc vector */
   copyStateToPetsc(m_Y,m_system);
@@ -259,14 +350,28 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
   TSAdaptSetType(adapt,m_ts_adapt_type.c_str());
 
   TSSetType(m_ts,m_ts_type.c_str());
-  if (!strcmp(m_ts_type.c_str(),TSRK)) {
-    TSRKSetType(m_ts,m_ts_subtype.c_str());
-    TSSetRHSFunction(m_ts,PETSC_NULL,RHSFunction,this);
+  if (!strcmp(m_ts_type.c_str(),TSRK))            TSRKSetType(m_ts,m_ts_subtype.c_str());
+  else if (!strcmp(m_ts_type.c_str(),TSARKIMEX))  TSARKIMEXSetType(m_ts,m_ts_subtype.c_str());
+
+  if (!strcmp(m_ts_type.c_str(),TSARKIMEX)) {
+
+    TSSetRHSFunction(m_ts,PETSC_NULL,RHSFunctionIMEX,this);
+    TSSetIFunction  (m_ts,PETSC_NULL,IFunctionIMEX  ,this);
+
+    MatCreateShell(MPI_COMM_WORLD,m_local_size,m_local_size,PETSC_DETERMINE,PETSC_DETERMINE,this,&m_Jac);
+    MatShellSetOperation(m_Jac,MATOP_MULT,(void (*)(void))JacobianFunctionIMEX);
+    MatSetUp(m_Jac);
+    TSSetIJacobian(m_ts,m_Jac,m_Jac,IJacobianIMEX,this);
+    
+    SNES  snes; TSGetSNES(m_ts,&snes);
+    KSP   ksp;  SNESGetKSP(snes,&ksp);
+    PC    pc;   KSPGetPC(ksp,&pc);
+    PCSetType(pc,PCNONE);
+
   } else {
-    if (!procID()) {
-      cout << "ts_type (" << m_ts_type << ") is invalid or ";
-      cout << "not yet supported.\n";
-    }
+
+    TSSetRHSFunction(m_ts,PETSC_NULL,RHSFunction,this);
+
   }
 
   /* set pre- and post-step functions */
@@ -295,6 +400,17 @@ void PetscTimeIntegrator<System>::copyStateFromPetsc( Vec& a_Y, System* a_System
 
   ierr = VecGetArrayRead(a_Y,&Yarr);
   a_System->copyStateFromArray((Real*)Yarr);
+  ierr = VecRestoreArrayRead(a_Y,&Yarr);
+}
+
+template <class System>
+void PetscTimeIntegrator<System>::addStateFromPetsc( Vec& a_Y, System* a_System, Real a_scale )
+{
+  PetscErrorCode    ierr;
+  const PetscScalar *Yarr;
+
+  ierr = VecGetArrayRead(a_Y,&Yarr);
+  a_System->addStateFromArray((Real*)Yarr,a_scale);
   ierr = VecRestoreArrayRead(a_Y,&Yarr);
 }
 
@@ -354,6 +470,7 @@ void PetscTimeIntegrator<System>::parseParametersPetsc( ParmParse& a_pppet )
    a_pppet.query( "ts_type", m_ts_type );
    a_pppet.query( "ts_subtype", m_ts_subtype );
    a_pppet.query( "ts_adapt_type", m_ts_adapt_type );
+   a_pppet.query( "epsilon_epsilon", m_epsilon_jfnk );
 }
 
 template <class System>
@@ -385,8 +502,11 @@ void PetscTimeIntegrator<System>::finalize()
 template <class System>
 PetscTimeIntegrator<System>::~PetscTimeIntegrator()
 {
-  TSDestroy(&m_ts);
+  TSDestroy (&m_ts);
+  MatDestroy(&m_Jac);
   VecDestroy(&m_Y);
+  VecDestroy(&m_Yref);
+  VecDestroy(&m_Fref);
 }
 
 #include "NamespaceFooter.H"

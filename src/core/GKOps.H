@@ -362,6 +362,8 @@ public:
        * @param[in] handle a reference to an HDF5 plot file.
        */
    void readCheckpointFile( HDF5Handle& handle, const int& cur_step  );
+
+   inline bool isLinear() { return(m_collisions->isLinear()); }
    
 private:
    

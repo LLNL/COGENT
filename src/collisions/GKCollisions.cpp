@@ -148,4 +148,9 @@ Real GKCollisions::computeTimeScale( const KineticSpeciesPtrVect& soln )
    return 0.;
 }
 
+bool GKCollisions::isLinear()
+{
+  return true;
+}
+
 #include "NamespaceFooter.H"

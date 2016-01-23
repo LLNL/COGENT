@@ -48,6 +48,22 @@ void GKState::copyFrom(Real *Y)
    }
 }
 
+void GKState::addFrom(Real *Y, Real a_a)
+{
+   CH_assert( isDefined() );
+   int offset = 0;
+   for (int s=0; s < m_species_mapped.size(); s++) {
+     LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
+     const DisjointBoxLayout& dbl = x.disjointBoxLayout();
+     DataIterator dit = x.dataIterator();
+     for (dit.begin(); dit.ok(); ++dit) {
+       const FArrayBox tmp(dbl[dit],1,(Y+offset));
+       x[dit].plus(tmp,a_a);
+       offset += dbl[dit].numPts();
+     }
+   }
+}
+
 void GKRHSData::copyTo(Real *Y)
 {
    CH_assert( isDefined() );

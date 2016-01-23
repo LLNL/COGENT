@@ -136,8 +136,9 @@ public:
       return m_geometry;
    }
 
-   void copyTo    (Real*);
-   void copyFrom  (Real*);
+   void copyTo   (Real *a_Y);
+   void copyFrom (Real *a_Y);
+   void addFrom  (Real *a_Y, Real a_a=1.0);
 
 private:
 
