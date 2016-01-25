@@ -87,12 +87,19 @@ class PetscTimeIntegrator
                 m_ts_adapt_type;
 
     Real  m_shift,
-          m_epsilon_jfnk;
+          m_epsilon_jfnk,
+          m_snes_atol,
+          m_snes_rtol,
+          m_snes_stol,
+          m_ksp_atol,
+          m_ksp_rtol;
+
     bool  m_is_linear,
           m_ts_monitor,
           m_ts_adapt_monitor,
           m_snes_monitor,
-          m_ksp_monitor;
+          m_ksp_monitor,
+          m_ts_arkimex_fully_implicit;
     
     Vec   m_Y;
     TS    m_ts;
@@ -327,7 +334,13 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_ts_monitor(false),
     m_ts_adapt_monitor(false),
     m_snes_monitor(false),
-    m_ksp_monitor(false)
+    m_ksp_monitor(false),
+    m_snes_atol(1e-6),
+    m_snes_rtol(1e-6),
+    m_snes_stol(1e-14),
+    m_ksp_atol(1e-6),
+    m_ksp_rtol(1e-6),
+    m_ts_arkimex_fully_implicit(false)
 {
   ParmParse ppsim( "simulation" );
   parseParametersSimulation( ppsim );
@@ -395,6 +408,8 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
 
     if (m_snes_monitor) SNESMonitorSet(snes,SNESMonitor,NULL,NULL);
     if (m_ksp_monitor)  KSPMonitorSet(ksp,KSPMonitor,NULL,NULL);
+
+    if (m_ts_arkimex_fully_implicit) TSARKIMEXSetFullyImplicit(m_ts,PETSC_TRUE);
 
   } else {
 
@@ -501,11 +516,19 @@ void PetscTimeIntegrator<System>::parseParametersPetsc( ParmParse& a_pppet )
    a_pppet.query("ts_type", m_ts_type );
    a_pppet.query("ts_subtype", m_ts_subtype );
    a_pppet.query("ts_adapt_type", m_ts_adapt_type );
+   if (!strcmp(m_ts_type.c_str(),TSARKIMEX)) 
+     a_pppet.query("ts_arkimex_fully_implicit", m_ts_arkimex_fully_implicit);
+   a_pppet.query("ts_adapt_type", m_ts_adapt_type );
    a_pppet.query("epsilon_epsilon", m_epsilon_jfnk );
    a_pppet.query("ts_monitor", m_ts_monitor );
    a_pppet.query("ts_adapt_monitor", m_ts_monitor );
    a_pppet.query("snes_monitor", m_snes_monitor );
    a_pppet.query("ksp_monitor", m_ksp_monitor );
+   a_pppet.query("ksp_atol", m_ksp_atol );
+   a_pppet.query("ksp_rtol", m_ksp_rtol );
+   a_pppet.query("snes_atol", m_snes_atol );
+   a_pppet.query("snes_rtol", m_snes_rtol );
+   a_pppet.query("snes_stol", m_snes_stol );
 }
 
 template <class System>
