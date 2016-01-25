@@ -379,7 +379,9 @@ SNCoreCoordSys::blockRemapping2(RealVect&       a_xi_valid,
             a_n_valid = n_valid_new;
 
             if ( !new_valid_cs->isValid(a_xi_valid) ) {
+#ifndef MODEL_GEOM
               printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, new_valid_cs);
+#endif
             }
           }
         }
@@ -510,7 +512,9 @@ SNCoreCoordSys::blockRemapping3(RealVect&       a_xi_valid,
                   a_n_valid = n_valid_new;
 
                   if ( !new_valid_cs->isValid(a_xi_valid) ) {
+#ifndef MODEL_GEOM
                      printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, new_valid_cs);
+#endif
                   }
                }
             }

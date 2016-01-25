@@ -10,7 +10,6 @@
 #include "SlabPhaseBC.H"
 #include "SingleNullPhaseBC.H"
 #include "SNCorePhaseBC.H"
-#include "RectangularTorusPhaseBC.H"
 
 #include <string>
 
@@ -71,9 +70,6 @@ KineticSpeciesBC* KineticSpeciesBCFactory::create(
    }
    else if (a_coord_sys_type == "Slab" ) {
       result = new SlabPhaseBC( a_name, a_pp, a_verbosity );
-   }
-   else if (a_coord_sys_type == "RectangularTorus" ) {
-      result = new RectangularTorusPhaseBC( a_name, a_pp, a_verbosity );
    }
    else {
       MayDay::Error( "KineticSpeciesBCFactory: Unimplemented boundary condition for given coordinate system type" );

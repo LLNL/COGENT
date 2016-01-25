@@ -57,12 +57,13 @@ SlabBlockCoordSys::SlabBlockCoordSys( ParmParse&               a_parm_parse,
 
    // Compute the mesh size in computational coordinates
    // 5/4/15: make y and z computational extents run from 0 to 2 pi so as to be consistent with the way periodic i.c.'s 
-   // are set for Miller
+   // are set for Miller.  1/12/16, introduce m_ximax into normalization in case we change this choice in the future
+   m_ximax = m_twopi;
    IntVect dimensions = a_domain.size();
-   double dx = m_twopi/(double)dimensions[0];
-   double dy = m_twopi/(double)dimensions[1];
+   double dx = m_ximax/(double)dimensions[0];
+   double dy = m_ximax/(double)dimensions[1];
 #if CFG_DIM==3
-   double dz = m_twopi/(double)dimensions[2];
+   double dz = m_ximax/(double)dimensions[2];
    RealVect cellSpacing(dx,dy,dz);
 #endif
 
@@ -98,9 +99,9 @@ SlabBlockCoordSys::SlabBlockCoordSys( ParmParse&               a_parm_parse,
 RealVect SlabBlockCoordSys::realCoord( const RealVect& a_xi ) const
 {
    RealVect x;
-   D_TERM(x[0] = m_xmax*a_xi[0]/m_twopi;,
-          x[1] = m_ymax*a_xi[1]/m_twopi;,
-          x[2] = m_zmax*a_xi[2]/m_twopi;)
+   D_TERM(x[0] = m_xmax*a_xi[0]/m_ximax;,
+          x[1] = m_ymax*a_xi[1]/m_ximax;,
+          x[2] = m_zmax*a_xi[2]/m_ximax;)
    return x;
 }
 
@@ -108,9 +109,9 @@ RealVect SlabBlockCoordSys::mappedCoord( const RealVect& a_x ) const
 {
 
    RealVect xi;
-   D_TERM(xi[0] = m_twopi*a_x[0]/m_xmax;,
-          xi[1] = m_twopi*a_x[1]/m_ymax;,
-          xi[2] = m_twopi*a_x[2]/m_zmax;)
+   D_TERM(xi[0] = m_ximax*a_x[0]/m_xmax;,
+          xi[1] = m_ximax*a_x[1]/m_ymax;,
+          xi[2] = m_ximax*a_x[2]/m_zmax;)
 
    return xi;
 }
@@ -127,7 +128,7 @@ Real SlabBlockCoordSys::dXdXi( const RealVect& a_Xi,
         value = 0.0;
       }
       else{
-        value = m_xmaxvec[a_dirX]/m_twopi;
+        value = m_xmaxvec[a_dirX]/m_ximax;
       }
 
   return value;
@@ -147,7 +148,7 @@ void SlabBlockCoordSys::dXdXi(FArrayBox&       a_dXdXi,
         a_dXdXi(iv,a_destComp) = 0;
       }
       else{
-        a_dXdXi(iv,a_destComp) = m_xmaxvec[a_dirX]/m_twopi;
+        a_dXdXi(iv,a_destComp) = m_xmaxvec[a_dirX]/m_ximax;
       }
    }
 }
@@ -199,6 +200,7 @@ SlabBlockCoordSys::computeFieldData( const int  a_dir,
                               CHF_CONST_REAL(m_BzOuter),
                               CHF_CONST_REAL(m_ByInner),
                               CHF_CONST_REAL(m_xmax),
+                              CHF_CONST_REAL(m_ximax),
                               CHF_FRA(a_BField),
                               CHF_FRA1(a_BFieldMag,0),
                               CHF_FRA(a_BFieldDir),

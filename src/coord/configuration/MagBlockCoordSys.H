@@ -222,7 +222,7 @@ void
       /// Fills the input FArrayBox with the real coordinates at dir face centers
       /**
        */
-      void getFaceCenteredRealCoords( const int dir, FArrayBox& a_x ) const;
+      virtual void getFaceCenteredRealCoords( const int dir, FArrayBox& a_x ) const;
 
       /// Fills the input FArrayBox with the real coordinates at cell nodes
       /**

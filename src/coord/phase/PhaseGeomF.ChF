@@ -10,6 +10,7 @@
      &     CHF_CONST_INT[include_drifts],
      &     CHF_CONST_INT[include_par_streaming],
      &     CHF_CONST_INT[include_gradb],
+     &     CHF_CONST_INT[use_field_alignment],
      &     CHF_CONST_FRA[E],
      &     CHF_CONST_FRA[Bvec],
      &     CHF_CONST_FRA[gradB],
@@ -42,6 +43,9 @@ c     local variables
          Bstar_par = zero
          do n = 0, 2
             G(n) = -Z * E(i,j,CHF_LBOUND[E;2],CHF_LBOUND[E;3],n)
+            if ((use_field_alignment .ne. 0) .and. (dir.eq.0)) then
+               G(n) = 0.0
+            endif 
             b(n) = Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],n) / Bmag
             mag_drift_fac(n) = fac * mass * vpar * curlb(i,j,CHF_LBOUND[curlb;2],CHF_LBOUND[curlb;3],n)
             Bstar(n) = Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],n) + mag_drift_fac(n)
@@ -64,10 +68,16 @@ c           R_dot
 
             do n = 0, 1
                velocity(CHF_IX[i;j;k;l],n)  = fac * bxG(2*n) + vpar * mag_drift_fac(2*n)
+
                if (include_par_streaming .ne. 0) then
                   velocity(CHF_IX[i;j;k;l],n) = velocity(CHF_IX[i;j;k;l],n) 
      &                 + vpar * Bvec(i,j,CHF_LBOUND[Bvec;2],CHF_LBOUND[Bvec;3],2*n)
                endif
+
+               if ((use_field_alignment .ne. 0). and. (dir.eq.0)) then
+                   velocity(CHF_IX[i;j;k;l],n)  = fac * bxG(2*n) + vpar * mag_drift_fac(2*n)
+               endif
+
                velocity(CHF_IX[i;j;k;l],n)  = velocity(CHF_IX[i;j;k;l],n) / Bstar_par
             enddo
 

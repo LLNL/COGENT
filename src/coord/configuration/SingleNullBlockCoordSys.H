@@ -3,8 +3,8 @@
 
 enum SingleNullBlockType {LCORE,RCORE,LCSOL,RCSOL,LSOL,RSOL,LPF,RPF,MCORE,MCSOL,NUM_SINGLE_NULL_BLOCKS};
 
-#define SPECTRAL_FIELD
 #undef PLOT_INVERSE_POINTS
+#undef MODEL_GEOM
 
 #include "MagBlockCoordSys.H"
 #include "Interp.H"
@@ -56,6 +56,7 @@ class SingleNullBlockCoordSys
        */
       virtual RealVect mappedCoord( const RealVect& x ) const;
 
+#ifndef MODEL_GEOM
       /// Returns computational coordinate computed by a Newton iteration
       /**
        * Returns location \f$\xi\f$ in mapped coordinate space of real-world
@@ -65,7 +66,8 @@ class SingleNullBlockCoordSys
        * @param[in] xi_initial  initial guess for Newton iteration
        */
       virtual RealVect mappedCoordNewton( const RealVect& x, const RealVect& xi_initial, const IntVect& iv_initial ) const;
-
+#endif
+   
       /// Returns the derivatives of the physical coordinates with respect to
       /// the computational coordinate.
       /**
@@ -122,6 +124,18 @@ class SingleNullBlockCoordSys
 
       virtual string geometryType() const {return "SingleNull";}
 
+#ifdef MODEL_GEOM
+      virtual void getFaceCenteredRealCoords( const int dir, FArrayBox& a_x ) const;
+      virtual void cellVol(FArrayBox& vol, const FluxBox& N, const Box& box) const;
+      virtual void getN(FluxBox& a_N, const Box& a_box) const;
+      RealVect realCoordPointwise( const RealVect& a_xi ) const;
+      double getCoreWidth() const {return m_core_width;}
+      double getSolWidth() const {return m_sol_width;}
+      double getPFWidth() const {return m_pf_width;}
+      double getPFArcLength () const {return m_div_leg_length;}
+      double getCoreArcLength () const {return m_pol_ref_length;}
+#endif
+
    protected:
 
       int m_block_type;
@@ -170,6 +184,73 @@ class SingleNullBlockCoordSys
 #ifdef PLOT_INVERSE_POINTS
       FILE *m_ipt_file[NUM_SINGLE_NULL_BLOCKS];
 #endif
+   
+
+#ifdef MODEL_GEOM
+   //Returns (shifted) physical coordinates for the intersection of the gridlines given by psi(R,Z)=psiVal, theta(R,Z)=thetaVal
+   //NB: the function returns solution only in the RCORE and RCSOL blocks, symmetry has to used to get solution in other blocks
+   RealVect gridLinesIntersection( const double psiVal, const double thetaVal, const int side ) const;
+   
+   //Returns (shifted) Z coordinate at the lower CORE block boundary corresponding to psiVal
+   double getZlo(double psiVal ) const;
+   
+   //Returns (shifted) X coordinate at the RCSOL- RSOL block boundary corresponding to psiVal
+   double getXlo(double psiVal ) const;
+   
+   //Returns (shifted) Z coordinate at the upper CORE block boundary corresponding to psiVal
+   double getZhi(double psiVal ) const;
+   
+   //Returns (shifted) physical coordinates on the reference flux surface (m_pol_ref_psi) correpsponding to the input value of the arc length.
+   //"ArcLength" is measured by the polar angle going in the counterclockwise direction with the origin at the magnetic axis and zero at the X-point.
+   RealVect arcLengthInverse(const double length) const;
+   
+   //Magnetic-flux countour-function (defined only for Z>m_Zx + m_Z0)
+   double psi(const RealVect& a_x) const;
+   
+   //Poloidal coordinate countour-function (defined only for Z>m_Zx + m_Z0)
+   double theta(const RealVect& a_x) const;
+   
+   //Returns value of psi at R=m_R0 (defined only for Z>m_Zx + m_Z0)
+   double psiAtR0(const double a_Z) const;
+   
+   //Computes normalization, wuch that the input BpScale corresponds to Bpol (T) at the separatrix top.
+   void normalizeBpScale();
+   
+   //Return partial Z and X derivatives f psi and theta (defined only for Z>m_Zx + m_Z0)
+   double psiZ(const RealVect& a_x) const;
+   double psiX(const RealVect& a_x) const;
+   double thetaZ(const RealVect& a_x) const;
+   double thetaX(const RealVect& a_x) const;
+   
+   double m_BpScale; //in the input that corresponds to Bpol(T) at the separatrix top (later it is internally normalized by normalizeBpScale())
+   
+   // Geometry parameters
+   double m_a;       //shape coeffiecient of a flux surface
+   double m_b;       //shape coeffiecient of a flux surface
+   double m_c;       //shape coeffiecient of a flux surface
+   
+   double m_Zx;      //Z-location of the X-point (unshifted)
+   double m_Zc;      //Z-location of the O-point (unshifted)
+   double m_Zsep_hi; //Z-location of the separatrix top (unshifted)
+   
+   double m_R0;      //radial shift
+   double m_Z0;      //vertical shift
+   
+   double m_core_width; //vertical size of the core block at the top of a tokamak (i.e., CORE top block boundary)
+   double m_sol_width;  //vertical size of the sol block at the top of a tokamak
+   double m_pf_width;   //vertical size of the pf block when projected at the top of a tokamak (we have up-down symmetry w/r/t the X-point)
+   double m_div_leg_length; //poloidal length of divertor legs (measured by the poloidal angle; origin at magnetic axis --makes use of the vertical symmetry about Zx)
+   
+   double m_pol_ref_z_lo;      //z-coordinate at the CORE bottom block boundary that designate the flux surface, on which the poloidal coordinate is define as the arc length)
+   double m_pol_ref_length;    //poloidal length of the reference flux surface from bottom to top (half of the full closed-surface length) -- here, measured as PI
+   double m_pol_ref_length_mp; //poloidal length of the reference flux surface from bottom to midplane -- here, measured as PI/2
+   double m_pol_ref_psi;       //value of psi at the reference flux surface
+   
+   double m_tol;
+   int m_max_iterations;
+
+#endif
+
 };
 
 #include "NamespaceFooter.H"

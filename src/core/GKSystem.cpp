@@ -8,7 +8,6 @@
 
 #include "MillerPhaseCoordSys.H"
 #include "SlabPhaseCoordSys.H"
-#include "RectangularTorusPhaseCoordSys.H"
 #include "SingleNullPhaseCoordSys.H"
 #include "SNCorePhaseCoordSys.H"
 
@@ -32,8 +31,6 @@
 #include "MillerCoordSys.H"
 #include "SlabBlockCoordSys.H"
 #include "SlabCoordSys.H"
-#include "RectangularTorusBlockCoordSys.H"
-#include "RectangularTorusCoordSys.H"
 #include "SingleNullBlockCoordSys.H"
 #include "SNCoreBlockCoordSys.H"
 #include "newMappedGridIO.H"
@@ -301,18 +298,7 @@ void GKSystem::createConfigurationSpace()
                                 m_is_periodic,
                                 m_configuration_decomposition);
   }
-  else if ( m_mag_geom_type == "RectangularTorus" ) {
 
-    string prefix = mag_geom_prefix + string(".")
-       + string(CFG::RectangularTorusBlockCoordSys::pp_name);
-    ParmParse pp( prefix.c_str() );
-
-    m_mag_geom_coords
-      = new CFG::RectangularTorusCoordSys(pp,
-                                m_num_cells,
-                                m_is_periodic,
-                                m_configuration_decomposition);
-  }
   // Construct the phase space DisjointBoxLayout
 
   CFG::DisjointBoxLayout grids;
@@ -454,7 +440,7 @@ GKSystem::getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids 
 
   CFG::ProblemDomain prob_domain;
 
-  if ( m_mag_geom_type == "Miller" || m_mag_geom_type == "Slab" || m_mag_geom_type == "RectangularTorus") {
+  if ( m_mag_geom_type == "Miller" || m_mag_geom_type == "Slab" ) {
     const CFG::MagBlockCoordSys* mag_block_coords
       = (CFG::MagBlockCoordSys *)m_mag_geom_coords->getCoordSys(0);
     prob_domain = mag_block_coords->domain();
@@ -685,12 +671,6 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
   else if ( m_mag_geom_type == "Slab" ) {
     m_phase_coords = new SlabPhaseCoordSys( a_ppgksys,
                                               *(CFG::SlabCoordSys*)m_mag_geom_coords,
-                                              *m_velocity_coords,
-                                              domains );
-  }
-  else if ( m_mag_geom_type == "RectangularTorus" ) {
-    m_phase_coords = new RectangularTorusPhaseCoordSys( a_ppgksys,
-                                              *(CFG::RectangularTorusCoordSys*)m_mag_geom_coords,
                                               *m_velocity_coords,
                                               domains );
   }

@@ -39,8 +39,6 @@ public:
 
    void getJ( LevelData<FArrayBox>& J ) const;
 
-   void getNJInverse( LevelData<FluxBox>& NJInverse ) const;
-
    void getPointwiseN( LevelData<FluxBox>& a_N ) const;
 
    void getPointwiseNJinverse( LevelData<FluxBox>& a_NJinverse ) const;
@@ -108,10 +106,16 @@ public:
    void writeGeometryData( const DisjointBoxLayout& grids, const double& time ) const;
 
    bool fullyPeriodic() const {return m_fully_periodic;}
+    
+   bool extrablockExchange() const {return m_extrablock_exchange;}
+
+   bool modelGeom() const {return m_model_geometry;}
 
    const MagCoordSys* getCoordSys() const {return m_coord_sys;}
 
    void fillInternalGhosts( LevelData<FArrayBox>& data ) const;
+   
+   void exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const;
 
    void fillTransversePhysicalGhosts( LevelData<FArrayBox>& data ) const;
 
@@ -220,6 +224,10 @@ private:
    bool m_correct_field;
 
    bool m_fully_periodic;
+   
+   bool m_extrablock_exchange;
+ 
+   bool m_model_geometry;
 
    const string m_pp_prefix;
 };

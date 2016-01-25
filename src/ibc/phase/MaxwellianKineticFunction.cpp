@@ -13,7 +13,6 @@
 #include "MayDay.H"
 #include "MillerPhaseCoordSys.H"
 #include "SlabPhaseCoordSys.H"
-#include "RectangularTorusPhaseCoordSys.H"
 #include "MultiBlockCoordSys.H"
 #include "PhaseBlockCoordSys.H"
 #include "SNCorePhaseCoordSys.H"
@@ -129,7 +128,9 @@ void MaxwellianKineticFunction::assign( KineticSpecies& a_species,
    }
 
    geometry.multBStarParallel( dfn );
-   convertToCellAverage( *geometry.coordSysPtr(), dfn );
+   if ( !(geometry.secondOrder()) )  {
+      convertToCellAverage( *geometry.coordSysPtr(), dfn );
+   }
    geometry.multJonValid( dfn );
    dfn.exchange();
 }
@@ -179,12 +180,16 @@ void MaxwellianKineticFunction::assign( KineticSpecies& a_species,
                       a_species.mass() );
    }
    geometry.multBStarParallel( dfn_tmp, a_bdry_layout );
-   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
-      Box domain_box( dfn_tmp[dit].box() );
-      domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
-      ProblemDomain domain( domain_box );
-      fourthOrderAverageCell( dfn_tmp[dit], domain, grids[dit] );
+   
+   if ( !(geometry.secondOrder()) )  {
+      for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
+         Box domain_box( dfn_tmp[dit].box() );
+         domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
+         ProblemDomain domain( domain_box );
+         fourthOrderAverageCell( dfn_tmp[dit], domain, grids[dit] );
+      }
    }
+   
    dfn_tmp.copyTo( dfn );
    dfn.exchange();
 }
@@ -233,10 +238,10 @@ void MaxwellianKineticFunction::initializeField( LevelData<FArrayBox>& a_field,
    const CFG::DisjointBoxLayout& grids( mag_geometry.grids() );
    const int SCALAR(1);
    const CFG::IntVect nghosts(CFG::IntVect::Unit);
-   const bool POINTWISE(false);
+   const bool cell_average( false );
 
    CFG::LevelData<CFG::FArrayBox> cfg_field( grids, SCALAR, nghosts );
-   a_ic.assign( cfg_field, mag_geometry, a_time, POINTWISE );
+   a_ic.assign( cfg_field, mag_geometry, a_time, cell_average );
    a_phase_geometry.injectConfigurationToPhase( cfg_field, a_field );
 }
 
@@ -258,8 +263,8 @@ void MaxwellianKineticFunction::initializeField( FArrayBox& a_field,
    a_geometry.projectPhaseToConfiguration( a_interior_box, interior_box_cfg );
 
    CFG::FArrayBox cfg_field( box_cfg, 1 );
-   const bool POINTWISE(false);
-   a_ic.assign( cfg_field, mag_geometry, interior_box_cfg, a_time, POINTWISE );
+   const bool cell_average( false );
+   a_ic.assign( cfg_field, mag_geometry, interior_box_cfg, a_time, cell_average );
 
    a_geometry.injectConfigurationToPhase( cfg_field, a_field );
 }
@@ -271,7 +276,6 @@ void MaxwellianKineticFunction::checkGeometryValidity( const PhaseGeom& a_geomet
    const MultiBlockCoordSys& an_coord_sys( *(a_geometry.coordSysPtr()) );
    bool not_annular (typeid(an_coord_sys) != typeid(MillerPhaseCoordSys));
    not_annular &= (typeid(an_coord_sys) != typeid(SlabPhaseCoordSys));
-   not_annular &= (typeid(an_coord_sys) != typeid(RectangularTorusPhaseCoordSys));
 
    const MultiBlockCoordSys& sn_coord_sys( *(a_geometry.coordSysPtr()) );
    bool not_single_null( typeid(sn_coord_sys) != typeid(SingleNullPhaseCoordSys) );

@@ -6,7 +6,6 @@
 #include "PotentialBC.H"
 #include "AnnulusPotentialBC.H"
 #include "SlabPotentialBC.H"
-#include "RectangularTorusPotentialBC.H"
 #include "SingleNullPotentialBC.H"
 #include "SNCorePotentialBC.H"
 
@@ -63,9 +62,6 @@ PotentialBC* PotentialBCFactory::create(
    }
    else if (a_coord_sys_type == "Slab" ) {
       result = new SlabPotentialBC( a_name, a_pp, a_verbosity );
-   }
-   else if (a_coord_sys_type == "RectangularTorus" ) {
-      result = new RectangularTorusPotentialBC( a_name, a_pp, a_verbosity );
    }
    else if (a_coord_sys_type == "SingleNull" ) {
       result = new SingleNullPotentialBC( a_name, a_pp, a_verbosity );

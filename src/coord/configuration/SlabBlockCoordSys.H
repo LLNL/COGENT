@@ -126,6 +126,7 @@ class SlabBlockCoordSys
 
    protected:
 
+      double m_ximax;
       double m_xmax;
       double m_ymax;
 #if CFG_DIM==3
