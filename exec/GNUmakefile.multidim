@@ -73,10 +73,18 @@ XTRALIBFLAGS += -L$(HYPRE_LOC)/lib -lHYPRE $(LAPACKLIBS)
 
 #########################################################################
 
-# PETSc options: Enable these to use PETSC (the installation of which
-# is your responsibility).  Otherwise, comment them out
-# Note: the environment variables PETSC_DIR and PETSC_ARCH *must*
-# be present.
+# Set this to TRUE or FALSE to compile with or without PETSc interface
+USE_PETSC = FALSE
+# Set the machine name (i.e., "cab","cori",etc). Make sure 
+# PETSC_LIB_FLAGS_$(MACHINE_NAME) (i.e., PETSC_LIB_FLAGS_cab, 
+# PETSC_LIB_FLAGS_cori, etc) for the machine being used is defined 
+# below. If not, follow the instructions and define it.
+MACHINE_NAME = cab
+
+# Note: PETSc must already be installed and the environment variables 
+# PETSC_DIR and PETSC_ARCH *must* be present.
+
+ifeq ($(USE_PETSC),TRUE)
 
 CXXFLAGS += -Dwith_petsc
 XTRACPPFLAGS += -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
@@ -90,11 +98,11 @@ XTRALIBFLAGS += -Wl,-rpath,$(PETSC_DIR)/$(PETSC_ARCH)/lib -L$(PETSC_DIR)/$(PETSC
 # 3) Look at the linking command executed (eg. the line starting with 
 #    "mpicc -fPIC  -Wall -Wwrite-strings -Wno-strict-aliasing -Wno-unknown-pragmas -g3  -o ex1 ex1.o ..."
 #    Everything after "-lpetsc" needs to be copied and put below as PETSC_LIB_FLAGS_($MACHINE_NAME).
-PETSC_LIB_FLAGS_CAB = -llapack -lblas -lX11 -lhwloc -lssl -lcrypto -Wl,-rpath,/usr/local/tools/pmgr/lib -L/usr/local/tools/pmgr/lib -Wl,-rpath,/usr/local/tools/mvapich2-gnu-1.7/lib -L/usr/local/tools/mvapich2-gnu-1.7/lib -Wl,-rpath,/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -lmpichf90 -lgfortran -lm -lmpichcxx -lstdc++ -Wl,-rpath,/usr/local/tools/pmgr/lib -L/usr/local/tools/pmgr/lib -Wl,-rpath,/usr/local/tools/mvapich2-gnu-1.7/lib -L/usr/local/tools/mvapich2-gnu-1.7/lib -Wl,-rpath,/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -Wl,-rpath,/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -Wl,-rpath,/usr/local/tools/pmgr/lib -lpsm_infinipath -ldl -Wl,-rpath,/usr/local/tools/mvapich2-gnu-1.7/lib -lmpich -lpmi -lopa -lmpl -lpthread -lgcc_s -ldl
+PETSC_LIB_FLAGS_cab = -llapack -lblas -lX11 -lhwloc -lssl -lcrypto -Wl,-rpath,/usr/local/tools/pmgr/lib -L/usr/local/tools/pmgr/lib -Wl,-rpath,/usr/local/tools/mvapich2-gnu-1.7/lib -L/usr/local/tools/mvapich2-gnu-1.7/lib -Wl,-rpath,/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -lmpichf90 -lgfortran -lm -lmpichcxx -lstdc++ -Wl,-rpath,/usr/local/tools/pmgr/lib -L/usr/local/tools/pmgr/lib -Wl,-rpath,/usr/local/tools/mvapich2-gnu-1.7/lib -L/usr/local/tools/mvapich2-gnu-1.7/lib -Wl,-rpath,/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -Wl,-rpath,/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -Wl,-rpath,/usr/local/tools/pmgr/lib -lpsm_infinipath -ldl -Wl,-rpath,/usr/local/tools/mvapich2-gnu-1.7/lib -lmpich -lpmi -lopa -lmpl -lpthread -lgcc_s -ldl
 
-# Add the appropriate PETSC_LIB_FLAGS_($MACHINE_NAME) from above
-# to XTRALIBFLAGS
-XTRALIBFLAGS += $(PETSC_LIB_FLAGS_CAB)
+XTRALIBFLAGS += $(PETSC_LIB_FLAGS_$(MACHINE_NAME))
+
+endif #($(PETSC),TRUE)
 
 #########################################################################
 
