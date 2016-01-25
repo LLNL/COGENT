@@ -88,7 +88,11 @@ class PetscTimeIntegrator
 
     Real  m_shift,
           m_epsilon_jfnk;
-    bool  m_is_linear;
+    bool  m_is_linear,
+          m_ts_monitor,
+          m_ts_adapt_monitor,
+          m_snes_monitor,
+          m_ksp_monitor;
     
     Vec   m_Y;
     TS    m_ts;
@@ -238,6 +242,23 @@ static PetscErrorCode PostTimeStep(TS ts)
   return(0);
 }
 
+static PetscErrorCode TSMonitor(TS ts,PetscInt step,PetscReal time,Vec u,void *ctx)
+{
+  PetscPrintf(PETSC_COMM_WORLD,"  ** TS iter = %D, Time %g **\n",step,(double)time);
+}
+
+static PetscErrorCode SNESMonitor(SNES snes, PetscInt its,PetscReal fnorm,void *ctx)
+{
+  PetscPrintf(PETSC_COMM_WORLD,"  **  SNES iter = %D, SNES Function norm %g **\n",its,(double)fnorm);
+  return(0);
+}
+
+static PetscErrorCode KSPMonitor(KSP ksp, PetscInt n,PetscReal rnorm,void *ctxt)
+{
+  PetscPrintf(PETSC_COMM_WORLD,"  **    KSP iter = %D, KSP Relative norm %g **\n",n,(double)rnorm);
+  return(0);
+}
+
 template <class System>
 inline void PetscTimeIntegrator<System>::writeHistFile(bool flag)
 {
@@ -302,7 +323,11 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_ts_subtype("4"),
     m_ts_adapt_type("none"),
     m_is_linear("true"),
-    m_epsilon_jfnk(1e-6) 
+    m_epsilon_jfnk(1e-6),
+    m_ts_monitor(false),
+    m_ts_adapt_monitor(false),
+    m_snes_monitor(false),
+    m_ksp_monitor(false)
 {
   ParmParse ppsim( "simulation" );
   parseParametersSimulation( ppsim );
@@ -368,11 +393,17 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     PC    pc;   KSPGetPC(ksp,&pc);
     PCSetType(pc,PCNONE);
 
+    if (m_snes_monitor) SNESMonitorSet(snes,SNESMonitor,NULL,NULL);
+    if (m_ksp_monitor)  KSPMonitorSet(ksp,KSPMonitor,NULL,NULL);
+
   } else {
 
     TSSetRHSFunction(m_ts,PETSC_NULL,RHSFunction,this);
 
   }
+
+  if (m_ts_monitor) TSMonitorSet(m_ts,TSMonitor,NULL,NULL);
+  if (m_ts_adapt_monitor) TSAdaptSetMonitor(adapt,PETSC_TRUE);
 
   /* set pre- and post-step functions */
   TSSetPreStep(m_ts,PreTimeStep);
@@ -467,10 +498,14 @@ template <class System>
 void PetscTimeIntegrator<System>::parseParametersPetsc( ParmParse& a_pppet )
 {
    // This determines the amount of diagnositic output generated
-   a_pppet.query( "ts_type", m_ts_type );
-   a_pppet.query( "ts_subtype", m_ts_subtype );
-   a_pppet.query( "ts_adapt_type", m_ts_adapt_type );
-   a_pppet.query( "epsilon_epsilon", m_epsilon_jfnk );
+   a_pppet.query("ts_type", m_ts_type );
+   a_pppet.query("ts_subtype", m_ts_subtype );
+   a_pppet.query("ts_adapt_type", m_ts_adapt_type );
+   a_pppet.query("epsilon_epsilon", m_epsilon_jfnk );
+   a_pppet.query("ts_monitor", m_ts_monitor );
+   a_pppet.query("ts_adapt_monitor", m_ts_monitor );
+   a_pppet.query("snes_monitor", m_snes_monitor );
+   a_pppet.query("ksp_monitor", m_ksp_monitor );
 }
 
 template <class System>
