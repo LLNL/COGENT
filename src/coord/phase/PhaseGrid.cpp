@@ -133,7 +133,7 @@ PhaseGrid::PhaseGrid(const Vector<ProblemDomain>&      a_domains,
 
    ProblemDomain prob_domain;
 
-   if ( a_mag_geom_type == "Miller" || a_mag_geom_type == "Slab" || a_mag_geom_type == "RectangularTorus") {
+   if ( a_mag_geom_type == "Miller" || a_mag_geom_type == "Slab" ) {
       prob_domain = ProblemDomain(a_domains[0]);
    }
    else if ( a_mag_geom_type == "SingleNull" || a_mag_geom_type == "SNCore" ) {

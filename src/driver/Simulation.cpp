@@ -355,6 +355,7 @@ inline void Simulation<SYSTEM>::setFixedTimeStep( const Real& a_dt_stable )
             cout << "  --\n";
          }
       }
+      m_cur_dt = m_sub_dt; 
    } else {
       if (m_fixed_dt > a_dt_stable) {
          if (!procID()) {

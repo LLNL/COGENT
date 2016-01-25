@@ -263,6 +263,7 @@ protected:
    int m_amg_max_iter;
 
    bool m_verbose;
+   bool m_second_order;
 
    int m_num_potential_ghosts_interpolated;
 };

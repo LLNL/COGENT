@@ -197,6 +197,8 @@ public:
    void getCellVolumes( LevelData<FArrayBox>& volume ) const;
 
    void fillInternalGhosts( LevelData<FArrayBox>& a_data ) const;
+   
+   void exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const;
 
    const LevelData<FArrayBox>& getBFieldMagnitude() const {return *m_BMagCell;}
 

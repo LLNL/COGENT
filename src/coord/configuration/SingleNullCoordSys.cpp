@@ -70,6 +70,11 @@ SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
          }
       }
    }
+#ifdef MODEL_GEOM
+   //Checks if the grid cell sizes are continious across block boundaries (assumed for the model geoemtry)
+   checkGridConsistency();
+#endif
+   
 }
 
 
@@ -712,15 +717,17 @@ SingleNullCoordSys::blockRemapping8(RealVect&       a_xi_valid,
                   a_n_valid = n_valid_new;
 
                   if ( !new_valid_cs->isValid(a_xi_valid) ) {
-                     printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, new_valid_cs);
+#ifndef MODEL_GEOM
+		    printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, new_valid_cs);
                      //              exit(1);
+#endif
                   }
                }
 #endif
             }
             else {
 #if 0
-               printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, valid_cs);
+	            printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, valid_cs);
                //      exit(1);
 #endif
         }
@@ -1073,16 +1080,20 @@ SingleNullCoordSys::blockRemapping10( RealVect&       a_xi_valid,
                   a_n_valid = n_valid_new;
 
                   if ( !new_valid_cs->isValid(a_xi_valid) ) {
-                     printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, new_valid_cs);
+#ifndef MODEL_GEOM
+		      printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, new_valid_cs);
                      //              exit(1);
+#endif
                   }
                }
 #endif
             }
             else {
 #if 1
-               printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, valid_cs);
+#ifndef MODEL_GEOM
+                     printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, valid_cs);
                //      exit(1);
+#endif
 #endif
             }
          }
@@ -2192,5 +2203,40 @@ void SingleNullCoordSys::extrapolateEfield( LevelData<FluxBox>&   a_Er_average_f
     
 }
 
+#ifdef MODEL_GEOM
+void SingleNullCoordSys::checkGridConsistency() const
+{
+   double epsilon = 1.0e-9; //Here, just an arbitrary very small number
+   
+   const SingleNullBlockCoordSys& lcore_coord_sys = (const SingleNullBlockCoordSys&)(*(getCoordSys(LCORE)));
+   const SingleNullBlockCoordSys& lsol_coord_sys = (const SingleNullBlockCoordSys&)(*(getCoordSys(LSOL)));
+   const SingleNullBlockCoordSys& lpf_coord_sys = (const SingleNullBlockCoordSys&)(*(getCoordSys(LPF)));
+   const SingleNullBlockCoordSys& rpf_coord_sys = (const SingleNullBlockCoordSys&)(*(getCoordSys(RPF)));
+   
+   int nrad_CORE = lcore_coord_sys.domain().domainBox().size(RADIAL_DIR);
+   int npol_CORE = lcore_coord_sys.domain().domainBox().size(POLOIDAL_DIR);
+   int nrad_SOL = lsol_coord_sys.domain().domainBox().size(RADIAL_DIR);
+   int nrad_PF = lpf_coord_sys.domain().domainBox().size(RADIAL_DIR);
+   int npol_LPF = lpf_coord_sys.domain().domainBox().size(POLOIDAL_DIR);
+   int npol_RPF = rpf_coord_sys.domain().domainBox().size(POLOIDAL_DIR);
+   
+   if (fabs(lcore_coord_sys.getCoreWidth()/(double)nrad_CORE - lcore_coord_sys.getSolWidth()/(double)nrad_SOL)>epsilon ) {
+      MayDay::Error("SingleNullCoordSys::checkGridConsistency(): model geometry requires the same radial cell size in the SOL and CORE blocks");
+   }
+
+   if (fabs(lcore_coord_sys.getCoreWidth()/(double)nrad_CORE - lcore_coord_sys.getPFWidth()/(double)nrad_PF)>epsilon ) {
+      MayDay::Error("SingleNullCoordSys::checkGridConsistency(): model geometry requires the same radial cell size in the PF and CORE blocks");
+   }
+
+   if (fabs(lcore_coord_sys.getCoreArcLength()/(double)npol_CORE - lcore_coord_sys.getPFArcLength()/(double)npol_LPF)>epsilon ) {
+      MayDay::Error("SingleNullCoordSys::checkGridConsistency(): model geometry requires the same poloidal cell size in the LPF and CORE blocks");
+   }
+
+   if (fabs(lcore_coord_sys.getCoreArcLength()/(double)npol_CORE - lcore_coord_sys.getPFArcLength()/(double)npol_RPF)>epsilon ) {
+      MayDay::Error("SingleNullCoordSys::checkGridConsistency(): model geometry requires the same poloidal cell size in the RPF and CORE blocks");
+   }
+
+}
+#endif
 
 #include "NamespaceFooter.H"
