@@ -43,3 +43,42 @@ location of your Chombo installation.
    This should create an executable with a platform and compiler specific name,
    e.g., cogent.Linux.mpicpc.ifort.OPT.MPI.ex.
 
+
+
+Build COGENT with PETSc time integration interface
+--------------------------------------------------
+
+We assume PETSc is already installed, and the environment variables
+PETSC_DIR (pointing to where PETSc is installed) and PETSC_ARCH (the
+specific build) exist. For more details, see the PETSc installation
+documentation (http://www.mcs.anl.gov/petsc/documentation/installation.html).
+
+1) Enter the build directory:
+
+     cd exec
+
+2) Open the file GNUmakefile.multidim
+
+3) Locate the line USE_PETSC = ... and set it to TRUE (it should be set 
+   to FALSE by default)
+
+4) Specify the machine name (i.e. cab, cori, etc) in the line 
+   MACHINE_NAME = ... (**)
+
+5) Close the file and build COGENT:
+
+      gmake [-j all]
+
+(**) Machine-specific linking flags need to be specified to compile with
+PETSc. GNUmakefile.multidim should already have these defined for machines
+commonly used (cab, cori, etc) (for example, PETSC_LIB_FLAGS_cab, 
+PETSC_LIB_FLAGS_cori). If this is not defined for the machine being used,
+do the following:
+1) Go to the PETSc installation.
+2) Compile an example (eg. To compile $PETSC_DIR/src/ts/examples/tutorials/ex1.c, go to the folder
+   and type "make ex1").
+3) Look at the linking command executed (eg. the line starting with something like:
+   "mpicc -fPIC  -Wall -Wwrite-strings -Wno-strict-aliasing -Wno-unknown-pragmas -g3  -o ex1 ex1.o ..."
+   Everything after "-lpetsc" needs to be copied and put in as PETSC_LIB_FLAGS_($MACHINE_NAME).
+
+
