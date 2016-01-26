@@ -7,6 +7,7 @@
      &     CHF_CONST_REAL[BzOuter],
      &     CHF_CONST_REAL[ByInner],
      &     CHF_CONST_REAL[xmax],
+     &     CHF_CONST_REAL[ximax],
      &     CHF_FRA[b_pt],
      &     CHF_FRA1[Bmag_pt],
      &     CHF_FRA[bunit_pt],
@@ -23,7 +24,7 @@ c     local variables
 
       ByBz = ByInner/BzInner
       DelBz = BzOuter-BzInner
-      DelBzoverxmax = DelBz/(2.0*PI)
+      DelBzoverxmax = DelBz/ximax
       maggradB = DelBz*sqrt(1.+ByBz**2)/xmax
       gradB(0) = maggradB
       gradB(1) = zero
@@ -34,7 +35,7 @@ c     above assumes grads are with respect to physical coordinates
 
 c        Local value of computational x
          xi = xix(CHF_AUTOIX[i])
-c        Since xi runs from 0 to 2pi, it can be used directly as the interpolation coefficient
+c        Since xi runs from 0 to xmax, xi/ximax can be used as the interpolation coefficient
 
          Bz = BzInner + DelBzoverxmax*xi
 c        Shearless slab, so...

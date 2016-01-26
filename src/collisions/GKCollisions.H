@@ -78,6 +78,8 @@ class GKCollisions
        */
       std::string collisionModelName( const std::string& name );
 
+      bool isLinear();
+
    private:
 
       // prevent copying

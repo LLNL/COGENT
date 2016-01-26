@@ -8,7 +8,6 @@
 
 #include "MillerPhaseCoordSys.H"
 #include "SlabPhaseCoordSys.H"
-#include "RectangularTorusPhaseCoordSys.H"
 #include "SingleNullPhaseCoordSys.H"
 #include "SNCorePhaseCoordSys.H"
 
@@ -32,8 +31,6 @@
 #include "MillerCoordSys.H"
 #include "SlabBlockCoordSys.H"
 #include "SlabCoordSys.H"
-#include "RectangularTorusBlockCoordSys.H"
-#include "RectangularTorusCoordSys.H"
 #include "SingleNullBlockCoordSys.H"
 #include "SNCoreBlockCoordSys.H"
 #include "newMappedGridIO.H"
@@ -61,7 +58,7 @@ using namespace CH_MultiDim;
 static const bool SKIP_SOLN_DATA = false;
 static const IntVect NO_GHOST_CELLS = IntVect::Zero;
 
-GKSystem::GKSystem( ParmParse& a_pp )
+GKSystem::GKSystem( ParmParse& a_pp, bool a_useExternalTI)
    :
      m_using_electrons(false),
      m_enforce_stage_positivity(false),
@@ -92,7 +89,8 @@ GKSystem::GKSystem( ParmParse& a_pp )
      m_hdf_dfn(false),
      m_hdf_deltaF(false),
      m_hdf_dfn_at_mu(false),
-     m_verbosity(0)
+     m_verbosity(0),
+     m_useNativeTimeIntegrator(false)
 {
    ParmParse ppgksys("gksystem");
 
@@ -113,13 +111,19 @@ GKSystem::GKSystem( ParmParse& a_pp )
 
    m_state.define( m_kinetic_species, m_phase_geom );
 
-   if (m_ti_class == "rk")        m_integrator = new TiRK   <GKState, GKRHSData, GKOps>;
-   else if (m_ti_class == "ark")  m_integrator = new TiARK  <GKState, GKRHSData, GKOps>;
-   else                           MayDay::Error("Unrecognized input for m_ti_class.");
-   
    const Real BASE_DT( 1.0 );
-   m_integrator->define(m_ti_method, m_state, BASE_DT);
-   m_gk_ops = &(m_integrator->getOperators());
+   m_useNativeTimeIntegrator = !a_useExternalTI;
+   if (!m_useNativeTimeIntegrator) {
+     m_gk_ops = new GKOps;
+     m_gk_ops->define(m_state,BASE_DT);
+     m_rhs.define(m_state);
+   } else {
+      if (m_ti_class == "rk")        m_integrator = new TiRK   <GKState, GKRHSData, GKOps>;
+      else if (m_ti_class == "ark")  m_integrator = new TiARK  <GKState, GKRHSData, GKOps>;
+      else                           MayDay::Error("Unrecognized input for m_ti_class.");
+      m_integrator->define(m_ti_method, m_state, BASE_DT);
+      m_gk_ops = &(m_integrator->getOperators());
+   }
    
    if ( m_using_electrons && m_gk_ops->usingBoltzmannElectrons() ) {
       MayDay::Error( "GKSystem::createSpecies():  Electrons input as both kinetic and Boltzmann" );
@@ -196,6 +200,9 @@ GKSystem::~GKSystem()
    delete m_mag_geom_coords;
    delete m_units;
    delete m_integrator;
+#ifdef with_petsc
+   if (!m_useNativeTimeIntegrator) delete m_gk_ops;
+#endif
 }
 
 
@@ -291,18 +298,7 @@ void GKSystem::createConfigurationSpace()
                                 m_is_periodic,
                                 m_configuration_decomposition);
   }
-  else if ( m_mag_geom_type == "RectangularTorus" ) {
 
-    string prefix = mag_geom_prefix + string(".")
-       + string(CFG::RectangularTorusBlockCoordSys::pp_name);
-    ParmParse pp( prefix.c_str() );
-
-    m_mag_geom_coords
-      = new CFG::RectangularTorusCoordSys(pp,
-                                m_num_cells,
-                                m_is_periodic,
-                                m_configuration_decomposition);
-  }
   // Construct the phase space DisjointBoxLayout
 
   CFG::DisjointBoxLayout grids;
@@ -444,7 +440,7 @@ GKSystem::getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids 
 
   CFG::ProblemDomain prob_domain;
 
-  if ( m_mag_geom_type == "Miller" || m_mag_geom_type == "Slab" || m_mag_geom_type == "RectangularTorus") {
+  if ( m_mag_geom_type == "Miller" || m_mag_geom_type == "Slab" ) {
     const CFG::MagBlockCoordSys* mag_block_coords
       = (CFG::MagBlockCoordSys *)m_mag_geom_coords->getCoordSys(0);
     prob_domain = mag_block_coords->domain();
@@ -675,12 +671,6 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
   else if ( m_mag_geom_type == "Slab" ) {
     m_phase_coords = new SlabPhaseCoordSys( a_ppgksys,
                                               *(CFG::SlabCoordSys*)m_mag_geom_coords,
-                                              *m_velocity_coords,
-                                              domains );
-  }
-  else if ( m_mag_geom_type == "RectangularTorus" ) {
-    m_phase_coords = new RectangularTorusPhaseCoordSys( a_ppgksys,
-                                              *(CFG::RectangularTorusCoordSys*)m_mag_geom_coords,
                                               *m_velocity_coords,
                                               domains );
   }
@@ -1731,8 +1721,6 @@ void GKSystem::postStageAdvance( KineticSpeciesPtrVect& a_soln )
       enforcePositivity( a_soln );
    }
 }
-
-
 
 #ifdef BLOB_ERROR_TEST
 

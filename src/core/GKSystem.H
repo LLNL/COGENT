@@ -108,9 +108,11 @@ class GKSystem
        *  Pure virtual function that will be resposible for setting
        *  initial conditions on the soln data.
        *
-       *  @param[in] pp the input database.
+       *  @param[in] pp                     the input database.
+       *  @param[in] a_useExternalTI   Flag to indicate if using native (false, default) 
+       *                                    or external (true) time integrators. 
        */
-      GKSystem( ParmParse& pp );
+      GKSystem( ParmParse& pp, bool a_useExternalTI = false);
 
       /// Destructor.
       /**
@@ -288,6 +290,20 @@ class GKSystem
 
       void printTimeStep(int,Real);
 
+      int  getVectorSize() { return m_state.getVectorSize();}
+
+      inline void copyStateToArray   (Real *Y) { m_state.copyTo(Y);   }
+      inline void copyStateFromArray (Real *Y) { m_state.copyFrom(Y); }
+      inline void copyRHSToArray     (Real *Y) { m_rhs.copyTo(Y);   }
+      inline void copyRHSFromArray   (Real *Y) { m_rhs.copyFrom(Y); }
+      inline void addStateFromArray  (Real *Y, Real a_scale = 1.0) { m_state.addFrom(Y,a_scale); }
+
+      inline void computeRHSFunctionExp (Real t) { m_gk_ops->explicitOp     (m_rhs,t,m_state); }
+      inline void computeRHSFunctionImEx(Real t) { m_gk_ops->explicitOpImEx (m_rhs,t,m_state); }
+      inline void computeIFunctionImEx  (Real t) { m_gk_ops->implicitOpImEx (m_rhs,t,m_state); }
+
+      inline bool isLinear()  { return m_gk_ops->isLinear(); }
+
    private:
 
       void createSpecies();
@@ -364,6 +380,7 @@ class GKSystem
 
       TimeIntegrator<GKState, GKRHSData, GKOps> *m_integrator;
       GKState m_state;
+      GKRHSData m_rhs;
 
      // Parameters to control plotting
      /**
@@ -392,6 +409,7 @@ class GKSystem
       PositivityPostProcessor m_positivity_post_processor;
 
       int m_verbosity;
+      bool m_useNativeTimeIntegrator;
 };
 
 #include "NamespaceFooter.H"

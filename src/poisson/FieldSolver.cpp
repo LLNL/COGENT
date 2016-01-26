@@ -52,6 +52,13 @@ FieldSolver::FieldSolver( const ParmParse& a_pp,
       a_pp.get("amg_tol", m_amg_tol);
    }
 
+   if (a_pp.contains("second_order")) {
+     a_pp.get("second_order", m_second_order);
+   }
+   else {
+     m_second_order = false;
+   }
+
    // If there is more than one block, construct the multiblock exchange object
    if ( m_geometry.coordSysPtr()->numBlocks() > 1 ) {
      m_mblex_potential_Ptr = new MultiBlockLevelExchangeCenter();
@@ -511,9 +518,9 @@ FieldSolver::applyOperator( const LevelData<FArrayBox>& a_in,
    m_geometry.fillTransversePhysicalGhosts(flux);
 
    // Convert to face-averaged
-   fourthOrderAverage(flux);
+   if (!m_second_order) fourthOrderAverage(flux);
 
-   m_geometry.computeMappedGridDivergence(flux, a_out, true);
+   m_geometry.computeMappedGridDivergence(flux, a_out, !m_second_order);
 
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
       a_out[dit] /= m_volume[dit];
@@ -564,7 +571,7 @@ FieldSolver::setBcDivergence( const PotentialBC&    a_bc,
    m_geometry.applyAxisymmetricCorrection(flux);
 
    // Convert to face-averaged
-   fourthOrderAverage(flux);
+   if (!m_second_order) fourthOrderAverage(flux);
 
    // We only compute this to second-order now since the flux has only
    // been computed to second-order in accumMappedBoundaryField().
@@ -670,26 +677,28 @@ FieldSolver::computeRadialFSAverage( const LevelData<FluxBox>& a_in,
    // Multiply the flux by the unmapped, face-centered coefficients
    multiplyUnmappedCoefficients(flux_even);
    multiplyUnmappedCoefficients(flux_odd);
-    
+   
    m_geometry.applyAxisymmetricCorrection(flux_even);
    m_geometry.applyAxisymmetricCorrection(flux_odd);
-    
+ 
    // At this point, we have face-centered fluxes including one
    // ghost cell layer.
 
-   // Convert to face-averaged
-   fourthOrderAverage(flux_even);
-   fourthOrderAverage(flux_odd);
+   if (!m_second_order) {
+     // Convert to face-averaged
+     fourthOrderAverage(flux_even);
+     fourthOrderAverage(flux_odd);
+   }
     
    // Now we have face-averaged fluxes on valid faces.  In one
    // layer of ghost cells, we still have the face-centered values,
    // which approximate face-averaged values to second-order.
 
    LevelData<FArrayBox> divergence_even(grids, 1, IntVect::Zero);
-   m_geometry.computeMappedGridDivergence(flux_even, divergence_even, true);
+   m_geometry.computeMappedGridDivergence(flux_even, divergence_even, !m_second_order);
     
    LevelData<FArrayBox> divergence_odd(grids, 1, IntVect::Zero);
-   m_geometry.computeMappedGridDivergence(flux_odd, divergence_odd, true);
+   m_geometry.computeMappedGridDivergence(flux_odd, divergence_odd, !m_second_order);
     
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
       divergence_even[dit] /= m_volume[dit];
@@ -1118,8 +1127,12 @@ FieldSolver::fillInternalGhosts( LevelData<FArrayBox>& a_phi ) const
 {
    a_phi.exchange();
 
-   if (m_mblex_potential_Ptr) {
+   if (m_mblex_potential_Ptr && (!m_geometry.extrablockExchange())) {
      m_mblex_potential_Ptr->interpGhosts(a_phi);
+   }
+   else if ((!m_geometry.extrablockExchange())) {
+     m_geometry.exchangeExtraBlockGhosts(a_phi);
+     a_phi.exchange();
    }
 }
 

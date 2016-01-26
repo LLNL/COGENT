@@ -90,7 +90,10 @@ protected:
                                       const SingleNullBlockCoordSys* src_cs,
                                       const SingleNullBlockCoordSys* valid_cs ) const;
     
-    
+   
+#ifdef MODEL_GEOM
+   void checkGridConsistency() const;
+#endif
 
    IntVect lo_mapped_index(int block) const;
 

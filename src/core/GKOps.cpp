@@ -10,7 +10,6 @@
 #include "SingleNullPhaseCoordSys.H"
 #include "SNCorePhaseCoordSys.H"
 #include "SlabPhaseCoordSys.H"
-#include "RectangularTorusPhaseCoordSys.H"
 #include "Kernels.H"
 #include "newMappedGridIO.H"
 
@@ -37,8 +36,6 @@
 #include "MillerCoordSys.H"
 #include "SlabBlockCoordSys.H"
 #include "SlabCoordSys.H"
-#include "RectangularTorusBlockCoordSys.H"
-#include "RectangularTorusCoordSys.H"
 #include "SingleNullBlockCoordSys.H"
 #include "SNCoreBlockCoordSys.H"
 #include "newMappedGridIO.H"
@@ -168,21 +165,12 @@ GKOps::initialize( const KineticSpeciesPtrVect& a_kinetic_species,
          }
       }
    }
-
+   
    CFG::LevelData<CFG::FArrayBox> initial_ion_charge_density( mag_grids, 1, CFG::IntVect::Zero);
    computeIonChargeDensity( initial_ion_charge_density, initial_kinetic_species );
 
    createGKPoisson( initial_ion_charge_density );
-    
-   CH_assert( isDefined() );
-   CH_assert( m_phase_geometry != NULL );
-   m_E_field_face.define( mag_grids, 3, CFG::IntVect::Unit );
-   m_E_field_cell.define( mag_grids, 3, CFG::IntVect::Unit );
-   computeEField( m_E_field_face,
-                  m_E_field_cell,
-                  a_kinetic_species,
-                  a_cur_step );
-    
+   
    if ( m_ampere_law && a_cur_step == 0 ) {
       //Initialize E-field
       m_poisson->fillInternalGhosts( m_phi );
@@ -194,6 +182,22 @@ GKOps::initialize( const KineticSpeciesPtrVect& a_kinetic_species,
       m_poisson->computeElectricField( m_phi, bc, m_Er_average_cell );
       m_poisson->computeElectricField( m_phi, bc, m_Er_average_face );
 #endif
+   }
+   
+   CH_assert( isDefined() );
+   CH_assert( m_phase_geometry != NULL );
+   m_E_field_face.define( mag_grids, 3, CFG::IntVect::Unit );
+   m_E_field_cell.define( mag_grids, 3, CFG::IntVect::Unit );
+   computeEField( m_E_field_face,
+                  m_E_field_cell,
+                  a_kinetic_species,
+                  a_cur_step );
+   
+   //Improve Er field calculation to take into accout the dealigment between the grid and magnetic surfaces
+   //Should not be used with poloidal variations: FIX LATER!!!
+   const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
+   if ( (typeid(coords) == typeid(CFG::SingleNullCoordSys)) && (m_dealignment_corrections)) {
+      mag_geom.interpolateErFromMagFS(m_E_field_face, m_E_field_cell);
    }
 }
 
@@ -1058,10 +1062,6 @@ GKOps::setCoreBC( const double      a_core_inner_bv,
       a_bc.setBCValue(0,RADIAL_DIR,0,a_core_inner_bv);
       a_bc.setBCValue(0,RADIAL_DIR,1,a_core_outer_bv);
    }
-   else if ( typeid(*(mag_geom.getCoordSys())) == typeid(CFG::RectangularTorusCoordSys) ) {
-      a_bc.setBCValue(0,RADIAL_DIR,0,a_core_inner_bv);
-      a_bc.setBCValue(0,RADIAL_DIR,1,a_core_outer_bv);
-   }
    else if ( typeid(*(mag_geom.getCoordSys())) == typeid(CFG::SNCoreCoordSys) ) {
       a_bc.setBCValue(L_CORE,RADIAL_DIR,0,a_core_inner_bv);
       a_bc.setBCValue(L_CORE,RADIAL_DIR,1,a_core_outer_bv);
@@ -1572,8 +1572,8 @@ void GKOps::plotEField( const std::string& a_filename,
         mag_geom.getBlockCoordSys(grids[dit]).computePsiThetaProjections(this_Efield);
       }
 
-      phase_geometry.plotConfigurationData( a_filename.c_str(), Efield, a_time );
-      //      phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell, a_time ); 
+      //phase_geometry.plotConfigurationData( a_filename.c_str(), Efield, a_time );
+      phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell, a_time );
 
        
    }

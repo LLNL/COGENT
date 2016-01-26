@@ -28,6 +28,20 @@ MagGeom::MagGeom(ParmParse&                 a_pp,
      a_pp.get("correct_field", m_correct_field);
    }
 
+   if (a_pp.contains("extrablock_exchange")) {
+      a_pp.get("extrablock_exchange", m_extrablock_exchange);
+   }
+   else {
+      m_extrablock_exchange = false;
+   }
+
+   if (a_pp.contains("model_geometry")) {
+      a_pp.get("model_geometry", m_model_geometry);
+   }
+   else {
+      m_model_geometry = false;
+   }
+
    // Check for full periodicity
    m_fully_periodic = true;
    for (int block=0; block<a_coordSysPtr->numBlocks(); ++block) {
@@ -211,37 +225,6 @@ MagGeom::getJ( LevelData<FArrayBox>& a_J ) const
       a_J[dit].copy(m_J[dit]);
    }
 }
-
-
-
-void
-MagGeom::getNJInverse( LevelData<FluxBox>& a_NJInverse ) const
-{
-   const DisjointBoxLayout& grids = a_NJInverse.disjointBoxLayout();
-
-   DataIterator dit = grids.dataIterator();
-   for (dit.begin(); dit.ok(); ++dit) {
-      const MagBlockCoordSys& coord_sys = getBlockCoordSys(grids[dit]);
-
-      Box box(a_NJInverse[dit].box());
-
-      Box grown_box(box);
-      grown_box.grow(1);  // Need and extra ghost cell for the transverse gradients in the product formula
-
-      FluxBox N(grown_box, SpaceDim*SpaceDim);
-      coord_sys.getN(N, grown_box);
-
-      FluxBox JInverse(grown_box,1);
-      coord_sys.getAvgJinverse(JInverse, grown_box);
-      coord_sys.computeNJinverse(a_NJInverse[dit], JInverse, N, box);
-   }
-
-   m_coord_sys->postProcessMetricData(a_NJInverse);
-
-   a_NJInverse.exchange();
-}
-
-
 
 void
 MagGeom::getPointwiseN( LevelData<FluxBox>& a_N ) const
@@ -544,7 +527,7 @@ MagGeom::applyAxisymmetricCorrection( LevelData<FluxBox>& a_data ) const
    for (dit.begin(); dit.ok(); ++dit) {
      const MagBlockCoordSys& coord_sys = getBlockCoordSys(grids[dit]);
 
-     if ( coord_sys.isAxisymmetric() ) {
+     if ( coord_sys.isAxisymmetric() && (!m_model_geometry) ) {
 
        FluxBox& this_data = a_data[dit];
        Box box(this_data.box());
@@ -1161,8 +1144,12 @@ MagGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
       tmp[dit].copy(a_data[dit]);
    }
 
-   if (m_mblexPtr) {
-     m_mblexPtr->interpGhosts(tmp);
+   if (m_mblexPtr && !m_extrablock_exchange) {
+      m_mblexPtr->interpGhosts(tmp);
+   }
+   
+   else if (m_extrablock_exchange) {
+      exchangeExtraBlockGhosts(a_data);
    }
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -1170,6 +1157,80 @@ MagGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
    }
 
    a_data.exchange();
+}
+
+void
+MagGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
+{
+    /*
+     Fills extrablock ghost cells using a pure exchange from valid data
+     rather than interpolation (for experimental purposes only).
+     */
+    
+    if ( m_coord_sys->numBlocks() > 1 ) {
+        
+        RefCountedPtr<MultiBlockCoordSys> coordSysRCP((MultiBlockCoordSys*)m_coord_sys);
+        coordSysRCP.neverDelete();
+        
+        const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+        
+        int ncomp = a_data.nComp();
+        
+        IntVect ghost_vect = a_data.ghostVect();
+        int max_ghost = -1;
+        for (int dir=0; dir<SpaceDim; ++dir) {
+            if (ghost_vect[dir] > max_ghost) max_ghost = ghost_vect[dir];
+        }
+        
+        BlockRegister blockRegister(coordSysRCP, grids, max_ghost);
+        
+        for (DataIterator dit(grids); dit.ok(); ++dit) {
+            for (int dir = 0; dir < SpaceDim; dir++) {
+                IntVect grow_vect = ghost_vect;
+                grow_vect[dir] = 0;
+                int nghost = ghost_vect[dir];
+                for (SideIterator sit; sit.ok(); ++sit) {
+                    Side::LoHiSide side = sit();
+                    if (blockRegister.hasInterface(dit(), dir, side)) {
+                        Box fill_box = adjCellBox(grids[dit], dir, side, 1);
+                        fill_box.grow(grow_vect);
+                        FArrayBox temp(fill_box, ncomp*nghost);
+                        for (int n=0; n<nghost; ++n) {
+                            temp.shift(dir, -sign(side));
+                            temp.copy(a_data[dit],0,n*ncomp,ncomp);
+                        }
+                        temp.shiftHalf(dir, (2*nghost-1)*sign(side));
+                        blockRegister.storeAux(temp, dit(), dir, side);
+                    }
+                }
+            }
+        }
+        blockRegister.close();
+        
+        for (DataIterator dit(grids); dit.ok(); ++dit) {
+            for (int dir = 0; dir < SpaceDim; dir++) {
+                IntVect grow_vect = ghost_vect;
+                grow_vect[dir] = 0;
+                int nghost = ghost_vect[dir];
+                for (SideIterator sit; sit.ok(); ++sit) {
+                    Side::LoHiSide side = sit();
+                    if (blockRegister.hasInterface(dit(), dir, side)) {
+                        Box fill_box = adjCellBox(grids[dit], dir, side, -1);
+                        fill_box.grow(grow_vect);
+                        FArrayBox temp(fill_box, ncomp*nghost);
+                        temp.shiftHalf(dir, sign(side));
+                        blockRegister.getAux(temp, dit(),
+                                             dir, side, side);
+                        temp.shiftHalf(dir, -sign(side));
+                        for (int n=0; n<nghost; ++n) {
+                            temp.shift(dir, sign(side));
+                            a_data[dit].copy(temp,n*ncomp,0,ncomp);
+                        }
+                    }
+                } // iterate over dimensions
+            } // iterate over sides
+        }
+    }
 }
 
 

@@ -5,7 +5,6 @@
 
 #include "Directions.H"
 #include "AnnulusPotentialBC.H"
-#include "RectangularTorusPotentialBC.H"
 #include "SlabPotentialBC.H"
 #include "SNCorePotentialBC.H"
 #include "newMappedGridIO.H"
@@ -1679,16 +1678,6 @@ GKPoissonBoltzmann::isCoreRadialPeriodicOrNeumannBC( const PotentialBC& a_bc ) c
    }
 
    if ( typeid(a_bc) == typeid(SlabPotentialBC) ) {
-      const ProblemDomain& domain = m_geometry.getBlockCoordSys(0).domain();
-
-      if ( domain.isPeriodic(RADIAL_DIR) ||
-           (a_bc.getBCType(0, RADIAL_DIR, 0) == PotentialBC::NEUMANN &&
-            a_bc.getBCType(0, RADIAL_DIR, 1) == PotentialBC::NEUMANN) ) {
-         flag = true;
-      }
-   }
-
-   if ( typeid(a_bc) == typeid(RectangularTorusPotentialBC) ) {
       const ProblemDomain& domain = m_geometry.getBlockCoordSys(0).domain();
 
       if ( domain.isPeriodic(RADIAL_DIR) ||

@@ -408,7 +408,10 @@ PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
       computeTestVelocities(a_velocity);
    }
 
-   if ( a_apply_axisymmetric_correction ) {
+   //Corrects for the extra R factor added to the metric coefficients (e.g., cellVoll)
+   //for the purposes of 4h order. The model ("analytic") geometry does
+   //not have that extra factor.
+   if ( a_apply_axisymmetric_correction) {
       applyAxisymmetricCorrection(a_velocity);
    }
 
@@ -438,6 +441,8 @@ PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
    const int include_drifts = m_no_drifts? 0: 1;
    const int include_gradb = (m_velocity_type == "ExB")? 0: 1;
    const int include_par_streaming = (m_no_parallel_streaming || m_velocity_type == "ExB")? 0: 1;
+   //use field alignment presently turns off parallel streaming and EXB drift on radial faces (assumes no Epol!!!)
+   const int use_field_alignment = (m_mag_geom.modelGeom())? 1: 0;
 
    const DisjointBoxLayout& grids = a_velocity.disjointBoxLayout();
 
@@ -464,6 +469,7 @@ PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
                                   CHF_CONST_INT(include_drifts),
                                   CHF_CONST_INT(include_par_streaming),
                                   CHF_CONST_INT(include_gradb),
+				  CHF_CONST_INT(use_field_alignment),
                                   CHF_CONST_FRA(this_Efield[dir]),
                                   CHF_CONST_FRA(this_B[dir]),
                                   CHF_CONST_FRA(this_gradB[dir]),
@@ -684,7 +690,7 @@ PhaseGeom::applyAxisymmetricCorrection( LevelData<FluxBox>& a_data ) const
    for (dit.begin(); dit.ok(); ++dit) {
      const CFG::MagBlockCoordSys& mag_block_coord_sys = getMagBlockCoordSys(grids[dit]);
 
-     if ( mag_block_coord_sys.isAxisymmetric() ) {
+     if ( mag_block_coord_sys.isAxisymmetric() && !(m_mag_geom.modelGeom()) ) {
 
        FluxBox& this_data = a_data[dit];
        Box box(this_data.box());
@@ -1712,17 +1718,96 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
 
    a_data.exchange();
 
-   if (m_mblexPtr) {
-     m_mblexPtr->interpGhosts(a_data);
+   if (m_mblexPtr && !(m_mag_geom.extrablockExchange())) {
+      m_mblexPtr->interpGhosts(a_data);
+   }
+   
+   else if (m_mag_geom.extrablockExchange()) {
+      exchangeExtraBlockGhosts(a_data);
+      a_data.exchange();
    }
 }
+
+void
+PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
+{
+   /*
+    Fills extrablock ghost cells using a pure exchange from valid data
+    rather than interpolation (for experimental purposes only).
+    */
+   
+   if ( m_coordSysPtr->numBlocks() > 1 ) {
+      
+      RefCountedPtr<MultiBlockCoordSys> coordSysRCP((MultiBlockCoordSys*)m_coordSysPtr);
+      coordSysRCP.neverDelete();
+      
+      const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+      
+      int ncomp = a_data.nComp();
+      
+      IntVect ghost_vect = a_data.ghostVect();
+      int max_ghost = -1;
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         if (ghost_vect[dir] > max_ghost) max_ghost = ghost_vect[dir];
+      }
+      
+      BlockRegister blockRegister(coordSysRCP, grids, max_ghost);
+      
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         for (int dir = 0; dir < SpaceDim; dir++) {
+            IntVect grow_vect = ghost_vect;
+            grow_vect[dir] = 0;
+            int nghost = ghost_vect[dir];
+            for (SideIterator sit; sit.ok(); ++sit) {
+               Side::LoHiSide side = sit();
+               if (blockRegister.hasInterface(dit(), dir, side)) {
+                  Box fill_box = adjCellBox(grids[dit], dir, side, 1);
+                  fill_box.grow(grow_vect);
+                  FArrayBox temp(fill_box, ncomp*nghost);
+                  for (int n=0; n<nghost; ++n) {
+                     temp.shift(dir, -sign(side));
+                     temp.copy(a_data[dit],0,n*ncomp,ncomp);
+                  }
+                  temp.shiftHalf(dir, (2*nghost-1)*sign(side));
+                  blockRegister.storeAux(temp, dit(), dir, side);
+               }
+            }
+         }
+      }
+      blockRegister.close();
+      
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         for (int dir = 0; dir < SpaceDim; dir++) {
+            IntVect grow_vect = ghost_vect;
+            grow_vect[dir] = 0;
+            int nghost = ghost_vect[dir];
+            for (SideIterator sit; sit.ok(); ++sit) {
+               Side::LoHiSide side = sit();
+               if (blockRegister.hasInterface(dit(), dir, side)) {
+                  Box fill_box = adjCellBox(grids[dit], dir, side, -1);
+                  fill_box.grow(grow_vect);
+                  FArrayBox temp(fill_box, ncomp*nghost);
+                  temp.shiftHalf(dir, sign(side));
+                  blockRegister.getAux(temp, dit(),
+                                       dir, side, side);
+                  temp.shiftHalf(dir, -sign(side));
+                  for (int n=0; n<nghost; ++n) {
+                     temp.shift(dir, sign(side));
+                     a_data[dit].copy(temp,n*ncomp,0,ncomp);
+                  }
+               }
+            } // iterate over dimensions
+         } // iterate over sides
+      }
+   }
+}
+
 
 
 
 /*
   Transdimensional utilities
 */
-
 
 
 void

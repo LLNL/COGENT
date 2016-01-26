@@ -18,8 +18,6 @@
 #include "MillerBlockCoordSys.H"
 #include "SlabCoordSys.H"
 #include "SlabBlockCoordSys.H"
-#include "RectangularTorusCoordSys.H"
-#include "RectangularTorusBlockCoordSys.H"
 #include "SingleNullCoordSys.H"
 #include "SingleNullBlockCoordSys.H"
 #include "MultiBlockCoordSys.H"
@@ -142,8 +140,6 @@ void Localized::checkGeometryValidity( const MultiBlockLevelGeom& a_geometry ) c
    not_annular &= (typeid(an_coord_sys) != typeid(MillerBlockCoordSys));
    not_annular &= (typeid(an_coord_sys) != typeid(SlabCoordSys));
    not_annular &= (typeid(an_coord_sys) != typeid(SlabBlockCoordSys));
-   not_annular &= (typeid(an_coord_sys) != typeid(RectangularTorusCoordSys));
-   not_annular &= (typeid(an_coord_sys) != typeid(RectangularTorusBlockCoordSys));
 
 
    const MultiBlockCoordSys& sn_coord_sys( *(a_geometry.coordSysPtr()) );
