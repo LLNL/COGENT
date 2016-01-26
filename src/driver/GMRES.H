@@ -1,19 +1,32 @@
+#ifdef CH_LANG_CC
 /*
- * Copied from Chombo's GMRESSolver.H, but 
- * add a template parameter to include 
- * operators.
-*/
+ *      _______              __
+ *     / ___/ /  ___  __ _  / /  ___
+ *    / /__/ _ \/ _ \/  V \/ _ \/ _ \
+ *    \___/_//_/\___/_/_/_/_.__/\___/
+ *    Please refer to Copyright.txt, in Chombo's root directory.
+ */
+#endif
 
-#ifndef _GMRES_H_
-#define _GMRES_H_
+// MFA, March 2011
 
+#ifndef _GMRESSOLVER_H_
+#define _GMRESSOLVER_H_
+
+#include "LinearSolver.H"
 #include "parstream.H"
 #include "CH_Timer.H"
-#include "LinearFunction.H"
 #include "NamespaceHeader.H"
 
-template <class T, class Ops>
-class GMRESSolver
+///
+/**
+   Krylov solver using the GMRES algorithm.
+      Important parmeters are:
+        1) relative tolerance: m_reps(1.e-12)
+        2) restart length: m_restrtLen(30)
+ */
+template <class T>
+class GMRESSolver : public LinearSolver<T>
 {
 public:
 
@@ -38,7 +51,7 @@ public:
      a_homogeneous is whether the solver uses homogeneous boundary
      conditions.
    */
-  virtual void define(LinearFunction<T,Ops>* a_op, bool a_homogeneous=false);
+  virtual void define(LinearOp<T>* a_op, bool a_homogeneous=true);
 
   ///solve the equation.
   virtual void solve(T& a_phi, const T& a_rhs);
@@ -54,7 +67,7 @@ public:
   /**
      public member data: operator to solve.
    */
-  LinearFunction<T,Ops>* m_op;
+  LinearOp<T>* m_op;
 
   ///
   /**
@@ -63,10 +76,12 @@ public:
 private:
   int m_restrtLen;
 public:
-  int restartLen() const { return m_restrtLen; }
+  int restartLen()const
+  {
+    return m_restrtLen;
+  }
   void setRestartLen(int mm);
-
-  ///
+ ///
   /**
      public member data:  max iterations (eg, >= m_restrtLen)
    */
@@ -134,8 +149,12 @@ private:
   T    *m_work_arr;
 };
 
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::allocate()
+// *******************************************************
+// GMRESSolver Implementation
+// *******************************************************
+
+template <class T>
+void GMRESSolver<T>::allocate()
 {
   int max_k         = m_restrtLen;
   int hh            = (max_k + 2) * (max_k + 1);
@@ -154,14 +173,14 @@ void GMRESSolver<T,Ops>::allocate()
   m_work_arr = 0;
 }
 
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::clearData()
+template <class T>
+void GMRESSolver<T>::clearData()
 {
   delete [] m_data;
 }
 
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::setRestartLen(int mm)
+template <class T>
+void GMRESSolver<T>::setRestartLen(int mm)
 {
   CH_assert(mm>0);
   clearData();
@@ -169,12 +188,12 @@ void GMRESSolver<T,Ops>::setRestartLen(int mm)
   allocate();
 }
 
-template <class T, class Ops>
-GMRESSolver<T,Ops>::GMRESSolver()
+template <class T>
+GMRESSolver<T>::GMRESSolver()
   :m_homogeneous(false),
    m_op(NULL),
    m_restrtLen(30),
-   m_imax(100),
+   m_imax(1000),
    m_verbosity(3),
    m_eps(1.0E-50),
    m_reps(1.0E-12),
@@ -185,15 +204,15 @@ GMRESSolver<T,Ops>::GMRESSolver()
   allocate();
 }
 
-template <class T, class Ops>
-GMRESSolver<T,Ops>::~GMRESSolver()
+template <class T>
+GMRESSolver<T>::~GMRESSolver()
 {
   m_op = NULL;
   clearData();
 }
 
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::define(LinearFunction<T,Ops>* a_operator, bool a_homogeneous/*=true*/)
+template <class T>
+void GMRESSolver<T>::define(LinearOp<T>* a_operator, bool a_homogeneous/*=true*/)
 {
   m_homogeneous = a_homogeneous;
   m_op = a_operator;
@@ -215,10 +234,10 @@ void GMRESSolver<T,Ops>::define(LinearFunction<T,Ops>* a_operator, bool a_homoge
 #define VEC_VV(i)          m_work_arr[VEC_OFFSET + i]
 
 ////////////////////////////////////////////////////////////////////////
-// GMRESSolver<T,Ops>::solve
+// GMRESSolver<T>::solve
 ///////////////////////////////////////////////////////////////////////
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
+template <class T>
+void GMRESSolver<T>::solve( T& a_xx, const T& a_bb )
 {
   CH_TIMERS("GMRESSolver::solve");
 
@@ -230,8 +249,7 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
 
   if (m_verbosity >= 3)
     {
-      //pout() << "GMRESSolver::solve" << endl;
-      if (!procID()) cout << "      GMRESSolver::solve" << endl;
+      pout() << "GMRESSolver::solve" << endl;
     }
 
   const int nwork = VEC_OFFSET + m_restrtLen + 1; // flex = VEC_OFFSET + 2*(m_restrtLen + 1);
@@ -271,8 +289,7 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
   {
     if (m_verbosity >= 3)
       {
-        //pout() << "*";
-        if (!procID()) cout << "      *";
+        pout() << "*";
       }
     ResidualGMRES( vv_0, a_xx, a_bb, VEC_TEMP_RHS );
     CycleGMRES( a_xx, m_exitStatus, it, rnorm0 );
@@ -295,8 +312,7 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
 
   if (m_verbosity >= 3)
     {
-      //pout() << "GMRESSolver::solve done, status = " << m_exitStatus << endl;
-      if (!procID()) cout << "      GMRESSolver::solve done, status = " << m_exitStatus << endl;
+      pout() << "GMRESSolver::solve done, status = " << m_exitStatus << endl;
     }
 
   CH_STOP(timeCleanup);
@@ -304,8 +320,8 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
 
 #define CONVERGED(r0,r) (r<r0*m_reps || r<m_eps)
 
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
+template <class T>
+void GMRESSolver<T>::CycleGMRES( T &a_xx,
                  int &a_reason, int &a_itcount, Real &a_rnorm0,
                                  const bool a_avoidnorms/*=false*/ )
 {
@@ -316,6 +332,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   T          &vv_0 = VEC_VV(0);
 
   /* scale VEC_VV (the initial residual) */
+  //ierr = vv_0->Normalize( &res_norm ); CHKERRQ(ierr);
   res_norm = m_op->norm( vv_0, m_normType );
   res = res_norm;
   *GRS(0) = res_norm;
@@ -325,13 +342,12 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   {
     if (m_verbosity >= 3)
       {
-        //pout() << "GMRESSolver::solve zero residual!!!" << endl;
-        if (!procID()) cout << "      GMRESSolver::solve zero residual!!!" << endl;
+        pout() << "GMRESSolver::solve zero residual!!!" << endl;
       }
     a_reason = 1; // 1 == converged,
     return;
   }
-  /* normalize */
+  // normilize
   tt = 1./res;
   m_op->scale( vv_0, tt);
 
@@ -341,10 +357,9 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   it = 0;
   while ( a_reason == -1 && it < m_restrtLen && a_itcount < m_imax )
   {
-    if ( m_verbosity>=3 && (it!=0 || a_itcount==0) )
+    if ( m_verbosity>=4 && (it!=0 || a_itcount==0) )
       {
-        //pout() << a_itcount << ") GMRES residual = " << res << endl;
-        if (!procID()) cout << "      Iteration " << a_itcount << ", GMRES residual = " << res << endl;
+        pout() << a_itcount << ") GMRES residual = " << res << endl;
       }
 
     const T &vv_it = VEC_VV(it);
@@ -359,16 +374,17 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
     TwoUnmodifiedGramSchmidtOrthogonalization(it);
 
     /* vv(i+1) . vv(i+1) */
+    //vv_it1->Normalize( &tt ); CHKERRQ(ierr);
     tt = m_op->norm( vv_it1, m_normType );
     /* check for the happy breakdown */
     //CH_assert( *GRS(it) != 0.0 );
+    //hapbnd  = Abs( tt / *GRS(it) );
     hapbnd = 1.e-99; // hard wired happy tol!!!
     if (tt < hapbnd)
     {
       if ( m_verbosity>=3 )
         {
-          //pout() << "Detected happy breakdown, "<<it<<") current hapbnd = "<< tt << endl;
-          if (!procID()) cout << "      Detected happy breakdown, "<<it<<") current hapbnd = "<< tt << endl;
+          pout() << "Detected happy breakdown, "<<it<<") current hapbnd = "<< tt << endl;
         }
       hapend = true;
     }
@@ -391,8 +407,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
     {
       if ( !conv && m_verbosity>=3)
       {
-        //pout() << "You reached the happy break down, but convergence was not indicated. Residual norm=" << res << endl;
-        if (!procID()) cout << "      You reached the happy break down, but convergence was not indicated. Residual norm=" << res << endl;
+        pout() << "You reached the happy break down, but convergence was not indicated. Residual norm=" << res << endl;
       }
       break;
     }
@@ -400,8 +415,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   /* Monitor if we know that we will not return for a restart */
   if ( (a_reason!=1 || a_itcount>=m_imax) && m_verbosity>=4 )
     {
-      //pout() << a_itcount << ") GMRES residual = " << res << endl;
-      if (!procID()) cout << "      Iteration "<< a_itcount << ", GMRES residual = " << res << endl;
+      pout() << a_itcount << ") GMRES residual = " << res << endl;
     }
 
   /*
@@ -413,8 +427,8 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   BuildGMRESSoln( GRS(0), a_xx, it-1, &VEC_VV(0) );
 }
 
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::ResidualGMRES( T &a_vv, const T &a_xx,
+template <class T>
+void GMRESSolver<T>::ResidualGMRES( T &a_vv, const T &a_xx,
                                     const T &a_bb, T &a_temp_rhs )
 {
   CH_assert(m_op != 0);
@@ -422,8 +436,8 @@ void GMRESSolver<T,Ops>::ResidualGMRES( T &a_vv, const T &a_xx,
   m_op->assign( a_vv, a_bb );
   m_op->incr( a_vv, a_temp_rhs, -1.0); /* b - A(B)x */
 }
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::BuildGMRESSoln( Real nrs[], T &a_xx, const int it,
+template <class T>
+void GMRESSolver<T>::BuildGMRESSoln( Real nrs[], T &a_xx, const int it,
                                      const T vv_0[] )
 {
   Real tt;
@@ -438,8 +452,7 @@ void GMRESSolver<T,Ops>::BuildGMRESSoln( Real nrs[], T &a_xx, const int it,
   }
   if (*HH(it,it) == 0.0)
     {
-      //pout() << "HH(it,it) is identically zero!!! GRS(it) = " << *GRS(it) << endl;
-      if (!procID()) cout << "      HH(it,it) is identically zero!!! GRS(it) = " << *GRS(it) << endl;
+      pout() << "HH(it,it) is identically zero!!! GRS(it) = " << *GRS(it) << endl;
     }
   if (*HH(it,it) != 0.0)
   {
@@ -474,7 +487,6 @@ void GMRESSolver<T,Ops>::BuildGMRESSoln( Real nrs[], T &a_xx, const int it,
   m_op->preCond( temp_matop, temp );
   m_op->incr( a_xx, temp_matop, 1.0 );
 }
-
 /* GMRESSolver::UpdateGMRESHessenberg *****************************************
  *
  *   INPUT:
@@ -488,8 +500,8 @@ void GMRESSolver<T,Ops>::BuildGMRESSoln( Real nrs[], T &a_xx, const int it,
  *   RETURN:
  *     - PETSc error code
  */
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::UpdateGMRESHessenberg( const int it, bool hapend, Real &res )
+template <class T>
+void GMRESSolver<T>::UpdateGMRESHessenberg( const int it, bool hapend, Real &res )
 {
   Real *hh,*cc,*ss,tt;
   int   j;
@@ -519,8 +531,7 @@ void GMRESSolver<T,Ops>::UpdateGMRESHessenberg( const int it, bool hapend, Real 
     tt = sqrt( *hh * *hh + *(hh+1) * *(hh+1) );
     if (tt == 0.0)
       {
-        //pout() << "Your matrix or preconditioner is the null operator\n";
-        if (!procID()) cout << "      GMRESSolver: Your matrix or preconditioner is the null operator\n";
+        pout() << "Your matrix or preconditioner is the null operator\n";
       }
     *cc       = *hh / tt;
     *ss       = *(hh+1) / tt;
@@ -541,6 +552,67 @@ void GMRESSolver<T,Ops>::UpdateGMRESHessenberg( const int it, bool hapend, Real 
     res = 0.0;
   }
 }
+/*
+    This is the basic orthogonalization routine using modified Gram-Schmidt.
+*/
+// template <class T>
+// void GMRESSolver<T>::ModifiedGramSchmidtOrthogonalization( const int it )
+// {
+
+//   int       ierr,j;
+//   double    *hh,*hes,tmp;
+//   PromVector_base *vv_1 = VEC_VV(it+1), *vv_j;
+//   //const PromMatrix_base * const Amat = alloced_ ? A_ : alias_->A_;
+
+//   PetscFunctionBegin;
+//   /* update Hessenberg matrix and do Gram-Schmidt */
+//   hh  = HH(0,it);
+//   hes = HES(0,it);
+//   for (j=0; j<=it; j++) {
+//     /* (vv(it+1), vv(j)) */
+//     vv_j = VEC_VV(j); ierr = vv_1->Dot( vv_j, hh );CHKERRQ(ierr);
+//     *hes++ = *hh;
+//     /* vv(it+1) <- vv(it+1) - hh[it+1][j] vv(j) */
+//     tmp    = - (*hh++);
+//     ierr   = vv_1->AXPY( tmp, vv_j );CHKERRQ(ierr);
+//   }
+//   PetscFunctionReturn(0);
+// }
+
+/*
+  This version uses UNMODIFIED Gram-Schmidt.  It is NOT always recommended,
+  but it can give MUCH better performance than the default modified form
+  when running in a parallel environment.
+ */
+
+// int PromSolver::UnmodifiedGramSchmidtOrthogonalization( const int it )
+// {
+//   int       j,ierr;
+//   double    *hh,*hes;
+//   PromVector_base *vv_1 = VEC_VV(it+1);
+//   const PromVector_base *const*vv_0 = &(VEC_VV(0));
+//   //const PromMatrix_base * const Amat = alloced_ ? A_ : alias_->A_;
+
+//   PetscFunctionBegin;
+//   /* update Hessenberg matrix and do unmodified Gram-Schmidt */
+//   hh  = HH(0,it);
+//   hes = HES(0,it);
+//   /*
+//      This is really a matrix-vector product, with the matrix stored
+//      as pointer to rows
+//      */
+//   ierr = vv_1->MDot( it+1, vv_0, hes );CHKERRQ(ierr);
+
+//   /*
+//     This is really a matrix-vector product:
+//     [h[0],h[1],...]*[ v[0]; v[1]; ...] subtracted from v[it+1].
+//   */
+
+//   for (j=0; j<=it; j++) hh[j] = -hes[j];
+//   ierr = vv_1->MAXPY( it+1, hh, vv_0 );CHKERRQ(ierr);
+//   for (j=0; j<=it; j++) hh[j] = -hh[j];
+//   PetscFunctionReturn(0);
+// }
 
 /*
   uses 1 iteration of iterative refinement of UNMODIFIED Gram-Schmidt.
@@ -550,12 +622,12 @@ void GMRESSolver<T,Ops>::UpdateGMRESHessenberg( const int it, bool hapend, Real 
 
   Care is taken to accumulate the updated HH/HES values.
  */
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::TwoUnmodifiedGramSchmidtOrthogonalization( const int it )
+template <class T>
+void GMRESSolver<T>::TwoUnmodifiedGramSchmidtOrthogonalization( const int it )
 {
-  Real *hh,*hes,*lhh = 0;
-  T    &vv_1 = VEC_VV(it+1);
-  T    *vv_0 = &(VEC_VV(0));
+  Real     *hh,*hes,*lhh = 0;
+  T        &vv_1 = VEC_VV(it+1);
+  const T  *vv_0 = &(VEC_VV(0));
 
   /* Don't allocate small arrays */
   lhh = new Real[it+1];
@@ -577,6 +649,11 @@ void GMRESSolver<T,Ops>::TwoUnmodifiedGramSchmidtOrthogonalization( const int it
        This is really a matrix-vector product, with the matrix stored
        as pointer to rows
     */
+    //ierr = vv_1->MDot( it+1, vv_0, lhh ); CHKERRQ(ierr); /* <v,vnew> */
+//     for (int j=0; j<=it; j++) // need a vector dot product!!!
+//       {
+//      lhh[j] = m_op->dotProduct(vv_1, vv_0[j]);
+//       }
     m_op->mDotProduct(vv_1, it+1, vv_0, lhh);
 
     /*
@@ -602,19 +679,19 @@ void GMRESSolver<T,Ops>::TwoUnmodifiedGramSchmidtOrthogonalization( const int it
 /* PromSolver::PromPCApplyBAorAB ******************************************
  *
  */
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::ApplyAB( T &a_dest, const T &a_xx, T &a_tmp_lhs ) const
+template <class T>
+void GMRESSolver<T>::ApplyAB( T &a_dest, const T &a_xx, T &a_tmp_lhs ) const
 {
   m_op->preCond( a_tmp_lhs, a_xx );
   m_op->applyOp( a_dest, a_tmp_lhs, true);
 }
 
-template <class T, class Ops>
-void GMRESSolver<T,Ops>::setConvergenceMetrics(Real a_metric,
+template <class T>
+void GMRESSolver<T>::setConvergenceMetrics(Real a_metric,
                                               Real a_tolerance)
 {
   m_eps = a_tolerance;
 }
 
 #include "NamespaceFooter.H"
-#endif /*_GMRES_H_*/
+#endif /*_GMRESSOLVER_H_*/
