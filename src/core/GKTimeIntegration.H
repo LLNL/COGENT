@@ -213,7 +213,7 @@ public:
    void computeNorms( Real& a_norm_1, Real& a_norm_2, Real& a_norm_inf);
    Real computeNorm ( int a_ord );
 
-   Real dotProduct (GKRHSData& a_Y);
+   Real dotProduct (const GKRHSData& a_Y);
    
    inline
    bool isDefined() const

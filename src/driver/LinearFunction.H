@@ -75,9 +75,9 @@ public:
      Compute and return the dot product of a_1 and a_2.   In most contexts, this
      means return the sum over all data points of a_1*a_2.
    */
-  virtual Real dotProduct(T& a_1, T& a_2)     = 0;
+  virtual Real dotProduct(T& a_1, const T& a_2)     = 0;
   /* multiple dot products (for GMRES) */
-  virtual void mDotProduct(T& a_1, const int a_sz, T a_2[], Real a_mdots[])
+  virtual void mDotProduct(T& a_1, const int a_sz, const T a_2[], Real a_mdots[])
   {
     for (int j=0; j<a_sz; j++)
       {

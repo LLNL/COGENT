@@ -183,7 +183,7 @@ void GKRHSData::increment( const GKRHSData& a_increment,
 }
 
 
-Real GKRHSData::dotProduct(GKRHSData& a_Y)
+Real GKRHSData::dotProduct(const GKRHSData& a_Y)
 {
    CH_assert( isDefined() );
    Real dotProduct_local = 0, dotProduct = 0;

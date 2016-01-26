@@ -23,7 +23,7 @@ class ImplicitStageJacobian: public LinearFunction<T,Ops>
     inline void incr      (T& a_Z, const T& a_Y, Real a_scale){ a_Z.increment(a_Y,a_scale); } 
     inline void scale     (T& a_Y, const Real& a_scale)       { a_Y.scale(a_scale); }
     inline void setToZero (T& a_Y)                            { a_Y.zero(); }
-    inline Real dotProduct(T& a_X, T& a_Y)                    { return(a_X.dotProduct(a_Y)); }
+    inline Real dotProduct(T& a_X, const T& a_Y)              { return(a_X.dotProduct(a_Y)); }
     inline Real norm      (T& a_Y, int a_ord)                 { return(a_Y.computeNorm(a_ord)); }
 
     inline void setShift        (Real a_shift )       { m_shift = a_shift;    }
