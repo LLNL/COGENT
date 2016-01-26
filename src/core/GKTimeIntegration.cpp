@@ -194,12 +194,7 @@ Real GKRHSData::dotProduct(const GKRHSData& a_Y)
       const LevelData<FArrayBox>& vec_b = Y_species[s]->distributionFunction();
       const DisjointBoxLayout& grids = vec_a.disjointBoxLayout();
       DataIterator dit = vec_a.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) {
-        FArrayBox tmp(grids[dit],1);
-        tmp.copy(vec_a[dit]); 
-        tmp *= vec_b[dit];
-        dotProduct_local += tmp.sum(grids[dit],0,1);
-      }
+      for (dit.begin();dit.ok();++dit) dotProduct_local += vec_a[dit].dotProduct(vec_b[dit],grids[dit]);
    }
    MPI_Allreduce(&dotProduct_local,&dotProduct,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
    return dotProduct;
