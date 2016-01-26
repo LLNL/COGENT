@@ -202,6 +202,7 @@ Real GKRHSData::dotProduct(const GKRHSData& a_Y)
       }
    }
    MPI_Allreduce(&dotProduct_local,&dotProduct,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+   return dotProduct;
 }
 
 void GKState::computeNorms( Real& a_norm_1, Real& a_norm_2, Real& a_norm_inf)
