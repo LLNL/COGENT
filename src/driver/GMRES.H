@@ -10,10 +10,10 @@
 
 // MFA, March 2011
 
-#ifndef _GMRESSOLVER_H_
-#define _GMRESSOLVER_H_
+#ifndef _GMRES_H_
+#define _GMRES_H_
 
-#include "LinearSolver.H"
+#include "LinearFunction.H"
 #include "parstream.H"
 #include "CH_Timer.H"
 #include "NamespaceHeader.H"
@@ -25,8 +25,8 @@
         1) relative tolerance: m_reps(1.e-12)
         2) restart length: m_restrtLen(30)
  */
-template <class T>
-class GMRESSolver : public LinearSolver<T>
+template <class T,class Ops>
+class GMRESSolver
 {
 public:
 
@@ -51,7 +51,7 @@ public:
      a_homogeneous is whether the solver uses homogeneous boundary
      conditions.
    */
-  virtual void define(LinearOp<T>* a_op, bool a_homogeneous=true);
+  virtual void define(LinearFunction<T,Ops>* a_op, bool a_homogeneous=true);
 
   ///solve the equation.
   virtual void solve(T& a_phi, const T& a_rhs);
@@ -67,7 +67,7 @@ public:
   /**
      public member data: operator to solve.
    */
-  LinearOp<T>* m_op;
+  LinearFunction<T,Ops>* m_op;
 
   ///
   /**
@@ -153,8 +153,8 @@ private:
 // GMRESSolver Implementation
 // *******************************************************
 
-template <class T>
-void GMRESSolver<T>::allocate()
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::allocate()
 {
   int max_k         = m_restrtLen;
   int hh            = (max_k + 2) * (max_k + 1);
@@ -173,14 +173,14 @@ void GMRESSolver<T>::allocate()
   m_work_arr = 0;
 }
 
-template <class T>
-void GMRESSolver<T>::clearData()
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::clearData()
 {
   delete [] m_data;
 }
 
-template <class T>
-void GMRESSolver<T>::setRestartLen(int mm)
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::setRestartLen(int mm)
 {
   CH_assert(mm>0);
   clearData();
@@ -188,8 +188,8 @@ void GMRESSolver<T>::setRestartLen(int mm)
   allocate();
 }
 
-template <class T>
-GMRESSolver<T>::GMRESSolver()
+template <class T,class Ops>
+GMRESSolver<T,Ops>::GMRESSolver()
   :m_homogeneous(false),
    m_op(NULL),
    m_restrtLen(30),
@@ -204,15 +204,15 @@ GMRESSolver<T>::GMRESSolver()
   allocate();
 }
 
-template <class T>
-GMRESSolver<T>::~GMRESSolver()
+template <class T,class Ops>
+GMRESSolver<T,Ops>::~GMRESSolver()
 {
   m_op = NULL;
   clearData();
 }
 
-template <class T>
-void GMRESSolver<T>::define(LinearOp<T>* a_operator, bool a_homogeneous/*=true*/)
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::define(LinearFunction<T,Ops>* a_operator, bool a_homogeneous/*=true*/)
 {
   m_homogeneous = a_homogeneous;
   m_op = a_operator;
@@ -234,10 +234,10 @@ void GMRESSolver<T>::define(LinearOp<T>* a_operator, bool a_homogeneous/*=true*/
 #define VEC_VV(i)          m_work_arr[VEC_OFFSET + i]
 
 ////////////////////////////////////////////////////////////////////////
-// GMRESSolver<T>::solve
+// GMRESSolver<T,Ops>::solve
 ///////////////////////////////////////////////////////////////////////
-template <class T>
-void GMRESSolver<T>::solve( T& a_xx, const T& a_bb )
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
 {
   CH_TIMERS("GMRESSolver::solve");
 
@@ -320,8 +320,8 @@ void GMRESSolver<T>::solve( T& a_xx, const T& a_bb )
 
 #define CONVERGED(r0,r) (r<r0*m_reps || r<m_eps)
 
-template <class T>
-void GMRESSolver<T>::CycleGMRES( T &a_xx,
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
                  int &a_reason, int &a_itcount, Real &a_rnorm0,
                                  const bool a_avoidnorms/*=false*/ )
 {
@@ -427,8 +427,8 @@ void GMRESSolver<T>::CycleGMRES( T &a_xx,
   BuildGMRESSoln( GRS(0), a_xx, it-1, &VEC_VV(0) );
 }
 
-template <class T>
-void GMRESSolver<T>::ResidualGMRES( T &a_vv, const T &a_xx,
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::ResidualGMRES( T &a_vv, const T &a_xx,
                                     const T &a_bb, T &a_temp_rhs )
 {
   CH_assert(m_op != 0);
@@ -436,8 +436,8 @@ void GMRESSolver<T>::ResidualGMRES( T &a_vv, const T &a_xx,
   m_op->assign( a_vv, a_bb );
   m_op->incr( a_vv, a_temp_rhs, -1.0); /* b - A(B)x */
 }
-template <class T>
-void GMRESSolver<T>::BuildGMRESSoln( Real nrs[], T &a_xx, const int it,
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::BuildGMRESSoln( Real nrs[], T &a_xx, const int it,
                                      const T vv_0[] )
 {
   Real tt;
@@ -500,8 +500,8 @@ void GMRESSolver<T>::BuildGMRESSoln( Real nrs[], T &a_xx, const int it,
  *   RETURN:
  *     - PETSc error code
  */
-template <class T>
-void GMRESSolver<T>::UpdateGMRESHessenberg( const int it, bool hapend, Real &res )
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::UpdateGMRESHessenberg( const int it, bool hapend, Real &res )
 {
   Real *hh,*cc,*ss,tt;
   int   j;
@@ -555,8 +555,8 @@ void GMRESSolver<T>::UpdateGMRESHessenberg( const int it, bool hapend, Real &res
 /*
     This is the basic orthogonalization routine using modified Gram-Schmidt.
 */
-// template <class T>
-// void GMRESSolver<T>::ModifiedGramSchmidtOrthogonalization( const int it )
+// template <class T,class Ops>
+// void GMRESSolver<T,Ops>::ModifiedGramSchmidtOrthogonalization( const int it )
 // {
 
 //   int       ierr,j;
@@ -622,8 +622,8 @@ void GMRESSolver<T>::UpdateGMRESHessenberg( const int it, bool hapend, Real &res
 
   Care is taken to accumulate the updated HH/HES values.
  */
-template <class T>
-void GMRESSolver<T>::TwoUnmodifiedGramSchmidtOrthogonalization( const int it )
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::TwoUnmodifiedGramSchmidtOrthogonalization( const int it )
 {
   Real     *hh,*hes,*lhh = 0;
   T        &vv_1 = VEC_VV(it+1);
@@ -679,15 +679,15 @@ void GMRESSolver<T>::TwoUnmodifiedGramSchmidtOrthogonalization( const int it )
 /* PromSolver::PromPCApplyBAorAB ******************************************
  *
  */
-template <class T>
-void GMRESSolver<T>::ApplyAB( T &a_dest, const T &a_xx, T &a_tmp_lhs ) const
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::ApplyAB( T &a_dest, const T &a_xx, T &a_tmp_lhs ) const
 {
   m_op->preCond( a_tmp_lhs, a_xx );
   m_op->applyOp( a_dest, a_tmp_lhs, true);
 }
 
-template <class T>
-void GMRESSolver<T>::setConvergenceMetrics(Real a_metric,
+template <class T,class Ops>
+void GMRESSolver<T,Ops>::setConvergenceMetrics(Real a_metric,
                                               Real a_tolerance)
 {
   m_eps = a_tolerance;
