@@ -76,7 +76,7 @@ public:
      public member data:  how much screen out put the user wants.
      set = 0 for no output.
    */
-  int m_verbosity;
+  bool m_verbose;
 
   ///
   /**
@@ -173,7 +173,7 @@ GMRESSolver<T,Ops>::GMRESSolver()
    m_op(NULL),
    m_restrtLen(30),
    m_imax(1000),
-   m_verbosity(3),
+   m_verbose(true),
    m_eps(1.0E-50),
    m_reps(1.0E-12),
    m_exitStatus(-1),
@@ -220,7 +220,7 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
 
   CH_START(timeInitialize);
 
-  if (m_verbosity >= 3)
+  if (m_verbose)
     {
       pout() << "GMRESSolver::solve" << endl;
     }
@@ -260,7 +260,7 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
   // loop for restarts
   while ( m_exitStatus==-1 && it < m_imax )
   {
-    if (m_verbosity >= 3)
+    if (m_verbose)
       {
         pout() << "*";
         if (!procID()) cout << "      *";
@@ -284,7 +284,7 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
     }
   delete [] m_work_arr; m_work_arr = 0;
 
-  if (m_verbosity >= 3)
+  if (m_verbose)
     {
       pout() << "GMRESSolver::solve done, status = " << m_exitStatus << endl;
     }
@@ -313,7 +313,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   /* check for the convergence */
   if ( res == 0. )
   {
-    if (m_verbosity >= 3)
+    if (m_verbose)
       {
         pout() << "GMRESSolver::solve zero residual!!!" << endl;
         if (!procID()) cout << "      GMRESSolver::solve zero residual!!!" << endl;
@@ -331,7 +331,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   it = 0;
   while ( it < m_restrtLen && a_itcount < m_imax )
   {
-    if ( m_verbosity>=3 && (it!=0 || a_itcount==0) )
+    if ( m_verbose && (it!=0 || a_itcount==0) )
       {
         pout() << a_itcount << ") GMRES residual = " << res << endl;
         if (!procID()) cout << "      --> GMRES iteration " << a_itcount << ", residual = " << res << endl;
@@ -356,7 +356,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
     hapbnd = 1.e-99; // hard wired happy tol!!!
     if (tt < hapbnd)
     {
-      if ( m_verbosity>=3 )
+      if ( m_verbose)
         {
           pout() << "Detected happy breakdown, "<<it<<") current hapbnd = "<< tt << endl;
           if (!procID()) cout << "      Detected happy breakdown, "<<it<<") current hapbnd = "<< tt << endl;
@@ -380,7 +380,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
     /* Catch error in happy breakdown and signal convergence and break from loop */
     if ( hapend )
     {
-      if ( !conv && m_verbosity>=3)
+      if ( !conv && m_verbose)
       {
         pout() << "You reached the happy break down, but convergence was not indicated. Residual norm=" << res << endl;
         if (!procID()) cout << "      You reached the happy break down, but convergence was not indicated. Residual norm=" << res << endl;
@@ -390,7 +390,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   }
   
   /* Monitor if we know that we will not return for a restart */
-  if ( (a_reason!=1 || a_itcount>=m_imax) && m_verbosity>=3 )
+  if ( (a_reason!=1 || a_itcount>=m_imax) && m_verbose)
     {
       pout() << a_itcount << ") GMRES residual = " << res << endl;
       if (!procID()) cout << "      --> GMRES iteration " << a_itcount << ", residual = " << res << endl;
