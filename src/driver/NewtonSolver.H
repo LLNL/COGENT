@@ -129,9 +129,7 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     m_its++;
 
     /* compute norm of m_F */
-    Real norm_1,norm_2,norm_inf;
-    m_F.computeNorms(norm_1,norm_2,norm_inf);
-    m_norm = norm_2; /* using the 2-norm */
+    m_norm = m_F.computeNorm(2);
     if (m_its == 1) m_norm0 = m_norm;
 
     if (m_verbose && (!procID())) {
@@ -165,6 +163,7 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     a_Y.increment(m_dY,-1);
   }
 
+  if ((!procID()) && m_verbose) cout << "    Newton iteration exit status: " << m_convergedReason << "\n";
 }
 
 #include "NamespaceFooter.H"
