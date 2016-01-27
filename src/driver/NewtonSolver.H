@@ -82,7 +82,7 @@ class NewtonSolver
     bool      m_is_Defined;
     int       m_its, m_maxits;
     Real      m_norm, m_norm0,
-              m_rtol, m_atol;
+              m_rtol, m_atol, m_stol;
     T         m_dY, m_F;
     bool      m_verbose;
 
@@ -112,6 +112,7 @@ void NewtonSolver<T,Ops>::define(T& a_state)
   m_maxits  = 100;
   m_rtol    = 1e-6;
   m_atol    = 1e-6;
+  m_stol    = 1e-14;
   m_verbose = true;
 
   m_is_Defined = true;
@@ -155,6 +156,11 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     m_dY.zero();
     m_LinearSolver.solve(m_dY,m_F);
     Real step_norm = m_dY.computeNorm(2);
+
+    if (step_norm < m_stol) {
+      m_convergedReason = "step size norm less than tolerance";
+      break;
+    }
 
     /* Update solution Y = Y - dY */
     a_Y.increment(m_dY,-1);
