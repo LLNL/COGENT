@@ -309,7 +309,7 @@ Real GKState::computeNorm( int a_ord)
       }
     }
     MPI_Allreduce(&local_norm,&norm, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-  } else if (a_ord = 1) {
+  } else if (a_ord == 1) {
     /* L1 */
     for (int s(0); s<m_species_mapped.size(); s++) {
       const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
@@ -368,7 +368,7 @@ Real GKRHSData::computeNorm( int a_ord)
       }
     }
     MPI_Allreduce(&local_norm,&norm, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-  } else if (a_ord = 1) {
+  } else if (a_ord == 1) {
     /* L1 */
     for (int s(0); s<m_species_mapped.size(); s++) {
       const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
