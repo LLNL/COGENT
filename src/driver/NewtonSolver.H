@@ -133,7 +133,7 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     if (m_its == 1) m_norm0 = m_norm;
 
     if (m_verbose && (!procID())) {
-      cout << "    Newton iteration " << m_its << ", absolute residual norm " << m_norm;
+      cout << "    --> Newton iteration " << m_its << ", absolute residual norm " << m_norm;
       cout << ", relative residual norm " << m_norm/m_norm0 << "\n"; 
     }
 
@@ -156,14 +156,9 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     m_LinearSolver.solve(m_dY,m_F);
     Real step_norm = m_dY.computeNorm(2);
 
-    if (m_verbose && (!procID())) 
-      cout << "    Newton iteration " << m_its << ", step norm " << step_norm << "\n";
-
     /* Update solution Y = Y - dY */
     a_Y.increment(m_dY,-1);
   }
-
-  if ((!procID()) && m_verbose) cout << "    Newton iteration exit status: " << m_convergedReason << "\n";
 }
 
 #include "NamespaceFooter.H"
