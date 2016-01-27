@@ -239,6 +239,8 @@ public:
    void copyTo    (Real*);
    void copyFrom  (Real*);
 
+   int getVectorSize();
+
 private:
 
    // Disallowed for all the usual reasons

@@ -50,6 +50,19 @@ int GKState::getVectorSize()
   return TotalSize;
 }
 
+int GKRHSData::getVectorSize()
+{
+  CH_assert( isDefined() );
+  int TotalSize = 0;
+  for (int s=0; s < m_species_mapped.size(); s++) {
+    const LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
+    const DisjointBoxLayout& dbl = x.disjointBoxLayout();
+    DataIterator dit = dbl.dataIterator();
+    for (dit.begin(); dit.ok(); ++dit) TotalSize += dbl[dit].numPts();
+  }
+  return TotalSize;
+}
+
 void GKState::copyTo(Real *Y)
 {
    CH_assert( isDefined() );
@@ -309,7 +322,6 @@ Real GKState::computeNorm( int a_ord)
         FArrayBox tmp(grids[dit],1);
         tmp.copy(solution[dit]);
         tmp.abs();
-        tmp *= volume[dit];
         local_norm += tmp.sum(grids[dit],0,1);
       }
     }
@@ -369,7 +381,6 @@ Real GKRHSData::computeNorm( int a_ord)
         FArrayBox tmp(grids[dit],1);
         tmp.copy(solution[dit]);
         tmp.abs();
-        tmp *= volume[dit];
         local_norm += tmp.sum(grids[dit],0,1);
       }
     }
