@@ -323,15 +323,10 @@ Real GKState::computeNorm( int a_ord)
       LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
       geom.getCellVolumes(volume);
       DataIterator dit = solution.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) {
-        FArrayBox tmp(grids[dit],1);
-        tmp.copy(solution[dit]); 
-        tmp *= solution[dit];
-        tmp *= volume[dit];
-        local_norm += tmp.sum(grids[dit],0,1);
-      }
+      for (dit.begin(); dit.ok(); ++dit) local_norm += solution[dit].sumPow(grids[dit]);
     }
     MPI_Allreduce(&local_norm, &norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    norm = sqrt(norm);
   }
 
   return(norm);
@@ -388,15 +383,10 @@ Real GKRHSData::computeNorm( int a_ord)
       LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
       geom.getCellVolumes(volume);
       DataIterator dit = solution.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) {
-        FArrayBox tmp(grids[dit],1);
-        tmp.copy(solution[dit]); 
-        tmp *= solution[dit];
-        tmp *= volume[dit];
-        local_norm += tmp.sum(grids[dit],0,1);
-      }
+      for (dit.begin(); dit.ok(); ++dit) local_norm += solution[dit].sumPow(grids[dit]);
     }
     MPI_Allreduce(&local_norm, &norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    norm = sqrt(norm);
   }
 
   return(norm);
