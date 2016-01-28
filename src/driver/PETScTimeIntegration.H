@@ -512,7 +512,6 @@ void PetscTimeIntegrator<System>::parseParametersSimulation( ParmParse& a_ppsim 
 template <class System>
 void PetscTimeIntegrator<System>::parseParametersPetsc( ParmParse& a_pppet )
 {
-   // This determines the amount of diagnositic output generated
    a_pppet.query("ts_type", m_ts_type );
    a_pppet.query("ts_subtype", m_ts_subtype );
    a_pppet.query("ts_adapt_type", m_ts_adapt_type );
