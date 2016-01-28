@@ -10,7 +10,7 @@
 #include "CH_Timer.H"
 #include "NamespaceHeader.H"
 
-template <class T,class Ops>
+template <class T,class Ops = void>
 class GMRESSolver
 {
 public:

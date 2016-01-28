@@ -14,7 +14,7 @@
 /**
    Operator class for Linear solver for solving L(phi) = rhs.
  */
-template <class T, class Ops>
+template <class T, class Ops = void>
 class LinearFunction
 {
 public:

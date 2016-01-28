@@ -3,7 +3,7 @@
 
 #include "NamespaceHeader.H"
 
-template <class T, class Ops>
+template <class T, class Ops = void>
 class Function
 {
   public:
