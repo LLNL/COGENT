@@ -6,6 +6,7 @@
 #define _GMRES_H_
 
 #include "LinearFunction.H"
+#include "ParmParse.H"
 #include "parstream.H"
 #include "CH_Timer.H"
 #include "NamespaceHeader.H"
@@ -21,32 +22,14 @@ public:
 
   void clearData();
 
-  virtual void setHomogeneous(bool a_homogeneous)
-  {
-    m_homogeneous = a_homogeneous;
-  }
-
-  ///
   virtual void setConvergenceMetrics(Real a_metric,
                                      Real a_tolerance);
 
-  ///
-  /**
-     define the solver.   a_op is the linear operator.
-     a_homogeneous is whether the solver uses homogeneous boundary
-     conditions.
-   */
-  virtual void define(LinearFunction<T,Ops>* a_op, bool a_homogeneous=true);
+  virtual void define(ParmParse&, LinearFunction<T,Ops>* a_op, 
+                      std::string a_outPrefix, std::string a_optPrefix);
 
   ///solve the equation.
   virtual void solve(T& a_phi, const T& a_rhs);
-
-  ///
-  /**
-     public member data: whether the solver is restricted to
-     homogeneous boundary conditions
-   */
-  bool m_homogeneous;
 
   ///
   /**
@@ -70,7 +53,7 @@ public:
   /**
      public member data:  max iterations (eg, >= m_restrtLen)
    */
-  int m_imax;
+  int m_maxits;
   ///
   /**
      public member data:  how much screen out put the user wants.
@@ -82,13 +65,13 @@ public:
   /**
      public member data:  solver tolerance
    */
-  Real m_eps;
+  Real m_atol;
 
   ///
   /**
      public member data:  relative solver tolerance
    */
-  Real m_reps;
+  Real m_rtol;
 
   ///
   /**
@@ -126,10 +109,14 @@ private:
 
   void ApplyAB( T &a_dest, const T &a_xx, T &a_temp ) const;
 
+  void parseParameters(ParmParse&);
+
   // data
   Real *m_data;
   Real *m_hes, *m_hh, *m_d, *m_ee, *m_dd;
   T    *m_work_arr;
+
+  std::string m_outPrefix, m_optPrefix;
 };
 
 template <class T,class Ops>
@@ -169,13 +156,12 @@ void GMRESSolver<T,Ops>::setRestartLen(int mm)
 
 template <class T,class Ops>
 GMRESSolver<T,Ops>::GMRESSolver()
-  :m_homogeneous(false),
-   m_op(NULL),
+  :m_op(NULL),
    m_restrtLen(30),
-   m_imax(1000),
+   m_maxits(100),
    m_verbose(true),
-   m_eps(1.0E-50),
-   m_reps(1.0E-12),
+   m_atol(1.0E-6),
+   m_rtol(1.0E-6),
    m_exitStatus(-1),
    m_small(1.0E-30),
    m_normType(2)
@@ -191,10 +177,28 @@ GMRESSolver<T,Ops>::~GMRESSolver()
 }
 
 template <class T,class Ops>
-void GMRESSolver<T,Ops>::define(LinearFunction<T,Ops>* a_operator, bool a_homogeneous/*=true*/)
+void GMRESSolver<T,Ops>::define(ParmParse& a_pp, LinearFunction<T,Ops>* a_operator, 
+                                std::string a_outPrefix, std::string a_optPrefix)
 {
-  m_homogeneous = a_homogeneous;
+  m_outPrefix = a_outPrefix;
+  m_optPrefix = a_optPrefix;
+
+  std::string optString = "_gmres";
+  optString = m_optPrefix + optString;
+
+  ParmParse ppGmres ( optString.c_str() );
+  parseParameters( ppGmres  );
+
   m_op = a_operator;
+}
+
+template <class T, class Ops>
+void GMRESSolver<T,Ops>::parseParameters( ParmParse& a_pp)
+{
+  a_pp.query("verbose", m_verbose); /* verbosity */
+  a_pp.query("atol",    m_atol);    /* absolute tolerance */
+  a_pp.query("rtol",    m_rtol);    /* relative tolerance */
+  a_pp.query("maxits",  m_maxits);  /* maximum iterations */
 }
 
 #define HH(a,b)  (m_hh        + (b)*(m_restrtLen+2) + (a))
@@ -258,7 +262,7 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
   it = 0; m_exitStatus = -1;
   CycleGMRES( a_xx, m_exitStatus, it, rnorm0 );
   // loop for restarts
-  while ( m_exitStatus==-1 && it < m_imax )
+  while ( m_exitStatus==-1 && it < m_maxits )
   {
     if (m_verbose)
       {
@@ -268,7 +272,7 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
     ResidualGMRES( vv_0, a_xx, a_bb, VEC_TEMP_RHS );
     CycleGMRES( a_xx, m_exitStatus, it, rnorm0 );
   }
-  if (m_exitStatus==-1 && it >= m_imax)
+  if (m_exitStatus==-1 && it >= m_maxits)
     {
       m_exitStatus = 3;
     }
@@ -292,7 +296,7 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
   CH_STOP(timeCleanup);
 }
 
-#define CONVERGED(r0,r) (r<r0*m_reps || r<m_eps)
+#define CONVERGED(r0,r) (r<r0*m_rtol || r<m_atol)
 
 template <class T,class Ops>
 void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
@@ -316,7 +320,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
     if (m_verbose)
       {
         pout() << "GMRESSolver::solve zero residual!!!" << endl;
-        if (!procID()) cout << "      GMRESSolver::solve zero residual!!!" << endl;
+        if (!procID()) cout << "      (" << m_outPrefix << ") GMRESSolver::solve zero residual!!!" << endl;
       }
     a_reason = 1; // 1 == converged,
     return;
@@ -329,12 +333,12 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   bool conv = CONVERGED( a_rnorm0, res );
   a_reason = conv ? 1 : -1;
   it = 0;
-  while ( it < m_restrtLen && a_itcount < m_imax )
+  while ( it < m_restrtLen && a_itcount < m_maxits )
   {
     if ( m_verbose && (it!=0 || a_itcount==0) )
       {
         pout() << a_itcount << ") GMRES residual = " << res << endl;
-        if (!procID()) cout << "      --> GMRES iteration " << a_itcount << ", residual = " << res << endl;
+        if (!procID()) cout << "      --> (" << m_outPrefix << ") GMRES iteration " << a_itcount << ", residual = " << res << endl;
       }
 
     if (a_reason == 1) break;
@@ -359,7 +363,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
       if ( m_verbose)
         {
           pout() << "Detected happy breakdown, "<<it<<") current hapbnd = "<< tt << endl;
-          if (!procID()) cout << "      Detected happy breakdown, "<<it<<") current hapbnd = "<< tt << endl;
+          if (!procID()) cout << "      (" << m_outPrefix << ") Detected happy breakdown, "<<it<<") current hapbnd = "<< tt << endl;
         }
       hapend = true;
     }
@@ -383,17 +387,17 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
       if ( !conv && m_verbose)
       {
         pout() << "You reached the happy break down, but convergence was not indicated. Residual norm=" << res << endl;
-        if (!procID()) cout << "      You reached the happy break down, but convergence was not indicated. Residual norm=" << res << endl;
+        if (!procID()) cout << "      (" << m_outPrefix << ") You reached the happy break down, but convergence was not indicated. Residual norm=" << res << endl;
       }
       break;
     }
   }
   
   /* Monitor if we know that we will not return for a restart */
-  if ( (a_reason!=1 || a_itcount>=m_imax) && m_verbose)
+  if ( (a_reason!=1 || a_itcount>=m_maxits) && m_verbose)
     {
       pout() << a_itcount << ") GMRES residual = " << res << endl;
-      if (!procID()) cout << "      --> GMRES iteration " << a_itcount << ", residual = " << res << endl;
+      if (!procID()) cout << "      --> (" << m_outPrefix << ") GMRES iteration " << a_itcount << ", residual = " << res << endl;
     }
 
   /*
@@ -432,7 +436,7 @@ void GMRESSolver<T,Ops>::BuildGMRESSoln( Real nrs[], T &a_xx, const int it,
   if (*HH(it,it) == 0.0)
     {
       pout() << "HH(it,it) is identically zero!!! GRS(it) = " << *GRS(it) << endl;
-      if (!procID()) cout << "      HH(it,it) is identically zero!!! GRS(it) = " << *GRS(it) << endl;
+      if (!procID()) cout << "      (" << m_outPrefix << ") HH(it,it) is identically zero!!! GRS(it) = " << *GRS(it) << endl;
     }
   if (*HH(it,it) != 0.0)
   {
@@ -513,7 +517,7 @@ void GMRESSolver<T,Ops>::UpdateGMRESHessenberg( const int it, bool hapend, Real 
     if (tt == 0.0)
       {
         pout() << "Your matrix or preconditioner is the null operator\n";
-        if (!procID()) cout << "      Your matrix or preconditioner is the null operator\n";
+        if (!procID()) cout << "      (" << m_outPrefix << ") Your matrix or preconditioner is the null operator\n";
       }
     *cc       = *hh / tt;
     *ss       = *(hh+1) / tt;
@@ -605,7 +609,7 @@ template <class T,class Ops>
 void GMRESSolver<T,Ops>::setConvergenceMetrics(Real a_metric,
                                               Real a_tolerance)
 {
-  m_eps = a_tolerance;
+  m_atol = a_tolerance;
 }
 
 #include "NamespaceFooter.H"

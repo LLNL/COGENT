@@ -4,6 +4,8 @@
 #include <string>
 
 #include "REAL.H"
+#include "ParmParse.H"
+#include "parstream.H"
 
 #include "NamespaceHeader.H"
 
@@ -13,7 +15,7 @@ class TimeIntegrator
 
   public:
     virtual Ops&  getOperators() = 0;
-    virtual void  define(std::string a_name, Solution& a_state, Real a_dt) = 0;
+    virtual void  define(ParmParse& a_pp,std::string a_name, Solution& a_state, Real a_dt) = 0;
     virtual void  advance(Real a_time, Solution& Y) = 0;
 
     virtual void setTimeStep(int a_n)         = 0;

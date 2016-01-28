@@ -4,7 +4,6 @@
 #include <iostream>
 #include <string>
 
-#include "REAL.H"
 #include "TimeIntegrator.H"
 #include "ImplicitStageFunction.H"
 #include "ImplicitStageJacobian.H"
@@ -36,7 +35,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_name string containing the method name
      */
-    void define(std::string a_name, Solution& a_state, Real a_dt);
+    void define(ParmParse& a_pp, std::string a_name, Solution& a_state, Real a_dt);
 
     /// Advance one time step
     /**
@@ -142,7 +141,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
 
 
 template <class Solution, class RHS, class Ops>
-void TiARK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real a_dt)
+void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Solution& a_state, Real a_dt)
 {
   m_dt = a_dt;
 
@@ -250,7 +249,9 @@ void TiARK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real
   m_IJacobian->define(m_R,m_Operators);
   m_Ifunction->setJac(m_IJacobian);
 
-  m_NewtonSolver.define(m_R);
+  std::string solverOutPrefix = "TiARK";
+  std::string solverOptPrefix = "ark";
+  m_NewtonSolver.define(a_pp,m_R,solverOutPrefix,solverOptPrefix);
 
   /* done */
   m_is_Defined = true;

@@ -4,7 +4,6 @@
 #include <iostream>
 #include <string>
 
-#include "REAL.H"
 #include "TimeIntegrator.H"
 
 #include "NamespaceHeader.H"
@@ -33,7 +32,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_name string containing the method name
      */
-    void define(std::string a_name, Solution& a_state, Real a_dt);
+    void define(ParmParse& a_pp, std::string a_name, Solution& a_state, Real a_dt);
 
     /// Advance one time step
     /**
@@ -132,7 +131,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
 };
 
 template <class Solution, class RHS, class Ops>
-void TiRK<Solution,RHS,Ops>::define(std::string a_name, Solution& a_state, Real a_dt)
+void TiRK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Solution& a_state, Real a_dt)
 {
   m_dt = a_dt;
 

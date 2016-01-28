@@ -5,6 +5,8 @@
 #include <string>
 
 #include "REAL.H"
+#include "ParmParse.H"
+#include "parstream.H"
 #include "Function.H"
 #include "LinearFunction.H"
 #include "GMRES.H"
@@ -40,7 +42,7 @@ class NewtonSolver
      *
      * @param[in] a_state solution object
      */
-    void define(T& a_state);
+    void define(ParmParse&, T&, std::string, std::string);
 
     /// Get the number of iterations
     /**
@@ -79,6 +81,8 @@ class NewtonSolver
 
   private:
 
+    void parseParameters( ParmParse& );
+
     bool      m_is_Defined;
     int       m_its, m_maxits;
     Real      m_norm, m_norm0,
@@ -86,7 +90,10 @@ class NewtonSolver
     T         m_dY, m_F;
     bool      m_verbose;
 
-    std::string           m_convergedReason;
+    std::string           m_convergedReason,
+                          m_outPrefix,
+                          m_optPrefix;
+
     Function<T,Ops>       *m_Function;
     LinearFunction<T,Ops> *m_Jacobian;
     GMRESSolver<T,Ops>    m_LinearSolver;
@@ -100,13 +107,9 @@ NewtonSolver<T,Ops>::~NewtonSolver()
 }
 
 template <class T, class Ops>
-void NewtonSolver<T,Ops>::define(T& a_state)
+void NewtonSolver<T,Ops>::define(ParmParse& a_pp, T& a_state, std::string a_outPrefix, std::string a_optPrefix)
 {
   CH_assert(!isDefined());
-
-  m_F.define(a_state); 
-  m_dY.define(a_state);
-  m_LinearSolver.define(m_Jacobian);
 
   /* default values */
   m_maxits  = 100;
@@ -114,6 +117,18 @@ void NewtonSolver<T,Ops>::define(T& a_state)
   m_atol    = 1e-6;
   m_stol    = 1e-14;
   m_verbose = true;
+
+  m_outPrefix = a_outPrefix;
+  m_optPrefix = a_optPrefix;
+  std::string optString = "_newton";
+  optString = m_optPrefix + optString;
+
+  ParmParse ppNewton( optString.c_str() );
+  parseParameters( ppNewton );
+
+  m_F.define(a_state); 
+  m_dY.define(a_state);
+  m_LinearSolver.define(a_pp,m_Jacobian,a_outPrefix,a_optPrefix);
 
   m_is_Defined = true;
 }
@@ -134,7 +149,7 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     if (m_its == 1) m_norm0 = m_norm;
 
     if (m_verbose && (!procID())) {
-      cout << "    --> Newton iteration " << m_its << ", absolute residual norm " << m_norm;
+      cout << "    --> (" << m_outPrefix << ") Newton iteration " << m_its << ", absolute residual norm " << m_norm;
       cout << ", relative residual norm " << m_norm/m_norm0 << "\n"; 
     }
 
@@ -165,6 +180,16 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     /* Update solution Y = Y - dY */
     a_Y.increment(m_dY,-1);
   }
+}
+
+template <class T, class Ops>
+void NewtonSolver<T,Ops>::parseParameters( ParmParse& a_pp)
+{
+  a_pp.query("verbose", m_verbose); /* verbosity */
+  a_pp.query("atol",    m_atol);    /* absolute tolerance */
+  a_pp.query("rtol",    m_rtol);    /* relative tolerance */
+  a_pp.query("stol",    m_stol);    /* step size tolerance */
+  a_pp.query("maxits",  m_maxits);  /* maximum iterations */
 }
 
 #include "NamespaceFooter.H"
