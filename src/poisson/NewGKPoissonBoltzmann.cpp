@@ -40,15 +40,17 @@ NewGKPoissonBoltzmann::NewGKPoissonBoltzmann( ParmParse&                  a_pp,
    const SingleNullCoordSys& coord_sys = (SingleNullCoordSys&)( *(a_geom.getCoordSys()) );
    
    const string pp_prefix = a_geom.getParmParsePrefix() + ".singlenull";
-   ParmParse pp_geom( pp_prefix.c_str() );
+   ParmParse pp_single_null_geom( pp_prefix.c_str() );
 
    DisjointBoxLayout dbl_core;
-   m_core_coord_sys = new SNCoreCoordSys( pp_geom,
+   m_core_coord_sys = new SNCoreCoordSys( pp_single_null_geom,
                                           (SingleNullCoordSys&)coord_sys,
                                           a_geom.grids(),
                                           dbl_core );
 
-   m_core_geometry = new MagGeom(a_pp, m_core_coord_sys, dbl_core, a_geom.ghosts());
+   const string pp_prefix_geom = a_geom.getParmParsePrefix();
+   ParmParse pp_geom( pp_prefix_geom.c_str() );
+   m_core_geometry = new MagGeom(pp_geom, m_core_coord_sys, dbl_core, a_geom.ghosts());
 
    LevelData<FArrayBox> core_initial_ion_charge_density(m_core_geometry->gridsFull(), 1, a_initial_ion_charge_density.ghostVect());
    copyToCore(a_initial_ion_charge_density, core_initial_ion_charge_density);

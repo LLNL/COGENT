@@ -1951,6 +1951,62 @@ void GKOps::plotHeatFlux( const std::string&    a_filename,
 }
 
 
+void GKOps::plotAmpereErIncrement( const std::string&    a_filename,
+				   const KineticSpecies& a_soln_species,
+				   const double&         a_time ) const
+{
+  CH_assert( isDefined() );
+  CH_assert( m_phase_geometry != NULL );
+  const PhaseGeom& phase_geometry( *m_phase_geometry );
+  const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+   
+  CFG::LevelData<CFG::FArrayBox> AmpereErIncr( mag_geom.grids(), 1, CFG::IntVect::Zero );
+
+  CFG::LevelData<CFG::FArrayBox> flux_div_grown( mag_geom.grids(), 1, CFG::IntVect::Unit );
+  CFG::LevelData<CFG::FArrayBox> gkp_div_grown( mag_geom.grids(), 1, CFG::IntVect::Unit );
+  for (CFG::DataIterator dit(AmpereErIncr.dataIterator()); dit.ok(); ++dit) {
+    flux_div_grown[dit].copy(m_radial_flux_divergence_average[dit]);
+    gkp_div_grown[dit].copy(m_radial_gkp_divergence_average[dit]);
+  }
+  flux_div_grown.exchange();
+  gkp_div_grown.exchange();
+  
+  const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
+  const CFG::MagBlockCoordSys& block0_coord_sys = (const CFG::MagBlockCoordSys&)(*(coords.getCoordSys(0)));
+  int hi_radial_index = block0_coord_sys.domain().domainBox().bigEnd(RADIAL_DIR);
+
+  for (CFG::DataIterator dit(AmpereErIncr.dataIterator()); dit.ok(); ++dit) {
+    int block_number( coords.whichBlock( mag_geom.grids()[dit] ) );
+        
+    if ( block_number < 2 ) {
+            
+      CFG::FArrayBox& this_AmpereErIncr = AmpereErIncr[dit];
+      CFG::FArrayBox& this_flux_div_grown = flux_div_grown[dit];
+      CFG::FArrayBox& this_gkp_div_grown = gkp_div_grown[dit];
+                
+      CFG::Box box( this_AmpereErIncr.box() );
+      CFG::BoxIterator bit(box);
+      for (bit.begin(); bit.ok(); ++bit) {
+                    
+	CFG::IntVect iv = bit();
+	CFG::IntVect iv_shift = bit();
+	iv_shift[0] = iv[0]+1;
+	this_AmpereErIncr(iv,0) = this_flux_div_grown(iv_shift,0)/this_gkp_div_grown(iv_shift,0);
+	if (iv[0]==hi_radial_index) {
+	  this_AmpereErIncr(iv,0) =   m_hi_radial_flux_divergence_average/m_hi_radial_gkp_divergence_average;
+	}
+      }
+    }
+    else {
+      AmpereErIncr[dit].setVal(0.0);
+    }
+  }
+
+  phase_geometry.plotConfigurationData( a_filename.c_str(), AmpereErIncr, a_time );
+  //if (procID()==0) cout<<"flux_hi="<<m_hi_radial_flux_divergence_average<<endl;
+}
+
+
 void GKOps::setupFieldHistories( ParmParse& a_ppsim )
 {
    CH_assert( isDefined() );

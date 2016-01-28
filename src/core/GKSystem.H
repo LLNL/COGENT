@@ -400,6 +400,7 @@ class GKSystem
       bool m_hdf_HeatFlux;
       bool m_hdf_vparmu;
       bool m_hdf_vlasov_divergence;
+      bool m_hdf_AmpereErIncrement;
       bool m_hdf_total_density;
       bool m_hdf_dfn;
       bool m_hdf_deltaF;
