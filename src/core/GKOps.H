@@ -343,6 +343,10 @@ public:
                               const KineticSpecies& kinetic_species,
                               const double&         time );
 
+   void plotAmpereErIncrement( const std::string&   filename,
+			       const KineticSpecies& kinetic_species,
+			       const double&         time ) const;
+
    void setupFieldHistories( ParmParse& a_ppsim );
 
    void writeFieldHistory( int cur_step, double cur_time, bool startup_flag );

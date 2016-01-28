@@ -105,7 +105,7 @@ c       endif
 c        J/hr*B*Flux = J/hr*(-Upsi*fB_face + Dpsi*dfB_dr/hr) ( note that actually putting in -flux )
 
        if (dir==0) then
-        flux(CHF_IX[i;j;k;l]) = htheta*hphi*(Dpsi*dfB_dr/hr-Upsi*fB_face)
+        flux(CHF_IX[i;j;k;l]) = htheta*hphi*(Dpsi*dfB_dr/hr-0.0*Upsi*fB_face)
        else
         flux(CHF_IX[i;j;k;l]) = zero
        endif

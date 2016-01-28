@@ -85,6 +85,7 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_useExternalTI)
      m_hdf_HeatFlux(false),
      m_hdf_vparmu(false),
      m_hdf_vlasov_divergence(false),
+     m_hdf_AmpereErIncrement(false),
      m_hdf_total_density(false),
      m_hdf_dfn(false),
      m_hdf_deltaF(false),
@@ -1245,6 +1246,17 @@ void GKSystem::writePlotFile(const char    *prefix,
          m_gk_ops->plotFourthMoment( filename, soln_species, cur_time );
       }
 
+      // Increment of Er in the Ampere model                                                                                                                           
+      if (m_hdf_AmpereErIncrement) {
+	std::string filename( plotFileName( prefix,
+					    "AmpereErIncrement",
+					    soln_species.name(),
+					    cur_step,
+					    species + 1) );
+	m_gk_ops->plotAmpereErIncrement( filename, soln_species, cur_time );
+      }
+
+
       // Particle flux moment
 
       if (m_hdf_ParticleFlux) {
@@ -1637,6 +1649,9 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
 
    // Should we make an hdf file for the Vlasov divergence?
    a_ppgksys.query("hdf_vlasov_divergence",m_hdf_vlasov_divergence);
+
+   // Should we make hdf files for Ampere Er increment?
+   a_ppgksys.query("hdf_AmpereErIncrement",m_hdf_AmpereErIncrement);
 
    // At what fixed phase space indices should I plot?  (Indices plotted against in a given plot
    //   are ignored.  Specify in 5D; toroidal index ignored in 4D and set to zero in arguments
