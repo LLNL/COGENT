@@ -96,8 +96,7 @@ public:
                    bool a_update_flux_register = false );
 
 
-   void computeNorms( Real& a_norm_1, Real& a_norm_2, Real& a_norm_inf);
-   Real computeNorm ( int a_ord); 
+   Real computeNorm ( int a_ord) const; 
 
    
    inline
@@ -210,8 +209,7 @@ public:
                    bool a_update_flux_register = false );
 
 
-   void computeNorms( Real& a_norm_1, Real& a_norm_2, Real& a_norm_inf);
-   Real computeNorm ( int a_ord );
+   Real computeNorm ( int a_ord ) const;
 
    Real dotProduct (const GKRHSData& a_Y);
    

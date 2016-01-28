@@ -37,7 +37,9 @@ class CLSInterface
                                const int                    species,
                                const Real                   time ) = 0;
 
-
+      virtual inline bool isLinear() { return false; }
+      
+      virtual Real TimeScale(const KineticSpeciesPtrVect& soln) { return DBL_MAX; }
 };
 
 #include "NamespaceFooter.H"

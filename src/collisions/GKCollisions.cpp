@@ -150,7 +150,11 @@ Real GKCollisions::computeTimeScale( const KineticSpeciesPtrVect& soln )
 
 bool GKCollisions::isLinear()
 {
-  return true;
+  bool linearFlag = true;
+  std::map<std::string,int>::iterator it;
+  for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it)
+    linearFlag = (linearFlag && m_collision_model[it->second]->isLinear());
+  return linearFlag;
 }
 
 #include "NamespaceFooter.H"

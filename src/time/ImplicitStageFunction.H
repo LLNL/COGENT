@@ -44,13 +44,14 @@ template <class T, class Ops>
 void ImplicitStageFunction<T,Ops>::evalFunction(T& a_F, T& a_Y, T& a_b)
 {
   CH_assert(isDefined());
+  m_ops->implicitOpImEx(m_Z,m_StageTime,a_Y,m_Stage);
+  /* set base Y and G(Y) for Jacobian */
+  m_jac->setBaseSolution(a_Y);
+  m_jac->setBaseRHS     (m_Z);
   /* Compute ([Y - shift*G(Y)] - b) */
   a_F.copy(a_Y);
-  m_ops->implicitOpImEx(m_Z,m_StageTime,a_Y,m_Stage);
   a_F.increment(m_Z,-m_shift);
   a_F.increment(a_b,-1);
-  /* set base Y for Jacobian */
-  m_jac->setBaseSolution(a_Y);
 }
 
 #include "NamespaceFooter.H"

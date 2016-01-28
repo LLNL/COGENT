@@ -72,6 +72,8 @@ public:
                         const Real      time, 
                         const Real      scale );
 
+  inline bool isLinear() {return true; }
+
 private:
 
    int m_verbosity;

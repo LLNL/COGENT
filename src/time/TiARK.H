@@ -123,6 +123,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
 
   private:
     bool          m_is_Defined;
+    bool          m_isLinear;
     std::string   m_name;
     int           m_nstages;
     Real          *m_Ae, *m_be, *m_ce;
@@ -236,6 +237,7 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
     m_rhsStage_imp[i].define(a_state);
   }
   m_Operators.define(a_state, m_dt);
+  m_isLinear = m_Operators.isLinear();
 
   /* define the Newton solver */
   Function<RHS,Ops>       **NewtonSolverFunction = m_NewtonSolver.getFunction();
@@ -248,6 +250,7 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
   m_Ifunction->define(m_R,m_Operators);
   m_IJacobian->define(m_R,m_Operators);
   m_Ifunction->setJac(m_IJacobian);
+  m_IJacobian->setIsLinear(m_isLinear);
 
   std::string solverOutPrefix = "TiARK";
   std::string solverOptPrefix = "ark";

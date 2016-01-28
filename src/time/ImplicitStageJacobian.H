@@ -30,26 +30,29 @@ class ImplicitStageJacobian: public LinearFunction<T,Ops>
     inline void setStageTime    (Real a_time  )       { m_StageTime = a_time; }
     inline void setStageNumber  (int a_Stage  )       { m_Stage = a_Stage;    }
     inline bool isDefined       ()              const { return m_is_Defined;  }
-    inline void setBaseSolution (T& a_Y)              { m_Y.copy(a_Y); }
+    inline void setBaseSolution (T& a_Y)              { m_Y0.copy(a_Y); }
+    inline void setBaseRHS      (T& a_F)              { m_F0.copy(a_F); }
 
     void define(T& a_state, Ops& a_ops);
+    void setIsLinear(bool a_isLinear) { m_isLinear = a_isLinear; }
 
   private:
   
-    bool m_is_Defined;
+    bool m_is_Defined, m_isLinear;
     int  m_Stage;
-    Real m_shift, m_StageTime;
-    T    m_Z, m_Y, m_F1, m_F2;
+    Real m_shift, m_StageTime, m_epsJFNK;
+    T    m_Z, m_Y0, m_F0, m_F;
     Ops  *m_ops;
 };
 
 template <class T, class Ops>
 void ImplicitStageJacobian<T,Ops>::define(T& a_state, Ops& a_ops)
 {
-  m_Z.define (a_state);
-  m_Y.define (a_state);
-  m_F1.define(a_state);
-  m_F2.define(a_state);
+  m_Z.define  (a_state);
+  m_Y0.define (a_state);
+  m_F0.define (a_state);
+  m_F.define  (a_state);
+  m_epsJFNK = 1e-6;
   m_ops = &a_ops;
   m_is_Defined = true;
 }
@@ -86,15 +89,19 @@ void ImplicitStageJacobian<T,Ops>::preCond(T& a_cor, const T& a_residual)
 template <class T, class Ops>
 void ImplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y, bool a_homogeneous=false)
 {
-  Real eps = 1.0;
+  Real normY = a_y.computeNorm(2);
+  if (normY < 1e-15) a_F.zero();
+  else {
+    Real eps;
+    if (m_isLinear) eps = 1.0;
+    else            eps = m_epsJFNK / normY;
 
-  m_Z.copy(m_Y); m_Z.increment(a_y,eps);
-  m_ops->implicitOpImEx(m_F1,m_StageTime,m_Y,m_Stage);
-  m_ops->implicitOpImEx(m_F2,m_StageTime,m_Z,m_Stage);
+    m_Z.copy(m_Y0); m_Z.increment(a_y,eps);
+    m_ops->implicitOpImEx(m_F,m_StageTime,m_Z,m_Stage);
 
-  m_Z.copy(m_F2); m_Z.increment(m_F1,-1);
-  a_F.copy(a_y); a_F.increment(m_Z,(-m_shift/eps));
-
+    m_Z.copy(m_F); m_Z.increment(m_F0,-1);
+    a_F.copy(a_y); a_F.increment(m_Z,(-m_shift/eps));
+  }
 }
 
 template <class T, class Ops>
