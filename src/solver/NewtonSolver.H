@@ -48,7 +48,7 @@ class NewtonSolver
     /**
      * get the number of Newton iterations
      */
-    int getNewtonIterations() const { return m_its; }
+    int getConvergedIterations() const { return m_its; }
 
     /// Solve the equation using Newton's method
     /**
@@ -64,6 +64,12 @@ class NewtonSolver
      * Get the reason for Newton solver exit
      */
     std::string getConvergedReason() const {return m_convergedReason; }
+
+    /// Get exit status
+    /*
+     * Get the exit status for the Newton solve
+     */
+    int getExitStatus() const { return m_exitStatus; }
 
     /// Get the function object
     /**
@@ -84,7 +90,7 @@ class NewtonSolver
     void parseParameters( ParmParse& );
 
     bool      m_is_Defined;
-    int       m_its, m_maxits;
+    int       m_its, m_maxits, m_exitStatus;
     Real      m_norm, m_norm0,
               m_rtol, m_atol, m_stol;
     T         m_dY, m_F;
@@ -156,14 +162,22 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     /* check for exit conditions */
     if (m_norm < m_atol) {
       m_convergedReason = "norm less than absolute tolerance";
+      m_exitStatus = 0;
       break;
     }
     if (m_norm/m_norm0 < m_rtol) {
       m_convergedReason = "norm less than relative tolerance";
+      m_exitStatus = 0;
       break;
     }
     if (m_its > m_maxits) {
       m_convergedReason = "number of iterations exceeded maximum";
+      m_exitStatus = 1;
+      break;
+    }
+    if (m_norm > m_norm0) {
+      m_convergedReason = "Newton solve diverged";
+      m_exitStatus = -1;
       break;
     }
 

@@ -28,68 +28,19 @@ public:
   virtual void define(ParmParse&, LinearFunction<T,Ops>* a_op, 
                       std::string a_outPrefix, std::string a_optPrefix);
 
-  ///solve the equation.
   virtual void solve(T& a_phi, const T& a_rhs);
 
-  ///
-  /**
-     public member data: operator to solve.
-   */
-  LinearFunction<T,Ops>* m_op;
 
-  ///
-  /**
-     private member data: restart length, need to allocate stuff
-   */
-private:
-  int m_restrtLen;
-public:
-  int restartLen()const
-  {
-    return m_restrtLen;
-  }
+  int restartLen() const { return m_restrtLen; }
+
   void setRestartLen(int mm);
- ///
-  /**
-     public member data:  max iterations (eg, >= m_restrtLen)
-   */
-  int m_maxits;
-  ///
-  /**
-     public member data:  how much screen out put the user wants.
-     set = 0 for no output.
-   */
-  bool m_verbose;
 
-  ///
-  /**
-     public member data:  solver tolerance
-   */
-  Real m_atol;
+  int getConvergedIterations() const { return m_its; }
 
-  ///
-  /**
-     public member data:  relative solver tolerance
-   */
-  Real m_rtol;
+  std::string getConvergedReason();
 
-  ///
-  /**
-     public member data:
-     set = -1 if solver exited for an unknown reason
-     set =  1 if solver converged to tolerance
-     set =  2 if rho = 0
-     set =  3 if max number of restarts was reached
-   */
-  int m_exitStatus;
+  int getExitStatus() const { return m_exitStatus; }
 
-  ///
-  /**
-     public member data:  what the algorithm should consider "close to zero"
-   */
-  Real m_small;
-
-  int m_normType;
 
 private:
   void allocate();
@@ -111,12 +62,26 @@ private:
 
   void parseParameters(ParmParse&);
 
-  // data
+  bool m_verbose;
+
+  Real  m_atol,
+        m_rtol,
+        m_small;
+
+  int m_exitStatus, 
+      m_normType,
+      m_maxits,
+      m_its,
+      m_restrtLen;
+
+  LinearFunction<T,Ops>* m_op;
+
   Real *m_data;
   Real *m_hes, *m_hh, *m_d, *m_ee, *m_dd;
   T    *m_work_arr;
 
-  std::string m_outPrefix, m_optPrefix;
+  std::string m_outPrefix, 
+              m_optPrefix;
 };
 
 template <class T,class Ops>
@@ -201,6 +166,24 @@ void GMRESSolver<T,Ops>::parseParameters( ParmParse& a_pp)
   a_pp.query("maxits",  m_maxits);  /* maximum iterations */
 }
 
+  ///
+  /**         m_exitStatus
+     set = -1 if solver exited for an unknown reason
+     set =  0 if solver converged to tolerance
+     set =  1 if max number of iterations exceeded
+     set =  2 if rho = 0
+   */
+template <class T, class Ops>
+std::string GMRESSolver<T,Ops>::getConvergedReason()
+{
+  std::string convergedReason;
+  if      (m_exitStatus == -1) convergedReason = "unknown";
+  else if (m_exitStatus ==  0) convergedReason = "norm less than absolute or relative tolerance";
+  else if (m_exitStatus ==  1) convergedReason = "number of iterations exceeded maximum";
+  else if (m_exitStatus ==  2) convergedReason = "rho = 0";
+  return convergedReason;
+}
+
 #define HH(a,b)  (m_hh        + (b)*(m_restrtLen+2) + (a))
 #define HES(a,b) (m_hes       + (b)*(m_restrtLen+1) + (a))
 #define CC(a)    (m_ee        + (a))
@@ -238,7 +221,6 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
       m_op->create(m_work_arr[i], a_bb);
     }
 
-  int it;
   Real rnorm0 = 0.0;
   T &vv_0 = VEC_VV(0);
 
@@ -248,21 +230,13 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
 
   CH_STOP(timeInitialize);
 
-  ///
-  /**         m_exitStatus
-     set = -1 if solver exited for an unknown reason
-     set =  1 if solver converged to tolerance
-     set =  2 if rho = 0
-     set =  3 if max number of restarts was reached
-   */
-
   CH_START(timeMainLoop);
 
   // doit
-  it = 0; m_exitStatus = -1;
-  CycleGMRES( a_xx, m_exitStatus, it, rnorm0 );
+  m_its = 0; m_exitStatus = -1;
+  CycleGMRES( a_xx, m_exitStatus, m_its, rnorm0 );
   // loop for restarts
-  while ( m_exitStatus==-1 && it < m_maxits )
+  while ( m_exitStatus==-1 && m_its < m_maxits )
   {
     if (m_verbose)
       {
@@ -270,11 +244,11 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
         if (!procID()) cout << "      *";
       }
     ResidualGMRES( vv_0, a_xx, a_bb, VEC_TEMP_RHS );
-    CycleGMRES( a_xx, m_exitStatus, it, rnorm0 );
+    CycleGMRES( a_xx, m_exitStatus, m_its, rnorm0 );
   }
-  if (m_exitStatus==-1 && it >= m_maxits)
+  if (m_exitStatus==-1 && m_its >= m_maxits)
     {
-      m_exitStatus = 3;
+      m_exitStatus = 1;
     }
 
   CH_STOP(timeMainLoop);
@@ -322,7 +296,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
         pout() << "GMRESSolver::solve zero residual!!!" << endl;
         if (!procID()) cout << "      (" << m_outPrefix << ") GMRESSolver::solve zero residual!!!" << endl;
       }
-    a_reason = 1; // 1 == converged,
+    a_reason = 0; // 0 == converged,
     return;
   }
   // normilize
@@ -331,7 +305,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
 
   if ( a_itcount == 0 ) a_rnorm0 = res;
   bool conv = CONVERGED( a_rnorm0, res );
-  a_reason = conv ? 1 : -1;
+  a_reason = conv ? 0 : -1;
   it = 0;
   while ( it < m_restrtLen && a_itcount < m_maxits )
   {
@@ -341,7 +315,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
         if (!procID()) cout << "      --> (" << m_outPrefix << ") GMRES iteration " << a_itcount << ", residual = " << res << endl;
       }
 
-    if (a_reason == 1) break;
+    if (a_reason == 0) break;
 
     const T &vv_it = VEC_VV(it);
     T &vv_it1 = VEC_VV(it+1);
@@ -380,7 +354,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
     // increment
     it++; (a_itcount)++;
     conv = CONVERGED( a_rnorm0, res );
-    a_reason = conv ? 1 : -1;
+    a_reason = conv ? 0 : -1;
     /* Catch error in happy breakdown and signal convergence and break from loop */
     if ( hapend )
     {
@@ -394,7 +368,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx,
   }
   
   /* Monitor if we know that we will not return for a restart */
-  if ( (a_reason!=1 || a_itcount>=m_maxits) && m_verbose)
+  if ( (a_reason!=0 || a_itcount>=m_maxits) && m_verbose)
     {
       pout() << a_itcount << ") GMRES residual = " << res << endl;
       if (!procID()) cout << "      --> (" << m_outPrefix << ") GMRES iteration " << a_itcount << ", residual = " << res << endl;
