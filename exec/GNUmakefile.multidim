@@ -48,6 +48,8 @@ base_dir = .
 4dsrc_dirs += ../src/coord/phase ../src/ibc/phase ../src/util 
 4dsrc_dirs += ../src/advectUtil
 4dsrc_dirs += ../src/ibc
+4dsrc_dirs += ../src/solver
+4dsrc_dirs += ../src/time
 
 mdsrc_dirs = ../src/ibc/multidim
 
