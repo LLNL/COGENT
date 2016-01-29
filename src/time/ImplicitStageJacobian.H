@@ -13,9 +13,9 @@ class ImplicitStageJacobian: public LinearFunction<T,Ops>
     ImplicitStageJacobian<T,Ops>() {m_is_Defined = false; m_shift = 0; }
     ~ImplicitStageJacobian<T,Ops>() {}
 
-    void residual   (T& a_residual, const T& a_y, const T& a_rhs, bool a_homogeneous);
+    void residual   (T& a_residual, const T& a_y, const T& a_rhs);
     void preCond    (T& a_cor, const T& a_residual);
-    void applyOp    (T& a_F, const T& a_y, bool a_homogeneous);
+    void applyOp    (T& a_F, const T& a_y);
     void axby       (T& a_Z, const T& a_X, const T& a_Y, Real a_a, Real a_b);
 
     inline void create    (T& a_Z, const T& a_Y)              { a_Z.define(a_Y); }
@@ -62,8 +62,7 @@ template <class T, class Ops>
 void ImplicitStageJacobian<T,Ops>::residual(
                                               T& a_residual,
                                               const T& a_Y,
-                                              const T& a_rhs,
-                                              bool a_homogeneous = false
+                                              const T& a_rhs
                                            )
 {
   applyOp(a_residual,a_Y);
@@ -87,7 +86,7 @@ void ImplicitStageJacobian<T,Ops>::preCond(T& a_cor, const T& a_residual)
  * For linear F(Y), eps = 1.
 */
 template <class T, class Ops>
-void ImplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y, bool a_homogeneous=false)
+void ImplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y)
 {
   Real normY = a_y.computeNorm(2);
   if (normY < 1e-15) a_F.zero();

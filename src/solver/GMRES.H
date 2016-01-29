@@ -388,7 +388,7 @@ void GMRESSolver<T,Ops>::ResidualGMRES( T &a_vv, const T &a_xx,
                                     const T &a_bb, T &a_temp_rhs )
 {
   CH_assert(m_op != 0);
-  m_op->applyOp( a_temp_rhs, a_xx, true); /* t <- Ax */
+  m_op->applyOp( a_temp_rhs, a_xx); /* t <- Ax */
   m_op->assign( a_vv, a_bb );
   m_op->incr( a_vv, a_temp_rhs, -1.0); /* b - A(B)x */
 }
@@ -576,7 +576,7 @@ template <class T,class Ops>
 void GMRESSolver<T,Ops>::ApplyAB( T &a_dest, const T &a_xx, T &a_tmp_lhs ) const
 {
   m_op->preCond( a_tmp_lhs, a_xx );
-  m_op->applyOp( a_dest, a_tmp_lhs, true);
+  m_op->applyOp( a_dest, a_tmp_lhs);
 }
 
 template <class T,class Ops>

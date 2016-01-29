@@ -24,10 +24,9 @@ public:
 
   ///
   /**
-     Say you are  solving L(phi) = rhs.   Make a_lhs = L(a_phi) - a_rhs.   If a_homogeneous is true,
-     evaluate the operator using homogeneous boundary conditions.
+     Say you are  solving L(phi) = rhs.   Make a_lhs = L(a_phi) - a_rhs.   
    */
-  virtual void residual(  T& a_lhs, const T& a_phi, const T& a_rhs, bool a_homogeneous = false) = 0;
+  virtual void residual(  T& a_lhs, const T& a_phi, const T& a_rhs) = 0;
 
   ///
   /**
@@ -37,10 +36,9 @@ public:
 
   ///
   /**
-     In the context of solving L(phi) = rhs, set a_lhs = L(a_phi).  If a_homogeneous is true,
-     evaluate the operator using homogeneous boundary conditions.
+     In the context of solving L(phi) = rhs, set a_lhs = L(a_phi).  
    */
-  virtual void applyOp(   T& a_lhs, const T& a_phi, bool a_homogeneous = false) = 0;
+  virtual void applyOp(   T& a_lhs, const T& a_phi) = 0;
 
   ///
   /**
