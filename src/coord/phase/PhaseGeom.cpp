@@ -2234,42 +2234,61 @@ PhaseGeom::projectPhaseToConfiguration( const LevelData<FArrayBox>&     a_src,
 
    SliceSpec slice_mu(MU_DIR,domainBox.smallEnd(MU_DIR));
    CP1::LevelData<CP1::FArrayBox> temp1;
-   sliceLevelData(temp1, a_src, slice_mu);
+   sliceLevelDataLocalOnly(temp1, a_src, slice_mu);
 
    // Slice in the v_parallel direction at the low v_parallel coordinate
 
    CP1::SliceSpec slice_vp(VPARALLEL_DIR,domainBox.smallEnd(VPARALLEL_DIR));
    CFG::LevelData<CFG::FArrayBox> temp2;
-   sliceLevelData(temp2, temp1, slice_vp);
+   sliceLevelDataLocalOnly(temp2, temp1, slice_vp);
 
-   //Allocate destination
-   //a_dst.define(temp2.disjointBoxLayout(), temp2.nComp(), temp2.ghostVect());
- 
-   temp2.copyTo(a_dst);
+   const CFG::DisjointBoxLayout& src_dbl = temp2.disjointBoxLayout();
+   const CFG::DisjointBoxLayout& dst_dbl = a_dst.disjointBoxLayout();
+
+   const CFG::ProblemDomain& config_domain = dst_dbl.physDomain();
+
+   CFG::Copier copier;
+   copier.ghostDefine(src_dbl,
+                      dst_dbl,
+                      config_domain,
+                      temp2.ghostVect(),
+                      a_dst.ghostVect());
+
+   temp2.copyTo(a_dst, copier);
 }
+
 
 void
 PhaseGeom::projectPhaseToConfiguration( const LevelData<FluxBox>&     a_src,
                                        CFG::LevelData<CFG::FluxBox>& a_dst ) const
 {
-    const Box& domainBox = m_domain.domainBox();
+   const Box& domainBox = m_domain.domainBox();
     
-    // Slice in the mu direction at the low mu coordinate
+   // Slice in the mu direction at the low mu coordinate
     
-    SliceSpec slice_mu(MU_DIR,domainBox.smallEnd(MU_DIR));
-    CP1::LevelData<CP1::FluxBox> temp1;
-    sliceLevelFlux(temp1, a_src, slice_mu);
+   SliceSpec slice_mu(MU_DIR,domainBox.smallEnd(MU_DIR));
+   CP1::LevelData<CP1::FluxBox> temp1;
+   sliceLevelFluxLocalOnly(temp1, a_src, slice_mu);
     
-    // Slice in the v_parallel direction at the low v_parallel coordinate
+   // Slice in the v_parallel direction at the low v_parallel coordinate
     
-    CP1::SliceSpec slice_vp(VPARALLEL_DIR,domainBox.smallEnd(VPARALLEL_DIR));
-    CFG::LevelData<CFG::FluxBox> temp2;
-    sliceLevelFlux(temp2, temp1, slice_vp);
+   CP1::SliceSpec slice_vp(VPARALLEL_DIR,domainBox.smallEnd(VPARALLEL_DIR));
+   CFG::LevelData<CFG::FluxBox> temp2;
+   sliceLevelFluxLocalOnly(temp2, temp1, slice_vp);
 
-    //Allocate destination
-    //a_dst.define(temp2.disjointBoxLayout(), temp2.nComp(), temp2.ghostVect());
-    
-    temp2.copyTo(a_dst);
+   const CFG::DisjointBoxLayout& src_dbl = temp2.disjointBoxLayout();
+   const CFG::DisjointBoxLayout& dst_dbl = a_dst.disjointBoxLayout();
+
+   const CFG::ProblemDomain& config_domain = dst_dbl.physDomain();
+
+   CFG::Copier copier;
+   copier.ghostDefine(src_dbl,
+                      dst_dbl,
+                      config_domain,
+                      temp2.ghostVect(),
+                      a_dst.ghostVect());
+
+   temp2.copyTo(a_dst, copier);
 }
 
 
