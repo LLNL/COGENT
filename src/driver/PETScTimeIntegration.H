@@ -61,7 +61,6 @@ class PetscTimeIntegrator
   private:
 
     void parseParametersSimulation( ParmParse& );
-    void parseParametersPetsc     ( ParmParse& );
 
     System      *m_system;
     int         m_cur_step;
@@ -82,24 +81,10 @@ class PetscTimeIntegrator
 
     int         m_local_size;
 
-    std::string m_ts_type, 
-                m_ts_subtype,
-                m_ts_adapt_type;
-
     Real  m_shift,
-          m_epsilon_jfnk,
-          m_snes_atol,
-          m_snes_rtol,
-          m_snes_stol,
-          m_ksp_atol,
-          m_ksp_rtol;
+          m_epsilon_jfnk;
 
-    bool  m_is_linear,
-          m_ts_monitor,
-          m_ts_adapt_monitor,
-          m_snes_monitor,
-          m_ksp_monitor,
-          m_ts_arkimex_fully_implicit;
+    bool  m_is_linear;
     
     Vec   m_Y;
     TS    m_ts;
@@ -201,6 +186,13 @@ static PetscErrorCode PreTimeStep(TS ts)
   TSGetTimeStep(ts,&dt);
   TSGetTimeStepNumber(ts,&cur_step);
 
+  if ((dt == 0.0) && (!procID()) {
+    cout << "*******************************************************************************************\n";
+    cout << "**WARNING (using PETSc time integration): dt = 0.0! Possibly because it has not been set!**\n";
+    cout << "**Specify simulation.fixed_dt in input file or -ts_dt <dt> in .petscrc to specify dt.    **\n";
+    cout << "*******************************************************************************************\n";
+  }
+
   if (context->getVerbosity() >= 1) {
     if (procID()==0) cout << endl << "Step " << cur_step+1 << endl;
   }
@@ -246,23 +238,6 @@ static PetscErrorCode PostTimeStep(TS ts)
     context->setLastChkpt(cur_step);
   }
 
-  return(0);
-}
-
-static PetscErrorCode TSMonitor(TS ts,PetscInt step,PetscReal time,Vec u,void *ctx)
-{
-  PetscPrintf(PETSC_COMM_WORLD,"  ** TS iter = %D, Time %g **\n",step,(double)time);
-}
-
-static PetscErrorCode SNESMonitor(SNES snes, PetscInt its,PetscReal fnorm,void *ctx)
-{
-  PetscPrintf(PETSC_COMM_WORLD,"  **  SNES iter = %D, SNES Function norm %g **\n",its,(double)fnorm);
-  return(0);
-}
-
-static PetscErrorCode KSPMonitor(KSP ksp, PetscInt n,PetscReal rnorm,void *ctxt)
-{
-  PetscPrintf(PETSC_COMM_WORLD,"  **    KSP iter = %D, KSP Relative norm %g **\n",n,(double)rnorm);
   return(0);
 }
 
@@ -315,7 +290,7 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_max_step(0),
     m_cur_time(0.0),
     m_max_time(0.0),
-    m_dt(-1.0),
+    m_dt(0.0),
     m_verbosity(0),
     m_checkpoint_interval(0),
     m_last_checkpoint(0),
@@ -326,26 +301,11 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_plottedonce(0),
     m_system(NULL),
     m_local_size(0),
-    m_ts_type("rk"),
-    m_ts_subtype("4"),
-    m_ts_adapt_type("none"),
     m_is_linear("true"),
     m_epsilon_jfnk(1e-6),
-    m_ts_monitor(false),
-    m_ts_adapt_monitor(false),
-    m_snes_monitor(false),
-    m_ksp_monitor(false),
-    m_snes_atol(1e-6),
-    m_snes_rtol(1e-6),
-    m_snes_stol(1e-14),
-    m_ksp_atol(1e-6),
-    m_ksp_rtol(1e-6),
-    m_ts_arkimex_fully_implicit(false)
 {
   ParmParse ppsim( "simulation" );
   parseParametersSimulation( ppsim );
-  ParmParse pppet( "petsc" );
-  parseParametersPetsc( pppet );
 
   m_system = new System(a_pp, usePetsc);
   m_system->initialize(m_cur_step);
@@ -380,18 +340,15 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
   TSSetDuration(m_ts,m_max_step,m_max_time);
   TSSetInitialTimeStep(m_ts,0.0,m_dt);
   TSSetExactFinalTime(m_ts,TS_EXACTFINALTIME_MATCHSTEP);
+  TSSetType(m_ts,TSEULER);
+  TSAdapt adapt; TSGetAdapt(m_ts,&adapt);
+  TSAdaptSetType(adapt,TSADAPTNONE);
   TSSetSolution(m_ts,m_Y);
   TSSetApplicationContext(m_ts,this);
-
-  /* Set time step adapter */
-  TSAdapt adapt; TSGetAdapt(m_ts,&adapt);
-  TSAdaptSetType(adapt,m_ts_adapt_type.c_str());
-
-  TSSetType(m_ts,m_ts_type.c_str());
-  if (!strcmp(m_ts_type.c_str(),TSRK))            TSRKSetType(m_ts,m_ts_subtype.c_str());
-  else if (!strcmp(m_ts_type.c_str(),TSARKIMEX))  TSARKIMEXSetType(m_ts,m_ts_subtype.c_str());
-
-  if (!strcmp(m_ts_type.c_str(),TSARKIMEX)) {
+  TSSetFromOptions(m_ts);
+  
+  TSType ts_type; TSGetType(m_ts,&ts_type);
+  if (!strcmp(ts_type,TSARKIMEX)) {
 
     TSSetRHSFunction(m_ts,PETSC_NULL,RHSFunctionIMEX,this);
     TSSetIFunction  (m_ts,PETSC_NULL,IFunctionIMEX  ,this);
@@ -406,19 +363,11 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     PC    pc;   KSPGetPC(ksp,&pc);
     PCSetType(pc,PCNONE);
 
-    if (m_snes_monitor) SNESMonitorSet(snes,SNESMonitor,NULL,NULL);
-    if (m_ksp_monitor)  KSPMonitorSet(ksp,KSPMonitor,NULL,NULL);
-
-    if (m_ts_arkimex_fully_implicit) TSARKIMEXSetFullyImplicit(m_ts,PETSC_TRUE);
-
   } else {
 
     TSSetRHSFunction(m_ts,PETSC_NULL,RHSFunction,this);
 
   }
-
-  if (m_ts_monitor) TSMonitorSet(m_ts,TSMonitor,NULL,NULL);
-  if (m_ts_adapt_monitor) TSAdaptSetMonitor(adapt,PETSC_TRUE);
 
   /* set pre- and post-step functions */
   TSSetPreStep(m_ts,PreTimeStep);
@@ -497,8 +446,9 @@ void PetscTimeIntegrator<System>::parseParametersSimulation( ParmParse& a_ppsim 
    a_ppsim.query( "max_time", m_max_time );
    CH_assert( m_max_time >= 0.0 );
 
+   //get time step size
    a_ppsim.query( "fixed_dt", m_dt );
-   CH_assert( m_dt>0.0 );
+   CH_assert( m_dt>=0.0 );
 
    // Set up checkpointing
    a_ppsim.query( "checkpoint_interval", m_checkpoint_interval );
@@ -507,27 +457,6 @@ void PetscTimeIntegrator<System>::parseParametersSimulation( ParmParse& a_ppsim 
    // Set up plot file writing
    a_ppsim.query( "plot_interval", m_plot_interval );
    a_ppsim.query( "plot_prefix", m_plot_prefix );
-}
-
-template <class System>
-void PetscTimeIntegrator<System>::parseParametersPetsc( ParmParse& a_pppet )
-{
-   a_pppet.query("ts_type", m_ts_type );
-   a_pppet.query("ts_subtype", m_ts_subtype );
-   a_pppet.query("ts_adapt_type", m_ts_adapt_type );
-   if (!strcmp(m_ts_type.c_str(),TSARKIMEX)) 
-     a_pppet.query("ts_arkimex_fully_implicit", m_ts_arkimex_fully_implicit);
-   a_pppet.query("ts_adapt_type", m_ts_adapt_type );
-   a_pppet.query("epsilon_epsilon", m_epsilon_jfnk );
-   a_pppet.query("ts_monitor", m_ts_monitor );
-   a_pppet.query("ts_adapt_monitor", m_ts_monitor );
-   a_pppet.query("snes_monitor", m_snes_monitor );
-   a_pppet.query("ksp_monitor", m_ksp_monitor );
-   a_pppet.query("ksp_atol", m_ksp_atol );
-   a_pppet.query("ksp_rtol", m_ksp_rtol );
-   a_pppet.query("snes_atol", m_snes_atol );
-   a_pppet.query("snes_rtol", m_snes_rtol );
-   a_pppet.query("snes_stol", m_snes_stol );
 }
 
 template <class System>
