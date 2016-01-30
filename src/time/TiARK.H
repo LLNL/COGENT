@@ -255,6 +255,7 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
   std::string solverOutPrefix = "TiARK";
   std::string solverOptPrefix = "ark";
   m_NewtonSolver.define(a_pp,m_R,solverOutPrefix,solverOptPrefix);
+  m_NewtonSolver.setIsLinear(m_isLinear);
 
   /* done */
   m_is_Defined = true;
