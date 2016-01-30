@@ -84,7 +84,8 @@ class PetscTimeIntegrator
     Real  m_shift,
           m_epsilon_jfnk;
 
-    bool  m_is_linear;
+    bool  m_is_linear,
+          m_is_Jac_allocated;
     
     Vec   m_Y;
     TS    m_ts;
@@ -186,7 +187,7 @@ static PetscErrorCode PreTimeStep(TS ts)
   TSGetTimeStep(ts,&dt);
   TSGetTimeStepNumber(ts,&cur_step);
 
-  if ((dt == 0.0) && (!procID()) {
+  if ((dt == 0.0) && (!procID())) {
     cout << "*******************************************************************************************\n";
     cout << "**WARNING (using PETSc time integration): dt = 0.0! Possibly because it has not been set!**\n";
     cout << "**Specify simulation.fixed_dt in input file or -ts_dt <dt> in .petscrc to specify dt.    **\n";
@@ -303,6 +304,7 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_local_size(0),
     m_is_linear("true"),
     m_epsilon_jfnk(1e-6),
+    m_is_Jac_allocated(false)
 {
   ParmParse ppsim( "simulation" );
   parseParametersSimulation( ppsim );
@@ -317,11 +319,6 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
   writeHistFile(true);
   m_is_linear = m_system->isLinear();
   
-  if (!procID()) {
-    cout << "Using PETSc time integrator: " << m_ts_type;
-    cout << " (" << m_ts_subtype << ")\n";
-  }
-
   /* create and initialize the PETSc solution vector */
   m_local_size = m_system->getVectorSize();
   VecCreate(MPI_COMM_WORLD,&m_Y);
@@ -345,6 +342,7 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
   TSAdaptSetType(adapt,TSADAPTNONE);
   TSSetSolution(m_ts,m_Y);
   TSSetApplicationContext(m_ts,this);
+  if (m_is_linear) TSSetProblemType(m_ts,TS_LINEAR);
   TSSetFromOptions(m_ts);
   
   TSType ts_type; TSGetType(m_ts,&ts_type);
@@ -356,11 +354,15 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     MatCreateShell(MPI_COMM_WORLD,m_local_size,m_local_size,PETSC_DETERMINE,PETSC_DETERMINE,this,&m_Jac);
     MatShellSetOperation(m_Jac,MATOP_MULT,(void (*)(void))JacobianFunctionIMEX);
     MatSetUp(m_Jac);
+    m_is_Jac_allocated = true;
+
     TSSetIJacobian(m_ts,m_Jac,m_Jac,IJacobianIMEX,this);
     
     SNES  snes; TSGetSNES(m_ts,&snes);
     KSP   ksp;  SNESGetKSP(snes,&ksp);
     PC    pc;   KSPGetPC(ksp,&pc);
+
+    if (m_is_linear) SNESSetType(snes,SNESKSPONLY);
     PCSetType(pc,PCNONE);
 
   } else {
@@ -488,8 +490,8 @@ void PetscTimeIntegrator<System>::finalize()
 template <class System>
 PetscTimeIntegrator<System>::~PetscTimeIntegrator()
 {
+  if (m_is_Jac_allocated) MatDestroy(&m_Jac);
   TSDestroy (&m_ts);
-  MatDestroy(&m_Jac);
   VecDestroy(&m_Y);
   VecDestroy(&m_Yref);
   VecDestroy(&m_Fref);

@@ -4,85 +4,29 @@ Using PETSc time integration with COGENT:
 1) Compilation: see INSTALL on how to compile COGENT with the PETSc
    time integration interface.
 
-2) To use PETSc time integrators, see below for a list of options
-   to be added to the input file (*.in)
+2) To use PETSc time integrators, add the following to the input file:
+  
+      use_petsc_ts = true
+
+   Set it to false to use native time integrators.
+   **By default, COGENT will use the native time integrators. The above
+   line must be included to use PETSc time integrators.
 
 3) The PETSc interface bypasses the "Simulation" object, and thus
    none of the input options starting with "simulation." is necessary
    to specify (if specified, will ignore), *except* the following:
 
    verbosity
-   max_step
-   max_time
-   fixed_dt
+   max_step     (**can also be specified through -ts_max_steps <n> in .petscrc)
+   max_time     (**can also be specified through -ts_final_time <t> in .petscrc)
+   fixed_dt     (**can also be specified through -ts_dt <dt> in .petscrc)
    checkpoint_interval
    checkpoint_prefix
    plot_interval
    plot_prefix
 
+4) PETSc-specific inputs are provided through a file called ".petscrc" placed
+   in the run directory. An example is provided in the directory "/inputs" 
+   (.petscrc_Example).
 
-PETSc options list:
-------------------
 
-Following are the options to use with PETSc time integration. They 
-are all *optional* in the sense that if they are not found in the 
-input file, the default value will be used.
-
-# Use PETSc time integrators? (Default is false)
-use_petsc = true
-DEFAULT = false
-
-# PETSc time integrator class (i.e. "rk" (explicit RK),
-# "arkimex" (Implicit-explicit ARK, etc). Refer to PETSc
-# documentation for all the methods available.
-petsc.ts_type         = "arkimex"
-DEFAULT = "rk"
-
-# Specific time integration method within the specified
-# class (e.g., if "rk", then specify "1fe" (forward Euler),
-# "2a" (2-stage, 2nd order), "3" (3-stage, 3rd order),
-# "4" (4-stage, 4th order), etc). Refer to PETSc documentation
-# for all the methods available.
-petsc.ts_subtype      = "4"
-DEFAULT = "4"
-
-# Use PETSc's time step adaptor? Choices are "none",
-# "basic", "cfl"
-petsc.ts_adapt_type   = "basic"
-DEFAULT = "none"
-
-# Print time integrator output to screen?
-petsc.ts_monitor      = true
-DEFAULT = false
-
-# Print time step adapter output to screen?
-petsc.ts_dapt_monitor = true
-DEFAULT = false
-
-# Print nonlinear solver output to screen?
-petsc.snes_monitor    = true
-DEFAULT = false
-
-# Print linear solver output to screen?
-petsc.ksp_monitor     = true
-DEFAULT = false
-
-# Absolute tolerance for nonlinear solver
-petsc.snes_atol       = 1e-8
-DEFAULT = 1e-6
-
-# Relative tolerance for nonlinear solver
-petsc.snes_rtol       = 1e-8
-DEFAULT = 1e-6
-
-# Step size tolerance for nonlinear solver
-petsc.snes_stol       = 1e-14
-DEFAULT = 1e-14
-
-# Absolute tolerance for linear solver
-petsc.ksp_atol        = 1e-8
-DEFAULT = 1e-6
-
-# Relative tolerance for linear solver
-petsc.ksp_rtol        = 1e-8
-DEFAULT = 1e-6

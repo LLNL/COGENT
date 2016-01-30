@@ -34,7 +34,7 @@ bool parseParams( ParmParse &a_pp)
 {
   /* default: don't use PETSc */
   bool flag = false;
-  a_pp.query("use_petsc",flag);
+  a_pp.query("use_petsc_ts",flag);
   return flag;
 }
 #endif
