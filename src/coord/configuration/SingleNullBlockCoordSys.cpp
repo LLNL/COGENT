@@ -1274,7 +1274,6 @@ SingleNullBlockCoordSys::init( ParmParse& a_pp )
    m_Zsep_hi = getZhi(psiVal) - m_Z0;
    m_pol_ref_psi = psiAtR0(m_pol_ref_z_lo + m_Z0);
    
-   
    //Create an interpolator for the cylindrical coordinates
    //Here, we just use this interpolation utility as an effective storage for cell vertices and cell ceneters values (computed analytically)
    //(otherwise we need to compute coordinates (by solving algebraic equations) each time step, and it takes time)
@@ -1312,10 +1311,8 @@ SingleNullBlockCoordSys::init( ParmParse& a_pp )
       m_RZ_interp = new SplineInterp(a_pp, interp_node_coords, RZ_data);
    }
 
-
 }
 
-#if 1
 RealVect
 SingleNullBlockCoordSys::realCoord( const RealVect& a_xi ) const
 {
@@ -1326,7 +1323,6 @@ SingleNullBlockCoordSys::realCoord( const RealVect& a_xi ) const
    
    return x;
 }
-#endif
 
 RealVect
 SingleNullBlockCoordSys::realCoordPointwise( const RealVect& a_xi ) const
@@ -1363,8 +1359,8 @@ SingleNullBlockCoordSys::realCoordPointwise( const RealVect& a_xi ) const
       if (length < 0) length = -length;
       if (length > m_pol_ref_length) length = m_pol_ref_length - (length - m_pol_ref_length);
       
-      if (length == 0) {
-         if (a_xi_tmp[RADIAL_DIR] <= upperMappedCoordinate(RADIAL_DIR)) {
+      if (length < epsilon) {
+         if (a_xi_tmp[RADIAL_DIR] <= upperMappedCoordinate(RADIAL_DIR) + epsilon) {
             x[0] = m_R0 + epsilon;
             x[1] = getZlo(psiVal);
          }
@@ -1374,12 +1370,12 @@ SingleNullBlockCoordSys::realCoordPointwise( const RealVect& a_xi ) const
          }
       }
       
-      else if (2 * length == m_pol_ref_length) {
+      else if ((2.0 * length > (m_pol_ref_length - epsilon)) && (2.0 * length < (m_pol_ref_length + epsilon))) {
          x[0] = m_R0 + acos(psiVal - m_b * sin(m_Zc) + m_c * m_Zc)/m_a;
          x[1] = m_Zc + m_Z0;
       }
       
-      else if (length == m_pol_ref_length) {
+      else if (length > m_pol_ref_length - epsilon) {
          x[0] = m_R0 + epsilon;
          x[1] = z_hi;
       }
@@ -1411,8 +1407,8 @@ SingleNullBlockCoordSys::realCoordPointwise( const RealVect& a_xi ) const
       if (length < 0) length = - length;
       if (length > m_pol_ref_length) length = m_pol_ref_length - (length - m_pol_ref_length);
       
-      if (length == 0) {
-         if (a_xi_tmp[RADIAL_DIR] >= lowerMappedCoordinate(RADIAL_DIR)) {
+      if (length < epsilon) {
+         if (a_xi_tmp[RADIAL_DIR] >= lowerMappedCoordinate(RADIAL_DIR) - epsilon) {
             x[1] = getZlo(psiVal);
             x[0] = getXlo(psiVal);
          }
@@ -1423,8 +1419,8 @@ SingleNullBlockCoordSys::realCoordPointwise( const RealVect& a_xi ) const
          
          if ( m_block_type == LCSOL ) x[0] = m_R0 - (x[0]-m_R0);
       }
-      
-      else if (2 * length == m_pol_ref_length) {
+
+      else if ((2.0 * length > (m_pol_ref_length - epsilon)) && (2.0 * length < (m_pol_ref_length + epsilon))) {
          
          x[0] = m_R0 + acos(psiVal - m_b * sin(m_Zc) + m_c * m_Zc)/m_a;
          x[1] = m_Zc + m_Z0;
@@ -1432,7 +1428,7 @@ SingleNullBlockCoordSys::realCoordPointwise( const RealVect& a_xi ) const
          if ( m_block_type == LCSOL ) x[0] = m_R0 - (x[0]-m_R0);
       }
       
-      else if (length == m_pol_ref_length) {
+      else if (length > m_pol_ref_length - epsilon) {
          x[0] = m_R0 + epsilon;
          x[1] = z_hi;
          
@@ -1472,8 +1468,8 @@ SingleNullBlockCoordSys::realCoordPointwise( const RealVect& a_xi ) const
       RealVect refPolPlaneInters = arcLengthInverse(length);
       double thetaVal = theta(refPolPlaneInters);
       
-      if (length == 0) {
-         if (a_xi_tmp[RADIAL_DIR] >= lowerMappedCoordinate(RADIAL_DIR)) {
+      if (length < epsilon) {
+         if (a_xi_tmp[RADIAL_DIR] >= lowerMappedCoordinate(RADIAL_DIR) - epsilon) {
             x[1] = getZlo(psiVal);
             x[0] = getXlo(psiVal);
          }
@@ -1487,6 +1483,13 @@ SingleNullBlockCoordSys::realCoordPointwise( const RealVect& a_xi ) const
          x[1] = (m_Z0 +m_Zx) - (x[1]-m_Z0-m_Zx);
       }
       
+      else if ((2.0 * length > (m_pol_ref_length - epsilon)) && (2.0 * length < (m_pol_ref_length + epsilon))) {
+	    x[0] = m_R0 + acos(psiVal - m_b * sin(m_Zc) + m_c * m_Zc)/m_a;
+	    x[1] = m_Zc + m_Z0;
+	    if ( m_block_type == LSOL ) x[0] = m_R0 - (x[0]-m_R0);
+	    x[1] = (m_Z0 +m_Zx) - (x[1]-m_Z0-m_Zx); 
+      }
+
       else {
          
          RealVect refPolPlaneInters = arcLengthInverse(length);
@@ -1521,19 +1524,18 @@ SingleNullBlockCoordSys::realCoordPointwise( const RealVect& a_xi ) const
       if (m_block_type == LPF) length = m_div_leg_length * (a_xi_tmp[POLOIDAL_DIR] - lowerMappedCoordinate(POLOIDAL_DIR)) / mapped_block_width[POLOIDAL_DIR];
       if (length < 0) length = - length;
       
-      if (length == 0) {
-         if (a_xi_tmp[RADIAL_DIR] <= upperMappedCoordinate(RADIAL_DIR)) {
+      if (length < epsilon) {
+         if (a_xi_tmp[RADIAL_DIR] <= upperMappedCoordinate(RADIAL_DIR) + epsilon) {
             x[0] = m_R0 + epsilon;
-            x[1] = getZlo(psiVal);
+            x[1] = getZlo(psiVal);	    
          }
          else {
             x[0] = 2.0*m_R0 - getXlo(psiVal);
             x[1] = getZlo(psiVal);
-         }
-         
+         }         
       }
-      
-      else if (2 * length == m_pol_ref_length) {
+
+      else if ((2.0 * length > (m_pol_ref_length - epsilon)) && (2.0 * length < (m_pol_ref_length + epsilon))) {
          x[0] = m_R0 + acos(psiVal - m_b * sin(m_Zc) + m_c * m_Zc)/m_a;
          x[1] = m_Zc + m_Z0;
       }
@@ -1945,7 +1947,7 @@ double SingleNullBlockCoordSys::psi(const RealVect& a_x) const
    //we flatten it out here, baising to a constant after the "first period boundary".
    //This is the extra cautionary measure for various Newton solvers.
    double psiTruncated = (psi < psiMin) ? psiMin : psi;
-   return psiTruncated;
+   return psi; //psiTruncated;
 }
 
 double SingleNullBlockCoordSys::theta(const RealVect& a_x) const

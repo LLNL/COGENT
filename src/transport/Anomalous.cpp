@@ -25,7 +25,8 @@ Anomalous::Anomalous( const string& a_species_name, ParmParse& a_pptpm, const in
       const_coeff(true),
       moment_op( MomentOp::instance() ),
       m_first_step(true),
-      verbosity(0)
+      m_field_aligned_grid(false),
+       verbosity(0)
 {
 
    verbosity = a_verbosity;
@@ -51,7 +52,7 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
     the following eq. for fB: dfB/dt = -div( -D*grad_r(fB) )
   */
       // parse the pptpm database for initial condition items for this species
-  if ( m_first_step ) {ParseParameters();}
+      if ( m_first_step ) {ParseParameters();}
 
       // print parameters at the first time step
       if ((verbosity) && (m_first_step)) {printParameters(soln);}
@@ -68,16 +69,15 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
 
       // get coordinate system parameters
       const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
-      const CFG::MultiBlockLevelGeom & mag_geom = phase_geom.magGeom();
+      const CFG::MagGeom& mag_geom = phase_geom.magGeom();
       const LevelData<FArrayBox>& inj_B = phase_geom.getBFieldMagnitude();
       const ProblemDomain& phase_domain = phase_geom.domain();
       const Box& domain_box = phase_domain.domainBox();
       int num_r_cells = domain_box.size(0);
 
-      // copy const soln_fB to a temporary 
-      // and put boundary values in ghost cells
-      const IntVect ghostVect(IntVect::Unit);
-      LevelData<FArrayBox> fB(dbl, 1, ghostVect); 
+      // copy const soln_fB (along wiht the boundary values) to a temporary
+      const IntVect ghostVect(4*IntVect::Unit);
+      LevelData<FArrayBox> fB(dbl, 1, ghostVect);
       DataIterator sdit = fB.dataIterator();
       for (sdit.begin(); sdit.ok(); ++sdit) {
         fB[sdit].copy(soln_fB[sdit]);
@@ -86,11 +86,12 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
       fB.exchange();
 
       // get density, mean parallel velocity, temperature, and fourth moment coefficient
-      CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, CFG::IntVect::Unit);
-      CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, CFG::IntVect::Unit);
-      CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_geom.grids(), 1, CFG::IntVect::Unit);
-      CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, CFG::IntVect::Unit);
-      CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, CFG::IntVect::Unit);
+      const CFG::IntVect cfg_ghostVect(4*CFG::IntVect::Unit);
+      CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
       moment_op.compute(dens_cfg, soln_species, fB, DensityKernel());
       moment_op.compute(Upar_cfg, soln_species, fB, ParallelMomKernel());
       moment_op.compute(four_cfg, soln_species, fB, FourthMomentKernel());
@@ -124,14 +125,22 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
 
       // get face centered metrics h_r, h_theta, and h_phi on each CFG_DIM face
       if (m_first_step) {
-        metrics_faces.define(dbl, 3, IntVect::Zero);
-        getFaceCenteredMetrics(metrics_faces, phase_geom, dbl);
-
+        m_metrics_faces.define(dbl, 3, ghostVect);
+        getFaceCenteredMetrics(m_metrics_faces, phase_geom, dbl);
       }
+   
+      //get NJinverse and B-field data for dealigned grid calculations
+      CFG::LevelData<CFG::FluxBox> pointwiseNJinv_cfg(mag_geom.grids(), CFG_DIM*CFG_DIM, cfg_ghostVect);
+      mag_geom.getPointwiseNJinverse(pointwiseNJinv_cfg);
+      LevelData<FluxBox> inj_pointwiseNJinv;
+      phase_geom.injectConfigurationToPhase(pointwiseNJinv_cfg, inj_pointwiseNJinv);
 
-
+      const CFG::LevelData<CFG::FluxBox>& bunit_cfg = mag_geom.getFCBFieldDir();
+      LevelData<FluxBox> inj_bunit;
+      phase_geom.injectConfigurationToPhase(bunit_cfg, inj_bunit);
+   
       //get shape function for nonuniform diffusion coefficients
-      CFG::LevelData<CFG::FArrayBox> shape_function( mag_geom.grids(), 1, CFG::IntVect::Unit );
+      CFG::LevelData<CFG::FArrayBox> shape_function( mag_geom.grids(), 1, cfg_ghostVect );
       if (const_coeff) {
         for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
           shape_function[cfg_dit].setVal(1.0);
@@ -146,9 +155,10 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
 
 
       // calculate face-averaged D*dfB/dr
-      LevelData<FluxBox> fluxA(dbl, 1, IntVect::Zero);
-      DataIterator dit = fluxA.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit)
+      LevelData<FluxBox> fluxNorm(dbl, 1, IntVect::Unit);
+      LevelData<FluxBox> flux(dbl, SpaceDim, IntVect::Unit);
+      const int field_aligned_grid = m_field_aligned_grid? 1: 0;
+      for (DataIterator dit( flux.dataIterator() ); dit.ok(); ++dit)
       {
         // get phase space dx on this patch
         const PhaseBlockCoordSys& block_coord_sys = phase_geom.getBlockCoordSys(dbl[dit]);
@@ -162,20 +172,27 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
         const FArrayBox& C_on_patch  = fourth_coef[dit];
         const FArrayBox& P_on_patch  = perp_coef[dit];
         const FArrayBox& shape_on_patch  = inj_shape[dit];
-
+         
         for (int dir=0; dir<SpaceDim; dir++)
         {
-          FArrayBox& thisfluxA = fluxA[dit][dir];
-          const FArrayBox& metrics_on_patch = metrics_faces[dit][dir];
+          FArrayBox& thisfluxNorm = fluxNorm[dit][dir];
+          FArrayBox& thisflux = flux[dit][dir];
+          const FArrayBox& metrics_on_patch = m_metrics_faces[dit][dir];
+          const FArrayBox& bunit_on_patch  = inj_bunit[dit][dir];
+          const FArrayBox& NJinv_on_patch = inj_pointwiseNJinv[dit][dir];
 
           FORT_EVAL_ANOM_FLUX(CHF_CONST_INT(dir),
-                          CHF_BOX(thisfluxA.box()),
+                          CHF_BOX(thisflux.box()),
                           CHF_CONST_REALVECT(phase_dx),
                           CHF_CONST_FRA(metrics_on_patch),
+                          CHF_CONST_FRA(NJinv_on_patch),
+                          CHF_CONST_FRA(bunit_on_patch),
+                          CHF_CONST_FRA(thisflux),
                           CHF_CONST_VR(D_kinet),
                           CHF_CONST_REAL(mass),
                           CHF_CONST_REAL(DN0),
                           CHF_CONST_INT(num_r_cells),
+                          CHF_CONST_INT(field_aligned_grid),
                           CHF_CONST_FRA1(fB_on_patch,0),
                           CHF_CONST_FRA1(B_on_patch,0),
                           CHF_CONST_FRA1(N_on_patch,0),
@@ -184,36 +201,52 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
                           CHF_CONST_FRA1(C_on_patch,0),
                           CHF_CONST_FRA1(P_on_patch,0),
                           CHF_CONST_FRA1(shape_on_patch,0),
-                          CHF_FRA1(thisfluxA,0));
+                          CHF_FRA1(thisfluxNorm,0));
         }
       }
 
       // calculate div(flux)
-      phase_geom.averageAtBlockBoundaries(fluxA);
       LevelData<FArrayBox> rhs_transport;
       rhs_transport.define(rhs_dfn);
-      phase_geom.mappedGridDivergenceFromFluxNormals(rhs_transport, fluxA);
-      DataIterator rdit = rhs_transport.dataIterator();
+      if (m_field_aligned_grid) {
+         phase_geom.averageAtBlockBoundaries(fluxNorm);
+         phase_geom.mappedGridDivergenceFromFluxNormals(rhs_transport, fluxNorm);
+      }
+      else {
+	 phase_geom.applyAxisymmetricCorrection(flux);
+         phase_geom.averageAtBlockBoundaries(flux);
+         const bool OMIT_NT(false);
+         phase_geom.mappedGridDivergence( rhs_transport, flux, OMIT_NT );
+         for (DataIterator dit( rhs_transport.dataIterator() ); dit.ok(); ++dit) {
+            const PhaseBlockCoordSys& block_coord_sys( phase_geom.getBlockCoordSys( dbl[dit] ) );
+            double fac( 1.0 / block_coord_sys.getMappedCellVolume() );
+            rhs_transport[dit].mult( fac );
+         }
 
+      }
+   
       // add (or overwrite) transport RHS to Vlasov RHS
+      DataIterator rdit = rhs_transport.dataIterator();
       for (rdit.begin(); rdit.ok(); ++rdit)
       {
-        if(model_only){
-        rhs_dfn[rdit].copy(rhs_transport[rdit]);}
-        else{
-        rhs_dfn[rdit].plus(rhs_transport[rdit]);}
+        if(model_only) {
+	  rhs_dfn[rdit].copy(rhs_transport[rdit]);
+	}
+	else  { 
+	  rhs_dfn[rdit].plus(rhs_transport[rdit]);
+	}
       }
 
-  m_first_step = false;  
+      m_first_step = false;
 }
 
-void Anomalous::getFaceCenteredMetrics( LevelData<FluxBox>&       metrics_faces,
+void Anomalous::getFaceCenteredMetrics( LevelData<FluxBox>&       a_metrics_faces,
                                         const PhaseGeom&          a_phase_geom,
                                         const DisjointBoxLayout&  a_dbl )
 {
    // FluxBox to be filled needs 3 components on each face (hr, htheta, and hphi)
-   CH_assert(metrics_faces.nComp() == 3);
-   DataIterator dit = metrics_faces.dataIterator();
+   CH_assert(a_metrics_faces.nComp() == 3);
+   DataIterator dit = a_metrics_faces.dataIterator();
    for (dit.begin(); dit.ok(); ++dit)
    {
 
@@ -223,12 +256,12 @@ void Anomalous::getFaceCenteredMetrics( LevelData<FluxBox>&       metrics_faces,
    Box phase_box(a_dbl[dit]);
    CFG::Box box_config;
    a_phase_geom.projectPhaseToConfiguration(phase_box, box_config);
-   box_config.grow(2);
+   box_config.grow(4);
    CFG::FluxBox N_cfg_face(box_config, CFG_DIM*CFG_DIM);  //4 components of N on each CFG_DIM face
    mag_block_coord_sys.getPointwiseN(N_cfg_face);
    FluxBox N_face;
    a_phase_geom.injectConfigurationToPhase(N_cfg_face, N_face);
-
+      
    // get face-centered 2*pi*Rmaj on this patch (note that 2piRmaj=h_toroidalangle)
    CFG::FluxBox TwoPiR_cfg_face(box_config, 1);
    for (int dir=0; dir<CFG_DIM; ++dir)
@@ -251,7 +284,7 @@ void Anomalous::getFaceCenteredMetrics( LevelData<FluxBox>&       metrics_faces,
 
    for (int dir=0; dir<CFG_DIM; dir++)
    {
-      FArrayBox& metrics_on_patch = metrics_faces[dit][dir];
+      FArrayBox& metrics_on_patch = a_metrics_faces[dit][dir];
 
       FORT_METRICS_FACES( CHF_BOX(metrics_on_patch.box()),
                          CHF_CONST_INT(dir),
@@ -312,6 +345,10 @@ void Anomalous::ParseParameters()
      pptpm.get("model_only",model_only);
    }
 
+   if (pptpm.contains("field_aligned_grid") ) {
+      pptpm.get("field_aligned_grid",m_field_aligned_grid);
+   }
+   
    if (pptpm.contains("const_coeff") ) {
      pptpm.get("const_coeff", const_coeff);
 

@@ -119,8 +119,7 @@ Real GKTransport::computeDt( const KineticSpeciesPtrVect& soln )
    const DisjointBoxLayout& grids = inj_B.getBoxes();
    LevelData<FArrayBox> hr(grids, 1, IntVect::Zero); // r metrics
    DataIterator bdit= inj_B.dataIterator();
-   LevelData<FArrayBox> dlnB_dr;
-   dlnB_dr.define(inj_B);
+   LevelData<FArrayBox> dlnB_dr(grids, 1, IntVect::Zero);
    Real dr;
    for (bdit.begin(); bdit.ok(); ++bdit)
    {
@@ -137,7 +136,7 @@ Real GKTransport::computeDt( const KineticSpeciesPtrVect& soln )
      const FArrayBox& b_on_patch = inj_B[bdit];
      FArrayBox& dlnB_dr_on_patch = dlnB_dr[bdit];
 
-     FORT_DLOGB_DR( CHF_BOX(b_on_patch.box()),
+     FORT_DLOGB_DR( CHF_BOX(dlnB_dr_on_patch.box()),
                     CHF_CONST_REAL(dr),
                     CHF_CONST_FRA1(b_on_patch,0),
                     CHF_FRA1(dlnB_dr_on_patch,0));
@@ -190,8 +189,6 @@ Real GKTransport::computeDt( const KineticSpeciesPtrVect& soln )
       }
     }
   }
-
-//cout << "dt_stable" << dt_stable << endl;
 
   // get minimum dt_stable
   Real min_dt = dt_stable[0];
