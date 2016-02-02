@@ -1,0 +1,38 @@
+#!/bin/sh
+
+debug="--enable-opt";
+
+mpi_include=`echo '-I/usr/local/include' | sed 's/-I//g'`
+
+install_dir=$PWD/lib/cori-cpp-gfortran-opt
+
+CC=cc
+MPICC=cc
+CXX=CC
+MPICXX=CC
+F77=ftn
+MPIF77=ftn
+CPP=cpp
+
+cd src
+CC=cc \
+MPICC=cc \
+CXX=CC \
+MPICXX=CC \
+F77=ftn \
+MPIF77=ftn \
+CPP=cpp \
+./configure $debug \
+            --with-CPP=cpp \
+            --with-CC=$CC \
+            --with-MPICC=$MPICC \
+            --with-CFLAGS="-O3  -ffast-math -funroll-loops " \
+            --with-CXX=$CXX \
+            --with-MPICXX=$MPICXX \
+            --with-CXXFLAGS="-O3  -ffast-math -funroll-loops " \
+            --with-F77=$F77 \
+            --with-MPIF77=$MPIF77 \
+            --with-F77FLAGS="-O3  -ffast-math -funroll-loops " \
+            --prefix=$install_dir
+cd ..
+
