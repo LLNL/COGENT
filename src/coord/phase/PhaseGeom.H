@@ -148,6 +148,10 @@ public:
 
    void fillTransverseGhosts( LevelData<FluxBox>& a_data, const bool do_block_exchange ) const;
 
+   void fillTransversePhysicalGhosts( LevelData<FArrayBox>& data ) const;
+
+   void fillTransversePhysicalGhosts( LevelData<FluxBox>& data ) const;
+
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
    void exchangeTransverseAtBlockBoundaries(LevelData<FluxBox>& a_data) const;

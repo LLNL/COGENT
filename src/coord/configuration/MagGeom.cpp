@@ -1291,12 +1291,11 @@ MagGeom::fillTransversePhysicalGhosts( LevelData<FluxBox>& a_data ) const
       const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
 
       for (int dir=0; dir<SpaceDim; ++dir) {
-         Box interior;
+         Box interior = surroundingNodes(grids[dit],dir);
+         interior.grow(dir,ghostVect[dir]);
+
          for (int tdir=0; tdir<SpaceDim; ++tdir) {
             if (tdir != dir) {  // Transverse directions only
-
-               interior = surroundingNodes(grids[dit],dir);
-               interior.grow(dir,ghostVect[dir]);
 
                // If the low or high boundaries in this transverse direction is
                // a block interface, then grow the interior box to trick the

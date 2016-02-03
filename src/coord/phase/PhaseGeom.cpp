@@ -1224,6 +1224,93 @@ PhaseGeom::fillTransverseGhosts( LevelData<FluxBox>& a_data,
 
 
 void
+PhaseGeom::fillTransversePhysicalGhosts( LevelData<FArrayBox>& a_data ) const
+{
+   CH_assert(a_data.ghostVect() >= IntVect::Unit);
+
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_phase_coords.boundaries();
+
+   for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+      const ProblemDomain& block_domain = block_coord_sys.domain();
+      const int block_number = m_phase_coords.whichBlock(grids[dit]);
+      const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
+
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         IntVect grow_vect = a_data.ghostVect();
+         grow_vect[dir] = 0;
+         Box interior = grow(grids[dit],grow_vect);
+
+         // If the low or high boundaries in this transverse direction is
+         // a block interface, then grow the interior box to trick the
+         // extrapolation utility into ignoring those sides
+         if ( this_block_boundaries[dir].isInterface() ) {
+            interior.growLo(dir,1);
+         }
+         if ( this_block_boundaries[dir + SpaceDim].isInterface() ) {
+            interior.growHi(dir,1);
+         }
+
+         secondOrderTransExtrapAtDomainBdry(a_data[dit],
+                                            dir,
+                                            interior,
+                                            block_domain);
+      }
+   }
+
+   a_data.exchange();
+
+}
+
+
+
+void
+PhaseGeom::fillTransversePhysicalGhosts( LevelData<FluxBox>& a_data ) const
+{
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_phase_coords.boundaries();
+
+   IntVect ghostVect = a_data.ghostVect();
+
+   for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+      const ProblemDomain& block_domain = block_coord_sys.domain();
+      const int block_number = m_phase_coords.whichBlock(grids[dit]);
+      const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
+
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         Box interior = surroundingNodes(grids[dit],dir);
+         interior.grow(dir,ghostVect[dir]);
+
+         for (int tdir=0; tdir<CFG_DIM; ++tdir) {
+            if (tdir != dir) {  // Transverse directions only
+
+               // If the low or high boundaries in this transverse direction is
+               // a block interface, then grow the interior box to trick the
+               // extrapolation utility into ignoring those sides
+               if ( this_block_boundaries[tdir].isInterface() ) {
+                  interior.growLo(tdir,1);
+               }
+               if ( this_block_boundaries[tdir + SpaceDim].isInterface() ) {
+                  interior.growHi(tdir,1);
+               }
+            }
+         }
+
+         secondOrderTransExtrapAtDomainBdry(a_data[dit][dir],
+                                            dir,
+                                            interior,
+                                            block_domain);
+      }
+   }
+
+   a_data.exchange();
+}
+
+
+
+void
 PhaseGeom::averageAtBlockBoundaries(LevelData<FluxBox>& a_data) const
 {
    if ( m_coordSysPtr->numBlocks() > 1 ) {

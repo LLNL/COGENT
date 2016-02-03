@@ -357,7 +357,8 @@ GKVlasov::computeFlux( const LevelData<FArrayBox>& a_dist_fn,
    }
    else {
 
-      CH_assert(a_flux.ghostVect() == IntVect::Unit);
+      a_phase_geom.fillTransversePhysicalGhosts(faceDist);
+
       const DisjointBoxLayout& grids = a_flux.disjointBoxLayout();
       LevelData<FluxBox> fourth_order_flux(grids, SpaceDim, IntVect::Zero);
       
@@ -366,16 +367,24 @@ GKVlasov::computeFlux( const LevelData<FArrayBox>& a_dist_fn,
 
       // Compute the second-order flux in valid plus ghost cell faces,
       // then overwrite with the fourth-order flux on the valid faces.
+      CH_assert(a_flux.ghostVect() == IntVect::Unit);
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          a_flux[dit].copy(a_velocity[dit]);
 
          Box box = grow(grids[dit],1);
          for (int dir=0; dir<SpaceDim; ++dir) {
-            a_flux[dit].mult(faceDist[dit],box,0,dir,1);
+            FArrayBox& this_flux_dir = a_flux[dit][dir];
+            FArrayBox& this_dist_dir = faceDist[dit][dir];
+            Box this_box_dir = surroundingNodes(box,dir);
+            for (int comp=0; comp<SpaceDim; ++comp) {
+               this_flux_dir.mult(this_dist_dir,this_box_dir,0,comp,1);
+            }
          }
          
          a_flux[dit].copy(fourth_order_flux[dit],grids[dit]);
       }
+
+      a_phase_geom.fillTransversePhysicalGhosts(a_flux);
    }
 
    a_flux.exchange();
