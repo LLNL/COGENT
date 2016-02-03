@@ -110,7 +110,11 @@ class NewtonSolver
 template <class T, class Ops>
 NewtonSolver<T,Ops>::~NewtonSolver()
 {
-  delete m_Function;
+  /*
+   * The calling module using this solver is responsible for
+   * deallocating the objects pointed to by m_Function and
+   * m_Jacobian (since it will also create these objects).
+   */
   return;
 }
 

@@ -137,6 +137,10 @@ GMRESSolver<T,Ops>::GMRESSolver()
 template <class T,class Ops>
 GMRESSolver<T,Ops>::~GMRESSolver()
 {
+  /*
+   * Note that the object m_op is not created by this
+   * object, so do not deallocate it!
+   */
   m_op = NULL;
   clearData();
 }

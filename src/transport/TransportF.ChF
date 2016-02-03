@@ -7,10 +7,14 @@ c    2ND ORDER RADIAL DIFFUSION AT CONSTANT MU
      &     CHF_BOX[gridbox],
      &     CHF_CONST_REALVECT[dx],
      &     CHF_CONST_FRA[metrics_face],
+     &     CHF_CONST_FRA[NJinv],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_CONST_FRA[flux],
      &     CHF_CONST_VR[D_kinet],
      &     CHF_CONST_REAL[mass],
      &     CHF_CONST_REAL[DN0],
      &     CHF_CONST_INT[Nr],
+     &     CHF_CONST_INT[field_aligned_grid],
      &     CHF_CONST_FRA1[fB],
      &     CHF_CONST_FRA1[B],
      &     CHF_CONST_FRA1[N],
@@ -19,14 +23,14 @@ c    2ND ORDER RADIAL DIFFUSION AT CONSTANT MU
      &     CHF_CONST_FRA1[C],
      &     CHF_CONST_FRA1[P],
      &     CHF_CONST_FRA1[Shape],
-     &     CHF_FRA1[flux]
+     &     CHF_FRA1[fluxNorm]
      &     )
 
 c     local variables
       integer CHF_DDECL[i;j;k;l], L2, L3
       double precision hr, htheta, hphi, vparr2, vperp2, v2, coef
-      double precision fB_face, B_face, T_face, N_face, U_face, C_face
-      double precision dfB_dr, dB_dr, dT_dr, dn_dr
+      double precision fB_face, B_face, T_face, N_face, U_face, C_face, bpol
+      double precision dfB_dr, dB_dr, dT_dr, dn_dr, dfB_dpsi, dfB_dtheta, fluxR, fluxZ, dot_product
       double precision DB, Upsi, Dpsi
 
       L2 = CHF_LBOUND[B;2]
@@ -60,30 +64,6 @@ c      Create fB, B, N, U, P, T and derivatives on r-faces
         dT_dr   = (T(i,j,L2,L3)-T(i-1,j,L2,L3))/dx(0)
 
 
-c       if (i==0) then
-c         N_face  = (three*N(i,j,L2,L3)-N(i+1,j,L2,L3))/two
-c         T_face  = (three*T(i,j,L2,L3)-T(i+1,j,L2,L3))/two
-c         U_face  = (three*U(i,j,L2,L3)-U(i+1,j,L2,L3))/two
-c         C_face  = (three*C(i,j,L2,L3)-C(i+1,j,L2,L3))/two
-c         dN_dr   = (-two*N(i,j,L2,L3)+three*N(i+1,j,L2,L3)-N(i+2,j,L2,L3))/dx(0)
-c         dT_dr   = (-two*T(i,j,L2,L3)+three*T(i+1,j,L2,L3)-T(i+2,j,L2,L3))/dx(0)
-c       else
-c       if (i==Nr) then
-c         N_face  = (three*N(i-1,j,L2,L3)-N(i-2,j,L2,L3))/two
-c         T_face  = (three*T(i-1,j,L2,L3)-T(i-2,j,L2,L3))/two
-c         U_face  = (three*U(i-1,j,L2,L3)-U(i-2,j,L2,L3))/two
-c         C_face  = (three*C(i-1,j,L2,L3)-C(i-2,j,L2,L3))/two
-c         dN_dr   = (two*N(i-1,j,L2,L3)-three*N(i-2,j,L2,L3)+N(i-3,j,L2,L3))/dx(0)
-c         dT_dr   = (two*T(i-1,j,L2,L3)-three*T(i-2,j,L2,L3)+T(i-3,j,L2,L3))/dx(0)
-c       else
-c         N_face  = (N(i,j,L2,L3)+N(i-1,j,L2,L3))/two
-c         T_face  = (T(i,j,L2,L3)+T(i-1,j,L2,L3))/two
-c         U_face  = (U(i,j,L2,L3)+U(i-1,j,L2,L3))/two
-c         C_face  = (C(i,j,L2,L3)+C(i-1,j,L2,L3))/two
-c         dN_dr   = (N(i,j,L2,L3)-N(i-1,j,L2,L3))/dx(0)
-c         dT_dr   = (T(i,j,L2,L3)-T(i-1,j,L2,L3))/dx(0)
-c       endif
-c       endif
 
 c      Create normalized primed velocity squared: 0.5*m*(v-U)^2/T
 c      coef should equal unity for maxwellian
@@ -97,18 +77,59 @@ c      coef should equal unity for maxwellian
        Upsi = Upsi + DB/coef*(v2-three/two)*dB_dr/B_face
        Dpsi = D_kinet(0) * (Shape(i,j,L2,L3) + Shape(i-1,j,L2,L3))/two
 
-c       if ( (dir==0) .and. (i==0) .and. (k==0) .and. (l==0) ) then
-c        print*,"j", j
-c        print*,"coef1 = ", coef1
-c       endif
 
+       if (field_aligned_grid.eq.1) then
 c        J/hr*B*Flux = J/hr*(-Upsi*fB_face + Dpsi*dfB_dr/hr) ( note that actually putting in -flux )
-
-       if (dir==0) then
-        flux(CHF_IX[i;j;k;l]) = htheta*hphi*(Dpsi*dfB_dr/hr-0.0*Upsi*fB_face)
-       else
-        flux(CHF_IX[i;j;k;l]) = zero
+         if (dir==0) then
+          fluxNorm(CHF_IX[i;j;k;l]) = htheta*hphi*(Dpsi*dfB_dr/hr-0.0*Upsi*fB_face)
+         else
+          fluxNorm(CHF_IX[i;j;k;l]) = zero
+         endif
        endif
+       
+       if (field_aligned_grid.eq.0) then
+
+c        Get mapped flux on faces  
+
+         if (dir.eq.0) then
+           dfB_dpsi = (fB(i,j,k,l)-fB(i-1,j,k,l))/dx(0)           
+           dfB_dtheta  = (fB(i,j+1,k,l)+fB(i-1,j+1,k,l) - fB(i,j-1,k,l) - fB(i-1,j-1,k,l))/four/dx(1)
+           Dpsi = D_kinet(0) * (Shape(i,j,L2,L3) + Shape(i-1,j,L2,L3))/two
+
+         else if (dir.eq.1) then
+           dfB_dpsi  = (fB(i+1,j,k,l)+fB(i+1,j-1,k,l) - fB(i-1,j,k,l) - fB(i-1,j-1,k,l))/four/dx(0)
+           dfB_dtheta = (fB(i,j,k,l)-fB(i,j-1,k,l))/dx(1)   
+           Dpsi = D_kinet(0) * (Shape(i,j,L2,L3) + Shape(i,j-1,L2,L3))/two        
+
+c        This is not nessesary (we do it anywasy for debugging purposes, e.g., when plotting flux)
+         else 
+           dfB_dpsi = (fB(i+1,j,k,l)-fB(i-1,j,k,l))/two/dx(0)
+           dfB_dtheta = (fB(i,j+1,k,l)-fB(i,j-1,k,l))/two/dx(1)
+           Dpsi = D_kinet(0) * Shape(i,j,L2,L3)
+         endif
+
+
+c        Get physical components of grad_fB (multiply by NJInverse)
+
+         fluxR = NJinv(i,j,L2,L3,0) * dfB_dpsi  + NJinv(i,j,L2,L3,1) * dfB_dtheta
+         fluxZ = NJinv(i,j,L2,L3,2) * dfB_dpsi  + NJinv(i,j,L2,L3,3) * dfB_dtheta
+
+c        Project grad_fB onto the radial direction
+          
+         bpol = sqrt(bunit(i,j,L2,L3,0)**2 + bunit(i,j,L2,L3,2)**2)
+         dot_product = fluxR * bunit(i,j,L2,L3,2)/bpol - fluxZ * bunit(i,j,L2,L3,0)/bpol   
+         fluxR = bunit(i,j,L2,L3,2)/bpol * dot_product  
+         fluxZ = -bunit(i,j,L2,L3,0)/bpol * dot_product
+
+c        Fill physical fluxes
+   
+         flux(CHF_IX[i;j;k;l],0) = Dpsi * fluxR
+         flux(CHF_IX[i;j;k;l],1) = Dpsi * fluxZ
+         flux(CHF_IX[i;j;k;l],2) = zero
+         flux(CHF_IX[i;j;k;l],3) = zero
+
+c         print*, Dpsi, fluxR, fluxZ
+       endif 
 
       CHF_ENDDO
 

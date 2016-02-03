@@ -1130,9 +1130,8 @@ FieldSolver::fillInternalGhosts( LevelData<FArrayBox>& a_phi ) const
    if (m_mblex_potential_Ptr && (!m_geometry.extrablockExchange())) {
      m_mblex_potential_Ptr->interpGhosts(a_phi);
    }
-   else if ((!m_geometry.extrablockExchange())) {
+   else if (m_geometry.extrablockExchange()) {
      m_geometry.exchangeExtraBlockGhosts(a_phi);
-     a_phi.exchange();
    }
 }
 

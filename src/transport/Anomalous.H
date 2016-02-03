@@ -62,13 +62,14 @@ private:
   bool const_coeff;
   MomentOp& moment_op;
   bool m_first_step;
+  bool m_field_aligned_grid;
 
 
   int verbosity;
   ParmParse pptpm;
   string species_name;
 
-  LevelData<FluxBox> metrics_faces;
+  LevelData<FluxBox> m_metrics_faces;
 
   /// Parse parameters.
   /**
@@ -89,7 +90,7 @@ private:
   /**
    * Private method to get metric components on cell faces.
    */
-  void getFaceCenteredMetrics(LevelData<FluxBox>&                 metrics_faces,
+  void getFaceCenteredMetrics(LevelData<FluxBox>&      a_metrics_faces,
                               const PhaseGeom&         a_phase_geom,
                               const DisjointBoxLayout& a_dbl);
 
