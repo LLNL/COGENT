@@ -360,6 +360,7 @@ class GKSystem
 
       std::string m_ti_class;
       std::string m_ti_method;
+      short int   m_ti_type;
 
       GKUnits*                  m_units;
       CFG::MagGeom*             m_mag_geom;

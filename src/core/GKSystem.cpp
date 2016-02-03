@@ -67,6 +67,7 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_useExternalTI)
      m_ghostVect(4*IntVect::Unit),
      m_ti_class("rk"),
      m_ti_method("4"),
+     m_ti_type(_TI_EXPLICIT_),
      m_gk_ops(NULL),
      m_initial_conditions(NULL),
      m_boundary_conditions(NULL),
@@ -118,12 +119,14 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_useExternalTI)
      m_gk_ops = new GKOps;
      m_gk_ops->define(m_state,BASE_DT);
      m_rhs.define(m_state);
+     m_ti_type = _TI_EXTERNAL_;
    } else {
       if (m_ti_class == "rk")        m_integrator = new TiRK   <GKState, GKRHSData, GKOps>;
       else if (m_ti_class == "ark")  m_integrator = new TiARK  <GKState, GKRHSData, GKOps>;
       else                           MayDay::Error("Unrecognized input for m_ti_class.");
       m_integrator->define(a_pp, m_ti_method, m_state, BASE_DT);
       m_gk_ops = &(m_integrator->getOperators());
+      m_ti_type = m_integrator->getType();
    }
    
    if ( m_using_electrons && m_gk_ops->usingBoltzmannElectrons() ) {
@@ -940,7 +943,9 @@ Real GKSystem::dtScale_Collisions(const int a_step_number)
 
 Real GKSystem::stableDt(const int a_step_number)
 {
-   return m_gk_ops->stableDt( m_state.data(), a_step_number );
+   if       (m_ti_type == _TI_EXPLICIT_) return m_gk_ops->stableDtExpl(m_state.data(),a_step_number);
+   else if  (m_ti_type == _TI_IMEX_)     return m_gk_ops->stableDtImEx(m_state.data(),a_step_number);
+   else                                  return DBL_MAX;
 }
 
 

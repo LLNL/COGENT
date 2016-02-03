@@ -119,6 +119,8 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      */ 
     void setCoefficients(int a_nstages, const Real* a_Ae, const Real* a_Ai, const Real* a_be, const Real* a_bi);
 
+    short int getType() { return _TI_IMEX_; }
+
   protected:
 
   private:

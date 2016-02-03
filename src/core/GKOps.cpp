@@ -229,8 +229,8 @@ Real GKOps::dtScale_Collisions( const KineticSpeciesPtrVect& a_soln,
   return m_TimeScale_Collisions;
 }
 
-Real GKOps::stableDt( const KineticSpeciesPtrVect& a_soln,
-                      const int a_step_number )
+Real GKOps::stableDtExpl( const KineticSpeciesPtrVect& a_soln,
+                          const int a_step_number )
 {
    CH_assert( isDefined() );
    LevelData<FluxBox> E_field;
@@ -239,6 +239,34 @@ Real GKOps::stableDt( const KineticSpeciesPtrVect& a_soln,
    m_dt_Vlasov      = m_vlasov->computeDt( E_field, a_soln );
    m_dt_Collisions  = m_collisions->computeDt( a_soln );
    Real dt_stable   = Min( m_dt_Vlasov, m_dt_Collisions );
+
+   /* compute and store the time scales */
+   m_TimeScale_Vlasov     = m_vlasov->computeTimeScale(E_field, a_soln);
+   m_TimeScale_Collisions = m_collisions->computeTimeScale( a_soln );
+
+   if (m_transport_model_on) {
+      Real dt_transport( m_transport->computeDt( a_soln ) );
+      dt_stable = Min( dt_stable, dt_transport );
+   }
+
+   if (m_neutrals_model_on) {
+      Real dt_neutrals( m_neutrals->computeDt( a_soln ) );
+      dt_stable = Min( dt_stable, dt_neutrals );
+   }
+ 
+   return dt_stable;
+}
+
+Real GKOps::stableDtImEx( const KineticSpeciesPtrVect& a_soln,
+                          const int a_step_number )
+{
+   CH_assert( isDefined() );
+   LevelData<FluxBox> E_field;
+   computeElectricField( E_field, a_soln, a_step_number );
+
+   m_dt_Vlasov      = m_vlasov->computeDt( E_field, a_soln );
+   m_dt_Collisions  = m_collisions->computeDt( a_soln );
+   Real dt_stable   = m_dt_Vlasov;
 
    /* compute and store the time scales */
    m_TimeScale_Vlasov     = m_vlasov->computeTimeScale(E_field, a_soln);
