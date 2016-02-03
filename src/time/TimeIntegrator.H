@@ -9,6 +9,10 @@
 
 #include "NamespaceHeader.H"
 
+#define _TI_EXTERNAL_ -1
+#define _TI_EXPLICIT_ 0
+#define _TI_IMEX_     1
+
 template <class Solution, class RHS, class Ops>
 class TimeIntegrator
 {
@@ -26,6 +30,8 @@ class TimeIntegrator
     virtual void getCurrentTime(Real *a_time) = 0;
 
     virtual ~TimeIntegrator<Solution,RHS,Ops>() {}
+
+    virtual short int getType() { return _TI_EXPLICIT_; }
 };
 
 #include "NamespaceFooter.H"

@@ -134,11 +134,17 @@ public:
     */
    Real dtScale_Collisions( const KineticSpeciesPtrVect& soln, const int step_number );
 
-   /// Compute a stable time step.
+   /// Compute a stable time step for explicit time integration
    /**
     * Computes and returns a stable time step estimate.
     */
-   Real stableDt( const KineticSpeciesPtrVect& soln, const int step_number );
+   Real stableDtExpl( const KineticSpeciesPtrVect& soln, const int step_number );
+
+   /// Compute a stable time step for IMEX time integration
+   /**
+    * Computes and returns a stable time step estimate.
+    */
+   Real stableDtImEx( const KineticSpeciesPtrVect& soln, const int step_number );
 
    /// Evaluates the RHS of the ODE.
    /**

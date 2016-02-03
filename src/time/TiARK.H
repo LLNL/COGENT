@@ -119,6 +119,8 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      */ 
     void setCoefficients(int a_nstages, const Real* a_Ae, const Real* a_Ai, const Real* a_be, const Real* a_bi);
 
+    short int getType() { return _TI_IMEX_; }
+
   protected:
 
   private:
@@ -255,6 +257,7 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
   std::string solverOutPrefix = "TiARK";
   std::string solverOptPrefix = "ark";
   m_NewtonSolver.define(a_pp,m_R,solverOutPrefix,solverOptPrefix);
+  m_NewtonSolver.setIsLinear(m_isLinear);
 
   /* done */
   m_is_Defined = true;

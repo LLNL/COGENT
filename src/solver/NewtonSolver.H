@@ -83,6 +83,8 @@ class NewtonSolver
      */
     LinearFunction<T,Ops>** getJacobian() { return &m_Jacobian; }
 
+    inline void setIsLinear(bool a_flag) { m_isLinear = a_flag; }
+
   protected:
 
   private:
@@ -94,7 +96,7 @@ class NewtonSolver
     Real      m_norm, m_norm0,
               m_rtol, m_atol, m_stol;
     T         m_dY, m_F;
-    bool      m_verbose;
+    bool      m_verbose, m_isLinear;
 
     std::string           m_convergedReason,
                           m_outPrefix,
@@ -150,6 +152,7 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
   CH_assert(m_Function);
 
   m_its = 0;
+  if (m_isLinear) m_maxits = 1;
   while(1) {
     m_Function->evalFunction(m_F,a_Y,a_b); /* F = F(Y) - b */
     m_its++;
