@@ -422,10 +422,6 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
    fillGhostCells( species_phys, m_E_field, a_time );
    applyVlasovOperator( a_rhs.data(), species_phys, m_E_field, a_time );
 
-   if (m_transport_model_on) {
-      applyTransportOperator( a_rhs.data(), species_phys, a_time );
-   }
-    
    if (m_neutrals_model_on) {
       applyNeutralsOperator( a_rhs.data(), species_comp, a_time );
    }
@@ -506,7 +502,14 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
    CH_assert( isDefined() );
 
    const KineticSpeciesPtrVect& species_comp( a_state.data() );
+   KineticSpeciesPtrVect species_phys;
+   createTemporarySpeciesVector( species_phys, species_comp );
+   fillGhostCells( species_phys, m_E_field, a_time );
+
    a_rhs.zero();
+   if (m_transport_model_on) {
+      applyTransportOperator( a_rhs.data(), species_phys, a_time );
+   }
    applyCollisionOperator( a_rhs.data(), species_comp, a_time );
 }
 
