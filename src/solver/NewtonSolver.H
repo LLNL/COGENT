@@ -152,14 +152,13 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
   CH_assert(m_Function);
 
   m_its = 0;
-  if (m_isLinear) m_maxits = 1;
+  if (m_isLinear) m_maxits = 0; /* Take only 1 Newton iteration */
   while(1) {
     m_Function->evalFunction(m_F,a_Y,a_b); /* F = F(Y) - b */
-    m_its++;
 
     /* compute norm of m_F */
     m_norm = m_F.computeNorm(2);
-    if (m_its == 1) m_norm0 = m_norm;
+    if (m_its == 0) m_norm0 = m_norm;
 
     if (m_verbose && (!procID())) {
       cout << "    --> (" << m_outPrefix << ") Newton iteration " << m_its << ", absolute residual norm " << m_norm;
@@ -200,6 +199,7 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
 
     /* Update solution Y = Y - dY */
     a_Y.increment(m_dY,-1);
+    m_its++;
   }
 }
 
