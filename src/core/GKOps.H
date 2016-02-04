@@ -122,17 +122,29 @@ public:
     */
    virtual ~GKOps();
 
-   /// Compute a stable time step for the Vlasov time scale.
+   /// Returns the Vlasov time scale.
    /**
-    * Computes and returns a stable time step estimate for the Vlasov time scale.
+    * Returns the Vlasov time scale.
     */
-   Real dtScale_Vlasov( const KineticSpeciesPtrVect& soln, const int step_number );
+   Real dtScale_Vlasov( const KineticSpeciesPtrVect& soln, const int step_number ) { return m_TimeScale_Vlasov; }
 
-   /// Compute a stable time step for the collisions time scale.
+   /// Returns the collisions time scale.
    /**
-    * Computes and returns a stable time step estimate for the collisions time scale.
+    * Returns the collisions time scale.
     */
-   Real dtScale_Collisions( const KineticSpeciesPtrVect& soln, const int step_number );
+   Real dtScale_Collisions( const KineticSpeciesPtrVect& soln, const int step_number ) { return m_TimeScale_Collisions; }
+
+   /// Returns the transport time scale.
+   /**
+    * Returns the transport time scale.
+    */
+   Real dtScale_Transport( const KineticSpeciesPtrVect& soln, const int step_number ) { return m_TimeScale_Transport; }
+
+   /// Returns the neutrals time scale.
+   /**
+    * Returns the neutrals time scale.
+    */
+   Real dtScale_Neutrals( const KineticSpeciesPtrVect& soln, const int step_number ) { return m_TimeScale_Neutrals; }
 
    /// Compute a stable time step for explicit time integration
    /**
@@ -182,6 +194,14 @@ public:
       m_hist_count(0),
       m_expand_incr(100),
       m_hist_fieldname("field"),
+      m_dt_Vlasov(-1),
+      m_dt_Collisions(-1),
+      m_dt_Transport(-1),
+      m_dt_Neutrals(-1),
+      m_TimeScale_Vlasov(-1),
+      m_TimeScale_Collisions(-1),
+      m_TimeScale_Transport(-1),
+      m_TimeScale_Neutrals(-1),
       m_verbosity(0) {;}   
    
    void define( const GKState& a_state, const Real a_dt );
@@ -557,8 +577,8 @@ private:
    std::string m_hist_fieldname; // type of field, e.g. "potential", now a temporary
 
    /* stable time step sizes and time scales */
-   Real m_dt_Vlasov, m_dt_Collisions;
-   Real m_TimeScale_Vlasov, m_TimeScale_Collisions;
+   Real m_dt_Vlasov, m_dt_Collisions, m_dt_Transport, m_dt_Neutrals;
+   Real m_TimeScale_Vlasov, m_TimeScale_Collisions, m_TimeScale_Transport, m_TimeScale_Neutrals;
 
    // stores data pertaining to a watchpoint history
    typedef struct {

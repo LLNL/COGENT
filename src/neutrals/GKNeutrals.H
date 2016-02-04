@@ -44,6 +44,12 @@ class GKNeutrals
        */
       Real computeDt( const KineticSpeciesPtrVect& soln );
 
+      /// Compute the time scale.
+      /**
+       * Computes and returns an estimate of the time scale.
+       */
+      Real computeTimeScale( const KineticSpeciesPtrVect& soln );
+
       /// returns the neutral model associated with the input name
       /**
        * @param[in] name String name of the species.

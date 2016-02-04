@@ -927,20 +927,6 @@ void GKSystem::copySolnData( KineticSpeciesPtrVect&       a_dstSoln,
 
 
 
-Real GKSystem::dtScale_Vlasov(const int a_step_number)
-{
-   return m_gk_ops->dtScale_Vlasov( m_state.data(), a_step_number );
-}
-
-
-
-Real GKSystem::dtScale_Collisions(const int a_step_number)
-{
-   return m_gk_ops->dtScale_Collisions( m_state.data(), a_step_number );
-}
-
-
-
 Real GKSystem::stableDt(const int a_step_number)
 {
    if       (m_ti_type == _TI_EXPLICIT_) return m_gk_ops->stableDtExpl(m_state.data(),a_step_number);
@@ -1474,18 +1460,16 @@ void GKSystem::printDiagnostics()
 void GKSystem::printTimeStep(int cur_step, Real dt)
 {
   if (procID() == 0) {
-    Real dt_Vlasov     = dtScale_Vlasov(cur_step);
+    Real dt_Vlasov     = dtScale_Vlasov    (cur_step);
     Real dt_Collisions = dtScale_Collisions(cur_step);
+    Real dt_Transport  = dtScale_Transport (cur_step);
+    Real dt_Neutrals   = dtScale_Neutrals  (cur_step);
     cout << "  ----\n";
     cout << "  dt: " << dt << std::endl;
-    cout << "    dt scales:  ";
-    cout << dt_Vlasov << " (Vlasov)  ";
-    cout << dt_Collisions << " (Collisions)  ";
-    cout << std::endl;
-    cout << "    CFL:  ";
-    cout << dt/dt_Vlasov << " (Vlasov)  ";
-    cout << dt/dt_Collisions << " (Collisions)";
-    cout << std::endl;
+    if (dt_Vlasov     >= 0) cout << "    Vlasov    : " << dt_Vlasov     << " (time scale), " << dt/dt_Vlasov << " (CFL)\n";
+    if (dt_Collisions >= 0) cout << "    Collisions: " << dt_Collisions << " (time scale), " << dt/dt_Collisions << " (CFL)\n";
+    if (dt_Transport  >= 0) cout << "    Transport : " << dt_Transport  << " (time scale), " << dt/dt_Transport  << " (CFL)\n";
+    if (dt_Neutrals   >= 0) cout << "    Neutrals  : " << dt_Neutrals   << " (time scale), " << dt/dt_Neutrals   << " (CFL)\n";
     cout << "  ----\n";
   }
 }

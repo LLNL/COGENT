@@ -39,12 +39,6 @@ class NullCLS
                                const KineticSpeciesPtrVect& soln,
                                const int                    species,
                                const Real                   time ) {;}
-  
-      /// Compute a stable time step.
-      /**
-       * Computes and returns an estimate of the maximum stable time step.
-       */
-      Real computeDt( const KineticSpeciesPtrVect& soln ) { return DBL_MAX; }
 };
 
 

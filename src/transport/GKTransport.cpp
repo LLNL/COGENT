@@ -105,6 +105,11 @@ void GKTransport::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
 
 Real GKTransport::computeDt( const KineticSpeciesPtrVect& soln )
 {
+  return computeTimeScale(soln);
+}
+
+Real GKTransport::computeTimeScale( const KineticSpeciesPtrVect& soln )
+{
    // get stuff to calculate stability parameters on time step
    const KineticSpecies& soln_species( *(soln[0]) );
    const LevelData<FArrayBox>& soln_dfn = soln_species.distributionFunction();
@@ -198,7 +203,7 @@ Real GKTransport::computeDt( const KineticSpeciesPtrVect& soln )
     }
   }
   //return min_dt;
-  return DBL_MAX;
+  return min_dt;
 
 }
 

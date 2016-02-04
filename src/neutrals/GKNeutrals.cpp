@@ -89,7 +89,12 @@ void GKNeutrals::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
 
 Real GKNeutrals::computeDt( const KineticSpeciesPtrVect& soln )
 {
-   return DBL_MAX;
+  return computeTimeScale(soln);
+}
+
+Real GKNeutrals::computeTimeScale( const KineticSpeciesPtrVect& soln )
+{
+   return -1;
 }
 
 

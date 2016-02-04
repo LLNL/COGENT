@@ -43,6 +43,12 @@ class GKTransport
        */
       Real computeDt( const KineticSpeciesPtrVect& soln );
 
+      /// Compute the time scale
+      /**
+       * Computes and returns an estimate of the time scale.
+       */
+      Real computeTimeScale( const KineticSpeciesPtrVect& soln );
+
    private:
 
       // prevent copying

@@ -217,18 +217,6 @@ GKOps::~GKOps()
    }
 }
 
-Real GKOps::dtScale_Vlasov( const KineticSpeciesPtrVect& a_soln,
-                             const int a_step_number )
-{
-   return m_TimeScale_Vlasov;
-}
-
-Real GKOps::dtScale_Collisions( const KineticSpeciesPtrVect& a_soln,
-                                 const int a_step_number )
-{
-  return m_TimeScale_Collisions;
-}
-
 Real GKOps::stableDtExpl( const KineticSpeciesPtrVect& a_soln,
                           const int a_step_number )
 {
@@ -245,13 +233,15 @@ Real GKOps::stableDtExpl( const KineticSpeciesPtrVect& a_soln,
    m_TimeScale_Collisions = m_collisions->computeTimeScale( a_soln );
 
    if (m_transport_model_on) {
-      Real dt_transport( m_transport->computeDt( a_soln ) );
-      dt_stable = Min( dt_stable, dt_transport );
+      m_dt_Transport = m_transport->computeDt( a_soln );
+      m_TimeScale_Transport = m_transport->computeTimeScale( a_soln );
+      dt_stable = Min( dt_stable, m_dt_Transport );
    }
 
    if (m_neutrals_model_on) {
-      Real dt_neutrals( m_neutrals->computeDt( a_soln ) );
-      dt_stable = Min( dt_stable, dt_neutrals );
+      m_dt_Neutrals = m_neutrals->computeDt( a_soln );
+      m_TimeScale_Neutrals = m_neutrals->computeTimeScale( a_soln );
+      dt_stable = Min( dt_stable, m_dt_Neutrals );
    }
  
    return dt_stable;
@@ -273,13 +263,14 @@ Real GKOps::stableDtImEx( const KineticSpeciesPtrVect& a_soln,
    m_TimeScale_Collisions = m_collisions->computeTimeScale( a_soln );
 
    if (m_transport_model_on) {
-      Real dt_transport( m_transport->computeDt( a_soln ) );
-      dt_stable = Min( dt_stable, dt_transport );
+      m_dt_Transport = m_transport->computeDt( a_soln );
+      m_TimeScale_Transport = m_transport->computeTimeScale( a_soln );
    }
 
    if (m_neutrals_model_on) {
-      Real dt_neutrals( m_neutrals->computeDt( a_soln ) );
-      dt_stable = Min( dt_stable, dt_neutrals );
+      m_dt_Neutrals = m_neutrals->computeDt( a_soln );
+      m_TimeScale_Neutrals = m_neutrals->computeTimeScale( a_soln );
+      dt_stable = Min( dt_stable, m_dt_Neutrals );
    }
  
    return dt_stable;

@@ -39,7 +39,8 @@ class CLSInterface
 
       virtual inline bool isLinear() { return false; }
       
-      virtual Real TimeScale(const KineticSpeciesPtrVect& soln) { return DBL_MAX; }
+      virtual Real computeDt(const KineticSpeciesPtrVect& soln) { return -1; }
+      virtual Real TimeScale(const KineticSpeciesPtrVect& soln) { return -1; }
 };
 
 #include "NamespaceFooter.H"

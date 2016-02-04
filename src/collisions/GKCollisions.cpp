@@ -128,24 +128,28 @@ void GKCollisions::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
 
 Real GKCollisions::computeDt( const KineticSpeciesPtrVect& soln )
 {
-   std::map<std::string,int>::iterator it;
-   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
-      if (it->first == "Krook") return ((Krook*)m_collision_model[it->second])->computeDt(soln);
-      else                      return DBL_MAX;
-   }
-
-   return 0.;
+  std::map<std::string,int>::iterator it;
+  Real dt = DBL_MAX;
+  int count = 0;
+  for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
+    Real tmp = m_collision_model[it->second]->computeDt(soln);
+    dt = (tmp < dt ? tmp : dt);
+    count++;
+  }
+  return (count ? dt : -1);
 }
 
 Real GKCollisions::computeTimeScale( const KineticSpeciesPtrVect& soln )
 {
-   std::map<std::string,int>::iterator it;
-   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
-      if (it->first == "Krook") return ((Krook*)m_collision_model[it->second])->TimeScale(soln);
-      else                      return DBL_MAX;
-   }
-
-   return 0.;
+  std::map<std::string,int>::iterator it;
+  Real scale = DBL_MAX;
+  int count = 0;
+  for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
+    Real tmp = m_collision_model[it->second]->TimeScale(soln);
+    scale = (tmp < scale ? tmp : scale);
+    count++;
+  }
+  return (count ? scale : -1);
 }
 
 bool GKCollisions::isLinear()

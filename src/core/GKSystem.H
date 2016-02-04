@@ -203,13 +203,29 @@ class GKSystem
       /**
        * Computes and returns a stable time step estimate for the Vlasov time scale.
        */
-      Real dtScale_Vlasov(const int step_number);
+      inline Real dtScale_Vlasov(const int a_step_number) 
+        { return m_gk_ops->dtScale_Vlasov( m_state.data(), a_step_number ); }
 
       /// Compute a stable time step for the collisions time scale.
       /**
        * Computes and returns a stable time step estimate for the collisions time scale.
        */
-      Real dtScale_Collisions(const int step_number);
+      inline Real dtScale_Collisions(const int a_step_number) 
+        { return m_gk_ops->dtScale_Collisions( m_state.data(), a_step_number ); }
+
+      /// Compute a stable time step for the transport time scale.
+      /**
+       * Computes and returns a stable time step estimate for the transport time scale.
+       */
+      inline Real dtScale_Transport (const int a_step_number) 
+        { return m_gk_ops->dtScale_Transport( m_state.data(), a_step_number ); }
+
+      /// Compute a stable time step for the neutrals time scale.
+      /**
+       * Computes and returns a stable time step estimate for the neutrals time scale.
+       */
+      inline Real dtScale_Neutrals  (const int a_step_number) 
+        { return m_gk_ops->dtScale_Neutrals( m_state.data(), a_step_number ); }
 
       /// Compute a stable time step.
       /**
