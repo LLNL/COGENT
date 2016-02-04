@@ -224,9 +224,11 @@ Real GKOps::stableDtExpl( const KineticSpeciesPtrVect& a_soln,
    LevelData<FluxBox> E_field;
    computeElectricField( E_field, a_soln, a_step_number );
 
+   Real dt_stable = DBL_MAX;
    m_dt_Vlasov      = m_vlasov->computeDt( E_field, a_soln );
+   dt_stable        = Min(dt_stable, m_dt_Vlasov);
    m_dt_Collisions  = m_collisions->computeDt( a_soln );
-   Real dt_stable   = Min( m_dt_Vlasov, m_dt_Collisions );
+   dt_stable        = Min( dt_stable, m_dt_Collisions );
 
    /* compute and store the time scales */
    m_TimeScale_Vlasov     = m_vlasov->computeTimeScale(E_field, a_soln);
@@ -254,9 +256,10 @@ Real GKOps::stableDtImEx( const KineticSpeciesPtrVect& a_soln,
    LevelData<FluxBox> E_field;
    computeElectricField( E_field, a_soln, a_step_number );
 
+   Real dt_stable = DBL_MAX;
    m_dt_Vlasov      = m_vlasov->computeDt( E_field, a_soln );
+   dt_stable        = Min(dt_stable, m_dt_Vlasov);
    m_dt_Collisions  = m_collisions->computeDt( a_soln );
-   Real dt_stable   = m_dt_Vlasov;
 
    /* compute and store the time scales */
    m_TimeScale_Vlasov     = m_vlasov->computeTimeScale(E_field, a_soln);
