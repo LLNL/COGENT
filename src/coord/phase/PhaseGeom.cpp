@@ -2067,10 +2067,6 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>&   a_s
                                        const CFG::LevelData<CFG::FArrayBox>& a_src_cell,
                                        LevelData<FluxBox>&                   a_dst ) const
 {
-   if (a_dst.isDefined()) {
-      MayDay::Error("PhaseBlockCoordSys: a_dst LevelData passed to injectConfigurationToPhase is already defined");
-   }
-
    const Box& domainBox = m_domain.domainBox();
    const CP1::SliceSpec slice_vp(VPARALLEL_DIR,domainBox.smallEnd(VPARALLEL_DIR));
    const SliceSpec slice_mu(MU_DIR,domainBox.smallEnd(MU_DIR));

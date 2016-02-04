@@ -504,6 +504,7 @@ private:
    CFG::LevelData<CFG::FluxBox>   m_E_field_face;
    CFG::LevelData<CFG::FArrayBox> m_E_field_cell;
    CFG::LevelData<CFG::FArrayBox> m_phi;
+   LevelData<FluxBox> m_E_field;
 
    CFG::BoltzmannElectron*             m_boltzmann_electron;
    double m_lo_radial_flux_divergence_average;

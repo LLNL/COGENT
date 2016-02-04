@@ -404,7 +404,6 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
 
    const KineticSpeciesPtrVect& species_comp( a_state.data() );
    
-   LevelData<FluxBox> E_field;
    if (m_consistent_potential_bcs) {
       if (a_stage == 0) {
          m_stage0_time = a_time;
@@ -412,16 +411,16 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
 
       // We're not fourth-order accurate with this option anyway,
       // so only compute the field at the beginning of the step.
-      computeElectricField( E_field, species_comp, -1, -1 );
+      computeElectricField( m_E_field, species_comp, -1, -1 );
    }
    else {
-      computeElectricField( E_field, species_comp, -1, a_stage );
+      computeElectricField( m_E_field, species_comp, -1, a_stage );
    }
 
    KineticSpeciesPtrVect species_phys;
    createTemporarySpeciesVector( species_phys, species_comp );
-   fillGhostCells( species_phys, E_field, a_time );
-   applyVlasovOperator( a_rhs.data(), species_phys, E_field, a_time );
+   fillGhostCells( species_phys, m_E_field, a_time );
+   applyVlasovOperator( a_rhs.data(), species_phys, m_E_field, a_time );
 
    if (m_transport_model_on) {
       applyTransportOperator( a_rhs.data(), species_phys, a_time );
