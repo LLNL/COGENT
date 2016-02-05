@@ -497,17 +497,19 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
 
    const KineticSpeciesPtrVect& species_comp( a_state.data() );
 
-   if (m_consistent_potential_bcs) {
-      if (a_stage == 0) {
-         m_stage0_time = a_time;
-      }
+   if (!m_E_field.isDefined()) {
+      if (m_consistent_potential_bcs) {
+         if (a_stage == 0) {
+            m_stage0_time = a_time;
+         }
 
-      // We're not fourth-order accurate with this option anyway,
-      // so only compute the field at the beginning of the step.
-      computeElectricField( m_E_field, species_comp, -1, -1 );
-   }
-   else {
-      computeElectricField( m_E_field, species_comp, -1, a_stage );
+         // We're not fourth-order accurate with this option anyway,
+         // so only compute the field at the beginning of the step.
+         computeElectricField( m_E_field, species_comp, -1, -1 );
+     }
+     else {
+        computeElectricField( m_E_field, species_comp, -1, a_stage );
+     }
    }
 
    KineticSpeciesPtrVect species_phys;
