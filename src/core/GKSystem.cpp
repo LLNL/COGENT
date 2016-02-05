@@ -931,6 +931,7 @@ Real GKSystem::stableDt(const int a_step_number)
 {
    if       (m_ti_type == _TI_EXPLICIT_) return m_gk_ops->stableDtExpl(m_state.data(),a_step_number);
    else if  (m_ti_type == _TI_IMEX_)     return m_gk_ops->stableDtImEx(m_state.data(),a_step_number);
+   else if  (m_ti_type == _TI_EXTERNAL_) return m_gk_ops->stableDtExpl(m_state.data(),a_step_number);
    else                                  return DBL_MAX;
 }
 

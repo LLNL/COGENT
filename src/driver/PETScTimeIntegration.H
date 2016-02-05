@@ -179,6 +179,7 @@ static PetscErrorCode PreTimeStep(TS ts)
 {
   PetscTimeIntegrator<GKSystem> *context;
   TSGetApplicationContext(ts,&context);
+  GKSystem *system = context->getSystem();
 
   int cur_step;
   Real cur_time, dt;
@@ -197,6 +198,7 @@ static PetscErrorCode PreTimeStep(TS ts)
   if (context->getVerbosity() >= 1) {
     if (procID()==0) cout << endl << "Step " << cur_step+1 << endl;
   }
+  dt = system->stableDt(cur_step);
   return(0);
 }
 
