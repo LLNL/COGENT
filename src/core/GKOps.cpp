@@ -496,6 +496,20 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
    CH_assert( isDefined() );
 
    const KineticSpeciesPtrVect& species_comp( a_state.data() );
+
+   if (m_consistent_potential_bcs) {
+      if (a_stage == 0) {
+         m_stage0_time = a_time;
+      }
+
+      // We're not fourth-order accurate with this option anyway,
+      // so only compute the field at the beginning of the step.
+      computeElectricField( m_E_field, species_comp, -1, -1 );
+   }
+   else {
+      computeElectricField( m_E_field, species_comp, -1, a_stage );
+   }
+
    KineticSpeciesPtrVect species_phys;
    createTemporarySpeciesVector( species_phys, species_comp );
    fillGhostCells( species_phys, m_E_field, a_time );
