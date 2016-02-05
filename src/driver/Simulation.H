@@ -179,12 +179,6 @@ class Simulation
        */
       void writeCheckpointFile();
 
-      /// Select time step.
-      /**
-       * Private method to set time step based on multiple controls.
-       */
-      void selectTimeStep();
-
       /// Set fixed time step
       /**
        * Private method to set the fixed time step
@@ -193,11 +187,17 @@ class Simulation
        */
       void setFixedTimeStep(const Real& a_dt_stable);
 
+      /// Pre time step operations.
+      /**
+       * Private method called before a time step is started.
+       */
+      inline void preTimeStep();
+
       /// Post time step operations.
       /**
        * Private method called after time step has been completed.
        */
-      void postTimeStep();
+      inline void postTimeStep();
 
       int m_verbosity;
 

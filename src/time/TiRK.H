@@ -79,7 +79,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_n the specified time step
      */
-    void setTimeStep(int a_dt) { m_cur_step = a_dt; }
+    void setTimeStep(int a_n) { m_cur_step = a_n; }
 
     /// Get the time step
     /**
@@ -260,12 +260,15 @@ void TiRK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
   for (i = 0; i < m_nstages; i++) {
     m_YStage.copy(a_Y);
     for (j=0; j<i; j++) m_YStage.increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
-    m_Operators.explicitOp(m_rhsStage[i],(m_time+m_c[i]*m_dt),m_YStage,i);
+    Real stage_time = m_time+m_c[i]*m_dt;
+    m_Operators.postTimeStage(m_cur_step,stage_time,i,m_YStage);
+    m_Operators.explicitOp(m_rhsStage[i],stage_time,m_YStage,i);
   }
   /* Step completion */
   for (i = 0; i < m_nstages; i++) a_Y.increment(m_rhsStage[i],(m_dt*m_b[i]));
 
-  /* update current time */
+  /* update current time and step number */
+  m_cur_step++;
   m_time += m_dt; 
 }
 

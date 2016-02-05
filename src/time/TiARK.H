@@ -346,8 +346,10 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
       m_YStage.copy(m_Z);
     }
 
-    m_Operators.explicitOpImEx(m_rhsStage_exp[i],(m_time+m_ce[i]*m_dt),m_YStage,i);
-    m_Operators.implicitOpImEx(m_rhsStage_imp[i],(m_time+m_ci[i]*m_dt),m_YStage,i);
+    Real stage_time = m_time+m_ce[i]*m_dt;
+    m_Operators.postTimeStage(m_cur_step,stage_time,i,m_YStage);
+    m_Operators.explicitOpImEx(m_rhsStage_exp[i],stage_time,m_YStage,i);
+    m_Operators.implicitOpImEx(m_rhsStage_imp[i],stage_time,m_YStage,i);
   }
   /* Step completion */
   for (i = 0; i < m_nstages; i++) {
@@ -355,7 +357,8 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
     a_Y.increment(m_rhsStage_imp[i],(m_dt*m_bi[i]));
   }
 
-  /* update current time */
+  /* update current time and step number */
+  m_cur_step++;
   m_time += m_dt; 
 }
 

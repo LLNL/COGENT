@@ -199,34 +199,6 @@ class GKSystem
       virtual void copySolnData( KineticSpeciesPtrVect&       dstSoln,
                                  const KineticSpeciesPtrVect& srcSoln );
 
-      /// Compute a stable time step for the Vlasov time scale.
-      /**
-       * Computes and returns a stable time step estimate for the Vlasov time scale.
-       */
-      inline Real dtScale_Vlasov(const int a_step_number) 
-        { return m_gk_ops->dtScale_Vlasov( m_state.data(), a_step_number ); }
-
-      /// Compute a stable time step for the collisions time scale.
-      /**
-       * Computes and returns a stable time step estimate for the collisions time scale.
-       */
-      inline Real dtScale_Collisions(const int a_step_number) 
-        { return m_gk_ops->dtScale_Collisions( m_state.data(), a_step_number ); }
-
-      /// Compute a stable time step for the transport time scale.
-      /**
-       * Computes and returns a stable time step estimate for the transport time scale.
-       */
-      inline Real dtScale_Transport (const int a_step_number) 
-        { return m_gk_ops->dtScale_Transport( m_state.data(), a_step_number ); }
-
-      /// Compute a stable time step for the neutrals time scale.
-      /**
-       * Computes and returns a stable time step estimate for the neutrals time scale.
-       */
-      inline Real dtScale_Neutrals  (const int a_step_number) 
-        { return m_gk_ops->dtScale_Neutrals( m_state.data(), a_step_number ); }
-
       /// Compute a stable time step.
       /**
        * Computes and returns a stable time step estimate.
@@ -238,7 +210,7 @@ class GKSystem
        * Advance the solution by a single time step.  Returns the current
        * simulation time.
        */
-      Real advance( const Real cur_time, const Real dt, const int step_number );
+      void advance( Real* cur_time, Real* dt, int* step_number );
 
       /// Callback to allow for additional operations after stage advance.
       /**
@@ -304,7 +276,8 @@ class GKSystem
 
       void printDiagnostics();
 
-      void printTimeStep(int,Real);
+      void preTimeStep(int,Real);
+      void postTimeStep(int,Real,Real);
 
       int  getVectorSize() { return m_state.getVectorSize();}
 

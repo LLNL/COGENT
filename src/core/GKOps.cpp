@@ -221,30 +221,12 @@ Real GKOps::stableDtExpl( const KineticSpeciesPtrVect& a_soln,
                           const int a_step_number )
 {
    CH_assert( isDefined() );
-   LevelData<FluxBox> E_field;
-   computeElectricField( E_field, a_soln, a_step_number );
 
    Real dt_stable = DBL_MAX;
-   m_dt_Vlasov      = m_vlasov->computeDt( E_field, a_soln );
-   dt_stable        = Min(dt_stable, m_dt_Vlasov);
-   m_dt_Collisions  = m_collisions->computeDt( a_soln );
-   dt_stable        = Min( dt_stable, m_dt_Collisions );
-
-   /* compute and store the time scales */
-   m_TimeScale_Vlasov     = m_vlasov->computeTimeScale(E_field, a_soln);
-   m_TimeScale_Collisions = m_collisions->computeTimeScale( a_soln );
-
-   if (m_transport_model_on) {
-      m_dt_Transport = m_transport->computeDt( a_soln );
-      m_TimeScale_Transport = m_transport->computeTimeScale( a_soln );
-      dt_stable = Min( dt_stable, m_dt_Transport );
-   }
-
-   if (m_neutrals_model_on) {
-      m_dt_Neutrals = m_neutrals->computeDt( a_soln );
-      m_TimeScale_Neutrals = m_neutrals->computeTimeScale( a_soln );
-      dt_stable = Min( dt_stable, m_dt_Neutrals );
-   }
+   dt_stable = Min(dt_stable, m_dt_Vlasov);
+   dt_stable = Min( dt_stable, m_dt_Collisions );
+   if (m_transport_model_on) dt_stable = Min( dt_stable, m_dt_Transport );
+   if (m_neutrals_model_on) dt_stable = Min( dt_stable, m_dt_Neutrals );
  
    return dt_stable;
 }
@@ -253,32 +235,57 @@ Real GKOps::stableDtImEx( const KineticSpeciesPtrVect& a_soln,
                           const int a_step_number )
 {
    CH_assert( isDefined() );
-   LevelData<FluxBox> E_field;
-   computeElectricField( E_field, a_soln, a_step_number );
 
    Real dt_stable = DBL_MAX;
-   m_dt_Vlasov      = m_vlasov->computeDt( E_field, a_soln );
-   dt_stable        = Min(dt_stable, m_dt_Vlasov);
-   m_dt_Collisions  = m_collisions->computeDt( a_soln );
-
-   /* compute and store the time scales */
-   m_TimeScale_Vlasov     = m_vlasov->computeTimeScale(E_field, a_soln);
-   m_TimeScale_Collisions = m_collisions->computeTimeScale( a_soln );
-
-   if (m_transport_model_on) {
-      m_dt_Transport = m_transport->computeDt( a_soln );
-      m_TimeScale_Transport = m_transport->computeTimeScale( a_soln );
-   }
-
-   if (m_neutrals_model_on) {
-      m_dt_Neutrals = m_neutrals->computeDt( a_soln );
-      m_TimeScale_Neutrals = m_neutrals->computeTimeScale( a_soln );
-      dt_stable = Min( dt_stable, m_dt_Neutrals );
-   }
+   dt_stable = Min(dt_stable, m_dt_Vlasov);
+   if (m_neutrals_model_on) dt_stable = Min( dt_stable, m_dt_Neutrals );
  
    return dt_stable;
 }
 
+void GKOps::preTimeStep (const int a_step, const Real a_time, const GKState& a_state)
+{
+  computeEField(a_time,a_state,0);
+  const KineticSpeciesPtrVect& soln(a_state.data());
+
+  m_dt_Vlasov            = m_vlasov->computeDt( m_E_field, soln );
+  m_dt_Collisions        = m_collisions->computeDt( soln );
+  m_TimeScale_Vlasov     = m_vlasov->computeTimeScale(m_E_field, soln);
+  m_TimeScale_Collisions = m_collisions->computeTimeScale( soln );
+  if (m_transport_model_on) {
+    m_dt_Transport = m_transport->computeDt( soln );
+    m_TimeScale_Transport = m_transport->computeTimeScale( soln );
+  }
+  if (m_neutrals_model_on) {
+    m_dt_Neutrals = m_neutrals->computeDt( soln );
+    m_TimeScale_Neutrals = m_neutrals->computeTimeScale( soln );
+  }
+}
+
+void GKOps::postTimeStep (const int a_step, const Real a_time, const GKState& a_state)
+{
+  /* nothing to do here for now */
+}
+
+void GKOps::postTimeStage(const int a_step, const Real a_time, const int a_stage, const GKState& a_state)
+{
+  computeEField(a_time,a_state,a_stage);
+}
+
+void GKOps::computeEField( const Real a_time, const GKState& a_state,const int a_stage)
+{
+   const KineticSpeciesPtrVect& species_comp( a_state.data() );
+   if (m_consistent_potential_bcs) {
+      if (a_stage == 0) m_stage0_time = a_time;
+      // We're not fourth-order accurate with this option anyway,
+      // so only compute the field at the beginning of the step.
+      computeElectricField( m_E_field, species_comp, -1, -1 );
+   }
+   else {
+      computeElectricField( m_E_field, species_comp, -1, a_stage );
+   }
+   return;
+}
 
 void GKOps::explicitOp( GKRHSData& a_rhs,
                         const Real a_time,
@@ -286,29 +293,13 @@ void GKOps::explicitOp( GKRHSData& a_rhs,
                         const int a_stage )
 {
    CH_assert( isDefined() );
-
    a_rhs.zero();
-
    const KineticSpeciesPtrVect& species_comp( a_state.data() );
    
-   LevelData<FluxBox> E_field;
-   if (m_consistent_potential_bcs) {
-      if (a_stage == 0) {
-         m_stage0_time = a_time;
-      }
-
-      // We're not fourth-order accurate with this option anyway,
-      // so only compute the field at the beginning of the step.
-      computeElectricField( E_field, species_comp, -1, -1 );
-   }
-   else {
-      computeElectricField( E_field, species_comp, -1, a_stage );
-   }
-
    KineticSpeciesPtrVect species_phys;
    createTemporarySpeciesVector( species_phys, species_comp );
-   fillGhostCells( species_phys, E_field, a_time );
-   applyVlasovOperator( a_rhs.data(), species_phys, E_field, a_time );
+   fillGhostCells( species_phys, m_E_field, a_time );
+   applyVlasovOperator( a_rhs.data(), species_phys, m_E_field, a_time );
 
    if (m_transport_model_on) {
       applyTransportOperator( a_rhs.data(), species_phys, a_time );
@@ -393,24 +384,9 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
                             const int a_stage )
 {
    CH_assert( isDefined() );
-
    a_rhs.zero();
-
    const KineticSpeciesPtrVect& species_comp( a_state.data() );
    
-   if (m_consistent_potential_bcs) {
-      if (a_stage == 0) {
-         m_stage0_time = a_time;
-      }
-
-      // We're not fourth-order accurate with this option anyway,
-      // so only compute the field at the beginning of the step.
-      computeElectricField( m_E_field, species_comp, -1, -1 );
-   }
-   else {
-      computeElectricField( m_E_field, species_comp, -1, a_stage );
-   }
-
    KineticSpeciesPtrVect species_phys;
    createTemporarySpeciesVector( species_phys, species_comp );
    fillGhostCells( species_phys, m_E_field, a_time );
@@ -494,29 +470,13 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
                             const int a_stage )
 {
    CH_assert( isDefined() );
-
+   a_rhs.zero();
    const KineticSpeciesPtrVect& species_comp( a_state.data() );
-
-   if (!m_E_field.isDefined()) {
-      if (m_consistent_potential_bcs) {
-         if (a_stage == 0) {
-            m_stage0_time = a_time;
-         }
-
-         // We're not fourth-order accurate with this option anyway,
-         // so only compute the field at the beginning of the step.
-         computeElectricField( m_E_field, species_comp, -1, -1 );
-     }
-     else {
-        computeElectricField( m_E_field, species_comp, -1, a_stage );
-     }
-   }
 
    KineticSpeciesPtrVect species_phys;
    createTemporarySpeciesVector( species_phys, species_comp );
    fillGhostCells( species_phys, m_E_field, a_time );
 
-   a_rhs.zero();
    if (m_transport_model_on) {
       applyTransportOperator( a_rhs.data(), species_phys, a_time );
    }

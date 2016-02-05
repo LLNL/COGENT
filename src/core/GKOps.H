@@ -214,7 +214,13 @@ public:
       CH_assert( isDefined() );
       m_dt = a_dt;
    }
-   
+
+   void preTimeStep  (const int,const Real,const GKState&);
+   void postTimeStep (const int,const Real,const GKState&);
+   void postTimeStage(const int,const Real,const int,const GKState&);
+
+   void computeEField (const Real a_time, const GKState& a_state, const int a_stage = 1);
+
    void explicitOp    (GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1);
    void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1);
    void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1);

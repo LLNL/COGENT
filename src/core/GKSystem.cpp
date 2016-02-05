@@ -948,18 +948,15 @@ void GKSystem::enforcePositivity( KineticSpeciesPtrVect& a_soln )
 
 
 
-Real GKSystem::advance( const Real a_cur_time,
-                        const Real a_dt,
-                        const int  a_step_number)
+void GKSystem::advance( Real* a_cur_time,
+                        Real* a_dt,
+                        int*  a_step_number)
 {
-   m_integrator->setCurrentTime ( a_cur_time );
-   m_integrator->setTimeStep    ( a_step_number );
-   m_integrator->setTimeStepSize( a_dt );
-
-   m_integrator->advance( a_cur_time, m_state );
-
-   Real new_time;
-   m_integrator->getCurrentTime(&new_time);
+   m_integrator->setTimeStepSize( *a_dt );
+   m_integrator->advance( *a_cur_time, m_state );
+   m_integrator->getCurrentTime(a_cur_time);
+   m_integrator->getTimeStep(a_step_number);
+   m_integrator->getTimeStepSize( a_dt );
    
    if (m_enforce_step_positivity) {
       enforcePositivity( m_state.data() );
@@ -969,11 +966,11 @@ Real GKSystem::advance( const Real a_cur_time,
 
 #ifdef BLOB_ERROR_TEST
    double l1_error, l2_error, max_error;
-   computeError(new_time, a_step_number, m_kinetic_species, l1_error, l2_error, max_error);
-   if (procID()==0) cout << "l1, l2, max error at t = " << new_time << " is " << l1_error << " " << l2_error << " " << max_error << endl;
+   computeError(*a_cur_time, *a_step_number, m_kinetic_species, l1_error, l2_error, max_error);
+   if (procID()==0) cout << "l1, l2, max error at t = " << *a_cur_time << " is " << l1_error << " " << l2_error << " " << max_error << endl;
 #endif
 
-   return new_time;
+   return;
 }
 
 
@@ -1458,19 +1455,28 @@ void GKSystem::printDiagnostics()
       cout << std::endl;
 }
 
-void GKSystem::printTimeStep(int cur_step, Real dt)
+void GKSystem::preTimeStep(int a_cur_step, Real a_cur_time)
 {
+  m_integrator->setCurrentTime ( a_cur_time );
+  m_integrator->setTimeStep    ( a_cur_step );
+  m_gk_ops->preTimeStep        ( a_cur_step, a_cur_time, m_state);
+}
+
+
+void GKSystem::postTimeStep(int a_cur_step, Real a_dt, Real a_cur_time)
+{
+  m_gk_ops->postTimeStep(a_cur_step,a_cur_time,m_state);
   if (procID() == 0) {
-    Real dt_Vlasov     = dtScale_Vlasov    (cur_step);
-    Real dt_Collisions = dtScale_Collisions(cur_step);
-    Real dt_Transport  = dtScale_Transport (cur_step);
-    Real dt_Neutrals   = dtScale_Neutrals  (cur_step);
+    Real dt_Vlasov     = m_gk_ops->dtScale_Vlasov    (m_state.data(),a_cur_step);
+    Real dt_Collisions = m_gk_ops->dtScale_Collisions(m_state.data(),a_cur_step);
+    Real dt_Transport  = m_gk_ops->dtScale_Transport (m_state.data(),a_cur_step);
+    Real dt_Neutrals   = m_gk_ops->dtScale_Neutrals  (m_state.data(),a_cur_step);
     cout << "  ----\n";
-    cout << "  dt: " << dt << std::endl;
-    if (dt_Vlasov     >= 0) cout << "    Vlasov    : " << dt_Vlasov     << " (time scale), " << dt/dt_Vlasov << " (CFL)\n";
-    if (dt_Collisions >= 0) cout << "    Collisions: " << dt_Collisions << " (time scale), " << dt/dt_Collisions << " (CFL)\n";
-    if (dt_Transport  >= 0) cout << "    Transport : " << dt_Transport  << " (time scale), " << dt/dt_Transport  << " (CFL)\n";
-    if (dt_Neutrals   >= 0) cout << "    Neutrals  : " << dt_Neutrals   << " (time scale), " << dt/dt_Neutrals   << " (CFL)\n";
+    cout << "  dt: " << a_dt << std::endl;
+    if (dt_Vlasov     >= 0) cout << "    Vlasov    : " << dt_Vlasov     << " (time scale), " << a_dt/dt_Vlasov << " (CFL)\n";
+    if (dt_Collisions >= 0) cout << "    Collisions: " << dt_Collisions << " (time scale), " << a_dt/dt_Collisions << " (CFL)\n";
+    if (dt_Transport  >= 0) cout << "    Transport : " << dt_Transport  << " (time scale), " << a_dt/dt_Transport  << " (CFL)\n";
+    if (dt_Neutrals   >= 0) cout << "    Neutrals  : " << dt_Neutrals   << " (time scale), " << a_dt/dt_Neutrals   << " (CFL)\n";
     cout << "  ----\n";
   }
 }
@@ -1526,7 +1532,6 @@ inline void GKSystem::printParameters() const
 
    }
 }
-
 
 
 void GKSystem::parseParameters( ParmParse&         a_ppgksys )

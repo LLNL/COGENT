@@ -205,22 +205,21 @@ template <class SYSTEM>
 void Simulation<SYSTEM>::advance()
 {
    if (m_verbosity >= 1) {
-      pout() << endl << "Step " << m_cur_step+1 << endl;
+      pout() << endl << "Step " << m_cur_step << endl;
       if(procID()==0) cout << endl << "Step " << m_cur_step+1 << endl;
    }
-   selectTimeStep();
+   preTimeStep();
 
-   m_cur_step++;
    if (m_fixed_dt_subiteration) {
       for (int sub_iter=1; sub_iter<=m_subiterations; sub_iter++) {
          if (!procID()) {
             cout << "  --\n";
             cout << "  Subiteration:" << sub_iter << " of " << m_subiterations << endl;
          }
-         m_cur_time = m_system->advance( m_cur_time, m_sub_dt, m_cur_step );
+         m_system->advance( &m_cur_time, &m_sub_dt, &m_cur_step );
       }
    } else {
-      m_cur_time = m_system->advance( m_cur_time, m_cur_dt, m_cur_step );
+      m_system->advance( &m_cur_time, &m_cur_dt, &m_cur_step );
    }
 
    postTimeStep();
@@ -373,8 +372,15 @@ inline void Simulation<SYSTEM>::setFixedTimeStep( const Real& a_dt_stable )
 
 
 template <class SYSTEM>
-void Simulation<SYSTEM>::selectTimeStep()
+void Simulation<SYSTEM>::postTimeStep()
 {
+   m_system->postTimeStep(m_cur_step,m_cur_dt,m_cur_dt);
+}
+
+template <class SYSTEM>
+void Simulation<SYSTEM>::preTimeStep()
+{
+   m_system->preTimeStep(m_cur_step,m_cur_time);
    Real dtStable = m_system->stableDt(m_cur_step) * m_cfl;
    CH_assert(dtStable > 1.0e-16);
 
@@ -404,13 +410,6 @@ void Simulation<SYSTEM>::selectTimeStep()
    if ( m_cur_dt > timeRemaining ) {
       m_cur_dt = timeRemaining + m_max_time * s_DT_EPS;
    }
-}
-
-
-template <class SYSTEM>
-void Simulation<SYSTEM>::postTimeStep()
-{
-   m_system->printTimeStep(m_cur_step,m_cur_dt);
 }
 
 #include "NamespaceFooter.H"
