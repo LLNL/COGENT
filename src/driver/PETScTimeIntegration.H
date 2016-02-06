@@ -198,7 +198,9 @@ static PetscErrorCode PreTimeStep(TS ts)
   if (context->getVerbosity() >= 1) {
     if (procID()==0) cout << endl << "Step " << cur_step+1 << endl;
   }
-  dt = system->stableDt(cur_step);
+  Vec Y; TSGetSolution(ts,&Y);
+  context->copyStateFromPetsc(Y,system);
+  system->preTimeStep(cur_step,cur_time);
   return(0);
 }
 
@@ -221,7 +223,9 @@ static PetscErrorCode PostTimeStep(TS ts)
   context->setTimeStep(dt);
   context->setTimeStepNumber(cur_step);
 
-  system->printTimeStep(cur_step,dt);
+  Vec Y; TSGetSolution(ts,&Y);
+  context->copyStateFromPetsc(Y,system);
+  system->postTimeStep(cur_step,dt,cur_time);
 
   if (verbosity >= 1) {
     system->printDiagnostics();
@@ -242,6 +246,22 @@ static PetscErrorCode PostTimeStep(TS ts)
   }
 
   return(0);
+}
+
+static PetscErrorCode PostTimeStage(TS ts, PetscReal stagetime, PetscInt stageindex, Vec* Y)
+{
+  PetscTimeIntegrator<GKSystem> *context;
+  TSGetApplicationContext(ts,&context);
+  GKSystem *system = context->getSystem();
+
+  int cur_step;
+  Real cur_time, dt;
+  TSGetTime           (ts,&cur_time);
+  TSGetTimeStep       (ts,&dt);
+  TSGetTimeStepNumber (ts,&cur_step);
+
+  context->copyStateFromPetsc(Y[stageindex],system);
+  system->postTimeStage(cur_step,stagetime);
 }
 
 template <class System>
@@ -373,9 +393,10 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
 
   }
 
-  /* set pre- and post-step functions */
+  /* set pre- and post-step functions, and post-stage function */
   TSSetPreStep(m_ts,PreTimeStep);
   TSSetPostStep(m_ts,PostTimeStep);
+  TSSetPostStage(m_ts,PostTimeStage);
 
   TSSetUp(m_ts);
 }

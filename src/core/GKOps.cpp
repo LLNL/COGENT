@@ -245,7 +245,7 @@ Real GKOps::stableDtImEx( const KineticSpeciesPtrVect& a_soln,
 
 void GKOps::preTimeStep (const int a_step, const Real a_time, const GKState& a_state)
 {
-  computeEField(a_time,a_state,0);
+  setElectricField(a_time,a_state);
   const KineticSpeciesPtrVect& soln(a_state.data());
 
   m_dt_Vlasov            = m_vlasov->computeDt( m_E_field, soln );
@@ -267,22 +267,21 @@ void GKOps::postTimeStep (const int a_step, const Real a_time, const GKState& a_
   /* nothing to do here for now */
 }
 
-void GKOps::postTimeStage(const int a_step, const Real a_time, const int a_stage, const GKState& a_state)
+void GKOps::postTimeStage(const int a_step, const Real a_time, const GKState& a_state)
 {
-  computeEField(a_time,a_state,a_stage);
+  setElectricField(a_time,a_state);
 }
 
-void GKOps::computeEField( const Real a_time, const GKState& a_state,const int a_stage)
+void GKOps::setElectricField( const Real a_time, const GKState& a_state)
 {
    const KineticSpeciesPtrVect& species_comp( a_state.data() );
    if (m_consistent_potential_bcs) {
-      if (a_stage == 0) m_stage0_time = a_time;
       // We're not fourth-order accurate with this option anyway,
       // so only compute the field at the beginning of the step.
-      computeElectricField( m_E_field, species_comp, -1, -1 );
+      computeElectricField( m_E_field, species_comp, -1 );
    }
    else {
-      computeElectricField( m_E_field, species_comp, -1, a_stage );
+      computeElectricField( m_E_field, species_comp, -1 );
    }
    return;
 }
@@ -311,6 +310,8 @@ void GKOps::explicitOp( GKRHSData& a_rhs,
 
    applyCollisionOperator( a_rhs.data(), species_comp, a_time );
 
+   /* The following is hard-coded for a 4-stage time integrator!! */
+   if (a_stage == 0) m_stage0_time = a_time;
    if (m_consistent_potential_bcs && a_stage == 3) {
 
       double dt = a_time - m_stage0_time;
@@ -397,6 +398,7 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
    }
 
    /* The following is hard-coded for a 4-stage time integrator!! */
+   if (a_stage == 0) m_stage0_time = a_time;
    if (m_consistent_potential_bcs && a_stage == 3) {
 
       double dt = a_time - m_stage0_time;
@@ -627,28 +629,20 @@ void GKOps::solveImEx( GKState& a_state,
 inline
 void GKOps::computeElectricField( LevelData<FluxBox>&          a_E_field,
                                   const KineticSpeciesPtrVect& a_kinetic_species,
-                                  const int                    a_step_number,
-                                  const int                    a_stage )
+                                  const int                    a_step_number )
 {
-   // If this is the first evaluation this step, then a field solve
-   // has already been performed to compute the potential needed to
-   // evaluate the velocity for determining the stable time step.
-   // We therefore check for this so we don't do another (redundant)
-   // field solve.
    CH_assert( isDefined() );
-   if ( a_stage > 0 ) {
-      const int num_kinetic_species( a_kinetic_species.size() );
-      KineticSpeciesPtrVect result;
-      result.resize(num_kinetic_species);
-      for (int species(0); species<num_kinetic_species; species++) {
-         result[species] = a_kinetic_species[species]->clone( m_ghost_vect );
-      }
-      divideJ( a_kinetic_species, result ); /// FIXME
-      computeEField( m_E_field_face,
-                     m_E_field_cell,
-                     result,
-                     a_step_number );
+   const int num_kinetic_species( a_kinetic_species.size() );
+   KineticSpeciesPtrVect result;
+   result.resize(num_kinetic_species);
+   for (int species(0); species<num_kinetic_species; species++) {
+      result[species] = a_kinetic_species[species]->clone( m_ghost_vect );
    }
+   divideJ( a_kinetic_species, result ); /// FIXME
+   computeEField( m_E_field_face,
+                  m_E_field_cell,
+                  result,
+                  a_step_number );
 
    CH_assert( m_phase_geometry != NULL );
    m_phase_geometry->injectConfigurationToPhase( m_E_field_face,

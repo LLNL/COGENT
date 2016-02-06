@@ -261,7 +261,7 @@ void TiRK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
     m_YStage.copy(a_Y);
     for (j=0; j<i; j++) m_YStage.increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
     Real stage_time = m_time+m_c[i]*m_dt;
-    m_Operators.postTimeStage(m_cur_step,stage_time,i,m_YStage);
+    m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage);
     m_Operators.explicitOp(m_rhsStage[i],stage_time,m_YStage,i);
   }
   /* Step completion */

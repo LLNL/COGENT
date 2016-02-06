@@ -217,9 +217,9 @@ public:
 
    void preTimeStep  (const int,const Real,const GKState&);
    void postTimeStep (const int,const Real,const GKState&);
-   void postTimeStage(const int,const Real,const int,const GKState&);
+   void postTimeStage(const int,const Real,const GKState&);
 
-   void computeEField (const Real a_time, const GKState& a_state, const int a_stage = 1);
+   void setElectricField (const Real a_time, const GKState& a_state);
 
    void explicitOp    (GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1);
    void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1);
@@ -234,8 +234,7 @@ public:
    
    void computeElectricField( LevelData<FluxBox>&          a_E_field,
                               const KineticSpeciesPtrVect& a_kinetic_species,
-                              const int                    a_step_number,
-                              const int                    a_stage = 1);
+                              const int                    a_step_number );
     
    void divideJ( const KineticSpeciesPtrVect& soln_mapped,
                  KineticSpeciesPtrVect&       soln_physical );

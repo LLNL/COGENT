@@ -1457,9 +1457,11 @@ void GKSystem::printDiagnostics()
 
 void GKSystem::preTimeStep(int a_cur_step, Real a_cur_time)
 {
-  m_integrator->setCurrentTime ( a_cur_time );
-  m_integrator->setTimeStep    ( a_cur_step );
-  m_gk_ops->preTimeStep        ( a_cur_step, a_cur_time, m_state);
+  if (m_ti_type != _TI_EXTERNAL_) {
+    m_integrator->setCurrentTime ( a_cur_time );
+    m_integrator->setTimeStep    ( a_cur_step );
+  }
+  m_gk_ops->preTimeStep( a_cur_step, a_cur_time, m_state);
 }
 
 
