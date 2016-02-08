@@ -223,10 +223,11 @@ Real GKOps::stableDtExpl( const KineticSpeciesPtrVect& a_soln,
    CH_assert( isDefined() );
 
    Real dt_stable = DBL_MAX;
-   dt_stable = Min(dt_stable, m_dt_Vlasov);
-   dt_stable = Min( dt_stable, m_dt_Collisions );
-   if (m_transport_model_on) dt_stable = Min( dt_stable, m_dt_Transport );
-   if (m_neutrals_model_on) dt_stable = Min( dt_stable, m_dt_Neutrals );
+
+   dt_stable = Min(dt_stable, (m_dt_Vlasov>0?m_dt_Vlasov:DBL_MAX));
+   dt_stable = Min( dt_stable, (m_dt_Collisions>0?m_dt_Collisions:DBL_MAX));
+   if (m_transport_model_on) dt_stable = Min( dt_stable, (m_dt_Transport>0?m_dt_Transport:DBL_MAX));
+   if (m_neutrals_model_on) dt_stable = Min( dt_stable, (m_dt_Neutrals>0?m_dt_Neutrals:DBL_MAX));
  
    return dt_stable;
 }
@@ -237,8 +238,8 @@ Real GKOps::stableDtImEx( const KineticSpeciesPtrVect& a_soln,
    CH_assert( isDefined() );
 
    Real dt_stable = DBL_MAX;
-   dt_stable = Min(dt_stable, m_dt_Vlasov);
-   if (m_neutrals_model_on) dt_stable = Min( dt_stable, m_dt_Neutrals );
+   dt_stable = Min(dt_stable, (m_dt_Vlasov>0?m_dt_Vlasov:DBL_MAX));
+   if (m_neutrals_model_on) dt_stable = Min( dt_stable, (m_dt_Neutrals>0?m_dt_Neutrals:DBL_MAX));
  
    return dt_stable;
 }
