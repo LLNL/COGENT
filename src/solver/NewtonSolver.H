@@ -159,6 +159,7 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     /* compute norm of m_F */
     m_norm = m_F.computeNorm(2);
     if (m_its == 0) m_norm0 = m_norm;
+    if (m_norm0 == 0) m_norm0 = 1e-16;
 
     if (m_verbose && (!procID())) {
       cout << "    --> (" << m_outPrefix << ") Newton iteration " << m_its << ", absolute residual norm " << m_norm;
