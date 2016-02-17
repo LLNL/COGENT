@@ -201,6 +201,8 @@ public:
 
    int numPotentialGhostsFilled() const {return m_num_potential_ghosts_interpolated;}
 
+   bool secondOrder() const {return m_second_order;}
+
 protected:
 
     /// Set all components of a LevelData<FArrayBox> to zero

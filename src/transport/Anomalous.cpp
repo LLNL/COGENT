@@ -4,8 +4,10 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "MagBlockCoordSys.H"
+#include "FourthOrderUtil.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
+#include "Directions.H"
 #include "PhaseGeom.H"
 #include "PhaseGeomF_F.H"
 #include "PhaseBlockCoordSys.H"
@@ -26,7 +28,7 @@ Anomalous::Anomalous( const string& a_species_name, ParmParse& a_pptpm, const in
       moment_op( MomentOp::instance() ),
       m_first_step(true),
       m_field_aligned_grid(false),
-       verbosity(0)
+      verbosity(0)
 {
 
    verbosity = a_verbosity;
@@ -123,18 +125,12 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
       phase_geom.injectConfigurationToPhase(four_cfg, fourth_coef);
       phase_geom.injectConfigurationToPhase(perp_cfg, perp_coef);
 
-      // get face centered metrics h_r, h_theta, and h_phi on each CFG_DIM face
-      if (m_first_step) {
-        m_metrics_faces.define(dbl, 3, ghostVect);
-        getFaceCenteredMetrics(m_metrics_faces, phase_geom, dbl);
-      }
    
       //get NJinverse and B-field data for dealigned grid calculations
       CFG::LevelData<CFG::FluxBox> pointwiseNJinv_cfg(mag_geom.grids(), CFG_DIM*CFG_DIM, cfg_ghostVect);
       mag_geom.getPointwiseNJinverse(pointwiseNJinv_cfg);
       LevelData<FluxBox> inj_pointwiseNJinv;
       phase_geom.injectConfigurationToPhase(pointwiseNJinv_cfg, inj_pointwiseNJinv);
-
       const CFG::LevelData<CFG::FluxBox>& bunit_cfg = mag_geom.getFCBFieldDir();
       LevelData<FluxBox> inj_bunit;
       phase_geom.injectConfigurationToPhase(bunit_cfg, inj_bunit);
@@ -152,8 +148,19 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
       }
       LevelData<FArrayBox> inj_shape;
       phase_geom.injectConfigurationToPhase( shape_function, inj_shape);
-
-
+   
+      // get face centered metrics h_r, h_theta, and h_phi on each CFG_DIM face
+      // and compute the preconditioner coeffficient for the implicit solver
+      if (m_first_step) {
+         m_metrics_faces.define(dbl, 3, ghostVect);
+         getFaceCenteredMetrics(m_metrics_faces, phase_geom, dbl);
+         
+         m_precond_D.define(mag_geom.grids(), CFG_DIM * CFG_DIM, CFG::IntVect::Unit);
+         CFG::LevelData<CFG::FluxBox> shape_on_faces(mag_geom.grids(), 1, CFG::IntVect::Unit );
+         fourthOrderCellToFaceCenters(shape_on_faces, shape_function);
+         computePrecondCoefficient(m_precond_D, mag_geom, shape_on_faces, D_kinet[0]);
+      }
+   
       // calculate face-averaged D*dfB/dr
       LevelData<FluxBox> fluxNorm(dbl, 1, IntVect::Unit);
       LevelData<FluxBox> flux(dbl, SpaceDim, IntVect::Unit);
@@ -213,7 +220,7 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
          phase_geom.mappedGridDivergenceFromFluxNormals(rhs_transport, fluxNorm);
       }
       else {
-	 phase_geom.applyAxisymmetricCorrection(flux);
+         phase_geom.applyAxisymmetricCorrection(flux);
          phase_geom.averageAtBlockBoundaries(flux);
          const bool OMIT_NT(false);
          phase_geom.mappedGridDivergence( rhs_transport, flux, OMIT_NT );
@@ -230,11 +237,11 @@ void Anomalous::evalTpmRHS( KineticSpeciesPtrVect&        rhs,
       for (rdit.begin(); rdit.ok(); ++rdit)
       {
         if(model_only) {
-	  rhs_dfn[rdit].copy(rhs_transport[rdit]);
-	}
-	else  { 
-	  rhs_dfn[rdit].plus(rhs_transport[rdit]);
-	}
+           rhs_dfn[rdit].copy(rhs_transport[rdit]);
+        }
+        else  {
+           rhs_dfn[rdit].plus(rhs_transport[rdit]);
+        }
       }
 
       m_first_step = false;
@@ -333,6 +340,84 @@ void Anomalous::getCellCenteredMetrics( FArrayBox&        metrics_cells,
                        CHF_FRA(metrics_cells));
 
 }
+
+
+
+void Anomalous::computePrecondCoefficient( CFG::LevelData<CFG::FluxBox>&         a_D,
+                                          const CFG::MagGeom&                    a_mag_geom,
+                                          const CFG::LevelData<CFG::FluxBox>&    a_shape,
+                                          const Real                             a_D0)
+{
+   
+   CFG::LevelData<CFG::FluxBox> NJinverse(a_mag_geom.grids(), CFG_DIM*CFG_DIM, CFG::IntVect::Unit);
+   a_mag_geom.getPointwiseNJinverse(NJinverse);
+   
+   CFG::LevelData<CFG::FluxBox> N(a_mag_geom.grids(), CFG_DIM*CFG_DIM, CFG::IntVect::Unit);
+   a_mag_geom.getPointwiseN(N);
+   
+   const CFG::LevelData<CFG::FluxBox>& bunit = a_mag_geom.getFCBFieldDir();
+
+   for (CFG::DataIterator dit(a_D.dataIterator()); dit.ok(); ++dit) {
+      
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+
+         const CFG::FArrayBox& this_shape = a_shape[dit][dir];
+         CFG::FArrayBox& this_coeff = a_D[dit][dir];
+         CFG::FArrayBox& this_N = N[dit][dir];
+         CFG::FArrayBox& this_NJinverse = NJinverse[dit][dir];
+         const CFG::FArrayBox& this_b = bunit[dit][dir];
+         const CFG::Box& box = this_coeff.box();
+
+         //Get coefficient in the cylindrical coordinate frame
+         CFG::FArrayBox phys_coeff(box, CFG_DIM * CFG_DIM);
+         CFG::BoxIterator bit(box);
+         for (bit.begin(); bit.ok(); ++bit) {
+            CFG::IntVect iv = bit();
+            
+            double bNmag = sqrt(pow(this_b(iv,0),2) + pow(this_b(iv,2),2));
+            CFG::RealVect bN;
+            bN[RADIAL_DIR] = this_b(iv,2) / bNmag;
+            bN[POLOIDAL_DIR] = -this_b(iv,0) / bNmag;
+            
+            phys_coeff(iv,0) = a_D0 * this_shape(iv,0) * bN[RADIAL_DIR]   * bN[RADIAL_DIR];
+            phys_coeff(iv,1) = a_D0 * this_shape(iv,0) * bN[POLOIDAL_DIR] * bN[RADIAL_DIR];
+            phys_coeff(iv,2) = a_D0 * this_shape(iv,0) * bN[RADIAL_DIR]   * bN[POLOIDAL_DIR];
+            phys_coeff(iv,3) = a_D0 * this_shape(iv,0) * bN[POLOIDAL_DIR] * bN[POLOIDAL_DIR];
+         
+         }
+         
+         CFG::FArrayBox tmp(box, 1);
+         // Multiply the coefficient matrix times the NJInverse matrix
+         CFG::FArrayBox phys_coeff_times_NJinv(box, CFG_DIM * CFG_DIM);
+         phys_coeff_times_NJinv.setVal(0.);
+         for (int row=0; row<CFG_DIM; ++row) {
+            for (int col=0; col<CFG_DIM; ++col) {
+               for (int m=0; m<CFG_DIM; ++m) {
+                  tmp.copy(phys_coeff,CFG_DIM*row+m,0,1);
+                  tmp.mult(this_NJinverse,CFG_DIM*m+col,0,1);
+                  phys_coeff_times_NJinv.plus(tmp,0,CFG_DIM*row+col,1);
+               }
+            }
+         }
+         
+         //Premultiply by the NTranspose matrix
+         this_coeff.setVal(0.);
+         for (int row=0; row<CFG_DIM; ++row) {
+            for (int col=0; col<CFG_DIM; ++col) {
+               for (int m=0; m<CFG_DIM; ++m) {
+                  tmp.copy(this_N,CFG_DIM*m+row,0,1);
+                  tmp.mult(phys_coeff_times_NJinv,CFG_DIM*m+col,0,1);
+                  this_coeff.plus(tmp,0,CFG_DIM*row+col,1);
+               }
+            }
+         }
+         
+      }
+   
+   }
+   
+}
+
 
 void Anomalous::ParseParameters()
 

@@ -245,7 +245,7 @@ PhaseGrid::assignPhaseDecompositionToProcs(const Vector<Box>& a_phase_boxes,
       // Figure out how many processors will be allocated to each group
       int* num_group_processors = new int[num_groups];
 
-      int min_procs_per_group = floor(nproc / num_groups);
+      int min_procs_per_group = floor((double)nproc / (double)num_groups);
       for (int group_number=0; group_number<num_groups; ++group_number) {
          num_group_processors[group_number] = min_procs_per_group;
       }
@@ -255,7 +255,7 @@ PhaseGrid::assignPhaseDecompositionToProcs(const Vector<Box>& a_phase_boxes,
          num_group_processors[group_number++]++;
       }
 
-      int max_procs_per_group = ceil(nproc / num_groups);
+      int max_procs_per_group = ceil((double)nproc / (double)num_groups);
       int* ranks = new int[max_procs_per_group];
       int proc = 0;
       group_number = 0;

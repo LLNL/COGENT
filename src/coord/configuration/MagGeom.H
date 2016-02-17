@@ -39,9 +39,9 @@ public:
 
    void getJ( LevelData<FArrayBox>& J ) const;
 
-   void getPointwiseN( LevelData<FluxBox>& a_N ) const;
+   void getPointwiseN( LevelData<FluxBox>& N ) const;
 
-   void getPointwiseNJinverse( LevelData<FluxBox>& a_NJinverse ) const;
+   void getPointwiseNJinverse( LevelData<FluxBox>& NJinverse ) const;
 
    void multJonValid( LevelData<FArrayBox>& dfn ) const;
 
@@ -49,25 +49,25 @@ public:
                         const BoundaryBoxLayout& bdry_layout ) const;
 
    // Computes physical face areas (no 2piR factors for axisymmetric)
-   void getFaceAreas( LevelData<FluxBox>& a_areas ) const;
+   void getFaceAreas( LevelData<FluxBox>& areas ) const;
 
-   void computeMetricTermProductAverage( LevelData<FluxBox>&       a_product,
-                                         const LevelData<FluxBox>& a_data,
-                                         const bool                a_fourthOrder ) const;
+   void computeMetricTermProductAverage( LevelData<FluxBox>&       product,
+                                         const LevelData<FluxBox>& data,
+                                         const bool                fourthOrder ) const;
 
    void computeMappedGridDivergence( const LevelData<FluxBox>& F,
                                      LevelData<FArrayBox>&     divergence,
                                      const bool                fourthOrder ) const;
 
-   void averageAtBlockBoundaries(LevelData<FluxBox>& a_data) const;
+   void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
-   void exchangeTransverseAtBlockBoundaries(LevelData<FluxBox>& a_data) const;
+   void exchangeTransverseAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
    void applyAxisymmetricCorrection( LevelData<FluxBox>& data ) const;
 
    void checkMultiblockMappingConsistency() const;
 
-   double maxBlockBoundaryDifference(LevelData<FluxBox>& a_data) const;
+   double maxBlockBoundaryDifference(LevelData<FluxBox>& data) const;
 
    const LevelData<FArrayBox>& getCCBField() const {return m_BField_cc;}
 
@@ -95,6 +95,9 @@ public:
 
    void plotFieldAlignment(const double& time) const;
 
+   void plotFieldDivergence( const LevelData<FluxBox>& field,
+                             const double              time ) const;
+
    void plotCellData( const string&               file_name,  
                       const LevelData<FArrayBox>& data,
                       const double&               time ) const;
@@ -115,13 +118,13 @@ public:
 
    void fillInternalGhosts( LevelData<FArrayBox>& data ) const;
    
-   void exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const;
+   void exchangeExtraBlockGhosts( LevelData<FArrayBox>& data ) const;
 
    void fillTransversePhysicalGhosts( LevelData<FArrayBox>& data ) const;
 
    void fillTransversePhysicalGhosts( LevelData<FluxBox>& data ) const;
 
-   void fillTransverseGhosts( LevelData<FluxBox>& a_data, const bool do_block_exchange ) const;
+   void fillTransverseGhosts( LevelData<FluxBox>& data, const bool do_block_exchange ) const;
 
    void definePotentialBC( PotentialBC& bc ) const {m_coord_sys->definePotentialBC(bc);}
 

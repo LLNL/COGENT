@@ -12,7 +12,6 @@
 #include "NamespaceHeader.H"
 
 #undef TEST_DIVERGENCE_CLEANING
-//#define TEST_DIVERGENCE_CLEANING
 
 
 MagGeom::MagGeom(ParmParse&                 a_pp,
@@ -67,6 +66,7 @@ MagGeom::MagGeom(ParmParse&                 a_pp,
                      m_curlBFieldDir_fc,
                      m_BFieldDirdotcurlBFieldDir_fc );
 
+
    m_BField_cc.define(a_grids, 3, field_ghosts);
    m_BFieldMag_cc.define(a_grids, 1, field_ghosts);
    m_BFieldDir_cc.define(a_grids, 3, field_ghosts);
@@ -108,6 +108,16 @@ MagGeom::MagGeom(ParmParse&                 a_pp,
          // mapped coordinate system vector in the poloidal direction.
          double time = 0.;
          plotFieldAlignment(time);
+      }
+   }
+
+   if (a_pp.contains("plot_field_divergence")) {
+      bool plot_field_divergence;
+      a_pp.get("plot_field_divergence", plot_field_divergence);
+
+      if (plot_field_divergence) {
+         double time = 0.;
+         plotFieldDivergence(m_BField_fc, time);
       }
    }
 
@@ -606,22 +616,19 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
       }
 
 #ifdef TEST_DIVERGENCE_CLEANING
-      plotFaceData( string("before_correction_BField"), a_BField ,0.0);
-      plotFaceData( string("before_correction_BFieldMag"), a_BFieldMag ,0.0);
-      plotFaceData( string("before_correction_BFieldDir"), a_BFieldDir ,0.0);
-      plotFaceData( string("before_correction_gradB"), a_gradBFieldMag ,0.0);
-      plotFaceData( string("before_correction_curlBFieldDir"), a_curlBFieldDir ,0.0);
-      plotFaceData( string("before_correction_BFieldDirdotcurlBFieldDir"), a_BFieldDirdotcurlBFieldDir ,0.0);
+      plotFaceData( string("before_correction_BField"), a_BField, 0. );
+      plotFaceData( string("before_correction_BFieldMag"), a_BFieldMag, 0. );
+      plotFaceData( string("before_correction_BFieldDir"), a_BFieldDir, 0. );
+      plotFaceData( string("before_correction_gradB"), a_gradBFieldMag, 0. );
+      plotFaceData( string("before_correction_curlBFieldDir"), a_curlBFieldDir, 0. );
+      plotFaceData( string("before_correction_BFieldDirdotcurlBFieldDir"), a_BFieldDirdotcurlBFieldDir, 0. );
 #endif
 
       if ( !m_BFieldCorrection.isDefined() ) {
-         m_BFieldCorrection.define( grids, 3, IntVect::Unit);
-
          CH_assert(a_BField.ghostVect() >= IntVect::Unit);
          LevelData<FluxBox> flux( grids, SpaceDim, IntVect::Unit );
          LevelData<FArrayBox> uncorrected_divergence( grids, 1, IntVect::Zero );
 #ifdef TEST_DIVERGENCE_CLEANING
-         LevelData<FArrayBox> corrected_divergence( grids, 1, IntVect::Zero );
          Box domain_box = grids.physDomain().domainBox();
 #endif
 
@@ -640,6 +647,10 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
             }
          }
 
+         applyAxisymmetricCorrection( flux );
+
+         fourthOrderAverage(flux);
+
          computeMappedGridDivergence( flux, uncorrected_divergence, true );
 
          for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -647,11 +658,12 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
          }
          
 #ifdef TEST_DIVERGENCE_CLEANING
-         WriteMappedUGHDF5("uncorrected_divergence", grids, uncorrected_divergence, *m_coord_sys, domain_box,0.0);
+         WriteMappedUGHDF5("uncorrected_divergence", grids, uncorrected_divergence, *m_coord_sys, domain_box, 0. );
 #endif
 
          ParmParse pp( Poisson::pp_name.c_str() );
          Poisson * poisson = new Poisson( pp, *this );
+         CH_assert(!poisson->secondOrder());   // This function assumes fourth-order
          poisson->setOperatorCoefficients( m_coord_sys->getDivergenceCleaningBC() );
 
          LevelData<FArrayBox> phi( grids, 1, 4*IntVect::Unit );
@@ -664,7 +676,7 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
          poisson->solve( uncorrected_divergence, bc, phi );
 
 #ifdef TEST_DIVERGENCE_CLEANING
-         WriteMappedUGHDF5("field_correction_potential", grids, phi, *m_coord_sys, domain_box,0.0);
+         WriteMappedUGHDF5("field_correction_potential", grids, phi, *m_coord_sys, domain_box, 0. );
 #endif
 
          poisson->fillInternalGhosts(phi);
@@ -672,43 +684,62 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
          // Compute cell-centered -grad phi
          poisson->computeFaceCenteredField( phi, bc, flux );
 
+         fillTransversePhysicalGhosts(flux);
+
+#ifdef TEST_DIVERGENCE_CLEANING
+         m_BFieldCorrection.define( grids, 3, IntVect::Zero);
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            FluxBox& this_BFieldCorrection = m_BFieldCorrection[dit];
+            FluxBox& this_flux = flux[dit];
+
+            this_BFieldCorrection.setVal(0.);
+            for (int dir=0; dir<SpaceDim; ++dir) {
+               FArrayBox& this_BFieldCorrection_dir = this_BFieldCorrection[dir];
+               FArrayBox& this_flux_dir = this_flux[dir];
+
+               Box valid_box_dir = surroundingNodes(grids[dit],dir);
+               this_BFieldCorrection_dir.copy( this_flux_dir, valid_box_dir, 0, valid_box_dir, 0, 1 );
+               this_BFieldCorrection_dir.copy( this_flux_dir, valid_box_dir, 1, valid_box_dir, 2, 1 );
+            }
+         }
+#endif
+
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            FluxBox& this_BField = a_BField[dit];
+            FluxBox& this_flux = flux[dit];
+            for (int dir=0; dir<SpaceDim; ++dir) {
+               FArrayBox& this_BField_dir = this_BField[dir];
+               FArrayBox& this_flux_dir = this_flux[dir];
+
+               this_flux_dir.negate();
+                  
+               IntVect grow_vect = IntVect::Unit;
+               grow_vect[dir] = 0;
+               Box box = surroundingNodes(grow(grids[dit],grow_vect),dir);
+
+               this_flux_dir.plus(this_BField_dir,box,0,0,1);
+               this_flux_dir.plus(this_BField_dir,box,2,1,1);
+
+               this_BField_dir.copy( this_flux_dir, box, 0, box, 0, 1 );
+               this_BField_dir.copy( this_flux_dir, box, 1, box, 2, 1 );
+            }
+         }
+
 #ifdef TEST_DIVERGENCE_CLEANING
 
          {
             applyAxisymmetricCorrection( flux );
 
-            fillTransversePhysicalGhosts(flux);
-
             fourthOrderAverage(flux);
 
-            for (DataIterator dit(grids); dit.ok(); ++dit) {
-               FluxBox& this_BField = a_BField[dit];
-               FluxBox& this_flux = flux[dit];
-               for (int dir=0; dir<SpaceDim; ++dir) {
-                  FArrayBox& this_BField_dir = this_BField[dir];
-                  FArrayBox& this_flux_dir = this_flux[dir];
-
-                  this_flux_dir.negate();
-                  
-                  IntVect grow_vect = IntVect::Unit;
-                  grow_vect[dir] = 0;
-                  Box box = surroundingNodes(grow(grids[dit],grow_vect),dir);
-
-                  this_flux_dir.plus(this_BField_dir,box,0,0,1);
-                  this_flux_dir.plus(this_BField_dir,box,2,1,1);
-
-                  this_BField_dir.copy( this_flux_dir, box, 0, box, 0, 1 );
-                  this_BField_dir.copy( this_flux_dir, box, 1, box, 2, 1 );
-               }
-            }
-
+            LevelData<FArrayBox> corrected_divergence( grids, 1, IntVect::Zero );
             computeMappedGridDivergence( flux, corrected_divergence, true );
 
             for (DataIterator dit(grids); dit.ok(); ++dit) {
                corrected_divergence[dit] /= cell_volume[dit];
             }
 
-            WriteMappedUGHDF5("corrected_divergence", grids, corrected_divergence, *m_coord_sys, domain_box,0.0);
+            WriteMappedUGHDF5("corrected_divergence", grids, corrected_divergence, *m_coord_sys, domain_box, 0.);
          }
 #endif
 
@@ -815,19 +846,19 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
             BFieldDirdotcurlBFieldDirChange[dit] -= a_BFieldDirdotcurlBFieldDir[dit];
          }
 
-         plotFaceData( string("BFieldChange"), m_BFieldCorrection ,0.0);
-         plotFaceData( string("BFieldMagChange"), BFieldMagChange ,0.0);
-         plotFaceData( string("BFieldDirChange"), BFieldDirChange ,0.0);
-         plotFaceData( string("gradBFieldMagChange"), gradBFieldMagChange ,0.0);
-         plotFaceData( string("curlBFieldDirChange"), curlBFieldDirChange ,0.0);
-         plotFaceData( string("BFieldDirdotcurlBFieldDirChange"), BFieldDirdotcurlBFieldDirChange ,0.0);
+         plotFaceData( string("BFieldChange"), m_BFieldCorrection, 0. );
+         plotFaceData( string("BFieldMagChange"), BFieldMagChange, 0. );
+         plotFaceData( string("BFieldDirChange"), BFieldDirChange, 0. );
+         plotFaceData( string("gradBFieldMagChange"), gradBFieldMagChange, 0. );
+         plotFaceData( string("curlBFieldDirChange"), curlBFieldDirChange, 0. );
+         plotFaceData( string("BFieldDirdotcurlBFieldDirChange"), BFieldDirdotcurlBFieldDirChange, 0. );
 
-         plotFaceData( string("after_correction_BField"), a_BField ,0.0);
-         plotFaceData( string("after_correction_BFieldMag"), a_BFieldMag ,0.0);
-         plotFaceData( string("after_correction_BFieldDir"), a_BFieldDir ,0.0);
-         plotFaceData( string("after_correction_gradB"), a_gradBFieldMag ,0.0);
-         plotFaceData( string("after_correction_curlBFieldDir"), a_curlBFieldDir ,0.0);
-         plotFaceData( string("after_correction_BFieldDirdotcurlBFieldDir"), a_BFieldDirdotcurlBFieldDir ,0.0);
+         plotFaceData( string("after_correction_BField"), a_BField, 0. );
+         plotFaceData( string("after_correction_BFieldMag"), a_BFieldMag, 0. );
+         plotFaceData( string("after_correction_BFieldDir"), a_BFieldDir, 0. );
+         plotFaceData( string("after_correction_gradB"), a_gradBFieldMag, 0. );
+         plotFaceData( string("after_correction_curlBFieldDir"), a_curlBFieldDir, 0. );
+         plotFaceData( string("after_correction_BFieldDirdotcurlBFieldDir"), a_BFieldDirdotcurlBFieldDir, 0. );
 #endif
 
          if( procID() == 0 ) {
@@ -1134,6 +1165,46 @@ MagGeom::plotFieldAlignment(const double& a_time) const
 }
 
 
+
+void
+MagGeom::plotFieldDivergence( const LevelData<FluxBox>& a_field,
+                              const double              a_time ) const
+{
+   const DisjointBoxLayout& grids = gridsFull();
+
+   LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Unit);
+   LevelData<FArrayBox> divergence(grids, 1, IntVect::Zero);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const FluxBox& this_B = a_field[dit];
+      FluxBox& this_flux = flux[dit];
+
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         const FArrayBox& this_B_dir = this_B[dir];
+         FArrayBox& this_flux_dir = this_flux[dir];
+
+         this_flux_dir.copy( this_B_dir, 0, 0, 1 );
+         this_flux_dir.copy( this_B_dir, 2, 1, 1 );
+      }
+   }
+
+   applyAxisymmetricCorrection( flux );
+
+   fourthOrderAverage(flux);
+
+   computeMappedGridDivergence( flux, divergence, true );
+
+   LevelData<FArrayBox> cell_volume(grids, 1, IntVect::Zero);
+   getCellVolumes(cell_volume);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      divergence[dit] /= cell_volume[dit];
+   }
+         
+   plotCellData( string("field_divergence"), divergence, a_time );
+}
+
+
 void
 MagGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
 {
@@ -1281,6 +1352,8 @@ MagGeom::fillTransversePhysicalGhosts( LevelData<FluxBox>& a_data ) const
 {
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
    const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys->boundaries();
+
+   a_data.exchange();
 
    IntVect ghostVect = a_data.ghostVect();
 

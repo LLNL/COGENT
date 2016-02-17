@@ -52,6 +52,10 @@ public:
                            const int                    species,
                            const Real                   time );
 
+   
+  const CFG::LevelData<CFG::FluxBox>& getPrecondCoeff() const {return m_precond_D;}
+   
+   
 private:
 
   Vector<Real> D_fluid;
@@ -70,6 +74,7 @@ private:
   string species_name;
 
   LevelData<FluxBox> m_metrics_faces;
+  CFG::LevelData<CFG::FluxBox> m_precond_D;
 
   /// Parse parameters.
   /**
@@ -102,6 +107,13 @@ private:
                               const PhaseGeom&         a_phase_geom,
                               const Box& a_dbl);
 
+  /// Compute the preconditioner coeffficient for the implicit solver
+  void computePrecondCoefficient( CFG::LevelData<CFG::FluxBox>&            a_D,
+                                  const CFG::MagGeom&                           a_phase_geom,
+                                  const CFG::LevelData<CFG::FluxBox>&      a_shape,
+                                  const double                             a_DN0);
+ 
+   
 };
 
 

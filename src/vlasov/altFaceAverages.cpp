@@ -79,6 +79,8 @@ bwenoFaceAverages( LevelData<FluxBox>&         a_face_phi,
 
       } // end loop over directions
    } // end loop over grids
+
+   a_face_phi.exchange();
 }
 
 void
@@ -129,6 +131,8 @@ uw5FaceAverages( LevelData<FluxBox>&         a_face_phi,
 
       } // end loop over directions
    } // end loop over grids
+
+   a_face_phi.exchange();
 }
 
 void
@@ -179,6 +183,8 @@ uw3FaceAverages( LevelData<FluxBox>&         a_face_phi,
 
       } // end loop over directions
    } // end loop over grids
+
+   a_face_phi.exchange();
 }
 
 void
@@ -229,6 +235,8 @@ uw1FaceAverages( LevelData<FluxBox>&         a_face_phi,
 
       } // end loop over directions
    } // end loop over grids
+
+   a_face_phi.exchange();
 }
 
 void
@@ -279,6 +287,8 @@ weno5FaceAverages( LevelData<FluxBox>&         a_face_phi,
 
       } // end loop over directions
    } // end loop over grids
+
+   a_face_phi.exchange();
 }
 
 #include "NamespaceFooter.H"

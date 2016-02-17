@@ -218,6 +218,7 @@ void Simulation<SYSTEM>::advance()
          }
          m_system->advance( &m_cur_time, &m_sub_dt, &m_cur_step );
       }
+      m_cur_step=m_cur_step-m_subiterations+1;
    } else {
       m_system->advance( &m_cur_time, &m_cur_dt, &m_cur_step );
    }
