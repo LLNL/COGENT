@@ -1,3 +1,5 @@
+# This file is needed by Chombo.  It should be copied to Chombo/lib/mk.
+
 # -*- Mode: Makefile; Modified: "Thu 06 Apr 2006 14:17:29 by dbs"; -*-
 
 ## Chombo version 1.5
@@ -58,21 +60,24 @@
 ##  PROF     command to generate performanace profile for $PROFILE=TRUE
 
 ################################################################################
-
+gnu_dir=/usr/local/tools/mvapich2-gnu-2.1
 # vars affecting the configuration string
 DIM=3
-DEBUG=FALSE
-OPT=TRUE
+DEBUG=TRUE
+OPT=FALSE
 PRECISION=DOUBLE
 PROFILE=FALSE
 MPI=TRUE
 CXX=g++
 #CXX=icpc
-FC=gfortran
+#CXX=mpicxx
+FC=$(gnu_dir)/bin/mpif77
+#FC=gfortran
 #FC=ifort
 # Note: if MPI=TRUE, MPICXX is used to compile but CXX is used to
 #       determine the type of the base C++ compiler
-MPICXX=mpicxx
+MPICXX=$(gnu_dir)/bin/mpicxx
+#MPICXX=mpicxx
 XTRACONFIG=
 
 #cxxcppflags = -std=c++0x
@@ -93,10 +98,17 @@ USE_COMPLEX=TRUE#    #type for complex numbers
 USE_TIMER=TRUE#      #Chombo::Timer
 
 USE_HDF=TRUE#        #HDF5 file i/o
-HDFINCFLAGS=-I$(HDF5_DIR_SERIAL)/include
-HDFLIBFLAGS=-L$(HDF5_DIR_SERIAL)/lib -lhdf5 -lz
-HDFMPIINCFLAGS=-I$(HDF5_DIR_PARALLEL)/include
-HDFMPILIBFLAGS=-L$(HDF5_DIR_PARALLEL)/lib -lhdf5 -lz
+hdf5_serial_dir=/usr/local/tools/hdf5-gnu-serial-1.8.10
+#hdf5_serial_dir=/usr/local/tools/hdf5-intel-serial-1.8.10
+hdf5_parallel_dir=/usr/local/tools/hdf5-gnu-parallel-mvapich2-1.8.10
+#hdf5_parallel_dir=/usr/local/tools/hdf5-intel-parallel-mvapich2-1.8.10
+
+HDFINCFLAGS=-I$(hdf5_serial_dir)/include -DH5_USE_16_API
+ifeq ($(USE_HDF),TRUE)
+HDFLIBFLAGS=-L$(hdf5_serial_dir)/lib -DH5_USE_16_API -lhdf5 -lz
+endif
+HDFMPIINCFLAGS=-I$(hdf5_parallel_dir)/include -DH5_USE_16_API
+HDFMPILIBFLAGS=-L$(hdf5_parallel_dir)/lib -DH5_USE_16_API -lhdf5 -lz
 
 USE_FFTW=FALSE#      #use FFTW library in $(FFTWDIR)/{include,lib}
 FFTWDIR=
@@ -119,3 +131,4 @@ LD=mpicxx
 PERL=perl
 RANLIB=ranlib#  #set this to 'echo' for systems that dont have ranlib
 PROF=gprof
+

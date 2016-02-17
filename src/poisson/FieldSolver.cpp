@@ -513,9 +513,9 @@ FieldSolver::applyOperator( const LevelData<FArrayBox>& a_in,
    // Multiply the field by the unmapped, face-centered GKP coefficients
    multiplyUnmappedCoefficients(flux);
 
-   m_geometry.applyAxisymmetricCorrection(flux);
-
    m_geometry.fillTransversePhysicalGhosts(flux);
+
+   m_geometry.applyAxisymmetricCorrection(flux);
 
    // Convert to face-averaged
    if (!m_second_order) fourthOrderAverage(flux);

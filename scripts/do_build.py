@@ -50,7 +50,7 @@ class Builder(object):
         self.project_dir = os.path.dirname(self.repo_dir)
         # <project>/Chombo:
         self.chombo_dir = os.path.join(self.project_dir, 'Chombo')
-        self.hypre_config = 'cab-mvapich2-gnu-2.1-dbg'
+        self.hypre_config = 'cab-mvapich2-gnu-2.1-opt'
         self._define_args()
 
     @_Auto_Log('Run Builder')
@@ -132,7 +132,7 @@ class Builder(object):
         """
         self.runner.execOrLog(
             command='import shutil; shutil.copy(src="%s", dst="%s")' %
-            (os.path.join(self.repo_dir, 'exec', 'Make.defs.local'),
+            (os.path.join(self.repo_dir, 'config', 'Make.defs.local.cab'),
              os.path.join(self.chombo_dir, 'lib', 'mk', 'Make.defs.local')),
             locals=locals(),
             globals=globals(),
