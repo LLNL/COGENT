@@ -2,6 +2,7 @@
 *.o
 *.a
 *_F.H
+*.pyc
 exec/d/
 exec/f/
 exec/p/
