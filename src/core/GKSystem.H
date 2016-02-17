@@ -279,7 +279,7 @@ class GKSystem
       void preTimeStep  (int,Real);
       void postTimeStep (int,Real,Real);
       inline void postTimeStage(const int a_step,const Real a_time)
-        { return m_gk_ops->postTimeStage(a_step,a_time,m_state); }
+        { m_gk_ops->postTimeStage(a_step,a_time,m_state); }
 
       int  getVectorSize() { return m_state.getVectorSize();}
 

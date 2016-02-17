@@ -262,6 +262,7 @@ static PetscErrorCode PostTimeStage(TS ts, PetscReal stagetime, PetscInt stagein
 
   context->copyStateFromPetsc(Y[stageindex],system);
   system->postTimeStage(cur_step,stagetime);
+  return(0);
 }
 
 template <class System>
