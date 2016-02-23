@@ -56,6 +56,7 @@ public:
    */
   Real computeDt(const KineticSpeciesPtrVect& soln);
 
+  inline bool isLinear() {return true; }
 
 private:
 
