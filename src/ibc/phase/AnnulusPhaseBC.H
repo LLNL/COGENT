@@ -103,6 +103,8 @@ class AnnulusPhaseBC
 
       Vector<RefCountedPtr<KineticFunction> > m_inflow_function;
       Vector<std::string> m_bdry_name;
+
+      bool m_radial_extrapolate;
 };
 
 #include "NamespaceFooter.H"

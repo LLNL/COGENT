@@ -33,8 +33,6 @@ void FourthOrderBC::setOutflowBC( FArrayBox&               a_this_soln,
                                   const int&               a_dir,
                                   const Side::LoHiSide&    a_side )
 {
-   //   if ( a_dir == RADIAL_DIR ) {
-
    // assumes the inflow data is already set
    // define the face box for this boundary
    Box face_box( a_boundary_box );
@@ -55,7 +53,6 @@ void FourthOrderBC::setOutflowBC( FArrayBox&               a_this_soln,
                                  CHF_CONST_FRA(face_velocity),
                                  CHF_CONST_INT(a_dir),
                                  CHF_CONST_INT(ISIDE) );
-//   }
 }
 
 

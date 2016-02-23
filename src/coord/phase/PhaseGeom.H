@@ -386,6 +386,10 @@ public:
                              const LevelData<FArrayBox>& data,
                              const double&               time) const;
 
+   void plotDivergence( const string&             file_name,
+                        const LevelData<FluxBox>& flux,
+                        const double              time ) const;
+
    void plotData( const string&               file_name,
                   const LevelData<FArrayBox>& data,
                   const double&               time) const;
