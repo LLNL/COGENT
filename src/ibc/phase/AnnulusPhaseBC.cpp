@@ -161,11 +161,33 @@ void AnnulusPhaseBC::apply( KineticSpecies& a_species_comp,
    
    fillInflowData( all_bdry_data, all_bdry_layouts, a_time );
 
-   PhaseBCUtils::setInflowOutflowBC( BfJ,
-                                     all_bdry_layouts,
-                                     all_bdry_data,
-                                     coord_sys,
-                                     a_velocity );
+   if (m_radial_extrapolate) {
+
+      // This option is a workaround for neoclassical simulations only.  It
+      // sets the velocity on radial boundaries to zero in order to force the
+      // ghost cells to be filled by extrapolation from the interior (i.e., always
+      // outflow) in the fortran routine FOURTH_ORDER_OUTFLOW_BC.
+
+      LevelData<FluxBox> tmp_velocity;
+      tmp_velocity.define(a_velocity);
+
+      for (DataIterator dit(tmp_velocity.dataIterator()); dit.ok(); ++dit) {
+         tmp_velocity[dit][RADIAL_DIR].setVal(0.);
+      }
+
+      PhaseBCUtils::setInflowOutflowBC( BfJ,
+                                        all_bdry_layouts,
+                                        all_bdry_data,
+                                        coord_sys,
+                                        tmp_velocity );
+   }
+   else {
+      PhaseBCUtils::setInflowOutflowBC( BfJ,
+                                        all_bdry_layouts,
+                                        all_bdry_data,
+                                        coord_sys,
+                                        a_velocity );
+   }
 
    // interpolate all other codim boundaries
    CodimBC::setCodimBoundaryValues( BfJ, coord_sys );
@@ -199,6 +221,13 @@ void AnnulusPhaseBC::parseParameters( ParmParse& a_pp )
       std::string function_name;
       fpp.query( "function", function_name );
       m_inflow_function[i] = library->find( function_name );
+   }
+
+   if (a_pp.contains("radial_extrapolate")) {
+      a_pp.get("radial_extrapolate", m_radial_extrapolate);
+   }
+   else {
+      m_radial_extrapolate = false;
    }
 
    if (m_verbosity) {

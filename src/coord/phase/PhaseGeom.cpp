@@ -2825,6 +2825,39 @@ PhaseGeom::plotVParPoloidalData( const string                a_file_name,
 
 
 void
+PhaseGeom::plotDivergence( const string&             a_file_name,
+                           const LevelData<FluxBox>& a_flux,
+                           const double              a_time ) const
+{
+   CH_assert(a_flux.ghostVect() >= IntVect::Unit);
+   const DisjointBoxLayout& grids = a_flux.disjointBoxLayout();
+
+   LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Unit);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      flux[dit].copy(a_flux[dit]);
+   }
+
+   applyAxisymmetricCorrection( flux );
+
+   if (m_second_order) fourthOrderAverage(flux);
+
+   LevelData<FArrayBox> divergence(grids, 1, IntVect::Zero);
+   bool OMIT_NT = false;
+   mappedGridDivergence( divergence, flux, OMIT_NT );
+
+   LevelData<FArrayBox> cell_volume(grids, 1, IntVect::Zero);
+   getCellVolumes(cell_volume);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      divergence[dit] /= cell_volume[dit];
+   }
+
+   plotData( a_file_name, divergence, a_time );
+}
+
+
+
+void
 PhaseGeom::plotData( const string&                a_file_name,
                      const LevelData<FArrayBox>&  a_data,
                      const double&                a_time ) const

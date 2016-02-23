@@ -571,7 +571,7 @@ FieldSolver::setBcDivergence( const PotentialBC&    a_bc,
    m_geometry.applyAxisymmetricCorrection(flux);
 
    // Convert to face-averaged
-   if (!m_second_order) fourthOrderAverage(flux);
+   //   if (!m_second_order) fourthOrderAverage(flux);
 
    // We only compute this to second-order now since the flux has only
    // been computed to second-order in accumMappedBoundaryField().
@@ -1672,21 +1672,24 @@ FieldSolver::computeMappedElectricField( const LevelData<FArrayBox>& a_phi,
 
    a_E_field.exchange();
 
-   // Recompute the field at valid cell centers to fourth-order
+   if ( !m_second_order ) {
 
-   order = 4;
+      // Recompute the field at valid cell centers to fourth-order
 
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
-      RealVect dx = block_coord_sys.dx();
+      order = 4;
 
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(grids[dit]),
-                                            CHF_CONST_INT(dir),
-                                            CHF_CONST_FRA1(phi_cell[dit],0),
-                                            CHF_CONST_REALVECT(dx),
-                                            CHF_CONST_INT(order),
-                                            CHF_FRA1(a_E_field[dit],(2*dir)%3));
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
+         RealVect dx = block_coord_sys.dx();
+
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(grids[dit]),
+                                               CHF_CONST_INT(dir),
+                                               CHF_CONST_FRA1(phi_cell[dit],0),
+                                               CHF_CONST_REALVECT(dx),
+                                               CHF_CONST_INT(order),
+                                               CHF_FRA1(a_E_field[dit],(2*dir)%3));
+         }
       }
    }
 }
@@ -1804,31 +1807,34 @@ FieldSolver::computeMappedElectricField( const LevelData<FArrayBox>& a_phi,
    // Second-order extrapolate the field to the transverse physical boundary ghosts
    m_geometry.fillTransversePhysicalGhosts(a_E_field);
 
-   // Recompute the field to fourth-order on valid cell faces
+   if ( !m_second_order ) {
 
-   order = 4;
+      // Recompute the field to fourth-order on valid cell faces
 
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
-      RealVect dx = block_coord_sys.dx();
+      order = 4;
 
-      for (int dir=0; dir<SpaceDim; dir++) {
-         Box box_dir = surroundingNodes(grids[dit],dir);
-         FORT_FACE_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
-                                            CHF_CONST_INT(dir),
-                                            CHF_CONST_FRA1(phi_cell[dit],0),
-                                            CHF_CONST_REALVECT(dx),
-                                            CHF_CONST_INT(order),
-                                            CHF_FRA1(a_E_field[dit][dir],(2*dir)%3));
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
+         RealVect dx = block_coord_sys.dx();
 
-         for (int tdir=0; tdir<SpaceDim; ++tdir) {
-            if (tdir != dir) {
-               FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
-                                                  CHF_CONST_INT(tdir),
-                                                  CHF_CONST_FRA1(phi_face[dit][dir],0),
-                                                  CHF_CONST_REALVECT(dx),
-                                                  CHF_CONST_INT(order),
-                                                  CHF_FRA1(a_E_field[dit][dir],(2*tdir)%3));
+         for (int dir=0; dir<SpaceDim; dir++) {
+            Box box_dir = surroundingNodes(grids[dit],dir);
+            FORT_FACE_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
+                                               CHF_CONST_INT(dir),
+                                               CHF_CONST_FRA1(phi_cell[dit],0),
+                                               CHF_CONST_REALVECT(dx),
+                                               CHF_CONST_INT(order),
+                                               CHF_FRA1(a_E_field[dit][dir],(2*dir)%3));
+
+            for (int tdir=0; tdir<SpaceDim; ++tdir) {
+               if (tdir != dir) {
+                  FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
+                                                     CHF_CONST_INT(tdir),
+                                                     CHF_CONST_FRA1(phi_face[dit][dir],0),
+                                                     CHF_CONST_REALVECT(dx),
+                                                     CHF_CONST_INT(order),
+                                                     CHF_FRA1(a_E_field[dit][dir],(2*tdir)%3));
+               }
             }
          }
       }
