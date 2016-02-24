@@ -63,6 +63,30 @@ int GKRHSData::getVectorSize()
   return TotalSize;
 }
 
+int GKState::getNComponents()
+{
+  CH_assert( isDefined() );
+  int NComponents = 0;
+  for (int s=0; s < m_species_mapped.size(); s++) {
+    const LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
+    DataIterator dit = x.dataIterator();
+    for (dit.begin(); dit.ok(); ++dit) NComponents = x[dit].nComp();
+  }
+  return NComponents;
+}
+
+int GKRHSData::getNComponents()
+{
+  CH_assert( isDefined() );
+  int NComponents = 0;
+  for (int s=0; s < m_species_mapped.size(); s++) {
+    const LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
+    DataIterator dit = x.dataIterator();
+    for (dit.begin(); dit.ok(); ++dit) NComponents = x[dit].nComp();
+  }
+  return NComponents;
+}
+
 void GKState::copyTo(Real *Y)
 {
    CH_assert( isDefined() );

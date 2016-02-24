@@ -35,14 +35,15 @@ class PetscTimeIntegrator
     void  copyRHSToPetsc      (Vec& a_Y, System* a_System);
     void  copyRHSFromPetsc    (Vec& a_Y, System* a_System);
 
-    inline System* getSystem()        { return m_system; }
-    inline int     getVerbosity()     { return m_verbosity; }
-    inline int     getPlotInterval()  { return m_plot_interval; }
-    inline int     getChkptInterval() { return m_checkpoint_interval; }
-    inline Real    getShift()         { return m_shift; }
-    inline Real    getTime()          { return m_cur_time; }
-    inline Real    getEpsilonJFNK()   { return m_epsilon_jfnk; }
-    inline bool    isLinear()         { return m_is_linear; }
+    inline System*    getSystem()        { return m_system; }
+    inline int        getVerbosity()     { return m_verbosity; }
+    inline int        getPlotInterval()  { return m_plot_interval; }
+    inline int        getChkptInterval() { return m_checkpoint_interval; }
+    inline Real       getShift()         { return m_shift; }
+    inline Real       getTime()          { return m_cur_time; }
+    inline Real       getEpsilonJFNK()   { return m_epsilon_jfnk; }
+    inline bool       isLinear()         { return m_is_linear; }
+    inline PetscBool  usePC()            { return m_usePreconditioner; }
 
     inline void    setLastPlot  (int a_int) { m_last_plot = a_int; }      
     inline void    setLastChkpt (int a_int) { m_last_checkpoint = a_int; }      
@@ -79,17 +80,22 @@ class PetscTimeIntegrator
     int         m_last_plot;
     std::string m_plot_prefix;
 
-    int         m_local_size;
+    int         m_local_size,
+                m_ndims, 
+                m_ncomp;
 
     Real  m_shift,
           m_epsilon_jfnk;
 
     bool  m_is_linear,
-          m_is_Jac_allocated;
+          m_is_Jac_allocated,
+          m_is_Pre_allocated;
+
+    PetscBool m_usePreconditioner;
     
     Vec   m_Y;
     TS    m_ts;
-    Mat   m_Jac;
+    Mat   m_Jac, m_Pre;
 };
 
 static PetscErrorCode RHSFunction(TS ts, PetscReal t, Vec Y, Vec F, void* ctxt)
@@ -140,6 +146,14 @@ static PetscErrorCode IJacobianIMEX(TS ts, PetscReal t, Vec Y, Vec Ydot, PetscRe
 
   context->setShift((Real)a);
   context->setTime((Real)t);
+
+  /* construct preconditioning matrix */
+  if (context->usePC() == PETSC_TRUE) {
+    MatZeroEntries(B);
+    GKSystem *system = context->getSystem();
+    context->copyStateFromPetsc(Y,system);
+    system->constructPCMatIMEX(&B,(Real)t);
+  }
 
   return(0);
 }
@@ -325,9 +339,13 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_plottedonce(0),
     m_system(NULL),
     m_local_size(0),
+    m_ndims(2),
+    m_ncomp(1),
     m_is_linear("true"),
     m_epsilon_jfnk(1e-6),
-    m_is_Jac_allocated(false)
+    m_is_Jac_allocated(false),
+    m_is_Pre_allocated(false),
+    m_usePreconditioner(PETSC_FALSE)
 {
   ParmParse ppsim( "simulation" );
   parseParametersSimulation( ppsim );
@@ -344,6 +362,7 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
   
   /* create and initialize the PETSc solution vector */
   m_local_size = m_system->getVectorSize();
+  //m_ncomp      = m_system->getNComponents();
   VecCreate(MPI_COMM_WORLD,&m_Y);
   VecSetSizes(m_Y,m_local_size,PETSC_DECIDE);
   VecSetUp(m_Y);
@@ -379,14 +398,27 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     MatSetUp(m_Jac);
     m_is_Jac_allocated = true;
 
-    TSSetIJacobian(m_ts,m_Jac,m_Jac,IJacobianIMEX,this);
-    
     SNES  snes; TSGetSNES(m_ts,&snes);
-    KSP   ksp;  SNESGetKSP(snes,&ksp);
-    PC    pc;   KSPGetPC(ksp,&pc);
-
     if (m_is_linear) SNESSetType(snes,SNESKSPONLY);
-    PCSetType(pc,PCNONE);
+
+    m_usePreconditioner = PETSC_FALSE;
+    PetscOptionsGetBool(PETSC_NULL,PETSC_NULL,"-with_pc",&m_usePreconditioner,PETSC_NULL);
+    if (m_usePreconditioner) {
+      m_is_Pre_allocated = true;
+      MatCreateAIJ(MPI_COMM_WORLD,m_local_size,m_local_size,PETSC_DETERMINE,PETSC_DETERMINE,
+                   (m_ndims*2+1)*m_ncomp,NULL,2*m_ndims*m_ncomp,NULL,&m_Pre);
+      MatSetBlockSize(m_Pre,m_ncomp);
+      /* Set the IJacobian function for TS */
+      TSSetIJacobian(m_ts,m_Jac,m_Pre,IJacobianIMEX,this);
+    } else { 
+      m_is_Pre_allocated = false;
+      /* Set the IJacobian function for TS */
+      TSSetIJacobian(m_ts,m_Jac,m_Jac,IJacobianIMEX,this);
+      /* Set PC (preconditioner) to none */
+      KSP   ksp;  SNESGetKSP(snes,&ksp);
+      PC    pc;   KSPGetPC(ksp,&pc);
+      PCSetType(pc,PCNONE);
+    }
 
   } else {
 
@@ -515,6 +547,7 @@ template <class System>
 PetscTimeIntegrator<System>::~PetscTimeIntegrator()
 {
   if (m_is_Jac_allocated) MatDestroy(&m_Jac);
+  if (m_is_Pre_allocated) MatDestroy(&m_Pre);
   TSDestroy (&m_ts);
   VecDestroy(&m_Y);
   VecDestroy(&m_Yref);

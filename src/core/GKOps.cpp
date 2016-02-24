@@ -626,6 +626,12 @@ void GKOps::solveImEx( GKState& a_state,
    }
 }
 
+void GKOps::constructPCMatIMEX( void *a_Pmat,
+                                const Real a_time,
+                                const GKState& a_state )
+{
+  return;
+}
 
 inline
 void GKOps::computeElectricField( LevelData<FluxBox>&          a_E_field,

@@ -281,7 +281,11 @@ class GKSystem
       inline void postTimeStage(const int a_step,const Real a_time)
         { m_gk_ops->postTimeStage(a_step,a_time,m_state); }
 
-      int  getVectorSize() { return m_state.getVectorSize();}
+      int  getVectorSize()  { return m_state.getVectorSize(); }
+      int  getNComponents() { return m_state.getNComponents();}
+
+      inline void constructPCMatIMEX(void* a_Pmat,Real a_time)
+        { m_gk_ops->constructPCMatIMEX(a_Pmat,a_time,m_state); }
 
       inline void copyStateToArray   (Real *Y) { m_state.copyTo(Y);   }
       inline void copyStateFromArray (Real *Y) { m_state.copyFrom(Y); }

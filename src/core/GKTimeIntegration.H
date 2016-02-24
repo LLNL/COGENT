@@ -85,6 +85,7 @@ public:
    }
 
    int getVectorSize();
+   int getNComponents();
 
    
    void increment( const GKState& a_state,
@@ -238,6 +239,7 @@ public:
    void copyFrom  (Real*);
 
    int getVectorSize();
+   int getNComponents();
 
 private:
 

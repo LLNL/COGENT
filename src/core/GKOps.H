@@ -231,6 +231,8 @@ public:
 
    //void solve( GKState& a_state, const GKRHSData& a_rhs, const Real a_time, const int a_stage  );
    void solveImEx( GKState& a_state, const GKRHSData& a_rhs, const Real shift, const Real a_time, const int a_stage  );
+
+   void constructPCMatIMEX(void*,const Real,const GKState&);
    
    void computeElectricField( LevelData<FluxBox>&          a_E_field,
                               const KineticSpeciesPtrVect& a_kinetic_species,
