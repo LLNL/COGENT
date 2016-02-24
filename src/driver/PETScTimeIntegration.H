@@ -324,25 +324,27 @@ inline void PetscTimeIntegrator<System>::writePlotFile()
 
 template <class System>
 PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc)
-  : m_cur_step(0),
+  : 
+    m_system(NULL),
+    m_cur_step(0),
     m_max_step(0),
     m_cur_time(0.0),
     m_max_time(0.0),
     m_dt(0.0),
     m_verbosity(0),
+    m_plottedonce(0),
     m_checkpoint_interval(0),
     m_last_checkpoint(0),
     m_checkpoint_prefix( "chk" ),
     m_plot_interval(0),
     m_last_plot(0),
     m_plot_prefix( "plt" ),
-    m_plottedonce(0),
-    m_system(NULL),
     m_local_size(0),
     m_ndims(2),
     m_ncomp(1),
-    m_is_linear("true"),
+    m_shift(1.0),
     m_epsilon_jfnk(1e-6),
+    m_is_linear("true"),
     m_is_Jac_allocated(false),
     m_is_Pre_allocated(false),
     m_usePreconditioner(PETSC_FALSE)
