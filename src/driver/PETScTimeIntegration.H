@@ -150,9 +150,13 @@ static PetscErrorCode IJacobianIMEX(TS ts, PetscReal t, Vec Y, Vec Ydot, PetscRe
   /* construct preconditioning matrix */
   if (context->usePC() == PETSC_TRUE) {
     MatZeroEntries(B);
+    MatAssemblyBegin(B,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd  (B,MAT_FINAL_ASSEMBLY);
+
     GKSystem *system = context->getSystem();
     context->copyStateFromPetsc(Y,system);
     system->constructPCMatIMEX(&B,(Real)t);
+    MatScale(B,-1.0); MatShift(B,a);
   }
 
   return(0);
