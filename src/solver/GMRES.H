@@ -121,15 +121,15 @@ void GMRESSolver<T,Ops>::setRestartLen(int mm)
 
 template <class T,class Ops>
 GMRESSolver<T,Ops>::GMRESSolver()
-  :m_op(NULL),
-   m_restrtLen(30),
-   m_maxits(100),
-   m_verbose(true),
+  :m_verbose(true),
    m_atol(1.0E-6),
    m_rtol(1.0E-6),
-   m_exitStatus(-1),
    m_small(1.0E-30),
-   m_normType(2)
+   m_exitStatus(-1),
+   m_normType(2),
+   m_maxits(100),
+   m_restrtLen(30),
+   m_op(NULL)
 {
   allocate();
 }
