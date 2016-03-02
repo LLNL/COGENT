@@ -35,7 +35,8 @@ class CLSInterface
       virtual void evalClsRHS( KineticSpeciesPtrVect&       rhs,
                                const KineticSpeciesPtrVect& soln,
                                const int                    species,
-                               const Real                   time ) = 0;
+                               const Real                   time,
+                               const int                    flag=1) = 0;
 
       virtual inline bool isLinear() { return false; }
       

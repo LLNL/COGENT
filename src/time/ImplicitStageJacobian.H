@@ -99,7 +99,7 @@ void ImplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y)
     else            eps = m_epsJFNK / normY;
 
     m_Z.copy(m_Y0); m_Z.increment(a_y,eps);
-    m_ops->implicitOpImEx(m_F,m_StageTime,m_Z,m_Stage);
+    m_ops->implicitOpImEx(m_F,m_StageTime,m_Z,m_Stage,0);
 
     m_Z.copy(m_F); m_Z.increment(m_F0,-1);
     a_F.copy(a_y); a_F.increment(m_Z,(-m_shift/eps));

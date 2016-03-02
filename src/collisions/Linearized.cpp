@@ -35,7 +35,8 @@ Linearized::~Linearized()
 void Linearized::evalClsRHS( KineticSpeciesPtrVect&       a_rhs,
                              const KineticSpeciesPtrVect& a_soln,
                              const int                    a_species,
-                             const Real                   a_time )
+                             const Real                   a_time,
+                             const int                    a_flag )
 // NB: a_soln is on the computational grid and has 4 ghost cells (passed here as Nans)
 {
    // Get solution distribution function (J*Bstar_par*dfn) for the current species

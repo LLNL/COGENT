@@ -43,7 +43,8 @@ public:
   virtual void evalClsRHS( KineticSpeciesPtrVect&        rhs,
                            const KineticSpeciesPtrVect&  soln,
                            const int                     species,
-                           const Real                    time );
+                           const Real                    time,
+                           const int                     flag = 1);
 
   /// Compute a stable time step.
   /**

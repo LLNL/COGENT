@@ -35,7 +35,8 @@ MyKrook::~MyKrook()
 void MyKrook::evalClsRHS( KineticSpeciesPtrVect&       a_rhs,
                           const KineticSpeciesPtrVect& a_soln,
                           const int                    a_species,
-                          const Real                   a_time )
+                          const Real                   a_time,
+                          const int                    a_flag)
 // NB: a_soln is on the computational grid
 {
    // Get solution distribution function (J*Bstar_par*dfn) for the current species

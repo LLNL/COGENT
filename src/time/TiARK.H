@@ -474,7 +474,7 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
     Real stage_time = m_time+m_ce[i]*m_dt;
     m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage);
     m_Operators.explicitOpImEx(m_rhsStage_exp[i],stage_time,m_YStage,i);
-    m_Operators.implicitOpImEx(m_rhsStage_imp[i],stage_time,m_YStage,i);
+    m_Operators.implicitOpImEx(m_rhsStage_imp[i],stage_time,m_YStage,i,0);
   }
   /* Step completion */
   for (i = 0; i < m_nstages; i++) {

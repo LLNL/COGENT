@@ -115,13 +115,14 @@ std::string GKCollisions::collisionModelName( const std::string& a_name )
 
 void GKCollisions::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
                                   const KineticSpeciesPtrVect& a_soln,
-                                  const Real                   a_time )
+                                  const Real                   a_time,
+                                  const int                    a_flag )
 {
    for (int species(0); species<a_rhs.size(); species++) {
       KineticSpecies& rhs_species( *(a_rhs[species]) );
       const std::string species_name( rhs_species.name() );
       CLSInterface& CLS( collisionModel( species_name ) );
-      CLS.evalClsRHS( a_rhs, a_soln, species, a_time );
+      CLS.evalClsRHS( a_rhs, a_soln, species, a_time, a_flag );
    }
 }
 

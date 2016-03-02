@@ -52,7 +52,8 @@ class GKCollisions
        */
       virtual void accumulateRHS( KineticSpeciesPtrVect&       rhs,
                                   const KineticSpeciesPtrVect& soln,
-                                  const Real                   time );
+                                  const Real                   time,
+                                  const int                    flag = 1);
 
       /// Compute a stable time step.
       /**

@@ -470,7 +470,8 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
 void GKOps::implicitOpImEx( GKRHSData& a_rhs,
                             const Real a_time,
                             const GKState& a_state,
-                            const int a_stage )
+                            const int a_stage,
+                            const int a_flag )
 {
    CH_assert( isDefined() );
    a_rhs.zero();
@@ -483,16 +484,17 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
    if (m_transport_model_on) {
       applyTransportOperator( a_rhs.data(), species_phys, a_time );
    }
-   applyCollisionOperator( a_rhs.data(), species_comp, a_time );
+   applyCollisionOperator( a_rhs.data(), species_comp, a_time, a_flag );
 }
 
 void GKOps::implicitOpImEx( GKRHSData& a_rhs,
                             const Real a_time,
                             const GKRHSData& a_state,
-                            const int a_stage )
+                            const int a_stage,
+                            const int a_flag )
 {
   m_Y.copy(a_state);
-  implicitOpImEx(a_rhs,a_time,m_Y,a_stage);
+  implicitOpImEx(a_rhs,a_time,m_Y,a_stage,a_flag);
 }
 
 bool GKOps::setupPCImEx( void *a_P, GKRHSData& a_state)
@@ -593,10 +595,11 @@ void GKOps::applyVlasovOperator(
 inline
 void GKOps::applyCollisionOperator( KineticSpeciesPtrVect&       a_rhs,
                                     const KineticSpeciesPtrVect& a_soln,
-                                    const Real&                  a_time )
+                                    const Real&                  a_time,
+                                    const int                    a_flag )
 {
    CH_assert( isDefined() );
-   m_collisions->accumulateRHS( a_rhs, a_soln, a_time );
+   m_collisions->accumulateRHS( a_rhs, a_soln, a_time, a_flag );
 }
 
 

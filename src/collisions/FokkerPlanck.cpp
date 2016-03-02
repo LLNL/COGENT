@@ -46,7 +46,8 @@ FokkerPlanck::~FokkerPlanck()
 void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
                         const KineticSpeciesPtrVect&  a_soln,
                         const int                     a_species,
-                        const Real                    a_time )
+                        const Real                    a_time,
+                        const int                     a_flag )
 
 // NB: a_soln is on the computational grid and has 4 ghost cells (passed here as Nans)
 // a_rhs has probably zero ghost cells (from accertion in computedivergence)  (double check)
@@ -77,6 +78,7 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
    bool update_phi(false);
    if (m_update_freq < 0) {update_phi = true;}
    else if (m_it_counter % (4 * m_update_freq) == 0 ) { update_phi=true; }
+   update_phi = (update_phi && (a_flag));
 
    if (!m_subtract_background) {
 
