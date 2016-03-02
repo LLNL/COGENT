@@ -442,6 +442,7 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
   //CH_TIMERS("TiARK::advance");
   CH_assert(isDefined());
   CH_assert(m_time == a_time);
+  m_Z.copy(a_Y);
 
   /* Stage calculations */
   int i, j;
@@ -460,8 +461,12 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
       m_IJacobian->setStageNumber(i);
       m_IJacobian->setStageTime(m_time+m_ce[i]*m_dt);
 
+      /* Before the Newton solve begins, m_Z contains the
+       * initial guess, which is:
+       * first stage - a_Y
+       * subsequent stages - m_YStage from previous stage
+       */
       m_R.copy(m_YStage);  /* right-hand side */
-      m_Z.copy(a_Y);       /* initial guess */
       m_NewtonSolver.solve(m_Z,m_R);
       m_YStage.copy(m_Z);
     }
