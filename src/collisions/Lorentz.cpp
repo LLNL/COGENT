@@ -244,6 +244,10 @@ void Lorentz::testPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
    for (DataIterator dit(flux_rhs.dataIterator() ); dit.ok(); ++dit) {
       const FArrayBox& this_flux_cell = flux_cell[dit];
 
+      FArrayBox tmp_flux_cell(grow(this_flux_cell.box(),1),2);
+      tmp_flux_cell.setVal(0.);
+      tmp_flux_cell.copy(this_flux_cell);
+
       for (int dir=0; dir<SpaceDim; dir++) {
           FArrayBox& this_flux_rhs = flux_rhs[dit][dir];
           FArrayBox& this_flux_face = flux_face[dit][dir];
@@ -251,7 +255,7 @@ void Lorentz::testPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
                                            CHF_CONST_INT(dir),
                                            CHF_BOX(this_flux_rhs.box()),
                                            CHF_CONST_FRA(this_flux_face),
-                                           CHF_CONST_FRA(this_flux_cell),
+                                           CHF_CONST_FRA(tmp_flux_cell),
                                            CHF_CONST_INT(num_vpar_cells),
                                            CHF_CONST_INT(num_mu_cells));
       }
