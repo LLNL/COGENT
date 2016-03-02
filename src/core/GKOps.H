@@ -229,9 +229,6 @@ public:
    void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage );
    void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage );
 
-   //void solve( GKState& a_state, const GKRHSData& a_rhs, const Real a_time, const int a_stage  );
-   void solveImEx( GKState& a_state, const GKRHSData& a_rhs, const Real shift, const Real a_time, const int a_stage  );
-   
    void computeElectricField( LevelData<FluxBox>&          a_E_field,
                               const KineticSpeciesPtrVect& a_kinetic_species,
                               const int                    a_step_number );
