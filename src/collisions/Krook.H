@@ -72,6 +72,10 @@ public:
                         const Real      time, 
                         const Real      scale );
 
+  /// Report that collision operator is linear
+  /**
+   * Reports that this collision operator is linear
+   */
   inline bool isLinear() {return true; }
 
 private:

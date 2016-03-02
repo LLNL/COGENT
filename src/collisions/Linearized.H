@@ -56,6 +56,10 @@ public:
    */
   Real computeDt(const KineticSpeciesPtrVect& soln);
 
+  /// Report that collision operator is linear
+  /**
+   * Reports that this collision operator is linear
+   */
   inline bool isLinear() {return true; }
 
 private:
