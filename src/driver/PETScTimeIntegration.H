@@ -184,7 +184,7 @@ static PetscErrorCode JacobianFunctionIMEX(Mat A, Vec Y, Vec F)
 
     context->copyStateFromPetsc(context->m_Yref,system);
     context->addStateFromPetsc(Y,system,epsilon);
-    system->computeIFunctionImEx(context->getTime());
+    system->computeIFunctionImEx(context->getTime(),0);
     context->copyRHSToPetsc(F,system);
     VecAXPY(F,-1.0,context->m_Fref);
     VecAXPBY(F,(PetscReal)context->getShift(),(-1.0/epsilon),Y);
