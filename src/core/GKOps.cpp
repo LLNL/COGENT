@@ -1567,10 +1567,12 @@ void GKOps::plotEField( const std::string& a_filename,
         mag_geom.getBlockCoordSys(grids[dit]).computePsiThetaProjections(this_Efield);
       }
 
-      //phase_geometry.plotConfigurationData( a_filename.c_str(), Efield, a_time );
-      phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell, a_time );
-
-       
+      if ( m_ampere_law ) {
+         phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell, a_time );
+      }
+      else {
+         phase_geometry.plotConfigurationData( a_filename.c_str(), Efield, a_time );
+      }
    }
    else { // Plot the unmapped field
       phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell, a_time );

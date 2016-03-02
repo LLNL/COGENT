@@ -295,6 +295,10 @@ void FokkerPlanck::computeFlux( LevelData<FluxBox>& a_flux,
    for (DataIterator dit(a_flux.dataIterator() ); dit.ok(); ++dit) {
       const FArrayBox& this_flux_cell = flux_cell[dit];
 
+      FArrayBox tmp_flux_cell(grow(this_flux_cell.box(),1),2);
+      tmp_flux_cell.setVal(0.);
+      tmp_flux_cell.copy(this_flux_cell);
+
       for (int dir=0; dir<SpaceDim; dir++) {
           FArrayBox& this_flux = a_flux[dit][dir];
           FArrayBox& this_flux_face = flux_face[dit][dir];
@@ -302,7 +306,7 @@ void FokkerPlanck::computeFlux( LevelData<FluxBox>& a_flux,
                                            CHF_CONST_INT(dir),
                                            CHF_BOX(this_flux.box()),
                                            CHF_CONST_FRA(this_flux_face),
-                                           CHF_CONST_FRA(this_flux_cell),
+                                           CHF_CONST_FRA(tmp_flux_cell),
                                            CHF_CONST_INT(num_vpar_cells),
                                            CHF_CONST_INT(num_mu_cells));
       }
