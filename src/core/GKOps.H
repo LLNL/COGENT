@@ -229,6 +229,9 @@ public:
    void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage );
    void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage );
 
+   bool setupPCImEx (void*,GKRHSData&);
+   inline void assemblePCImEx(void *a_P) { m_collisions->assemblePrecondMatrix(a_P); }
+   
    void computeElectricField( LevelData<FluxBox>&          a_E_field,
                               const KineticSpeciesPtrVect& a_kinetic_species,
                               const int                    a_step_number );

@@ -41,6 +41,9 @@ class CLSInterface
       
       virtual Real computeDt(const KineticSpeciesPtrVect& soln) { return -1; }
       virtual Real TimeScale(const KineticSpeciesPtrVect& soln) { return -1; }
+
+      virtual bool setupPrecondMatrix(void *a_P,int a_N) { return false; }
+      virtual void assemblePrecondMatrix(void *a_P) {}
 };
 
 #include "NamespaceFooter.H"

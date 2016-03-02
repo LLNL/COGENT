@@ -2,6 +2,7 @@
 #define _ImplicitStageJacobian_H_
 
 #include "LinearFunction.H"
+#include "ImplicitStagePreconditioner.H"
 
 #include "NamespaceHeader.H"
 
@@ -14,10 +15,14 @@ class ImplicitStageJacobian: public LinearFunction<T,Ops>
     ~ImplicitStageJacobian<T,Ops>() {}
 
     void residual   (T& a_residual, const T& a_y, const T& a_rhs);
-    void preCond    (T& a_cor, const T& a_residual);
     void applyOp    (T& a_F, const T& a_y);
     void axby       (T& a_Z, const T& a_X, const T& a_Y, Real a_a, Real a_b);
 
+    inline void preCond(T& a_cor, const T& a_residual)     
+      { 
+        m_preCond.updateP();
+        m_preCond.applyPinv(a_cor,a_residual); 
+      }
     inline void create    (T& a_Z, const T& a_Y)              { a_Z.define(a_Y); }
     inline void assign    (T& a_Z, const T& a_Y)              { a_Z.copy(a_Y); }
     inline void incr      (T& a_Z, const T& a_Y, Real a_scale){ a_Z.increment(a_Y,a_scale); } 
@@ -26,7 +31,7 @@ class ImplicitStageJacobian: public LinearFunction<T,Ops>
     inline Real dotProduct(T& a_X, const T& a_Y)              { return(a_X.dotProduct(a_Y)); }
     inline Real norm      (T& a_Y, int a_ord)                 { return(a_Y.computeNorm(a_ord)); }
 
-    inline void setShift        (Real a_shift )       { m_shift = a_shift;    }
+    inline void setShift        (Real a_shift )       { m_shift = a_shift; m_preCond.setShift(a_shift); }
     inline void setStageTime    (Real a_time  )       { m_StageTime = a_time; }
     inline void setStageNumber  (int a_Stage  )       { m_Stage = a_Stage;    }
     inline bool isDefined       ()              const { return m_is_Defined;  }
@@ -42,6 +47,8 @@ class ImplicitStageJacobian: public LinearFunction<T,Ops>
     int  m_Stage;
     Real m_shift, m_StageTime, m_epsJFNK;
     T    m_Z, m_Y0, m_F0, m_F;
+
+    ImplicitStagePreconditioner<T,Ops> m_preCond;
     Ops  *m_ops;
 };
 
@@ -54,6 +61,8 @@ void ImplicitStageJacobian<T,Ops>::define(T& a_state, Ops& a_ops)
   m_F.define  (a_state);
   m_epsJFNK = 1e-6;
   m_ops = &a_ops;
+
+  m_preCond.define(a_state,a_ops);
   m_is_Defined = true;
 }
 
@@ -67,12 +76,6 @@ void ImplicitStageJacobian<T,Ops>::residual(
 {
   applyOp(a_residual,a_Y);
   a_residual.increment(a_rhs,-1);
-}
-
-template <class T, class Ops>
-void ImplicitStageJacobian<T,Ops>::preCond(T& a_cor, const T& a_residual)
-{
-  a_cor.copy(a_residual);
 }
 
 /* To compute: a_F = [L]a_y where [L] is the Jacobian of an implicit ARK stage,

@@ -495,6 +495,14 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
   implicitOpImEx(a_rhs,a_time,m_Y,a_stage);
 }
 
+bool GKOps::setupPCImEx( void *a_P, GKRHSData& a_state)
+{
+  bool  flag;
+  int   VecSize = a_state.getVectorSize();
+
+  flag = m_collisions->setupPrecondMatrix(a_P,VecSize);
+  return flag;
+}
 
 inline
 void GKOps::computeElectricField( LevelData<FluxBox>&          a_E_field,
