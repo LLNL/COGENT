@@ -331,7 +331,7 @@ void RosenbluthPotentials::solve(LevelData<FArrayBox>& a_solution,
 #endif
 
       if (procID()==0) {
-         //cout << "      RosenbluthPotentials PCG max residual = " << max_final_norm << " after " << max_iterations << " iterations (max)" << endl;
+         cout << "      RosenbluthPotentials PCG max residual = " << max_final_norm << " after " << max_iterations << " iterations (max)" << endl;
       }
    }
 
