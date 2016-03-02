@@ -495,64 +495,6 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
   implicitOpImEx(a_rhs,a_time,m_Y,a_stage);
 }
 
-#if 0
-void GKOps::solve( GKState& a_state,
-                   const GKRHSData& a_rhs,
-                   const Real a_time,
-                   const int a_stage )
-// Solve for a_state in
-// (I - s_aIdiag * m_dt * FI) (a_state) = a_rhs.
-{
-
-// So we could think of this iteratively as
-//
-//    [G(phi_s+eps)-G(phi_s)]/eps * dphi_s = G(phi_s),
-//
-// with phi_{s+1} = phi_s + dphi_s, where
-//
-//    G(a_state) = a_state - s_aIdiag * dt * f_I(a_state) - a_rhs = 0.
-//
-// The only thing that is necessary from an operator treated implicitly is then
-// the implicit rhs function f_I(phi).
-
-   CH_assert( isDefined() );
-
-   KineticSpeciesPtrVect& species_comp( a_state.data() );
-   const KineticSpeciesPtrVect& species_rhs( a_rhs.data() );
-
-   const int num_kinetic_species( species_comp.size() );
-   for (int s(0); s<num_kinetic_species; s++) {
-      
-      KineticSpecies& soln_species( *(species_comp[s]) );
-      CLSInterface& cls_ref( m_collisions->collisionModel( soln_species.name() ) );
-      MyKrook* krook = NULL;
-      krook = dynamic_cast<MyKrook*>( &cls_ref );
-
-      if (krook) {
-         Real nu( krook->collisionFrequency() );
-         CH_assert( nu>=0.0 );
-         Real coeff( m_dt_scale * m_dt * nu );
-         Real factor( 1.0 / (1.0 + coeff) );
-         
-         LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
-         
-         const KineticSpecies& rhs_species( *(species_rhs[s]) );
-         const LevelData<FArrayBox>& rhs_dfn( rhs_species.distributionFunction() );
-         
-         rhs_dfn.copyTo( soln_dfn );
-         krook->addReferenceDfn( soln_species, a_time, coeff );
-         for (DataIterator sdit(soln_dfn.dataIterator()); sdit.ok(); ++sdit) {
-            soln_dfn[sdit].mult( factor );
-         }
-         
-      }
-      else {
-         MayDay::Error( "Implicit solution is currently limited to linear, non-conservative Krook operator!" );
-      }
-   }
-}
-#endif
-
 /* Solve for a_state in  (I - shift * FI) (a_state) = a_rhs. 
    So we could think of this iteratively as
 
