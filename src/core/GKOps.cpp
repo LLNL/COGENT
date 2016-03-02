@@ -470,7 +470,8 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
 void GKOps::implicitOpImEx( GKRHSData& a_rhs,
                             const Real a_time,
                             const GKState& a_state,
-                            const int a_stage )
+                            const int a_stage,
+                            const int a_flag )
 {
    CH_assert( isDefined() );
    a_rhs.zero();
@@ -483,16 +484,17 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
    if (m_transport_model_on) {
       applyTransportOperator( a_rhs.data(), species_phys, a_time );
    }
-   applyCollisionOperator( a_rhs.data(), species_comp, a_time );
+   applyCollisionOperator( a_rhs.data(), species_comp, a_time, a_flag );
 }
 
 void GKOps::implicitOpImEx( GKRHSData& a_rhs,
                             const Real a_time,
                             const GKRHSData& a_state,
-                            const int a_stage )
+                            const int a_stage,
+                            const int a_flag )
 {
   m_Y.copy(a_state);
-  implicitOpImEx(a_rhs,a_time,m_Y,a_stage);
+  implicitOpImEx(a_rhs,a_time,m_Y,a_stage,a_flag);
 }
 
 void GKOps::constructPCMatIMEX( void *a_Pmat,
@@ -500,6 +502,16 @@ void GKOps::constructPCMatIMEX( void *a_Pmat,
                                 const GKState& a_state )
 {
   return;
+}
+
+
+bool GKOps::setupPCImEx( void *a_P, GKRHSData& a_state)
+{
+  bool  flag;
+  int   VecSize = a_state.getVectorSize();
+
+  flag = m_collisions->setupPrecondMatrix(a_P,VecSize);
+  return flag;
 }
 
 inline
@@ -591,10 +603,11 @@ void GKOps::applyVlasovOperator(
 inline
 void GKOps::applyCollisionOperator( KineticSpeciesPtrVect&       a_rhs,
                                     const KineticSpeciesPtrVect& a_soln,
-                                    const Real&                  a_time )
+                                    const Real&                  a_time,
+                                    const int                    a_flag )
 {
    CH_assert( isDefined() );
-   m_collisions->accumulateRHS( a_rhs, a_soln, a_time );
+   m_collisions->accumulateRHS( a_rhs, a_soln, a_time, a_flag );
 }
 
 
@@ -1442,10 +1455,12 @@ void GKOps::plotEField( const std::string& a_filename,
         mag_geom.getBlockCoordSys(grids[dit]).computePsiThetaProjections(this_Efield);
       }
 
-      //phase_geometry.plotConfigurationData( a_filename.c_str(), Efield, a_time );
-      phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell, a_time );
-
-       
+      if ( m_ampere_law ) {
+         phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell, a_time );
+      }
+      else {
+         phase_geometry.plotConfigurationData( a_filename.c_str(), Efield, a_time );
+      }
    }
    else { // Plot the unmapped field
       phase_geometry.plotConfigurationData( a_filename.c_str(), m_E_field_cell, a_time );

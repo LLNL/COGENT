@@ -52,7 +52,8 @@ class GKCollisions
        */
       virtual void accumulateRHS( KineticSpeciesPtrVect&       rhs,
                                   const KineticSpeciesPtrVect& soln,
-                                  const Real                   time );
+                                  const Real                   time,
+                                  const int                    flag = 1);
 
       /// Compute a stable time step.
       /**
@@ -65,6 +66,9 @@ class GKCollisions
        * Computes and returns an estimate of the time scale of the collision term.
        */
       Real computeTimeScale( const KineticSpeciesPtrVect& soln );
+
+      bool setupPrecondMatrix(void*,int);
+      void assemblePrecondMatrix(void*);
 
       /// returns the collision model associated with the input name
       /**

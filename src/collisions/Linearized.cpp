@@ -35,7 +35,8 @@ Linearized::~Linearized()
 void Linearized::evalClsRHS( KineticSpeciesPtrVect&       a_rhs,
                              const KineticSpeciesPtrVect& a_soln,
                              const int                    a_species,
-                             const Real                   a_time )
+                             const Real                   a_time,
+                             const int                    a_flag )
 // NB: a_soln is on the computational grid and has 4 ghost cells (passed here as Nans)
 {
    // Get solution distribution function (J*Bstar_par*dfn) for the current species
@@ -255,6 +256,10 @@ void Linearized::testPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
    for (DataIterator dit(flux_rhs.dataIterator() ); dit.ok(); ++dit) {
       const FArrayBox& this_flux_cell = flux_cell[dit];
 
+      FArrayBox tmp_flux_cell(grow(this_flux_cell.box(),1),2);
+      tmp_flux_cell.setVal(0.);
+      tmp_flux_cell.copy(this_flux_cell);
+
       for (int dir=0; dir<SpaceDim; dir++) {
           FArrayBox& this_flux_rhs = flux_rhs[dit][dir];
           FArrayBox& this_flux_face = flux_face[dit][dir];
@@ -262,7 +267,7 @@ void Linearized::testPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
                                            CHF_CONST_INT(dir),
                                            CHF_BOX(this_flux_rhs.box()),
                                            CHF_CONST_FRA(this_flux_face),
-                                           CHF_CONST_FRA(this_flux_cell),
+                                           CHF_CONST_FRA(tmp_flux_cell),
                                            CHF_CONST_INT(num_vpar_cells),
                                            CHF_CONST_INT(num_mu_cells));
       }
@@ -379,14 +384,26 @@ void Linearized::fieldPartCollRHS( LevelData<FArrayBox>& a_rhs_coll,
         const FArrayBox& this_TempDistr = m_temperature[dit];
         const FArrayBox& this_B= B_injected[dit];
 
+        FArrayBox tmp_ERest(grow(this_ERest.box(),IntVect(1,1,0,0)),this_ERest.nComp());
+        tmp_ERest.setVal(0.);
+        tmp_ERest.copy(this_ERest);
+
+        FArrayBox tmp_ENorm(grow(this_ENorm.box(),IntVect(1,1,0,0)),this_ENorm.nComp());
+        tmp_ENorm.setVal(0.);
+        tmp_ENorm.copy(this_ENorm);
+
+        FArrayBox tmp_TempDistr(grow(this_TempDistr.box(),IntVect(1,1,0,0)),this_TempDistr.nComp());
+        tmp_TempDistr.setVal(0.);
+        tmp_TempDistr.copy(this_TempDistr);
+
         for (int dir=0; dir<SpaceDim; dir++) {
            FArrayBox& thisFlux_FullERest = flux_full_ERest[dit][dir];
            FORT_EVALUATE_FULL_ER_FLUX(CHF_CONST_INT(dir),
                                       CHF_BOX(thisFlux_FullERest.box()),
                                       CHF_FRA(thisFlux_FullERest),
-                                      CHF_CONST_FRA1(this_ERest,0),
-                                      CHF_CONST_FRA1(this_ENorm,0),
-                                      CHF_CONST_FRA1(this_TempDistr,0),
+                                      CHF_CONST_FRA1(tmp_ERest,0),
+                                      CHF_CONST_FRA1(tmp_ENorm,0),
+                                      CHF_CONST_FRA1(tmp_TempDistr,0),
                                       CHF_CONST_FRA1(this_B,0),
                                       CHF_CONST_REALVECT(vel_dx),
                                       CHF_CONST_INT(num_vpar_cells),
@@ -486,13 +503,17 @@ void Linearized::evaluateNormKern( LevelData<FArrayBox>& a_kern_moment_norm,
       const FArrayBox& this_TempDistr = m_temperature[dit];
       const FArrayBox& this_B= B_injected[dit];
 
+      FArrayBox tmp_TempDistr(grow(this_TempDistr.box(),IntVect(1,1,0,0)),1);
+      tmp_TempDistr.setVal(0.);
+      tmp_TempDistr.copy(this_TempDistr);
+
       for (int dir=0; dir<SpaceDim; dir++) {
          FArrayBox& this_flux_NormERest = flux_norm_ERest[dit][dir];
 
          FORT_EVALUATE_NORM_ER_FLUX(CHF_CONST_INT(dir),
                                     CHF_BOX(this_flux_NormERest.box()),
                                     CHF_FRA(this_flux_NormERest),
-                                    CHF_CONST_FRA1(this_TempDistr,0),
+                                    CHF_CONST_FRA1(tmp_TempDistr,0),
                                     CHF_CONST_FRA1(this_B,0),
                                     CHF_CONST_REALVECT(vel_dx),
                                     CHF_CONST_INT(num_vpar_cells),

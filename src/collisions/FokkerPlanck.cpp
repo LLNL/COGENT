@@ -46,7 +46,8 @@ FokkerPlanck::~FokkerPlanck()
 void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
                         const KineticSpeciesPtrVect&  a_soln,
                         const int                     a_species,
-                        const Real                    a_time )
+                        const Real                    a_time,
+                        const int                     a_flag )
 
 // NB: a_soln is on the computational grid and has 4 ghost cells (passed here as Nans)
 // a_rhs has probably zero ghost cells (from accertion in computedivergence)  (double check)
@@ -77,6 +78,7 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
    bool update_phi(false);
    if (m_update_freq < 0) {update_phi = true;}
    else if (m_it_counter % (4 * m_update_freq) == 0 ) { update_phi=true; }
+   update_phi = (update_phi && (a_flag));
 
    if (!m_subtract_background) {
 
@@ -295,6 +297,10 @@ void FokkerPlanck::computeFlux( LevelData<FluxBox>& a_flux,
    for (DataIterator dit(a_flux.dataIterator() ); dit.ok(); ++dit) {
       const FArrayBox& this_flux_cell = flux_cell[dit];
 
+      FArrayBox tmp_flux_cell(grow(this_flux_cell.box(),1),2);
+      tmp_flux_cell.setVal(0.);
+      tmp_flux_cell.copy(this_flux_cell);
+
       for (int dir=0; dir<SpaceDim; dir++) {
           FArrayBox& this_flux = a_flux[dit][dir];
           FArrayBox& this_flux_face = flux_face[dit][dir];
@@ -302,7 +308,7 @@ void FokkerPlanck::computeFlux( LevelData<FluxBox>& a_flux,
                                            CHF_CONST_INT(dir),
                                            CHF_BOX(this_flux.box()),
                                            CHF_CONST_FRA(this_flux_face),
-                                           CHF_CONST_FRA(this_flux_cell),
+                                           CHF_CONST_FRA(tmp_flux_cell),
                                            CHF_CONST_INT(num_vpar_cells),
                                            CHF_CONST_INT(num_mu_cells));
       }

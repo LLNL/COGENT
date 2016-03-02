@@ -35,12 +35,16 @@ class CLSInterface
       virtual void evalClsRHS( KineticSpeciesPtrVect&       rhs,
                                const KineticSpeciesPtrVect& soln,
                                const int                    species,
-                               const Real                   time ) = 0;
+                               const Real                   time,
+                               const int                    flag=1) = 0;
 
       virtual inline bool isLinear() { return false; }
       
       virtual Real computeDt(const KineticSpeciesPtrVect& soln) { return -1; }
       virtual Real TimeScale(const KineticSpeciesPtrVect& soln) { return -1; }
+
+      virtual bool setupPrecondMatrix(void *a_P,int a_N) { return false; }
+      virtual void assemblePrecondMatrix(void *a_P) {}
 };
 
 #include "NamespaceFooter.H"

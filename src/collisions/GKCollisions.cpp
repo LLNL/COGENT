@@ -115,13 +115,14 @@ std::string GKCollisions::collisionModelName( const std::string& a_name )
 
 void GKCollisions::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
                                   const KineticSpeciesPtrVect& a_soln,
-                                  const Real                   a_time )
+                                  const Real                   a_time,
+                                  const int                    a_flag )
 {
    for (int species(0); species<a_rhs.size(); species++) {
       KineticSpecies& rhs_species( *(a_rhs[species]) );
       const std::string species_name( rhs_species.name() );
       CLSInterface& CLS( collisionModel( species_name ) );
-      CLS.evalClsRHS( a_rhs, a_soln, species, a_time );
+      CLS.evalClsRHS( a_rhs, a_soln, species, a_time, a_flag );
    }
 }
 
@@ -159,6 +160,30 @@ bool GKCollisions::isLinear()
   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it)
     linearFlag = (linearFlag && m_collision_model[it->second]->isLinear());
   return linearFlag;
+}
+
+bool GKCollisions::setupPrecondMatrix(void *a_P,int a_N)
+{
+  int count = 0;
+  bool flag = true;
+  std::map<std::string,int>::iterator it;
+  for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
+    flag = (flag && m_collision_model[it->second]->setupPrecondMatrix(a_P,a_N));
+    count++;
+  }
+  CH_assert(count<=1);
+  return flag;
+}
+
+void GKCollisions::assemblePrecondMatrix(void *a_P)
+{
+  int count = 0;
+  std::map<std::string,int>::iterator it;
+  for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
+    m_collision_model[it->second]->assemblePrecondMatrix(a_P);
+    count++;
+  }
+  CH_assert(count<=1);
 }
 
 #include "NamespaceFooter.H"

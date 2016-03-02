@@ -223,13 +223,15 @@ public:
 
    void explicitOp    (GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1);
    void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1);
-   void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1);
+   void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKState& a_state, const int a_stage = 1, const int a_flag = 1);
    
-   void explicitOp    (GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage );
-   void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage );
-   void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage );
+   void explicitOp    (GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage = 1);
+   void explicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage = 1);
+   void implicitOpImEx(GKRHSData& a_rhs, const Real a_time, const GKRHSData& a_state, const int a_stage = 1, const int a_flag = 1);
 
    void constructPCMatIMEX(void*,const Real,const GKState&);
+   bool setupPCImEx (void*,GKRHSData&);
+   inline void assemblePCImEx(void *a_P) { m_collisions->assemblePrecondMatrix(a_P); }
    
    void computeElectricField( LevelData<FluxBox>&          a_E_field,
                               const KineticSpeciesPtrVect& a_kinetic_species,
@@ -430,7 +432,8 @@ private:
 
    void applyCollisionOperator( KineticSpeciesPtrVect&       rhs,
                                 const KineticSpeciesPtrVect& soln,
-                                const Real&                  time );
+                                const Real&                  time,
+                                const int                    flag = 1);
 
    void applyNeutralsOperator(   KineticSpeciesPtrVect&       rhs,
                                 const KineticSpeciesPtrVect& soln,

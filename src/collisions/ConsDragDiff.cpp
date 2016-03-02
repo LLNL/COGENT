@@ -29,7 +29,8 @@ ConsDragDiff::~ConsDragDiff()
 void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        rhs,
                                const KineticSpeciesPtrVect&  soln,
                                const int                     species,
-                               const Real                    time )
+                               const Real                    time,
+                               const int                     flag )
 {
   /*
     Evaluates the like-like species fully conservative drag-diffusion

@@ -44,13 +44,20 @@ public:
   virtual void evalClsRHS( KineticSpeciesPtrVect&       rhs,
                            const KineticSpeciesPtrVect& soln,
                            const int                    species,
-                           const Real                   time );
+                           const Real                   time,
+                           const int                    flag = 1);
 
   /// Compute a stable time step.
   /**
    * Computes and returns an estimate of the maximum stable time step.
    */
   Real computeDt(const KineticSpeciesPtrVect& soln);
+
+  /// Report that collision operator is nonlinear
+  /**
+   * Reports that this collision operator is nonlinear
+   */
+  inline bool isLinear() { return false; }
 
 
 private:
