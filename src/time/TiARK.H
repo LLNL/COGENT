@@ -4,6 +4,8 @@
 #include <iostream>
 #include <string>
 
+#include "ParmParse.H"
+#include "parstream.H"
 #include "TimeIntegrator.H"
 #include "ImplicitStageFunction.H"
 #include "ImplicitStageJacobian.H"
@@ -107,18 +109,6 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      */ 
     void getCurrentTime(Real *a_time) { *a_time = m_time; }
 
-    /// Set Butcher tableaux coefficients
-    /*
-     * set the Butcher tableaux coefficients for the method
-     *
-     * @param[in] a_nstages Number of stages
-     * @param[in] a_Ae Explicit stage calculation coefficients
-     * @param[in] a_Ai Implicit stage calculation coefficients
-     * @param[in] a_be Explicit step completion coefficients (if NULL, equal to a_be)
-     * @param[in] a_bi Implicit step completion coefficients (if NULL, last row of a_Ai) 
-     */ 
-    void setCoefficients(int a_nstages, const Real* a_Ae, const Real* a_Ai, const Real* a_be, const Real* a_bi);
-
     short int getType() { return _TI_IMEX_; }
 
   protected:
@@ -126,12 +116,17 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
   private:
     bool          m_is_Defined;
     bool          m_isLinear;
+    bool          m_stagePredictor;
     std::string   m_name;
     int           m_nstages;
+    int           m_pinterp;
     Real          *m_Ae, *m_be, *m_ce;
     Real          *m_Ai, *m_bi, *m_ci;
-    Solution      m_YStage;
-    RHS           *m_rhsStage_exp, *m_rhsStage_imp, m_R, m_Z;
+    Real          *m_binterpe, *m_binterpi;
+    Solution      m_YStage, m_YPrev;
+    RHS           *m_rhsStage_exp, *m_rhsStage_imp, 
+                  *m_rhsStage_exp_prev, *m_rhsStage_imp_prev,
+                  m_R, m_Z;
     Ops           m_Operators;
     Real          m_time;
     Real          m_dt;
@@ -140,6 +135,12 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
     ImplicitStageFunction<RHS,Ops>  *m_Ifunction;
     ImplicitStageJacobian<RHS,Ops>  *m_IJacobian;
     NewtonSolver<RHS,Ops>           m_NewtonSolver;
+
+    void setCoefficients(int,const Real*,const Real*,const Real*,const Real*,
+                         int,const Real*,const Real*);
+
+    void extrapolate(Real,RHS&);
+    void parseParameters( ParmParse& );
 };
 
 
@@ -147,6 +148,7 @@ template <class Solution, class RHS, class Ops>
 void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Solution& a_state, Real a_dt)
 {
   m_dt = a_dt;
+  m_stagePredictor = false;
 
   /* set Butcher coefficients */
   if (a_name == "1bee") {
@@ -164,7 +166,7 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
       Ai[3][3] = {{1.0,0.0,0.0},
                   {0.0,0.5,0.0},
                   {0.0,0.5,0.5}};
-    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL);
+    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL,1,NULL,NULL);
 
   } else if (a_name == "2a") {
 
@@ -180,7 +182,7 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
                   {1.0,0.0}},
       Ai[2][2] = {{0.0,0.0},
                   {0.5,0.5}};
-    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL);
+    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL,1,NULL,NULL);
 
   } else if (a_name == "2c") {
 
@@ -197,8 +199,11 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
                   {0.5,0.5,0}},
       Ai[3][3] = {{0,0,0},
                   {1-1/1.414213562373095048802,1-1/1.414213562373095048802,0},
-                  {1/(2*1.414213562373095048802),1/(2*1.414213562373095048802),1-1/1.414213562373095048802}};
-    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL);
+                  {1/(2*1.414213562373095048802),1/(2*1.414213562373095048802),1-1/1.414213562373095048802}},
+      binterpi[3][2] = {{1.0/1.414213562373095048802,-1.0/(2.0*1.414213562373095048802)},
+                        {1.0/1.414213562373095048802,-1.0/(2.0*1.414213562373095048802)},
+                        {1.0-1.414213562373095048802,1.0/1.414213562373095048802}};
+    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL,2,NULL,&binterpi[0][0]);
 
   } else if (a_name == "2e") {
 
@@ -215,8 +220,11 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
                   {(3-2*1.414213562373095048802)/6,(3+2*1.414213562373095048802)/6,0}},
       Ai[3][3] = {{0,0,0},
                   {1-1/1.414213562373095048802,1-1/1.414213562373095048802,0},
-                  {1/(2*1.414213562373095048802),1/(2*1.414213562373095048802),1-1/1.414213562373095048802}};
-    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL);
+                  {1/(2*1.414213562373095048802),1/(2*1.414213562373095048802),1-1/1.414213562373095048802}},
+      binterpi[3][2] =  {{1.0/1.414213562373095048802,-1.0/(2.0*1.414213562373095048802)},
+                         {1.0/1.414213562373095048802,-1.0/(2.0*1.414213562373095048802)},
+                         {1.0-1.414213562373095048802,1.0/1.414213562373095048802}};
+    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL,2,NULL,&binterpi[0][0]);
 
   } else if (a_name == "prssp2") {
 
@@ -234,7 +242,7 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
       Ai[3][3] = {{0.25,0,0},
                   {0,0.25,0},
                   {1./3,1./3,1./3}};
-    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL);
+    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL,0,NULL,NULL);
 
   } else if (a_name == "3") {
 
@@ -253,8 +261,12 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
       Ai[4][4] = {{0,0,0,0},
                   {1767732205903./4055673282236.,1767732205903./4055673282236.,0,0},
                   {2746238789719./10658868560708.,-640167445237./6845629431997.,1767732205903./4055673282236.,0},
-                  {1471266399579./7840856788654.,-4482444167858./7529755066697.,11266239266428./11593286722821.,1767732205903./4055673282236.}};
-    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL);
+                  {1471266399579./7840856788654.,-4482444167858./7529755066697.,11266239266428./11593286722821.,1767732205903./4055673282236.}},
+      binterpi[4][2] = {{4655552711362./22874653954995., -215264564351./13552729205753.},
+                        {-18682724506714./9892148508045.,17870216137069./13817060693119.},
+                        {34259539580243./13192909600954.,-28141676662227./17317692491321.},
+                        {584795268549./6622622206610.,   2508943948391./7218656332882.}};
+    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL,2,NULL,&binterpi[0][0]);
 
   } else if (a_name == "4") {
 
@@ -277,8 +289,14 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
                   {8611./62500.,-1743./31250.,1./4,0,0,0},
                   {5012029./34652500.,-654441./2922500.,174375./388108.,1./4,0,0},
                   {15267082809./155376265600.,-71443401./120774400.,730878875./902184768.,2285395./8070912.,1./4,0},
-                  {82889./524892.,0,15625./83664.,69875./102672.,-2260./8211,1./4}};
-    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL);
+                  {82889./524892.,0,15625./83664.,69875./102672.,-2260./8211,1./4}},
+      binterpi[6][3] = {{6943876665148./7220017795957.,-54480133./30881146.,6818779379841./7100303317025.},
+                        {0,0,0},
+                        {7640104374378./9702883013639.,-11436875./14766696.,2173542590792./12501825683035.},
+                        {-20649996744609./7521556579894.,174696575./18121608.,-31592104683404./5083833661969.},
+                        {8854892464581./2390941311638.,-12120380./966161.,61146701046299./7138195549469.},
+                        {-11397109935349./6675773540249.,3843./706.,-17219254887155./4939391667607.}};
+    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL,3,NULL,&binterpi[0][0]);
 
   } else if (a_name == "5") {
 
@@ -305,8 +323,16 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
                   {3016520224154./10081342136671.,0,30586259806659./12414158314087.,-22760509404356./11113319521817.,41./200.,0,0,0},
                   {218866479029./1489978393911.,0,638256894668./5436446318841.,-1179710474555./5321154724896.,-60928119172./8023461067671.,41./200.,0,0},
                   {1020004230633./5715676835656.,0,25762820946817./25263940353407.,-2161375909145./9755907335909.,-211217309593./5846859502534.,-4269925059573./7827059040749.,41./200,0},
-                  {-872700587467./9133579230613.,0,0,22348218063261./9555858737531.,-1143369518992./8141816002931.,-39379526789629./19018526304540.,32727382324388./42900044865799.,41./200.}};
-    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL);
+                  {-872700587467./9133579230613.,0,0,22348218063261./9555858737531.,-1143369518992./8141816002931.,-39379526789629./19018526304540.,32727382324388./42900044865799.,41./200.}},
+      binterpi[8][3] = {{-17674230611817./10670229744614.,  43486358583215./12773830924787., -9257016797708./5021505065439.},
+                        {0,  0, 0                            },
+                        {0,  0, 0                            },
+                        {65168852399939./7868540260826.,  -91478233927265./11067650958493., 26096422576131./11239449250142.},
+                        {15494834004392./5936557850923.,  -79368583304911./10890268929626., 92396832856987./20362823103730.},
+                        {-99329723586156./26959484932159.,  -12239297817655./9152339842473., 30029262896817./10175596800299.},
+                        {-19024464361622./5461577185407.,  115839755401235./10719374521269., -26136350496073./3983972220547.},
+                        {-6511271360970./6095937251113.,  5843115559534./2180450260947., -5289405421727./3760307252460. }};
+    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL,3,NULL,&binterpi[0][0]);
 
   } else if (a_name == "rk4") {
 
@@ -320,7 +346,7 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
                  {0,0.5,0,0},
                  {0,0,1.0,0}},
       b[4]    = {1.0/6.0,1.0/3.0,1.0/3.0,1.0/6.0};
-    setCoefficients(m_nstages,&A[0][0],&A[0][0],&b[0],&b[0]);
+    setCoefficients(m_nstages,&A[0][0],&A[0][0],&b[0],&b[0],0,NULL,NULL);
 
   } else {
 
@@ -341,9 +367,26 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
                   {8611./62500.,-1743./31250.,1./4,0,0,0},
                   {5012029./34652500.,-654441./2922500.,174375./388108.,1./4,0,0},
                   {15267082809./155376265600.,-71443401./120774400.,730878875./902184768.,2285395./8070912.,1./4,0},
-                  {82889./524892.,0,15625./83664.,69875./102672.,-2260./8211,1./4}};
-    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL);
+                  {82889./524892.,0,15625./83664.,69875./102672.,-2260./8211,1./4}},
+      binterpi[6][3] = {{6943876665148./7220017795957.,-54480133./30881146.,6818779379841./7100303317025.},
+                        {0,0,0},
+                        {7640104374378./9702883013639.,-11436875./14766696.,2173542590792./12501825683035.},
+                        {-20649996744609./7521556579894.,174696575./18121608.,-31592104683404./5083833661969.},
+                        {8854892464581./2390941311638.,-12120380./966161.,61146701046299./7138195549469.},
+                        {-11397109935349./6675773540249.,3843./706.,-17219254887155./4939391667607.}};
+    setCoefficients(m_nstages,&Ae[0][0],&Ai[0][0],NULL,NULL,3,NULL,&binterpi[0][0]);
 
+  }
+
+  ParmParse ppARK("ark");
+  parseParameters( ppARK );
+  if ((m_pinterp == 0) && (m_stagePredictor)) {
+    if (!procID()) {
+      cout << "ARK method \"" << m_name << "\" does not have dense output. ";
+      cout << "Cannot use stage predictors. Set ark.stage_predictor to false ";
+      cout << "or remove it from input file (default: false).\n";
+    }
+    return;
   }
 
   /* allocate RHS */
@@ -360,6 +403,17 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
   }
   m_Operators.define(a_state, m_dt);
   m_isLinear = m_Operators.isLinear();
+
+  /* define vectors for stage predictors */
+  if (m_stagePredictor) {
+    m_YPrev.define(a_state);
+    m_rhsStage_exp_prev  = new RHS[m_nstages];
+    m_rhsStage_imp_prev  = new RHS[m_nstages];
+    for (int i=0; i<m_nstages; i++) {
+      m_rhsStage_exp_prev[i].define(a_state);
+      m_rhsStage_imp_prev[i].define(a_state);
+    }
+  } else m_rhsStage_exp_prev = m_rhsStage_imp_prev = NULL;
 
   /* define the Newton solver */
   Function<RHS,Ops>       **NewtonSolverFunction = m_NewtonSolver.getFunction();
@@ -387,7 +441,9 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
 template <class Solution, class RHS, class Ops>
 void TiARK<Solution, RHS, Ops>::setCoefficients( int a_nstages,
                                                  const Real* a_Ae, const Real* a_Ai, 
-                                                 const Real* a_be, const Real* a_bi
+                                                 const Real* a_be, const Real* a_bi,
+                                                 int a_pinterp,
+                                                 const Real* a_binterpe, const Real* a_binterpi
                                                )
 {
   CH_assert(!isDefined());
@@ -419,6 +475,18 @@ void TiARK<Solution, RHS, Ops>::setCoefficients( int a_nstages,
       m_ci[i] += a_Ai[i*m_nstages+j]; 
     }
   }
+
+  if (a_pinterp != 0) {
+    m_pinterp = a_pinterp;
+    m_binterpe = new Real[m_nstages*m_pinterp];
+    m_binterpi = new Real[m_nstages*m_pinterp];
+    for (i=0; i<m_nstages; i++) {
+      for (j=0; j<m_pinterp; j++) {
+        m_binterpi[i*m_pinterp+j] = (a_binterpi?a_binterpi[i*m_pinterp+j]:m_be[i]);
+        m_binterpe[i*m_pinterp+j] = (a_binterpe?a_binterpe[i*m_pinterp+j]:m_binterpi[i*m_pinterp+j]);
+      }
+    }
+  } else m_binterpe = m_binterpi = NULL;
 }
 
 template <class Solution, class RHS, class Ops>
@@ -430,8 +498,16 @@ TiARK<Solution, RHS, Ops>::~TiARK()
   delete[] m_Ai;
   delete[] m_bi;
   delete[] m_ci;
+  if (m_pinterp != 0) {
+    delete[] m_binterpe;
+    delete[] m_binterpi;
+  }
   delete[] m_rhsStage_exp;
   delete[] m_rhsStage_imp;
+  if (m_stagePredictor) {
+    delete[] m_rhsStage_exp_prev;
+    delete[] m_rhsStage_imp_prev;
+  }
   delete m_Ifunction;
   delete m_IJacobian;
 }
@@ -461,12 +537,15 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
       m_IJacobian->setStageNumber(i);
       m_IJacobian->setStageTime(m_time+m_ce[i]*m_dt);
 
+      m_R.copy(m_YStage);  /* right-hand side */
       /* Before the Newton solve begins, m_Z contains the
        * initial guess, which is:
        * first stage - a_Y
        * subsequent stages - m_YStage from previous stage
+       * If using stage predictor, initial guess is computed
+       * by extrapolating from previous step.
        */
-      m_R.copy(m_YStage);  /* right-hand side */
+      if (m_stagePredictor && (m_cur_step > 0)) extrapolate(m_ce[i],m_Z);
       m_NewtonSolver.solve(m_Z,m_R);
       m_YStage.copy(m_Z);
     }
@@ -476,15 +555,63 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
     m_Operators.explicitOpImEx(m_rhsStage_exp[i],stage_time,m_YStage,i);
     m_Operators.implicitOpImEx(m_rhsStage_imp[i],stage_time,m_YStage,i,0);
   }
+  /* save stuff for stage predictor */
+  if (m_stagePredictor) {
+    m_YPrev.copy(a_Y);
+    for (i = 0; i< m_nstages; i++) {
+      m_rhsStage_exp_prev[i].copy(m_rhsStage_exp[i]);
+      m_rhsStage_imp_prev[i].copy(m_rhsStage_imp[i]);
+    }
+  }
   /* Step completion */
   for (i = 0; i < m_nstages; i++) {
     a_Y.increment(m_rhsStage_exp[i],(m_dt*m_be[i]));
     a_Y.increment(m_rhsStage_imp[i],(m_dt*m_bi[i]));
   }
-
   /* update current time and step number */
   m_cur_step++;
   m_time += m_dt; 
+}
+
+/* Use dense output to extrapolate from previous stage */
+template <class Solution, class RHS, class Ops>
+void TiARK<Solution, RHS, Ops>::extrapolate(Real c, RHS& a_Y)
+{
+  Real h, tt, t, *bt,*b;
+  int i,j;
+  if (!m_binterpi || !m_binterpe) {
+    if (!procID()) cout << "Error: ARK method \"" << m_name << "\" does not have an interpolation formula.\n";
+    return;
+  }
+
+  t = 1.0 + c;
+  h = m_dt;
+  bt = (Real*) calloc (m_nstages,sizeof(Real));
+  b  = (Real*) calloc (m_nstages,sizeof(Real));
+
+  for (i=0; i<m_nstages; i++) bt[i] = b[i] = 0;
+  for (j=0,tt=t; j<m_pinterp; j++,tt*=t) {
+    for (i=0; i<m_nstages; i++) {
+      bt[i] += h * m_binterpi[i*m_pinterp+j] * tt;
+      b[i]  += h * m_binterpe[i*m_pinterp+j] * tt;
+    }
+  }
+
+  a_Y.copy(m_YPrev);
+  for (i=0; i<m_nstages; i++) {
+    a_Y.increment(m_rhsStage_imp_prev[i],bt[i]);
+    a_Y.increment(m_rhsStage_exp_prev[i],b[i] );
+  }
+
+  free(bt);
+  free(b);
+}
+
+template <class Solution, class RHS, class Ops>
+void TiARK<Solution,RHS,Ops>::parseParameters( ParmParse& a_pp)
+{
+  /* use stage predictor based on dense output */
+  a_pp.query("stage_predictor", m_stagePredictor); 
 }
 
 #include "NamespaceFooter.H"
