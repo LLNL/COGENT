@@ -582,7 +582,7 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
   /* update current time and step number */
   m_cur_step++;
   m_time += m_dt; 
-  m_count;
+  m_count++;
 }
 
 /* Use dense output to extrapolate from previous stage */
