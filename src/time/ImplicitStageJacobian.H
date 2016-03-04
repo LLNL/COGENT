@@ -37,6 +37,7 @@ class ImplicitStageJacobian: public LinearFunction<T,Ops>
     inline bool isDefined       ()              const { return m_is_Defined;  }
     inline void setBaseSolution (T& a_Y)              { m_Y0.copy(a_Y); }
     inline void setBaseRHS      (T& a_F)              { m_F0.copy(a_F); }
+    inline void setJFNKEps      (Real a_eps)          { m_epsJFNK = a_eps; }
 
     void define(T& a_state, Ops& a_ops);
     void setIsLinear(bool a_isLinear) { m_isLinear = a_isLinear; }

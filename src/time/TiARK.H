@@ -138,6 +138,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
     Ops           m_Operators;
     Real          m_time;
     Real          m_dt;
+    Real          m_epsJFNK;
     int           m_cur_step,
                   m_count, m_count_NonLinear, m_count_Linear;
 
@@ -158,6 +159,7 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
 {
   m_dt = a_dt;
   m_stagePredictor = false;
+  m_epsJFNK = 1e-6;
 
   /* set Butcher coefficients */
   if (a_name == "1bee") {
@@ -436,6 +438,7 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
   m_IJacobian->define(m_R,m_Operators);
   m_Ifunction->setJac(m_IJacobian);
   m_IJacobian->setIsLinear(m_isLinear);
+  m_IJacobian->setJFNKEps(m_epsJFNK);
 
   std::string solverOutPrefix = "TiARK";
   std::string solverOptPrefix = "ark";
@@ -624,6 +627,7 @@ void TiARK<Solution,RHS,Ops>::parseParameters( ParmParse& a_pp)
 {
   /* use stage predictor based on dense output */
   a_pp.query("stage_predictor", m_stagePredictor); 
+  a_pp.query("jfnk_epsilon", m_epsJFNK); 
 }
 
 #include "NamespaceFooter.H"
