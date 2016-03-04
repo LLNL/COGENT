@@ -111,6 +111,14 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
 
     short int getType() { return _TI_IMEX_; }
 
+    void getCounts(int *a_ti, int *a_nonlinear, int *a_linear)
+      {
+        if (a_ti)         *a_ti = m_count;
+        if (a_nonlinear)  *a_nonlinear = m_NewtonSolver.getCount();
+        if (a_linear)     *a_linear = m_NewtonSolver.getLinearCount();
+        return;
+      }
+
   protected:
 
   private:
@@ -130,7 +138,8 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
     Ops           m_Operators;
     Real          m_time;
     Real          m_dt;
-    int           m_cur_step;
+    int           m_cur_step,
+                  m_count, m_count_NonLinear, m_count_Linear;
 
     ImplicitStageFunction<RHS,Ops>  *m_Ifunction;
     ImplicitStageJacobian<RHS,Ops>  *m_IJacobian;
@@ -433,6 +442,8 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
   m_NewtonSolver.define(a_pp,m_R,solverOutPrefix,solverOptPrefix);
   m_NewtonSolver.setIsLinear(m_isLinear);
 
+  m_count = m_count_NonLinear = m_count_Linear = 0;
+
   /* done */
   m_is_Defined = true;
   if (!procID()) cout << "Time integration method: ark (" << m_name << ")\n" ;
@@ -571,6 +582,7 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
   /* update current time and step number */
   m_cur_step++;
   m_time += m_dt; 
+  m_count;
 }
 
 /* Use dense output to extrapolate from previous stage */

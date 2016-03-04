@@ -404,6 +404,15 @@ public:
    void readCheckpointFile( HDF5Handle& handle, const int& cur_step  );
 
    inline bool isLinear() { return(m_collisions->isLinear()); }
+
+   inline void getFunctionCounts(int *a_count_Vlasov, int *a_count_Collision,
+                                 int *a_count_Transport, int *a_count_Neutrals)
+    {
+      if (a_count_Vlasov)     *a_count_Vlasov = m_count_Vlasov;
+      if (a_count_Collision)  *a_count_Collision = m_count_Collision;
+      if (a_count_Transport)  *a_count_Transport = m_count_Transport;
+      if (a_count_Neutrals)   *a_count_Neutrals = m_count_Neutrals;
+    }
    
 private:
    
@@ -602,6 +611,12 @@ private:
    Vector<FieldHist> m_fieldHistLists; // for saving all histories internally
    
    int                            m_verbosity;
+
+   /* Function counters */
+   int m_count_Vlasov,
+       m_count_Collision,
+       m_count_Transport,
+       m_count_Neutrals;
 };
 
 #include "NamespaceFooter.H"

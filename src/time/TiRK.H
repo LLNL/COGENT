@@ -115,6 +115,14 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      */ 
     void setCoefficients(int a_nstages, const Real* a_A,const Real* a_b);
 
+    void getCounts(int *a_ti, int *a_nonlinear, int *a_linear)
+      {
+        if (a_ti)           *a_ti         = m_count;
+        if (a_nonlinear)    *a_nonlinear  = 0;
+        if (a_linear)       *a_linear     = 0;
+        return;
+      }
+
   protected:
 
   private:
@@ -127,7 +135,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
     Ops         m_Operators;
     Real        m_time;
     Real        m_dt;
-    int         m_cur_step;
+    int         m_cur_step, m_count;
 };
 
 template <class Solution, class RHS, class Ops>
@@ -211,6 +219,7 @@ void TiRK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Solutio
     m_rhsStage[i].define(a_state);
   }
   m_Operators.define(a_state, m_dt);
+  m_count = 0;
   m_is_Defined = true;
 
   if (!procID()) cout << "Time integration method: rk (" << m_name << ")\n" ;
@@ -270,6 +279,7 @@ void TiRK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
   /* update current time and step number */
   m_cur_step++;
   m_time += m_dt; 
+  m_count++;
 }
 
 #include "NamespaceFooter.H"

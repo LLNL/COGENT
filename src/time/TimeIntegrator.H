@@ -32,6 +32,7 @@ class TimeIntegrator
     virtual ~TimeIntegrator<Solution,RHS,Ops>() {}
 
     virtual short int getType() { return _TI_EXPLICIT_; }
+    virtual void getCounts(int *a,int *b,int *c) = 0;
 };
 
 #include "NamespaceFooter.H"

@@ -85,6 +85,9 @@ class NewtonSolver
 
     inline void setIsLinear(bool a_flag) { m_isLinear = a_flag; }
 
+    inline int  getCount() { return m_count; }
+    inline int  getLinearCount() { return m_LinearSolver.getCount(); }
+
   protected:
 
   private:
@@ -92,7 +95,7 @@ class NewtonSolver
     void parseParameters( ParmParse& );
 
     bool      m_is_Defined;
-    int       m_its, m_maxits, m_exitStatus;
+    int       m_its, m_maxits, m_exitStatus, m_count;
     Real      m_norm, m_norm0,
               m_rtol, m_atol, m_stol;
     T         m_dY, m_F;
@@ -129,6 +132,7 @@ void NewtonSolver<T,Ops>::define(ParmParse& a_pp, T& a_state, std::string a_outP
   m_atol    = 1e-6;
   m_stol    = 1e-14;
   m_verbose = true;
+  m_count   = 0;
 
   m_outPrefix = a_outPrefix;
   m_optPrefix = a_optPrefix;
@@ -202,6 +206,7 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
     a_Y.increment(m_dY,-1);
     m_its++;
   }
+  m_count += m_its;
 }
 
 template <class T, class Ops>

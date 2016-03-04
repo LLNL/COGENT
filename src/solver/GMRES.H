@@ -41,6 +41,7 @@ public:
 
   int getExitStatus() const { return m_exitStatus; }
 
+  inline int  getCount() { return m_count; }
 
 private:
   void allocate();
@@ -72,7 +73,8 @@ private:
       m_normType,
       m_maxits,
       m_its,
-      m_restrtLen;
+      m_restrtLen,
+      m_count;
 
   LinearFunction<T,Ops>* m_op;
 
@@ -129,6 +131,7 @@ GMRESSolver<T,Ops>::GMRESSolver()
    m_normType(2),
    m_maxits(100),
    m_restrtLen(30),
+   m_count(0),
    m_op(NULL)
 {
   allocate();
@@ -256,7 +259,7 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
     }
 
   CH_STOP(timeMainLoop);
-
+  
   CH_START(timeCleanup);
 
   // clean up
@@ -272,6 +275,7 @@ void GMRESSolver<T,Ops>::solve( T& a_xx, const T& a_bb )
     }
 
   CH_STOP(timeCleanup);
+  m_count += m_its;
 }
 
 #define CONVERGED(r0,r) (r<r0*m_rtol || r<m_atol)

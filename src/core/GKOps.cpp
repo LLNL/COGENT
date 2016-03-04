@@ -109,6 +109,10 @@ void GKOps::define( const GKState& a_state,
    CFG::IntVect phi_ghost_vect( 4*CFG::IntVect::Unit );
    m_phi.define( m_phase_geometry->magGeom().grids(), 1, phi_ghost_vect );
 
+   m_count_Vlasov = m_count_Collision
+                  = m_count_Transport
+                  = m_count_Neutrals = 0;
+
    m_is_defined = true;
 }
 
@@ -575,6 +579,7 @@ void GKOps::applyVlasovOperator(
    const Real&                  a_time )
 {
    CH_assert( isDefined() );
+   m_count_Vlasov++;
 
    if (m_consistent_potential_bcs) {
       m_lo_radial_flux_divergence_average = 0.;
@@ -607,6 +612,7 @@ void GKOps::applyCollisionOperator( KineticSpeciesPtrVect&       a_rhs,
                                     const int                    a_flag )
 {
    CH_assert( isDefined() );
+   m_count_Collision++;
    m_collisions->accumulateRHS( a_rhs, a_soln, a_time, a_flag );
 }
 
@@ -617,6 +623,7 @@ void GKOps::applyTransportOperator( KineticSpeciesPtrVect&       a_rhs,
                                     const Real&                  a_time )
 {
    CH_assert( isDefined() );
+   m_count_Transport++;
    m_transport->accumulateRHS( a_rhs, a_soln, a_time );
 
 }
@@ -627,6 +634,7 @@ void GKOps::applyNeutralsOperator( KineticSpeciesPtrVect&       a_rhs,
                                    const Real&                  a_time )
 {
     CH_assert( isDefined() );
+    m_count_Neutrals++;
     m_neutrals->accumulateRHS( a_rhs, a_soln, a_time );
     
 }

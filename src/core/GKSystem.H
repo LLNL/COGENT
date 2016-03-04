@@ -298,6 +298,16 @@ class GKSystem
       inline void computeIFunctionImEx  (Real t,int flag=1) { m_gk_ops->implicitOpImEx (m_rhs,t,m_state,1,flag); }
 
       inline bool isLinear()  { return m_gk_ops->isLinear(); }
+      inline void getFunctionCounts(int *a,int *b,int *c,int *d) 
+        {
+          m_gk_ops->getFunctionCounts(a,b,c,d);
+          return;
+        }
+      inline void getTimeIntegratorCounts(int *a,int *b, int *c)
+        {
+          m_integrator->getCounts(a,b,c);
+          return;
+        }
 
    private:
 

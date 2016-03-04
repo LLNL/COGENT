@@ -265,6 +265,26 @@ void Simulation<SYSTEM>::finalize()
       writeCheckpointFile();
    }
 
+   int countVlasov, countCollision, countTransport, countNeutrals;
+   m_system->getFunctionCounts(&countVlasov,&countCollision,&countTransport,&countNeutrals);
+   int countTI, countNonLinear, countLinear;
+   m_system->getTimeIntegratorCounts(&countTI,&countNonLinear,&countLinear);
+   if (!procID()) {
+     cout << "----\n";
+     cout << "  Function counts:-\n";
+     cout << "    Vlasov     : " << countVlasov     << "\n";
+     cout << "    Collision  : " << countCollision  << "\n";
+     cout << "    Transport  : " << countTransport  << "\n";
+     cout << "    Neutrals   : " << countNeutrals   << "\n";
+     cout << "----\n";
+     cout << "  Time integrator counts:-\n";
+     cout << "    Time steps          : " << countTI         << "\n";
+     cout << "    Nonlinear iterations: " << countNonLinear  << "\n";
+     cout << "    Linear iterations   : " << countLinear     << "\n";
+     cout << "----\n";
+   }
+
+
 #ifdef CH_USE_TIMER
    m_shutdown_timer->stop() ;
    m_all_timer->stop() ;
