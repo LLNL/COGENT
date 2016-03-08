@@ -248,9 +248,9 @@ void FokkerPlanck::assemblePrecondMatrix(void *a_P,const KineticSpeciesPtrVect& 
            ase = 0.0,
            asw = 0.0;
 
-      int ncols = 9, bs = n_comp*n_comp, ix = 0;
-      int   *icols = (int*)  calloc (ncols,sizeof(int));
-      Real  *data  = (Real*) calloc (ncols*bs,sizeof(Real));
+      int  ncols = 9, bs = n_comp*n_comp, ix = 0;
+      int  *icols = (int*)  calloc (ncols,sizeof(int));
+      Real *data  = (Real*) calloc (ncols*bs,sizeof(Real));
 
       /* center element */
       icols[ix] = pc;

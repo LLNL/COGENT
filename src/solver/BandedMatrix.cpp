@@ -76,4 +76,30 @@ void BandedMatrix::shift(Real a_a)
   }
 }
 
+#ifdef with_petsc
+void BandedMatrix::copyToPetscMat(Mat& A,const int offset)
+{
+  int irow, *colind = (int*) calloc (m_nbands,sizeof(int));
+  Real  **val   = (Real**)calloc (m_bs,sizeof(Real*));
+  for (int v=0; v<m_bs; v++) val[v] = (Real*) calloc (m_bs*m_nbands,sizeof(Real));
+
+  for (int row=0; row<m_nrow; row++) {
+    irow = row + offset; 
+    for (int i=0; i<m_nbands; i++) {
+      colind[i] = (m_cols+row*m_nbands)[i] + offset;
+      for (int u=0; u<m_bs; u++) {
+        for (int v=0; v<m_bs; v++) val[u][v+i*m_bs] = (m_data+row*m_rstride)[i*m_bs*m_bs+u*m_bs+v];
+      }
+    }
+    MatSetValuesBlocked(A,1,&irow,m_nbands,colind,&val[0][0],INSERT_VALUES);
+  }
+  MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd  (A,MAT_FINAL_ASSEMBLY);
+
+  free(colind);
+  for (int v=0; v<m_bs; v++) free(val[v]); free(val);
+  return;
+}
+#endif
+
 #include "NamespaceFooter.H"

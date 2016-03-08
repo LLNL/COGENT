@@ -6,6 +6,10 @@
 #include "REAL.H"
 #include "Box.H"
 
+#ifdef with_petsc
+#include <petscmat.h>
+#endif
+
 #include "NamespaceHeader.H"
 
 class BandedMatrix
@@ -38,6 +42,10 @@ class BandedMatrix
     inline bool isDefined() { return(m_is_Defined); }
 
     void setRowValues(int,int,int*,Real*);
+
+#ifdef with_petsc
+    void copyToPetscMat(Mat&,const int);
+#endif
 
   private:
     bool  m_is_Defined,

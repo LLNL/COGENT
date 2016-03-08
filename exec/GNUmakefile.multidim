@@ -76,7 +76,7 @@ XTRALIBFLAGS += -L$(HYPRE_LOC)/lib -lHYPRE $(LAPACKLIBS)
 #########################################################################
 
 # Set this to TRUE or FALSE to compile with or without PETSc interface
-USE_PETSC = FALSE
+USE_PETSC = TRUE
 # Set the machine name (i.e., "cab","cori",etc). Make sure 
 # PETSC_LIB_FLAGS_$(MACHINE_NAME) (i.e., PETSC_LIB_FLAGS_cab, 
 # PETSC_LIB_FLAGS_cori, etc) for the machine being used is defined 
