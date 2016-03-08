@@ -39,17 +39,17 @@ NewGKPoissonBoltzmann::NewGKPoissonBoltzmann( ParmParse&                  a_pp,
 
    const SingleNullCoordSys& coord_sys = (SingleNullCoordSys&)( *(a_geom.getCoordSys()) );
    
-   const string pp_prefix = a_geom.getParmParsePrefix() + ".singlenull";
-   ParmParse pp_single_null_geom( pp_prefix.c_str() );
+   const string pp_geom_prefix = a_geom.getParmParsePrefix();
+   const string pp_sn_geom_prefix = pp_geom_prefix + ".singlenull";
+   ParmParse pp_sn_geom( pp_sn_geom_prefix.c_str() );
 
    DisjointBoxLayout dbl_core;
-   m_core_coord_sys = new SNCoreCoordSys( pp_single_null_geom,
+   m_core_coord_sys = new SNCoreCoordSys( pp_sn_geom,
                                           (SingleNullCoordSys&)coord_sys,
                                           a_geom.grids(),
                                           dbl_core );
 
-   const string pp_prefix_geom = a_geom.getParmParsePrefix();
-   ParmParse pp_geom( pp_prefix_geom.c_str() );
+   ParmParse pp_geom( pp_geom_prefix.c_str() );
    m_core_geometry = new MagGeom(pp_geom, m_core_coord_sys, dbl_core, a_geom.ghosts());
 
    LevelData<FArrayBox> core_initial_ion_charge_density(m_core_geometry->gridsFull(), 1, a_initial_ion_charge_density.ghostVect());
@@ -188,7 +188,7 @@ NewGKPoissonBoltzmann::getPhiTilde( const LevelData<FArrayBox>& a_Zni,
 
    m_gkpb_solver->getPhiTilde(Zni_core, ne_core, phi_tilde_core);
 
-   setZero(a_phi_tilde);
+   setToZero(a_phi_tilde);
    copyFromCore(phi_tilde_core, a_phi_tilde);
 }
 
@@ -299,7 +299,7 @@ NewGKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>& a_io
 
    m_gkpb_solver->setOperatorCoefficients( ion_mass_density_core, *m_bc_core, a_lo_value, a_hi_value, radial_gkp_divergence_average_core );
 
-   setZero(a_radial_gkp_divergence_average);
+   setToZero(a_radial_gkp_divergence_average);
    copyFromCore(radial_gkp_divergence_average_core, a_radial_gkp_divergence_average);
 }
 
@@ -321,7 +321,7 @@ NewGKPoissonBoltzmann::getFaceCenteredFieldOnCore( const LevelData<FArrayBox>& a
 
    LevelData<FluxBox> core_field(core_grids, a_field.nComp(), a_field.ghostVect());
 
-   m_gkpb_solver->computeFaceCenteredField( phi_core, *m_bc_core, core_field );
+   m_gkpb_solver->computePoloidalFieldWithBCs( phi_core, core_field, false );
 
    for (DataIterator cdit(core_grids.dataIterator()), dit(grids.dataIterator());
         dit.ok() && cdit.ok(); ++dit,++cdit) {

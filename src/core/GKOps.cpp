@@ -179,12 +179,11 @@ GKOps::initialize( const KineticSpeciesPtrVect& a_kinetic_species,
       //Initialize E-field
       m_poisson->fillInternalGhosts( m_phi );
 #ifdef EXTRAPOLATE_FIELD
-      m_poisson->computeElectricField( m_phi, m_Er_average_cell );
-      m_poisson->computeElectricField( m_phi, m_Er_average_face );
+      m_poisson->computeField( m_phi, m_Er_average_cell );
+      m_poisson->computeField( m_phi, m_Er_average_face );
 #else
-      CFG::PotentialBC& bc = m_boundary_conditions->getPotentialBC();
-      m_poisson->computeElectricField( m_phi, bc, m_Er_average_cell );
-      m_poisson->computeElectricField( m_phi, bc, m_Er_average_face );
+      m_poisson->computeField( m_phi, m_Er_average_cell );
+      m_poisson->computeField( m_phi, m_Er_average_face );
 #endif
    }
    
@@ -343,7 +342,7 @@ void GKOps::explicitOp( GKRHSData& a_rhs,
 
             // Compute the poloidal variation phi_tilde.  The poloidal variation of the
             // current potential is used as the initial guess for the interative procedure.
-            int num_phi_ghosts_filled = m_poisson->numPotentialGhostsFilled();
+            int num_phi_ghosts_filled = m_poisson->numPotentialGhosts();
             CH_assert(num_phi_ghosts_filled >=3 );
             CFG::LevelData<CFG::FArrayBox> phi_tilde(mag_grids, 1, num_phi_ghosts_filled*CFG::IntVect::Unit);
 
@@ -354,10 +353,10 @@ void GKOps::explicitOp( GKRHSData& a_rhs,
             m_poisson->fillInternalGhosts( phi_tilde );
 
             E_tilde_mapped_face.define(mag_grids, 3, CFG::IntVect::Unit);
-            m_poisson->computeMappedElectricField( phi_tilde, E_tilde_mapped_face );
+            m_poisson->computeMappedField( phi_tilde, E_tilde_mapped_face );
 
             E_tilde_mapped_cell.define(mag_grids, 3, CFG::IntVect::Unit);
-            m_poisson->computeMappedElectricField( phi_tilde, E_tilde_mapped_cell );
+            m_poisson->computeMappedField( phi_tilde, E_tilde_mapped_cell );
 
             CFG::LevelData<CFG::FluxBox> Er_tilde_mapped(mag_grids, 1, CFG::IntVect::Zero);
             m_poisson->extractNormalComponent(E_tilde_mapped_face, RADIAL_DIR, Er_tilde_mapped);
@@ -430,7 +429,7 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
 
             // Compute the poloidal variation phi_tilde.  The poloidal variation of the
             // current potential is used as the initial guess for the interative procedure.
-            int num_phi_ghosts_filled = m_poisson->numPotentialGhostsFilled();
+            int num_phi_ghosts_filled = m_poisson->numPotentialGhosts();
             CH_assert(num_phi_ghosts_filled >=2 );
             CFG::LevelData<CFG::FArrayBox> phi_tilde(mag_grids, 1, num_phi_ghosts_filled*CFG::IntVect::Unit);
 
@@ -441,10 +440,10 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
             m_poisson->fillInternalGhosts( phi_tilde );
 
             E_tilde_mapped_face.define(mag_grids, 3, CFG::IntVect::Zero);
-            m_poisson->computeMappedElectricField( phi_tilde, E_tilde_mapped_face );
+            m_poisson->computeMappedField( phi_tilde, E_tilde_mapped_face );
 
             E_tilde_mapped_cell.define(mag_grids, 3, CFG::IntVect::Zero);
-            m_poisson->computeMappedElectricField( phi_tilde, E_tilde_mapped_cell );
+            m_poisson->computeMappedField( phi_tilde, E_tilde_mapped_cell );
 
             CFG::LevelData<CFG::FluxBox> Er_tilde_mapped(mag_grids, 1, CFG::IntVect::Zero);
             m_poisson->extractNormalComponent(E_tilde_mapped_face, RADIAL_DIR, Er_tilde_mapped);
@@ -828,7 +827,7 @@ void GKOps::computeEField( CFG::LevelData<CFG::FluxBox>&   a_E_field_face,
 
             CFG::LevelData<CFG::FArrayBox> total_charge_density( grids, 1, CFG::IntVect::Zero );
             computeTotalChargeDensity( total_charge_density, a_soln );
-            m_poisson->computePotential( m_phi, bc, total_charge_density );
+            m_poisson->computePotential( m_phi, total_charge_density );
 
          }
          else {
@@ -914,11 +913,11 @@ void GKOps::computeEField( CFG::LevelData<CFG::FluxBox>&   a_E_field_face,
          else {
 
 #ifdef EXTRAPOLATE_FIELD
-            m_poisson->computeElectricField( m_phi, a_E_field_cell );
-            m_poisson->computeElectricField( m_phi, a_E_field_face );
+            m_poisson->computeField( m_phi, a_E_field_cell );
+            m_poisson->computeField( m_phi, a_E_field_face );
 #else
-            m_poisson->computeElectricField( m_phi, bc, a_E_field_cell );
-            m_poisson->computeElectricField( m_phi, bc, a_E_field_face );
+            m_poisson->computeField( m_phi, a_E_field_cell );
+            m_poisson->computeField( m_phi, a_E_field_face );
 #endif
          }          
          m_initializedE = true;
@@ -1130,8 +1129,6 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
         }
     }
 
-    mag_geom.fillTransverseGhosts(Er_mapped_face, false);
-
     //Compute cell-centered increment for the mapped E-field
     CFG::LevelData<CFG::FArrayBox> Er_mapped_cell(mag_geom.grids(), 3, CFG::IntVect::Unit );
     CFG::DataIterator dit( Er_mapped_cell.dataIterator() );
@@ -1148,15 +1145,12 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
         }
     }
     
-    mag_geom.fillInternalGhosts(Er_mapped_cell);
-    mag_geom.fillTransversePhysicalGhosts(Er_mapped_cell);
-
     //Multiply by NJtranspose (E_fs_average = - NJInverse * grad Phi)
     CFG::LevelData<CFG::FluxBox> Er_face_incr( mag_geom.grids(), 3, CFG::IntVect::Unit );
-    m_poisson->getUnmappedField(Er_mapped_face, Er_face_incr);
+    m_poisson->unmapGradient(Er_mapped_face, Er_face_incr);
     
     CFG::LevelData<CFG::FArrayBox> Er_cell_incr( mag_geom.grids(), 3, CFG::IntVect::Unit );
-    m_poisson->getUnmappedField(Er_mapped_cell, Er_cell_incr);
+    m_poisson->unmapGradient(Er_mapped_cell, Er_cell_incr);
     
     //Update E-field
     for (CFG::DataIterator dit(a_Er_average_face.dataIterator()); dit.ok(); ++dit) {
@@ -1220,8 +1214,8 @@ GKOps::updateEfieldPoloidalVariation( const CFG::LevelData<CFG::FluxBox>&   a_E_
       CH_assert(a_E_tilde_mapped_cell.ghostVect() == CFG::IntVect::Unit);
       CH_assert(a_phi_tilde_fs_average.ghostVect() == CFG::IntVect::Zero);
 
-      m_poisson->getUnmappedField(a_E_tilde_mapped_face, a_E_tilde_phys_face);
-      m_poisson->getUnmappedField(a_E_tilde_mapped_cell, a_E_tilde_phys_cell);
+      m_poisson->unmapGradient(a_E_tilde_mapped_face, a_E_tilde_phys_face);
+      m_poisson->unmapGradient(a_E_tilde_mapped_cell, a_E_tilde_phys_cell);
       
       CFG::LevelData<CFG::FluxBox> Er_average_face_pol_contrib(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
       CFG::LevelData<CFG::FArrayBox> Er_average_cell_pol_contrib(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
@@ -1240,6 +1234,9 @@ void
 GKOps::setErAverage( const LevelData<FluxBox>& Er_face_injected )
 {
    m_Er_average_face.define(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
+   for (CFG::DataIterator dit(m_Er_average_face.disjointBoxLayout()); dit.ok(); ++dit) {
+      m_Er_average_face[dit].setVal(0.);
+   }
    m_phase_geometry->projectPhaseToConfiguration(Er_face_injected, m_Er_average_face);
 }
 
@@ -1254,6 +1251,9 @@ void
 GKOps::setETilde( const LevelData<FluxBox>& E_tilde_face_injected )
 {
    m_E_tilde_face.define(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
+   for (CFG::DataIterator dit(m_E_tilde_face.disjointBoxLayout()); dit.ok(); ++dit) {
+      m_E_tilde_face[dit].setVal(0.);
+   }
    m_phase_geometry->projectPhaseToConfiguration(E_tilde_face_injected, m_E_tilde_face);
 }
 
@@ -1447,13 +1447,12 @@ void GKOps::plotEField( const std::string& a_filename,
    const PhaseGeom& phase_geometry( *m_phase_geometry );
 
    if (m_poisson) { // Plot the psi and theta projections of the physical field
+
       const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
       CFG::LevelData<CFG::FluxBox> Efield( mag_geom.grids(), 2, CFG::IntVect::Unit);
 
-      const CFG::PotentialBC& bc = m_boundary_conditions->getPotentialBC();
-
 #if 1
-      m_poisson->computeFaceCenteredField( m_phi, bc, Efield );
+      m_poisson->computePoloidalField( m_phi, Efield );
 #else
       ((CFG::NewGKPoissonBoltzmann*)m_poisson)->getFaceCenteredFieldOnCore( m_phi, Efield );
 #endif
@@ -2469,8 +2468,7 @@ void GKOps::computeQuasiNeutralElectronDensity(
    const CFG::DisjointBoxLayout& grids( a_ion_density.disjointBoxLayout() );
    CFG::LevelData<CFG::FArrayBox> polarization_density( grids, 1, m_cfg_nghosts );
 
-   const CFG::PotentialBC& bc = m_boundary_conditions->getPotentialBC();
-   m_poisson->applyOperator( a_potential, bc, polarization_density );
+   m_poisson->computeFluxDivergence( a_potential, polarization_density );
    for (CFG::DataIterator cdit( grids.dataIterator() ); cdit.ok(); ++cdit) {
       a_quasineutral_density[cdit] -= polarization_density[cdit];
    }

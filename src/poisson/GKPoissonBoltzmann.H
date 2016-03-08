@@ -3,18 +3,11 @@
 
 #include "GKPoisson.H"
 #include "FluxSurface.H"
-#include "BiCGStabSolver.H"
-#include "GMRESSolver.H"
-#include "LinearSolver.H"
 #include "BoltzmannElectron.H"
 
 #include "GKBoltzmannRelation.H"
 
-//#undef CH_SPACEDIM
-//#define CH_SPACEDIM PDIM
-//#include "GKSystemIC.H"
-//#undef CH_SPACEDIM
-//#define CH_SPACEDIM CFG_DIM
+#include "MBTridiagonalSolver.H"
 
 #include "NamespaceHeader.H"
 
@@ -53,8 +46,7 @@ enum prefactor_strategy {GLOBAL_NEUTRALITY,
                          FS_NEUTRALITY_INITIAL_FS_NI};
 
 class GKPoissonBoltzmann
-   : public GKPoisson,
-     public LinearOp< LevelData<FArrayBox> >
+   : public GKPoisson
 {
 public:
 
@@ -87,16 +79,6 @@ public:
 
    ///
    /**
-      Say you are  solving L(phi) = rhs.   Make a_lhs = L(a_phi) - a_rhs.   If a_homogeneous is true,
-      evaluate the operator using homogeneous boundary conditions.
-   */
-   virtual void residual( LevelData<FArrayBox>&       lhs,
-                          const LevelData<FArrayBox>& phi,
-                          const LevelData<FArrayBox>& rhs,
-                          bool                        homogeneous = false );
-
-   ///
-   /**
       Given the current state of the residual the correction, apply your preconditioner to a_cor.
    */
    virtual void preCond( LevelData<FArrayBox>&       cor,
@@ -110,115 +92,6 @@ public:
    virtual void applyOp( LevelData<FArrayBox>& a_out,
                          const LevelData<FArrayBox>& a_in,
                          bool a_homogeneous = false);
-
-   ///
-   /**
-      Creat data holder a_lhs that mirrors a_rhs.   You do not need to copy the data of a_rhs,
-      just  make a holder the same size.
-   */
-   virtual void create( LevelData<FArrayBox>& a_lhs,
-                        const LevelData<FArrayBox>& a_rhs);
-
-
-   ///
-   /**
-      Opposite of create -- perform any operations required before lhs goes
-      out of scope. In general, the only time this needs to be defined in
-      a derived class is if the create() function called new. Otherwise, the
-      default no-op function is sufficient.
-   */
-   virtual void clear(LevelData<FArrayBox>& a_lhs) {;}
-
-
-   ///
-   /**
-      Set a_lhs  equal to a_rhs.
-   */
-   virtual void assign( LevelData<FArrayBox>& a_lhs, const LevelData<FArrayBox>& a_rhs);
-
-   virtual void assignLocal( LevelData<FArrayBox>& a_lhs, const LevelData<FArrayBox>& a_rhs)
-   {
-      this->assign(a_lhs, a_rhs);
-   }
-   ///
-   /**
-      Compute and return the dot product of a_1 and a_2.   In most contexts, this
-      means return the sum over all data points of a_1*a_2.
-   */
-   virtual Real dotProduct(const LevelData<FArrayBox>& a_1, const LevelData<FArrayBox>& a_2);
-
-   ///
-   /**
-      Increment by scaled amount (a_lhs += a_scale*a_x).
-   */
-   virtual void incr  ( LevelData<FArrayBox>& a_lhs,
-                        const LevelData<FArrayBox>& a_x,
-                        Real a_scale);
-
-   ///
-   /**
-      Set input to a scaled sum (a_lhs = a_a*a_x + a_b*a_y).
-   */
-   virtual void axby( LevelData<FArrayBox>& a_lhs,
-                      const LevelData<FArrayBox>& a_x,
-                      const LevelData<FArrayBox>& a_y,
-                      Real a_a, Real a_b);
-
-   ///
-   /**
-      Multiply the input by a given scale (a_lhs *= a_scale).
-   */
-   virtual void scale( LevelData<FArrayBox>& a_lhs, const Real& a_scale);
-
-   ///
-   /**
-      Return the norm of  a_rhs.
-      a_ord == 0  max norm, a_ord == 1 sum(abs(a_rhs)), else, L(a_ord) norm.
-   */
-   virtual Real norm(const LevelData<FArrayBox>& a_rhs,
-                     int a_ord);
-
-   ///
-   /**
-      Return dx at this level of refinement
-   */
-   virtual Real dx() const
-   {
-      MayDay::Warning(" calling dx on base class\n");
-      return 0;
-   }
-
-   ///
-   /**
-      Set a_lhs to zero.
-   */
-   virtual void setToZero(LevelData<FArrayBox>& a_lhs);
-
-   ///
-   /**
-      Debugging aid for solvers.  Print out a "T" to a file named "filename"
-      default implementation is to print out a message saying "LinearOp::write not implemented"
-   */
-   virtual void write(const LevelData<FArrayBox>* a, const char* filename)
-   {
-      MayDay::Warning("LinearOp::write not implemented");
-   }
-
-   void solveFluxSurfaceAverage(LevelData<FArrayBox>& a_data) const;
-
-   void solveTridiagonal(const bool   periodic,
-                         const int           n,
-                         double *         diag,
-                         double *        udiag,
-                         double *        ldiag,
-                         double *   fs_average) const;
-
-   void solveTridiagonalNeumann(const int           n,
-                                double *         diag,
-                                double *        udiag,
-                                double *        ldiag,
-                                double *   fs_average,
-                                const double * weights) const;
 
    /// Compute the electron density ne = prefactor exp(phi/T)
    /** Compute the electron density ne = prefactor exp(phi/T).  The prefactor depends
@@ -244,8 +117,6 @@ public:
                                   const double * a_bmag_outer_plate, 
                                   const double * a_bmag_inner_plate,
                                   const int norm_dir );
-
-   bool isCoreRadialPeriodicOrNeumannBC( const PotentialBC& a_bc ) const;
 
    void getPhiTilde( const LevelData<FArrayBox>& Zni,
                      const BoltzmannElectron&    ne,
@@ -292,7 +163,7 @@ protected:
     */
    void solveJacobian( const LevelData<FArrayBox>& rvec,
                        LevelData<FArrayBox>& zvec,
-                       const bool use_absolute_tolerance = false ) const;
+                       const bool use_absolute_tolerance = false );
 
    /// Compute residual = GKP(phi) - ni + ne
    /** Compute residual = GKP(phi) - ni + ne
@@ -304,7 +175,6 @@ protected:
     */
    double computeResidual( const LevelData<FArrayBox>& ni,
                            const LevelData<FArrayBox>& phi,
-                           const PotentialBC&          bc,
                            BoltzmannElectron&          ne,
                            LevelData<FArrayBox>&       residual );
 
@@ -403,7 +273,6 @@ protected:
 
    LevelData<FArrayBox> m_ni_fs_av_saved;
 
-   bool m_core_radial_or_neumannbc;
    bool m_radial_solve_only;
    bool m_subspace_iteration_solve;
 
@@ -413,12 +282,11 @@ protected:
    bool m_compute_core_prefactor;
    LevelData<FArrayBox> m_core_prefactor_numerator;
 
-#ifdef USE_PETSC
-   MBPETScSolver m_precond_Psolver;
-   MBPETScSolver m_precond_Qsolver;
+   MBTridiagonalSolver* m_precond_Psolver;
+#ifdef with_petsc
+   MBPETScSolver* m_precond_Qsolver;
 #else
-   MBHypreSolver m_precond_Psolver;
-   MBHypreSolver m_precond_Qsolver;
+   MBHypreSolver* m_precond_Qsolver;
 #endif
 
    double*  m_Zni_outer_plate;
@@ -430,9 +298,6 @@ protected:
    // in the Newton residual calculation to enable solvability
    // for problems with a (constant) null space
    bool m_preserve_initial_ni_average;
-
-   mutable BiCGStabSolver< LevelData<FArrayBox> > m_pbsolver;
-   //   GMRESSolver< LevelData<FArrayBox> > m_pbsolver;
 };
 
 #include "NamespaceFooter.H"

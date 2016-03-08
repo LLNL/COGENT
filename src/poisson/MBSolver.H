@@ -1,13 +1,15 @@
 #ifndef _MBSOLVER_H_
 #define _MBSOLVER_H_
 
-#include "MagGeom.H"
+#include "MultiBlockLevelGeom.H"
 #include "MultiBlockLevelExchangeCenter.H"
-#include "SparseCoupling.H"
+#include "PotentialBC.H"
 #include "CoDim1Stencil.H"
 #include "CoDim2Stencil.H"
 
 #include "NamespaceHeader.H"
+
+
 
 class MBSolver
 {
@@ -16,69 +18,53 @@ public:
    /// Constructor with initialization.
    /**
     *  @param[in] geom the geometry
+    *  @param[in] volume cell volumes
     *  @param[in] discretization_ordr discretization order
     */
-   MBSolver( const MagGeom& geom,
-             const int      discretization_order );
+   MBSolver( const MultiBlockLevelGeom&  geom,
+             const LevelData<FArrayBox>& volume,
+             const int                   discretization_order );
       
    /// Destructor.
    /**
     */
-   ~MBSolver() {;}
+   ~MBSolver();
+
+   virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
+                                        LevelData<FluxBox>&   tensor_coefficient,
+                                        LevelData<FArrayBox>& beta_coefficient,
+                                        const PotentialBC&    bc ) = 0;
 
    virtual void multiplyMatrix( const LevelData<FArrayBox>&  in,
                                 LevelData<FArrayBox>&        out ) const = 0;
 
-   virtual void updateMatrixDiagonals( const LevelData<FArrayBox>&  diagonal_increment ) = 0;
-
-   virtual void constructMatrix( LevelData<FluxBox>&   tensor_coefficient,
-                                 const PotentialBC&    bc,
-                                 const bool            poloidally_average,
-                                 const bool            test_matvec ) = 0;
-
-   virtual void constructMatrix( LevelData<FArrayBox>& alpha_coefficient,
-                                 LevelData<FluxBox>&   tensor_coefficient,
-                                 const PotentialBC&    bc,
-                                 const bool            poloidally_average,
-                                 const bool            test_matvec ) = 0;
-
-   virtual void constructMatrix( LevelData<FluxBox>&   tensor_coefficient,
-                                 LevelData<FArrayBox>& beta_coefficient,
-                                 const PotentialBC&    bc,
-                                 const bool            poloidally_average,
-                                 const bool            test_matvec ) = 0;
-
-   virtual void constructMatrix( LevelData<FArrayBox>& alpha_coefficient,
-                                 LevelData<FluxBox>&   tensor_coefficient,
-                                 LevelData<FArrayBox>& beta_coefficient,
-                                 const PotentialBC&    bc,
-                                 const bool            poloidally_average,
-                                 const bool            test_matvec ) = 0;
+   virtual void solve( const LevelData<FArrayBox>&  rhs,
+                       LevelData<FArrayBox>&        solution,
+                       bool                         homogeneous_bcs ) = 0;
 
    virtual void dumpMatrix(const string& file_name) const = 0;
 
-   virtual void solveWithMultigrid( const LevelData<FArrayBox>& rhs,
-                                    const double                tol,
-                                    const int                   max_iter,
-                                    const bool                  verbose,
-                                    LevelData<FArrayBox>&       solution ) = 0;
+   void constructMatrix( LevelData<FluxBox>&   tensor_coefficient,
+                         const PotentialBC&    bc );
 
-   virtual void solveWithGMRES(const LevelData<FArrayBox>& rhs,
-                               const double                tol,
-                               const int                   max_iter,
-                               const double                amg_tol,
-                               const int                   amg_max_iter,
-                               const bool                  verbose,
-                               LevelData<FArrayBox>&       solution) = 0;
+   void constructMatrix( LevelData<FArrayBox>& alpha_coefficient,
+                         LevelData<FluxBox>&   tensor_coefficient,
+                         const PotentialBC&    bc );
 
-   const LevelData<FArrayBox>& getARadial() const {return m_A_radial;}
+   void constructMatrix( LevelData<FluxBox>&   tensor_coefficient,
+                         LevelData<FArrayBox>& beta_coefficient,
+                         const PotentialBC&    bc );
+
+   void constructMatrix( LevelData<FArrayBox>& alpha_coefficient,
+                         LevelData<FluxBox>&   tensor_coefficient,
+                         LevelData<FArrayBox>& beta_coefficient,
+                         const PotentialBC&    bc );
 
    const LevelData<FArrayBox>& getBCRhsContrib() const {return m_rhs_from_bc;}
 
-   // Object ParmParse name.
-   static const std::string pp_name;
-
 protected:
+
+   void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
    IntVectSet getInterBlockCoupledCells( const int   block_number,
                                          const int   radius,
@@ -147,16 +133,18 @@ protected:
                              const bool                                         dropOrder,
                              const LevelData<FArrayBox>&                        rhs_from_bc ) const;
 
+   void plot( const string&               file_name,  
+              const LevelData<FArrayBox>& data,
+              const double&               time ) const;
+
    void setZero( LevelData<FArrayBox>& data ) const;
 
-   const MagGeom& m_geometry;
+   const MultiBlockLevelGeom& m_geometry;
+   MultiBlockCoordSys* m_coord_sys_ptr;
 
    MultiBlockLevelExchangeCenter* m_mblex_potential_Ptr; 
 
    LevelData<FArrayBox> m_volume;
-   LevelData<FArrayBox> m_A_diagonal;
-   LevelData<FArrayBox> m_A_radial;
-   LevelData<FArrayBox> m_diagonal_increment;
    LevelData<FArrayBox> m_rhs_from_bc;
 
    int m_discretization_order;

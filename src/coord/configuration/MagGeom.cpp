@@ -661,19 +661,46 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
          WriteMappedUGHDF5("uncorrected_divergence", grids, uncorrected_divergence, *m_coord_sys, domain_box, 0. );
 #endif
 
-         ParmParse pp( Poisson::pp_name.c_str() );
+         ParmParse pp( "field_correction" );
          Poisson * poisson = new Poisson( pp, *this );
          CH_assert(!poisson->secondOrder());   // This function assumes fourth-order
+
          poisson->setOperatorCoefficients( m_coord_sys->getDivergenceCleaningBC() );
+
+         string method;  // dummy variable
+
+         // Defaults; over-ridden if in ParmParse object
+         double tol = 1.e-12;
+         int max_iter = 50;
+         bool verbose = false;
+         ParmParse pp_linear_solver( ((string)pp.prefix() + ".linear_solver").c_str());
+         poisson->parseMethodAndParams(pp_linear_solver, method, tol, max_iter, verbose);
+
+         // Defaults; over-ridden if in ParmParse object
+         double precond_tol = 0.;
+         int precond_max_iter = 1;
+         bool precond_verbose = false;
+         ParmParse pp_ls_precond( ((string)pp_linear_solver.prefix() + ".precond").c_str());
+         poisson->parseMethodAndParams(pp_ls_precond, method, precond_tol, precond_max_iter, precond_verbose);
+
+         // Defaults; over-ridden if in ParmParse object
+         double precond_precond_tol = 0.;
+         int precond_precond_max_iter = 0;
+         bool precond_precond_verbose = false;
+         ParmParse pp_ls_precond_precond( ((string)pp_ls_precond.prefix() + ".precond").c_str());
+         poisson->parseMethodAndParams(pp_ls_precond_precond, method, precond_precond_tol,
+                                       precond_precond_max_iter, precond_precond_verbose);
+
+         poisson->setConvergenceParams(tol, max_iter, verbose,
+                                       precond_tol, precond_max_iter, precond_verbose,
+                                       precond_precond_tol, precond_precond_max_iter, precond_precond_verbose);
 
          LevelData<FArrayBox> phi( grids, 1, 4*IntVect::Unit );
          for (DataIterator dit(grids); dit.ok(); ++dit) {
             phi[dit].setVal(0.);
          }
 
-         const PotentialBC& bc = m_coord_sys->getDivergenceCleaningBC();
-
-         poisson->solve( uncorrected_divergence, bc, phi );
+         poisson->solve( uncorrected_divergence, phi );
 
 #ifdef TEST_DIVERGENCE_CLEANING
          WriteMappedUGHDF5("field_correction_potential", grids, phi, *m_coord_sys, domain_box, 0. );
@@ -682,7 +709,7 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
          poisson->fillInternalGhosts(phi);
 
          // Compute cell-centered -grad phi
-         poisson->computeFaceCenteredField( phi, bc, flux );
+         poisson->computePoloidalFieldWithBCs( phi, flux, false );
 
          fillTransversePhysicalGhosts(flux);
 

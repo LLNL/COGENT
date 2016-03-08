@@ -10,14 +10,31 @@ const std::string Poisson::pp_name = "poisson";
 
 Poisson::Poisson( const ParmParse& a_pp,
                   const MagGeom&   a_geom )
-   : FieldSolver(a_pp, a_geom),
-     m_solver(a_geom, 2)
+   : FieldSolver(a_pp, a_geom)
 {
+   const DisjointBoxLayout& grids = a_geom.grids();
+
+   LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
+   a_geom.getCellVolumes(volume);
+
+#ifdef with_petsc
+   m_preconditioner = new MBPETScSolver(a_geom, volume, 2);
+#else
+   m_preconditioner = new MBHypreSolver(a_geom, volume, 2);
+#endif
+
    // We give the mapped coefficients one ghost cell layer so that the
    // usual second-order centered difference formula can be used to compute
    // the transverse gradients needed for the fourth-order formulas even
    // at box boundaries.
-   m_mapped_coefficients.define(a_geom.grids(), SpaceDim*SpaceDim, IntVect::Unit);
+   m_mapped_coefficients.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
+}
+
+
+
+Poisson::~Poisson()
+{
+   if (m_preconditioner) delete m_preconditioner;
 }
 
 
@@ -25,9 +42,13 @@ Poisson::Poisson( const ParmParse& a_pp,
 void
 Poisson::setOperatorCoefficients( const PotentialBC& a_bc )
 {
+   setBc(a_bc);
+
    computeCoefficients(m_mapped_coefficients);
 
-   m_solver.constructMatrix(m_mapped_coefficients, a_bc, false, false);
+   computeBcDivergence( a_bc, m_bc_divergence );
+
+   m_preconditioner->constructMatrix(m_mapped_coefficients, a_bc);
 }
 
 
@@ -74,10 +95,23 @@ Poisson::computeCoefficients(LevelData<FluxBox>& a_coefficients)
 
 
 void
+Poisson::setPreconditionerConvergenceParams( const double a_tol,
+                                             const int    a_max_iter,
+                                             const double a_precond_tol,
+                                             const int    a_precond_max_iter )
+{
+   m_preconditioner->setParams(m_precond_method, a_tol, a_max_iter, m_precond_verbose,
+                               m_precond_precond_method, a_precond_tol, a_precond_max_iter,
+                               m_precond_precond_verbose);
+}
+
+
+
+void
 Poisson::solvePreconditioner( const LevelData<FArrayBox>& a_in,
                               LevelData<FArrayBox>&       a_out )
 {
-   m_solver.solveWithMultigrid(a_in, m_amg_tol, m_amg_max_iter, m_verbose, a_out);
+   m_preconditioner->solve(a_in, a_out, true);
 }
 
 

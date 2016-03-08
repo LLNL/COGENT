@@ -12,7 +12,7 @@
 
 #include "FieldSolver.H"
 #include "MultiBlockLevelExchangeAverage.H"
-#ifdef USE_PETSC
+#ifdef with_petsc
 #include "MBPETScSolver.H"
 #else
 #include "MBHypreSolver.H"
@@ -74,12 +74,15 @@ public:
                              LevelData<FluxBox>& mapped_coefficients,
                              LevelData<FluxBox>& unmapped_coefficients );
 
+   virtual void setPreconditionerConvergenceParams( const double tol,
+                                                    const int    max_iter,
+                                                    const double precond_tol,
+                                                    const int    precond_max_iter );
+
    virtual void solvePreconditioner( const LevelData<FArrayBox>& in,
                                      LevelData<FArrayBox>&       out );
 
    virtual void multiplyUnmappedCoefficients( LevelData<FluxBox>& data ) const;
-
-   void applyBCs( LevelData<FArrayBox>& data) const;
 
    /// ParmParse object name
    /**
@@ -96,14 +99,14 @@ protected:
 
    void fillDensityGhosts(LevelData<FArrayBox>& a_density) const;
 
-#ifdef USE_PETSC
-   MBPETScSolver m_solver;
+#ifdef with_petsc
+   MBPETScSolver* m_preconditioner;
 #else
-   MBHypreSolver m_solver;
+   MBHypreSolver* m_preconditioner;
 #endif
 
-   Real              m_larmor_number2;
-   Real              m_debye_number2;
+   Real m_larmor_number2;
+   Real m_debye_number2;
 
    MultiBlockLevelExchangeAverage* m_mblex_density_Ptr; 
    int m_density_interp_ghosts;

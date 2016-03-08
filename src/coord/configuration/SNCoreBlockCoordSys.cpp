@@ -9,6 +9,8 @@
 #include "BoxIterator.H"
 #include "CONSTANTS.H"
 
+#undef REPORT_NEWTON_FAILURE
+
 enum interpolation_package {HERMITE, SPLINE, BSPLINE};
 enum interpolation_mode {FUNCTION, RADIAL_DERIVATIVE, POLOIDAL_DERIVATIVE};
 enum field_vars {RBR_VAR, RBZ_VAR, RB_VAR, UNIT_BR_VAR, UNIT_BPHI_VAR, UNIT_BZ_VAR, NUM_FIELD_VARS};
@@ -617,7 +619,7 @@ SNCoreBlockCoordSys::mappedCoordNewton( const RealVect& a_X,
       Fnorm_saved[num_iters] = Fnorm;
    }
 
-#if 1
+#ifdef REPORT_NEWTON_FAILURE 
    if ( !converged && num_iters >= max_iter ) {
       cout << "On block " << m_block_type << ": Newton solve did not converge at " << a_X << ", iv_init = " << a_iv_initial << ", Fnorm = " << Fnorm << endl;
 #if 0
