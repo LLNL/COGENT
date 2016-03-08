@@ -49,8 +49,6 @@
 #include "FourthOrderUtil.H"
 #include "Directions.H"
 
-#include "inspect.H"
-
 #include "NamespaceHeader.H"
 
 using namespace CH_MultiDim;
@@ -1380,28 +1378,28 @@ void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
 
    if ( m_gk_ops->usingAmpereLaw() ) {
       a_handle.setGroup("Er_cell");
-      CFG::LevelData<CFG::FArrayBox> Er_cell_config(m_mag_geom->grids(), 3, 2*CFG::IntVect::Unit);
+      CFG::LevelData<CFG::FArrayBox> Er_cell_config(m_mag_geom->grids(), 3, CFG::IntVect::Unit);
       LevelData<FArrayBox> Er_cell_injected;
       m_phase_geom->injectConfigurationToPhase(Er_cell_config, Er_cell_injected);
       read( a_handle, Er_cell_injected, "data", Er_cell_injected.disjointBoxLayout() );
       m_gk_ops->setErAverage( Er_cell_injected );
     
       a_handle.setGroup("Er_face");
-      CFG::LevelData<CFG::FluxBox> Er_face_config(m_mag_geom->grids(), 3, 2*CFG::IntVect::Unit);
+      CFG::LevelData<CFG::FluxBox> Er_face_config(m_mag_geom->grids(), 3, CFG::IntVect::Unit);
       LevelData<FluxBox> Er_face_injected;
       m_phase_geom->injectConfigurationToPhase(Er_face_config, Er_face_injected);
       read( a_handle, Er_face_injected, "data", Er_face_injected.disjointBoxLayout() );
       m_gk_ops->setErAverage( Er_face_injected );
 
       a_handle.setGroup("E_tilde_cell");
-      CFG::LevelData<CFG::FArrayBox> E_tilde_cell_config(m_mag_geom->grids(), 3, 2*CFG::IntVect::Unit);
+      CFG::LevelData<CFG::FArrayBox> E_tilde_cell_config(m_mag_geom->grids(), 3, CFG::IntVect::Unit);
       LevelData<FArrayBox> E_tilde_cell_injected;
       m_phase_geom->injectConfigurationToPhase(E_tilde_cell_config, E_tilde_cell_injected);
       read( a_handle, E_tilde_cell_injected, "data", E_tilde_cell_injected.disjointBoxLayout() );
       m_gk_ops->setETilde( E_tilde_cell_injected );
     
       a_handle.setGroup("E_tilde_face");
-      CFG::LevelData<CFG::FluxBox> E_tilde_face_config(m_mag_geom->grids(), 3, 2*CFG::IntVect::Unit);
+      CFG::LevelData<CFG::FluxBox> E_tilde_face_config(m_mag_geom->grids(), 3, CFG::IntVect::Unit);
       LevelData<FluxBox> E_tilde_face_injected;
       m_phase_geom->injectConfigurationToPhase(E_tilde_face_config, E_tilde_face_injected);
       read( a_handle, E_tilde_face_injected, "data", E_tilde_face_injected.disjointBoxLayout() );

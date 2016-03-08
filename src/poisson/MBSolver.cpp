@@ -2,6 +2,9 @@
 #include "MBSolverF_F.H"
 #include "MBStencilIterator.H"
 #include "BlockBaseRegister.H"
+#include "BlockRegister.H"
+#include "SparseCoupling.H"
+#include "newMappedGridIO.H"
 
 #include "NamespaceHeader.H"
 
@@ -29,37 +32,148 @@ L2Norm( const LevelData<FArrayBox>&  a_data )
 
 
 
-MBSolver::MBSolver( const MagGeom&  a_geom,
-                    const int       a_discretization_order )
+MBSolver::MBSolver( const MultiBlockLevelGeom&  a_geom,
+                    const LevelData<FArrayBox>& a_volume,
+                    const int                   a_discretization_order )
    : m_geometry(a_geom),
+     m_coord_sys_ptr(m_geometry.coordSysPtr()),
+     m_mblex_potential_Ptr(NULL),
      m_discretization_order(a_discretization_order),
      m_dropOrder(true)
 {
    CH_assert(m_discretization_order == 2 || m_discretization_order == 4);
 
-   const DisjointBoxLayout& grids = m_geometry.grids();
+   const DisjointBoxLayout& grids = m_geometry.gridsFull();
 
    m_volume.define(grids, 1, IntVect::Zero);
-   m_geometry.getCellVolumes(m_volume);
+   a_volume.copyTo(m_volume);
 
-   m_A_diagonal.define(grids, 1, IntVect::Zero);
-   m_A_radial.define(grids, 3, IntVect::Zero);
-   m_diagonal_increment.define(grids, 1, IntVect::Zero);
    m_rhs_from_bc.define(a_geom.grids(), 1, IntVect::Zero);
-
+   
    // If there is more than one block, construct the multiblock exchange object
-   if ( m_geometry.coordSysPtr()->numBlocks() > 1 ) {
-     m_mblex_potential_Ptr = new MultiBlockLevelExchangeCenter();
-     int num_ghosts_filled = m_discretization_order / 2;
-     int spaceOrder = m_discretization_order;
+   if ( m_coord_sys_ptr->numBlocks() > 1 ) {
+      m_mblex_potential_Ptr = new MultiBlockLevelExchangeCenter();
+      int num_ghosts_filled = m_discretization_order / 2;
+      int spaceOrder = m_discretization_order;
 
-     m_mblex_potential_Ptr->define(&a_geom, num_ghosts_filled, spaceOrder);
-   }
-   else {
-     m_mblex_potential_Ptr = NULL;
+      m_mblex_potential_Ptr->define(&a_geom, num_ghosts_filled, spaceOrder);
    }
 }
       
+
+
+MBSolver::~MBSolver()
+{
+   if (m_mblex_potential_Ptr) delete m_mblex_potential_Ptr;
+}
+
+
+
+void
+MBSolver::constructMatrix( LevelData<FluxBox>&  a_tensor_coefficient,
+                           const PotentialBC&   a_bc )
+{
+   LevelData<FArrayBox> dummy;
+   constructMatrixGeneral(dummy, a_tensor_coefficient, dummy, a_bc );
+}
+
+
+
+void
+MBSolver::constructMatrix( LevelData<FArrayBox>&  a_alpha_coefficient,
+                           LevelData<FluxBox>&    a_tensor_coefficient,
+                           const PotentialBC&     a_bc )
+{
+   LevelData<FArrayBox> dummy;
+   constructMatrixGeneral(a_alpha_coefficient, a_tensor_coefficient, dummy, a_bc);
+}
+
+
+
+void
+MBSolver::constructMatrix( LevelData<FluxBox>&    a_tensor_coefficient,
+                           LevelData<FArrayBox>&  a_beta_coefficient,
+                           const PotentialBC&     a_bc )
+{
+   LevelData<FArrayBox> dummy;
+   constructMatrixGeneral(dummy, a_tensor_coefficient, a_beta_coefficient, a_bc );
+}
+
+
+
+void
+MBSolver::constructMatrix( LevelData<FArrayBox>& a_alpha_coefficient,
+                           LevelData<FluxBox>&   a_tensor_coefficient,
+                           LevelData<FArrayBox>& a_beta_coefficient,
+                           const PotentialBC&    a_bc )
+{
+   constructMatrixGeneral( a_alpha_coefficient, a_tensor_coefficient, a_beta_coefficient, a_bc );
+}
+
+
+
+void
+MBSolver::averageAtBlockBoundaries(LevelData<FluxBox>& a_data) const
+{
+   if ( m_coord_sys_ptr->numBlocks() > 1 ) {
+
+      const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+
+      RefCountedPtr<MultiBlockCoordSys> coordSysRCP(m_coord_sys_ptr);
+      coordSysRCP.neverDelete();
+
+      BlockRegister blockRegister(coordSysRCP, grids, 0);
+
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         for (int idir = 0; idir < SpaceDim; idir++) {
+            for (SideIterator sit; sit.ok(); ++sit) {
+               Side::LoHiSide side = sit();
+               if (blockRegister.hasInterface(dit(), idir, side)) {
+                  FArrayBox flux_comp(a_data[dit][idir].box(), a_data.nComp());
+                  flux_comp.copy(a_data[dit][idir]);
+                  blockRegister.storeFlux(flux_comp, dit(), idir, side);
+               }
+            }
+         }
+      }
+      blockRegister.close();
+
+      const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = m_coord_sys_ptr->boundaries();
+
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         const Box& baseBox = grids[dit];
+         int block_number = m_coord_sys_ptr->whichBlock(grids[dit]);
+         int faceID = 0;
+         for (SideIterator sit; sit.ok(); ++sit) {
+            Side::LoHiSide side = sit();
+            for (int idir = 0; idir < SpaceDim; idir++) {
+               if (blockRegister.hasInterface(dit(), idir, side)) {
+                  // maybe better if this is done inside BlockRegister
+                  const BlockBoundary& bb = boundaries[block_number][faceID];
+                  int reorientFace = bb.reorientFace(idir);
+                  Box faceBox = adjCellBox(baseBox, idir, side, 1);
+                  // if Lo, then shift +1; if Hi, then shift -1
+                  faceBox.shiftHalf(idir, -sign(side));
+                  Side::LoHiSide sideOther = flip(side);
+                  // Need to define these FABs.
+                  FArrayBox fluxThisFab(faceBox, a_data.nComp());
+                  FArrayBox fluxOtherFab(faceBox, a_data.nComp());
+                  blockRegister.getFlux(fluxThisFab, dit(),
+                                        idir, side, side);
+                  fluxThisFab.mult(reorientFace * 0.5);
+                  blockRegister.getFlux(fluxOtherFab, dit(),
+                                        idir, side, sideOther);
+                  fluxOtherFab.mult(0.5);
+                  fluxThisFab += fluxOtherFab;
+                  a_data[dit][idir].copy(fluxThisFab);
+               }
+               faceID++;
+            } // iterate over dimensions
+         } // iterate over sides
+      }
+   }
+}
+
 
 
 IntVectSet
@@ -67,22 +181,20 @@ MBSolver::getInterBlockCoupledCells( const int   a_block_number,
                                      const int   a_radius,
                                      const Box&  a_box ) const
 {
-  MultiBlockCoordSys* coord_sys_ptr = m_geometry.coordSysPtr();
-  const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = coord_sys_ptr->boundaries();
+  const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys_ptr->boundaries();
 
   const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[a_block_number];
-  const ProblemDomain& domain = ((const MagBlockCoordSys*)coord_sys_ptr->getCoordSys(a_block_number))->domain();
-  const Box& domainBox = domain.domainBox();
-  CH_assert(domainBox.contains(a_box));
+  const Box& domain_box = (m_coord_sys_ptr->mappingBlocks())[a_block_number];
+  CH_assert(domain_box.contains(a_box));
 
   IntVectSet ivs;
   for (int dir=0; dir<SpaceDim; ++dir) {
     if ( this_block_boundaries[dir].isInterface() ) {
-      int d = a_box.smallEnd(dir) - domainBox.smallEnd(dir);
+      int d = a_box.smallEnd(dir) - domain_box.smallEnd(dir);
       if ( d < a_radius ) ivs |= adjCellLo(a_box, dir, -(a_radius - d));
     }
     if ( this_block_boundaries[dir + SpaceDim].isInterface() ) {
-      int d = domainBox.bigEnd(dir) - a_box.bigEnd(dir);
+      int d = domain_box.bigEnd(dir) - a_box.bigEnd(dir);
       if ( d < a_radius ) ivs |= adjCellHi(a_box, dir, -(a_radius - d));
     }
   }
@@ -97,22 +209,20 @@ MBSolver::getBoundaryCoupledCells( const int   a_block_number,
                                    const int   a_radius,
                                    const Box&  a_box ) const
 {
-  MultiBlockCoordSys* coord_sys_ptr = m_geometry.coordSysPtr();
-  const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = coord_sys_ptr->boundaries();
+  const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys_ptr->boundaries();
 
   const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[a_block_number];
-  const ProblemDomain& domain = ((const MagBlockCoordSys*)coord_sys_ptr->getCoordSys(a_block_number))->domain();
-  const Box& domainBox = domain.domainBox();
-  CH_assert(domainBox.contains(a_box));
+  const Box& domain_box = (m_coord_sys_ptr->mappingBlocks())[a_block_number];
+  CH_assert(domain_box.contains(a_box));
 
   IntVectSet ivs;
   for (int dir=0; dir<SpaceDim; ++dir) {
     if ( this_block_boundaries[dir].isDomainBoundary() ) {
-      int d = a_box.smallEnd(dir) - domainBox.smallEnd(dir);
+      int d = a_box.smallEnd(dir) - domain_box.smallEnd(dir);
       if ( d < a_radius ) ivs |= adjCellLo(a_box, dir, -(a_radius - d));
     }
     if ( this_block_boundaries[dir + SpaceDim].isDomainBoundary() ) {
-      int d = domainBox.bigEnd(dir) - a_box.bigEnd(dir);
+      int d = domain_box.bigEnd(dir) - a_box.bigEnd(dir);
       if ( d < a_radius ) ivs |= adjCellHi(a_box, dir, -(a_radius - d));
     }
   }
@@ -133,8 +243,7 @@ MBSolver::getUnstructuredCouplings( int                                 a_radius
       const LayoutData< IntVectSet >& ghostCells = m_mblex_potential_Ptr->ghostCells();
       const LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& stencil = m_mblex_potential_Ptr->stencils();
 
-      MultiBlockCoordSys* coord_sys_ptr = m_geometry.coordSysPtr();
-      const DisjointBoxLayout & grids = m_geometry.grids();
+      const DisjointBoxLayout & grids = m_geometry.gridsFull();
     
       all_couplings.define(grids);
       for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -147,10 +256,13 @@ MBSolver::getUnstructuredCouplings( int                                 a_radius
          }
       }
       
+      const Vector<Box>& mapping_blocks = m_coord_sys_ptr->mappingBlocks();
+
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          const IntVectSet& this_ghosts_fab = ghostCells[dit];
          const IVSFAB<MBStencil>& this_stencil_fab = *stencil[dit];
-         const Box& domain_box = (coord_sys_ptr->blockDomainOfBox(grids[dit])).domainBox();
+         int block_number = m_coord_sys_ptr->whichBlock(grids[dit]);
+         const Box& domain_box = mapping_blocks[block_number];
       
          Vector< BaseFab<IntVectSet>* >& this_coupling = all_couplings[dit];
          for (int dir=0; dir<SpaceDim; ++dir) {
@@ -196,11 +308,11 @@ MBSolver::getUnstructuredCouplings( int                                 a_radius
       // a system matrix corresponding to a conservative discretization in which fluxes are
       // averaged at multiblock interfaces.
 
-      BlockBaseRegister<BaseFab<SparseCoupling> > blockRegister(coord_sys_ptr, grids, 0);
+      BlockBaseRegister<BaseFab<SparseCoupling> > blockRegister(m_coord_sys_ptr, grids, 0);
 
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Vector< BaseFab<IntVectSet>* >& this_coupling = all_couplings[dit];
-         int dst_block_number = coord_sys_ptr->whichBlock(grids[dit]);
+         int dst_block_number = m_coord_sys_ptr->whichBlock(grids[dit]);
 
          // Find all cells that may be coupled through a block interface
          IntVectSet dst_ivs = getInterBlockCoupledCells(dst_block_number, a_radius, grids[dit]);
@@ -263,8 +375,8 @@ MBSolver::getUnstructuredCouplings( int                                 a_radius
       a_unstructured_couplings.define(grids);
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Vector< BaseFab<IntVectSet>* >& this_coupling = all_couplings[dit];
-         int dst_block_number = coord_sys_ptr->whichBlock(grids[dit]);
-         Box domain_box = m_geometry.getBlockCoordSys(dst_block_number).domain().domainBox();
+         int dst_block_number = m_coord_sys_ptr->whichBlock(grids[dit]);
+         Box domain_box = mapping_blocks[dst_block_number];
          BaseFab<IntVectSet>& this_unstructured_coupling = a_unstructured_couplings[dit];
          
          this_unstructured_coupling.resize(grids[dit], 1);
@@ -475,19 +587,18 @@ MBSolver::constructBoundaryStencils( const bool                        a_fourth_
 
    int order = a_fourth_order? 4: 2;
 
-   const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
+   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys_ptr->boundaries();
 
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = mag_coord_sys->boundaries();
-
-   int num_blocks = mag_coord_sys->numBlocks();
+   int num_blocks = m_coord_sys_ptr->numBlocks();
    a_codim1_stencils.resize(num_blocks);
    a_codim2_stencils.resize(num_blocks);
 
+   const Vector<Box>& mapping_blocks = m_coord_sys_ptr->mappingBlocks();
+
    for (int block_number=0; block_number<num_blocks; ++block_number) {
-      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
-      const ProblemDomain& domain = block_coord_sys.domain();
-      Box domain_box = domain.domainBox();
-      RealVect dx = block_coord_sys.dx();
+      const NewCoordSys* block_coord_sys = m_coord_sys_ptr->getCoordSys(block_number);
+      Box domain_box = mapping_blocks[block_number];
+      RealVect dx = block_coord_sys->dx();
 
       const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
 
@@ -542,8 +653,7 @@ MBSolver::constructBoundaryStencils( const bool                        a_fourth_
 
                         for (int block_number2=0; block_number2<num_blocks; ++block_number2) {
                            if (block_number2 != block_number) {
-                              const MagBlockCoordSys& block_coord_sys2 = m_geometry.getBlockCoordSys(block_number2);
-                              const Box& domain_box2 = block_coord_sys2.domain().domainBox();
+                              const Box& domain_box2 = mapping_blocks[block_number2];
 
                               Box overlap = new_codim2_box & domain_box2;
                               if ( overlap == new_codim2_box ) {
@@ -576,11 +686,10 @@ MBSolver::accumPhysicalGhosts( const Vector< Vector<CoDim1Stencil> >&  a_codim1_
                                const bool                              a_include_bvs,
                                LevelData<FArrayBox>&                   a_data ) const
 {
-   const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      int block_number = mag_coord_sys->whichBlock(grids[dit]);
+      int block_number = m_coord_sys_ptr->whichBlock(grids[dit]);
       FArrayBox& this_data = a_data[dit];
       const Box& this_data_box = this_data.box();
 
@@ -655,8 +764,6 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
 {
    CH_assert(a_flux_normal.ghostVect() == IntVect::Zero);
 
-   const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
-
    CH_assert((a_stencil_values.box().size(0)-1)%2 == 0);
    int radius = (a_stencil_values.box().size(0)-1)/2;
 
@@ -667,6 +774,8 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       a_flux_normal[dit].setVal(0.);
    }
+
+   const Vector<Box>& mapping_blocks = m_coord_sys_ptr->mappingBlocks();
 
    for (int dir_outer=0; dir_outer<SpaceDim; ++dir_outer) {
       for (int dir_inner=0; dir_inner<SpaceDim; ++dir_inner) {
@@ -685,10 +794,10 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
          accumPhysicalGhosts( a_codim1_stencils, a_codim2_stencils, a_extrapolate_from_interior, a_include_bvs, tmp );
 
          for (DataIterator dit(grids); dit.ok(); ++dit) {
-            int block_number = mag_coord_sys->whichBlock(grids[dit]);
-            const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
-            const Box& domain_box = block_coord_sys.domain().domainBox();
-            RealVect dx = block_coord_sys.dx();
+            int block_number = m_coord_sys_ptr->whichBlock(grids[dit]);
+            const NewCoordSys* block_coord_sys = m_coord_sys_ptr->getCoordSys(block_number);
+            const Box& domain_box = mapping_blocks[block_number];
+            RealVect dx = block_coord_sys->dx();
             const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = a_block_boundaries[block_number];
 
             FArrayBox& this_flux = a_flux_normal[dit][dir_outer];
@@ -784,7 +893,7 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
    computeFluxNormalFromStencil( solution, a_tensor_coefficient, a_block_boundaries, a_codim1_stencils,
                                  a_codim2_stencils, a_stencil_values, a_fourthOrder,
                                  a_dropOrder, extrapolate_from_interior, include_bvs, flux_normal_without_bvs );
-   m_geometry.averageAtBlockBoundaries(flux_normal_without_bvs);
+   averageAtBlockBoundaries(flux_normal_without_bvs);
 
    LevelData<FArrayBox> zero(grids, 1, IntVect::Zero);
 
@@ -848,8 +957,8 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
    LevelData<FArrayBox> matvec(grids, 1, IntVect::Zero);
    multiplyMatrix(solution, matvec);
 
-   m_geometry.plotCellData("matvec", matvec, 0.);
-   m_geometry.plotCellData("operator_eval", operator_eval, 0.);
+   plot("matvec", matvec, 0.);
+   plot("operator_eval", operator_eval, 0.);
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       matvec[dit] -= a_rhs_from_bc[dit];
@@ -859,14 +968,26 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
       matvec[dit] -= operator_eval[dit];
    }
 
-
-   m_geometry.plotCellData("diff", matvec, 0.);
+   plot("diff", matvec, 0.);
 
    double diff = L2Norm(matvec);
 
    if (procID()==0) {
       cout << "Matrix diff = " << diff << endl;
    }
+}
+
+
+
+void MBSolver::plot( const string&               a_file_name,  
+                     const LevelData<FArrayBox>& a_data,
+                     const double&               a_time ) const
+{
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+
+   Box domain_box = grids.physDomain().domainBox();
+   domain_box.grow(a_data.ghostVect());
+   WriteMappedUGHDF5(a_file_name.c_str(), grids, a_data, *m_coord_sys_ptr, domain_box, a_time);
 }
 
 

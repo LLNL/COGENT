@@ -14,7 +14,6 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
                       const Real         a_larmor_number,
                       const Real         a_debye_number )
    : FieldSolver(a_pp, a_geom),
-     m_solver(a_geom, 2),
      m_larmor_number2(a_larmor_number*a_larmor_number),
      m_debye_number2(a_debye_number*a_debye_number)
 {
@@ -25,6 +24,9 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
    const DisjointBoxLayout& grids = a_geom.grids();
    m_mapped_coefficients.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
    m_unmapped_coefficients.define(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+
+   LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
+   a_geom.getCellVolumes(volume);
 
    // If there is more than one block, construct the multiblock exchange object
    if ( m_geometry.coordSysPtr()->numBlocks() > 1 ) {
@@ -37,12 +39,19 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
       m_density_interp_ghosts = 0;
       m_mblex_density_Ptr = NULL;
    }
+
+#ifdef with_petsc
+   m_preconditioner = new MBPETScSolver(a_geom, volume, 2);
+#else
+   m_preconditioner = new MBHypreSolver(a_geom, volume, 2);
+#endif
 }
       
 
 
 GKPoisson::~GKPoisson()
 {
+   if (m_preconditioner) delete m_preconditioner;
    if (m_mblex_density_Ptr) delete m_mblex_density_Ptr;
 }
 
@@ -52,11 +61,13 @@ void
 GKPoisson::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
                                     const PotentialBC&          a_bc )
 {
+   setBc(a_bc);
+
    computeCoefficients( a_ion_mass_density, m_mapped_coefficients, m_unmapped_coefficients );
 
-   setBcDivergence( a_bc, m_bc_divergence );
+   computeBcDivergence( a_bc, m_bc_divergence );
 
-   m_solver.constructMatrix(m_mapped_coefficients, a_bc, false, false);
+   m_preconditioner->constructMatrix(m_mapped_coefficients, a_bc);
 }
 
 
@@ -231,10 +242,23 @@ GKPoisson::getMinMax(LevelData<FluxBox>& a_data, double& a_min, double& a_max) c
 
 
 void
+GKPoisson::setPreconditionerConvergenceParams( const double a_tol,
+                                               const int    a_max_iter,
+                                               const double a_precond_tol,
+                                               const int    a_precond_max_iter )
+{
+   m_preconditioner->setParams(m_precond_method, a_tol, a_max_iter, m_precond_verbose,
+                               m_precond_precond_method, a_precond_tol, a_precond_max_iter,
+                               m_precond_precond_verbose);
+}
+
+
+
+void
 GKPoisson::solvePreconditioner( const LevelData<FArrayBox>& a_in,
                                 LevelData<FArrayBox>&       a_out )
 {
-   m_solver.solveWithMultigrid(a_in, m_amg_tol, m_amg_max_iter, m_verbose, a_out);
+   m_preconditioner->solve(a_in, a_out, true);
 }
 
 

@@ -2,7 +2,7 @@
 #define _POISSON_H_
 
 #include "FieldSolver.H"
-#ifdef USE_PETSC
+#ifdef with_petsc
 #include "MBPETScSolver.H"
 #else
 #include "MBHypreSolver.H"
@@ -34,7 +34,7 @@ public:
    /// Destructor.
    /**
     */
-   virtual ~Poisson() {;}
+   virtual ~Poisson();
 
    /// Construct the operator coefficients
    /**
@@ -44,7 +44,13 @@ public:
 
    void computeCoefficients( LevelData<FluxBox>& coefficients );
 
-   virtual void solvePreconditioner( const LevelData<FArrayBox>& in, LevelData<FArrayBox>& out );
+   virtual void setPreconditionerConvergenceParams( const double tol,
+                                                    const int    max_iter,
+                                                    const double precond_tol,
+                                                    const int    precond_max_iter );
+
+   virtual void solvePreconditioner( const LevelData<FArrayBox>& in,
+                                     LevelData<FArrayBox>&       out );
 
    // Multiply by the unmapped coefficients
    virtual void multiplyUnmappedCoefficients( LevelData<FluxBox>& a_data ) const {;}
@@ -58,10 +64,10 @@ public:
 
 protected:
 
-#ifdef USE_PETSC
-   MBPETScSolver m_solver;
+#ifdef with_petsc
+   MBPETScSolver* m_preconditioner;
 #else
-   MBHypreSolver m_solver;
+   MBHypreSolver* m_preconditioner;
 #endif
 
    LevelData<FluxBox> m_mapped_coefficients;

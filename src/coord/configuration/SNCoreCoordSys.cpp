@@ -131,11 +131,22 @@ SNCoreCoordSys::define( ParmParse& a_pp_geom )
 
    setXPointNeighborhood();
 
-   int bc_type = 0;     // Homogeneous Dirichlet
-   int bc_value = 0.;
-   for (int side=0; side<2; ++side) {
-      m_divergence_cleaning_bc.setBCType(0, RADIAL_DIR, side, bc_type);
-      m_divergence_cleaning_bc.setBCValue(0, RADIAL_DIR, side, bc_value);
+   bool correct_field;
+   if (a_pp_geom.contains("correct_field")) {
+     a_pp_geom.get("correct_field", correct_field);
+   }
+   else {
+      correct_field = false;
+   }
+
+   if ( correct_field ) {
+
+      int bc_type = 0;     // Homogeneous Dirichlet
+      int bc_value = 0.;
+      for (int side=0; side<2; ++side) {
+         m_divergence_cleaning_bc.setBCType(0, RADIAL_DIR, side, bc_type);
+         m_divergence_cleaning_bc.setBCValue(0, RADIAL_DIR, side, bc_value);
+      }
    }
 }
 

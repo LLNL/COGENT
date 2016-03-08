@@ -14,6 +14,7 @@
 #include "MagBlockCoordSys.H"
 #include "MillerBlockCoordSys.H"
 #include "newMappedGridIO.H"
+#include "inspect.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -2219,7 +2220,6 @@ PhaseGeom::injectVelocityToPhase( const VEL::LevelData<VEL::FluxBox>& a_src,
 }
 
 
-
 void
 PhaseGeom::projectPhaseToConfiguration( const LevelData<FArrayBox>&     a_src,
                                         CFG::LevelData<CFG::FArrayBox>& a_dst ) const
@@ -2258,7 +2258,7 @@ void
 PhaseGeom::projectPhaseToConfiguration( const LevelData<FluxBox>&     a_src,
                                        CFG::LevelData<CFG::FluxBox>& a_dst ) const
 {
-   const Box& domainBox = m_domain.domainBox();
+    const Box& domainBox = m_domain.domainBox();
     
    // Slice in the mu direction at the low mu coordinate
     

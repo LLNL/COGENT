@@ -56,6 +56,7 @@ SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
 
    setXPointNeighborhood();
 
+   // Define the boundary conditions for divergence cleaning (whether or not they're used)
    for (int block = 0; block < num_blocks; block++) {
       Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block];
 
