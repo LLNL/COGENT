@@ -512,9 +512,10 @@ void GKOps::constructPCMatIMEX( void *a_Pmat,
 bool GKOps::setupPCImEx( void *a_P, GKRHSData& a_state)
 {
   bool  flag;
-  int   VecSize = a_state.getVectorSize();
+  int   VecSize = a_state.getVectorSize(),
+        nComp   = a_state.getNComponents();
 
-  flag = m_collisions->setupPrecondMatrix(a_P,VecSize);
+  flag = m_collisions->setupPrecondMatrix(a_P,VecSize,nComp);
   return flag;
 }
 

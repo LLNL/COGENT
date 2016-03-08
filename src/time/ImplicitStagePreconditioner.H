@@ -14,7 +14,8 @@ class ImplicitStagePreconditioner
 
     void define   (T&,Ops&);
     void applyPinv(T&, const T&);
-    void updateP   ();
+    void updateP  (const T&);
+
     inline void setShift  (Real a_a)  { m_shift = a_a; }
 
   private:
@@ -33,11 +34,11 @@ void ImplicitStagePreconditioner<T,Ops>::define(T& a_state,Ops& a_ops)
 }
 
 template <class T,class Ops>
-void ImplicitStagePreconditioner<T,Ops>::updateP()
+void ImplicitStagePreconditioner<T,Ops>::updateP(const T& a_x)
 {
   if (!m_is_Defined) {
     m_P.zeroEntries();
-    m_ops->assemblePCImEx((void*)&m_P);
+    m_ops->assemblePCImEx((void*)&m_P,a_x);
     m_P.scaleEntries(-m_shift);
     m_P.shift(1.0);
   }

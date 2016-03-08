@@ -231,7 +231,8 @@ public:
 
    void constructPCMatIMEX(void*,const Real,const GKState&);
    bool setupPCImEx (void*,GKRHSData&);
-   inline void assemblePCImEx(void *a_P) { m_collisions->assemblePrecondMatrix(a_P); }
+   inline void assemblePCImEx(void *a_P,const GKRHSData& a_state) 
+     { m_collisions->assemblePrecondMatrix(a_P,a_state.data()); }
    
    void computeElectricField( LevelData<FluxBox>&          a_E_field,
                               const KineticSpeciesPtrVect& a_kinetic_species,

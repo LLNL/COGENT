@@ -20,6 +20,30 @@ void BandedMatrix::define(int a_nrow,int a_ncol,int a_nbands,int a_bs)
   m_is_Defined = true;
 }
 
+void BandedMatrix::setRowValues(int a_row,int a_ncols, int *a_icols, Real *a_data)
+{
+  CH_assert(a_ncols <= m_nbands);
+  CH_assert(a_row < m_nrow);
+
+  Real *data_ptr = m_data + a_row*m_rstride,
+       *b_data_ptr = a_data;
+  int  *col_ptr  = m_cols + a_row*m_nbands;
+
+  m_rows[a_row] = a_row;
+  for (int i=0; i<a_ncols; i++) {
+    col_ptr[i] = a_icols[i];
+    for (int v=0; v<m_bs*m_bs; v++) data_ptr[v] = b_data_ptr[v];
+    data_ptr += m_cstride; b_data_ptr += m_cstride;
+  }
+  for (int i=a_ncols; i<m_nbands; i++) {
+    col_ptr[i] = 0;
+    for (int v=0; v<m_bs*m_bs; v++) data_ptr[v] = 0.0;
+    data_ptr += m_cstride;
+  }
+
+  return;
+}
+
 /* A = 0 */
 void BandedMatrix::zeroEntries()
 {

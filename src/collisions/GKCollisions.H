@@ -67,8 +67,8 @@ class GKCollisions
        */
       Real computeTimeScale( const KineticSpeciesPtrVect& soln );
 
-      bool setupPrecondMatrix(void*,int);
-      void assemblePrecondMatrix(void*);
+      bool setupPrecondMatrix(void*,int,int);
+      void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&);
 
       /// returns the collision model associated with the input name
       /**

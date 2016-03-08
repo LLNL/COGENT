@@ -1,6 +1,7 @@
 #ifndef  _FOKKERPLANCK_H_
 #define  _FOKKERPLANCK_H_
 
+#include "BandedMatrix.H"
 #include "FArrayBox.H"
 #include "LevelData.H"
 #include "RefCountedPtr.H"
@@ -59,6 +60,15 @@ public:
    */
   inline bool isLinear() { return false; }
 
+  bool setupPrecondMatrix(void *a_P,int a_N,int a_bs)
+    {
+      BandedMatrix *P = (BandedMatrix*) a_P;
+      int nbands = 9; /* central differences of derivatives */
+      P->define(a_N,a_N,nbands,a_bs);
+      return(P->isDefined());
+    }
+
+  void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,int);
 
 private:
 
@@ -151,6 +161,12 @@ private:
    
 };
 
+#define _IndexMapping_(p,i,N,ndims,offset) \
+  { \
+    p = i[ndims-1]; \
+    for (int c=ndims-2; c>=0; c--) p = (p*N[c]) + i[c];\
+    p += offset; \
+  }
 
 #include "NamespaceFooter.H"
 

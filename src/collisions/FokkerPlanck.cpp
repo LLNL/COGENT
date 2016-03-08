@@ -183,6 +183,142 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
    m_first_step = false;
 }
 
+void FokkerPlanck::assemblePrecondMatrix(void *a_P,const KineticSpeciesPtrVect& a_soln,int a_species)
+{
+  BandedMatrix *Pmat = (BandedMatrix*) a_P;
+
+  const KineticSpecies& soln_species(*(a_soln[a_species]));
+  const LevelData<FArrayBox>& soln_dfn(soln_species.distributionFunction());
+  const DisjointBoxLayout& grids(soln_dfn.disjointBoxLayout());
+  const int n_comp(soln_dfn.nComp());
+
+  DataIterator dit = grids.dataIterator();
+  int offset = 0;
+  for (dit.begin(); dit.ok(); ++dit) {
+    const Box& grid = grids[dit];
+    const FArrayBox& dfn = soln_dfn[dit];
+
+    /* grid size */
+    IntVect bigEnd   = grid.bigEnd(),
+            smallEnd = grid.smallEnd();
+    IntVect gridSize(bigEnd); gridSize -= smallEnd;
+
+    BoxIterator bit(grid);
+    for (bit.begin(); bit.ok(); ++bit) {
+      /* this point */
+      IntVect ic = bit();
+      /* neighboring points */
+      IntVect ie(ic),
+              iw(ic),
+              in(ic),
+              is(ic),
+              ine(ic),
+              inw(ic),
+              ise(ic),
+              isw(ic);
+      /* north-south is along mu; east-west is along v|| */
+      ie[SpaceDim-2]++;                          /* east  */
+      iw[SpaceDim-2]--;                          /* west  */
+      in[SpaceDim-1]++;                          /* north */
+      is[SpaceDim-1]--;                          /* south */
+      ine[SpaceDim-2]++; ine[SpaceDim-1]++;   /* northeast */
+      inw[SpaceDim-2]--; inw[SpaceDim-1]++;   /* northwest */
+      ise[SpaceDim-2]++; ise[SpaceDim-1]--;   /* southeast */
+      isw[SpaceDim-2]--; isw[SpaceDim-1]--;   /* southwest */
+      /* col numbers */
+      int pc, pe, pw, pn, ps, pne, pnw, pse, psw;
+      _IndexMapping_(pc ,ic ,gridSize,SpaceDim,offset);
+      _IndexMapping_(pe ,ie ,gridSize,SpaceDim,offset);
+      _IndexMapping_(pw ,iw ,gridSize,SpaceDim,offset);
+      _IndexMapping_(pn ,in ,gridSize,SpaceDim,offset);
+      _IndexMapping_(ps ,is ,gridSize,SpaceDim,offset);
+      _IndexMapping_(pne,ine,gridSize,SpaceDim,offset);
+      _IndexMapping_(pnw,inw,gridSize,SpaceDim,offset);
+      _IndexMapping_(pne,ine,gridSize,SpaceDim,offset);
+      _IndexMapping_(psw,isw,gridSize,SpaceDim,offset);
+
+      /* coefficients */
+      Real ac = 1.0,
+           an = 0.0,
+           as = 0.0,
+           ae = 0.0,
+           aw = 0.0,
+           ane = 0.0,
+           anw = 0.0,
+           ase = 0.0,
+           asw = 0.0;
+
+      int ncols = 9, bs = n_comp*n_comp, ix = 0;
+      int   *icols = (int*)  calloc (ncols,sizeof(int));
+      Real  *data  = (Real*) calloc (ncols*bs,sizeof(Real));
+
+      /* center element */
+      icols[ix] = pc;
+      for (int v=0; v<bs; v++) data[ix*bs+v] = ac;
+      ix++;
+      /* east element */
+      if (ie[SpaceDim-2] <= bigEnd[SpaceDim-2]) {
+        icols[ix] = pe;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = ae;
+        ix++;
+      }
+      /* west element */
+      if (iw[SpaceDim-2] >= smallEnd[SpaceDim-2]) {
+        icols[ix] = pw;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = aw;
+        ix++;
+      }
+      /* north element */
+      if (in[SpaceDim-3] <= bigEnd[SpaceDim-3]) {
+        icols[ix] = pn;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = an;
+        ix++;
+      }
+      /* south element */
+      if (is[SpaceDim-3] <= bigEnd[SpaceDim-3]) {
+        icols[ix] = ps;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = as;
+        ix++;
+      }
+      /* north east element */
+      if (   (ie[SpaceDim-2] <= bigEnd[SpaceDim-2]) 
+          && (in[SpaceDim-3] <= bigEnd[SpaceDim-3])) {
+        icols[ix] = pne;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = ane;
+        ix++;
+      }
+      /* north west element */
+      if (   (iw[SpaceDim-2] >= smallEnd[SpaceDim-2]) 
+          && (in[SpaceDim-3] <= bigEnd[SpaceDim-3])) {
+        icols[ix] = pnw;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = anw;
+        ix++;
+      }
+      /* south east element */
+      if (   (ie[SpaceDim-2] <= bigEnd[SpaceDim-2]) 
+          && (is[SpaceDim-3] >= smallEnd[SpaceDim-3])) {
+        icols[ix] = pse;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = ase;
+        ix++;
+      }
+      /* south west element */
+      if (   (iw[SpaceDim-2] >= smallEnd[SpaceDim-2]) 
+          && (is[SpaceDim-3] >= smallEnd[SpaceDim-3])) {
+        icols[ix] = psw;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = asw;
+        ix++;
+      }
+
+      Pmat->setRowValues(pc,ix,icols,data);
+      free(data);
+      free(icols);
+    }
+    offset += grid.numPts();
+  }
+
+  return;
+}
+
 void FokkerPlanck::evalRosenbluthPotentials( LevelData<FArrayBox>& a_phi,
                                              const PhaseGeom& a_phase_geom,
                                              const LevelData<FArrayBox>& a_dfn,

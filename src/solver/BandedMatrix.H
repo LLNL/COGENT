@@ -2,7 +2,9 @@
 #define _BandedMatrix_H_
 
 #include <stdlib.h>
+#include <iostream>
 #include "REAL.H"
+#include "Box.H"
 
 #include "NamespaceHeader.H"
 
@@ -32,6 +34,10 @@ class BandedMatrix
     void zeroEntries();
     void scaleEntries(Real a_a);
     void shift(Real a_a);
+
+    inline bool isDefined() { return(m_is_Defined); }
+
+    void setRowValues(int,int,int*,Real*);
 
   private:
     bool  m_is_Defined,
