@@ -64,7 +64,7 @@ public:
     {
       BandedMatrix *P = (BandedMatrix*) a_P;
       int nbands = 9; /* central differences of derivatives */
-      P->define(a_N,a_N,nbands,a_bs);
+      P->define(a_N,nbands,a_bs);
       return(P->isDefined());
     }
 

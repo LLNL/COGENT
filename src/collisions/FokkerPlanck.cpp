@@ -201,7 +201,7 @@ void FokkerPlanck::assemblePrecondMatrix(void *a_P,const KineticSpeciesPtrVect& 
     /* grid size */
     IntVect bigEnd   = grid.bigEnd(),
             smallEnd = grid.smallEnd();
-    IntVect gridSize(bigEnd); gridSize -= smallEnd;
+    IntVect gridSize(bigEnd); gridSize -= smallEnd; gridSize += 1;
 
     BoxIterator bit(grid);
     for (bit.begin(); bit.ok(); ++bit) {
@@ -227,15 +227,15 @@ void FokkerPlanck::assemblePrecondMatrix(void *a_P,const KineticSpeciesPtrVect& 
       isw[SpaceDim-2]--; isw[SpaceDim-1]--;   /* southwest */
       /* col numbers */
       int pc, pe, pw, pn, ps, pne, pnw, pse, psw;
-      _IndexMapping_(pc ,ic ,gridSize,SpaceDim,offset);
-      _IndexMapping_(pe ,ie ,gridSize,SpaceDim,offset);
-      _IndexMapping_(pw ,iw ,gridSize,SpaceDim,offset);
-      _IndexMapping_(pn ,in ,gridSize,SpaceDim,offset);
-      _IndexMapping_(ps ,is ,gridSize,SpaceDim,offset);
-      _IndexMapping_(pne,ine,gridSize,SpaceDim,offset);
-      _IndexMapping_(pnw,inw,gridSize,SpaceDim,offset);
-      _IndexMapping_(pne,ine,gridSize,SpaceDim,offset);
-      _IndexMapping_(psw,isw,gridSize,SpaceDim,offset);
+      _IndexMapping_(pc ,(ic -smallEnd),gridSize,SpaceDim,offset);
+      _IndexMapping_(pe ,(ie -smallEnd),gridSize,SpaceDim,offset);
+      _IndexMapping_(pw ,(iw -smallEnd),gridSize,SpaceDim,offset);
+      _IndexMapping_(pn ,(in -smallEnd),gridSize,SpaceDim,offset);
+      _IndexMapping_(ps ,(is -smallEnd),gridSize,SpaceDim,offset);
+      _IndexMapping_(pne,(ine-smallEnd),gridSize,SpaceDim,offset);
+      _IndexMapping_(pnw,(inw-smallEnd),gridSize,SpaceDim,offset);
+      _IndexMapping_(pne,(ine-smallEnd),gridSize,SpaceDim,offset);
+      _IndexMapping_(psw,(isw-smallEnd),gridSize,SpaceDim,offset);
 
       /* coefficients */
       Real ac = 1.0,
@@ -269,41 +269,41 @@ void FokkerPlanck::assemblePrecondMatrix(void *a_P,const KineticSpeciesPtrVect& 
         ix++;
       }
       /* north element */
-      if (in[SpaceDim-3] <= bigEnd[SpaceDim-3]) {
+      if (in[SpaceDim-1] <= bigEnd[SpaceDim-1]) {
         icols[ix] = pn;
         for (int v=0; v<bs; v++) data[ix*bs+v] = an;
         ix++;
       }
       /* south element */
-      if (is[SpaceDim-3] <= bigEnd[SpaceDim-3]) {
+      if (is[SpaceDim-1] >= smallEnd[SpaceDim-1]) {
         icols[ix] = ps;
         for (int v=0; v<bs; v++) data[ix*bs+v] = as;
         ix++;
       }
       /* north east element */
-      if (   (ie[SpaceDim-2] <= bigEnd[SpaceDim-2]) 
-          && (in[SpaceDim-3] <= bigEnd[SpaceDim-3])) {
+      if (   (ine[SpaceDim-2] <= bigEnd[SpaceDim-2]) 
+          && (ine[SpaceDim-1] <= bigEnd[SpaceDim-1])) {
         icols[ix] = pne;
         for (int v=0; v<bs; v++) data[ix*bs+v] = ane;
         ix++;
       }
       /* north west element */
-      if (   (iw[SpaceDim-2] >= smallEnd[SpaceDim-2]) 
-          && (in[SpaceDim-3] <= bigEnd[SpaceDim-3])) {
+      if (   (inw[SpaceDim-2] >= smallEnd[SpaceDim-2]) 
+          && (inw[SpaceDim-1] <= bigEnd[SpaceDim-1])) {
         icols[ix] = pnw;
         for (int v=0; v<bs; v++) data[ix*bs+v] = anw;
         ix++;
       }
       /* south east element */
-      if (   (ie[SpaceDim-2] <= bigEnd[SpaceDim-2]) 
-          && (is[SpaceDim-3] >= smallEnd[SpaceDim-3])) {
+      if (   (ise[SpaceDim-2] <= bigEnd[SpaceDim-2]) 
+          && (ise[SpaceDim-1] >= smallEnd[SpaceDim-1])) {
         icols[ix] = pse;
         for (int v=0; v<bs; v++) data[ix*bs+v] = ase;
         ix++;
       }
       /* south west element */
-      if (   (iw[SpaceDim-2] >= smallEnd[SpaceDim-2]) 
-          && (is[SpaceDim-3] >= smallEnd[SpaceDim-3])) {
+      if (   (isw[SpaceDim-2] >= smallEnd[SpaceDim-2]) 
+          && (isw[SpaceDim-1] >= smallEnd[SpaceDim-1])) {
         icols[ix] = psw;
         for (int v=0; v<bs; v++) data[ix*bs+v] = asw;
         ix++;

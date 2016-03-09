@@ -2,20 +2,19 @@
 
 #include "NamespaceHeader.H"
 
-void BandedMatrix::define(int a_nrow,int a_ncol,int a_nbands,int a_bs)
+void BandedMatrix::define(int a_nrow,int a_nbands,int a_bs)
 {
   m_nrow      = a_nrow;
-  m_ncol      = a_ncol;
   m_nbands    = a_nbands;
   m_bs        = a_bs;
-  m_is_Square = (m_nrow == m_ncol);
 
-  m_rows = (int*) calloc (m_nrow,sizeof(int));
-  m_cols = (int*) calloc (m_nrow*m_nbands,sizeof(int));
-  m_data = (Real*) calloc (m_nrow*m_nbands*m_bs*m_bs,sizeof(Real));
+  m_irows = (int*) calloc (m_nrow,sizeof(int));
+  m_ncols = (int*) calloc (m_nrow,sizeof(int));
+  m_icols = (int*) calloc (m_nrow*m_nbands,sizeof(int));
+  m_data  = (Real*) calloc (m_nrow*m_nbands*m_bs*m_bs,sizeof(Real));
 
   m_cstride = m_bs*m_bs;
-  m_rstride = m_nbands*m_cstride;
+  m_rstride = m_nbands*m_bs*m_bs;
 
   m_is_Defined = true;
 }
@@ -27,18 +26,14 @@ void BandedMatrix::setRowValues(int a_row,int a_ncols, int *a_icols, Real *a_dat
 
   Real *data_ptr = m_data + a_row*m_rstride,
        *b_data_ptr = a_data;
-  int  *col_ptr  = m_cols + a_row*m_nbands;
+  int  *col_ptr  = m_icols + a_row*m_nbands;
 
-  m_rows[a_row] = a_row;
+  m_irows[a_row] = a_row;
+  m_ncols[a_row] = a_ncols;
   for (int i=0; i<a_ncols; i++) {
     col_ptr[i] = a_icols[i];
-    for (int v=0; v<m_bs*m_bs; v++) data_ptr[v] = b_data_ptr[v];
+    for (int v=0; v<m_cstride; v++) data_ptr[v] = b_data_ptr[v];
     data_ptr += m_cstride; b_data_ptr += m_cstride;
-  }
-  for (int i=a_ncols; i<m_nbands; i++) {
-    col_ptr[i] = 0;
-    for (int v=0; v<m_bs*m_bs; v++) data_ptr[v] = 0.0;
-    data_ptr += m_cstride;
   }
 
   return;
@@ -48,7 +43,7 @@ void BandedMatrix::setRowValues(int a_row,int a_ncols, int *a_icols, Real *a_dat
 void BandedMatrix::zeroEntries()
 {
   int i;
-  for (i=0; i<(m_nrow*m_nbands*m_bs*m_bs); i++) m_data[i] = 0.0;
+  for (i=0; i<(m_nrow*m_rstride); i++) m_data[i] = 0.0;
   return;
 }
 
@@ -56,7 +51,7 @@ void BandedMatrix::zeroEntries()
 void BandedMatrix::scaleEntries(Real a_a)
 {
   int i;
-  for (i=0; i<(m_nrow*m_nbands*m_bs*m_bs); i++) m_data[i] *= a_a;
+  for (i=0; i<(m_nrow*m_rstride); i++) m_data[i] *= a_a;
   return;
 }
 
@@ -68,7 +63,7 @@ void BandedMatrix::shift(Real a_a)
 
   for (i=0; i<m_nrow; i++) {
     for (j=0; j<m_nbands; j++) {
-      if (m_rows[i] == m_cols[i*m_nbands+j]) {
+      if (m_irows[i] == m_icols[i*m_nbands+j]) {
         T = m_data + i*m_rstride + j*m_cstride;
         for (k=0; k<m_bs;k++) T[k*m_bs+k] += a_a;
       }
@@ -85,13 +80,13 @@ void BandedMatrix::copyToPetscMat(Mat& A,const int offset)
 
   for (int row=0; row<m_nrow; row++) {
     irow = row + offset; 
-    for (int i=0; i<m_nbands; i++) {
-      colind[i] = (m_cols+row*m_nbands)[i] + offset;
+    for (int i=0; i<m_ncols[row]; i++) {
+      colind[i] = (m_icols+row*m_nbands)[i] + offset;
       for (int u=0; u<m_bs; u++) {
-        for (int v=0; v<m_bs; v++) val[u][v+i*m_bs] = (m_data+row*m_rstride)[i*m_bs*m_bs+u*m_bs+v];
+        for (int v=0; v<m_bs; v++) val[u][v+i*m_bs] = (m_data+row*m_rstride)[i*m_cstride+u*m_bs+v];
       }
     }
-    MatSetValuesBlocked(A,1,&irow,m_nbands,colind,&val[0][0],INSERT_VALUES);
+    MatSetValuesBlocked(A,1,&irow,m_ncols[row],colind,&val[0][0],INSERT_VALUES);
   }
   MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd  (A,MAT_FINAL_ASSEMBLY);

@@ -370,7 +370,7 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
   
   /* create and initialize the PETSc solution vector */
   m_local_size = m_system->getVectorSize();
-  //m_ncomp      = m_system->getNComponents();
+  m_ncomp      = m_system->getNComponents();
   VecCreate(MPI_COMM_WORLD,&m_Y);
   VecSetSizes(m_Y,m_local_size,PETSC_DECIDE);
   VecSetUp(m_Y);
@@ -413,16 +413,14 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     PetscOptionsGetBool(PETSC_NULL,PETSC_NULL,"-with_pc",&m_usePreconditioner,PETSC_NULL);
     if (m_usePreconditioner) {
       m_is_Pre_allocated = true;
-      MatCreateAIJ(MPI_COMM_WORLD,m_local_size,m_local_size,PETSC_DETERMINE,PETSC_DETERMINE,
-                   (m_ndims*2+1)*m_ncomp,NULL,2*m_ndims*m_ncomp,NULL,&m_Pre);
-      MatSetBlockSize(m_Pre,m_ncomp);
-      /* Initialize to identity matrix */
-      MatZeroEntries(m_Pre);
-      MatAssemblyBegin(m_Pre,MAT_FINAL_ASSEMBLY);
-      MatAssemblyEnd  (m_Pre,MAT_FINAL_ASSEMBLY);
-      MatShift(m_Pre,1.0);
       /* set up native matrix */
       m_system->setupPCImEx((void*)&m_Pmat);
+      /* set up PETSc matrix */
+      MatCreate(MPI_COMM_WORLD,&m_Pre);
+      MatSetType(m_Pre,MATMPIAIJ);
+      MatSetSizes(m_Pre,m_local_size,m_local_size,PETSC_DETERMINE,PETSC_DETERMINE);
+      MatSetBlockSize(m_Pre,m_ncomp);
+      MatMPIAIJSetPreallocation(m_Pre,m_Pmat.getNBands(),NULL,0,NULL);
       /* Set the IJacobian function for TS */
       TSSetIJacobian(m_ts,m_Jac,m_Pre,IJacobianIMEX,this);
     } else { 
