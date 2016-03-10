@@ -200,13 +200,17 @@ void FokkerPlanck::assemblePrecondMatrix(void *a_P,const KineticSpeciesPtrVect& 
 {
   BandedMatrix *Pmat = (BandedMatrix*) a_P;
 
-  const KineticSpecies& soln_species(*(a_soln[a_species]));
+  const KineticSpecies&       soln_species(*(a_soln[a_species]));
   const LevelData<FArrayBox>& soln_dfn(soln_species.distributionFunction());
-  const DisjointBoxLayout& grids(soln_dfn.disjointBoxLayout());
-  const int n_comp(soln_dfn.nComp());
-  DataIterator dit = grids.dataIterator();
+  const DisjointBoxLayout&    grids(soln_dfn.disjointBoxLayout());
+  const PhaseGeom&            phase_geom( soln_species.phaseSpaceGeometry());
+  const int                   n_comp(soln_dfn.nComp());
+  const VEL::VelCoordSys&     vel_coords = phase_geom.velSpaceCoordSys();
+  const VEL::RealVect&        vel_dx     = vel_coords.dx();
 
+  Real  dv = 1.0/vel_dx[0], dmu = 1.0/vel_dx[1], dv_sq = dv*dv, dmu_sq = dmu*dmu;
   int offset = 0;
+  DataIterator dit = grids.dataIterator();
   for (dit.begin(); dit.ok(); ++dit) {
     const Box& grid = grids[dit];
 
@@ -250,15 +254,64 @@ void FokkerPlanck::assemblePrecondMatrix(void *a_P,const KineticSpeciesPtrVect& 
       _IndexMapping_(psw,(isw-smallEnd),gridSize,SpaceDim,offset);
 
       /* coefficients */
-      Real ac = 1.0,
-           an = 0.0,
-           as = 0.0,
-           ae = 0.0,
-           aw = 0.0,
-           ane = 0.0,
-           anw = 0.0,
-           ase = 0.0,
-           asw = 0.0;
+      Real D_c [m_nD],
+           D_e [m_nD],
+           D_w [m_nD],
+           D_n [m_nD],
+           D_s [m_nD],
+           D_ne[m_nD],
+           D_nw[m_nD],
+           D_se[m_nD],
+           D_sw[m_nD];
+      m_D[dit].getVal(&D_c [0],ic );
+      m_D[dit].getVal(&D_e [0],ie );
+      m_D[dit].getVal(&D_w [0],iw );
+      m_D[dit].getVal(&D_n [0],in );
+      m_D[dit].getVal(&D_s [0],is );
+      m_D[dit].getVal(&D_ne[0],ine);
+      m_D[dit].getVal(&D_nw[0],inw);
+      m_D[dit].getVal(&D_se[0],ise);
+      m_D[dit].getVal(&D_sw[0],isw);
+
+      /*
+       * D[0] -> D_v
+       * D[1] -> D_mu
+       * D[2] -> D_v_v
+       * D[3] -> D_v_mu
+       * D[4] -> D_mu_mu
+       */
+
+      Real ac = -2 * (D_c[2]*dv_sq + D_c[4]*dmu_sq),
+           an = ( 0.5*D_n[1]*dmu + D_n[4]*dmu_sq),
+           as = (-0.5*D_s[1]*dmu + D_s[4]*dmu_sq),
+           ae = ( 0.5*D_e[0]*dv  + D_e[2]*dv_sq ),
+           aw = (-0.5*D_w[0]*dv  + D_w[2]*dv_sq ),
+           ane =  0.5*D_ne[3]*dv*dmu,
+           anw = -0.5*D_nw[3]*dv*dmu,
+           ase = -0.5*D_se[3]*dv*dmu,
+           asw =  0.5*D_sw[3]*dv*dmu;
+
+      if (m_fixed_cls_freq) {
+        ac  *= m_cls_freq;
+        ae  *= m_cls_freq;
+        aw  *= m_cls_freq;
+        an  *= m_cls_freq;
+        as  *= m_cls_freq;
+        ane *= m_cls_freq;
+        anw *= m_cls_freq;
+        ase *= m_cls_freq;
+        asw *= m_cls_freq;
+      } else {
+        ac  *= m_cls_norm;
+        ae  *= m_cls_norm;
+        aw  *= m_cls_norm;
+        an  *= m_cls_norm;
+        as  *= m_cls_norm;
+        ane *= m_cls_norm;
+        anw *= m_cls_norm;
+        ase *= m_cls_norm;
+        asw *= m_cls_norm;
+      }
 
       int  ncols = 9, bs = n_comp*n_comp, ix = 0;
       int  *icols = (int*)  calloc (ncols,sizeof(int));
