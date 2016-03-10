@@ -81,6 +81,7 @@ private:
    Real m_pcg_tol;
    Real m_pcg_maxiter;
    int  m_mult_num;
+   int  m_nD;
 
    int  m_update_freq;
    int  m_it_counter;
@@ -90,6 +91,8 @@ private:
 
    LevelData<FArrayBox> m_phi;
    LevelData<FArrayBox> m_phi_F0;
+   LevelData<FArrayBox> m_D;
+   LevelData<FArrayBox> m_D_F0;
 
    RefCountedPtr<KineticFunction> m_ref_func;
    
@@ -99,16 +102,23 @@ private:
                                   const PhaseGeom& phase_geom,
                                   const LevelData<FArrayBox>& dfn,
                                   const double mass ) const;
+
+  /// Computes the coefficients D_v, D_mu, D_v_v, D_v_mu, D_mu_mu
+  //  from the Rosenbluth potentials
+  
+  void evalCoefficients( LevelData<FArrayBox>& D,
+                         const LevelData<FArrayBox>& phi,
+                         const PhaseGeom& phase_geom,
+                         const double mass_tp,
+                         const double mass_fp) const;
   
 
   /// Computes the collision flux 
 
    void computeFlux( LevelData<FluxBox>& flux,
                      const PhaseGeom& phase_geom,
-                     const LevelData<FArrayBox>& phi,
-                     const LevelData<FArrayBox>& dfn,
-                     const double mass_tp,
-                     const double mass_fp ) const;
+                     const LevelData<FArrayBox>& D,
+                     const LevelData<FArrayBox>& dfn) const;
 
 
   ///Computes the normalization factor 

@@ -22,6 +22,7 @@ FokkerPlanck::FokkerPlanck( ParmParse& a_ppcls, const int a_verbosity )
      m_pcg_tol(1.0e-5),
      m_pcg_maxiter(100),
      m_mult_num(1),
+     m_nD(5),
      m_update_freq(-1),
      m_it_counter(0),
      m_first_step(true),
@@ -89,16 +90,21 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
      //Covert delta_dfn to cell centers
      convertToCellCenters(phase_geom, dfn);
 
-     //Define m_phi and set it to zero at the first time step
+     //Define m_phi and D, and set them to zero at the first time step
      if (m_first_step) {
        m_phi.define( grids, 2, IntVect::Zero );
+       m_D.define( grids, m_nD, IntVect::Zero );
        for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
          m_phi[dit].setVal(0.0);
+         m_D[dit].setVal(0.0);
        }
      }
      
-     if ( update_phi ) {evalRosenbluthPotentials(m_phi, phase_geom, dfn, mass_tp); }
-     computeFlux(flux, phase_geom, m_phi, dfn, mass_tp, mass_fp);
+     if ( update_phi ) {
+       evalRosenbluthPotentials(m_phi, phase_geom, dfn, mass_tp); 
+       evalCoefficients(m_D,m_phi,phase_geom,mass_tp,mass_fp);
+     }
+     computeFlux(flux, phase_geom, m_D, dfn);
 
    }
  
@@ -119,15 +125,20 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
      //Covert delta_dfn to cell centers
      convertToCellCenters(phase_geom, delta_dfn);
 
-     //Define m_phi and m_phi_F0, and compute m_phi_F0 
+     //Define m_phi, m_phi_F0, m_D, m_D_F0, and compute m_phi_F0, and m_D_F0
      if (m_first_step) {
        m_phi.define( grids, 2, IntVect::Zero );
        m_phi_F0.define( grids, 2, IntVect::Zero );
+       m_D.define( grids, m_nD, IntVect::Zero );
+       m_D_F0.define( grids, m_nD, IntVect::Zero );
        for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
          m_phi[dit].setVal(0.0);
          m_phi_F0[dit].setVal(0.0);
+         m_D[dit].setVal(0.0);
+         m_D_F0[dit].setVal(0.0);
        }
        evalRosenbluthPotentials(m_phi_F0, phase_geom, ref_dfn, mass_tp);
+       evalCoefficients(m_D_F0,m_phi_F0,phase_geom,mass_tp,mass_fp);
      } 
 
 
@@ -135,14 +146,16 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
      LevelData<FluxBox> flux_tmp(grids, SpaceDim, IntVect::Zero);
 
      //Compute C[F1,F0]
-     computeFlux(flux_tmp, phase_geom, m_phi_F0, delta_dfn, mass_tp, mass_fp);
+     computeFlux(flux_tmp, phase_geom, m_D_F0, delta_dfn);
      for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
         flux[dit].copy( flux_tmp[dit] );
      }
-
      //Compute C[F1,F0] + C[F0,F1]
-     if ( update_phi ) {evalRosenbluthPotentials(m_phi, phase_geom, delta_dfn, mass_tp); }
-     computeFlux(flux_tmp, phase_geom, m_phi, ref_dfn, mass_tp, mass_fp);
+     if ( update_phi ) {
+       evalRosenbluthPotentials(m_phi, phase_geom, delta_dfn, mass_tp); 
+       evalCoefficients(m_D,m_phi,phase_geom,mass_tp,mass_fp);
+     }
+     computeFlux(flux_tmp, phase_geom, m_D, ref_dfn);
      for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
        for (int dir=0; dir<SpaceDim; dir++) {
          flux[dit][dir].plus( flux_tmp[dit][dir] );
@@ -150,7 +163,7 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
      }
 
      //Compute C[F1,F0] + C[F0,F1] + C[F1,F1]
-     computeFlux(flux_tmp, phase_geom, m_phi, delta_dfn, mass_tp, mass_fp);
+     computeFlux(flux_tmp, phase_geom, m_D, delta_dfn);
      for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
        for (int dir=0; dir<SpaceDim; dir++) {
          flux[dit][dir].plus( flux_tmp[dit][dir] );
@@ -191,12 +204,11 @@ void FokkerPlanck::assemblePrecondMatrix(void *a_P,const KineticSpeciesPtrVect& 
   const LevelData<FArrayBox>& soln_dfn(soln_species.distributionFunction());
   const DisjointBoxLayout& grids(soln_dfn.disjointBoxLayout());
   const int n_comp(soln_dfn.nComp());
-
   DataIterator dit = grids.dataIterator();
+
   int offset = 0;
   for (dit.begin(); dit.ok(); ++dit) {
     const Box& grid = grids[dit];
-    const FArrayBox& dfn = soln_dfn[dit];
 
     /* grid size */
     IntVect bigEnd   = grid.bigEnd(),
@@ -347,54 +359,37 @@ void FokkerPlanck::evalRosenbluthPotentials( LevelData<FArrayBox>& a_phi,
    }
 }
 
-
-void FokkerPlanck::computeFlux( LevelData<FluxBox>& a_flux,
-                                const PhaseGeom& a_phase_geom,
-                                const LevelData<FArrayBox>& a_phi,
-                                const LevelData<FArrayBox>& a_dfn,
-                                const double a_mass_tp,
-                                const double a_mass_fp ) const
-
+void FokkerPlanck::evalCoefficients( LevelData<FArrayBox>& a_D,
+                                     const LevelData<FArrayBox>& a_phi,
+                                     const PhaseGeom& a_phase_geom,
+                                     const double a_mass_tp,
+                                     const double a_mass_fp) const
 {
-
    // Get velocity coordinate system parameters
-   const VEL::VelCoordSys& vel_coords = a_phase_geom.velSpaceCoordSys();
-   const VEL::ProblemDomain& vel_domain = vel_coords.domain();
-   const VEL::Box& domain_box = vel_domain.domainBox();
-   const VEL::RealVect& vel_dx = vel_coords.dx();
+   const VEL::VelCoordSys&    vel_coords = a_phase_geom.velSpaceCoordSys();
+   const VEL::ProblemDomain&  vel_domain = vel_coords.domain();
+   const VEL::Box&            domain_box = vel_domain.domainBox();
+   const VEL::RealVect&       vel_dx     = vel_coords.dx();
+
    const int num_vpar_cells = domain_box.size(0);
-   const int num_mu_cells = domain_box.size(1);
+   const int num_mu_cells   = domain_box.size(1);
 
-
-   //Create temporary dfn and phi with two extra layers of ghost cells (filled with zeros)
-   LevelData<FArrayBox> dfn_tmp(a_dfn.disjointBoxLayout(),
-                                a_dfn.nComp(),
-                                a_dfn.ghostVect()+2*IntVect::Unit);
-
+   //Create temporary phi with two extra layers of ghost cells (filled with zeros)
    LevelData<FArrayBox> phi_tmp(a_phi.disjointBoxLayout(),
                                 a_phi.nComp(),
                                 a_phi.ghostVect()+2*IntVect::Unit);
 
-   const DisjointBoxLayout& grids( a_dfn.getBoxes() );
-   for (DataIterator dit( a_dfn.dataIterator() ); dit.ok(); ++dit) {
-      dfn_tmp[dit].setVal(0.0);
-      dfn_tmp[dit].copy(a_dfn[dit],grids[dit]);
-
+   const DisjointBoxLayout& grids( a_phi.getBoxes() );
+   for (DataIterator dit( a_phi.dataIterator() ); dit.ok(); ++dit) {
       phi_tmp[dit].setVal(0.0);
       phi_tmp[dit].copy(a_phi[dit],grids[dit]);
    }
 
-   dfn_tmp.exchange();
    phi_tmp.exchange();
-
    FillGhostCells(a_phase_geom, phi_tmp);
-// FillGhostCells(a_phase_geom, dfn_tmp);
    
-   //Compute cell-cenetered collision fluxes (0 comp - vpar_dir, 1 comp - mu_dir)
-   LevelData<FArrayBox> flux_cell(grids, 2, IntVect::Zero);
    const LevelData<FArrayBox>& injected_B = a_phase_geom.getBFieldMagnitude();
-
-   for (DataIterator dit( a_dfn.dataIterator() ); dit.ok(); ++dit) {
+   for (DataIterator dit( a_D.dataIterator() ); dit.ok(); ++dit) {
       
       // Check if the have more than 4 cells on a box in MU_DIR 
       // used for calcuation of second derivatives in mu at mu=0 bnd   
@@ -403,19 +398,64 @@ void FokkerPlanck::computeFlux( LevelData<FluxBox>& a_flux,
        MayDay::Error(" Box size in MU_DIR must be greater that 4 for FP operator calculations");
       }  
 
-      FArrayBox& this_flux_cell = flux_cell[dit];
-      FArrayBox& this_dfn_tmp = dfn_tmp[dit];
+      FArrayBox& this_D = a_D[dit];
       const FArrayBox& this_phi_tmp = phi_tmp[dit];
       const FArrayBox& this_b = injected_B[dit];
       
+      FORT_EVALUATE_COEFFICIENTS( CHF_FRA(this_D),
+                                  CHF_CONST_FRA(this_phi_tmp),
+                                  CHF_CONST_FRA1(this_b,0),
+                                  CHF_BOX(this_D.box()),
+                                  CHF_CONST_REALVECT(vel_dx),
+                                  CHF_CONST_REAL(a_mass_tp),
+                                  CHF_CONST_REAL(a_mass_fp),
+                                  CHF_CONST_INT(num_vpar_cells),
+                                  CHF_CONST_INT(num_mu_cells));
+   }
+
+}
+
+void FokkerPlanck::computeFlux( LevelData<FluxBox>& a_flux,
+                                const PhaseGeom& a_phase_geom,
+                                const LevelData<FArrayBox>& a_D,
+                                const LevelData<FArrayBox>& a_dfn) const
+
+{
+
+   // Get velocity coordinate system parameters
+   const VEL::VelCoordSys&    vel_coords  = a_phase_geom.velSpaceCoordSys();
+   const VEL::ProblemDomain&  vel_domain  = vel_coords.domain();
+   const VEL::Box&            domain_box  = vel_domain.domainBox();
+   const VEL::RealVect&       vel_dx      = vel_coords.dx();
+
+   const int num_vpar_cells = domain_box.size(0);
+   const int num_mu_cells   = domain_box.size(1);
+
+   //Create temporary dfn with two extra layers of ghost cells (filled with zeros)
+   LevelData<FArrayBox> dfn_tmp(a_dfn.disjointBoxLayout(),
+                                a_dfn.nComp(),
+                                a_dfn.ghostVect()+2*IntVect::Unit);
+
+   const DisjointBoxLayout& grids( a_dfn.getBoxes() );
+   for (DataIterator dit( a_dfn.dataIterator() ); dit.ok(); ++dit) {
+      dfn_tmp[dit].setVal(0.0);
+      dfn_tmp[dit].copy(a_dfn[dit],grids[dit]);
+   }
+   dfn_tmp.exchange();
+
+   //Compute cell-cenetered collision fluxes (0 comp - vpar_dir, 1 comp - mu_dir)
+   LevelData<FArrayBox> flux_cell(grids, 2, IntVect::Zero);
+   for (DataIterator dit( a_dfn.dataIterator() ); dit.ok(); ++dit) {
+      
+      FArrayBox& this_flux_cell = flux_cell[dit];
+      FArrayBox& this_dfn_tmp   = dfn_tmp[dit];
+      const FArrayBox& this_D   = a_D[dit];
+      
       FORT_EVALUATE_FLUX_CELL(CHF_FRA(this_flux_cell),
                               CHF_FRA1(this_dfn_tmp,0),
-                              CHF_CONST_FRA(this_phi_tmp),
-                              CHF_CONST_FRA1(this_b,0),
+                              CHF_CONST_FRA(this_D),
                               CHF_BOX(this_flux_cell.box()),
                               CHF_CONST_REALVECT(vel_dx),
-                              CHF_CONST_REAL(a_mass_tp),
-                              CHF_CONST_REAL(a_mass_fp),
                               CHF_CONST_INT(num_vpar_cells),
                               CHF_CONST_INT(num_mu_cells));
 

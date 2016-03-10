@@ -1,8 +1,7 @@
 #include "CONSTANTS.H"
 
-      subroutine evaluate_flux_cell(
-     &     CHF_FRA[flux],
-     &     CHF_FRA1[f],
+      subroutine evaluate_coefficients(
+     &     CHF_FRA[D],
      &     CHF_CONST_FRA[phi],
      &     CHF_CONST_FRA1[bmag],
      &     CHF_BOX[gridbox],
@@ -15,20 +14,14 @@
 
 c     local variables
       integer CHF_DDECL[i;j;k;l]
-      double precision f_v, f_mu, h_v, h_mu, g_v, g_mu, g_v_v, g_mu_mu, g_v_mu
+      double precision h_v, h_mu, g_v, g_mu, g_v_v, g_mu_mu, g_v_mu
       double precision g_v_lo1, g_v_lo2, g_v_lo3, g_v_lo4, g_v_hi1, g_v_hi2, g_v_hi3, g_v_hi4
-      double precision mu, b, D_v, D_mu, D_mu_v, D_v_mu, D_v_v, D_mu_mu
+      double precision mu, b, D_v, D_mu, D_v_mu, D_v_v, D_mu_mu
 
       CHF_MULTIDO[gridbox;i;j;k;l]
 
 c      *** Calculate necessary phi derivatives; notation is used from Z. Xiong, JCP 2008
        
-       f_v = (1.0d0/12.0d0/dx(0))*(8.0d0*(f(CHF_IX[i;j;k+1;l])-f(CHF_IX[i;j;k-1;l]))
-     &                         -(f(CHF_IX[i;j;k+2;l])-f(CHF_IX[i;j;k-2;l])))
-       
-       f_mu = (1.0d0/12.0d0/dx(1))*(8.0d0*(f(CHF_IX[i;j;k;l+1])-f(CHF_IX[i;j;k;l-1]))
-     &                         -(f(CHF_IX[i;j;k;l+2])-f(CHF_IX[i;j;k;l-2])))
-
        h_v = (1.0d0/12.0d0/dx(0))*(8.0d0*(phi(CHF_IX[i;j;k+1;l],0)-phi(CHF_IX[i;j;k-1;l],0))
      &                         -(phi(CHF_IX[i;j;k+2;l],0)-phi(CHF_IX[i;j;k-2;l],0)))
        
@@ -122,9 +115,6 @@ c      ***Calculate one-sided 4-th order accurate derivatives at mu=0 bnd
         if ((l.eq.0) .or. (l.eq.1)) then
 
        
-          f_mu = 1.0d0/dx(1)*(-25.0d0/12.0d0*f(CHF_IX[i;j;k;l])+4.0d0*f(CHF_IX[i;j;k;l+1])
-     &           -3.0d0*f(CHF_IX[i;j;k;l+2])+4.0d0/3.0d0*f(CHF_IX[i;j;k;l+3])-1.0d0/4.0d0*f(CHF_IX[i;j;k;l+4]))
-
           h_mu = 1.0d0/dx(1)*(-25.0d0/12.0d0*phi(CHF_IX[i;j;k;l],0)+4.0d0*phi(CHF_IX[i;j;k;l+1],0)
      &           -3.0d0*phi(CHF_IX[i;j;k;l+2],0)+4.0d0/3.0d0*phi(CHF_IX[i;j;k;l+3],0)-1.0d0/4.0d0*phi(CHF_IX[i;j;k;l+4],0))
 
@@ -215,18 +205,70 @@ c      ***Calculate one-sided 4-th order accurate derivatives at hi_mu bnd
         endif
 
 
-
 c      *** Calculate collisional flux 
        b = bmag(i,j,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
        mu=(l+0.5) * dx(1)
        
-       D_v = (mTP/mFP) * h_v
-       D_v_v = -g_v_v
-       D_v_mu = -2.0d0 * mTP / b * mu * g_v_mu
-       D_mu = 2.0d0 * (mTP/mFP) * mTP / b * mu * h_mu
-       D_mu_v = -2.0d0 * mTP / b * mu * g_v_mu
-       D_mu_mu = -2.0d0 * mTP * mTP /(b*b) * mu * (2.0d0 * mu * g_mu_mu + g_mu)
+       D_v      = (mTP/mFP) * h_v
+       D_v_v    = -g_v_v
+       D_v_mu   = -2.0d0 * mTP / b * mu * g_v_mu
+       D_mu     = 2.0d0 * (mTP/mFP) * mTP / b * mu * h_mu
+c      D_mu_v   = -2.0d0 * mTP / b * mu * g_v_mu
+       D_mu_mu  = -2.0d0 * mTP * mTP /(b*b) * mu * (2.0d0 * mu * g_mu_mu + g_mu)
 
+       D(CHF_IX[i;j;k;l],0) = D_v
+       D(CHF_IX[i;j;k;l],1) = D_mu
+       D(CHF_IX[i;j;k;l],2) = D_v_v
+       D(CHF_IX[i;j;k;l],3) = D_v_mu ! = D_mu_v
+       D(CHF_IX[i;j;k;l],4) = D_mu_mu
+
+      CHF_ENDDO
+
+      return
+
+      end
+
+
+      subroutine evaluate_flux_cell(
+     &     CHF_FRA[flux],
+     &     CHF_FRA1[f],
+     &     CHF_CONST_FRA[D],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_INT[Nvpar],
+     &     CHF_CONST_INT[Nmu]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l]
+      double precision f_v, f_mu
+      double precision D_v, D_mu, D_mu_v, D_v_mu, D_v_v, D_mu_mu
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+c      *** Calculate necessary phi derivatives; notation is used from Z. Xiong, JCP 2008
+       
+       f_v = (1.0d0/12.0d0/dx(0))*(8.0d0*(f(CHF_IX[i;j;k+1;l])-f(CHF_IX[i;j;k-1;l]))
+     &                         -(f(CHF_IX[i;j;k+2;l])-f(CHF_IX[i;j;k-2;l])))
+       
+       f_mu = (1.0d0/12.0d0/dx(1))*(8.0d0*(f(CHF_IX[i;j;k;l+1])-f(CHF_IX[i;j;k;l-1]))
+     &                         -(f(CHF_IX[i;j;k;l+2])-f(CHF_IX[i;j;k;l-2])))
+
+c      ***Calculate one-sided 4-th order accurate derivatives at mu=0 bnd
+
+        if ((l.eq.0) .or. (l.eq.1)) then
+          f_mu = 1.0d0/dx(1)*(-25.0d0/12.0d0*f(CHF_IX[i;j;k;l])+4.0d0*f(CHF_IX[i;j;k;l+1])
+     &           -3.0d0*f(CHF_IX[i;j;k;l+2])+4.0d0/3.0d0*f(CHF_IX[i;j;k;l+3])-1.0d0/4.0d0*f(CHF_IX[i;j;k;l+4]))
+        endif
+
+c      *** Calculate collisional flux 
+       
+       D_v     = D(CHF_IX[i;j;k;l],0) ! = (mTP/mFP) * h_v
+       D_mu    = D(CHF_IX[i;j;k;l],1) ! = 2.0d0 * (mTP/mFP) * mTP / b * mu * h_mu
+       D_v_v   = D(CHF_IX[i;j;k;l],2) ! = -g_v_v
+       D_v_mu  = D(CHF_IX[i;j;k;l],3) ! = -2.0d0 * mTP / b * mu * g_v_mu
+       D_mu_v  = D(CHF_IX[i;j;k;l],3) ! = -2.0d0 * mTP / b * mu * g_v_mu
+       D_mu_mu = D(CHF_IX[i;j;k;l],4) ! = -2.0d0 * mTP * mTP /(b*b) * mu * (2.0d0 * mu * g_mu_mu + g_mu)
 
        flux(CHF_IX[i;j;k;l],0) = D_v * f(CHF_IX[i;j;k;l]) + D_v_v * f_v + 2.0d0 * D_v_mu * f_mu
        flux(CHF_IX[i;j;k;l],1) = 2.0d0 * (D_mu * f(CHF_IX[i;j;k;l]) + D_mu_v * f_v + 2.0d0 * D_mu_mu * f_mu)
