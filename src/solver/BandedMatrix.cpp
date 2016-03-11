@@ -78,6 +78,7 @@ void BandedMatrix::copyToPetscMat(Mat& A,const int offset)
   Real  **val   = (Real**)calloc (m_bs,sizeof(Real*));
   for (int v=0; v<m_bs; v++) val[v] = (Real*) calloc (m_bs*m_nbands,sizeof(Real));
 
+  MatZeroEntries(A);
   for (int row=0; row<m_nrow; row++) {
     irow = row + offset; 
     for (int i=0; i<m_ncols[row]; i++) {

@@ -250,7 +250,7 @@ void FokkerPlanck::assemblePrecondMatrix(void *a_P,const KineticSpeciesPtrVect& 
       _IndexMapping_(ps ,(is -smallEnd),gridSize,SpaceDim,offset);
       _IndexMapping_(pne,(ine-smallEnd),gridSize,SpaceDim,offset);
       _IndexMapping_(pnw,(inw-smallEnd),gridSize,SpaceDim,offset);
-      _IndexMapping_(pne,(ine-smallEnd),gridSize,SpaceDim,offset);
+      _IndexMapping_(pse,(ise-smallEnd),gridSize,SpaceDim,offset);
       _IndexMapping_(psw,(isw-smallEnd),gridSize,SpaceDim,offset);
 
       /* coefficients */
