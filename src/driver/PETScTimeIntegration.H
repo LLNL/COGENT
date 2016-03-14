@@ -133,7 +133,7 @@ static PetscErrorCode IFunctionIMEX(TS ts, PetscReal t, Vec Y, Vec Ydot, Vec F, 
   GKSystem *system = context->getSystem();
 
   context->copyStateFromPetsc(Y,system);
-  system->computeIFunctionImEx((Real)t);
+  system->computeIFunctionImEx((Real)t,0);
   context->copyRHSToPetsc(F,system);
 
   VecCopy(Y,context->m_Yref);
@@ -407,6 +407,7 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_is_Jac_allocated = true;
 
     SNES  snes; TSGetSNES(m_ts,&snes);
+    m_is_linear = true;
     if (m_is_linear) SNESSetType(snes,SNESKSPONLY);
 
     m_usePreconditioner = PETSC_FALSE;
