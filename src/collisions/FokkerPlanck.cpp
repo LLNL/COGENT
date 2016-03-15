@@ -100,7 +100,7 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
        }
      }
      
-     if ( update_phi ) {
+     if ( update_phi || m_first_step ) {
        evalRosenbluthPotentials(m_phi, phase_geom, dfn, mass_tp); 
        evalCoefficients(m_D,m_phi,phase_geom,mass_tp,mass_fp);
      }
