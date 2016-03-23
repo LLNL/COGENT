@@ -1539,7 +1539,9 @@ PhaseGeom::divideJonValid( LevelData<FArrayBox>& a_dfn ) const
       getJ(*m_configuration_J, *m_velocity_J, J);
 
       for (DataIterator dit(a_dfn.dataIterator()); dit.ok(); ++dit) {
-         a_dfn[dit] /= J[dit];
+        for (int n=0; n<a_dfn.nComp(); ++n) {
+          a_dfn[dit].divide(J[dit],0,n,1);
+        }
       }
    }
    else {
