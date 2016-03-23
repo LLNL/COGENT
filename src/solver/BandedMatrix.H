@@ -41,10 +41,10 @@ class BandedMatrix
     inline bool isDefined() { return(m_is_Defined); }
     inline int  getNBands() { return m_nbands; }
 
-    void setRowValues(int,int,int*,Real*);
+    void setRowValues(int,int,int,int*,Real*);
 
 #ifdef with_petsc
-    void copyToPetscMat(Mat&,const int);
+    void copyToPetscMat(Mat);
 #endif
 
   private:

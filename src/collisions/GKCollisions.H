@@ -5,6 +5,7 @@
 #include "CLSInterface.H"
 #include "KineticSpecies.H"
 #include "ParmParse.H"
+#include "Mapping.H"
 
 #include "Krook.H"
 #include "MyKrook.H"
@@ -68,7 +69,7 @@ class GKCollisions
       Real computeTimeScale( const KineticSpeciesPtrVect& soln );
 
       bool setupPrecondMatrix(void*,int,int);
-      void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&);
+      void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,const Mapping&);
 
       /// returns the collision model associated with the input name
       /**

@@ -35,17 +35,17 @@ class PetscTimeIntegrator
     void  addStateFromPetsc   (Vec& a_Y, System* a_System, Real a_scale = 1.0);
     void  copyRHSToPetsc      (Vec& a_Y, System* a_System);
     void  copyRHSFromPetsc    (Vec& a_Y, System* a_System);
-    void  copyMatrixToPetsc   (Mat& a_B);
 
-    inline System*    getSystem()        { return m_system; }
-    inline int        getVerbosity()     { return m_verbosity; }
-    inline int        getPlotInterval()  { return m_plot_interval; }
-    inline int        getChkptInterval() { return m_checkpoint_interval; }
-    inline Real       getShift()         { return m_shift; }
-    inline Real       getTime()          { return m_cur_time; }
-    inline Real       getEpsilonJFNK()   { return m_epsilon_jfnk; }
-    inline bool       isLinear()         { return m_is_linear; }
-    inline PetscBool  usePC()            { return m_usePreconditioner; }
+    inline System*    getSystem()                 { return m_system; }
+    inline int        getVerbosity()              { return m_verbosity; }
+    inline int        getPlotInterval()           { return m_plot_interval; }
+    inline int        getChkptInterval()          { return m_checkpoint_interval; }
+    inline Real       getShift()                  { return m_shift; }
+    inline Real       getTime()                   { return m_cur_time; }
+    inline Real       getEpsilonJFNK()            { return m_epsilon_jfnk; }
+    inline bool       isLinear()                  { return m_is_linear; }
+    inline PetscBool  usePC()                     { return m_usePreconditioner; }
+    inline void       copyMatrixToPetsc(Mat a_B)  { m_Pmat.copyToPetscMat(a_B); }
 
     inline void    setLastPlot  (int a_int) { m_last_plot = a_int; }      
     inline void    setLastChkpt (int a_int) { m_last_checkpoint = a_int; }      
@@ -421,7 +421,7 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
       MatSetType(m_Pre,MATMPIAIJ);
       MatSetSizes(m_Pre,m_local_size,m_local_size,PETSC_DETERMINE,PETSC_DETERMINE);
       MatSetBlockSize(m_Pre,m_ncomp);
-      MatMPIAIJSetPreallocation(m_Pre,m_Pmat.getNBands(),NULL,0,NULL);
+      MatMPIAIJSetPreallocation(m_Pre,m_Pmat.getNBands(),NULL,m_Pmat.getNBands()/2,NULL);
       /* Set the IJacobian function for TS */
       TSSetIJacobian(m_ts,m_Jac,m_Pre,IJacobianIMEX,this);
     } else { 
@@ -446,15 +446,6 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
   TSSetPostStage(m_ts,PostTimeStage);
 
   TSSetUp(m_ts);
-}
-
-template <class System>
-void PetscTimeIntegrator<System>::copyMatrixToPetsc( Mat& a_B )
-{
-  PetscErrorCode ierr;
-  int offset;
-  ierr = MatGetOwnershipRange(a_B,&offset,NULL);
-  m_Pmat.copyToPetscMat(a_B,offset);
 }
 
 template <class System>

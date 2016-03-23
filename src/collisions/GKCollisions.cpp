@@ -175,14 +175,16 @@ bool GKCollisions::setupPrecondMatrix(void *a_P,int a_N,int a_bs)
   return flag;
 }
 
-void GKCollisions::assemblePrecondMatrix(void *a_P,const KineticSpeciesPtrVect& a_soln)
+void GKCollisions::assemblePrecondMatrix( void *a_P,
+                                          const KineticSpeciesPtrVect& a_soln,
+                                          const Mapping& a_mapping)
 {
   CH_assert(a_soln.size() == 1);
   for (int species(0); species<a_soln.size(); species++) {
     KineticSpecies& soln_species(*(a_soln[species]));
     const std::string species_name(soln_species.name());
     CLSInterface& CLS(collisionModel(species_name));
-    CLS.assemblePrecondMatrix(a_P,a_soln,species);
+    CLS.assemblePrecondMatrix(a_P,a_soln,species,a_mapping);
   }
 }
 

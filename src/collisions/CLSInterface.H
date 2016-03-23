@@ -4,6 +4,7 @@
 #include "REAL.H"
 #include "ParmParse.H"
 #include "KineticSpecies.H"
+#include "Mapping.H"
 
 #include "NamespaceHeader.H"
 
@@ -44,7 +45,10 @@ class CLSInterface
       virtual Real TimeScale(const KineticSpeciesPtrVect& soln) { return -1; }
 
       virtual bool setupPrecondMatrix(void *a_P,int a_N,int a_bs) { return false; }
-      virtual void assemblePrecondMatrix(void *a_P,const KineticSpeciesPtrVect& a_soln,int a_i) { }
+      virtual void assemblePrecondMatrix( void *a_P,
+                                          const KineticSpeciesPtrVect& a_soln,
+                                          int a_i,
+                                          const Mapping& a_mapping) { }
 };
 
 #include "NamespaceFooter.H"
