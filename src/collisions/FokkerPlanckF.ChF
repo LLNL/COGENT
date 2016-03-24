@@ -231,7 +231,7 @@ c      D_mu_v   = -2.0d0 * mTP / b * mu * g_v_mu
 
       subroutine evaluate_flux_cell(
      &     CHF_FRA[flux],
-     &     CHF_FRA1[f],
+     &     CHF_CONST_FRA1[f],
      &     CHF_CONST_FRA[D],
      &     CHF_BOX[gridbox],
      &     CHF_CONST_REALVECT[dx],
@@ -242,24 +242,29 @@ c      D_mu_v   = -2.0d0 * mTP / b * mu * g_v_mu
 c     local variables
       integer CHF_DDECL[i;j;k;l]
       double precision f_v, f_mu
-      double precision D_v, D_mu, D_mu_v, D_v_mu, D_v_v, D_mu_mu
+      double precision D_v, D_mu, D_mu_v, D_v_mu, D_v_v, D_mu_mu, dvinv, dmuinv
+
+      dvinv = 1.0d0/dx(0)
+      dmuinv= 1.0d0/dx(1)
 
       CHF_MULTIDO[gridbox;i;j;k;l]
-
+       
 c      *** Calculate necessary phi derivatives; notation is used from Z. Xiong, JCP 2008
+        f_v  = (f(CHF_IX[i;j;k;l])-f(CHF_IX[i;j;k-1;l]))*dvinv
+        f_mu = (f(CHF_IX[i;j;k;l])-f(CHF_IX[i;j;k;l-1]))*dmuinv
+
+!       f_v = (1.0d0/12.0d0/dx(0))*(8.0d0*(f(CHF_IX[i;j;k+1;l])-f(CHF_IX[i;j;k-1;l]))
+!     &                         -(f(CHF_IX[i;j;k+2;l])-f(CHF_IX[i;j;k-2;l])))
        
-       f_v = (1.0d0/12.0d0/dx(0))*(8.0d0*(f(CHF_IX[i;j;k+1;l])-f(CHF_IX[i;j;k-1;l]))
-     &                         -(f(CHF_IX[i;j;k+2;l])-f(CHF_IX[i;j;k-2;l])))
-       
-       f_mu = (1.0d0/12.0d0/dx(1))*(8.0d0*(f(CHF_IX[i;j;k;l+1])-f(CHF_IX[i;j;k;l-1]))
-     &                         -(f(CHF_IX[i;j;k;l+2])-f(CHF_IX[i;j;k;l-2])))
+!       f_mu = (1.0d0/12.0d0/dx(1))*(8.0d0*(f(CHF_IX[i;j;k;l+1])-f(CHF_IX[i;j;k;l-1]))
+!     &                         -(f(CHF_IX[i;j;k;l+2])-f(CHF_IX[i;j;k;l-2])))
 
 c      ***Calculate one-sided 4-th order accurate derivatives at mu=0 bnd
 
-        if ((l.eq.0) .or. (l.eq.1)) then
-          f_mu = 1.0d0/dx(1)*(-25.0d0/12.0d0*f(CHF_IX[i;j;k;l])+4.0d0*f(CHF_IX[i;j;k;l+1])
-     &           -3.0d0*f(CHF_IX[i;j;k;l+2])+4.0d0/3.0d0*f(CHF_IX[i;j;k;l+3])-1.0d0/4.0d0*f(CHF_IX[i;j;k;l+4]))
-        endif
+!        if ((l.eq.0) .or. (l.eq.1)) then
+!          f_mu = 1.0d0/dx(1)*(-25.0d0/12.0d0*f(CHF_IX[i;j;k;l])+4.0d0*f(CHF_IX[i;j;k;l+1])
+!     &           -3.0d0*f(CHF_IX[i;j;k;l+2])+4.0d0/3.0d0*f(CHF_IX[i;j;k;l+3])-1.0d0/4.0d0*f(CHF_IX[i;j;k;l+4]))
+!        endif
 
 c      *** Calculate collisional flux 
        
@@ -272,7 +277,6 @@ c      *** Calculate collisional flux
 
        flux(CHF_IX[i;j;k;l],0) = D_v * f(CHF_IX[i;j;k;l]) + D_v_v * f_v + 2.0d0 * D_v_mu * f_mu
        flux(CHF_IX[i;j;k;l],1) = 2.0d0 * (D_mu * f(CHF_IX[i;j;k;l]) + D_mu_v * f_v + 2.0d0 * D_mu_mu * f_mu)
-
       CHF_ENDDO
 
       return
@@ -330,3 +334,29 @@ c        *** Zero out fluxes at the domain bnds to avoid continous sink of parti
       return
       end
 
+      subroutine evaluate_fokkerplanck_rhs(
+     &     CHF_FRA1[rhs],
+     &     CHF_CONST_FRA[flux],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_INT[Nvpar],
+     &     CHF_CONST_INT[Nmu]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l]
+      double precision flux_v, flux_mu, dvinv, dmuinv
+
+      dvinv = 1.0d0/dx(0)
+      dmuinv= 1.0d0/dx(1)
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+        flux_v = (flux(CHF_IX[i;j;k+1;l],0)-flux(CHF_IX[i;j;k;l],0))*dvinv
+        flux_mu= (flux(CHF_IX[i;j;k;l+1],1)-flux(CHF_IX[i;j;k;l],1))*dmuinv
+        rhs(CHF_IX[i;j;k;l]) = flux_v + flux_mu
+
+      CHF_ENDDO
+
+      return
+
+      end

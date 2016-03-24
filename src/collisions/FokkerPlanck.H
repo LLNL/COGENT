@@ -8,6 +8,7 @@
 #include "KineticSpecies.H"
 #include "KineticFunction.H"
 #include "REAL.H"
+#include "Mapping.H"
 #include "CLSInterface.H"
 #include "ParmParse.H"
 #include <sstream>
@@ -68,7 +69,7 @@ public:
       return(P->isDefined());
     }
 
-  void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,int);
+  void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,int,const Mapping&);
 
 private:
 
@@ -120,6 +121,14 @@ private:
                      const LevelData<FArrayBox>& D,
                      const LevelData<FArrayBox>& dfn) const;
 
+   void computeFluxCellCentered(  LevelData<FArrayBox>& flux,
+                                  const PhaseGeom& phase_geom,
+                                  const LevelData<FArrayBox>& D,
+                                  const LevelData<FArrayBox>& dfn) const;
+
+   void computeDivergence(  LevelData<FArrayBox>&,
+                            const PhaseGeom&,
+                            const LevelData<FArrayBox>&) const;
 
   ///Computes the normalization factor 
   /**
@@ -170,13 +179,6 @@ private:
    void printParameters();
    
 };
-
-#define _IndexMapping_(p,i,N,ndims,offset) \
-  { \
-    p = i[ndims-1]; \
-    for (int c=ndims-2; c>=0; c--) p = (p*N[c]) + i[c];\
-    p += offset; \
-  }
 
 #include "NamespaceFooter.H"
 
