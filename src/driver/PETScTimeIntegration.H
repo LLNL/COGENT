@@ -421,7 +421,7 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
       MatSetType(m_Pre,MATMPIAIJ);
       MatSetSizes(m_Pre,m_local_size,m_local_size,PETSC_DETERMINE,PETSC_DETERMINE);
       MatSetBlockSize(m_Pre,m_ncomp);
-      MatMPIAIJSetPreallocation(m_Pre,m_Pmat.getNBands(),NULL,m_Pmat.getNBands()/2,NULL);
+      MatMPIAIJSetPreallocation(m_Pre,m_Pmat.getNBands(),NULL,m_Pmat.getNBands(),NULL);
       /* Set the IJacobian function for TS */
       TSSetIJacobian(m_ts,m_Jac,m_Pre,IJacobianIMEX,this);
     } else { 
