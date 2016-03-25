@@ -97,7 +97,6 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
        for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
          m_phi[dit].setVal(0.0);
          m_D[dit].setVal(0.0);
-         m_D[dit].setVal(0.0);
        }
      }
      
