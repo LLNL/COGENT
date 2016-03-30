@@ -366,7 +366,7 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_last_plot = m_cur_step;
   }
   writeHistFile(true);
-  m_is_linear = m_system->isLinear();
+  m_is_linear = true; //m_system->isLinear();
   
   /* create and initialize the PETSc solution vector */
   m_local_size = m_system->getVectorSize();
@@ -407,7 +407,6 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_is_Jac_allocated = true;
 
     SNES  snes; TSGetSNES(m_ts,&snes);
-    m_is_linear = true;
     if (m_is_linear) SNESSetType(snes,SNESKSPONLY);
 
     m_usePreconditioner = PETSC_FALSE;

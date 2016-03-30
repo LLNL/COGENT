@@ -44,7 +44,7 @@ template <class T, class Ops>
 void ImplicitStageFunction<T,Ops>::evalFunction(T& a_F, T& a_Y, T& a_b)
 {
   CH_assert(isDefined());
-  m_ops->implicitOpImEx(m_Z,m_StageTime,a_Y,m_Stage);
+  m_ops->implicitOpImEx(m_Z,m_StageTime,a_Y,m_Stage,0);
   /* set base Y and G(Y) for Jacobian */
   m_jac->setBaseSolution(a_Y);
   m_jac->setBaseRHS     (m_Z);

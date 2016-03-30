@@ -413,7 +413,7 @@ void TiARK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Soluti
     m_rhsStage_imp[i].define(a_state);
   }
   m_Operators.define(a_state, m_dt);
-  m_isLinear = m_Operators.isLinear();
+  m_isLinear = true; //m_Operators.isLinear();
 
   /* define vectors for stage predictors */
   if (m_stagePredictor) {
