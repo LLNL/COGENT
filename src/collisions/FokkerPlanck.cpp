@@ -73,7 +73,7 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
  
    // Create collisional flux 
    //LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Zero);
-   LevelData<FArrayBox> flux(grids, 2, IntVect::Unit);
+   LevelData<FArrayBox> flux(grids, 2, IntVect::Zero);
 
    //Update phi?
    bool update_phi(false);
@@ -93,7 +93,7 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
      //Define m_phi and D, and set them to zero at the first time step
      if (m_first_step) {
        m_phi.define( grids, 2, IntVect::Zero );
-       m_D.define( grids, m_nD, IntVect::Unit );
+       m_D.define( grids, m_nD, IntVect::Zero );
        for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
          m_phi[dit].setVal(0.0);
          m_D[dit].setVal(0.0);
@@ -492,7 +492,7 @@ void FokkerPlanck::evalCoefficients( LevelData<FArrayBox>& a_D,
    //Create temporary phi with two extra layers of ghost cells (filled with zeros)
    LevelData<FArrayBox> phi_tmp(a_phi.disjointBoxLayout(),
                                 a_phi.nComp(),
-                                a_D.ghostVect()+2*IntVect::Unit);
+                                a_phi.ghostVect()+2*IntVect::Unit);
 
    const DisjointBoxLayout& grids( a_phi.getBoxes() );
    for (DataIterator dit( a_phi.dataIterator() ); dit.ok(); ++dit) {
@@ -664,10 +664,20 @@ void FokkerPlanck::computeDivergence( LevelData<FArrayBox>& a_rhs,
    const int num_vpar_cells = domain_box.size(0);
    const int num_mu_cells   = domain_box.size(1);
 
+   const DisjointBoxLayout& grids(a_flux.getBoxes());
+   LevelData<FArrayBox> flux_tmp(a_flux.disjointBoxLayout(),
+                                 a_flux.nComp(),
+                                 IntVect::Unit);
+   for (DataIterator dit(a_flux.dataIterator()); dit.ok(); ++dit) {
+     flux_tmp[dit].setVal(0.0);
+     flux_tmp[dit].copy(a_flux[dit],grids[dit]);
+   }
+   flux_tmp.exchange();
+
    //Compute cell-cenetered divergence 
    for (DataIterator dit( a_rhs.dataIterator() ); dit.ok(); ++dit) {
       
-      const FArrayBox& this_flux = a_flux[dit];
+      const FArrayBox& this_flux = flux_tmp[dit];
       FArrayBox& this_rhs  = a_rhs[dit];
       
       FORT_EVALUATE_FOKKERPLANCK_RHS( CHF_FRA1(this_rhs,0),

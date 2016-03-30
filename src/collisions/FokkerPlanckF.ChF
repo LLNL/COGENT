@@ -250,8 +250,17 @@ c     local variables
       CHF_MULTIDO[gridbox;i;j;k;l]
        
 c      *** Calculate necessary phi derivatives; notation is used from Z. Xiong, JCP 2008
-        f_v  = (f(CHF_IX[i;j;k;l])-f(CHF_IX[i;j;k-1;l]))*dvinv
-        f_mu = (f(CHF_IX[i;j;k;l])-f(CHF_IX[i;j;k;l-1]))*dmuinv
+
+        if (k .eq. -Nvpar/2) then
+          f_v  = (f(CHF_IX[i;j;k+1;l])-f(CHF_IX[i;j;k;l]))*dvinv
+        else
+          f_v  = (f(CHF_IX[i;j;k;l])-f(CHF_IX[i;j;k-1;l]))*dvinv
+        endif
+        if (l .eq. 0) then
+          f_mu = (f(CHF_IX[i;j;k;l+1])-f(CHF_IX[i;j;k;l]))*dmuinv
+        else
+          f_mu = (f(CHF_IX[i;j;k;l])-f(CHF_IX[i;j;k;l-1]))*dmuinv
+        endif
 
 !       f_v = (1.0d0/12.0d0/dx(0))*(8.0d0*(f(CHF_IX[i;j;k+1;l])-f(CHF_IX[i;j;k-1;l]))
 !     &                         -(f(CHF_IX[i;j;k+2;l])-f(CHF_IX[i;j;k-2;l])))
@@ -351,8 +360,16 @@ c     local variables
       dmuinv= 1.0d0/dx(1)
       CHF_MULTIDO[gridbox;i;j;k;l]
 
-        flux_v = (flux(CHF_IX[i;j;k+1;l],0)-flux(CHF_IX[i;j;k;l],0))*dvinv
-        flux_mu= (flux(CHF_IX[i;j;k;l+1],1)-flux(CHF_IX[i;j;k;l],1))*dmuinv
+        if (k .eq. Nvpar/2-1) then
+          flux_v = (flux(CHF_IX[i;j;k;l],0)-flux(CHF_IX[i;j;k-1;l],0))*dvinv
+        else
+          flux_v = (flux(CHF_IX[i;j;k+1;l],0)-flux(CHF_IX[i;j;k;l],0))*dvinv
+        endif
+        if (l .eq. Nmu-1) then
+          flux_mu= (flux(CHF_IX[i;j;k;l],1)-flux(CHF_IX[i;j;k;l-1],1))*dmuinv
+        else
+          flux_mu= (flux(CHF_IX[i;j;k;l+1],1)-flux(CHF_IX[i;j;k;l],1))*dmuinv
+        endif
         rhs(CHF_IX[i;j;k;l]) = flux_v + flux_mu
 
       CHF_ENDDO
