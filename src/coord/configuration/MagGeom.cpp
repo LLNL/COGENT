@@ -221,7 +221,7 @@ MagGeom::getJ( LevelData<FArrayBox>& a_J ) const
 
       const DisjointBoxLayout& grids = a_J.disjointBoxLayout();
 
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          const MagBlockCoordSys& coord_sys = getBlockCoordSys(grids[dit]);
          coord_sys.getAvgJ(m_J[dit], m_J[dit].box());
       }
@@ -325,7 +325,7 @@ void MagGeom::multPointwiseJ( LevelData<FArrayBox>& a_u,
                               const BoundaryBoxLayout& a_bdry_layout ) const
 {
    const DisjointBoxLayout& bdry_grids( a_bdry_layout.disjointBoxLayout() );
-   for (DataIterator dit( bdry_grids.dataIterator() ); dit.ok(); ++dit) {
+   for (DataIterator dit( bdry_grids ); dit.ok(); ++dit) {
       const Box interior_box( a_bdry_layout.interiorBox( dit ) );
       const MagBlockCoordSys& coord_sys( getBlockCoordSys( interior_box ) );
       const Box& fill_box( a_u[dit].box() );
@@ -375,7 +375,7 @@ MagGeom::computeMetricTermProductAverage( LevelData<FluxBox>&       a_product,
    LevelData<FluxBox> tanGradN(grids, SpaceDim*SpaceDim, IntVect::Unit); 
    getMetricTerms( N, tanGradN );
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       const Box& box = grids[dit];
       const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(box);
 
@@ -400,7 +400,7 @@ MagGeom::computeMappedGridDivergence( const LevelData<FluxBox>& a_F,
    averageAtBlockBoundaries(NTF_normal);
 
    RealVect fakeDx = RealVect::Unit;
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       simpleDivergence(a_divergence[dit], NTF_normal[dit], grids[dit], fakeDx);
    }
 }
@@ -419,8 +419,7 @@ MagGeom::averageAtBlockBoundaries(LevelData<FluxBox>& a_data) const
 
       BlockRegister blockRegister(coordSysRCP, grids, 0);
 
-      DataIterator dit = grids.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          for (int idir = 0; idir < SpaceDim; idir++) {
             for (SideIterator sit; sit.ok(); ++sit) {
                Side::LoHiSide side = sit();
@@ -436,7 +435,7 @@ MagGeom::averageAtBlockBoundaries(LevelData<FluxBox>& a_data) const
 
       const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = m_coord_sys->boundaries();
 
-      for (dit.begin(); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Box& baseBox = grids[dit];
          int block_number = m_coord_sys->whichBlock(grids[dit]);
          int faceID = 0;
@@ -532,9 +531,8 @@ void
 MagGeom::applyAxisymmetricCorrection( LevelData<FluxBox>& a_data ) const
 {
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
-   DataIterator dit = grids.dataIterator();
 
-   for (dit.begin(); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
      const MagBlockCoordSys& coord_sys = getBlockCoordSys(grids[dit]);
 
      if ( coord_sys.isAxisymmetric() && (!m_model_geometry) ) {
@@ -897,6 +895,42 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
 
 
 
+void MagGeom::getMagneticFlux( LevelData<FArrayBox>& a_psi ) const
+{
+   const DisjointBoxLayout& grids = a_psi.disjointBoxLayout();
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+      FArrayBox& this_psi = a_psi[dit];
+      
+      FArrayBox phys_coords(this_psi.box(), SpaceDim);
+
+      block_coord_sys.getCellCenteredRealCoords(phys_coords);
+      block_coord_sys.getMagneticFlux(phys_coords, this_psi);
+   }
+}
+
+
+
+void MagGeom::getMagneticFlux( LevelData<FluxBox>& a_psi ) const
+{
+   const DisjointBoxLayout& grids = a_psi.disjointBoxLayout();
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+      FluxBox& this_psi = a_psi[dit];
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         FArrayBox& this_psi_dir = this_psi[dir];
+         FArrayBox phys_coords(this_psi_dir.box(), SpaceDim);
+
+         block_coord_sys.getFaceCenteredRealCoords(dir, phys_coords);
+         block_coord_sys.getMagneticFlux(phys_coords, this_psi_dir);
+      }
+   }
+}
+
+
+
 void MagGeom::plotCellData( const string&               a_file_name,  
                             const LevelData<FArrayBox>& a_data,
                             const double&               a_time ) const
@@ -924,8 +958,7 @@ void MagGeom::plotFaceData( const string&             a_file_name,
    // Next, average the directions
    LevelData<FArrayBox> data_cell(grids, a_data.nComp(), a_data.ghostVect());
 
-   DataIterator dit = grids.dataIterator();
-   for (dit.begin(); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       FArrayBox& this_tmp = tmp[dit];
       FArrayBox& this_data_cell = data_cell[dit];
 
@@ -952,8 +985,7 @@ MagGeom::writeGeometryData( const DisjointBoxLayout& a_grids,
   IntVect geom_data_ghosts = 4*IntVect::Unit;
   LevelData<FArrayBox> geom_data(a_grids, 6, geom_data_ghosts);
 
-  DataIterator dit = a_grids.dataIterator();
-  for (dit.begin(); dit.ok(); ++dit) {
+  for (DataIterator dit(a_grids); dit.ok(); ++dit) {
     const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(a_grids[dit]);
 
     RealVect dx = block_coord_sys.dx();
@@ -1006,7 +1038,7 @@ MagGeom::checkMultiblockMappingConsistency() const
 
       const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = m_coord_sys->boundaries();
 
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Box& box = grids[dit];
          int block_number = m_coord_sys->whichBlock(box);
          const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
@@ -1082,8 +1114,7 @@ MagGeom::maxBlockBoundaryDifference(LevelData<FluxBox>& a_data) const
 
       BlockRegister blockRegister(coordSysRCP, grids, 0);
 
-      DataIterator dit = grids.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          for (int idir = 0; idir < SpaceDim; idir++) {
             for (SideIterator sit; sit.ok(); ++sit) {
                Side::LoHiSide side = sit();
@@ -1101,7 +1132,7 @@ MagGeom::maxBlockBoundaryDifference(LevelData<FluxBox>& a_data) const
 
       double local_max = 0.;
 
-      for (dit.begin(); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Box& baseBox = grids[dit];
          int block_number = m_coord_sys->whichBlock(grids[dit]);
          int faceID = 0;
@@ -1153,7 +1184,7 @@ MagGeom::plotFieldAlignment(const double& a_time) const
    const DisjointBoxLayout& grids = gridsFull();
    LevelData<FluxBox> dotprod(grids, 1, IntVect::Zero);
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       const MagBlockCoordSys& coord_sys = getBlockCoordSys(grids[dit]);
       const FluxBox& this_b = m_BFieldDir_fc[dit];
       FluxBox& this_dotprod = dotprod[dit];
@@ -1496,7 +1527,7 @@ MagGeom::cellCenter( const LevelData<FluxBox>& a_fc_data,
    LevelData<FArrayBox> tmp(grids, SpaceDim*a_fc_data.nComp(), a_fc_data.ghostVect());
    EdgeToCell(a_fc_data, tmp);
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       const FArrayBox& this_tmp = tmp[dit];
       FArrayBox& this_data = a_cc_data[dit];
 
@@ -1686,7 +1717,7 @@ void MagGeom::computeMagFluxMappingCell( LevelData<FArrayBox>& a_magFS_mapping_c
     
     //Computing mapping data that relates the input cell-data to the magnetic-flux surfaces
     const DisjointBoxLayout& grids = a_magFS_mapping_cell.disjointBoxLayout();
-    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    for (DataIterator dit(grids); dit.ok(); ++dit) {
         
         a_magFS_mapping_cell[dit].setVal(0.0);
         FArrayBox& this_mapping_cell = a_magFS_mapping_cell[dit];
@@ -1765,7 +1796,7 @@ void MagGeom::computeMagFluxMappingFace( LevelData<FluxBox>& a_magFS_mapping_fac
     
     //Computing mapping data that relates the input cell-data to the magnetic-flux surfaces
     const DisjointBoxLayout& grids = a_magFS_mapping_face.disjointBoxLayout();
-    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    for (DataIterator dit(grids); dit.ok(); ++dit) {
         
         a_magFS_mapping_face[dit].setVal(0.0);
         for (int dir(0); dir<SpaceDim; ++dir) {
@@ -1847,7 +1878,7 @@ void MagGeom::interpolateFromMagFS( const LevelData<FluxBox>& a_data,
     //Extracting the data along the LCORE boundary (top),
     //and creating the corresponding magneitc flux function
     const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
-    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    for (DataIterator dit(grids); dit.ok(); ++dit) {
         int block_number = m_coord_sys->whichBlock(grids[dit]);
         if (block_number == LCORE) {
             const FArrayBox& this_data_pol_dir = a_data[dit][POLOIDAL_DIR];
@@ -1878,7 +1909,7 @@ void MagGeom::interpolateFromMagFS( const LevelData<FluxBox>& a_data,
     MPI_Allreduce(data_Z_loc, data_Z, size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     
     //Interpolating magnetic flux function onto the grid
-    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    for (DataIterator dit(grids); dit.ok(); ++dit) {
         a_interp[dit].copy(a_data[dit]);
         
         for (int dir(0); dir<SpaceDim; ++dir) {
@@ -1946,7 +1977,7 @@ void MagGeom::interpolateFromMagFS(const LevelData<FluxBox>& a_data_face,
     //Extracting the data along the LCORE and LCSOL boundaries (top cut),
     //and creating the corresponding magneitc flux function
     const DisjointBoxLayout& grids = a_data_cell.disjointBoxLayout();
-    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    for (DataIterator dit(grids); dit.ok(); ++dit) {
         int block_number = m_coord_sys->whichBlock(grids[dit]);
         if (block_number == LCORE) {
             const FArrayBox& this_data_pol_dir = a_data_face[dit][POLOIDAL_DIR];
@@ -1977,7 +2008,7 @@ void MagGeom::interpolateFromMagFS(const LevelData<FluxBox>& a_data_face,
     MPI_Allreduce(data_Z_loc, data_Z, size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     
     //Interpolating the magnetic flux function onto the grid
-    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    for (DataIterator dit(grids); dit.ok(); ++dit) {
         a_interp[dit].copy(a_data_cell[dit]);
         FArrayBox& this_interp = a_interp[dit];
         const FArrayBox& this_magFS_mapping_cell = m_magFS_mapping_cell[dit];

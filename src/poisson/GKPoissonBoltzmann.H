@@ -298,6 +298,8 @@ protected:
    // in the Newton residual calculation to enable solvability
    // for problems with a (constant) null space
    bool m_preserve_initial_ni_average;
+
+   bool m_gkp_verbose;
 };
 
 #include "NamespaceFooter.H"

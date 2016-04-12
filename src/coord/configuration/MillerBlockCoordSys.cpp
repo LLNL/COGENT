@@ -417,6 +417,23 @@ MillerBlockCoordSys::computeFieldData( const int  a_dir,
 
 
 
+void
+MillerBlockCoordSys::getMagneticFlux( const FArrayBox& physical_coordinates,
+                                      FArrayBox&       magnetic_flux ) const
+{
+   MayDay::Error("MillerBlockCoordSys::getMagneticFlux() not implemented");
+}
+
+
+
+double
+MillerBlockCoordSys::getMagneticFlux( const RealVect& a_physical_coordinate ) const
+{
+   MayDay::Error("MillerBlockCoordSys::getMagneticFlux() not implemented");
+}
+
+
+
 void MillerBlockCoordSys::getCellCenteredMappedCoords(FArrayBox& a_xi) const
 {
    double rmid = getAvMinorRad() - m_inner_radial_boundary;

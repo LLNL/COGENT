@@ -15,18 +15,19 @@
 
 
 void
-getUnitSquareGrid(const int  a_n,
+getUnitSquareGrid(const int  a_n_radial,
+                  const int  a_n_poloidal,
                   FArrayBox& a_xi)
 {
-   Box box(IntVect::Zero, a_n*IntVect::Unit);
-   double dx = 1./a_n;
+   Box box(IntVect::Zero, IntVect(a_n_radial,a_n_poloidal));
+   RealVect dx(1./a_n_radial,1./a_n_poloidal);
 
    a_xi.define(box,2);
 
    for (BoxIterator bit(box);bit.ok();++bit) {
       IntVect iv = bit();
       for (int dir=0; dir<SpaceDim; ++dir) {
-         a_xi(iv,dir) = iv[dir]*dx;
+         a_xi(iv,dir) = iv[dir]*dx[dir];
       }
    }
 }
@@ -72,7 +73,7 @@ int main( int a_argc, char* a_argv[] )
 
    // Get a grid on the unit square.  The argument sets the size.
    FArrayBox xi;
-   getUnitSquareGrid(10, xi);
+   getUnitSquareGrid(10, 50, xi);
 
    const Box& box(xi.box());
 
@@ -93,13 +94,19 @@ int main( int a_argc, char* a_argv[] )
    // Using the discrete cosine transform (DCT) field representation,
    // whose coefficients are contained in "field_file_name", get the field
    // unit vector (first two components) and the derivatives of its components
-   // with respect to the mapped coordinates (next 4 components) at
+   // with respect to the physical coordinates (next 4 components) at
    // this set of physical coordinates.  The numbering of the 6 components
-   // is explained at the top of FieldData::convertToMappedDerivatives().
+   // is explained at the top of FieldData::convertToMappedDerivatives(),
+   // which converts the derivatives in physical space to derivatives
+   // in mapped space.
 
    field_data.getFieldUnitVectorFromDCT(physical_coordinates, field_unit_vector);
    field_data.convertToMappedDerivatives(xi, field_unit_vector);
 
+   FArrayBox magnetic_flux(physical_coordinates.box(),1);
+   field_data.getMagneticFluxFromDCT(physical_coordinates, magnetic_flux);
+
+   field_data.writeMagneticFlux(physical_coordinates, magnetic_flux);
 #else
 
    // Using the field data contained in the coordinate mapping

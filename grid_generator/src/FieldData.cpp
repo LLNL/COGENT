@@ -853,8 +853,6 @@ FieldData::getFieldUnitVectorFromDCT( const FArrayBox& a_physical_coordinates,
    CH_assert(a_field_unit_vector.box().contains(box));
    CH_assert(a_field_unit_vector.nComp() == 6);
 
-   FArrayBox xi(box, SpaceDim);
-
    double RB[2];
    double dRBdR[2];
    double dRBdZ[2];
@@ -1055,6 +1053,169 @@ FieldData::getFieldUnitVectorFromDCT( const FArrayBox& a_physical_coordinates,
 
 
 void
+FieldData::getMagneticFluxFromDCT( const FArrayBox& a_physical_coordinates,
+                                   FArrayBox&       a_magnetic_flux ) const
+{
+   /*
+     Given the FArrayBox a_physical_coordinates of physical coordinates, fill the
+     components of a_magnetic_flux with the magnetic flux by evaluating its 
+     DCT expansion.
+   */
+
+   const Box& box(a_physical_coordinates.box());
+   CH_assert(a_magnetic_flux.box().contains(box));
+
+   int NR = m_psi_coefs.box().size(0);
+   int NZ = m_psi_coefs.box().size(1);
+
+   int llen = NR>NZ? NR: NZ;
+
+   double * temp = new double[7*llen];
+   double * lambda = temp;
+   double * facR = lambda + llen;
+   double * facZ = facR + llen;
+   double * sinfacR = facZ + llen;
+   double * cosfacR = sinfacR + llen;
+   double * sinfacZ = cosfacR + llen;
+   double * cosfacZ = sinfacZ + llen;
+
+   lambda[0] = 1. / sqrt(2.);
+   for (int l=1; l<llen; ++l) {
+      lambda[l] = 1.;
+   }
+
+   for (int i=0; i<NR; ++i) {
+      facR[i] = i * Pi / NR;
+   }
+
+   for (int j=0; j<NZ; ++j) {
+      facZ[j] = j * Pi / NZ;
+   }
+
+   double Rscale = (NR-1)/(m_Rmax - m_Rmin);
+   double Zscale = (NZ-1)/(m_Zmax - m_Zmin);
+
+   for (BoxIterator bit(box); bit.ok(); ++bit) {
+      IntVect iv = bit();
+      
+      double sR = (a_physical_coordinates(iv,0) - m_Rmin) * Rscale;
+      double sZ = (a_physical_coordinates(iv,1) - m_Zmin) * Zscale;
+
+      for (int i=0; i<NR; ++i) {
+         double t = facR[i] * (sR + 0.5);
+         sinfacR[i] = sin(t);
+         cosfacR[i] = cos(t);
+      }
+
+      for (int j=0; j<NZ; ++j) {
+         double t = facZ[j] * (sZ + 0.5);
+         sinfacZ[j] = sin(t);
+         cosfacZ[j] = cos(t);
+      }
+
+      // Compute psi
+
+      int derivR = 0;
+      int derivZ = 0;
+
+      FORT_DCT_INTERP( CHF_CONST_FRA1(m_psi_coefs,0),
+                       CHF_CONST_INT(derivR),
+                       CHF_CONST_INT(derivZ),
+                       CHF_R1D(facR,NR),
+                       CHF_R1D(facZ,NZ),
+                       CHF_R1D(sinfacR,NR),
+                       CHF_R1D(cosfacR,NR),
+                       CHF_R1D(sinfacZ,NZ),
+                       CHF_R1D(cosfacZ,NZ),
+                       CHF_R1D(lambda,llen),
+                       CHF_REAL(a_magnetic_flux(iv,0)) );
+   }
+
+   delete[] temp;
+}
+
+
+
+double
+FieldData::getMagneticFluxFromDCT( const RealVect& a_physical_coordinate ) const
+{
+   /*
+     Given the input physical coordinate a_physical_coordinate, return the magnetic flux
+     at that point by evaluating its DCT expansion.
+   */
+
+   int NR = m_psi_coefs.box().size(0);
+   int NZ = m_psi_coefs.box().size(1);
+
+   int llen = NR>NZ? NR: NZ;
+
+   double * temp = new double[7*llen];
+   double * lambda = temp;
+   double * facR = lambda + llen;
+   double * facZ = facR + llen;
+   double * sinfacR = facZ + llen;
+   double * cosfacR = sinfacR + llen;
+   double * sinfacZ = cosfacR + llen;
+   double * cosfacZ = sinfacZ + llen;
+
+   lambda[0] = 1. / sqrt(2.);
+   for (int l=1; l<llen; ++l) {
+      lambda[l] = 1.;
+   }
+
+   for (int i=0; i<NR; ++i) {
+      facR[i] = i * Pi / NR;
+   }
+
+   for (int j=0; j<NZ; ++j) {
+      facZ[j] = j * Pi / NZ;
+   }
+
+   double Rscale = (NR-1)/(m_Rmax - m_Rmin);
+   double Zscale = (NZ-1)/(m_Zmax - m_Zmin);
+
+   double psi;
+
+   double sR = (a_physical_coordinate[0] - m_Rmin) * Rscale;
+   double sZ = (a_physical_coordinate[1] - m_Zmin) * Zscale;
+
+   for (int i=0; i<NR; ++i) {
+      double t = facR[i] * (sR + 0.5);
+      sinfacR[i] = sin(t);
+      cosfacR[i] = cos(t);
+   }
+
+   for (int j=0; j<NZ; ++j) {
+      double t = facZ[j] * (sZ + 0.5);
+      sinfacZ[j] = sin(t);
+      cosfacZ[j] = cos(t);
+   }
+
+   // Compute psi
+
+   int derivR = 0;
+   int derivZ = 0;
+
+   FORT_DCT_INTERP( CHF_CONST_FRA1(m_psi_coefs,0),
+                    CHF_CONST_INT(derivR),
+                    CHF_CONST_INT(derivZ),
+                    CHF_R1D(facR,NR),
+                    CHF_R1D(facZ,NZ),
+                    CHF_R1D(sinfacR,NR),
+                    CHF_R1D(cosfacR,NR),
+                    CHF_R1D(sinfacZ,NZ),
+                    CHF_R1D(cosfacZ,NZ),
+                    CHF_R1D(lambda,llen),
+                    CHF_REAL(psi) );
+
+   delete[] temp;
+
+   return psi;
+}
+
+
+
+void
 FieldData::writePhysicalCoordinates(const FArrayBox& a_physical_coordinates) const
 {
    char file_name[80];
@@ -1091,6 +1252,27 @@ FieldData::writeVectors(const FArrayBox& a_physical_coordinates,
       IntVect iv = bit();
       fprintf(fd, "%20.12e %20.12e %20.12e %20.12e\n", a_physical_coordinates(iv,0), a_physical_coordinates(iv,1),
               a_vector_data(iv,0), a_vector_data(iv,1));
+   }
+
+   fclose(fd);
+}
+
+
+void
+FieldData::writeMagneticFlux(const FArrayBox& a_physical_coordinates,
+                             const FArrayBox& a_magnetic_flux) const
+{
+   char file_name[80];
+   sprintf(file_name, "psi%d", m_block_number);
+   FILE* fd = fopen(file_name, "w");
+
+   const Box& box = a_physical_coordinates.box();
+
+   fprintf(fd, "%d %d 0\n", box.size(0), box.size(1));
+
+   for (BoxIterator bit(box);bit.ok();++bit) {
+      IntVect iv = bit();
+      fprintf(fd, "%20.12e %20.12e %20.12e \n", a_physical_coordinates(iv,0), a_physical_coordinates(iv,1), a_magnetic_flux(iv,0));
    }
 
    fclose(fd);

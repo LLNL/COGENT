@@ -93,6 +93,11 @@ class SlabBlockCoordSys
                                      FArrayBox& BFieldDirdotcurlBFieldDir,
                                      const bool derived_data_only = false ) const;
 
+      virtual void getMagneticFlux( const FArrayBox& physical_coordinates,
+                                    FArrayBox&       magnetic_flux ) const;
+
+      virtual double getMagneticFlux( const RealVect& a_physical_coordinate ) const;
+
       virtual void getCellCenteredMappedCoords(FArrayBox& xi) const;
 
       virtual void getFaceCenteredMappedCoords(const int dir, FArrayBox& xi) const;

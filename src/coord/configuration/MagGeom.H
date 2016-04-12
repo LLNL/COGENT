@@ -69,6 +69,10 @@ public:
 
    double maxBlockBoundaryDifference(LevelData<FluxBox>& data) const;
 
+   void getMagneticFlux(LevelData<FArrayBox>& psi) const;
+
+   void getMagneticFlux(LevelData<FluxBox>& psi) const;
+
    const LevelData<FArrayBox>& getCCBField() const {return m_BField_cc;}
 
    const LevelData<FArrayBox>& getCCBFieldMag() const {return m_BFieldMag_cc;}

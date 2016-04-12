@@ -1,7 +1,7 @@
 #ifndef _FIELDDATA_H_
 #define _FIELDDATA_H_
 
-//#define USE_DCT_FIELD
+#define USE_DCT_FIELD
 
 #include "BSplineInterp.H"
 
@@ -15,7 +15,7 @@ class FieldData
              const string& field_coefficients_file_name,
              const string& block_name);
 
-    ~FieldData();
+   ~FieldData();
 
    void getPhysicalCoordinates(const FArrayBox& xi,
                                FArrayBox&       physical_coordinates) const;
@@ -26,6 +26,11 @@ class FieldData
    void getFieldUnitVectorFromDCT(const FArrayBox& physical_coordinates,
                                   FArrayBox&       field_unit_vector) const;
 
+   void getMagneticFluxFromDCT( const FArrayBox& a_physical_coordinates,
+                                FArrayBox&       a_magnetic_flux ) const;
+
+   double getMagneticFluxFromDCT( const RealVect& a_physical_coordinate ) const;
+
    void convertToMappedDerivatives( const FArrayBox& a_mapped_coordinates,
                                     FArrayBox&       a_field_unit_vector ) const;
 
@@ -33,6 +38,9 @@ class FieldData
 
    void writeVectors(const FArrayBox& physical_coordinates,
                      const FArrayBox& vector_data) const;
+
+   void writeMagneticFlux(const FArrayBox& a_physical_coordinates,
+                          const FArrayBox& a_magnetic_flux) const;
 
    RealVect getMappedCoordinate( const RealVect& X ) const;
 

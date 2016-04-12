@@ -211,6 +211,21 @@ SlabBlockCoordSys::computeFieldData( const int  a_dir,
 
 
 
+void SlabBlockCoordSys::getMagneticFlux( const FArrayBox& physical_coordinates,
+                                         FArrayBox&       magnetic_flux ) const
+{
+   MayDay::Error("SlabBlockCoordSys::getMagneticFlux() not implemented");
+}
+
+
+
+double SlabBlockCoordSys::getMagneticFlux( const RealVect& a_physical_coordinate ) const
+{
+   MayDay::Error("SlabBlockCoordSys::getMagneticFlux() not implemented");
+}
+
+
+
 void SlabBlockCoordSys::getCellCenteredMappedCoords(FArrayBox& a_xi) const
 {
 

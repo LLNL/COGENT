@@ -32,10 +32,10 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
    // Read input
 
    if (a_pp.contains("verbose")) {
-      a_pp.get("verbose", m_verbose);
+      a_pp.get("verbose", m_gkp_verbose);
    }
    else {
-      m_verbose = false;
+      m_gkp_verbose = false;
    }
 
    // Determine the form of the Boltzmann prefactor if specified in the input;
@@ -107,7 +107,7 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
       m_jacobian_solve_tolerance = 1.e-4;
    }
 
-   if (m_verbose && procID()==0) {
+   if (m_gkp_verbose && procID()==0) {
       cout << "GKPoissonAdiabaticElectron parameters:" << endl;
       cout << "   Debye number squared = "<< m_debye_number2 << endl;
       cout << "   Larmor number squared = " << m_larmor_number2 << endl;
@@ -442,7 +442,7 @@ GKPoissonBoltzmann::solve( const LevelData<FArrayBox>& a_Zni,
    }
    double old_norm = L2Norm(old_phi);
 
-   if (m_verbose && procID()==0) {
+   if (m_gkp_verbose && procID()==0) {
 #if 0
       cout << "   Newton iteration " << iter << ": relative residual = "
            << residual_norm / rhs_norm << endl
@@ -499,7 +499,7 @@ GKPoissonBoltzmann::solve( const LevelData<FArrayBox>& a_Zni,
       }
       old_norm = new_norm;
 
-      if (m_verbose && procID()==0) {
+      if (m_gkp_verbose && procID()==0) {
 #if 1
          cout << "   Newton iteration " << iter << ": relative residual = "
               << residual_norm / rhs_norm << endl

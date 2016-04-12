@@ -294,7 +294,6 @@ void
       void computeGradFFactor( FArrayBox& a_data ) const;
       void computeGradFFactor( FluxBox& a_data ) const;
 
-
       /**
        * Returns the value of the outermost flux label
        */
@@ -313,6 +312,11 @@ void
                                      FArrayBox& curlBFieldDir,
                                      FArrayBox& BFieldDirdotcurlBFieldDir,
                                      const bool derived_data_only = false ) const = 0;
+
+      virtual void getMagneticFlux( const FArrayBox& physical_coordinates,
+                                    FArrayBox&       magnetic_flux ) const = 0;
+
+      virtual double getMagneticFlux( const RealVect& a_physical_coordinate ) const = 0;
 
       bool isAxisymmetric() const {return m_axisymmetric;}
 

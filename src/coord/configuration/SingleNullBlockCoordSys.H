@@ -107,6 +107,11 @@ class SingleNullBlockCoordSys
                                      FArrayBox& BFieldDirdotcurlBFieldDir,
                                      const bool derived_data_only = false ) const;
 
+      void getMagneticFlux( const FArrayBox& a_physical_coordinates,
+                            FArrayBox&       a_magnetic_flux ) const;
+
+      double getMagneticFlux( const RealVect& a_physical_coordinate ) const;
+
       virtual double getRBtoroidal() const {return m_RB_toroidal;}
 
       virtual const string getParmParseName() const {return pp_name;}
@@ -159,6 +164,11 @@ class SingleNullBlockCoordSys
                                             FArrayBox& curlBFieldDir,
                                             FArrayBox& BFieldDirdotcurlBFieldDir,
                                             const bool derived_data_only = false ) const;
+
+      void getMagneticFluxFromDCT( const FArrayBox& a_physical_coordinates,
+                                   FArrayBox&       a_magnetic_flux ) const;
+
+      double getMagneticFluxFromDCT( const RealVect& a_physical_coordinate ) const;
 
       FArrayBox m_realCoords;
       int m_rc_coarsen_ratio;
