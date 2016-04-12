@@ -5,6 +5,7 @@
 #include "RefCountedPtr.H"
 #include "KineticSpecies.H"
 #include "PhaseGeom.H"
+#include "Mapping.H"
 
 #include "NamespaceHeader.H"
 
@@ -59,6 +60,7 @@ public:
       }
       m_geometry = a_geometry;
       CH_assert(!m_geometry.isNull());
+      m_mapping.define(m_species_mapped);
       m_is_defined = true;
    }
    
@@ -113,6 +115,13 @@ public:
       CH_assert( isDefined() );
       return m_species_mapped;
    }
+
+   inline 
+   const Mapping& mapping() const
+   {
+     CH_assert(isDefined());
+     return m_mapping;
+   }
    
    inline
    const KineticSpeciesPtrVect& data() const
@@ -149,6 +158,7 @@ private:
    IntVect                  m_ghost_vect;
    KineticSpeciesPtrVect    m_species_mapped;
    RefCountedPtr<PhaseGeom> m_geometry;
+   Mapping                  m_mapping;
 };
 
 
@@ -172,6 +182,7 @@ public:
       for (int s(0); s<n; s++) {
          m_species_mapped[s] = a_species[s]->clone( IntVect::Zero );
       }
+      m_mapping.define(m_species_mapped);
       m_is_defined = true;
    }
 
@@ -228,6 +239,13 @@ public:
       return m_species_mapped;
    }
    
+   inline 
+   const Mapping& mapping() const
+   {
+     CH_assert(isDefined());
+     return m_mapping;
+   }
+   
    inline
    const KineticSpeciesPtrVect& data() const
    {
@@ -249,6 +267,7 @@ private:
 
    bool                  m_is_defined;
    KineticSpeciesPtrVect m_species_mapped;
+   Mapping               m_mapping;
 };
 
 

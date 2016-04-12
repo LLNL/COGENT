@@ -18,10 +18,10 @@ class ImplicitStageJacobian: public LinearFunction<T,Ops>
     void applyOp    (T& a_F, const T& a_y);
     void axby       (T& a_Z, const T& a_X, const T& a_Y, Real a_a, Real a_b);
 
-    inline void preCond(T& a_cor, const T& a_residual)     
+    inline void preCond(T& a_Y, const T& a_X)     
       { 
-        m_preCond.updateP();
-        m_preCond.applyPinv(a_cor,a_residual); 
+        m_preCond.updateP(a_X);
+        m_preCond.applyPinv(a_Y,a_X); 
       }
     inline void create    (T& a_Z, const T& a_Y)              { a_Z.define(a_Y); }
     inline void assign    (T& a_Z, const T& a_Y)              { a_Z.copy(a_Y); }

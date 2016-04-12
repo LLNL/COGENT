@@ -162,28 +162,30 @@ bool GKCollisions::isLinear()
   return linearFlag;
 }
 
-bool GKCollisions::setupPrecondMatrix(void *a_P,int a_N)
+bool GKCollisions::setupPrecondMatrix(void *a_P,int a_N,int a_bs)
 {
   int count = 0;
   bool flag = true;
   std::map<std::string,int>::iterator it;
   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
-    flag = (flag && m_collision_model[it->second]->setupPrecondMatrix(a_P,a_N));
+    flag = (flag && m_collision_model[it->second]->setupPrecondMatrix(a_P,a_N,a_bs));
     count++;
   }
   CH_assert(count<=1);
   return flag;
 }
 
-void GKCollisions::assemblePrecondMatrix(void *a_P)
+void GKCollisions::assemblePrecondMatrix( void *a_P,
+                                          const KineticSpeciesPtrVect& a_soln,
+                                          const Mapping& a_mapping)
 {
-  int count = 0;
-  std::map<std::string,int>::iterator it;
-  for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
-    m_collision_model[it->second]->assemblePrecondMatrix(a_P);
-    count++;
+  CH_assert(a_soln.size() == 1);
+  for (int species(0); species<a_soln.size(); species++) {
+    KineticSpecies& soln_species(*(a_soln[species]));
+    const std::string species_name(soln_species.name());
+    CLSInterface& CLS(collisionModel(species_name));
+    CLS.assemblePrecondMatrix(a_P,a_soln,species,a_mapping);
   }
-  CH_assert(count<=1);
 }
 
 #include "NamespaceFooter.H"

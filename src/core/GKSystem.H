@@ -284,8 +284,11 @@ class GKSystem
       int  getVectorSize()  { return m_state.getVectorSize(); }
       int  getNComponents() { return m_state.getNComponents();}
 
-      inline void constructPCMatIMEX(void* a_Pmat,Real a_time)
-        { m_gk_ops->constructPCMatIMEX(a_Pmat,a_time,m_state); }
+      inline void assemblePCImEx(void* a_Pmat)
+        { m_gk_ops->assemblePCImEx(a_Pmat,m_state); }
+
+      inline void setupPCImEx(void *a_Pmat)
+        { m_gk_ops->setupPCImEx(a_Pmat,m_state); }
 
       inline void copyStateToArray   (Real *Y) { m_state.copyTo(Y);   }
       inline void copyStateFromArray (Real *Y) { m_state.copyFrom(Y); }
@@ -293,9 +296,10 @@ class GKSystem
       inline void copyRHSFromArray   (Real *Y) { m_rhs.copyFrom(Y); }
       inline void addStateFromArray  (Real *Y, Real a_scale = 1.0) { m_state.addFrom(Y,a_scale); }
 
-      inline void computeRHSFunctionExp (Real t)            { m_gk_ops->explicitOp     (m_rhs,t,m_state); }
-      inline void computeRHSFunctionImEx(Real t)            { m_gk_ops->explicitOpImEx (m_rhs,t,m_state); }
-      inline void computeIFunctionImEx  (Real t,int flag=1) { m_gk_ops->implicitOpImEx (m_rhs,t,m_state,1,flag); }
+      inline void computeRHSFunctionExp (Real t) { m_gk_ops->explicitOp     (m_rhs,t,m_state); }
+      inline void computeRHSFunctionImEx(Real t) { m_gk_ops->explicitOpImEx (m_rhs,t,m_state); }
+      inline void computeIFunctionImEx  (Real t,int flag=1) 
+        { m_gk_ops->implicitOpImEx (m_rhs,t,m_state,1,flag); }
 
       inline bool isLinear()  { return m_gk_ops->isLinear(); }
       inline void getFunctionCounts(int *a,int *b,int *c,int *d) 

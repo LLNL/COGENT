@@ -1,12 +1,14 @@
 #ifndef  _FOKKERPLANCK_H_
 #define  _FOKKERPLANCK_H_
 
+#include "BandedMatrix.H"
 #include "FArrayBox.H"
 #include "LevelData.H"
 #include "RefCountedPtr.H"
 #include "KineticSpecies.H"
 #include "KineticFunction.H"
 #include "REAL.H"
+#include "Mapping.H"
 #include "CLSInterface.H"
 #include "ParmParse.H"
 #include <sstream>
@@ -59,6 +61,15 @@ public:
    */
   inline bool isLinear() { return false; }
 
+  bool setupPrecondMatrix(void *a_P,int a_N,int a_bs)
+    {
+      BandedMatrix *P = (BandedMatrix*) a_P;
+      int nbands = 9; /* central differences of derivatives */
+      P->define(a_N,nbands,a_bs);
+      return(P->isDefined());
+    }
+
+  void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,int,const Mapping&);
 
 private:
 
@@ -71,6 +82,7 @@ private:
    Real m_pcg_tol;
    Real m_pcg_maxiter;
    int  m_mult_num;
+   int  m_nD;
 
    int  m_update_freq;
    int  m_it_counter;
@@ -80,8 +92,12 @@ private:
 
    LevelData<FArrayBox> m_phi;
    LevelData<FArrayBox> m_phi_F0;
+   LevelData<FArrayBox> m_D;
+   LevelData<FArrayBox> m_D_F0;
 
    RefCountedPtr<KineticFunction> m_ref_func;
+
+   bool m_debug;
    
    /// Computes the Rosenbluth potentials
 
@@ -89,17 +105,34 @@ private:
                                   const PhaseGeom& phase_geom,
                                   const LevelData<FArrayBox>& dfn,
                                   const double mass ) const;
+
+  /// Computes the coefficients D_v, D_mu, D_v_v, D_v_mu, D_mu_mu
+  //  from the Rosenbluth potentials
+  
+  void evalCoefficients( LevelData<FArrayBox>& D,
+                         const LevelData<FArrayBox>& phi,
+                         const PhaseGeom& phase_geom,
+                         const double mass_tp,
+                         const double mass_fp) const;
   
 
   /// Computes the collision flux 
 
    void computeFlux( LevelData<FluxBox>& flux,
                      const PhaseGeom& phase_geom,
-                     const LevelData<FArrayBox>& phi,
+                     const LevelData<FArrayBox>& D,
                      const LevelData<FArrayBox>& dfn,
-                     const double mass_tp,
-                     const double mass_fp ) const;
+                     const double a_mass_tp,
+                     const double a_mass_fp ) const;
 
+   void computeFluxCellCentered(  LevelData<FArrayBox>& flux,
+                                  const PhaseGeom& phase_geom,
+                                  const LevelData<FArrayBox>& D,
+                                  const LevelData<FArrayBox>& dfn) const;
+
+   void computeDivergence(  LevelData<FArrayBox>&,
+                            const PhaseGeom&,
+                            const LevelData<FArrayBox>&) const;
 
   ///Computes the normalization factor 
   /**
@@ -134,6 +167,16 @@ private:
                             LevelData<FArrayBox>&   dfn) const;
 
    
+  void evalClsRHS_Main( KineticSpeciesPtrVect&       rhs,
+                        const KineticSpeciesPtrVect& soln,
+                        const int                    species,
+                        const Real                   time,
+                        const int                    flag);
+  void evalClsRHS_LowOrder( KineticSpeciesPtrVect&       rhs,
+                            const KineticSpeciesPtrVect& soln,
+                            const int                    species,
+                            const Real                   time,
+                            const int                    flag);
    /// Parse parameters.
    /**
     * Private method to obtain control parameters from "CLS.species" section
@@ -150,7 +193,6 @@ private:
    void printParameters();
    
 };
-
 
 #include "NamespaceFooter.H"
 

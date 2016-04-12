@@ -500,20 +500,23 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
   implicitOpImEx(a_rhs,a_time,m_Y,a_stage,a_flag);
 }
 
-void GKOps::constructPCMatIMEX( void *a_Pmat,
-                                const Real a_time,
-                                const GKState& a_state )
+bool GKOps::setupPCImEx( void *a_P, GKState& a_state)
 {
-  return;
-}
+  bool  flag;
+  int   VecSize = a_state.getVectorSize(),
+        nComp   = a_state.getNComponents();
 
+  flag = m_collisions->setupPrecondMatrix(a_P,VecSize,nComp);
+  return flag;
+}
 
 bool GKOps::setupPCImEx( void *a_P, GKRHSData& a_state)
 {
   bool  flag;
-  int   VecSize = a_state.getVectorSize();
+  int   VecSize = a_state.getVectorSize(),
+        nComp   = a_state.getNComponents();
 
-  flag = m_collisions->setupPrecondMatrix(a_P,VecSize);
+  flag = m_collisions->setupPrecondMatrix(a_P,VecSize,nComp);
   return flag;
 }
 
