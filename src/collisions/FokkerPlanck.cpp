@@ -26,7 +26,8 @@ FokkerPlanck::FokkerPlanck( ParmParse& a_ppcls, const int a_verbosity )
      m_update_freq(-1),
      m_it_counter(0),
      m_first_step(true),
-     m_subtract_background(false)
+     m_subtract_background(false),
+     m_debug(false)
 {
    m_verbosity = true;
    parseParameters( a_ppcls );
@@ -49,10 +50,155 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
                         const int                     a_species,
                         const Real                    a_time,
                         const int                     a_flag )
+{
+  if (m_debug) evalClsRHS_LowOrder(a_rhs,a_soln,a_species,a_time,a_flag);
+  else         evalClsRHS_Main    (a_rhs,a_soln,a_species,a_time,a_flag);
+  return;
+}
 
 // NB: a_soln is on the computational grid and has 4 ghost cells (passed here as Nans)
 // a_rhs has probably zero ghost cells (from accertion in computedivergence)  (double check)
+void FokkerPlanck::evalClsRHS_Main( KineticSpeciesPtrVect& a_rhs,
+                        const KineticSpeciesPtrVect&  a_soln,
+                        const int                     a_species,
+                        const Real                    a_time,
+                        const int                     a_flag )
+{
 
+   // Get solution distribution function (J*Bstar_par*dfn) for the current species
+   const KineticSpecies& soln_species( *(a_soln[a_species]) );
+   const LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
+
+   const DisjointBoxLayout& grids( soln_dfn.getBoxes() );
+   const int n_comp( soln_dfn.nComp() );
+
+   //Get test-particle (tp) and field-particle (fp) masses
+   const double mass_tp = soln_species.mass();
+   const double mass_fp = soln_species.mass();
+
+   // Get coordinate system parameters 
+   const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
+
+   //Compute normalization
+   if (m_first_step) {computeClsNorm(m_cls_norm, soln_species.mass(), soln_species.charge());}
+ 
+   // Create collisional flux 
+   LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Zero);
+
+   //Update phi?
+   bool update_phi(false);
+   if (m_update_freq < 0) {update_phi = true;}
+   else if (m_it_counter % (4 * m_update_freq) == 0 ) { update_phi=true; }
+   update_phi = (update_phi && (a_flag));
+
+   if (!m_subtract_background) {
+
+     LevelData<FArrayBox> dfn( grids, n_comp, IntVect::Zero );
+     for (DataIterator dit(dfn.dataIterator()); dit.ok(); ++dit) {
+      dfn[dit].copy( soln_dfn[dit] );
+     }
+     //Covert delta_dfn to cell centers
+     convertToCellCenters(phase_geom, dfn);
+
+     //Define m_phi and set it to zero at the first time step
+     if (m_first_step) {
+       m_phi.define( grids, 2, IntVect::Zero );
+       for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
+         m_phi[dit].setVal(0.0);
+       }
+     }
+     
+     if ( update_phi || m_first_step ) {evalRosenbluthPotentials(m_phi, phase_geom, dfn, mass_tp); }
+     computeFlux(flux, phase_geom, m_phi, dfn, mass_tp, mass_fp);
+
+   }
+ 
+   else {
+
+     // Create reference (J*Bstar_par*dfn_bckg) distribution
+     KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Zero, false ) );
+     m_ref_func->assign( *ref_species, a_time );
+     LevelData<FArrayBox>& ref_dfn( ref_species->distributionFunction() );
+
+     // Compute the difference from the reference (background) solution
+     LevelData<FArrayBox> delta_dfn( grids, n_comp, IntVect::Zero );
+     for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
+        delta_dfn[dit].copy( soln_dfn[dit] );
+        delta_dfn[dit].minus( ref_dfn[dit] );
+     }
+
+     //Covert delta_dfn to cell centers
+     convertToCellCenters(phase_geom, delta_dfn);
+
+     //Define m_phi and m_phi_F0, and compute m_phi_F0 
+     if (m_first_step) {
+       m_phi.define( grids, 2, IntVect::Zero );
+       m_phi_F0.define( grids, 2, IntVect::Zero );
+       for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
+         m_phi[dit].setVal(0.0);
+         m_phi_F0[dit].setVal(0.0);
+       }
+       evalRosenbluthPotentials(m_phi_F0, phase_geom, ref_dfn, mass_tp);
+     } 
+
+
+     //Compute C[F1,F0]+C[F0,F1]+C[F1,F1]
+     LevelData<FluxBox> flux_tmp(grids, SpaceDim, IntVect::Zero);
+
+     //Compute C[F1,F0]
+     computeFlux(flux_tmp, phase_geom, m_phi_F0, delta_dfn, mass_tp, mass_fp);
+     for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
+        flux[dit].copy( flux_tmp[dit] );
+     }
+
+     //Compute C[F1,F0] + C[F0,F1]
+     if ( update_phi ) {evalRosenbluthPotentials(m_phi, phase_geom, delta_dfn, mass_tp); }
+     computeFlux(flux_tmp, phase_geom, m_phi, ref_dfn, mass_tp, mass_fp);
+     for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
+       for (int dir=0; dir<SpaceDim; dir++) {
+         flux[dit][dir].plus( flux_tmp[dit][dir] );
+       }
+     }
+
+     //Compute C[F1,F0] + C[F0,F1] + C[F1,F1]
+     computeFlux(flux_tmp, phase_geom, m_phi, delta_dfn, mass_tp, mass_fp);
+     for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
+       for (int dir=0; dir<SpaceDim; dir++) {
+         flux[dit][dir].plus( flux_tmp[dit][dir] );
+       }
+     }
+   }
+
+   //Add collisional contribution to rhs
+   KineticSpecies& rhs_species( *(a_rhs[a_species]) );
+   LevelData<FArrayBox>& rhs_dfn( rhs_species.distributionFunction() );
+  
+   LevelData<FArrayBox> rhs_cls(grids, n_comp, IntVect::Zero);
+   phase_geom.mappedGridDivergence(rhs_cls, flux, true);
+  
+   //Remove Bstar_parallel*J factor (for normalization purposes) 
+   phase_geom.divideJonValid(rhs_cls);
+   phase_geom.divideBStarParallel(rhs_cls);
+
+   for (DataIterator dit( rhs_cls.dataIterator() ); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = phase_geom.getBlockCoordSys(grids[dit]);
+      double fac = 1. / block_coord_sys.getMappedCellVolume();
+      rhs_cls[dit].mult( fac );
+      if (m_fixed_cls_freq) {rhs_cls[dit].mult( m_cls_freq );}
+      else {rhs_cls[dit].mult( m_cls_norm );}     
+      rhs_dfn[dit].plus( rhs_cls[dit] ); 
+    }
+
+   //Update iteration counter
+   m_it_counter+=1;
+   m_first_step = false;
+}
+
+void FokkerPlanck::evalClsRHS_LowOrder( KineticSpeciesPtrVect& a_rhs,
+                        const KineticSpeciesPtrVect&  a_soln,
+                        const int                     a_species,
+                        const Real                    a_time,
+                        const int                     a_flag )
 { 
    // Get solution distribution function (J*Bstar_par*dfn) for the current species
    const KineticSpecies& soln_species( *(a_soln[a_species]) );
@@ -72,7 +218,6 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
    if (m_first_step) {computeClsNorm(m_cls_norm, soln_species.mass(), soln_species.charge());}
  
    // Create collisional flux 
-   //LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Zero);
    LevelData<FArrayBox> flux(grids, 2, IntVect::Zero);
 
    //Update phi?
@@ -87,8 +232,6 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
      for (DataIterator dit(dfn.dataIterator()); dit.ok(); ++dit) {
       dfn[dit].copy( soln_dfn[dit] );
      }
-     //Covert delta_dfn to cell centers
-     //convertToCellCenters(phase_geom, dfn);
 
      //Define m_phi and D, and set them to zero at the first time step
      if (m_first_step) {
@@ -104,7 +247,6 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
        evalRosenbluthPotentials(m_phi, phase_geom, dfn, mass_tp); 
        evalCoefficients(m_D,m_phi,phase_geom,mass_tp,mass_fp);
      }
-     //computeFlux(flux, phase_geom, m_D, dfn);
      computeFluxCellCentered(flux, phase_geom, m_D, dfn);
 
    } else {
@@ -120,9 +262,6 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
         delta_dfn[dit].copy( soln_dfn[dit] );
         delta_dfn[dit].minus( ref_dfn[dit] );
      }
-
-     //Covert delta_dfn to cell centers
-     //convertToCellCenters(phase_geom, delta_dfn);
 
      //Define m_phi, m_phi_F0, m_D, m_D_F0, and compute m_phi_F0, and m_D_F0
      if (m_first_step) {
@@ -142,11 +281,9 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
 
 
      //Compute C[F1,F0]+C[F0,F1]+C[F1,F1]
-     //LevelData<FluxBox> flux_tmp(grids, SpaceDim, IntVect::Zero);
      LevelData<FArrayBox> flux_tmp(grids, 2, IntVect::Unit);
 
      //Compute C[F1,F0]
-     //computeFlux(flux_tmp, phase_geom, m_D_F0, delta_dfn);
      computeFluxCellCentered(flux_tmp, phase_geom, m_D_F0, delta_dfn);
      for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
         flux[dit].copy( flux_tmp[dit] );
@@ -159,18 +296,12 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
      }
      computeFluxCellCentered(flux_tmp, phase_geom, m_D, ref_dfn);
      for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
-       //for (int dir=0; dir<SpaceDim; dir++) {
-       //  flux[dit][dir].plus( flux_tmp[dit][dir] );
-       //}
        flux[dit].plus( flux_tmp[dit] );
      }
 
      //Compute C[F1,F0] + C[F0,F1] + C[F1,F1]
      computeFluxCellCentered(flux_tmp, phase_geom, m_D, delta_dfn);
      for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
-       //for (int dir=0; dir<SpaceDim; dir++) {
-       //  flux[dit][dir].plus( flux_tmp[dit][dir] );
-       //}
        flux[dit].plus( flux_tmp[dit] );
      }
    }
@@ -180,20 +311,9 @@ void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
    LevelData<FArrayBox>& rhs_dfn( rhs_species.distributionFunction() );
   
    LevelData<FArrayBox> rhs_cls(grids, n_comp, IntVect::Zero);
-   //phase_geom.mappedGridDivergence(rhs_cls, flux, true);
    computeDivergence(rhs_cls,phase_geom,flux);
   
-   /*
-   //Remove Bstar_parallel*J factor (for normalization purposes) 
-   phase_geom.divideJonValid(rhs_cls);
-   phase_geom.divideBStarParallel(rhs_cls);
-   This has been moved to evalCoefficients()
-   */
-
    for (DataIterator dit( rhs_cls.dataIterator() ); dit.ok(); ++dit) {
-      //const PhaseBlockCoordSys& block_coord_sys = phase_geom.getBlockCoordSys(grids[dit]);
-      //double fac = 1. / block_coord_sys.getMappedCellVolume();
-      //rhs_cls[dit].mult( fac );
       if (m_fixed_cls_freq) {rhs_cls[dit].mult( m_cls_freq );}
       else {rhs_cls[dit].mult( m_cls_norm );}     
       rhs_dfn[dit].plus( rhs_cls[dit] ); 
@@ -226,9 +346,6 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
   for (dit.begin(); dit.ok(); ++dit) {
     const Box& grid = grids[dit];
     const FArrayBox& pMap = pMapping[dit];
-
-    //const PhaseBlockCoordSys& block_coord_sys = phase_geom.getBlockCoordSys(grid);
-    //double fac = 1. / block_coord_sys.getMappedCellVolume();
 
     /* grid size */
     IntVect bigEnd   = grid.bigEnd(),
@@ -344,18 +461,6 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
       anw =  -2*D_n[3]*dv*dmu;
       ase =  -2*D_e[3]*dv*dmu;
       asw =  0.0;
-
-      /*
-      ac  *= fac;
-      ae  *= fac;
-      aw  *= fac;
-      an  *= fac;
-      as  *= fac;
-      ane *= fac;
-      anw *= fac;
-      ase *= fac;
-      asw *= fac;
-      */
 
       if (m_fixed_cls_freq) {
         ac  *= m_cls_freq;
@@ -535,44 +640,71 @@ void FokkerPlanck::evalCoefficients( LevelData<FArrayBox>& a_D,
 
 void FokkerPlanck::computeFlux( LevelData<FluxBox>& a_flux,
                                 const PhaseGeom& a_phase_geom,
-                                const LevelData<FArrayBox>& a_D,
-                                const LevelData<FArrayBox>& a_dfn) const
+                                const LevelData<FArrayBox>& a_phi,
+                                const LevelData<FArrayBox>& a_dfn,
+                                const double a_mass_tp,
+                                const double a_mass_fp ) const
 {
 
    // Get velocity coordinate system parameters
-   const VEL::VelCoordSys&    vel_coords  = a_phase_geom.velSpaceCoordSys();
-   const VEL::ProblemDomain&  vel_domain  = vel_coords.domain();
-   const VEL::Box&            domain_box  = vel_domain.domainBox();
-   const VEL::RealVect&       vel_dx      = vel_coords.dx();
-
+   const VEL::VelCoordSys& vel_coords = a_phase_geom.velSpaceCoordSys();
+   const VEL::ProblemDomain& vel_domain = vel_coords.domain();
+   const VEL::Box& domain_box = vel_domain.domainBox();
+   const VEL::RealVect& vel_dx = vel_coords.dx();
    const int num_vpar_cells = domain_box.size(0);
-   const int num_mu_cells   = domain_box.size(1);
+   const int num_mu_cells = domain_box.size(1);
 
-   //Create temporary dfn with two extra layers of ghost cells (filled with zeros)
+
+   //Create temporary dfn and phi with two extra layers of ghost cells (filled with zeros)
    LevelData<FArrayBox> dfn_tmp(a_dfn.disjointBoxLayout(),
                                 a_dfn.nComp(),
                                 a_dfn.ghostVect()+2*IntVect::Unit);
+
+   LevelData<FArrayBox> phi_tmp(a_phi.disjointBoxLayout(),
+                                a_phi.nComp(),
+                                a_phi.ghostVect()+2*IntVect::Unit);
 
    const DisjointBoxLayout& grids( a_dfn.getBoxes() );
    for (DataIterator dit( a_dfn.dataIterator() ); dit.ok(); ++dit) {
       dfn_tmp[dit].setVal(0.0);
       dfn_tmp[dit].copy(a_dfn[dit],grids[dit]);
-   }
-   dfn_tmp.exchange();
 
+      phi_tmp[dit].setVal(0.0);
+      phi_tmp[dit].copy(a_phi[dit],grids[dit]);
+   }
+
+   dfn_tmp.exchange();
+   phi_tmp.exchange();
+
+   FillGhostCells(a_phase_geom, phi_tmp);
+// FillGhostCells(a_phase_geom, dfn_tmp);
+   
    //Compute cell-cenetered collision fluxes (0 comp - vpar_dir, 1 comp - mu_dir)
    LevelData<FArrayBox> flux_cell(grids, 2, IntVect::Zero);
+   const LevelData<FArrayBox>& injected_B = a_phase_geom.getBFieldMagnitude();
+
    for (DataIterator dit( a_dfn.dataIterator() ); dit.ok(); ++dit) {
       
+      // Check if the have more than 4 cells on a box in MU_DIR 
+      // used for calcuation of second derivatives in mu at mu=0 bnd   
+      const Box& grid_box = grids[dit];
+      if (grid_box.size(3)<5) { 
+       MayDay::Error(" Box size in MU_DIR must be greater that 4 for FP operator calculations");
+      }  
+
       FArrayBox& this_flux_cell = flux_cell[dit];
-      FArrayBox& this_dfn_tmp   = dfn_tmp[dit];
-      const FArrayBox& this_D   = a_D[dit];
+      FArrayBox& this_dfn_tmp = dfn_tmp[dit];
+      const FArrayBox& this_phi_tmp = phi_tmp[dit];
+      const FArrayBox& this_b = injected_B[dit];
       
       FORT_EVALUATE_FLUX_CELL(CHF_FRA(this_flux_cell),
                               CHF_FRA1(this_dfn_tmp,0),
-                              CHF_CONST_FRA(this_D),
+                              CHF_CONST_FRA(this_phi_tmp),
+                              CHF_CONST_FRA1(this_b,0),
                               CHF_BOX(this_flux_cell.box()),
                               CHF_CONST_REALVECT(vel_dx),
+                              CHF_CONST_REAL(a_mass_tp),
+                              CHF_CONST_REAL(a_mass_fp),
                               CHF_CONST_INT(num_vpar_cells),
                               CHF_CONST_INT(num_mu_cells));
 
@@ -641,13 +773,13 @@ void FokkerPlanck::computeFluxCellCentered( LevelData<FArrayBox>& a_flux,
       const FArrayBox& this_dfn_tmp = dfn_tmp[dit];
       const FArrayBox& this_D       = a_D[dit];
       
-      FORT_EVALUATE_FLUX_CELL(CHF_FRA(this_flux_cell),
-                              CHF_CONST_FRA1(this_dfn_tmp,0),
-                              CHF_CONST_FRA(this_D),
-                              CHF_BOX(this_flux_cell.box()),
-                              CHF_CONST_REALVECT(vel_dx),
-                              CHF_CONST_INT(num_vpar_cells),
-                              CHF_CONST_INT(num_mu_cells));
+      FORT_EVALUATE_FLUX_CELL_LOW_ORDER(CHF_FRA(this_flux_cell),
+                                        CHF_CONST_FRA1(this_dfn_tmp,0),
+                                        CHF_CONST_FRA(this_D),
+                                        CHF_BOX(this_flux_cell.box()),
+                                        CHF_CONST_REALVECT(vel_dx),
+                                        CHF_CONST_INT(num_vpar_cells),
+                                        CHF_CONST_INT(num_mu_cells));
    }
 }
 
@@ -834,7 +966,7 @@ void FokkerPlanck::parseParameters( ParmParse& a_ppcls )
    a_ppcls.query( "subtract_background", m_subtract_background );
    a_ppcls.query( "update_frequency", m_update_freq);
    a_ppcls.query( "verbose", m_verbosity);
-
+   a_ppcls.query( "debug",m_debug);
 
    a_ppcls.query( "convergence_tolerance", m_pcg_tol );
    a_ppcls.query( "max_interation_number", m_pcg_maxiter);

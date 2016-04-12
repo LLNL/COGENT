@@ -96,6 +96,8 @@ private:
    LevelData<FArrayBox> m_D_F0;
 
    RefCountedPtr<KineticFunction> m_ref_func;
+
+   bool m_debug;
    
    /// Computes the Rosenbluth potentials
 
@@ -119,7 +121,9 @@ private:
    void computeFlux( LevelData<FluxBox>& flux,
                      const PhaseGeom& phase_geom,
                      const LevelData<FArrayBox>& D,
-                     const LevelData<FArrayBox>& dfn) const;
+                     const LevelData<FArrayBox>& dfn,
+                     const double a_mass_tp,
+                     const double a_mass_fp ) const;
 
    void computeFluxCellCentered(  LevelData<FArrayBox>& flux,
                                   const PhaseGeom& phase_geom,
@@ -163,6 +167,16 @@ private:
                             LevelData<FArrayBox>&   dfn) const;
 
    
+  void evalClsRHS_Main( KineticSpeciesPtrVect&       rhs,
+                        const KineticSpeciesPtrVect& soln,
+                        const int                    species,
+                        const Real                   time,
+                        const int                    flag);
+  void evalClsRHS_LowOrder( KineticSpeciesPtrVect&       rhs,
+                            const KineticSpeciesPtrVect& soln,
+                            const int                    species,
+                            const Real                   time,
+                            const int                    flag);
    /// Parse parameters.
    /**
     * Private method to obtain control parameters from "CLS.species" section
