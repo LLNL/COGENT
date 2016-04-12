@@ -1,8 +1,6 @@
 #ifndef  _GKSYSTEM_H_
 #define  _GKSYSTEM_H_
 
-#undef BLOB_ERROR_TEST
-
 #if CFG_DIM==2
 #define CFG_NAMESPACE D2
 #define PDIM 4
@@ -13,7 +11,6 @@
 #endif
 #define VEL_DIM 2
 #define VEL_NAMESPACE D2
-
 
 #include "KineticSpecies.H"
 #include "GKVlasov.H"
@@ -259,15 +256,6 @@ class GKSystem
       void computeEField(const int step_number, KineticSpeciesPtrVect& soln,
                          CFG::LevelData<CFG::FluxBox>& E_field,
                          CFG::LevelData<CFG::FArrayBox>& E_field_cell);
-
-#ifdef BLOB_ERROR_TEST
-      void computeError(const double                 time,
-                        const int                    step,
-                        const KineticSpeciesPtrVect& species,
-                        double&                      l1_error,
-                        double&                      l2_error,
-                        double&                      max_error);
-#endif
 
       void getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids );
 

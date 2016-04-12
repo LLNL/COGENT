@@ -182,12 +182,6 @@ GKSystem::initialize(const int a_cur_step)
    // b.  If the fixed_efield option is false, then both the potential and
    //     associated field are computed.
    m_gk_ops->initialize( m_kinetic_species, a_cur_step );
-   
-#ifdef BLOB_ERROR_TEST
-   double l1_error, l2_error, max_error;
-   computeError(0., a_cur_step, m_kinetic_species, l1_error, l2_error, max_error);
-   if (procID()==0) cout << "l1, l2, max error at t = 0. is " << l1_error << " " << l2_error << " " << max_error << endl;
-#endif
 }
 
 
@@ -960,15 +954,6 @@ void GKSystem::advance( Real* a_cur_time,
       enforcePositivity( m_state.data() );
    }
    m_gk_ops->divideJ( m_state.data(), m_kinetic_species );
-
-
-#ifdef BLOB_ERROR_TEST
-   double l1_error, l2_error, max_error;
-   computeError(*a_cur_time, *a_step_number, m_kinetic_species, l1_error, l2_error, max_error);
-   if (procID()==0) cout << "l1, l2, max error at t = " << *a_cur_time << " is " << l1_error << " " << l2_error << " " << max_error << endl;
-#endif
-
-   return;
 }
 
 
@@ -1731,135 +1716,5 @@ void GKSystem::postStageAdvance( KineticSpeciesPtrVect& a_soln )
       enforcePositivity( a_soln );
    }
 }
-
-#ifdef BLOB_ERROR_TEST
-
-static bool dir_created = false;
-
-void GKSystem::computeError(const double                 a_time,
-                            const int                    a_step,
-                            const KineticSpeciesPtrVect& a_species,
-                            double&                      a_l1_error,
-                            double&                      a_l2_error,
-                            double&                      a_max_error)
-{
-
-  const LevelData<FArrayBox>& solution = a_species[0]->distributionFunction();
-  const PhaseGeom& geom = a_species[0]->phaseSpaceGeometry();
-  const PhaseCoordSys& coords = geom.phaseCoordSys();
-
-  const DisjointBoxLayout& grids = solution.disjointBoxLayout();
-
-  LevelData<FArrayBox> exact(grids, 1, IntVect::Unit);
-
-  ParmParse pp("kinetic_function_library.blob");
-
-  double amplitude;
-  pp.get( "amplitude", amplitude );
-
-  Vector<Real> temp( PDIM );
-  temp.assign( 0.0 );
-  pp.queryarr( "location", temp, 0, PDIM );
-  RealVect location = RealVect( temp );
-
-  temp.assign( 1.0 );
-  pp.queryarr( "width", temp, 0, PDIM );
-  RealVect width = RealVect( temp );
-
-  temp.assign( 0.0 );
-  ParmParse pp_miller("gksystem.magnetic_geometry_mapping.miller");
-  pp_miller.queryarr( "origin", temp, 0, CFG_DIM );
-  RealVect origin = RealVect( temp );
-
-  double d[CFG_DIM];
-  for (int dir=0; dir<CFG_DIM; ++dir) {
-     d[dir] = location[dir] - origin[dir];
-  }
-  double r = sqrt( d[0]*d[0] + d[1]*d[1] );
-  double theta_0 = atan2(d[1],d[0]);
-
-  location[0] = r*cos(a_time + theta_0) + origin[0];
-  location[1] = r*sin(a_time + theta_0) + origin[1];
-
-  LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
-  geom.getCellVolumes(volume);
-
-  // Iterate over patches
-  DataIterator dit = solution.dataIterator();
-  for (dit.begin(); dit.ok(); ++dit) {
-    const PhaseBlockCoordSys& block_coord_sys = geom.getBlockCoordSys(grids[dit]);
-
-    Box box(grids[dit]);
-    box.grow(1);
-    FArrayBox cell_center_coords( box, SpaceDim );
-    block_coord_sys.getCellCenteredRealCoords( cell_center_coords );
-
-    FORT_SET_LOCALIZED(
-                       CHF_FRA(exact[dit]),
-                       CHF_BOX(box),
-                       CHF_CONST_FRA(cell_center_coords),
-                       CHF_CONST_REAL(amplitude),
-                       CHF_CONST_REALVECT(location),
-                       CHF_CONST_REALVECT(width));
-
-    fourthOrderAverageCell(exact[dit]);
-
-    exact[dit] -= solution[dit];
-    exact[dit].abs();
-  }
-
-  if (a_step%1 == 0) {
-
-    //  Plot max norm error
-
-    if(procID()==0 && !dir_created) {
-      mkdir("error_plots", 0777);
-      dir_created = true;
-    }
-
-    char iter_str[100];
-    sprintf(iter_str, "error_plots/error.%04d.", a_step);
-    stringstream filename;
-    filename << iter_str;
-
-    geom.plotAtVelocityIndex(filename.str(), VEL::IntVect::Zero, exact);
-  }
-
-  // Compute max norm
-  double local_max = 0.;
-  for (dit.begin(); dit.ok(); ++dit) {
-    double box_max = exact[dit].max(grids[dit]);
-    if (box_max > local_max) local_max = box_max;
-  }
-
-  MPI_Allreduce(&local_max, &a_max_error, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-
-  // Compute L1 norm
-  double local_sum1 = 0.;
-  for (dit.begin(); dit.ok(); ++dit) {
-    FArrayBox tmp(grids[dit],1);
-    tmp.copy(exact[dit]);
-    tmp *= volume[dit];
-    local_sum1 += tmp.sum(grids[dit],0,1);
-  }
-
-  MPI_Allreduce(&local_sum1, &a_l1_error, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-  // Compute L2 norm
-  double local_sum2 = 0.;
-  for (dit.begin(); dit.ok(); ++dit) {
-    FArrayBox tmp(grids[dit],1);
-    tmp.copy(exact[dit]);
-    tmp *= exact[dit];
-    tmp *= volume[dit];
-    local_sum2 += tmp.sum(grids[dit],0,1);
-  }
-
-  MPI_Allreduce(&local_sum2, &a_l2_error, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  a_l2_error = sqrt(a_l2_error);
-
-}
-#endif
-
 
 #include "NamespaceFooter.H"
