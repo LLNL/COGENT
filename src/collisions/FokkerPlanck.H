@@ -121,9 +121,7 @@ private:
    void computeFlux( LevelData<FluxBox>& flux,
                      const PhaseGeom& phase_geom,
                      const LevelData<FArrayBox>& D,
-                     const LevelData<FArrayBox>& dfn,
-                     const double a_mass_tp,
-                     const double a_mass_fp ) const;
+                     const LevelData<FArrayBox>& dfn ) const;
 
    void computeFluxCellCentered(  LevelData<FArrayBox>& flux,
                                   const PhaseGeom& phase_geom,
