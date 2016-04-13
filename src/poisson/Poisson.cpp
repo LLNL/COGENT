@@ -14,13 +14,10 @@ Poisson::Poisson( const ParmParse& a_pp,
 {
    const DisjointBoxLayout& grids = a_geom.grids();
 
-   LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
-   a_geom.getCellVolumes(volume);
-
 #ifdef with_petsc
-   m_preconditioner = new MBPETScSolver(a_geom, volume, 2);
+   m_preconditioner = new MBPETScSolver(a_geom, 2);
 #else
-   m_preconditioner = new MBHypreSolver(a_geom, volume, 2);
+   m_preconditioner = new MBHypreSolver(a_geom, 2);
 #endif
 
    // We give the mapped coefficients one ghost cell layer so that the
@@ -48,7 +45,7 @@ Poisson::setOperatorCoefficients( const PotentialBC& a_bc )
 
    computeBcDivergence( a_bc, m_bc_divergence );
 
-   m_preconditioner->constructMatrix(m_mapped_coefficients, a_bc);
+   m_preconditioner->constructMatrix(m_volume_reciprocal, m_mapped_coefficients, a_bc);
 }
 
 

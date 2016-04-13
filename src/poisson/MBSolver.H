@@ -18,11 +18,9 @@ public:
    /// Constructor with initialization.
    /**
     *  @param[in] geom the geometry
-    *  @param[in] volume cell volumes
     *  @param[in] discretization_ordr discretization order
     */
    MBSolver( const MultiBlockLevelGeom&  geom,
-             const LevelData<FArrayBox>& volume,
              const int                   discretization_order );
       
    /// Destructor.
@@ -144,7 +142,6 @@ protected:
 
    MultiBlockLevelExchangeCenter* m_mblex_potential_Ptr; 
 
-   LevelData<FArrayBox> m_volume;
    LevelData<FArrayBox> m_rhs_from_bc;
 
    int m_discretization_order;

@@ -312,6 +312,7 @@ protected:
 
    const MagGeom& m_geometry;
    LevelData<FArrayBox> m_volume;
+   LevelData<FArrayBox> m_volume_reciprocal;
    LevelData<FArrayBox> m_bc_divergence;
 
    string m_method;

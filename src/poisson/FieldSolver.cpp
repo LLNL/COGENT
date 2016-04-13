@@ -51,6 +51,12 @@ FieldSolver::FieldSolver( const ParmParse& a_pp,
 
    m_volume.define(grids, 1, IntVect::Zero);
    m_geometry.getCellVolumes(m_volume);
+
+   m_volume_reciprocal.define(m_volume);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      m_volume_reciprocal[dit].invert(1.);
+   }
+
    m_bc_divergence.define(grids, 1, IntVect::Zero);
 }
       

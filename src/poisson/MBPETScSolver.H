@@ -19,11 +19,9 @@ public:
    /// Constructor with initialization.
    /**
     *  @param[in] pp the input database.
-    *  @param[in] volume cell volumes.
     *  @param[in] geom the geometry
     */
    MBPETScSolver( const MultiBlockLevelGeom&   geom,
-                  const LevelData<FArrayBox>&  volume,
                   const int                    discretization_order);
       
    /// Destructor.

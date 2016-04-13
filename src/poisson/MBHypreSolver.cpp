@@ -12,9 +12,8 @@
 const std::string MBHypreSolver::pp_name = "MBHypreSolver";
 
 MBHypreSolver::MBHypreSolver( const MultiBlockLevelGeom&  a_geom,
-                              const LevelData<FArrayBox>& a_volume,
                               const int                   a_discretization_order )
-   : MBSolver(a_geom, a_volume, a_discretization_order),
+   : MBSolver(a_geom, a_discretization_order),
      m_hypre_allocated(false),
      m_A(NULL)
 {
@@ -553,7 +552,6 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
          const Box& domainBox = (m_coord_sys_ptr->mappingBlocks())[block_number];
          const IntVectSet& this_ghosts_fab = ghosts[dit];
          const IVSFAB<MBStencil>& this_stencil = *stencil[dit];
-         const FArrayBox& this_volume = m_volume[dit];
 
          BaseFab<SparseCoupling> data[SpaceDim];
          for( int dir = 0; dir < SpaceDim; ++dir ) {
@@ -566,7 +564,6 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
             IntVect iv = ivsit();
             Box stencil_box = stencil_offsets + iv;
             Box stencil_box_valid = stencil_box & domainBox;
-            double this_cell_volume = this_volume(iv);
             IntVectSet extra_block_ghosts = stencil_box & this_ghosts_fab;
 
             double alpha = alphaPtr? alphaPtr->operator()(iv): 1.;
@@ -623,7 +620,7 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
                                  data[dir](iv_face).add(stencil_box_iv, -s);
 
                                  int entry = findHypreEntry(stencil_box, unstructured_couplings, stencil_box_iv);
-                                 double value = s * alpha / this_cell_volume;
+                                 double value = s * alpha;
 
                                  int num_entries = 1;
                                  HYPRE_SStructMatrixAddToValues(a_matrix, block_number, iv.dataPtr(),
@@ -652,7 +649,7 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
                                     data[dir](iv_face).add(interp_cell, -values[k]);
                                  }
 
-                                 values[k] *= (alpha / this_cell_volume);
+                                 values[k] *= alpha;
                                  k++;
                               }
 
@@ -697,7 +694,6 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
 
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          int block_number = m_coord_sys_ptr->whichBlock(grids[dit]);
-         const FArrayBox& this_volume = m_volume[dit];
 
          const FArrayBox* alphaPtr = NULL;
          if ( a_alpha_coefficient.isDefined() ) {
@@ -732,7 +728,7 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
                      for (SparseCouplingIterator it(coupling); it.ok(); ++it) {
                         IntVect index = coupling[it()];
                         entries[k] = findHypreEntry(stencil_box, unstructured_couplings, index);
-                        values[k] = coupling.weight(index) * alpha / this_volume(iv);
+                        values[k] = coupling.weight(index) * alpha;
                         k++;
                      }
 
@@ -833,7 +829,6 @@ MBHypreSolver::constructHypreMatrix( LevelData<FArrayBox>&               a_alpha
      const Box& domainBox = (m_coord_sys_ptr->mappingBlocks())[block_number];
 
      FluxBox& this_coef = a_tensor_coefficient[dit];
-     const FArrayBox & this_volume = m_volume[dit];
 
      const FArrayBox* alpha = NULL;
      if ( a_alpha_coefficient.isDefined() ) {
@@ -883,9 +878,6 @@ MBHypreSolver::constructHypreMatrix( LevelData<FArrayBox>&               a_alpha
              }
           }
        }
-
-       a_stencil_values /= this_volume(iv);
-       a_rhs_from_bc[dit](iv,0) /= this_volume(iv);
 
        if ( alpha ) {
           a_stencil_values *= alpha->operator()(iv);

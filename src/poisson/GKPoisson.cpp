@@ -25,9 +25,6 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
    m_mapped_coefficients.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
    m_unmapped_coefficients.define(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
 
-   LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
-   a_geom.getCellVolumes(volume);
-
    // If there is more than one block, construct the multiblock exchange object
    if ( m_geometry.coordSysPtr()->numBlocks() > 1 ) {
       m_mblex_density_Ptr = new MultiBlockLevelExchangeAverage();
@@ -41,9 +38,9 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
    }
 
 #ifdef with_petsc
-   m_preconditioner = new MBPETScSolver(a_geom, volume, 2);
+   m_preconditioner = new MBPETScSolver(a_geom, 2);
 #else
-   m_preconditioner = new MBHypreSolver(a_geom, volume, 2);
+   m_preconditioner = new MBHypreSolver(a_geom, 2);
 #endif
 }
       
@@ -67,7 +64,7 @@ GKPoisson::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_mass_densi
 
    computeBcDivergence( a_bc, m_bc_divergence );
 
-   m_preconditioner->constructMatrix(m_mapped_coefficients, a_bc);
+   m_preconditioner->constructMatrix(m_volume_reciprocal, m_mapped_coefficients, a_bc);
 }
 
 

@@ -14,9 +14,8 @@ extern "C" {
 
 
 MBTridiagonalSolver::MBTridiagonalSolver( const MultiBlockLevelGeom&  a_geom,
-                                          const LevelData<FArrayBox>& a_volume,
                                           const int                   a_discretization_order )
-   : MBSolver(a_geom, a_volume, a_discretization_order),
+   : MBSolver(a_geom, a_discretization_order),
      m_flux_surface((MagGeom&)a_geom)
 
 {
@@ -160,7 +159,6 @@ MBTridiagonalSolver::constructTridiagonalMatrix( LevelData<FArrayBox>&          
      const Box& domainBox = mapping_blocks[block_number];
 
      FluxBox& this_coef = a_tensor_coefficient[dit];
-     const FArrayBox & this_volume = m_volume[dit];
 
      const FArrayBox* alpha = NULL;
      if ( a_alpha_coefficient.isDefined() ) {
@@ -210,9 +208,6 @@ MBTridiagonalSolver::constructTridiagonalMatrix( LevelData<FArrayBox>&          
              }
           }
        }
-
-       a_stencil_values /= this_volume(iv);
-       a_rhs_from_bc[dit](iv,0) /= this_volume(iv);
 
        if ( alpha ) {
           a_stencil_values *= alpha->operator()(iv);
