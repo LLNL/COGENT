@@ -264,6 +264,7 @@ void GKOps::preTimeStep (const int a_step, const Real a_time, const GKState& a_s
     m_dt_Neutrals = m_neutrals->computeDt( soln );
     m_TimeScale_Neutrals = m_neutrals->computeTimeScale( soln );
   }
+  m_collisions->preTimeStep( soln, a_time );
 }
 
 void GKOps::postTimeStep (const int a_step, const Real a_time, const GKState& a_state)

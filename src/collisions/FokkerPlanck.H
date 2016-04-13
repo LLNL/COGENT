@@ -71,6 +71,8 @@ public:
 
   void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,int,const Mapping&);
 
+  void preTimeStep( const KineticSpeciesPtrVect&, const int, const Real );
+
 private:
 
    int m_verbosity;

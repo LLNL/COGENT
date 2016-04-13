@@ -49,6 +49,9 @@ class CLSInterface
                                           const KineticSpeciesPtrVect& a_soln,
                                           int a_i,
                                           const Mapping& a_mapping) { }
+
+      virtual void preTimeStep (const KineticSpeciesPtrVect& soln,
+                                const int, const Real ) { }
 };
 
 #include "NamespaceFooter.H"

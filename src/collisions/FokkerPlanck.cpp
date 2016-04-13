@@ -44,25 +44,9 @@ FokkerPlanck::~FokkerPlanck()
 {
 }
 
-
-void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
-                        const KineticSpeciesPtrVect&  a_soln,
-                        const int                     a_species,
-                        const Real                    a_time,
-                        const int                     a_flag )
-{
-  if (m_debug) evalClsRHS_LowOrder(a_rhs,a_soln,a_species,a_time,a_flag);
-  else         evalClsRHS_Main    (a_rhs,a_soln,a_species,a_time,a_flag);
-  return;
-}
-
-// NB: a_soln is on the computational grid and has 4 ghost cells (passed here as Nans)
-// a_rhs has probably zero ghost cells (from accertion in computedivergence)  (double check)
-void FokkerPlanck::evalClsRHS_Main( KineticSpeciesPtrVect& a_rhs,
-                        const KineticSpeciesPtrVect&  a_soln,
-                        const int                     a_species,
-                        const Real                    a_time,
-                        const int                     a_flag )
+void FokkerPlanck::preTimeStep(const KineticSpeciesPtrVect& a_soln, 
+                               const int  a_species,
+                               const Real a_time)
 {
 
    // Get solution distribution function (J*Bstar_par*dfn) for the current species
@@ -82,14 +66,10 @@ void FokkerPlanck::evalClsRHS_Main( KineticSpeciesPtrVect& a_rhs,
    //Compute normalization
    if (m_first_step) {computeClsNorm(m_cls_norm, soln_species.mass(), soln_species.charge());}
  
-   // Create collisional flux 
-   LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Zero);
-
    //Update phi?
    bool update_phi(false);
    if (m_update_freq < 0) {update_phi = true;}
-   else if (m_it_counter % (4 * m_update_freq) == 0 ) { update_phi=true; }
-   update_phi = (update_phi && (a_flag));
+   else if (m_it_counter % m_update_freq == 0 ) { update_phi=true; }
 
    if (!m_subtract_background) {
 
@@ -114,11 +94,8 @@ void FokkerPlanck::evalClsRHS_Main( KineticSpeciesPtrVect& a_rhs,
        evalRosenbluthPotentials(m_phi, phase_geom, dfn, mass_tp); 
        evalCoefficients(m_D,m_phi,phase_geom,mass_tp,mass_fp);
      }
-     computeFlux(flux, phase_geom, m_D, dfn);
 
-   }
- 
-   else {
+   } else {
 
      // Create reference (J*Bstar_par*dfn_bckg) distribution
      KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Zero, false ) );
@@ -151,6 +128,78 @@ void FokkerPlanck::evalClsRHS_Main( KineticSpeciesPtrVect& a_rhs,
        evalCoefficients(m_D_F0,m_phi_F0,phase_geom,mass_tp,mass_fp);
      } 
 
+     //Compute C[F1,F0] + C[F0,F1]
+     if ( update_phi ) {
+       evalRosenbluthPotentials(m_phi, phase_geom, delta_dfn, mass_tp); 
+       evalCoefficients(m_D,m_phi,phase_geom,mass_tp,mass_fp);
+     }
+   }
+
+   //Update iteration counter
+   m_it_counter+=1;
+   m_first_step = false;
+}
+
+void FokkerPlanck::evalClsRHS( KineticSpeciesPtrVect& a_rhs,
+                        const KineticSpeciesPtrVect&  a_soln,
+                        const int                     a_species,
+                        const Real                    a_time,
+                        const int                     a_flag )
+{
+  if (m_debug) evalClsRHS_LowOrder(a_rhs,a_soln,a_species,a_time,a_flag);
+  else         evalClsRHS_Main    (a_rhs,a_soln,a_species,a_time,a_flag);
+  return;
+}
+
+// NB: a_soln is on the computational grid and has 4 ghost cells (passed here as Nans)
+// a_rhs has probably zero ghost cells (from accertion in computedivergence)  (double check)
+void FokkerPlanck::evalClsRHS_Main( KineticSpeciesPtrVect& a_rhs,
+                        const KineticSpeciesPtrVect&  a_soln,
+                        const int                     a_species,
+                        const Real                    a_time,
+                        const int                     a_flag )
+{
+
+   // Get solution distribution function (J*Bstar_par*dfn) for the current species
+   const KineticSpecies& soln_species( *(a_soln[a_species]) );
+   const LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
+
+   const DisjointBoxLayout& grids( soln_dfn.getBoxes() );
+   const int n_comp( soln_dfn.nComp() );
+
+   // Get coordinate system parameters 
+   const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
+
+   // Create collisional flux 
+   LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Zero);
+
+   if (!m_subtract_background) {
+
+     LevelData<FArrayBox> dfn( grids, n_comp, IntVect::Zero );
+     for (DataIterator dit(dfn.dataIterator()); dit.ok(); ++dit) {
+      dfn[dit].copy( soln_dfn[dit] );
+     }
+     //Covert delta_dfn to cell centers
+     convertToCellCenters(phase_geom, dfn);
+
+     computeFlux(flux, phase_geom, m_D, dfn);
+
+   } else {
+
+     // Create reference (J*Bstar_par*dfn_bckg) distribution
+     KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Zero, false ) );
+     m_ref_func->assign( *ref_species, a_time );
+     LevelData<FArrayBox>& ref_dfn( ref_species->distributionFunction() );
+
+     // Compute the difference from the reference (background) solution
+     LevelData<FArrayBox> delta_dfn( grids, n_comp, IntVect::Zero );
+     for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
+        delta_dfn[dit].copy( soln_dfn[dit] );
+        delta_dfn[dit].minus( ref_dfn[dit] );
+     }
+
+     //Covert delta_dfn to cell centers
+     convertToCellCenters(phase_geom, delta_dfn);
 
      //Compute C[F1,F0]+C[F0,F1]+C[F1,F1]
      LevelData<FluxBox> flux_tmp(grids, SpaceDim, IntVect::Zero);
@@ -161,11 +210,6 @@ void FokkerPlanck::evalClsRHS_Main( KineticSpeciesPtrVect& a_rhs,
         flux[dit].copy( flux_tmp[dit] );
      }
 
-     //Compute C[F1,F0] + C[F0,F1]
-     if ( update_phi ) {
-       evalRosenbluthPotentials(m_phi, phase_geom, delta_dfn, mass_tp); 
-       evalCoefficients(m_D,m_phi,phase_geom,mass_tp,mass_fp);
-     }
      computeFlux(flux_tmp, phase_geom, m_D, ref_dfn);
      for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
        for (int dir=0; dir<SpaceDim; dir++) {
@@ -216,24 +260,11 @@ void FokkerPlanck::evalClsRHS_LowOrder( KineticSpeciesPtrVect& a_rhs,
    const DisjointBoxLayout& grids( soln_dfn.getBoxes() );
    const int n_comp( soln_dfn.nComp() );
 
-   //Get test-particle (tp) and field-particle (fp) masses
-   const double mass_tp = soln_species.mass();
-   const double mass_fp = soln_species.mass();
-
    // Get coordinate system parameters 
    const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
 
-   //Compute normalization
-   if (m_first_step) {computeClsNorm(m_cls_norm, soln_species.mass(), soln_species.charge());}
- 
    // Create collisional flux 
    LevelData<FArrayBox> flux(grids, 2, IntVect::Zero);
-
-   //Update phi?
-   bool update_phi(false);
-   if (m_update_freq < 0) {update_phi = true;}
-   else if (m_it_counter % (4 * m_update_freq) == 0 ) { update_phi=true; }
-   update_phi = (update_phi && (a_flag));
 
    if (!m_subtract_background) {
 
@@ -242,20 +273,6 @@ void FokkerPlanck::evalClsRHS_LowOrder( KineticSpeciesPtrVect& a_rhs,
       dfn[dit].copy( soln_dfn[dit] );
      }
 
-     //Define m_phi and D, and set them to zero at the first time step
-     if (m_first_step) {
-       m_phi.define( grids, 2, IntVect::Zero );
-       m_D.define( grids, m_nD, IntVect::Zero );
-       for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
-         m_phi[dit].setVal(0.0);
-         m_D[dit].setVal(0.0);
-       }
-     }
-     
-     if ( update_phi || (!m_it_counter) ) {
-       evalRosenbluthPotentials(m_phi, phase_geom, dfn, mass_tp); 
-       evalCoefficients(m_D,m_phi,phase_geom,mass_tp,mass_fp);
-     }
      computeFluxCellCentered(flux, phase_geom, m_D, dfn);
 
    } else {
@@ -272,23 +289,6 @@ void FokkerPlanck::evalClsRHS_LowOrder( KineticSpeciesPtrVect& a_rhs,
         delta_dfn[dit].minus( ref_dfn[dit] );
      }
 
-     //Define m_phi, m_phi_F0, m_D, m_D_F0, and compute m_phi_F0, and m_D_F0
-     if (m_first_step) {
-       m_phi.define( grids, 2, IntVect::Zero );
-       m_phi_F0.define( grids, 2, IntVect::Zero );
-       m_D.define( grids, m_nD, IntVect::Unit );
-       m_D_F0.define( grids, m_nD, IntVect::Unit );
-       for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
-         m_phi[dit].setVal(0.0);
-         m_phi_F0[dit].setVal(0.0);
-         m_D[dit].setVal(0.0);
-         m_D_F0[dit].setVal(0.0);
-       }
-       evalRosenbluthPotentials(m_phi_F0, phase_geom, ref_dfn, mass_tp);
-       evalCoefficients(m_D_F0,m_phi_F0,phase_geom,mass_tp,mass_fp);
-     } 
-
-
      //Compute C[F1,F0]+C[F0,F1]+C[F1,F1]
      LevelData<FArrayBox> flux_tmp(grids, 2, IntVect::Unit);
 
@@ -299,10 +299,6 @@ void FokkerPlanck::evalClsRHS_LowOrder( KineticSpeciesPtrVect& a_rhs,
      }
 
      //Compute C[F1,F0] + C[F0,F1]
-     if ( update_phi ) {
-       evalRosenbluthPotentials(m_phi, phase_geom, delta_dfn, mass_tp); 
-       evalCoefficients(m_D,m_phi,phase_geom,mass_tp,mass_fp);
-     }
      computeFluxCellCentered(flux_tmp, phase_geom, m_D, ref_dfn);
      for (DataIterator dit(soln_dfn.dataIterator()); dit.ok(); ++dit) {
        flux[dit].plus( flux_tmp[dit] );

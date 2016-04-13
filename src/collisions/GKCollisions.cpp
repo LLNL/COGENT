@@ -188,4 +188,14 @@ void GKCollisions::assemblePrecondMatrix( void *a_P,
   }
 }
 
+void GKCollisions::preTimeStep( const KineticSpeciesPtrVect& a_soln, const Real a_time )
+{
+   for (int species(0); species<a_soln.size(); species++) {
+      KineticSpecies& soln_species( *(a_soln[species]) );
+      const std::string species_name( soln_species.name() );
+      CLSInterface& CLS( collisionModel( species_name ) );
+      CLS.preTimeStep( a_soln, species, a_time );
+   }
+}
+
 #include "NamespaceFooter.H"

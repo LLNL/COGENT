@@ -85,6 +85,8 @@ class GKCollisions
 
       bool isLinear();
 
+      void preTimeStep (const KineticSpeciesPtrVect&, const Real);
+
    private:
 
       // prevent copying
