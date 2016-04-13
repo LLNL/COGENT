@@ -21,11 +21,9 @@ public:
    /// Constructor with initialization.
    /**
     *  @param[in] geom the geometry
-    *  @param[in] volume cell volumes
     *  @param[in] discretization_ordr discretization order
     */
    MBHypreSolver( const MultiBlockLevelGeom&   geom,
-                  const LevelData<FArrayBox>&  volume,
                   const int                    discretization_order);
       
    /// Destructor.

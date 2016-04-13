@@ -33,7 +33,6 @@ L2Norm( const LevelData<FArrayBox>&  a_data )
 
 
 MBSolver::MBSolver( const MultiBlockLevelGeom&  a_geom,
-                    const LevelData<FArrayBox>& a_volume,
                     const int                   a_discretization_order )
    : m_geometry(a_geom),
      m_coord_sys_ptr(m_geometry.coordSysPtr()),
@@ -42,11 +41,6 @@ MBSolver::MBSolver( const MultiBlockLevelGeom&  a_geom,
      m_dropOrder(true)
 {
    CH_assert(m_discretization_order == 2 || m_discretization_order == 4);
-
-   const DisjointBoxLayout& grids = m_geometry.gridsFull();
-
-   m_volume.define(grids, 1, IntVect::Zero);
-   a_volume.copyTo(m_volume);
 
    m_rhs_from_bc.define(a_geom.grids(), 1, IntVect::Zero);
    
@@ -911,7 +905,6 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
    LevelData<FArrayBox> operator_eval(grids, 1, IntVect::Zero);
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const FArrayBox & this_volume = m_volume[dit];
       FArrayBox & this_operator_eval = operator_eval[dit];
       FluxBox & this_flux_normal = flux_normal_without_bvs[dit];
 
@@ -941,8 +934,6 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
                this_operator_eval(iv,0) += (1 - 2*side)*this_flux_normal[dir](iv_face,0);
             }
          }
-
-         this_operator_eval(iv,0) /= this_volume(iv);
 
          if ( alpha ) {
             this_operator_eval(iv,0) *= alpha->operator()(iv);

@@ -157,13 +157,13 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
    }
 
    // A tridiagonal solver is needed by all of the solver options
-   m_precond_Psolver = new MBTridiagonalSolver(a_geom, m_volume, 2);
+   m_precond_Psolver = new MBTridiagonalSolver(a_geom, 2);
 
    if ( !m_radial_solve_only && !m_subspace_iteration_solve ) {
 #ifdef with_petsc
-      m_precond_Qsolver = new MBPETScSolver(a_geom, m_volume, 2);
+      m_precond_Qsolver = new MBPETScSolver(a_geom, 2);
 #else
-      m_precond_Qsolver = new MBHypreSolver(a_geom, m_volume, 2);
+      m_precond_Qsolver = new MBHypreSolver(a_geom, 2);
 #endif
 
       // Defaults; overridden if present in ParmParse object
@@ -307,8 +307,8 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron& a_ne,
 
    if ( m_radial_solve_only || m_subspace_iteration_solve ) {
 
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-         alpha[dit].setVal(1.);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         alpha[dit].copy(m_volume_reciprocal[dit]);
          beta[dit].setVal(0.);
       }
 
@@ -323,72 +323,70 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron& a_ne,
 #ifdef DIVIDE_M
 
       // Set alpha = M^{-1}
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          alpha[dit].setVal(1.);
       }
       divideM(alpha);
 
       // Construct beta = I - D
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          beta[dit].setVal(-1.);
       }
       multiplyD(beta);
 
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          beta[dit] += 1.;
       }
 
-      m_precond_Psolver->constructMatrix(alpha, m_mapped_coefficients, beta, a_bc);
-
 #else
 
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          alpha[dit].setVal(1.);
          beta[dit].setVal(0.);
       }
 
-      m_precond_Psolver->constructMatrix(alpha, m_mapped_coefficients, beta, a_bc);
-
 #endif
+
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         alpha[dit] *= m_volume_reciprocal[dit];
+      }
+
+      m_precond_Psolver->constructMatrix(alpha, m_mapped_coefficients, beta, a_bc);
 
 #ifdef DIVIDE_M
 
       // Set alpha = M^{-1}
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          alpha[dit].setVal(1.);
       }
       divideM(alpha);
 
-#if 0
-      double anorm = L2Norm(alpha);
-      cout.precision(20);
-      if(procID()==0) cout <<"anorm = " << anorm << endl;
-      cout.precision();
-#endif
 
       // Set beta = I
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          beta[dit].setVal(1.);
       }
-
-      m_precond_Qsolver->constructMatrix(alpha, m_mapped_coefficients, beta, a_bc);
 
 #else
 
       // Set alpha = I
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          alpha[dit].setVal(1.);
       }
 
       // Set beta = M
-      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
          beta[dit].setVal(1.);
       }
       multiplyM(beta);
 
-      m_precond_Qsolver->constructMatrix(alpha, m_mapped_coefficients, beta, a_bc);
-
 #endif
+
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         alpha[dit] *= m_volume_reciprocal[dit];
+      }
+
+      m_precond_Qsolver->constructMatrix(alpha, m_mapped_coefficients, beta, a_bc);
    }
 }
 
@@ -533,7 +531,7 @@ GKPoissonBoltzmann::solveRadial( const LevelData<FArrayBox>& a_Zni,
    LevelData<FArrayBox> phi_fs(fs_grids, 1, IntVect::Zero);
    m_flux_surface.average(rhs, phi_fs);
 
-   for (DataIterator dit(fs_grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(fs_grids); dit.ok(); ++dit) {
       phi_fs[dit] -= m_boltzmann_prefactor_saved_numerator[dit];
    }
 
@@ -840,8 +838,7 @@ GKPoissonBoltzmann::computeElectronDensity( const LevelData<FArrayBox>& a_phi,
      core_prefactor_denominator.define( grids, 1, IntVect::Zero );
      m_flux_surface.averageAndSpread(ne, core_prefactor_denominator);
 
-     DataIterator dit = grids.dataIterator();
-     for (dit.begin(); dit.ok(); ++dit) {
+     for (DataIterator dit(grids); dit.ok(); ++dit) {
         int block_number = coord_sys.whichBlock( grids[dit] );
 
         if ((block_number == RCORE)||(block_number == LCORE)) {
@@ -1004,26 +1001,26 @@ GKPoissonBoltzmann::fluxSurfaceNeutralityRelativeError( const LevelData<FArrayBo
       LevelData<FArrayBox> Zni_integrated(flux_surface_grids, 1, IntVect::Zero);
       m_flux_surface.average(a_Zni, Zni_integrated);
 
-      for (DataIterator dit(flux_surface_grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(flux_surface_grids); dit.ok(); ++dit) {
          error[dit] -= Zni_integrated[dit];
          error[dit] /= Zni_integrated[dit];
       }
    }
    else if (m_prefactor_strategy == FS_NEUTRALITY_GLOBAL_NI) {
       double ni_global_average = averageMapped(a_Zni);
-      for (DataIterator dit(flux_surface_grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(flux_surface_grids); dit.ok(); ++dit) {
          error[dit] -= ni_global_average;
          error[dit] /= ni_global_average;
       }
    }
    else if (m_prefactor_strategy == FS_NEUTRALITY_INITIAL_GLOBAL_NI) {
-      for (DataIterator dit(flux_surface_grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(flux_surface_grids); dit.ok(); ++dit) {
          error[dit] -= m_initial_ion_charge_density_average;
          error[dit] /= m_initial_ion_charge_density_average;
       }
    }
    else if (m_prefactor_strategy == FS_NEUTRALITY_INITIAL_FS_NI) {
-      for (DataIterator dit(flux_surface_grids.dataIterator()); dit.ok(); ++dit) {
+      for (DataIterator dit(flux_surface_grids); dit.ok(); ++dit) {
          error[dit] -= m_boltzmann_prefactor_saved_numerator[dit];
          error[dit] /= m_boltzmann_prefactor_saved_numerator[dit];
       }
@@ -1061,7 +1058,7 @@ GKPoissonBoltzmann::integrateMapped( const LevelData<FArrayBox>& a_data ) const
    const DisjointBoxLayout& grids = a_data.getBoxes();
 
    double local_sum = 0.;
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       FArrayBox tmp(grids[dit],1);
       tmp.copy(m_volume[dit]);
       tmp.mult(a_data[dit]);
@@ -1086,7 +1083,7 @@ GKPoissonBoltzmann::averageMapped( const LevelData<FArrayBox>& a_data ) const
    const DisjointBoxLayout& grids = a_data.getBoxes();
 
    double local_volume = 0.;
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       local_volume += m_volume[dit].sum(grids[dit],0);
    }
 
@@ -1189,7 +1186,7 @@ GKPoissonBoltzmann::multiplyM( LevelData<FArrayBox>& a_data ) const
 {
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       a_data[dit].mult(m_M[dit]);
    }
 }
@@ -1318,9 +1315,8 @@ GKPoissonBoltzmann::computeBoundaryData( FArrayBox& a_inner_divertor_bvs,
 
 
   const DisjointBoxLayout& grids = m_geometry.grids();
-  DataIterator dit = grids.dataIterator();
   
-  for (dit.begin(); dit.ok(); ++dit) {
+  for (DataIterator dit(grids); dit.ok(); ++dit) {
 
     int block_number = coord_sys.whichBlock( grids[dit] );
 

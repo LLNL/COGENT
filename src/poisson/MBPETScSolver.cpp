@@ -11,9 +11,8 @@
 
 
 MBPETScSolver::MBPETScSolver( const MultiBlockLevelGeom&  a_geom,
-                              const LevelData<FArrayBox>& a_volume,
                               const int                   a_discretization_order )
-   : MBSolver(a_geom, a_volume, a_discretization_order),
+   : MBSolver(a_geom, a_discretization_order),
      m_petsc_allocated(false),
      m_amg_solver_allocated(false),
      m_gmres_solver_allocated(false)
@@ -601,7 +600,6 @@ MBPETScSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
 
          const IntVectSet& this_ghosts_fab = ghosts[dit];
          const IVSFAB<MBStencil>& this_stencil = *stencil[dit];
-         const FArrayBox& this_volume = m_volume[dit];
 
          BaseFab<SparseCoupling> data[SpaceDim];
          for( int dir = 0; dir < SpaceDim; ++dir ) {
@@ -613,7 +611,6 @@ MBPETScSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
             IntVect iv = ivsit();
             Box stencil_box = stencil_offsets + iv;
             Box stencil_box_valid = stencil_box & domain_box;
-            double this_cell_volume = this_volume(iv);
             IntVectSet extra_block_ghosts = stencil_box & this_ghosts_fab;
 
             double alpha = alphaPtr? alphaPtr->operator()(iv): 1.;
@@ -665,7 +662,7 @@ MBPETScSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
                               if ( (at_lo_block_interface && side == 0) || (at_hi_block_interface && side == 1) ) {
                                  data[dir](iv_face).add(stencil_box_iv, -s);
                                  
-                                 double value = s * alpha / this_cell_volume;
+                                 double value = s * alpha;
                                  
                                  int row = this_gids(iv);
                                  int col = getGID(block_number, stencil_box_iv);
@@ -688,7 +685,7 @@ MBPETScSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
                                     data[dir](iv_face).add(interp_cell, -value);
                                  }
 
-                                 value *= (alpha / this_cell_volume);
+                                 value *= alpha;
                                  
                                  int row = this_gids(iv);
                                  int col = getGID(interp_cell);
@@ -730,7 +727,6 @@ MBPETScSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
       blockRegister.exchange();
 
       for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-         const FArrayBox& this_volume = m_volume[dit];
          const BaseFab<int>& this_gids = m_gids[dit];
 
          const FArrayBox* alphaPtr = NULL;
@@ -759,7 +755,7 @@ MBPETScSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
                      SparseCoupling& coupling = otherFab(iv_face,0);
                      for (SparseCouplingIterator it(coupling); it.ok(); ++it) {
                         IntVect index = coupling[it()];
-                        double value = coupling.weight(index) * alpha / this_volume(iv);
+                        double value = coupling.weight(index) * alpha;
 
                         int row = this_gids(iv);
                         int col = getGID(index);
@@ -849,7 +845,6 @@ MBPETScSolver::constructPETScMatrix( LevelData<FArrayBox>&              a_alpha_
      const Box& domain_box = mapping_blocks[block_number];
 
      FluxBox& this_coefs = a_tensor_coefficient[dit];
-     const FArrayBox & this_volume = m_volume[dit];
 
      const FArrayBox* alpha = NULL;
      if ( a_alpha_coefficient.isDefined() ) {
@@ -899,8 +894,6 @@ MBPETScSolver::constructPETScMatrix( LevelData<FArrayBox>&              a_alpha_
              }
           }
        }
-
-       a_stencil_values /= this_volume(iv);
 
        if ( alpha ) {
           a_stencil_values *= alpha->operator()(iv);
