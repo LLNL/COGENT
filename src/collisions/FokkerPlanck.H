@@ -128,7 +128,8 @@ private:
    void computeFluxCellCentered(  LevelData<FArrayBox>& flux,
                                   const PhaseGeom& phase_geom,
                                   const LevelData<FArrayBox>& D,
-                                  const LevelData<FArrayBox>& dfn) const;
+                                  const LevelData<FArrayBox>& dfn,
+                                  const LevelData<FArrayBox>& dfn_ref) const;
 
    void computeDivergence(  LevelData<FArrayBox>&,
                             const PhaseGeom&,
