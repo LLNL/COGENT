@@ -1550,7 +1550,7 @@ PhaseGeom::divideJonValid( LevelData<FArrayBox>& a_dfn ) const
       LevelData<FArrayBox> J(grids, 1, grown_vect);
       getJ(*m_configuration_J, *m_velocity_J, J);
 
-      LevelData<FArrayBox> grown_dfn(grids, 1, grown_vect);
+      LevelData<FArrayBox> grown_dfn(grids, a_dfn.nComp(), grown_vect);
 
       for (DataIterator dit(grown_dfn.dataIterator()); dit.ok(); ++dit) {
          grown_dfn[dit].copy(a_dfn[dit]);
