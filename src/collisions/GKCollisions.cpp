@@ -166,12 +166,18 @@ bool GKCollisions::setupPrecondMatrix(void *a_P,int a_N,int a_bs)
 {
   int count = 0;
   bool flag = true;
+  if (!procID()) {
+    cout << "Setting up preconditioner matrix for collision model(s)... ";
+  }
   std::map<std::string,int>::iterator it;
   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
     flag = (flag && m_collision_model[it->second]->setupPrecondMatrix(a_P,a_N,a_bs));
     count++;
   }
   CH_assert(count<=1);
+  if (!procID()) {
+    cout << "Done.\n";
+  }
   return flag;
 }
 
