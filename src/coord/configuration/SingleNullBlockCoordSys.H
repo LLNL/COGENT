@@ -107,18 +107,31 @@ class SingleNullBlockCoordSys
                                      FArrayBox& BFieldDirdotcurlBFieldDir,
                                      const bool derived_data_only = false ) const;
 
+      //Computes magnetic flux Psi
       void getMagneticFlux( const FArrayBox& a_physical_coordinates,
                             FArrayBox&       a_magnetic_flux ) const;
 
       double getMagneticFlux( const RealVect& a_physical_coordinate ) const;
-
+   
+      //Computes normalized magnetic flux
+      void getNormMagneticFlux( const FArrayBox& a_physical_coordinates,
+                                FArrayBox&       a_magnetic_flux ) const;
+   
+      double getNormMagneticFlux( const RealVect& a_physical_coordinate ) const;
+   
+      //Returns the physical radial coordinate (R) for a given value of normalized psi
+      double getOuterMidplaneCoord(const double psiNorm) const;
+   
+      //Returns the radial coordinate of the separatrix at the outer midplane
+      double getOuterRsep() const;
+   
       virtual double getRBtoroidal() const {return m_RB_toroidal;}
 
       virtual const string getParmParseName() const {return pp_name;}
 
       int blockType() const {return m_block_type;}
 
-       // Object ParmParse name.
+      // Object ParmParse name.
       static const std::string pp_name;
 
       void getCellCenterRealCoords();
@@ -128,6 +141,9 @@ class SingleNullBlockCoordSys
       bool isValid(const RealVect& xi) const;
 
       virtual string geometryType() const {return "SingleNull";}
+   
+      RealVect m_Xpoint;
+      RealVect m_magAxis;
 
 #ifdef MODEL_GEOM
       virtual void getFaceCenteredRealCoords( const int dir, FArrayBox& a_x ) const;

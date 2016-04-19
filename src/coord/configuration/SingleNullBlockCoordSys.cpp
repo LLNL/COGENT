@@ -153,8 +153,141 @@ SingleNullBlockCoordSys::~SingleNullBlockCoordSys()
 }
 
 
-#ifndef MODEL_GEOM
+void
+SingleNullBlockCoordSys::getMagneticFlux( const FArrayBox& a_physical_coordinates,
+                                         FArrayBox&       a_magnetic_flux ) const
+{
 
+#ifndef MODEL_GEOM
+   if (m_spectral_field) {
+      getMagneticFluxFromDCT(a_physical_coordinates, a_magnetic_flux);
+   }
+   else {
+      MayDay::Error("SingleNullBlockCoordSys::getMagneticFlux() only implemented for DCT field option");
+   }
+#else
+
+   const Box& box(a_physical_coordinates.box());
+   CH_assert(a_magnetic_flux.box().contains(box));
+
+   for (BoxIterator bit(box); bit.ok(); ++bit) {
+      IntVect iv = bit();
+      
+      RealVect phys_coord(iv);
+      for (int dir=0; dir<SpaceDim; dir++) {
+         phys_coord[dir] = a_physical_coordinates(iv,dir);
+      }
+      
+      a_magnetic_flux(iv,0) = psi(phys_coord);
+   }
+   
+#endif
+}
+
+
+double
+SingleNullBlockCoordSys::getMagneticFlux( const RealVect& a_physical_coordinate ) const
+{
+#ifndef MODEL_GEOM
+   double psi;
+   if (m_spectral_field) {
+      psi = getMagneticFluxFromDCT(a_physical_coordinate);
+   }
+   else {
+      MayDay::Error("SingleNullBlockCoordSys::getMagneticFlux() only implemented for DCT field option");
+      psi = 0.;
+   }
+   return psi;
+
+#else
+   return psi(a_physical_coordinate);
+#endif
+}
+
+void SingleNullBlockCoordSys::getNormMagneticFlux( const FArrayBox& a_physical_coordinates,
+                                             FArrayBox&       a_magnetic_flux ) const
+
+{
+   double physFluxOnAxis = getMagneticFlux(m_magAxis);
+   double physFluxOnSep = getMagneticFlux(m_Xpoint);
+   
+   getMagneticFlux(a_physical_coordinates, a_magnetic_flux);
+   a_magnetic_flux.plus(-physFluxOnAxis);
+   a_magnetic_flux.divide(physFluxOnSep - physFluxOnAxis);
+   
+}
+
+double SingleNullBlockCoordSys::getNormMagneticFlux( const RealVect& a_physical_coordinate ) const
+{
+   
+   double physFluxOnAxis = getMagneticFlux(m_magAxis);
+   double physFluxOnSep = getMagneticFlux(m_Xpoint);
+   double physFlux = getMagneticFlux(a_physical_coordinate);
+   
+   return (physFlux - physFluxOnAxis)/(physFluxOnSep - physFluxOnAxis);
+}
+
+   
+double SingleNullBlockCoordSys::getOuterMidplaneCoord(const double psiNorm) const
+{
+   bool residual_tolerance_satisfied = false;
+   int max_iterations = 10000;
+   double tol = 1.0e-5;
+   
+   double tmp_lo_R = m_magAxis[0];
+
+   double tmp_hi_R, half_R, f_lo_R, f_hi_R, f_half_R;
+
+#ifndef MODEL_GEOM
+      if (m_spectral_field) tmp_hi_R = m_Rmax; // MAYBE WILL NEED TO FIX LATER IN CASE THERE ARE MULTIVALUE SOLUTIONS NEAR M_RMAX
+      else MayDay::Error("SingleNullBlockCoordSys::getOuterMidplaneCoord only implemented for DCT field option");
+#else
+      tmp_hi_R = m_R0 + PI/m_a;
+#endif
+   
+      
+   int iter = 0;
+   while ( iter++ < max_iterations && !residual_tolerance_satisfied ) {
+         
+      half_R = 0.5 * (tmp_lo_R + tmp_hi_R);
+      
+      RealVect lo_R_vect(tmp_lo_R,m_magAxis[1]);
+      f_lo_R = getNormMagneticFlux(lo_R_vect) - psiNorm;
+      
+      RealVect hi_R_vect(tmp_hi_R,m_magAxis[1]);
+      f_hi_R = getNormMagneticFlux(hi_R_vect) - psiNorm;
+
+      RealVect half_R_vect(half_R,m_magAxis[1]);
+      f_half_R = getNormMagneticFlux(half_R_vect) - psiNorm;
+         
+      if (f_lo_R * f_half_R < 0) {
+         tmp_hi_R = half_R;
+      }
+         
+      else {
+         tmp_lo_R = half_R;
+      }
+      
+      RealVect R_hi_test(half_R + tol,m_magAxis[1]);
+      RealVect R_lo_test(half_R - tol,m_magAxis[1]);
+      if ( (getNormMagneticFlux(R_hi_test) - psiNorm) * (getNormMagneticFlux(R_lo_test) - psiNorm) < 0 ) {
+         residual_tolerance_satisfied = true;
+      }
+      
+   }
+
+   return half_R;
+}
+   
+double SingleNullBlockCoordSys::getOuterRsep() const
+{
+   double psiNorm_atSep = getNormMagneticFlux(m_Xpoint);
+
+   return getOuterMidplaneCoord(psiNorm_atSep);
+}
+   
+#ifndef MODEL_GEOM
+   
 void
 SingleNullBlockCoordSys::getCellCenterRealCoords()
 {
@@ -493,7 +626,12 @@ SingleNullBlockCoordSys::init( ParmParse& a_pp )
         fieldCoefficientsFile >> m_Zmax;
         fieldCoefficientsFile >> NR;
         fieldCoefficientsFile >> NZ;
+        fieldCoefficientsFile >> m_magAxis[0];
+        fieldCoefficientsFile >> m_magAxis[1];
+        fieldCoefficientsFile >> m_Xpoint[0];
+        fieldCoefficientsFile >> m_Xpoint[1];
 
+        
 #ifdef CH_MPI
      }
 #endif
@@ -504,7 +642,9 @@ SingleNullBlockCoordSys::init( ParmParse& a_pp )
      MPI_Bcast(&m_Zmax, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
      MPI_Bcast(&NR, 1, MPI_INT, 0, MPI_COMM_WORLD);
      MPI_Bcast(&NZ, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
+     MPI_Bcast(&m_magAxis, 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+     MPI_Bcast(&m_Xpoint, 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+     
      Box kbox = Box(IntVect::Zero,IntVect(NR-1,NZ-1));
 
      m_psi_coefs.define(kbox,1);
@@ -1112,38 +1252,6 @@ SingleNullBlockCoordSys::computeFieldDataFromMappingFile( const int  a_dir,
 
 
 void
-SingleNullBlockCoordSys::getMagneticFlux( const FArrayBox& a_physical_coordinates,
-                                          FArrayBox&       a_magnetic_flux ) const
-{
-   if (m_spectral_field) {
-      getMagneticFluxFromDCT(a_physical_coordinates, a_magnetic_flux);
-   }
-   else {
-      MayDay::Error("SingleNullBlockCoordSys::getMagneticFlux() only implemented for DCT field option");
-   }
-}
-
-
-
-double
-SingleNullBlockCoordSys::getMagneticFlux( const RealVect& a_physical_coordinate ) const
-{
-   double psi;
-   
-   if (m_spectral_field) {
-      psi = getMagneticFluxFromDCT(a_physical_coordinate);
-   }
-   else {
-      MayDay::Error("SingleNullBlockCoordSys::getMagneticFlux() only implemented for DCT field option");
-      psi = 0.;
-   }
-
-   return psi;
-}
-
-
-
-void
 SingleNullBlockCoordSys::getMagneticFluxFromDCT( const FArrayBox& a_physical_coordinates,
                                                  FArrayBox&       a_magnetic_flux ) const
 {
@@ -1441,6 +1549,11 @@ SingleNullBlockCoordSys::init( ParmParse& a_pp )
    m_pol_ref_length_mp = PI/2.0;
    m_div_leg_length = 1.0/4.0 * PI;
    m_pol_ref_z_lo = m_Zx+0.2;
+   m_magAxis[0] = m_R0;
+   m_magAxis[1] = m_Zc + m_Z0;
+   m_Xpoint[0] = m_R0;
+   m_Xpoint[1] = m_Zx + m_Z0;
+
    
    //Get the geometry parameters
    a_pp.query( "shape_factor_a",                   m_a );
@@ -1901,26 +2014,6 @@ SingleNullBlockCoordSys::computeFieldData( const int  a_dir,
    }
 }
 
-
-
-void
-SingleNullBlockCoordSys::getMagneticFlux( const FArrayBox& a_physical_coordinates,
-                                          FArrayBox&       a_magnetic_flux ) const
-{
-   MayDay::Error("SingleNullBlockCoordSys::getMagneticFlux() not yet implemented for model geometry");
-}
-
-
-
-double
-SingleNullBlockCoordSys::getMagneticFlux( const RealVect& a_physical_coordinate ) const
-{
-   MayDay::Error("SingleNullBlockCoordSys::getMagneticFlux() not yet implemented for model geometry");
-
-   return 0.;
-}
-
-
 RealVect
 SingleNullBlockCoordSys::gridLinesIntersection( const double psiVal, const double thetaVal, const int side ) const
 {
@@ -2156,7 +2249,9 @@ double SingleNullBlockCoordSys::psi(const RealVect& a_x) const
 {
    double x = a_x[0] - m_R0;
    double z = a_x[1] - m_Z0;
-   // CH_assert(z >= m_Zx);
+   
+   if (z<m_Zx) z = 2.0 * m_Zx - z;
+   
    double psiMin = m_b * sin(m_Zc) - m_c * m_Zc;
    double psi = cos(m_a * x) + m_b * sin(z) - m_c * z;
    

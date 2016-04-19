@@ -107,10 +107,23 @@ class SNCoreBlockCoordSys
                                      FArrayBox& BFieldDirdotcurlBFieldDir,
                                      const bool derived_data_only = false ) const;
 
+      //Computes magnetic flux Psi
       virtual void getMagneticFlux( const FArrayBox& physical_coordinates,
                                     FArrayBox&       magnetic_flux ) const;
 
       virtual double getMagneticFlux( const RealVect& a_physical_coordinate ) const;
+   
+      //Computes normalized magnetic flux
+      void getNormMagneticFlux( const FArrayBox& a_physical_coordinates,
+                                FArrayBox&       a_magnetic_flux ) const;
+   
+      double getNormMagneticFlux( const RealVect& a_physical_coordinate ) const;
+
+      //Returns the physical radial coordinate (R) for a given value of normalized psi
+      double getOuterMidplaneCoord(const double psiNorm) const;
+   
+      //Returns the radial coordinate of the separatrix at the outer midplane
+      double getOuterRsep() const;
 
       virtual double getRBtoroidal() const {return m_RB_toroidal;}
 
@@ -126,6 +139,9 @@ class SNCoreBlockCoordSys
       bool isValid(const RealVect& xi) const;
 
       virtual string geometryType() const {return "SNCore";}
+   
+      RealVect m_Xpoint;
+      RealVect m_magAxis;
 
 #ifdef MODEL_GEOM
       virtual void getFaceCenteredRealCoords( const int dir, FArrayBox& a_x ) const;
