@@ -275,6 +275,8 @@ void GKOps::postTimeStep (const int a_step, const Real a_time, const GKState& a_
 void GKOps::postTimeStage(const int a_step, const Real a_time, const GKState& a_state)
 {
   setElectricField(a_time,a_state);
+  const KineticSpeciesPtrVect& soln(a_state.data());
+  m_collisions->postTimeStage( soln, a_time );
 }
 
 void GKOps::setElectricField( const Real a_time, const GKState& a_state)

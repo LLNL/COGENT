@@ -44,11 +44,11 @@ FokkerPlanck::~FokkerPlanck()
 {
 }
 
-void FokkerPlanck::preTimeStep(const KineticSpeciesPtrVect& a_soln, 
-                               const int  a_species,
-                               const Real a_time)
+void FokkerPlanck::computePotentialsAndCoeffs(const KineticSpeciesPtrVect& a_soln, 
+                                              const int  a_species,
+                                              const Real a_time,
+                                              const bool a_flag )
 {
-
    // Get solution distribution function (J*Bstar_par*dfn) for the current species
    const KineticSpecies& soln_species( *(a_soln[a_species]) );
    const LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
@@ -135,7 +135,9 @@ void FokkerPlanck::preTimeStep(const KineticSpeciesPtrVect& a_soln,
    }
 
    //Update iteration counter
-   m_it_counter+=1;
+   if (a_flag) {
+     m_it_counter+=1;
+   }
    m_first_step = false;
 }
 

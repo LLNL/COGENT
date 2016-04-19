@@ -71,7 +71,10 @@ public:
 
   void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,int,const Mapping&);
 
-  void preTimeStep( const KineticSpeciesPtrVect&, const int, const Real );
+  inline void preTimeStep  ( const KineticSpeciesPtrVect& a_soln, const int a_species, const Real a_time)
+    { computePotentialsAndCoeffs( a_soln, a_species, a_time, true ); }
+  inline void postTimeStage( const KineticSpeciesPtrVect& a_soln, const int a_species, const Real a_time)
+    { computePotentialsAndCoeffs( a_soln, a_species, a_time, false ); }
 
 private:
 
@@ -100,6 +103,8 @@ private:
    RefCountedPtr<KineticFunction> m_ref_func;
 
    bool m_debug;
+
+   void computePotentialsAndCoeffs(const KineticSpeciesPtrVect&, const int, const Real, const bool);
    
    /// Computes the Rosenbluth potentials
 
