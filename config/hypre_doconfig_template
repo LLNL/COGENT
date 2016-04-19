@@ -1,0 +1,17 @@
+#!/bin/sh
+
+if test "dbg" = "MASTER_OPT"; then
+   debug="--enable-opt";
+else
+   debug="--enable-debug"
+fi
+
+install_dir=$PWD/lib/MASTER_MACHINE-MASTER_CXX-MASTER_FC-MASTER_OPT
+
+cd src
+./configure $debug \
+            CC=MASTER_CC \
+            CXX=MASTER_CXX \
+            --prefix=$install_dir
+cd ..
+

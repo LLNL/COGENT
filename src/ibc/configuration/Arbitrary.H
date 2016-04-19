@@ -17,15 +17,18 @@
 /**
  * Arbitrary function class.
  * Assigns arbitrary function in configuration space:
+ * 
+ * coordinate_type="mapped" uses the mapped r and theta coordinates as "x" and "y"  (default)
+ * coordinate_type="physical" uses the physical R and Z coordinates as "x" and "y"
+ * coordinate_type="flux" uses the normalized flux as "x" and mapped theta coordinate as "y"
+ * coordinate_type="outer_midplane" uses the shifter outer radial coordinate (R-Rsep) as "x" and mapped theta coordinate as "y"
  *
  * The following represents a sample input entry for this function choice.
  *
  * \verbatim
- * type = "cosine"
- * constant = 1.0
- * amplitude = 1.0
- * mode = 1.0 1.0
- * phase = 0.0 0.0
+ * type = "arbitrary"
+ * coordinate_type="flux"
+ * function="sin(x)+sin(y)"
  *
 */
 class Arbitrary : public GridFunction
@@ -141,6 +144,7 @@ class Arbitrary : public GridFunction
 
       int m_verbosity;
       std::string m_function;
+      std::string m_coord_type;
 
 };
 

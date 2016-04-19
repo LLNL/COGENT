@@ -14,6 +14,8 @@
 #include "MayDay.H"
 #include "MillerCoordSys.H"
 #include "MillerBlockCoordSys.H"
+#include "SNCoreBlockCoordSys.H"
+#include "SingleNullBlockCoordSys.H"
 #include "SlabCoordSys.H"
 #include "SlabBlockCoordSys.H"
 #include "MultiBlockCoordSys.H"
@@ -39,6 +41,7 @@ const MagBlockCoordSys& getCoordSys( const MultiBlockLevelGeom& a_geometry,
 Arbitrary::Arbitrary( ParmParse& a_pp,
                     const int& a_verbosity )
    : m_verbosity(a_verbosity),
+     m_coord_type("mapped"),
      m_function("UNDEFINED")
 {
    parseParameters( a_pp );
@@ -62,8 +65,8 @@ void Arbitrary::assign( LevelData<FArrayBox>& a_data,
                      const Real& a_time,
                      const bool& a_cell_averages ) const
 {
-//   checkGeometryValidity( a_geometry );
 
+   //checkGeometryValidity( a_geometry );
    const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       if (a_cell_averages) {
@@ -122,11 +125,10 @@ void Arbitrary::assign( LevelData<FArrayBox>& a_data,
 inline
 void Arbitrary::parseParameters( ParmParse& a_pp )
 {
-   //   bool enforce_positivity(false);
-//   a_pp.query( "enforce_positivity", enforce_positivity );
    a_pp.get( "function", m_function);
+   a_pp.query( "coordinate_type", m_coord_type );
 
-
+   
    if (m_verbosity) {
       printParameters();
    }
@@ -167,40 +169,70 @@ void Arbitrary::setCellAverages( FArrayBox&              a_data,
 
 inline
 void Arbitrary::setPointwise( FArrayBox&              a_data,
-                             const MagBlockCoordSys& a_coord_sys ) const
+                             const MagBlockCoordSys&  a_coord_sys ) const
 
 {
+   //Check geometry validity for "flux" or "outer_midplane" types
+   if (m_coord_type == "flux" || m_coord_type == "outer_midplane") {
+      bool not_sn( typeid(a_coord_sys) != typeid(SNCoreBlockCoordSys) );
+      not_sn &= (typeid(a_coord_sys) != typeid(SingleNullBlockCoordSys));
+      if ( not_sn ) {
+         const std::string msg( "Arbitrary: Attempt to use not a single-null geometry with the flux or outer_midplane options. ");
+         MayDay::Error( msg.c_str() );
+      }
+   }
+   
    Box box( a_data.box() );
-   FArrayBox cell_center_coords( box, SpaceDim );
-   a_coord_sys.getCellCenteredFluxCoords( cell_center_coords );
+   FArrayBox cc_mapped_coords( box, SpaceDim );
+   a_coord_sys.getCellCenteredMappedCoords( cc_mapped_coords );
 
-//   cell_center_coords.plus( -0.5*( a_coord_sys.getOuterFluxLabel() + a_coord_sys.getInnerFluxLabel() ), RADIAL_DIR, 1 );
-   RealVect a_amrDx = a_coord_sys.dx();
-
-// rescale a_amrDx so that x, y, z span from 0 to 2*pi
-   IntVect hi_index = a_coord_sys.domain().domainBox().bigEnd();
-   hi_index = hi_index+1;
-   a_amrDx = a_amrDx*2.0*M_PI/(a_amrDx*hi_index); 
-
+   FArrayBox cc_phys_coords( box, SpaceDim );
+   a_coord_sys.getCellCenteredRealCoords( cc_phys_coords );
+   
    a_data.setVal(0.0);
 
    BoxIterator bit(a_data.box());
    for (bit.begin(); bit.ok(); ++bit)
    {
-       IntVect iv = bit();
-       RealVect loc(iv);
-       loc *= a_amrDx;
-       //       loc += ccOffset;
+      IntVect iv = bit();
+      RealVect loc(iv);
+      RealVect phys_coordinate(iv);
+      
+      for (int dir=0; dir<SpaceDim; dir++) {
+         phys_coordinate[dir] = cc_phys_coords(iv, dir);
+         if (m_coord_type == "physical")  loc[dir] = cc_phys_coords(iv, dir);
+         if (m_coord_type == "mapped" || m_coord_type == "flux" || m_coord_type == "outer_midplane")  loc[dir] = cc_mapped_coords(iv, dir);
+      }
+      
+      if (m_coord_type == "flux") {
+         if (typeid(a_coord_sys) == typeid(SNCoreBlockCoordSys))  loc[0] = ((const SNCoreBlockCoordSys&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
+         if (typeid(a_coord_sys) == typeid(SingleNullBlockCoordSys))  loc[0] = ((const SingleNullBlockCoordSys&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
+         
+      }
+      
+      if (m_coord_type == "outer_midplane") {
+         
+          if (typeid(a_coord_sys) == typeid(SNCoreBlockCoordSys)) {
+             double fluxNorm  = ((const SNCoreBlockCoordSys&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
+             double Rsep  = ((const SNCoreBlockCoordSys&)a_coord_sys).getOuterRsep();
+             loc[0] = ((const SNCoreBlockCoordSys&)a_coord_sys).getOuterMidplaneCoord(fluxNorm) - Rsep;
 
+          }
+
+         if (typeid(a_coord_sys) == typeid(SingleNullBlockCoordSys)) {
+            double fluxNorm  = ((const SingleNullBlockCoordSys&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
+            double Rsep  = ((const SingleNullBlockCoordSys&)a_coord_sys).getOuterRsep();
+            loc[0] = ((const SingleNullBlockCoordSys&)a_coord_sys).getOuterMidplaneCoord(fluxNorm) - Rsep;
+         }
+      }
+
+
+      
 #if CFG_DIM==3
        Real val = m_pscore->calc3d(loc[0],loc[1],loc[2]);
 #else
        Real val = m_pscore->calc2d(loc[0],loc[1]);
 #endif
-
-       //Real val = cos(loc[2]);
-       //Real val = cos(loc[1]);
-       //Real val = cos(loc[0]);
 
        a_data(iv,0) += val;
 
@@ -213,6 +245,7 @@ void Arbitrary::printParameters() const
    if (procID()==0) {
       std::cout << "Arbitrary grid function parameters:" << std::endl;
       std::cout << "  function: "  << m_function << std::endl;
+      std::cout << "  coordinate type: "  << m_coord_type << std::endl;
       std::cout << std::endl;
    }
 }
