@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if test "dbg" = "MASTER_OPT"; then
+if test "MASTER_OPT" = "opt"; then
    debug="--enable-opt";
 else
    debug="--enable-debug"
