@@ -2,7 +2,6 @@
 #include "MBStencilIterator.H"
 #include "BlockRegister.H"
 #include "SparseCoupling.H"
-#include "FluxSurface.H"
 #include "MBSolverF_F.H"
 
 #include "NamespaceHeader.H"
