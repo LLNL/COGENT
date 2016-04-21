@@ -27,6 +27,7 @@ FokkerPlanck::FokkerPlanck( ParmParse& a_ppcls, const int a_verbosity )
      m_it_counter(0),
      m_first_step(true),
      m_subtract_background(false),
+     m_nbands(13),
      m_debug(false)
 {
    m_verbosity = true;
@@ -362,7 +363,11 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
               ine(ic),
               inw(ic),
               ise(ic),
-              isw(ic);
+              isw(ic),
+              iee(ic),
+              iww(ic),
+              inn(ic),
+              iss(ic);
       /* north-south is along mu; east-west is along v|| */
       ie[SpaceDim-2]++;                          /* east  */
       iw[SpaceDim-2]--;                          /* west  */
@@ -372,8 +377,12 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
       inw[SpaceDim-2]--; inw[SpaceDim-1]++;   /* northwest */
       ise[SpaceDim-2]++; ise[SpaceDim-1]--;   /* southeast */
       isw[SpaceDim-2]--; isw[SpaceDim-1]--;   /* southwest */
+      iee[SpaceDim-2]+=2;                        /* east-east   */
+      iww[SpaceDim-2]-=2;                        /* west-west   */
+      inn[SpaceDim-1]+=2;                        /* north-north */
+      iss[SpaceDim-1]-=2;                        /* south-south */
       /* global row/column numbers */
-      int pc, pe, pw, pn, ps, pne, pnw, pse, psw, pcl;
+      int pc, pe, pw, pn, ps, pne, pnw, pse, psw, pee, pww, pnn, pss, pcl;
       pc  = (int) pMap.get(ic ,0);
       pn  = (int) pMap.get(in ,0);
       ps  = (int) pMap.get(is ,0);
@@ -383,19 +392,23 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
       pnw = (int) pMap.get(inw,0);
       pse = (int) pMap.get(ise,0);
       psw = (int) pMap.get(isw,0);
+      pee = (int) pMap.get(iee,0);
+      pww = (int) pMap.get(iww,0);
+      pnn = (int) pMap.get(inn,0);
+      pss = (int) pMap.get(iss,0);
       pcl = (int) pMap.get(ic ,1);
 
       /* coefficients */
-      Real *D_c,
-           *D_e,
-           *D_w,
-           *D_n,
-           *D_s,
-           *D_ne,
-           *D_nw,
-           *D_se,
-           *D_sw,
-           ac, an, as, ae, aw, ane, anw, ase, asw;
+      Real *D_c;
+      Real *D_e;
+      Real *D_w;
+      Real *D_n;
+      Real *D_s;
+      Real *D_ne;
+      Real *D_nw;
+      Real *D_se;
+      Real *D_sw;
+      Real ac, an, as, ae, aw, ane, anw, ase, asw, aee, aww, ann, ass;
 
       D_c  = new Real[m_nD];
       D_e  = new Real[m_nD];
@@ -479,16 +492,19 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
        * D[4] -> D_mu_mu
        */
 
-      ac = ( - D_c[0]*dv - 2*D_c[1]*dmu - D_c[2]*dv_sq - D_e[2]*dv_sq 
-             - 4*D_c[4]*dmu_sq - 4*D_n[4]*dmu_sq - 4*D_c[3]*dv*dmu );
-      an = ( 2*D_n[1]*dmu + 2*D_n[3]*dv*dmu + 4*D_n[4]*dmu_sq );
-      as = ( 4*D_c[4]*dmu_sq + 2*D_c[3]*dv*dmu );
-      ae = ( D_e[0]*dv + D_e[2]*dv_sq + 2*D_e[3]*dv*dmu );
-      aw = ( D_c[2]*dv_sq + 2*D_c[3]*dv*dmu );
-      ane =  0.0;
-      anw =  -2*D_n[3]*dv*dmu;
-      ase =  -2*D_e[3]*dv*dmu;
-      asw =  0.0;
+      ac  = -0.25*dv_sq*(D_e[2]+D_w[2]) - dmu_sq*(D_n[4]+D_s[4]);
+      ae  =  0.50*dv*D_e[0];
+      aw  = -0.50*dv*D_w[0];
+      an  =  dmu*D_n[1];
+      as  = -dmu*D_s[1];
+      ane =  0.50*dv*dmu*(D_e[3]+D_n[3]);
+      anw = -0.50*dv*dmu*(D_w[3]+D_n[3]);
+      ase = -0.50*dv*dmu*(D_e[3]+D_s[3]);
+      asw =  0.50*dv*dmu*(D_w[3]+D_s[3]);
+      aee =  0.25*dv_sq*D_e[2];
+      aww =  0.25*dv_sq*D_w[2];
+      ann =  dmu_sq*D_n[4];
+      ass =  dmu_sq*D_s[4];
 
       delete[] D_c;
       delete[] D_e;
@@ -510,6 +526,10 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
         anw *= m_cls_freq;
         ase *= m_cls_freq;
         asw *= m_cls_freq;
+        aee *= m_cls_freq;
+        aww *= m_cls_freq;
+        ann *= m_cls_freq;
+        ass *= m_cls_freq;
       } else {
         ac  *= m_cls_norm;
         ae  *= m_cls_norm;
@@ -520,9 +540,13 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
         anw *= m_cls_norm;
         ase *= m_cls_norm;
         asw *= m_cls_norm;
+        aee *= m_cls_norm;
+        aww *= m_cls_norm;
+        ann *= m_cls_norm;
+        ass *= m_cls_norm;
       }
 
-      int  ncols = 9, bs = n_comp*n_comp, ix = 0;
+      int  ncols = m_nbands, bs = n_comp*n_comp, ix = 0;
       int  *icols = (int*)  calloc (ncols,sizeof(int));
       Real *data  = (Real*) calloc (ncols*bs,sizeof(Real));
 
@@ -576,6 +600,30 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
       if (psw >= 0) {
         icols[ix] = psw;
         for (int v=0; v<bs; v++) data[ix*bs+v] = asw;
+        ix++;
+      }
+      /* east-east element */
+      if (pee >= 0) {
+        icols[ix] = pee;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = aee;
+        ix++;
+      }
+      /* west-west element */
+      if (pww >= 0) {
+        icols[ix] = pww;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = aww;
+        ix++;
+      }
+      /* north-north element */
+      if (pnn >= 0) {
+        icols[ix] = pnn;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = ann;
+        ix++;
+      }
+      /* south-south element */
+      if (pss >= 0) {
+        icols[ix] = pss;
+        for (int v=0; v<bs; v++) data[ix*bs+v] = ass;
         ix++;
       }
 

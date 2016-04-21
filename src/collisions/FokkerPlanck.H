@@ -64,8 +64,7 @@ public:
   bool setupPrecondMatrix(void *a_P,int a_N,int a_bs)
     {
       BandedMatrix *P = (BandedMatrix*) a_P;
-      int nbands = 9; /* central differences of derivatives */
-      P->define(a_N,nbands,a_bs);
+      P->define(a_N,m_nbands,a_bs);
       return(P->isDefined());
     }
 
@@ -99,6 +98,8 @@ private:
    LevelData<FArrayBox> m_phi_F0;
    LevelData<FArrayBox> m_D;
    LevelData<FArrayBox> m_D_F0;
+
+   int m_nbands;
 
    RefCountedPtr<KineticFunction> m_ref_func;
 

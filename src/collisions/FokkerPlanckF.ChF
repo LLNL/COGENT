@@ -348,8 +348,8 @@ c     local variables
        
 c      *** Calculate necessary phi derivatives; notation is used from Z. Xiong, JCP 2008
 
-        f_v  = (f(CHF_IX[i;j;k;l])-f(CHF_IX[i;j;k-1;l]))*dvinv
-        f_mu = (f(CHF_IX[i;j;k;l])-f(CHF_IX[i;j;k;l-1]))*dmuinv
+        f_v  = 0.5*(f(CHF_IX[i;j;k+1;l])-f(CHF_IX[i;j;k-1;l]))*dvinv
+        f_mu = 0.5*(f(CHF_IX[i;j;k;l+1])-f(CHF_IX[i;j;k;l-1]))*dmuinv
 
 c      *** Calculate collisional flux 
        
@@ -386,8 +386,8 @@ c     local variables
       dmuinv= 1.0d0/dx(1)
       CHF_MULTIDO[gridbox;i;j;k;l]
 
-        flux_v = (flux(CHF_IX[i;j;k+1;l],0)-flux(CHF_IX[i;j;k;l],0))*dvinv
-        flux_mu= (flux(CHF_IX[i;j;k;l+1],1)-flux(CHF_IX[i;j;k;l],1))*dmuinv
+        flux_v = 0.5*(flux(CHF_IX[i;j;k+1;l],0)-flux(CHF_IX[i;j;k-1;l],0))*dvinv
+        flux_mu= 0.5*(flux(CHF_IX[i;j;k;l+1],1)-flux(CHF_IX[i;j;k;l-1],1))*dmuinv
         rhs(CHF_IX[i;j;k;l]) = flux_v + flux_mu
 
       CHF_ENDDO
