@@ -944,6 +944,7 @@ void GKSystem::advance( Real* a_cur_time,
                         Real* a_dt,
                         int*  a_step_number)
 {
+   CH_assert(m_useNativeTimeIntegrator);
    m_integrator->setTimeStepSize( *a_dt );
    m_integrator->advance( *a_cur_time, m_state );
    m_integrator->getCurrentTime(a_cur_time);
@@ -953,7 +954,6 @@ void GKSystem::advance( Real* a_cur_time,
    if (m_enforce_step_positivity) {
       enforcePositivity( m_state.data() );
    }
-   m_gk_ops->divideJ( m_state.data(), m_kinetic_species );
 }
 
 
@@ -1451,6 +1451,7 @@ void GKSystem::preTimeStep(int a_cur_step, Real a_cur_time)
 void GKSystem::postTimeStep(int a_cur_step, Real a_dt, Real a_cur_time)
 {
   m_gk_ops->postTimeStep(a_cur_step,a_cur_time,m_state);
+  m_gk_ops->divideJ( m_state.data(), m_kinetic_species );
   if (procID() == 0) {
     Real dt_Vlasov     = m_gk_ops->dtScale_Vlasov    (m_state.data(),a_cur_step);
     Real dt_Collisions = m_gk_ops->dtScale_Collisions(m_state.data(),a_cur_step);
