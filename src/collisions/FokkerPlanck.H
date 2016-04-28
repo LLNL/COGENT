@@ -103,7 +103,7 @@ private:
 
    RefCountedPtr<KineticFunction> m_ref_func;
 
-   bool m_debug;
+   bool m_debug, m_rosenbluth_skip_stage;
 
    void computePotentialsAndCoeffs(const KineticSpeciesPtrVect&, const int, const Real, const bool);
    

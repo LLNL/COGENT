@@ -41,8 +41,8 @@ const MagBlockCoordSys& getCoordSys( const MultiBlockLevelGeom& a_geometry,
 Arbitrary::Arbitrary( ParmParse& a_pp,
                     const int& a_verbosity )
    : m_verbosity(a_verbosity),
-     m_coord_type("mapped"),
-     m_function("UNDEFINED")
+     m_function("UNDEFINED"),
+     m_coord_type("mapped")
 {
    parseParameters( a_pp );
 

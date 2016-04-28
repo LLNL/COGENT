@@ -222,6 +222,7 @@ void SlabBlockCoordSys::getMagneticFlux( const FArrayBox& physical_coordinates,
 double SlabBlockCoordSys::getMagneticFlux( const RealVect& a_physical_coordinate ) const
 {
    MayDay::Error("SlabBlockCoordSys::getMagneticFlux() not implemented");
+   return(0.0);
 }
 
 

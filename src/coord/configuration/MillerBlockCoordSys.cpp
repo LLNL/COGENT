@@ -430,6 +430,7 @@ double
 MillerBlockCoordSys::getMagneticFlux( const RealVect& a_physical_coordinate ) const
 {
    MayDay::Error("MillerBlockCoordSys::getMagneticFlux() not implemented");
+   return(0.0);
 }
 
 

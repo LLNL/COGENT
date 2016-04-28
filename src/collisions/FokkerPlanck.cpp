@@ -28,7 +28,8 @@ FokkerPlanck::FokkerPlanck( ParmParse& a_ppcls, const int a_verbosity )
      m_first_step(true),
      m_subtract_background(false),
      m_nbands(13),
-     m_debug(false)
+     m_debug(false),
+     m_rosenbluth_skip_stage(false)
 {
    m_verbosity = true;
    parseParameters( a_ppcls );
@@ -49,7 +50,16 @@ void FokkerPlanck::computePotentialsAndCoeffs(const KineticSpeciesPtrVect& a_sol
                                               const int  a_species,
                                               const Real a_time,
                                               const bool a_flag )
+/*
+ * a_flag = 1 means this function is being called at the beginning of a time step
+ * a_flag = 0 means this function is being called at the end of a time stage
+*/
 {
+   if ((!a_flag) && (m_rosenbluth_skip_stage)) {
+     /* skip solving for Rosenbluth potentials within time integration stages */
+     return;
+   }
+
    // Get solution distribution function (J*Bstar_par*dfn) for the current species
    const KineticSpecies& soln_species( *(a_soln[a_species]) );
    const LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
@@ -752,7 +762,6 @@ void FokkerPlanck::computeFlux( LevelData<FluxBox>& a_flux,
 
    //Compute cell-cenetered collision fluxes (0 comp - vpar_dir, 1 comp - mu_dir)
    LevelData<FArrayBox> flux_cell(grids, 2, IntVect::Zero);
-   const LevelData<FArrayBox>& injected_B = a_phase_geom.getBFieldMagnitude();
 
    for (DataIterator dit( a_dfn.dataIterator() ); dit.ok(); ++dit) {
       
@@ -1028,6 +1037,7 @@ void FokkerPlanck::parseParameters( ParmParse& a_ppcls )
    a_ppcls.query( "update_frequency", m_update_freq);
    a_ppcls.query( "verbose", m_verbosity);
    a_ppcls.query( "debug",m_debug);
+   a_ppcls.query( "rosenbluth_skip_stage",m_rosenbluth_skip_stage);
 
    a_ppcls.query( "convergence_tolerance", m_pcg_tol );
    a_ppcls.query( "max_interation_number", m_pcg_maxiter);
