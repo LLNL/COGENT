@@ -349,6 +349,65 @@ class PressureKernel : public Kernel
 
 };
 
+/// Parallel heat flux kernel.
+/**
+ */
+class ParallelHeatFluxKernel : public Kernel
+{
+public:
+   
+   ParallelHeatFluxKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift);
+   
+   /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
+   virtual ~ParallelHeatFluxKernel() {;}
+   
+   /// Computes the integrand for a ParallelHeatFlux moment calculation.
+   /**
+    * Computes the integrand by multiplying the input distribution function
+    * by the scalar velocity squared.
+    *
+    * The number of kernel components is one.  If the distribution function
+    * has more than one component, the first component of the result
+    * will contain the moment of the first distribution function component,
+    * the next component will contain the moment of the second
+    * distribution function component, etc.  Upon entry, it is assumed
+    * that result has already been initialized with the distribution function
+    * correspondingly, ie., the first component contains the first
+    * component of the distribution function, the next component
+    * contain the second component of the distribution function, etc.
+    *
+    * @param[in] result Cell-averaged distribution function.
+    * @param[out] result Cell-averaged integrand.
+    * @param[in] kinetic_species Kinetic species object.
+    */
+   virtual void eval( LevelData<FArrayBox>& result,
+                     const KineticSpecies& kinetic_species ) const;
+   
+   /// Returns the kernel scale.
+   /**
+    * Returns the kernel scale, which is 1..
+    *
+    * @param[in] kinetic_species Kinetic species object.
+    * @return real-valued scale to be applied in configuration space.
+    */
+   virtual Real scale( const KineticSpecies& kinetic_species ) const
+   { return 1.; }
+   
+   /// Returns the number of kernel components
+   /**
+    * Returns the number of kernel components.
+    *
+    * @param[in] kinetic_species Kinetic species object.
+    */
+   virtual int nComponents() const { return 1; }
+   
+private:
+   
+   const CFG::LevelData<CFG::FArrayBox>& m_v_parallel_shift;
+   
+};
+
+
 /// perp energy kernel.
 /**
  */

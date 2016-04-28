@@ -1738,6 +1738,29 @@ void GKOps::plotPressure( const std::string&    a_filename,
    phase_geometry.plotConfigurationData( a_filename.c_str(), pressure, a_time );
 }
 
+void GKOps::plotParallelHeatFlux( const std::string&    a_filename,
+                                  const KineticSpecies& a_soln_species,
+                                  const double&         a_time ) const
+{
+   CH_assert( isDefined() );
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
+   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+   
+   CFG::LevelData<CFG::FArrayBox> density( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   a_soln_species.numberDensity( density );
+   a_soln_species.ParallelMomentum( ParallelMom );
+   
+   for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
+      ParallelMom[dit].divide(density[dit]);
+   }
+   CFG::LevelData<CFG::FArrayBox> parallelHeatFlux( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   a_soln_species.parallelHeatFluxMoment(parallelHeatFlux, ParallelMom);
+   
+   phase_geometry.plotConfigurationData( a_filename.c_str(), parallelHeatFlux, a_time );
+}
+
 
 void GKOps::plotTemperature( const std::string&    a_filename,
                              const KineticSpecies& a_soln_species,

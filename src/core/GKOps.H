@@ -361,6 +361,11 @@ public:
                       const KineticSpecies& soln_species,
                       const double&         time ) const;
    
+   void plotParallelHeatFlux( const std::string&    filename,
+                              const KineticSpecies& soln_species,
+                              const double&         time ) const;
+   
+
    void plotTemperature( const std::string&    filename,
                          const KineticSpecies& soln_species,
                          const double&         time ) const;

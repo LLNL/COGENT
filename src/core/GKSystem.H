@@ -390,6 +390,7 @@ class GKSystem
       bool m_hdf_vpartheta;
       bool m_hdf_rtheta;
       bool m_hdf_pressure;
+      bool m_hdf_parallelHeatFlux;
       bool m_hdf_temperature;
       bool m_hdf_fourthMoment;
       bool m_hdf_ParallelMomentum;

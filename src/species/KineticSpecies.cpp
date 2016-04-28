@@ -97,6 +97,12 @@ void KineticSpecies::HeatFlux( CFG::LevelData<CFG::FArrayBox>& a_HeatFlux,
 
 }
 
+void KineticSpecies::parallelHeatFluxMoment( CFG::LevelData<CFG::FArrayBox>& a_parallelHeatFlux,
+                                             CFG::LevelData<CFG::FArrayBox>& a_vparshift ) const
+{
+   m_moment_op.compute( a_parallelHeatFlux, *this, ParallelHeatFluxKernel(a_vparshift) );
+}
+
 void KineticSpecies::pressureMoment( CFG::LevelData<CFG::FArrayBox>& a_pressure,
                                      CFG::LevelData<CFG::FArrayBox>& a_vparshift ) const
 {

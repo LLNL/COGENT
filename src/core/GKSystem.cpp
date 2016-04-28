@@ -76,6 +76,7 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_useExternalTI)
      m_hdf_vpartheta(false),
      m_hdf_rtheta(false),
      m_hdf_pressure(false),
+     m_hdf_parallelHeatFlux(false),
      m_hdf_temperature(false),
      m_hdf_fourthMoment(false),
      m_hdf_ParallelMomentum(false),
@@ -1194,6 +1195,19 @@ void GKSystem::writePlotFile(const char    *prefix,
          m_gk_ops->plotPressure( filename, soln_species, cur_time );
       }
 
+      // Parallel heat flux
+      
+      if (m_hdf_parallelHeatFlux) {
+         std::string filename( plotFileName( prefix,
+                                            "ParallelHeatFlux",
+                                            soln_species.name(),
+                                            cur_step,
+                                            species + 1) );
+         
+         m_gk_ops->plotParallelHeatFlux( filename, soln_species, cur_time );
+      }
+
+      
       // Temperature
 
       if (m_hdf_temperature) {
@@ -1615,6 +1629,9 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
 
    // Should we make hdf files for pressure?
    a_ppgksys.query("hdf_pressure",m_hdf_pressure);
+
+   // Should we make hdf files for parallel heat flux?
+   a_ppgksys.query("hdf_parallelHeatFlux",m_hdf_parallelHeatFlux);
 
    // Should we make hdf files for temperature?
    a_ppgksys.query("hdf_temperature",m_hdf_temperature);
