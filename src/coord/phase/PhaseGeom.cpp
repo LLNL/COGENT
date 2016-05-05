@@ -1484,7 +1484,9 @@ PhaseGeom::multJonValid( LevelData<FArrayBox>& a_dfn ) const
       getJ(*m_configuration_J, *m_velocity_J, J);
 
       for (DataIterator dit(a_dfn.dataIterator()); dit.ok(); ++dit) {
-         a_dfn[dit] *= J[dit];
+        for (int n=0; n<a_dfn.nComp(); ++n) {
+          a_dfn[dit].mult(J[dit],0,n,1);
+        }
       }
    }
    else {
@@ -1493,7 +1495,7 @@ PhaseGeom::multJonValid( LevelData<FArrayBox>& a_dfn ) const
       LevelData<FArrayBox> J(grids, 1, grown_vect);
       getJ(*m_configuration_J, *m_velocity_J, J);
 
-      LevelData<FArrayBox> grown_dfn(grids, 1, grown_vect);
+      LevelData<FArrayBox> grown_dfn(grids, a_dfn.nComp(), grown_vect);
 
       for (DataIterator dit(grown_dfn.dataIterator()); dit.ok(); ++dit) {
          grown_dfn[dit].copy(a_dfn[dit]);
