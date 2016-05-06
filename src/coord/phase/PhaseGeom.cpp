@@ -2814,7 +2814,8 @@ PhaseGeom::plotVParPoloidalData( const string                a_file_name,
         compNames[n] = label;
      }
 
-  WriteAMRHierarchyHDF5(a_file_name,
+  string full_file_name = a_file_name + "2d.hdf5";
+  WriteAMRHierarchyHDF5(full_file_name,
                         vectGrids,
                         vectData,
                         compNames,

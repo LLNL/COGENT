@@ -606,6 +606,105 @@ DeltaFKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
+MaxwellianKernel::MaxwellianKernel (const CFG::LevelData<CFG::FArrayBox>& density,
+                                    const CFG::LevelData<CFG::FArrayBox>& temperature,
+                                    const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
+   : m_density(density),
+     m_temperature(temperature),
+     m_v_parallel_shift(v_parallel_shift)
+
+{
+}
+
+
+void
+MaxwellianKernel::eval( LevelData<FArrayBox>& a_result,
+                        const KineticSpecies& a_kinetic_species ) const
+{
+   const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+
+
+   //Compute Maxwellian distribution with the 3 first moments
+   const LevelData<FArrayBox>& B_injected = phase_geom.getBFieldMagnitude();
+   double mass = a_kinetic_species.mass();
+   double pi = Constants::PI;
+   double factor = sqrt(pi * pow((2.0/mass),3));
+
+
+   LevelData<FArrayBox> n_inj;
+   phase_geom.injectConfigurationToPhase( m_density, n_inj );
+   LevelData<FArrayBox> T_inj;
+   phase_geom.injectConfigurationToPhase( m_temperature, T_inj );
+   LevelData<FArrayBox> vpar_inj;
+   phase_geom.injectConfigurationToPhase( m_v_parallel_shift, vpar_inj );
+
+   for (dit.begin(); dit.ok(); ++dit) {
+
+      const PhaseBlockCoordSys& block_coord_sys = phase_geom.getBlockCoordSys(grids[dit]);
+
+      FArrayBox& this_result = a_result[dit];
+      const FArrayBox& this_B = B_injected[dit];
+
+      const FArrayBox& this_n = n_inj[dit];
+      const FArrayBox& this_T = T_inj[dit]; 
+      const FArrayBox& this_vparshift = vpar_inj[dit]; 
+ 
+      const Box& Bbox = this_B.box();
+      int vpB = Bbox.smallEnd(VPARALLEL_DIR);
+      int muB = Bbox.smallEnd(MU_DIR);
+
+      // Get the physical velocity coordinates for this part of phase space
+      FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+      block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+      BoxIterator bit(velocityRealCoords.box());
+      for (bit.begin(); bit.ok(); ++bit) {
+         IntVect iv = bit();
+         IntVect ivB = iv;
+         ivB[VPARALLEL_DIR] = vpB;
+         ivB[MU_DIR] = muB;
+         double v_parallel = velocityRealCoords(iv,0);
+         double mu = velocityRealCoords(iv,1);
+         double eparnorm = 0.5 * mass * pow(v_parallel-this_vparshift(ivB,0),2) / this_T(ivB,0);
+         double munorm   = 0.5 * this_B(ivB) * mu / this_T(ivB,0);
+         double val      = exp( -( eparnorm + munorm ) );
+         val    = val * this_n(ivB,0) / ( factor * sqrt(this_T(ivB,0)) * this_T(ivB,0) );
+
+
+         // Multiply the distribution function by the velocity square.
+         for (int n_comp=0; n_comp<a_result.nComp(); ++n_comp) {
+            this_result(iv,n_comp) = val ;
+         }
+      }
+   }
+
+   //Convert a_result to cell-averages 
+   LevelData<FArrayBox> dfn_tmp(grids, dfn.nComp(), dfn.ghostVect()+IntVect::Unit);
+   for (dit.begin(); dit.ok(); ++dit) {
+      dfn_tmp[dit].copy( a_result[dit] );
+   }
+   dfn_tmp.exchange();
+
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& coord_sys = phase_geom.getBlockCoordSys(grids[dit]);
+      const ProblemDomain& domain = coord_sys.domain();
+
+      fourthOrderAverageCell(dfn_tmp[dit], domain, grids[dit]);
+   }
+   dfn_tmp.exchange();
+
+   for (dit.begin(); dit.ok(); ++dit) {
+      a_result[dit].copy(dfn_tmp[dit]);
+   }
+   
+   //Multiply BstarParallel factor
+   phase_geom.multBStarParallel( a_result );
+}
+
 
 void
 Kernel::computeVelCell(LevelData<FArrayBox>& a_velCell,

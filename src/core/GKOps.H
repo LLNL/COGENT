@@ -259,11 +259,9 @@ public:
       m_dt = a_dt;
    }
 
-   void preTimeStep( const int,const Real,const GKState& );
-
-   void postTimeStep( const int,const Real,const GKState& );
-
-   void postTimeStage( const int,const Real,const GKState&, const int );
+   void preTimeStep  (const int,const Real,const GKState&,const GKState&);
+   void postTimeStep (const int,const Real,const GKState&);
+   void postTimeStage(const int,const Real,const GKState&, const int);
 
    void setElectricField ( const Real a_time, const GKState& a_state );
 

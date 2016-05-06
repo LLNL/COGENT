@@ -1664,7 +1664,8 @@ void GKSystem::preTimeStep(int a_cur_step, Real a_cur_time)
       m_integrator->setCurrentTime( a_cur_time );
       m_integrator->setTimeStep( a_cur_step );
    }
-   m_gk_ops->preTimeStep( a_cur_step, a_cur_time, m_state_comp );
+   m_gk_ops->divideJ( m_state_comp, m_state_phys );
+   m_gk_ops->preTimeStep( a_cur_step, a_cur_time, m_state_comp, m_state_phys );
 }
 
 

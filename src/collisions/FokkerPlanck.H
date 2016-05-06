@@ -5,6 +5,7 @@
 #include "FArrayBox.H"
 #include "LevelData.H"
 #include "RefCountedPtr.H"
+#include "Kernels.H"
 #include "KineticSpecies.H"
 #include "KineticFunction.H"
 #include "REAL.H"
@@ -71,9 +72,21 @@ public:
 
   void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,int,const Mapping&);
 
-  inline void preTimeStep  ( const KineticSpeciesPtrVect& a_soln, const int a_species, const Real a_time)
-    { computePotentialsAndCoeffs( a_soln, a_species, a_time, true ); }
-  inline void postTimeStage( const KineticSpeciesPtrVect& a_soln, const int a_species, const Real a_time, const int a_stage)
+  inline void preTimeStep  ( const KineticSpeciesPtrVect& a_soln_mapped, 
+                             const int a_species, 
+                             const Real a_time,
+                             const KineticSpeciesPtrVect& a_soln_physical)
+    { 
+      computeReferenceSolution  ( a_soln_physical, a_species, a_time);
+      computePotentialsAndCoeffs( a_soln_mapped, a_species, a_time, true ); 
+      m_it_counter+=1;
+      m_first_step = false;
+    }
+
+  inline void postTimeStage( const KineticSpeciesPtrVect& a_soln, 
+                             const int a_species, 
+                             const Real a_time,
+                             const int a_stage)
     { 
       if (a_stage) {
         computePotentialsAndCoeffs( a_soln, a_species, a_time, false ); 
@@ -99,6 +112,7 @@ private:
    bool m_first_step;
    bool m_subtract_background;
 
+   LevelData<FArrayBox> m_F0;
    LevelData<FArrayBox> m_phi;
    LevelData<FArrayBox> m_phi_F0;
    LevelData<FArrayBox> m_D;
@@ -108,9 +122,11 @@ private:
 
    RefCountedPtr<KineticFunction> m_ref_func;
 
-   bool m_debug, m_rosenbluth_skip_stage;
+   bool m_debug, m_rosenbluth_skip_stage, m_compute_maxwellian;
 
    void computePotentialsAndCoeffs(const KineticSpeciesPtrVect&, const int, const Real, const bool);
+
+   void computeReferenceSolution(const KineticSpeciesPtrVect&, const int, const Real);
    
    /// Computes the Rosenbluth potentials
 

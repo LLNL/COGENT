@@ -55,8 +55,10 @@ class CLSInterface
                                           int a_i,
                                           const Mapping& a_mapping) { }
 
-      virtual void preTimeStep  (const KineticSpeciesPtrVect& soln,
-                                 const int, const Real ) { }
+      virtual void preTimeStep  (const KineticSpeciesPtrVect&,
+                                 const int, const Real,
+                                 const KineticSpeciesPtrVect&) { }
+
       virtual void postTimeStage(const KineticSpeciesPtrVect& soln,
                                  const int, const Real, const int ) { }
 };

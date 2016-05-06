@@ -261,19 +261,23 @@ Real GKOps::stableDtImEx( const GKState& a_state, const int a_step_number )
    return dt_stable;
 }
 
-void GKOps::preTimeStep(const int a_step, const Real a_time, const GKState& a_state)
+void GKOps::preTimeStep (const int a_step, 
+                         const Real a_time, 
+                         const GKState& a_state_comp, 
+                         const GKState& a_state_phys)
 {
-  setElectricField( a_time, a_state );
-  const KineticSpeciesPtrVect& soln( a_state.dataKinetic() );
+  setElectricField( a_time, a_state_comp );
+  const KineticSpeciesPtrVect& soln_comp( a_state_comp.dataKinetic() );
+  const KineticSpeciesPtrVect& soln_phys( a_state_phys.dataKinetic() );
 
-  m_dt_vlasov = m_vlasov->computeDt( m_E_field, soln );
-  m_time_scale_vlasov = m_vlasov->computeTimeScale (m_E_field, soln );
+  m_dt_vlasov = m_vlasov->computeDt( m_E_field, soln_comp );
+  m_time_scale_vlasov = m_vlasov->computeTimeScale (m_E_field, soln_comp );
 
-  m_dt_collisions = m_collisions->computeDt( soln );
-  m_time_scale_collisions = m_collisions->computeTimeScale( soln );
+  m_dt_collisions = m_collisions->computeDt( soln_comp );
+  m_time_scale_collisions = m_collisions->computeTimeScale( soln_comp );
 
-  const CFG::FluidSpeciesPtrVect& fluids_comp( a_state.dataFluid() );
-  const CFG::FieldPtrVect& fields_comp( a_state.dataField() );
+  const CFG::FluidSpeciesPtrVect& fluids_comp( a_state_comp.dataFluid() );
+  const CFG::FieldPtrVect& fields_comp( a_state_comp.dataField() );
 
   m_dt_fields = m_fieldOp->computeDt( fields_comp, fluids_comp );
   m_time_scale_fields = m_fieldOp->computeTimeScale( fields_comp, fluids_comp );
@@ -282,14 +286,14 @@ void GKOps::preTimeStep(const int a_step, const Real a_time, const GKState& a_st
   m_time_scale_fluids = m_fluidOp->computeTimeScale( fields_comp, fluids_comp );
 
   if (m_transport_model_on) {
-    m_dt_transport = m_transport->computeDt( soln );
-    m_time_scale_transport = m_transport->computeTimeScale( soln );
+    m_dt_transport = m_transport->computeDt( soln_comp );
+    m_time_scale_transport = m_transport->computeTimeScale( soln_comp );
   }
   if (m_neutrals_model_on) {
-    m_dt_neutrals = m_neutrals->computeDt( soln );
-    m_time_scale_neutrals = m_neutrals->computeTimeScale( soln );
+    m_dt_neutrals = m_neutrals->computeDt( soln_comp );
+    m_time_scale_neutrals = m_neutrals->computeTimeScale( soln_comp );
   }
-  m_collisions->preTimeStep( soln, a_time );
+  m_collisions->preTimeStep( soln_comp, a_time, soln_phys );
 }
 
 void GKOps::postTimeStep (const int a_step, const Real a_time, const GKState& a_state)

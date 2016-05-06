@@ -86,7 +86,7 @@ class GKCollisions
 
       bool isLinear();
 
-      void preTimeStep    (const KineticSpeciesPtrVect&, const Real);
+      void preTimeStep    (const KineticSpeciesPtrVect&, const Real, const KineticSpeciesPtrVect&);
       void postTimeStage  (const KineticSpeciesPtrVect&, const Real, const int);
 
    private:
