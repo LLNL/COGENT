@@ -204,10 +204,10 @@ public:
    GKOps() :
       m_vlasov(NULL),
       m_collisions(NULL),
-      m_fieldOp(NULL),
-      m_fluidOp(NULL),
       m_neutrals(NULL),
       m_transport(NULL),
+      m_fieldOp(NULL),
+      m_fluidOp(NULL),
       m_poisson(NULL),
       m_boltzmann_electron(NULL),
       m_units(NULL),

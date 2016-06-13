@@ -15,8 +15,8 @@ Vorticity::Vorticity( ParmParse& a_pp, const int a_verbosity )
    : m_verbosity(a_verbosity),
      m_first_step(true),
      m_num_ghosts(4),
-     m_Te(1.0),
-     m_conductivity(-1.0)
+     m_conductivity(-1.0),
+     m_Te(1.0)
 {
    parseParameters( a_pp );
    if (m_verbosity>0) {
@@ -101,7 +101,6 @@ Vorticity::computePerpCurrentDensity( LevelData<FluxBox>&               a_perp_c
       
       const PS::KineticSpecies& this_species( *(a_species[species]) );
       const PS::PhaseGeom& phase_geom = this_species.phaseSpaceGeometry();
-      const PS::LevelData<PS::FArrayBox>& this_dfn( this_species.distributionFunction() );
    
       // Compute the perpendicular current density for this species
       PS::LevelData<PS::FluxBox> field_inj;
@@ -118,7 +117,6 @@ Vorticity::computePerpCurrentDensity( LevelData<FluxBox>&               a_perp_c
    const PS::KineticSpecies& species( *(a_species[0]) );
    const PS::PhaseGeom& phase_geom = species.phaseSpaceGeometry();
    const MagGeom& mag_geom = phase_geom.magGeom();
-   const DisjointBoxLayout& grids( a_field.getBoxes() );
    
    extrapolateAtDomainBnd(mag_geom, perp_current_density_cell);
    
