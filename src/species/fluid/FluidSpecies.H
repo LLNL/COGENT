@@ -11,7 +11,6 @@
 #include "LevelData.H"
 #include "FArrayBox.H"
 #include "MagGeom.H"
-#include "Variable.H"
 
 #include "NamespaceHeader.H"
 
@@ -20,7 +19,7 @@
  * Concrete reification of abstract SpeciesModel interface for kinetic
  * species.
  */
-class FluidSpecies : public Variable
+class FluidSpecies 
 {
    public:
 
@@ -130,7 +129,7 @@ class FluidSpecies : public Variable
        *                                ghost cells in comparison.
        */
       virtual
-      RefCountedPtr<FluidSpecies> clone( const IntVect ghostVect = IntVect::Zero,
+      RefCountedPtr<FluidSpecies> clone( const IntVect ghost_vect = IntVect::Zero,
                                          const bool include_ghost_cells = true ) const;
 
       /// Copy
@@ -145,24 +144,26 @@ class FluidSpecies : public Variable
        */
       const FluidSpecies& operator=( const FluidSpecies& rhs );
 
-      /// Provides the full fluid state.
-      /**
-       */
-      LevelData<FArrayBox>& fluidState() { return m_state; }
-
-      /// Provides a const reference to the full fluid state.
-      /**
-       */
-      const LevelData<FArrayBox>& fluidState() const { return m_state; }
-
       /// Provides a const reference to the configuration space geometry object.
       /**
        */
-      const MagGeom& congifurationSpaceGeometry() const { return m_geometry; }
+      const MagGeom& configurationSpaceGeometry() const { return m_geometry; }
 
       virtual LevelData<FArrayBox>& data() {return m_state;}
 
       const virtual LevelData<FArrayBox>& data() const {return m_state;}
+
+   inline
+   virtual int size( bool a_count_ghosts = false )
+   {
+      int size(0);
+      const DisjointBoxLayout& dbl( m_state.disjointBoxLayout() );
+      for (DataIterator dit( dbl.dataIterator() ); dit.ok(); ++dit) {
+         const Box& box( a_count_ghosts ? m_state[dit].box() : dbl[dit] );
+         size += box.numPts() * m_state.nComp();
+      }
+      return size;
+   }
 
    private:
 
@@ -170,13 +171,16 @@ class FluidSpecies : public Variable
 
       enum {ISOTHERMAL, EULER};
 
-      const MagGeom& m_geometry;
       string m_name;
       string m_model;
       Real m_mass;
       Real m_charge;
+      const MagGeom& m_geometry;
       LevelData<FArrayBox> m_state;
 };
+
+typedef RefCountedPtr<FluidSpecies> FluidSpeciesPtr;
+typedef Vector<FluidSpeciesPtr> FluidSpeciesPtrVect;
 
 #include "NamespaceFooter.H"
 

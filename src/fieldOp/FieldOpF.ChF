@@ -1,0 +1,27 @@
+#include "CONSTANTS.H"
+
+
+      subroutine celltoface2ndorder(
+     &     CHF_FRA[faceData],
+     &     CHF_CONST_FRA[cellData],
+     &     CHF_BOX[faceBox],
+     &     CHF_INT[faceDir])
+
+      integer CHF_AUTODECL[i]
+      integer CHF_AUTODECL[ii]
+      integer comp
+      REAL_T factor
+
+      factor = one/two
+
+      CHF_AUTOID[ii;faceDir]
+      do comp = 0, CHF_NCOMP[faceData]-1
+         CHF_AUTOMULTIDO[faceBox; i]
+           faceData(CHF_AUTOIX[i],comp) 
+     &        = factor * cellData(CHF_OFFSETIX[i; -ii],comp)
+     &        + factor * cellData(CHF_AUTOIX[i],comp)
+         CHF_ENDDO
+      enddo
+
+      return
+      end

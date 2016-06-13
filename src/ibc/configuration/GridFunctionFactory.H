@@ -1,5 +1,5 @@
 #ifndef _Grid_Function_FACTORY_
-#define _Grid_gFunction_FACTORY_
+#define _Grid_Function_FACTORY_
 
 #include "ParmParse.H"
 #include "MultiBlockLevelGeom.H"

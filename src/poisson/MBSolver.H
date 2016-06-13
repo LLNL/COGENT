@@ -13,6 +13,8 @@
 
 class MBSolver
 {
+   friend class MBSolverUtil;
+
 public:
 
    /// Constructor with initialization.
@@ -27,11 +29,6 @@ public:
    /**
     */
    ~MBSolver();
-
-   virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
-                                        LevelData<FluxBox>&   tensor_coefficient,
-                                        LevelData<FArrayBox>& beta_coefficient,
-                                        const PotentialBC&    bc ) = 0;
 
    virtual void multiplyMatrix( const LevelData<FArrayBox>&  in,
                                 LevelData<FArrayBox>&        out ) const = 0;
@@ -62,6 +59,11 @@ public:
 
 protected:
 
+   virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
+                                        LevelData<FluxBox>&   tensor_coefficient,
+                                        LevelData<FArrayBox>& beta_coefficient,
+                                        const PotentialBC&    bc ) = 0;
+
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
    IntVectSet getInterBlockCoupledCells( const int   block_number,
@@ -86,7 +88,6 @@ protected:
                                   const FluxBox&   mapped_coefs,
                                   const RealVect&  dx,
                                   const bool       fourthOrder,
-                                  const bool       dropOrder,
                                   FArrayBox&       stencil_values) const;
 
    void modifyStencilForBCs( const Vector<CoDim1Stencil>&  codim1_stencil,
@@ -115,7 +116,6 @@ protected:
                                       const Vector< Vector<CoDim2Stencil> >&             codim2_stencils,
                                       FArrayBox&                                         stencil_values,
                                       const bool                                         fourthOrder,
-                                      const bool                                         dropOrder,
                                       const bool                                         extrapolate_from_interior,
                                       const bool                                         include_bvs,
                                       LevelData<FluxBox>&                                flux_normal ) const;
@@ -128,7 +128,6 @@ protected:
                              const Vector< Vector<CoDim2Stencil> >&             codim2_stencils,
                              FArrayBox&                                         stencil_values,
                              const bool                                         fourthOrder,
-                             const bool                                         dropOrder,
                              const LevelData<FArrayBox>&                        rhs_from_bc ) const;
 
    void plot( const string&               file_name,  
@@ -145,7 +144,6 @@ protected:
    LevelData<FArrayBox> m_rhs_from_bc;
 
    int m_discretization_order;
-   bool m_dropOrder;
 };
 
 

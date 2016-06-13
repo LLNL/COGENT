@@ -1,181 +1,326 @@
       subroutine accum_flux_stencil4(
-     &     CHF_CONST_INT[s],
-     &     CHF_CONST_INT[sprime],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[deriv_dir],
      &     CHF_CONST_INT[side],
      &     CHF_CONST_REALVECT[h],
-     &     CHF_CONST_FRA1[Dtilde_av],
+     &     CHF_CONST_FRA1[coef],
      &     CHF_CONST_INTVECT[global],
-     &     CHF_CONST_INT[drop_order],
      &     CHF_FRA1[sum]
      &     )
+      integer CHF_AUTODECL[i], CHF_AUTODECL[ii], CHF_AUTODECL[it], CHF_AUTODECL[ic], CHF_AUTODECL[lo],
+     &     CHF_AUTODECL[hi], CHF_AUTODECL[nlo], CHF_AUTODECL[nhi], CHF_AUTODECL[tii],
+     &     tdir, m, n, n_start, n_stop, t_start, t_stop
+#if CH_SPACEDIM==3
+     &     , tdir_other, t_start_other, t_stop_other
+#endif
+      REAL_T hfac, n_stencil(0:3), t_stencil_1(0:CH_SPACEDIM-1,0:4), t_stencil_2(0:CH_SPACEDIM-1,0:4),
+     &     d, trans_grad_d, t_stencil_1_prod, t_stencil_2_prod
 
-      integer
-     &     CHF_DDECL[i;j], CHF_DDECL[ii;jj], CHF_DDECL[it;jt], CHF_DDECL[ic;jc],
-     &     CHF_DDECL[lo0;lo1], CHF_DDECL[hi0;hi1], CHF_DDECL[iglobal;jglobal],
-     &     dir, tdir, m, m_max, n, noffset, nlength, toffset
-      REAL_T hfac, n_stencil(0:3), gamma4(0:4), gamma2(0:4),
-     &     gamma4_lo(0:4), gamma4_hi(0:4), gamma2_lo(0:4), gamma2_hi(0:4),
-     &     d, trans_grad_d, flux(0:4), trans_grad_flux(0:4)
-
-      dir = s
-      iglobal = global(0)
-      jglobal = global(1)
-
+c     Stencil center index
       CHF_DTERM[
-      ii = CHF_ID(0,dir);
-      jj = CHF_ID(1,dir)]
+      ic0 = (CHF_LBOUND[sum;0]+CHF_UBOUND[sum;0])/2;
+      ic1 = (CHF_LBOUND[sum;1]+CHF_UBOUND[sum;1])/2;
+      ic2 = (CHF_LBOUND[sum;2]+CHF_UBOUND[sum;2])/2]
 
-      CHF_DTERM[
-      it = 1 - ii;
-      jt = 1 - jj]
-
-      if (drop_order .eq. 0) then
-         ic = 3
-         jc = 3
-      else
-         ic = 2
-         jc = 2
-      endif
-
-      tdir = 1 - dir
-
-c     Get normal direction stencil factors
-
-      noffset = side - 2
-      nlength = 4
-
-      if (s .eq. sprime) then
-
-c        fourth-order accurate first derivative (Eq. (30))
-         n_stencil(0) =   1.d0 / 24.d0
-         n_stencil(1) = -27.d0 / 24.d0
-         n_stencil(2) =  27.d0 / 24.d0
-         n_stencil(3) =  -1.d0 / 24.d0
-
-      else
-
-c        fourth-order accurate interpolation (Eq. (35))
-         n_stencil(0) = -1.d0 / 16.d0
-         n_stencil(1) =  9.d0 / 16.d0
-         n_stencil(2) =  9.d0 / 16.d0
-         n_stencil(3) = -1.d0 / 16.d0
-
-      endif
-
-c     Get transverse direction stencil factors
-
-      m_max = 4
-      toffset = -2
-
-      if (s .eq. sprime) then
-
-c        exact function evaluations
-         gamma4_lo(0) = 0.d0
-         gamma4_lo(1) = 1.d0
-         gamma4_lo(2) = 0.d0
-         gamma4_lo(3) = 0.d0
-         gamma4_lo(4) = 0.d0
-
-         gamma4(0) = 0.d0
-         gamma4(1) = 0.d0
-         gamma4(2) = 1.d0
-         gamma4(3) = 0.d0
-         gamma4(4) = 0.d0
-
-         gamma4_hi(0) = 0.d0
-         gamma4_hi(1) = 0.d0
-         gamma4_hi(2) = 0.d0
-         gamma4_hi(3) = 1.d0
-         gamma4_hi(4) = 0.d0
-
-c        second-order accurate second derivative
-
-         gamma2(0) =  0.d0
-         gamma2(1) =  1.d0
-         gamma2(2) = -2.d0
-         gamma2(3) =  1.d0
-         gamma2(4) =  0.d0
-
-      else
-
-c        fourth-order accurate first derivative
-
-c        Eq. (32) with the minus
-         gamma4_lo(0) =  -3.d0 / 12.d0
-         gamma4_lo(1) = -10.d0 / 12.d0
-         gamma4_lo(2) =  18.d0 / 12.d0
-         gamma4_lo(3) =  -6.d0 / 12.d0
-         gamma4_lo(4) =   1.d0 / 12.d0
-
-c        Eq. (27)
-         gamma4(0)     =  1.d0 / 12.d0
-         gamma4(1)     = -8.d0 / 12.d0
-         gamma4(2)     =  0.d0
-         gamma4(3)     =  8.d0 / 12.d0
-         gamma4(4)     = -1.d0 / 12.d0
-
-c        Eq. (32) with the plus
-         gamma4_hi(0) =  -1.d0 / 12.d0
-         gamma4_hi(1) =   6.d0 / 12.d0
-         gamma4_hi(2) = -18.d0 / 12.d0
-         gamma4_hi(3) =  10.d0 / 12.d0
-         gamma4_hi(4) =   3.d0 / 12.d0
-
-c        second-order accurate third derivative (Eq. (28))
-
-         gamma2(0)      = -1.d0 / 2.d0
-         gamma2(1)      =  2.d0 / 2.d0
-         gamma2(2)      =  0.d0
-         gamma2(3)      = -2.d0 / 2.d0
-         gamma2(4)      =  1.d0 / 2.d0
-
-      endif
-
-      do m = 0, m_max
-         flux(m) = gamma4(m) + gamma2(m) / 24.d0
-         trans_grad_flux(m) = 0.5d0 * (gamma4_hi(m) - gamma4_lo(m))
+c     Negative of the signed (low = -; high = +) face area divided by the cell size
+c     in the derivative direction
+      hfac = dble(1 - 2*side) / h(deriv_dir)
+      do tdir = 0, CH_SPACEDIM-1
+         if (tdir .ne. dir) then
+            hfac = hfac * h(tdir)
+         endif
       enddo
 
-      trans_grad_d = 0.5d0 * (
-     &     Dtilde_av(iglobal+ii*side+it,jglobal+jj*side+jt)
-     &     -  Dtilde_av(iglobal+ii*side-it,jglobal+jj*side-jt)
-     &     )
-      
-c     Accumulate the stencil contributions
+      CHF_AUTOID[ii;dir]
 
-      if (dir .eq. 0) then
-         lo0 = ic + noffset
-         hi0 = lo0 + nlength - 1
-         lo1 = jc + toffset - 1
-         hi1 = lo1
+c     Face-averaged coefficient
+      d = coef(CHF_DTERM[global(0)+side*ii0;,global(1)+side*ii1;,global(2)+side*ii2])
+
+      if (dir .eq. deriv_dir) then
+
+c        Normal derivative case: fourth-order accurate first derivative (Eq. (30))
+         n_stencil(0) =    one / 24.d0
+         n_stencil(1) = -27.d0 / 24.d0
+         n_stencil(2) =  27.d0 / 24.d0
+         n_stencil(3) =   -one / 24.d0
+
       else
-         lo0 = ic + toffset - 1
-         hi0 = lo0
-         lo1 = jc + noffset
-         hi1 = lo1 + nlength - 1
+
+c        Transverse derivative case: fourth-order accurate interpolation (Eq. (35))
+         n_stencil(0) = -one / 16.d0
+         n_stencil(1) = nine / 16.d0
+         n_stencil(2) = nine / 16.d0
+         n_stencil(3) = -one / 16.d0
+
       endif
 
-      hfac = dble(1 - 2*side)
-      if (s .eq. sprime) then
-         hfac = hfac * h(tdir) / h(dir)
-      endif
+      n_start = side - 2
+      n_stop = n_start + 3
 
-      d = Dtilde_av(iglobal+side*ii,jglobal+side*jj)
+      CHF_DTERM[
+      nlo0 = ic0 + ii0*n_start
+      nhi0 = ic0 + ii0*n_stop;
+      nlo1 = ic1 + ii1*n_start
+      nhi1 = ic1 + ii1*n_stop;
+      nlo2 = ic2 + ii2*n_start
+      nhi2 = ic2 + ii2*n_stop]
 
-      do m = 0, m_max
-         lo1 = lo1 + ii
-         hi1 = hi1 + ii
-         lo0 = lo0 + jj
-         hi0 = hi0 + jj
-
-         n = -1
-         do j = lo1, hi1
-            do i = lo0, hi0
-               n = n + 1
-               sum(CHF_IX[i;j]) = sum(CHF_IX[i;j]) + hfac * n_stencil(n) *
-     &                           (d * flux(m) + trans_grad_d * trans_grad_flux(m) / 12.d0)
-            enddo
+      do m = 0, 4
+         do n = 0, CH_SPACEDIM-1
+            t_stencil_1(n,m) = zero
+            t_stencil_2(n,m) = zero
          enddo
+      enddo
+
+      if (dir .eq. deriv_dir) then
+
+c        Normal derivative case
+
+         CHF_DTERM[
+         lo0 = nlo0
+         hi0 = nhi0;
+         lo1 = nlo1
+         hi1 = nhi1;
+         lo2 = nlo2
+         hi2 = nhi2]
+
+         CHF_DINVTERM[
+         do i0 = lo0, hi0;
+            do i1 = lo1, hi1;
+               do i2 = lo2, hi2]
+                  n = CHF_DTERM[ii0*(i0-lo0); + ii1*(i1-lo1); + ii2*(i2-lo2)]
+
+                  sum(CHF_IX[i0;i1;i2]) = sum(CHF_IX[i0;i1;i2]) + hfac * d * n_stencil(n)
+                  CHF_DINVTERM[
+               enddo;
+            enddo;
+         enddo]
+
+         t_start = -1
+         t_stop = 1
+
+         do tdir = 0, CH_SPACEDIM-1
+            if (tdir .ne. dir) then
+
+               do n = 0, CH_SPACEDIM-1
+                  t_stencil_2(n,0) =  zero
+               enddo
+
+               t_stencil_2(tdir,0) =  one
+               t_stencil_2(tdir,1) = -two
+               t_stencil_2(tdir,2) =  one
+
+               CHF_AUTOID[tii;tdir]
+
+               CHF_DTERM[
+               lo0 = nlo0 + tii0*t_start
+               hi0 = nhi0 + tii0*t_stop;
+               lo1 = nlo1 + tii1*t_start
+               hi1 = nhi1 + tii1*t_stop;
+               lo2 = nlo2 + tii2*t_start
+               hi2 = nhi2 + tii2*t_stop]
+
+               CHF_DINVTERM[
+               do i0 = lo0, hi0;
+                  do i1 = lo1, hi1;
+                     do i2 = lo2, hi2]
+                        n = CHF_DTERM[ii0*(i0-lo0); + ii1*(i1-lo1); + ii2*(i2-lo2)]
+                        t_stencil_2_prod = CHF_DTERM[0; + ii0*t_stencil_2(1,i1-lo1) + ii1*t_stencil_2(0,i0-lo0);
+     &                       + (ii0+ii1)*t_stencil_2(2,i2-lo2) + ii2 * (t_stencil_2(0,i0-lo0) + t_stencil_2(1,i1-lo1))]
+
+                        sum(CHF_IX[i0;i1;i2]) = sum(CHF_IX[i0;i1;i2])
+     &                       + hfac * d * n_stencil(n) * t_stencil_2_prod / 24.d0
+                        CHF_DINVTERM[
+                     enddo;
+                  enddo;
+               enddo]
+
+            endif
+         enddo
+         
+      else
+
+c        Transverse derivative case
+
+         do n = 0, CH_SPACEDIM-1
+            t_stencil_1(n,0) = zero
+            t_stencil_2(n,0) = zero
+         enddo
+
+c        Eq. (27), gamma4, fourth-order first derivative
+         t_stencil_1(deriv_dir,0) =    one / twelve
+         t_stencil_1(deriv_dir,1) = -eight / twelve
+         t_stencil_1(deriv_dir,2) =   zero
+         t_stencil_1(deriv_dir,3) =  eight / twelve
+         t_stencil_1(deriv_dir,4) =   -one / twelve
+
+c        second-order third derivative (Eq. (28))
+         t_stencil_2(deriv_dir,0) = -half
+         t_stencil_2(deriv_dir,1) =   one
+         t_stencil_2(deriv_dir,2) =  zero
+         t_stencil_2(deriv_dir,3) =  -one
+         t_stencil_2(deriv_dir,4) =  half
+
+         t_start = -2
+         t_stop = 2
+
+         CHF_AUTOID[tii;deriv_dir]
+
+         CHF_DTERM[
+         lo0 = nlo0 + tii0*t_start
+         hi0 = nhi0 + tii0*t_stop;
+         lo1 = nlo1 + tii1*t_start
+         hi1 = nhi1 + tii1*t_stop;
+         lo2 = nlo2 + tii2*t_start
+         hi2 = nhi2 + tii2*t_stop]
+
+         CHF_DINVTERM[
+         do i0 = lo0, hi0;
+            do i1 = lo1, hi1;
+               do i2 = lo2, hi2]
+                  n = CHF_DTERM[ii0*(i0-lo0); + ii1*(i1-lo1); + ii2*(i2-lo2)]
+                  t_stencil_1_prod = CHF_DTERM[0; + ii0*t_stencil_1(1,i1-lo1) + ii1*t_stencil_1(0,i0-lo0);
+     &                 + (ii0+ii1)*t_stencil_1(2,i2-lo2) + ii2 * (t_stencil_1(0,i0-lo0) + t_stencil_1(1,i1-lo1))]
+                  t_stencil_2_prod = CHF_DTERM[0; + ii0*t_stencil_2(1,i1-lo1) + ii1*t_stencil_2(0,i0-lo0);
+     &                 + (ii0+ii1)*t_stencil_2(2,i2-lo2) + ii2 * (t_stencil_2(0,i0-lo0) + t_stencil_2(1,i1-lo1))]
+
+                  sum(CHF_IX[i0;i1;i2]) = sum(CHF_IX[i0;i1;i2])
+     &                 + hfac * d * n_stencil(n) * (t_stencil_1_prod + t_stencil_2_prod / 24.d0)
+                  CHF_DINVTERM[
+               enddo;
+            enddo;
+         enddo]
+
+#if CH_SPACEDIM==3
+
+         do n = 0, CH_SPACEDIM-1
+            t_stencil_2(n,0) = one
+         enddo
+
+c        Find the other transverse direction
+         do n = 0, CH_SPACEDIM-1
+            if (n .ne. dir .and. n .ne. deriv_dir) then
+               tdir_other = n
+            endif
+         enddo
+
+c        Eq. (27), gamma4, fourth-order first derivative
+         t_stencil_2(deriv_dir,0) =    one / twelve
+         t_stencil_2(deriv_dir,1) = -eight / twelve
+         t_stencil_2(deriv_dir,2) =   zero
+         t_stencil_2(deriv_dir,3) =  eight / twelve
+         t_stencil_2(deriv_dir,4) =   -one / twelve
+
+c        second-order, second derivative
+         t_stencil_2(tdir_other,0) =  one
+         t_stencil_2(tdir_other,1) = -two
+         t_stencil_2(tdir_other,2) =  one
+
+         t_start_other = -1
+         t_stop_other = 1
+
+         CHF_AUTOID[tii;tdir_other]
+
+         CHF_DTERM[
+         lo0 = lo0 + tii0*t_start_other
+         hi0 = hi0 + tii0*t_stop_other;
+         lo1 = lo1 + tii1*t_start_other
+         hi1 = hi1 + tii1*t_stop_other;
+         lo2 = lo2 + tii2*t_start_other
+         hi2 = hi2 + tii2*t_stop_other]
+
+         CHF_DINVTERM[
+         do i0 = lo0, hi0;
+            do i1 = lo1, hi1;
+               do i2 = lo2, hi2]
+                  n = CHF_DTERM[ii0*(i0-lo0); + ii1*(i1-lo1); + ii2*(i2-lo2)]
+                  t_stencil_2_prod = ii0*t_stencil_2(1,i1-lo1)*t_stencil_2(2,i2-lo2)
+     &                             + ii1*t_stencil_2(0,i0-lo0)*t_stencil_2(2,i2-lo2)
+     &                             + ii2*t_stencil_2(0,i0-lo0)*t_stencil_2(1,i1-lo1)
+
+                  sum(CHF_IX[i0;i1;i2]) = sum(CHF_IX[i0;i1;i2])
+     &                 + hfac * d * n_stencil(n) * t_stencil_2_prod / 24.d0
+                  CHF_DINVTERM[
+               enddo;
+            enddo;
+         enddo]
+#endif
+
+      endif
+
+c     Add the dot product of the transverse gradients
+
+      if (dir .eq. deriv_dir) then
+c        Normal derivative case: second-order first derivative
+         n_stencil(0) = -one
+         n_stencil(1) =  one
+      else
+c        Transverse derivative case: second-order average
+         n_stencil(0) = half
+         n_stencil(1) = half
+      endif
+
+      n_start = side - 1
+      n_stop = n_start + 1
+
+      CHF_DTERM[
+      nlo0 = ic0 + ii0*n_start
+      nhi0 = ic0 + ii0*n_stop;
+      nlo1 = ic1 + ii1*n_start
+      nhi1 = ic1 + ii1*n_stop;
+      nlo2 = ic2 + ii2*n_start
+      nhi2 = ic2 + ii2*n_stop]
+
+      t_start = -1
+      t_stop = 1
+
+c     Accumulate the dot product of the transverse gradients
+
+      do tdir = 0, CH_SPACEDIM-1
+         if (tdir .ne. dir) then
+
+            do n = 0, CH_SPACEDIM-1
+               t_stencil_2(n,0) = zero
+            enddo
+
+c           Second-order second derivative
+            t_stencil_2(tdir,0) = -half
+            t_stencil_2(tdir,1) =  zero
+            t_stencil_2(tdir,2) =  half
+            
+            CHF_AUTOID[tii;tdir]
+
+            CHF_DTERM[
+            lo0 = nlo0 + tii0*t_start
+            hi0 = nhi0 + tii0*t_stop;
+            lo1 = nlo1 + tii1*t_start
+            hi1 = nhi1 + tii1*t_stop;
+            lo2 = nlo2 + tii2*t_start
+            hi2 = nhi2 + tii2*t_stop]
+
+            CHF_AUTOID[it;tdir]
+
+            trans_grad_d = half * (
+     &           coef(CHF_DTERM[global(0)+ii0*side+it0;,global(1)+ii1*side+it1;,global(2)+ii2*side+it2])
+     &        -  coef(CHF_DTERM[global(0)+ii0*side-it0;,global(1)+ii1*side-it1;,global(2)+ii2*side-it2])
+     &                            )
+
+            CHF_DINVTERM[
+            do i0 = lo0, hi0;
+               do i1 = lo1, hi1;
+                  do i2 = lo2, hi2]
+                     n = CHF_DTERM[ii0*(i0-lo0); + ii1*(i1-lo1); + ii2*(i2-lo2)]
+                     t_stencil_2_prod = CHF_DTERM[0; + ii0*t_stencil_2(1,i1-lo1) + ii1*t_stencil_2(0,i0-lo0);
+     &                    + (ii0+ii1)*t_stencil_2(2,i2-lo2) + ii2 * (t_stencil_2(0,i0-lo0) + t_stencil_2(1,i1-lo1))]
+
+                     sum(CHF_IX[i0;i1;i2]) = sum(CHF_IX[i0;i1;i2])
+     &                    + hfac * trans_grad_d * n_stencil(n) * t_stencil_2_prod / twelve
+                     CHF_DINVTERM[
+                  enddo;
+               enddo;
+            enddo]
+
+         endif
       enddo
 
       return
@@ -183,98 +328,129 @@ c     Accumulate the stencil contributions
 
 
       subroutine accum_flux_stencil2(
-     &     CHF_CONST_INT[s],
-     &     CHF_CONST_INT[sprime],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[deriv_dir],
      &     CHF_CONST_INT[side],
      &     CHF_CONST_REALVECT[h],
-     &     CHF_CONST_FRA1[Dtilde_av],
+     &     CHF_CONST_FRA1[coef],
      &     CHF_CONST_INTVECT[global],
      &     CHF_FRA1[sum]
      &     )
-      integer
-     &     CHF_DDECL[i;j], CHF_DDECL[ii;jj], CHF_DDECL[ic;jc],
-     &     CHF_DDECL[lo0;lo1], CHF_DDECL[hi0;hi1],  CHF_DDECL[iglobal;jglobal],
-     &     dir, tdir, m, m_max, n, noffset, toffset, nlength
-      REAL_T hfac, n_stencil(0:1), t_stencil(0:2), norm_fac
+      integer CHF_AUTODECL[i], CHF_AUTODECL[ii], CHF_AUTODECL[ic], CHF_AUTODECL[tii],
+     &   CHF_AUTODECL[lo], CHF_AUTODECL[hi], CHF_AUTODECL[nlo], CHF_AUTODECL[nhi],
+     &   tdir, m, n, n_start, n_stop, t_start, t_stop
+      REAL_T hfac, d, n_stencil(0:1), t_stencil(0:CH_SPACEDIM-1,0:2), t_stencil_prod
 
-      dir = s
-      iglobal = global(0)
-      jglobal = global(1)
-
+c     Stencil center index
       CHF_DTERM[
-      ic = 1;
-      jc = 1]
+      ic0 = (CHF_LBOUND[sum;0]+CHF_UBOUND[sum;0])/2;
+      ic1 = (CHF_LBOUND[sum;1]+CHF_UBOUND[sum;1])/2;
+      ic2 = (CHF_LBOUND[sum;2]+CHF_UBOUND[sum;2])/2]
 
-      CHF_DTERM[
-      ii = CHF_ID(0,dir);
-      jj = CHF_ID(1,dir)]
-      tdir = 1 - dir
-
-      hfac = (1 - 2*side) * Dtilde_av(iglobal+side*ii,jglobal+side*jj)
-
-      if (s. eq. sprime) then
-         hfac = hfac * h(tdir) / h(dir)
-      endif
-
-      if (s. eq. sprime) then
-
-         noffset = side - 1
-         nlength = 2
-         m_max   = 0
-         toffset = 0
-
-         n_stencil(0) = -1.d0
-         n_stencil(1) =  1.d0
-         t_stencil(0) =  1.d0
-
-      else
-
-         n_stencil(0) = 0.5d0
-         n_stencil(1) = 0.5d0
-         
-         noffset = side - 1
-         nlength = 2
-
-         m_max   = 2
-         toffset = -1
-
-         t_stencil(0) = -1.d0 / 2.d0
-         t_stencil(1) =  0.d0
-         t_stencil(2) =  1.d0 / 2.d0
-         
-      endif
-
-c     Accumulate the stencil contributions
-
-      if (dir .eq. 0) then
-         lo0 = ic + noffset
-         hi0 = lo0 + nlength - 1
-         lo1 = jc + toffset - 1
-         hi1 = lo1
-      else
-         lo0 = ic + toffset - 1
-         hi0 = lo0
-         lo1 = jc + noffset
-         hi1 = lo1 + nlength - 1
-      endif
-
-      do m = 0, m_max
-         if (dir .eq. 0) then
-            lo1 = lo1 + 1
-            hi1 = hi1 + 1
-         else
-            lo0 = lo0 + 1
-            hi0 = hi0 + 1
+c     Negative of the signed (low = -; high = +) face area divided by the cell size
+c     in the derivative direction
+      hfac = (1 - 2*side)/ h(deriv_dir)
+      do tdir = 0, CH_SPACEDIM-1
+         if (tdir .ne. dir) then
+            hfac = hfac * h(tdir)
          endif
+      enddo
 
-         n = -1
-         do j = lo1, hi1
-            do i = lo0, hi0
-               n = n + 1
-               sum(CHF_IX[i;j]) = sum(CHF_IX[i;j]) + hfac * n_stencil(n) * t_stencil(m)
-            enddo
+      CHF_AUTOID[ii;dir]
+
+c     Face-averaged coefficient
+      d = coef(CHF_DTERM[global(0)+side*ii0;,global(1)+side*ii1;,global(2)+side*ii2])
+
+      if (dir .eq. deriv_dir) then
+         n_stencil(0) = -one
+         n_stencil(1) =  one
+      else
+         n_stencil(0) = half
+         n_stencil(1) = half
+      endif
+
+      n_start = side - 1
+      n_stop = n_start + 1
+
+      CHF_DTERM[
+      nlo0 = ic0 + ii0*n_start
+      nhi0 = ic0 + ii0*n_stop;
+      nlo1 = ic1 + ii1*n_start
+      nhi1 = ic1 + ii1*n_stop;
+      nlo2 = ic2 + ii2*n_start
+      nhi2 = ic2 + ii2*n_stop]
+
+      do m = 0, 2
+         do n = 0, CH_SPACEDIM-1
+            t_stencil(n,m) = zero
          enddo
       enddo
+
+      if (dir .eq. deriv_dir) then
+
+c        Normal derivative case
+
+         CHF_DTERM[
+         lo0 = nlo0
+         hi0 = nhi0;
+         lo1 = nlo1
+         hi1 = nhi1;
+         lo2 = nlo2
+         hi2 = nhi2]
+
+         CHF_DINVTERM[
+         do i0 = lo0, hi0;
+            do i1 = lo1, hi1;
+               do i2 = lo2, hi2]
+                  n = CHF_DTERM[ii0*(i0-lo0); + ii1*(i1-lo1); + ii2*(i2-lo2)]
+
+                  sum(CHF_IX[i0;i1;i2]) = sum(CHF_IX[i0;i1;i2]) + hfac * d * n_stencil(n)
+                  CHF_DINVTERM[
+               enddo;
+            enddo;
+         enddo]
+
+      else
+
+c        Transverse derivative case
+
+         do n = 0, CH_SPACEDIM-1
+            t_stencil(n,0) = zero
+         enddo
+
+c        Second-order first derivative
+         t_stencil(deriv_dir,0) = -half
+         t_stencil(deriv_dir,1) =  zero
+         t_stencil(deriv_dir,2) =  half
+
+         t_start = -1
+         t_stop = 1
+
+         CHF_AUTOID[tii;deriv_dir]
+
+         CHF_DTERM[
+         lo0 = nlo0 + tii0*t_start
+         hi0 = nhi0 + tii0*t_stop;
+         lo1 = nlo1 + tii1*t_start
+         hi1 = nhi1 + tii1*t_stop;
+         lo2 = nlo2 + tii2*t_start
+         hi2 = nhi2 + tii2*t_stop]
+
+         CHF_DINVTERM[
+         do i0 = lo0, hi0;
+            do i1 = lo1, hi1;
+               do i2 = lo2, hi2]
+                  n = CHF_DTERM[ii0*(i0-lo0); + ii1*(i1-lo1); + ii2*(i2-lo2)]
+                  t_stencil_prod = CHF_DTERM[0; + ii0*t_stencil(1,i1-lo1) + ii1*t_stencil(0,i0-lo0);
+     &                 + (ii0+ii1)*t_stencil(2,i2-lo2) + ii2 * (t_stencil(0,i0-lo0) + t_stencil(1,i1-lo1))]
+
+                  sum(CHF_IX[i0;i1;i2]) = sum(CHF_IX[i0;i1;i2]) + hfac * d * n_stencil(n) * t_stencil_prod
+                  CHF_DINVTERM[
+               enddo;
+            enddo;
+         enddo]
+
+      endif
 
       return
       end

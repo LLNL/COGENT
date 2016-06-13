@@ -101,15 +101,6 @@ class PhaseBlockCoordSys : public NewFourthOrderCoordSys
       void projectOntoFluxSurfaceNormal( FArrayBox& data ) const;
       void projectOntoFluxSurfaceNormal( FluxBox& data ) const;
 
-      /// Project the vector argument onto the unit vector in the
-      /// direction of the mapped radial coordinate
-      /**
-       * @param[in] data    vector to be projected
-       * @param[out] data   projected vector
-       */
-      void projectOntoRadial( FArrayBox& data ) const;
-      void projectOntoRadial( FluxBox& data ) const;
-
       /// Compute projections of the configurational components of vector 
       /// argument onto the psi(normal) and theta (tangental) directions
       /**
@@ -118,9 +109,6 @@ class PhaseBlockCoordSys : public NewFourthOrderCoordSys
        */
       void computePsiThetaProjections( FArrayBox& data ) const;
       void computePsiThetaProjections( FluxBox& data ) const;
-
-      void computeGradFFactor( FArrayBox& a_data ) const;
-      void computeGradFFactor( FluxBox& a_data ) const;
 
       virtual void cellVol(FArrayBox& vol, const FluxBox& N, const Box& box) const;
 

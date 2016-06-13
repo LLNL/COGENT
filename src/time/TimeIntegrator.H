@@ -9,30 +9,43 @@
 
 #include "NamespaceHeader.H"
 
-#define _TI_EXTERNAL_ -1
-#define _TI_EXPLICIT_ 0
-#define _TI_IMEX_     1
-
 template <class Solution, class RHS, class Ops>
 class TimeIntegrator
 {
+   
+public:
 
-  public:
-    virtual Ops&  getOperators() = 0;
-    virtual void  define(ParmParse& a_pp,std::string a_name, Solution& a_state, Real a_dt) = 0;
-    virtual void  advance(Real a_time, Solution& Y) = 0;
+   virtual ~TimeIntegrator<Solution,RHS,Ops>() {}
+   
+   virtual void define( ParmParse& a_pp,
+                        std::string a_name,
+                        Solution& a_state,
+                        Real a_dt ) = 0;
 
-    virtual void setTimeStep(int a_n)         = 0;
-    virtual void getTimeStep(int *a_n)        = 0;
-    virtual void setTimeStepSize(Real a_dt)   = 0;
-    virtual void getTimeStepSize(Real *a_dt)  = 0;
-    virtual void setCurrentTime(Real a_time)  = 0;
-    virtual void getCurrentTime(Real *a_time) = 0;
+   virtual void advance( const Real& a_time, Solution& Y ) = 0;
+   
+   virtual Ops& getOperators() = 0;
+   
+   virtual void setTimeStep( const int& a_n ) = 0;
 
-    virtual ~TimeIntegrator<Solution,RHS,Ops>() {}
+   virtual void getTimeStep ( int& a_n ) const = 0;
 
-    virtual short int getType() { return _TI_EXPLICIT_; }
-    virtual void getCounts(int *a,int *b,int *c) = 0;
+   virtual void setTimeStepSize( const Real& a_dt) = 0;
+
+   virtual void getTimeStepSize( Real& a_dt) const = 0;
+
+   virtual void setCurrentTime( const Real& a_time ) = 0;
+
+   virtual void getCurrentTime( Real& a_time ) const = 0;
+   
+   virtual void getCounts( int& a, int& b, int& c ) const = 0;
+
+   virtual bool isExplicit() const = 0;
+
+   virtual bool isImEx() const = 0;
+
+   virtual bool isExternal() const = 0;
+
 };
 
 #include "NamespaceFooter.H"

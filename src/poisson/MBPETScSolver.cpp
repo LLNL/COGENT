@@ -31,21 +31,6 @@ MBPETScSolver::~MBPETScSolver()
 
 
 void
-MBPETScSolver::constructMatrixGeneral( LevelData<FArrayBox>& a_alpha_coefficient,
-                                       LevelData<FluxBox>&   a_tensor_coefficient,
-                                       LevelData<FArrayBox>& a_beta_coefficient,
-                                       const PotentialBC&    a_bc )
-{
-   bool fourthOrder = (m_discretization_order == 4);
-
-   constructPETScMatrix(a_alpha_coefficient, a_tensor_coefficient, a_beta_coefficient, a_bc,
-                        m_A_stencil_values, m_A_diagonal_offset,
-                        m_A_unstructured_coupling, fourthOrder, m_dropOrder, m_A, m_rhs_from_bc);
-}
-
-
-
-void
 MBPETScSolver::multiplyMatrix( const LevelData<FArrayBox>& a_in,
                                LevelData<FArrayBox>&       a_out ) const
 {
@@ -152,6 +137,25 @@ MBPETScSolver::dumpMatrix(const string& a_file_name) const
 
 
 void
+MBPETScSolver::constructMatrixGeneral( LevelData<FArrayBox>& a_alpha_coefficient,
+                                       LevelData<FluxBox>&   a_tensor_coefficient,
+                                       LevelData<FArrayBox>& a_beta_coefficient,
+                                       const PotentialBC&    a_bc )
+{
+   bool fourth_order = (m_discretization_order == 4);
+
+   if ( fourth_order && !(a_tensor_coefficient.ghostVect() >= IntVect::Unit) ) {
+      MayDay::Error("MBPETScSolver::constructMatrixGeneral(): Fourth-order solve requires tensor coefficient with one transverse ghost cell");
+   } 
+
+   constructPETScMatrix(a_alpha_coefficient, a_tensor_coefficient, a_beta_coefficient, a_bc,
+                        m_A_stencil_values, m_A_diagonal_offset,
+                        m_A_unstructured_coupling, fourth_order, m_A, m_rhs_from_bc);
+}
+
+
+
+void
 MBPETScSolver::createPETScData()
 {
    if (m_petsc_allocated) {
@@ -164,14 +168,8 @@ MBPETScSolver::createPETScData()
    IntVect stencil_box_hi;
    int radius;
    if (m_discretization_order == 4) {
-      if (m_dropOrder) {
-         stencil_box_hi = 4*IntVect::Unit;
-         radius = 2;
-      }
-      else {
-         stencil_box_hi = 6*IntVect::Unit;
-         radius = 3;
-      }
+      stencil_box_hi = 4*IntVect::Unit;
+      radius = 2;
    }
    else {
       stencil_box_hi = 2*IntVect::Unit;
@@ -552,7 +550,6 @@ MBPETScSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
                                             const PotentialBC&                       a_bc,
                                             FArrayBox&                               a_stencil_values,
                                             const bool                               a_fourthOrder,
-                                            const bool                               a_dropOrder,
                                             const LayoutData< BaseFab<IntVectSet> >& a_unstructured_coupling,
                                             Vector< Vector<CoDim1Stencil> >&         a_codim1_stencils,
                                             Vector< Vector<CoDim2Stencil> >&         a_codim2_stencils,
@@ -640,7 +637,7 @@ MBPETScSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&         
                      a_stencil_values.setVal(0.);
 
                      accumStencilMatrixEntries(iv, dir, side, dir2, a_tensor_coefficient[dit],
-                                               dx, a_fourthOrder, a_dropOrder, a_stencil_values);
+                                               dx, a_fourthOrder, a_stencil_values);
 
                      FArrayBox dummy;
                      modifyStencilForBCs( a_codim1_stencils[block_number], a_codim2_stencils[block_number],
@@ -782,7 +779,6 @@ MBPETScSolver::constructPETScMatrix( LevelData<FArrayBox>&              a_alpha_
                                      const int                          a_diagonal_offset,
                                      LayoutData< BaseFab<IntVectSet> >& a_unstructured_coupling,
                                      const bool                         a_fourth_order,
-                                     const bool                         a_dropOrder,
                                      Mat&                               a_matrix,
                                      LevelData<FArrayBox>&              a_rhs_from_bc ) const
 {
@@ -884,7 +880,7 @@ MBPETScSolver::constructPETScMatrix( LevelData<FArrayBox>&              a_alpha_
                 tmp_stencil_values.setVal(0.);
 
                 accumStencilMatrixEntries(iv, dir, side, dir2, this_coefs, dx,
-                                          a_fourth_order, a_dropOrder, tmp_stencil_values);
+                                          a_fourth_order, tmp_stencil_values);
 
                 modifyStencilForBCs( codim1_stencils[block_number], codim2_stencils[block_number],
                                      iv, tmp_stencil_values, a_rhs_from_bc[dit],
@@ -971,7 +967,7 @@ MBPETScSolver::constructPETScMatrix( LevelData<FArrayBox>&              a_alpha_
    delete [] indxn;
 
    addUnstructuredMatrixEntries(a_alpha_coefficient, a_tensor_coefficient, a_bc, a_stencil_values,
-                                a_fourth_order, a_dropOrder, a_unstructured_coupling,
+                                a_fourth_order, a_unstructured_coupling,
                                 codim1_stencils, codim2_stencils, a_matrix);
 
    MatAssemblyBegin(a_matrix, MAT_FINAL_ASSEMBLY);
@@ -994,7 +990,6 @@ MBPETScSolver::constructPETScMatrix( LevelData<FArrayBox>&              a_alpha_
                         codim2_stencils,
                         a_stencil_values,
                         a_fourth_order,
-                        a_dropOrder,
                         a_rhs_from_bc );
 #endif
 }

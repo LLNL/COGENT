@@ -22,12 +22,7 @@ MBTridiagonalSolver::MBTridiagonalSolver( const MultiBlockLevelGeom&  a_geom,
    IntVect stencil_box_lo(IntVect::Zero);
    IntVect stencil_box_hi;
    if (m_discretization_order == 4) {
-      if (m_dropOrder) {
-         stencil_box_hi = 4*IntVect::Unit;
-      }
-      else {
-         stencil_box_hi = 6*IntVect::Unit;
-      }
+      stencil_box_hi = 4*IntVect::Unit;
    }
    else {
       stencil_box_hi = 2*IntVect::Unit;
@@ -55,7 +50,7 @@ MBTridiagonalSolver::constructMatrixGeneral( LevelData<FArrayBox>&  a_alpha_coef
 
    constructTridiagonalMatrix(a_alpha_coefficient, a_tensor_coefficient, a_beta_coefficient, a_bc,
                               m_A_stencil_values, m_A_radial, m_A_diagonal_offset, fourthOrder,
-                              m_dropOrder, m_rhs_from_bc);
+                              m_rhs_from_bc);
 }
 
 
@@ -107,7 +102,6 @@ MBTridiagonalSolver::constructTridiagonalMatrix( LevelData<FArrayBox>&          
                                                  LevelData<FArrayBox>&               a_radial,
                                                  const int                           a_diagonal_offset,
                                                  const bool                          a_fourth_order,
-                                                 const bool                          a_dropOrder,
                                                  LevelData<FArrayBox>&               a_rhs_from_bc ) const
 {
    // Make sure the coefficient ghost cell values are set.
@@ -198,7 +192,7 @@ MBTridiagonalSolver::constructTridiagonalMatrix( LevelData<FArrayBox>&          
                 tmp_stencil_values.setVal(0.);
 
                 accumStencilMatrixEntries(iv, dir, side, dir2, this_coef, dx,
-                                          a_fourth_order, a_dropOrder, tmp_stencil_values);
+                                          a_fourth_order, tmp_stencil_values);
 
                 modifyStencilForBCs( codim1_stencils[block_number], codim2_stencils[block_number],
                                      iv, tmp_stencil_values, a_rhs_from_bc[dit],
@@ -266,7 +260,6 @@ MBTridiagonalSolver::constructTridiagonalMatrix( LevelData<FArrayBox>&          
                         codim2_stencils,
                         a_stencil_values,
                         a_fourth_order,
-                        a_dropOrder,
                         a_rhs_from_bc );
 #endif
 }

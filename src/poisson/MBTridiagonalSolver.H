@@ -50,7 +50,6 @@ protected:
                                     LevelData<FArrayBox>&    radial,
                                     const int                diagonal_offset,
                                     const bool               fourthOrder,
-                                    const bool               dropOrder,
                                     LevelData<FArrayBox>&    rhs_from_bc ) const;
 
    void solveFluxSurfaceAverage( LevelData<FArrayBox>& data ) const;

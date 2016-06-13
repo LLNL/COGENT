@@ -209,7 +209,7 @@ FieldSolver::computePoloidalFieldWithBCs( const LevelData<FArrayBox>& a_phi,
    LevelData<FluxBox> mapped_field(m_geometry.grids(), 2, a_field.ghostVect());
    computeMappedPoloidalFieldWithBCs(a_phi, mapped_field, a_homogeneousBCs);
 
-   unmapPoloidalGradient(mapped_field, a_field);
+   m_geometry.unmapPoloidalGradient(mapped_field, a_field);
 }
 
 
@@ -257,7 +257,7 @@ FieldSolver::computePoloidalField( const LevelData<FArrayBox>& a_phi,
    LevelData<FArrayBox> mapped_field(m_geometry.grids(), 2, IntVect::Unit);
    computeMappedPoloidalField(a_phi, mapped_field);
 
-   unmapPoloidalGradient(mapped_field, a_field);
+   m_geometry.unmapPoloidalGradient(mapped_field, a_field);
 }
 
 
@@ -272,7 +272,7 @@ FieldSolver::computePoloidalField( const LevelData<FArrayBox>& a_phi,
    LevelData<FluxBox> mapped_field(m_geometry.grids(), 2, IntVect::Unit);
    computeMappedPoloidalField(a_phi, mapped_field);
 
-   unmapPoloidalGradient(mapped_field, a_field);
+   m_geometry.unmapPoloidalGradient(mapped_field, a_field);
 }
 
 
@@ -383,7 +383,7 @@ FieldSolver::computeField( const LevelData<FArrayBox>& a_phi,
    LevelData<FArrayBox> mapped_field(a_field.disjointBoxLayout(), 3, a_field.ghostVect());
    computeMappedField( a_phi, mapped_field );
 
-   unmapGradient(mapped_field, a_field);
+   m_geometry.unmapGradient(mapped_field, a_field);
 }
 
 
@@ -398,7 +398,7 @@ FieldSolver::computeField( const LevelData<FArrayBox>& a_phi,
    LevelData<FluxBox> mapped_field(a_field.disjointBoxLayout(), 3, a_field.ghostVect());
    computeMappedField( a_phi, mapped_field );
 
-   unmapGradient(mapped_field, a_field);
+   m_geometry.unmapGradient(mapped_field, a_field);
 }
 
 
@@ -413,7 +413,7 @@ FieldSolver::computeMappedField( const LevelData<FArrayBox>& a_phi,
    LevelData<FArrayBox> poloidal_field(a_field.disjointBoxLayout(), 2, IntVect::Unit);
    computeMappedPoloidalField(a_phi, poloidal_field);
 
-   injectPoloidalVector(poloidal_field, a_field);
+   m_geometry.injectPoloidalVector(poloidal_field, a_field);
 }
 
 
@@ -428,7 +428,7 @@ FieldSolver::computeMappedField( const LevelData<FArrayBox>& a_phi,
    LevelData<FluxBox> poloidal_field(a_field.disjointBoxLayout(), 2, IntVect::Unit);
    computeMappedPoloidalField(a_phi, poloidal_field);
 
-   injectPoloidalVector(poloidal_field, a_field);
+   m_geometry.injectPoloidalVector(poloidal_field, a_field);
 }
 
 
@@ -483,7 +483,7 @@ FieldSolver::computeBcDivergence( const PotentialBC&    a_bc,
    computeMappedPoloidalFieldWithBCs( phi, mapped_field, false );
    
    LevelData<FluxBox> flux(grids, 2, IntVect::Unit);
-   unmapPoloidalGradient(mapped_field, flux);
+   m_geometry.unmapPoloidalGradient(mapped_field, flux);
 
    // Multiply the field by the unmapped, face-centered coefficients
    multiplyUnmappedCoefficients(flux);
@@ -584,10 +584,10 @@ FieldSolver::computeRadialFSAverage( const LevelData<FluxBox>& a_in,
    mapped_flux_odd.exchange();
     
    LevelData<FluxBox> flux_even(grids, SpaceDim, IntVect::Unit);
-   unmapPoloidalGradient(mapped_flux_even, flux_even);
+   m_geometry.unmapPoloidalGradient(mapped_flux_even, flux_even);
 
    LevelData<FluxBox> flux_odd(grids, SpaceDim, IntVect::Unit);
-   unmapPoloidalGradient(mapped_flux_odd, flux_odd);
+   m_geometry.unmapPoloidalGradient(mapped_flux_odd, flux_odd);
     
    // Multiply the flux by the unmapped, face-centered coefficients
    multiplyUnmappedCoefficients(flux_even);
@@ -693,95 +693,6 @@ FieldSolver::fillInternalGhosts( LevelData<FArrayBox>& a_phi ) const
    }
 
    a_phi.exchange();
-}
-
-
-
-void
-FieldSolver::unmapGradient( const LevelData<FArrayBox>& a_mapped_gradient,
-                            LevelData<FArrayBox>&       a_gradient ) const
-{
-   CH_assert(a_mapped_gradient.nComp() == 3);
-   CH_assert(a_gradient.nComp() == 3);
-   const DisjointBoxLayout & grids = m_geometry.grids();
-
-   LevelData<FArrayBox> mapped_poloidal_gradient(grids, 2, a_mapped_gradient.ghostVect());
-   projectPoloidalVector(a_mapped_gradient, mapped_poloidal_gradient);
-
-   LevelData<FArrayBox> poloidal_gradient(grids, 2, a_gradient.ghostVect());
-   unmapPoloidalGradient(mapped_poloidal_gradient, poloidal_gradient);
-
-   injectPoloidalVector(poloidal_gradient, a_gradient);
-}
-
-
-
-void
-FieldSolver::unmapGradient( const LevelData<FluxBox>& a_mapped_gradient,
-                            LevelData<FluxBox>&       a_gradient ) const
-{
-   CH_assert(a_mapped_gradient.nComp() == 3);
-   CH_assert(a_gradient.nComp() == 3);
-   const DisjointBoxLayout & grids = m_geometry.grids();
-
-   LevelData<FluxBox> mapped_poloidal_gradient(grids, 2, a_mapped_gradient.ghostVect());
-   projectPoloidalVector(a_mapped_gradient, mapped_poloidal_gradient);
-
-   LevelData<FluxBox> poloidal_gradient(grids, 2, a_gradient.ghostVect());
-   unmapPoloidalGradient(mapped_poloidal_gradient, poloidal_gradient);
-
-   injectPoloidalVector(poloidal_gradient, a_gradient);
-}
-
-
-
-void
-FieldSolver::unmapPoloidalGradient( const LevelData<FArrayBox>& a_mapped_gradient,
-                                    LevelData<FArrayBox>&       a_gradient ) const
-{
-   CH_assert(a_mapped_gradient.nComp() == 2);
-   CH_assert(a_gradient.nComp() == 2);
-   const DisjointBoxLayout & grids = m_geometry.grids();
-
-   // Multiply by NJInverse
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
-
-      Box box = a_mapped_gradient[dit].box();
-      FArrayBox NJInverse(box, 4);
-      block_coord_sys.getPointwiseNJInverse(NJInverse);
-
-      FORT_MULT_NJINVERSE(CHF_BOX(box),
-                          CHF_CONST_FRA(a_mapped_gradient[dit]),
-                          CHF_CONST_FRA(NJInverse),
-                          CHF_FRA(a_gradient[dit]));
-   }
-}
-
-
-
-void
-FieldSolver::unmapPoloidalGradient( const LevelData<FluxBox>& a_mapped_gradient,
-                                    LevelData<FluxBox>&       a_gradient ) const
-{
-   CH_assert(a_mapped_gradient.nComp() == 2);
-   CH_assert(a_gradient.nComp() == 2);
-   const DisjointBoxLayout & grids = m_geometry.grids();
-
-   // Multiply by NJInverse
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
-
-      FluxBox NJInverse(a_mapped_gradient[dit].box(), 4);
-      block_coord_sys.getPointwiseNJInverse(NJInverse);
-
-      for (int dir=0; dir<2; dir++) {
-         FORT_MULT_NJINVERSE(CHF_BOX(a_mapped_gradient[dit][dir].box()),
-                             CHF_CONST_FRA(a_mapped_gradient[dit][dir]),
-                             CHF_CONST_FRA(NJInverse[dir]),
-                             CHF_FRA(a_gradient[dit][dir]));
-      }
-   }
 }
 
 
@@ -1404,96 +1315,6 @@ FieldSolver::extrapBoundaryGhostsForFC(FArrayBox&                              a
       }
    }
 } 
-
-
-
-void
-FieldSolver::injectPoloidalVector( const LevelData<FArrayBox>& a_poloidal_vector,
-                                   LevelData<FArrayBox>&       a_vector ) const
-{
-   CH_assert(a_poloidal_vector.nComp() == 2);
-   CH_assert(a_vector.nComp() == 3);
-
-   const DisjointBoxLayout& grids = m_geometry.grids();
-
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const FArrayBox& this_poloidal_vector = a_poloidal_vector[dit];
-      FArrayBox& this_vector = a_vector[dit];
-
-      this_vector.copy(this_poloidal_vector, 0, 0, 1);
-      this_vector.setVal(0., 1);
-      this_vector.copy(this_poloidal_vector, 1, 2, 1);
-   }   
-}
-
-
-
-void
-FieldSolver::injectPoloidalVector( const LevelData<FluxBox>& a_poloidal_vector,
-                                   LevelData<FluxBox>&       a_vector ) const
-{
-   CH_assert(a_poloidal_vector.nComp() == 2);
-   CH_assert(a_vector.nComp() == 3);
-
-   const DisjointBoxLayout& grids = m_geometry.grids();
-
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const FluxBox& this_poloidal_vector = a_poloidal_vector[dit];
-      FluxBox& this_vector = a_vector[dit];
-      for (int dir=0; dir<2; ++dir) {
-         const FArrayBox& this_poloidal_vector_dir = this_poloidal_vector[dir];
-         FArrayBox& this_vector_dir = this_vector[dir];
-
-         this_vector_dir.copy(this_poloidal_vector_dir, 0, 0, 1);
-         this_vector_dir.setVal(0., 1);
-         this_vector_dir.copy(this_poloidal_vector_dir, 1, 2, 1);
-      }
-   }   
-}
-
-
-
-void
-FieldSolver::projectPoloidalVector( const LevelData<FArrayBox>& a_vector,
-                                    LevelData<FArrayBox>&       a_poloidal_vector ) const
-{
-   CH_assert(a_vector.nComp() == 3);
-   CH_assert(a_poloidal_vector.nComp() == 2);
-
-   const DisjointBoxLayout& grids = m_geometry.grids();
-
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const FArrayBox& this_vector = a_vector[dit];
-      FArrayBox& this_poloidal_vector = a_poloidal_vector[dit];
-
-      this_poloidal_vector.copy(this_vector, 0, 0, 1);
-      this_poloidal_vector.copy(this_vector, 2, 1, 1);
-   }   
-}
-
-
-
-void
-FieldSolver::projectPoloidalVector( const LevelData<FluxBox>& a_vector,
-                                    LevelData<FluxBox>&       a_poloidal_vector ) const
-{
-   CH_assert(a_vector.nComp() == 3);
-   CH_assert(a_poloidal_vector.nComp() == 2);
-
-   const DisjointBoxLayout& grids = m_geometry.grids();
-
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const FluxBox& this_vector = a_vector[dit];
-      FluxBox& this_poloidal_vector = a_poloidal_vector[dit];
-      for (int dir=0; dir<2; ++dir) {
-         const FArrayBox& this_vector_dir = this_vector[dir];
-         FArrayBox& this_poloidal_vector_dir = this_poloidal_vector[dir];
-
-         this_poloidal_vector_dir.copy(this_vector_dir, 0, 0, 1);
-         this_poloidal_vector_dir.copy(this_vector_dir, 2, 1, 1);
-      }
-   }   
-}
 
 
 

@@ -248,14 +248,6 @@ void
       void computeFluxSurfaceUnitNormal( FArrayBox& data ) const;
       void computeFluxSurfaceUnitNormal( FluxBox& data ) const;
 
-      /// Computes the unit vector in the direction of the
-      /// mapped grid radial coordinate
-      /**
-       * @param[out] data  radial unit vector
-       */
-      void computeUnitRadial( FArrayBox& data ) const;
-      void computeUnitRadial( FluxBox& data ) const;
-
       /// Project the vector argument onto the flux surface
       /**
        * @param[in] data    vector to be projected
@@ -272,14 +264,6 @@ void
       void projectOntoFluxSurfaceNormal( FArrayBox& data ) const;
       void projectOntoFluxSurfaceNormal( FluxBox& data ) const;
 
-      /// Project the vector argument onto the unit vector in the
-      /// direction of the mapped radial coordinate
-      /**
-       * @param[in] data    vector to be projected
-       * @param[out] data   projected vector
-       */
-      void projectOntoRadial( FArrayBox& data ) const;
-      void projectOntoRadial( FluxBox& data ) const;
 
       /// Compute projections of the configurational components of vector 
       /// argument onto the psi(normal) and theta (tangental) directions
@@ -290,9 +274,6 @@ void
       void computePsiThetaProjections( FArrayBox& data ) const;
       void computePsiThetaProjections( FluxBox& data ) const;
 
-
-      void computeGradFFactor( FArrayBox& a_data ) const;
-      void computeGradFFactor( FluxBox& a_data ) const;
 
       /**
        * Returns the value of the outermost flux label

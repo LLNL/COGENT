@@ -1,4 +1,5 @@
 #include "MagGeom.H"
+#include "MagGeomF_F.H"
 #include "Poisson.H"
 #include "Directions.H"
 #include "CONSTANTS.H"
@@ -9,6 +10,7 @@
 #include "SingleNullBlockCoordSys.H"
 #include "SingleNullCoordSys.H"
 
+#include "FieldSolverF_F.H"
 #include "NamespaceHeader.H"
 
 #undef TEST_DIVERGENCE_CLEANING
@@ -289,6 +291,31 @@ MagGeom::getPointwiseNJinverse( LevelData<FluxBox>& a_NJinverse ) const
 
    for (dit.begin(); dit.ok(); ++dit) {
       a_NJinverse[dit].copy(m_NJinverse_face_centered[dit]);
+   }
+}
+
+
+void
+MagGeom::divideJonValid( LevelData<FArrayBox>& a_data ) const
+{
+   // Multiplies the argument by J on valid cells
+
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+   IntVect grown_vect = IntVect::Unit;
+   LevelData<FArrayBox> J(grids, 1, grown_vect);
+   getJ(J);
+
+   LevelData<FArrayBox> grown_data(grids, 1, grown_vect);
+
+   for (DataIterator dit(grown_data.dataIterator()); dit.ok(); ++dit) {
+      grown_data[dit].copy(a_data[dit]);
+   }
+   grown_data.exchange();
+
+   // Compute the fourth-order quotient
+   for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+      const MagBlockCoordSys& coord_sys = getBlockCoordSys(grids[dit]);
+      cellFGToCellF(a_data[dit], grown_data[dit], J[dit], grids[dit], coord_sys.domain(), true);
    }
 }
 
@@ -2152,4 +2179,421 @@ double MagGeom::magFluxZ(const double a_Z) const
 
 
 
+void
+MagGeom::unmapGradient( const LevelData<FArrayBox>& a_mapped_gradient,
+                        LevelData<FArrayBox>&       a_gradient ) const
+{
+   CH_assert(a_mapped_gradient.nComp() == 3);
+   CH_assert(a_gradient.nComp() == 3);
+
+   LevelData<FArrayBox> mapped_poloidal_gradient(m_gridsFull, 2, a_mapped_gradient.ghostVect());
+   projectPoloidalVector(a_mapped_gradient, mapped_poloidal_gradient);
+
+   LevelData<FArrayBox> poloidal_gradient(m_gridsFull, 2, a_gradient.ghostVect());
+   unmapPoloidalGradient(mapped_poloidal_gradient, poloidal_gradient);
+
+   injectPoloidalVector(poloidal_gradient, a_gradient);
+}
+
+
+
+void
+MagGeom::unmapGradient( const LevelData<FluxBox>& a_mapped_gradient,
+                        LevelData<FluxBox>&       a_gradient ) const
+{
+   CH_assert(a_mapped_gradient.nComp() == 3);
+   CH_assert(a_gradient.nComp() == 3);
+
+   LevelData<FluxBox> mapped_poloidal_gradient(m_gridsFull, 2, a_mapped_gradient.ghostVect());
+   projectPoloidalVector(a_mapped_gradient, mapped_poloidal_gradient);
+
+   LevelData<FluxBox> poloidal_gradient(m_gridsFull, 2, a_gradient.ghostVect());
+   unmapPoloidalGradient(mapped_poloidal_gradient, poloidal_gradient);
+
+   injectPoloidalVector(poloidal_gradient, a_gradient);
+}
+
+
+
+void
+MagGeom::unmapPoloidalGradient( const LevelData<FArrayBox>& a_mapped_gradient,
+                                LevelData<FArrayBox>&       a_gradient ) const
+{
+   CH_assert(a_mapped_gradient.nComp() == 2);
+   CH_assert(a_gradient.nComp() == 2);
+
+   // Multiply by NJInverse
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(m_gridsFull[dit]);
+
+      Box box = a_mapped_gradient[dit].box();
+      FArrayBox NJInverse(box, 4);
+      block_coord_sys.getPointwiseNJInverse(NJInverse);
+
+      FORT_MULT_NJINVERSE(CHF_BOX(box),
+                          CHF_CONST_FRA(a_mapped_gradient[dit]),
+                          CHF_CONST_FRA(NJInverse),
+                          CHF_FRA(a_gradient[dit]));
+   }
+}
+
+
+
+void
+MagGeom::unmapPoloidalGradient( const LevelData<FluxBox>& a_mapped_gradient,
+                                LevelData<FluxBox>&       a_gradient ) const
+{
+   CH_assert(a_mapped_gradient.nComp() == 2);
+   CH_assert(a_gradient.nComp() == 2);
+
+   // Multiply by NJInverse
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(m_gridsFull[dit]);
+
+      FluxBox NJInverse(a_mapped_gradient[dit].box(), 4);
+      block_coord_sys.getPointwiseNJInverse(NJInverse);
+
+      for (int dir=0; dir<2; dir++) {
+         FORT_MULT_NJINVERSE(CHF_BOX(a_mapped_gradient[dit][dir].box()),
+                             CHF_CONST_FRA(a_mapped_gradient[dit][dir]),
+                             CHF_CONST_FRA(NJInverse[dir]),
+                             CHF_FRA(a_gradient[dit][dir]));
+      }
+   }
+}
+
+
+
+void
+MagGeom::injectPoloidalVector( const LevelData<FArrayBox>& a_poloidal_vector,
+                               LevelData<FArrayBox>&       a_vector ) const
+{
+   CH_assert(a_poloidal_vector.nComp() == 2);
+   CH_assert(a_vector.nComp() == 3);
+
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      const FArrayBox& this_poloidal_vector = a_poloidal_vector[dit];
+      FArrayBox& this_vector = a_vector[dit];
+
+      this_vector.copy(this_poloidal_vector, 0, 0, 1);
+      this_vector.setVal(0., 1);
+      this_vector.copy(this_poloidal_vector, 1, 2, 1);
+   }   
+}
+
+
+
+void
+MagGeom::injectPoloidalVector( const LevelData<FluxBox>& a_poloidal_vector,
+                               LevelData<FluxBox>&       a_vector ) const
+{
+   CH_assert(a_poloidal_vector.nComp() == 2);
+   CH_assert(a_vector.nComp() == 3);
+
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      const FluxBox& this_poloidal_vector = a_poloidal_vector[dit];
+      FluxBox& this_vector = a_vector[dit];
+      for (int dir=0; dir<2; ++dir) {
+         const FArrayBox& this_poloidal_vector_dir = this_poloidal_vector[dir];
+         FArrayBox& this_vector_dir = this_vector[dir];
+
+         this_vector_dir.copy(this_poloidal_vector_dir, 0, 0, 1);
+         this_vector_dir.setVal(0., 1);
+         this_vector_dir.copy(this_poloidal_vector_dir, 1, 2, 1);
+      }
+   }   
+}
+
+
+
+void
+MagGeom::projectPoloidalVector( const LevelData<FArrayBox>& a_vector,
+                                LevelData<FArrayBox>&       a_poloidal_vector ) const
+{
+   CH_assert(a_vector.nComp() == 3);
+   CH_assert(a_poloidal_vector.nComp() == 2);
+
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      const FArrayBox& this_vector = a_vector[dit];
+      FArrayBox& this_poloidal_vector = a_poloidal_vector[dit];
+
+      this_poloidal_vector.copy(this_vector, 0, 0, 1);
+      this_poloidal_vector.copy(this_vector, 2, 1, 1);
+   }   
+}
+
+
+
+void
+MagGeom::projectPoloidalVector( const LevelData<FluxBox>& a_vector,
+                                LevelData<FluxBox>&       a_poloidal_vector ) const
+{
+   CH_assert(a_vector.nComp() == 3);
+   CH_assert(a_poloidal_vector.nComp() == 2);
+
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      const FluxBox& this_vector = a_vector[dit];
+      FluxBox& this_poloidal_vector = a_poloidal_vector[dit];
+      for (int dir=0; dir<2; ++dir) {
+         const FArrayBox& this_vector_dir = this_vector[dir];
+         FArrayBox& this_poloidal_vector_dir = this_poloidal_vector[dir];
+
+         this_poloidal_vector_dir.copy(this_vector_dir, 0, 0, 1);
+         this_poloidal_vector_dir.copy(this_vector_dir, 2, 1, 1);
+      }
+   }   
+}
+
+void
+MagGeom::projectOntoParallel( LevelData<FArrayBox>& a_vector ) const
+{
+   CH_assert(a_vector.nComp() == CFG_DIM);
+
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      
+      FORT_PROJECT_ONTO_PARALLEL(CHF_BOX(a_vector[dit].box()),
+                                 CHF_CONST_FRA(m_BFieldDir_cc[dit]),
+                                 CHF_FRA(a_vector[dit]));
+
+   }
+}
+
+void
+MagGeom::projectOntoParallel( LevelData<FluxBox>& a_vector ) const
+{
+   CH_assert(a_vector.nComp() == CFG_DIM);
+   
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+      
+         FORT_PROJECT_ONTO_PARALLEL(CHF_BOX(a_vector[dit][dir].box()),
+                                    CHF_CONST_FRA(m_BFieldDir_fc[dit][dir]),
+                                    CHF_FRA(a_vector[dit][dir]));
+      }
+   }
+}
+
+void
+MagGeom::computeRadialProjection( LevelData<FArrayBox>& a_radComp,
+                                  const LevelData<FArrayBox>& a_vector) const
+{
+
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+         
+      FORT_COMPUTE_RADIAL_PROJECTION(CHF_BOX(a_radComp[dit].box()),
+                                     CHF_CONST_FRA(m_BFieldDir_cc[dit]),
+                                     CHF_CONST_FRA(a_vector[dit]),
+                                     CHF_FRA1(a_radComp[dit],0));
+      
+   }
+}
+
+void
+MagGeom::computeRadialProjection( LevelData<FluxBox>& a_radComp,
+                                  const LevelData<FluxBox>& a_vector) const
+{
+   //Assumes that radComp box structure is within vector box structure
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+            
+         FORT_COMPUTE_RADIAL_PROJECTION(CHF_BOX(a_radComp[dit][dir].box()),
+                                        CHF_CONST_FRA(m_BFieldDir_fc[dit][dir]),
+                                        CHF_CONST_FRA(a_vector[dit][dir]),
+                                        CHF_FRA1(a_radComp[dit][dir],0));
+      }
+   }
+}
+
+void
+MagGeom::computePoloidalProjection( LevelData<FArrayBox>& a_polComp,
+                                  const LevelData<FArrayBox>& a_vector) const
+{
+
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+         
+      FORT_COMPUTE_POLOIDAL_PROJECTION(CHF_BOX(a_polComp[dit].box()),
+                                       CHF_CONST_FRA(m_BFieldDir_cc[dit]),
+                                       CHF_CONST_FRA(a_vector[dit]),
+                                       CHF_FRA1(a_polComp[dit],0));
+         
+   }
+}
+   
+void
+MagGeom::computePoloidalProjection( LevelData<FluxBox>& a_polComp,
+                                    const LevelData<FluxBox>& a_vector) const
+{
+
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+            
+         FORT_COMPUTE_POLOIDAL_PROJECTION(CHF_BOX(a_polComp[dit][dir].box()),
+                                          CHF_CONST_FRA(m_BFieldDir_fc[dit][dir]),
+                                          CHF_CONST_FRA(a_vector[dit][dir]),
+                                          CHF_FRA1(a_polComp[dit][dir],0));
+      }
+   }
+}
+   
+void
+MagGeom::computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& a_phi,
+                                                  LevelData<FArrayBox>&       a_field,
+                                                  const int                   a_order ) const
+{
+   CH_assert(a_phi.ghostVect() >= 2*IntVect::Unit);
+   CH_assert(a_field.nComp() == 2);
+   CH_assert(a_field.ghostVect() == IntVect::Unit);
+   CH_assert(a_order == 2 || a_order == 4);
+      
+   // The following assumes that we have potential values in at least two layers of ghost cells
+   
+   // Compute the field to second_order including one layer of ghost cells
+      
+   const DisjointBoxLayout& grids = a_phi.disjointBoxLayout();
+      
+   int tmp_order = 2;
+      
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+      RealVect dx = block_coord_sys.dx();
+      Box box = grow(grids[dit],1);
+         
+      // Initializing to NaN to ensure that the field is actually computed everywhere it's used
+      a_field[dit].setVal(1./0.);
+         
+      for (int dir=0; dir<2; dir++) {
+         FORT_CELL_CENTERED_GRAD_COMPONENT(CHF_BOX(box),
+                                           CHF_CONST_INT(dir),
+                                           CHF_CONST_FRA1(a_phi[dit],0),
+                                           CHF_CONST_REALVECT(dx),
+                                           CHF_CONST_INT(tmp_order),
+                                           CHF_FRA1(a_field[dit],dir));
+      }
+   }
+      
+   a_field.exchange();
+      
+   // If fourth-order, recompute the field at valid cell centers to fourth-order
+      
+   if ( a_order == 4 ) {
+         
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+         RealVect dx = block_coord_sys.dx();
+            
+         for (int dir=0; dir<2; ++dir) {
+            FORT_CELL_CENTERED_GRAD_COMPONENT(CHF_BOX(grids[dit]),
+                                              CHF_CONST_INT(dir),
+                                              CHF_CONST_FRA1(a_phi[dit],0),
+                                              CHF_CONST_REALVECT(dx),
+                                              CHF_CONST_INT(a_order),
+                                              CHF_FRA1(a_field[dit],dir));
+         }
+      }
+   }
+}
+
+void
+MagGeom::computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& a_phi,
+                                                  LevelData<FluxBox>&         a_field,
+                                                  const int                   a_order ) const
+{
+   CH_assert(a_phi.ghostVect() >= 2*IntVect::Unit);
+   CH_assert(a_field.nComp() == 2);
+   CH_assert(a_field.ghostVect() == IntVect::Unit);
+   CH_assert(a_order == 2 || a_order == 4);
+   
+   // The following assumes that we have potential values in at least two layers of ghost cells at
+   // all block boundaries.
+   
+   const DisjointBoxLayout& grids = a_phi.disjointBoxLayout();
+   LevelData<FluxBox> phi_face(grids, 1, 2*IntVect::Unit);
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for (int dir=0; dir<2; dir++) {
+         IntVect grow_vect = 2*IntVect::Unit;
+         grow_vect[dir] = 0;
+         Box box = grow(grids[dit],grow_vect);
+         
+         FORT_FACE_INTERPOLATE(CHF_CONST_INT(dir),
+                               CHF_BOX(surroundingNodes(box,dir)),
+                               CHF_CONST_INT(a_order),
+                               CHF_CONST_FRA1(a_phi[dit],0),
+                               CHF_FRA1(phi_face[dit][dir],0));
+      }
+   }
+   phi_face.exchange();
+   
+   // Compute the field to second-order including one layer of transverse faces
+   
+   int tmp_order = 2;
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+      RealVect dx = block_coord_sys.dx();
+      Box box = grow(grids[dit],1);
+      
+      // Initializing to NaN to ensure that the field is actually computed everywhere it's used
+      a_field[dit].setVal(1./0.);
+      
+      for (int dir=0; dir<2; dir++) {
+         Box box_dir = surroundingNodes(box,dir);
+         FORT_FACE_CENTERED_GRAD_COMPONENT(CHF_BOX(box_dir),
+                                            CHF_CONST_INT(dir),
+                                            CHF_CONST_FRA1(a_phi[dit],0),
+                                            CHF_CONST_REALVECT(dx),
+                                            CHF_CONST_INT(tmp_order),
+                                            CHF_FRA1(a_field[dit][dir],dir));
+         
+         for (int tdir=0; tdir<2; ++tdir) {
+            if (tdir != dir) {
+               FORT_CELL_CENTERED_GRAD_COMPONENT(CHF_BOX(box_dir),
+                                                  CHF_CONST_INT(tdir),
+                                                  CHF_CONST_FRA1(phi_face[dit][dir],0),
+                                                  CHF_CONST_REALVECT(dx),
+                                                  CHF_CONST_INT(tmp_order),
+                                                  CHF_FRA1(a_field[dit][dir],tdir));
+            }
+         }
+      }
+   }
+   a_field.exchange();
+   
+   // Second-order extrapolate the field to the transverse physical boundary ghosts
+   fillTransversePhysicalGhosts(a_field);
+   
+   // If fourth-order, recompute the field on valid cell faces
+   
+   if ( a_order == 4 ) {
+      
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+         RealVect dx = block_coord_sys.dx();
+         
+         for (int dir=0; dir<2; dir++) {
+            Box box_dir = surroundingNodes(grids[dit],dir);
+            FORT_FACE_CENTERED_GRAD_COMPONENT(CHF_BOX(box_dir),
+                                              CHF_CONST_INT(dir),
+                                              CHF_CONST_FRA1(a_phi[dit],0),
+                                              CHF_CONST_REALVECT(dx),
+                                              CHF_CONST_INT(a_order),
+                                              CHF_FRA1(a_field[dit][dir],dir));
+            
+            for (int tdir=0; tdir<2; ++tdir) {
+               if (tdir != dir) {
+                  FORT_CELL_CENTERED_GRAD_COMPONENT(CHF_BOX(box_dir),
+                                                    CHF_CONST_INT(tdir),
+                                                    CHF_CONST_FRA1(phi_face[dit][dir],0),
+                                                    CHF_CONST_REALVECT(dx),
+                                                    CHF_CONST_INT(a_order),
+                                                    CHF_FRA1(a_field[dit][dir],tdir));
+               }
+            }
+         }
+      }
+   }
+   
+   a_field.exchange();
+}
+   
 #include "NamespaceFooter.H"

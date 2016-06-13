@@ -749,3 +749,79 @@ c     local variables
 
       return
       end
+
+      subroutine compute_radial_projection(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_CONST_FRA[vector],
+     &     CHF_CONST_FRA1[vector_r]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m] 
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+
+         fac = sqrt(bunit(i,j,CHF_LBOUND[bunit;2],CHF_LBOUND[bunit;3],0) ** 2
+     &             +bunit(i,j,CHF_LBOUND[bunit;2],CHF_LBOUND[bunit;3],2) ** 2)                
+
+         vector_r(CHF_IX[i;j;k;l;m]) = vector(CHF_IX[i;j;k;l;m],0) * bunit(i,j,CHF_LBOUND[bunit;2],CHF_LBOUND[bunit;3],2)/fac
+     &                               - vector(CHF_IX[i;j;k;l;m],1) * bunit(i,j,CHF_LBOUND[bunit;2],CHF_LBOUND[bunit;3],0)/fac 
+
+
+#else
+
+         fac = sqrt(bunit(i,j,k,CHF_LBOUND[bunit;3],CHF_LBOUND[bunit;4],0) ** 2
+     &             +bunit(i,j,k,CHF_LBOUND[bunit;3],CHF_LBOUND[bunit;4],2) ** 2)                
+
+         vector_r(CHF_IX[i;j;k;l;m]) = vector(CHF_IX[i;j;k;l;m],0) * bunit(i,j,k,CHF_LBOUND[bunit;3],CHF_LBOUND[bunit;4],2)/fac
+     &                               - vector(CHF_IX[i;j;k;l;m],2) * bunit(i,j,k,CHF_LBOUND[bunit;3],CHF_LBOUND[bunit;4],0)/fac 
+
+#endif
+   
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine compute_poloidal_projection(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_CONST_FRA[vector],
+     &     CHF_CONST_FRA1[vector_pol]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m] 
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+
+         fac = sqrt(bunit(i,j,CHF_LBOUND[bunit;2],CHF_LBOUND[bunit;3],0) ** 2
+     &             +bunit(i,j,CHF_LBOUND[bunit;2],CHF_LBOUND[bunit;3],2) ** 2)                
+
+         vector_pol(CHF_IX[i;j;k;l;m]) = vector(CHF_IX[i;j;k;l;m],0) * bunit(i,j,CHF_LBOUND[bunit;2],CHF_LBOUND[bunit;3],0)/fac
+     &                                 + vector(CHF_IX[i;j;k;l;m],1) * bunit(i,j,CHF_LBOUND[bunit;2],CHF_LBOUND[bunit;3],2)/fac 
+
+
+#else
+
+         fac = sqrt(bunit(i,j,k,CHF_LBOUND[bunit;3],CHF_LBOUND[bunit;4],0) ** 2
+     &             +bunit(i,j,k,CHF_LBOUND[bunit;3],CHF_LBOUND[bunit;4],2) ** 2)                
+
+         vector_pol(CHF_IX[i;j;k;l;m]) = vector(CHF_IX[i;j;k;l;m],0) * bunit(i,j,k,CHF_LBOUND[bunit;3],CHF_LBOUND[bunit;4],0)/fac
+     &                                 + vector(CHF_IX[i;j;k;l;m],2) * bunit(i,j,k,CHF_LBOUND[bunit;3],CHF_LBOUND[bunit;4],2)/fac 
+
+
+#endif
+   
+      CHF_ENDDO
+
+      return
+      end

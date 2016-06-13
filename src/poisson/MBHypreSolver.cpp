@@ -29,21 +29,6 @@ MBHypreSolver::~MBHypreSolver()
 
 
 void
-MBHypreSolver::constructMatrixGeneral( LevelData<FArrayBox>&  a_alpha_coefficient,
-                                       LevelData<FluxBox>&    a_tensor_coefficient,
-                                       LevelData<FArrayBox>&  a_beta_coefficient,
-                                       const PotentialBC&     a_bc )
-{
-   bool fourthOrder = (m_discretization_order == 4);
-
-   constructHypreMatrix(a_alpha_coefficient, a_tensor_coefficient, a_beta_coefficient, a_bc,
-                        m_A_graph, m_A_stencil_values, m_A_diagonal_offset, m_A_unstructured_coupling,
-                        fourthOrder, m_dropOrder, m_A, m_rhs_from_bc);
-}
-
-
-
-void
 MBHypreSolver::multiplyMatrix( const LevelData<FArrayBox>&  a_in,
                                LevelData<FArrayBox>&        a_out ) const
 {
@@ -207,6 +192,25 @@ MBHypreSolver::dumpMatrix(const string&  a_file_name) const
 
 
 void
+MBHypreSolver::constructMatrixGeneral( LevelData<FArrayBox>&  a_alpha_coefficient,
+                                       LevelData<FluxBox>&    a_tensor_coefficient,
+                                       LevelData<FArrayBox>&  a_beta_coefficient,
+                                       const PotentialBC&     a_bc )
+{
+   bool fourth_order = (m_discretization_order == 4);
+
+   if ( fourth_order && !(a_tensor_coefficient.ghostVect() >= IntVect::Unit) ) {
+      MayDay::Error("MBHypreSolver::constructMatrixGeneral(): Fourth-order solve requires tensor coefficient with one transverse ghost cell");
+   } 
+
+   constructHypreMatrix(a_alpha_coefficient, a_tensor_coefficient, a_beta_coefficient, a_bc,
+                        m_A_graph, m_A_stencil_values, m_A_diagonal_offset, m_A_unstructured_coupling,
+                        fourth_order, m_A, m_rhs_from_bc);
+}
+
+
+
+void
 MBHypreSolver::createHypreData()
 {
    if (m_hypre_allocated) {
@@ -219,14 +223,8 @@ MBHypreSolver::createHypreData()
    IntVect stencil_box_hi;
    int radius;
    if (m_discretization_order == 4) {
-      if (m_dropOrder) {
-         stencil_box_hi = 4*IntVect::Unit;
-         radius = 2;
-      }
-      else {
-         stencil_box_hi = 6*IntVect::Unit;
-         radius = 3;
-      }
+      stencil_box_hi = 4*IntVect::Unit;
+      radius = 2;
    }
    else {
       stencil_box_hi = 2*IntVect::Unit;
@@ -288,7 +286,7 @@ MBHypreSolver::createHypreData()
                }
                if (ncells != 1) {
                   if (procID()==0) {
-                     MayDay::Error( "GKPoisson: Periodic direction must be a factor of 2!" );
+                     MayDay::Error( "GKPoisson: Periodic direction must be a power of 2!" );
                   }
                }
             }
@@ -308,56 +306,29 @@ MBHypreSolver::createHypreData()
    // Define the discretization stencil for the system matrix A
 
    {
-
       /* Define the geometry of the stencil. Each represents a
          relative offset (in the index space). */
 
       int stencil_size = stencil_box.numPts();
 
-      int offsets2[][2] = {{-1,-1}, {0,-1}, {1,-1},
-                           {-1,0},  {0,0},  {1,0},
-                           {-1,1},  {0,1},  {1,1}};
-
-      int offsets3[][2] = {{-2,-2}, {-1,-2}, {0,-2}, {1,-2}, {2,-2},
-                           {-2,-1}, {-1,-1}, {0,-1}, {1,-1}, {2,-1},
-                           {-2, 0}, {-1, 0}, {0, 0}, {1, 0}, {2, 0},
-                           {-2, 1}, {-1, 1}, {0, 1}, {1, 1}, {2, 1},
-                           {-2, 2}, {-1, 2}, {0, 2}, {1, 2}, {2, 2}};
-
-      int offsets4[][2] = {{-3,-3}, {-2,-3}, {-1,-3}, {0,-3}, {1,-3}, {2,-3}, {3,-3},
-                           {-3,-2}, {-2,-2}, {-1,-2}, {0,-2}, {1,-2}, {2,-2}, {3,-2},
-                           {-3,-1}, {-2,-1}, {-1,-1}, {0,-1}, {1,-1}, {2,-1}, {3,-1},
-                           {-3, 0}, {-2, 0}, {-1, 0}, {0, 0}, {1, 0}, {2, 0}, {3, 0},
-                           {-3, 1}, {-2, 1}, {-1, 1}, {0, 1}, {1, 1}, {2, 1}, {3, 1},
-                           {-3, 2}, {-2, 2}, {-1, 2}, {0, 2}, {1, 2}, {2, 2}, {3, 2},
-                           {-3, 3}, {-2, 3}, {-1, 3}, {0, 3}, {1, 3}, {2, 3}, {3, 3}};
-
       int** offsets = new int*[stencil_size];
-      for (int n=0; n<stencil_size; ++n) {
-         offsets[n] = new int[2];
-         for (int m=0; m<2; ++m) {
-            if (m_discretization_order == 4) {
-               if (m_dropOrder) {
-                  offsets[n][m] = offsets3[n][m];
-               }
-               else {
-                  offsets[n][m] = offsets4[n][m];
-               }
-            }
-            else {
-               offsets[n][m] = offsets2[n][m];
-            }
+      int n = -1;
+      for (BoxIterator bit(stencil_box - radius*IntVect::Unit); bit.ok(); ++bit) {
+         n++;
+         offsets[n] = new int[SpaceDim];
+         IntVect iv = bit();
+         for (int m=0; m<SpaceDim; ++m) {
+            offsets[n][m] = iv[m];
          }
       }
 
       m_A_diagonal_offset = (stencil_size - 1) / 2;
 
-      /* Create an empty 2D stencil object */
+      /* Create an empty stencil object */
       HYPRE_SStructStencilCreate(SpaceDim, stencil_size, &m_A_stencil);
 
       /* Assign each of the stencil entries */
-      int entry;
-      for (entry = 0; entry < stencil_size; entry++)
+      for (int entry = 0; entry < stencil_size; entry++)
         HYPRE_SStructStencilSetEntry(m_A_stencil, entry, offsets[entry], var);
 
       for (int n=0; n<stencil_size; ++n) {
@@ -383,7 +354,7 @@ MBHypreSolver::createHypreData()
       HYPRE_SStructGraphAssemble(m_A_graph);
    }
 
-   // Set up vectors for b, x and bc
+   // Set up b and x vectors
 
    {
       /* Create an empty vector object */
@@ -406,14 +377,15 @@ void
 MBHypreSolver::destroyHypreData()
 {
    if (m_hypre_allocated) {
-      HYPRE_SStructGridDestroy(m_grid);
-      HYPRE_SStructStencilDestroy(m_A_stencil);
       if (m_A) {
          HYPRE_SStructMatrixDestroy(m_A);
          m_A = NULL;
       }
-      HYPRE_SStructVectorDestroy(m_b);
       HYPRE_SStructVectorDestroy(m_x);
+      HYPRE_SStructVectorDestroy(m_b);
+      HYPRE_SStructGraphDestroy(m_A_graph);
+      HYPRE_SStructStencilDestroy(m_A_stencil);
+      HYPRE_SStructGridDestroy(m_grid);
 
       m_hypre_allocated = false;
    }
@@ -505,8 +477,7 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
                                              const LevelData<FluxBox>&                 a_tensor_coefficient,
                                              const PotentialBC&                        a_bc,
                                              FArrayBox&                                a_stencil_values,
-                                             const bool                                a_fourthOrder,
-                                             const bool                                a_dropOrder,
+                                             const bool                                a_fourth_order,
                                              const LayoutData< BaseFab<IntVectSet> >&  a_unstructured_coupling,
                                              Vector< Vector<CoDim1Stencil> >&          a_codim1_stencils,
                                              Vector< Vector<CoDim2Stencil> >&          a_codim2_stencils,
@@ -596,7 +567,7 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
                      a_stencil_values.setVal(0.);
 
                      accumStencilMatrixEntries(iv, dir, side, dir2, a_tensor_coefficient[dit],
-                                               dx, a_fourthOrder, a_dropOrder, a_stencil_values);
+                                               dx, a_fourth_order, a_stencil_values);
 
                      FArrayBox dummy;
                      modifyStencilForBCs( a_codim1_stencils[block_number], a_codim2_stencils[block_number],
@@ -757,7 +728,6 @@ MBHypreSolver::constructHypreMatrix( LevelData<FArrayBox>&               a_alpha
                                      const int                           a_diagonal_offset,
                                      LayoutData< BaseFab<IntVectSet> >&  a_unstructured_coupling,
                                      const bool                          a_fourth_order,
-                                     const bool                          a_dropOrder,
                                      HYPRE_SStructMatrix&                a_matrix,
                                      LevelData<FArrayBox>&               a_rhs_from_bc ) const
 {
@@ -867,7 +837,7 @@ MBHypreSolver::constructHypreMatrix( LevelData<FArrayBox>&               a_alpha
                 tmp_stencil_values.setVal(0.);
 
                 accumStencilMatrixEntries(iv, dir, side, dir2, this_coef, dx,
-                                          a_fourth_order, a_dropOrder, tmp_stencil_values);
+                                          a_fourth_order, tmp_stencil_values);
 
                 modifyStencilForBCs( codim1_stencils[block_number], codim2_stencils[block_number],
                                      iv, tmp_stencil_values, a_rhs_from_bc[dit],
@@ -934,7 +904,7 @@ MBHypreSolver::constructHypreMatrix( LevelData<FArrayBox>&               a_alpha
    delete [] entries;
 
    addUnstructuredMatrixEntries(a_alpha_coefficient, a_tensor_coefficient, a_bc, a_stencil_values,
-                                a_fourth_order, a_dropOrder, a_unstructured_coupling,
+                                a_fourth_order, a_unstructured_coupling,
                                 codim1_stencils, codim2_stencils, a_matrix);
 
    /* This is a collective call finalizing the matrix assembly.
@@ -953,9 +923,25 @@ MBHypreSolver::constructHypreMatrix( LevelData<FArrayBox>&               a_alpha
                         codim2_stencils,
                         a_stencil_values,
                         a_fourth_order,
-                        a_dropOrder,
                         a_rhs_from_bc );
 #endif
+}
+
+
+
+void
+MBHypreSolver::extrapGhosts( const PotentialBC&    a_bc,
+                             const bool            a_fourth_order,
+                             LevelData<FArrayBox>& a_data ) const
+{
+   Vector< Vector<CoDim1Stencil> > codim1_stencils;
+   Vector< Vector<CoDim2Stencil> > codim2_stencils;
+
+   constructBoundaryStencils(a_fourth_order, a_bc, codim1_stencils, codim2_stencils );
+
+   bool extrapolate_from_interior = true;
+   bool include_bvs = true;
+   accumPhysicalGhosts( codim1_stencils, codim2_stencils, extrapolate_from_interior, include_bvs, a_data );
 }
 
 

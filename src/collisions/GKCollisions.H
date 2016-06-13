@@ -68,8 +68,9 @@ class GKCollisions
        */
       Real computeTimeScale( const KineticSpeciesPtrVect& soln );
 
-      bool setupPrecondMatrix(void*,int,int);
-      void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,const Mapping&);
+      bool setupPrecondMatrix( void*, int );
+
+   void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,const Mapping&);
 
       /// returns the collision model associated with the input name
       /**
@@ -86,7 +87,7 @@ class GKCollisions
       bool isLinear();
 
       void preTimeStep    (const KineticSpeciesPtrVect&, const Real);
-      void postTimeStage  (const KineticSpeciesPtrVect&, const Real);
+      void postTimeStage  (const KineticSpeciesPtrVect&, const Real, const int);
 
    private:
 
@@ -94,6 +95,12 @@ class GKCollisions
       GKCollisions( const GKCollisions& );
       const GKCollisions& operator=( const GKCollisions& );
 
+      inline
+      int getCollisionModelIndex( std::map<std::string,int>::iterator& it )
+      {
+         return it->second;
+      }
+   
       bool m_verbose;
       std::map<std::string,int> m_species_map;
       std::vector<CLSInterface*> m_collision_model;

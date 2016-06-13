@@ -41,7 +41,7 @@ public:
 
   int getExitStatus() const { return m_exitStatus; }
 
-  inline int  getCount() { return m_count; }
+  inline int getCount() const { return m_count; }
 
 private:
   void allocate();

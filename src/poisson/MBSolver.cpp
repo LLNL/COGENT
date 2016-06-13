@@ -37,8 +37,7 @@ MBSolver::MBSolver( const MultiBlockLevelGeom&  a_geom,
    : m_geometry(a_geom),
      m_coord_sys_ptr(m_geometry.coordSysPtr()),
      m_mblex_potential_Ptr(NULL),
-     m_discretization_order(a_discretization_order),
-     m_dropOrder(true)
+     m_discretization_order(a_discretization_order)
 {
    CH_assert(m_discretization_order == 2 || m_discretization_order == 4);
 
@@ -428,20 +427,16 @@ MBSolver::accumStencilMatrixEntries(const IntVect    a_index,
                                     const FluxBox&   a_mapped_coefs,
                                     const RealVect&  a_dx,
                                     const bool       a_fourthOrder,
-                                    const bool       a_dropOrder,
                                     FArrayBox&       a_stencil_values) const
 {
    if (a_fourthOrder) {
         
-      int dropOrder = a_dropOrder? 1: 0;
-
       FORT_ACCUM_FLUX_STENCIL4( CHF_CONST_INT(a_dir),
                                 CHF_CONST_INT(a_dir2),
                                 CHF_CONST_INT(a_side),
                                 CHF_CONST_REALVECT(a_dx),
-                                CHF_CONST_FRA1(a_mapped_coefs[a_dir],2*a_dir+a_dir2),
+                                CHF_CONST_FRA1(a_mapped_coefs[a_dir],SpaceDim*a_dir+a_dir2),
                                 CHF_CONST_INTVECT(a_index),
-                                CHF_CONST_INT(dropOrder),
                                 CHF_FRA1(a_stencil_values,0) );
    }
    else {
@@ -450,7 +445,7 @@ MBSolver::accumStencilMatrixEntries(const IntVect    a_index,
                                 CHF_CONST_INT(a_dir2),
                                 CHF_CONST_INT(a_side),
                                 CHF_CONST_REALVECT(a_dx),
-                                CHF_CONST_FRA1(a_mapped_coefs[a_dir],2*a_dir+a_dir2),
+                                CHF_CONST_FRA1(a_mapped_coefs[a_dir],SpaceDim*a_dir+a_dir2),
                                 CHF_CONST_INTVECT(a_index),
                                 CHF_FRA1(a_stencil_values,0) );
    }
@@ -751,7 +746,6 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
                                         const Vector< Vector<CoDim2Stencil> >&             a_codim2_stencils,
                                         FArrayBox&                                         a_stencil_values,
                                         const bool                                         a_fourthOrder,
-                                        const bool                                         a_dropOrder,
                                         const bool                                         a_extrapolate_from_interior,
                                         const bool                                         a_include_bvs,
                                         LevelData<FluxBox>&                                a_flux_normal ) const
@@ -815,7 +809,7 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
                   a_stencil_values.setVal(0.);
 
                   accumStencilMatrixEntries(iv, dir_outer, side, dir_inner, this_coef,
-                                            dx, a_fourthOrder, a_dropOrder, a_stencil_values);
+                                            dx, a_fourthOrder, a_stencil_values);
 
                   double flux_contrib = 0.;
                   for (BoxIterator bit_cell(a_stencil_values.box()); bit_cell.ok(); ++bit_cell) {
@@ -860,7 +854,6 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
                                const Vector< Vector<CoDim2Stencil> >&             a_codim2_stencils,
                                FArrayBox&                                         a_stencil_values,
                                const bool                                         a_fourthOrder,
-                               const bool                                         a_dropOrder,
                                const LevelData<FArrayBox>&                        a_rhs_from_bc ) const
 {
    const DisjointBoxLayout& grids = a_rhs_from_bc.disjointBoxLayout();
@@ -886,7 +879,7 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
    include_bvs = false;
    computeFluxNormalFromStencil( solution, a_tensor_coefficient, a_block_boundaries, a_codim1_stencils,
                                  a_codim2_stencils, a_stencil_values, a_fourthOrder,
-                                 a_dropOrder, extrapolate_from_interior, include_bvs, flux_normal_without_bvs );
+                                 extrapolate_from_interior, include_bvs, flux_normal_without_bvs );
    averageAtBlockBoundaries(flux_normal_without_bvs);
 
    LevelData<FArrayBox> zero(grids, 1, IntVect::Zero);
@@ -900,7 +893,7 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
    include_bvs = true;
    computeFluxNormalFromStencil( zero, a_tensor_coefficient, a_block_boundaries, a_codim1_stencils,
                                  a_codim2_stencils, a_stencil_values, a_fourthOrder,
-                                 a_dropOrder, extrapolate_from_interior, include_bvs, flux_normal_only_bvs );
+                                 extrapolate_from_interior, include_bvs, flux_normal_only_bvs );
 
    LevelData<FArrayBox> operator_eval(grids, 1, IntVect::Zero);
 
@@ -964,7 +957,7 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
    double diff = L2Norm(matvec);
 
    if (procID()==0) {
-      cout << "Matrix diff = " << diff << endl;
+      cout << "Matrix diff = " << diff << " (using random input)" << endl;
    }
 }
 

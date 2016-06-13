@@ -7,13 +7,6 @@
 //#include "BCInterface.H.multidim"
 #include "Vector.H"
 #include "RefCountedPtr.H"
-#define CH_SPACEDIM PDIM
-
-#undef CH_SPACEDIM
-#define CH_SPACEDIM CFG_DIM
-#include "FluxSurface.H"
-#undef CH_SPACEDIM
-#define CH_SPACEDIM PDIM
 
 #include "NamespaceHeader.H"
 namespace CFG = CFG_NAMESPACE;
@@ -108,15 +101,15 @@ class KineticSpecies
       /**
        */
       virtual void HeatFlux( CFG::LevelData<CFG::FArrayBox>& Heat_Flux,
-                                   const LevelData<FluxBox>& field,
-                                   const LevelData<FArrayBox>& phi ) const;
+                             const LevelData<FluxBox>& field,
+                             const LevelData<FArrayBox>& phi ) const;
 
-      /// Returns species parallel heat flux.
+      /// Returns species perpendicular current density.
       /**
        */
-      virtual void parallelHeatFluxMoment( CFG::LevelData<CFG::FArrayBox>& parallelHeatFlux,
-                                           CFG::LevelData<CFG::FArrayBox>& vparshift ) const;
-
+      virtual void perpCurrentDensity( CFG::LevelData<CFG::FArrayBox>& Perp_Current_Density,
+                                       const LevelData<FluxBox>& field  ) const;
+   
       /// Returns species pressure.
       /**
        */
@@ -206,6 +199,18 @@ class KineticSpecies
 
       void computeMappedVelocity( LevelData<FluxBox>& a_velocity,
                                   const LevelData<FluxBox>& a_E_field ) const;
+
+   inline
+   virtual int size( bool a_count_ghosts = false )
+   {
+      int size(0);
+      const DisjointBoxLayout& dbl( m_dist_func.disjointBoxLayout() );
+      for (DataIterator dit( dbl.dataIterator() ); dit.ok(); ++dit) {
+         const Box& box( a_count_ghosts ? m_dist_func[dit].box() : dbl[dit] );
+         size += box.numPts() * m_dist_func.nComp();
+      }
+      return size;
+   }
 
    private:
 

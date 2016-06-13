@@ -1,0 +1,65 @@
+      subroutine compute_mapped_coefficients(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[unmapped_coef],
+     &     CHF_CONST_FRA[n],
+     &     CHF_CONST_FRA1[jinverse],
+     &     CHF_FRA[coef]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], row, col, m
+      double precision n_mat(CH_SPACEDIM,CH_SPACEDIM), nji_mat(CH_SPACEDIM,CH_SPACEDIM),
+     &       d_mat(CH_SPACEDIM,CH_SPACEDIM), dnji_mat(CH_SPACEDIM,CH_SPACEDIM),
+     &       coef_mat(CH_SPACEDIM,CH_SPACEDIM)
+
+      CHF_MULTIDO[box;i;j;k]
+
+         m = -1
+         do row = 1, CH_SPACEDIM
+            do col = 1, CH_SPACEDIM
+               m = m + 1
+               d_mat(row,col) = unmapped_coef(CHF_IX[i;j;k],m)
+               nji_mat(row,col) = n(CHF_IX[i;j;k],m) * jinverse(CHF_IX[i;j;k])
+            enddo
+         enddo
+
+c        Multiply the coefficient matrix times the NJInverse matrix
+         do row = 1, CH_SPACEDIM
+            do col = 1, CH_SPACEDIM
+               dnji_mat(row,col) = zero
+               do m = 1, CH_SPACEDIM
+                  dnji_mat(row,col) = dnji_mat(row,col) + d_mat(row,m) * nji_mat(m,col)
+               enddo
+            enddo
+         enddo
+
+         m = -1
+         do row = 1, CH_SPACEDIM
+            do col = 1, CH_SPACEDIM
+               m = m + 1
+               n_mat(row,col) = n(CHF_IX[i;j;k],m)
+            enddo
+         enddo
+
+c        Premultiply by the NTranspose matrix
+         do row = 1, CH_SPACEDIM
+            do col = 1, CH_SPACEDIM
+               coef_mat(row,col) = zero
+               do m = 1, CH_SPACEDIM
+                  coef_mat(row,col) = coef_mat(row,col) + n_mat(m,row) * dnji_mat(m,col)
+               enddo
+            enddo
+         enddo
+
+         m = -1
+         do row = 1, CH_SPACEDIM
+            do col = 1, CH_SPACEDIM
+               m = m + 1
+               coef(CHF_IX[i;j;k],m) = coef_mat(row,col)
+            enddo
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end

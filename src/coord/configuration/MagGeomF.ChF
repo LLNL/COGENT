@@ -1,0 +1,227 @@
+      subroutine mult_njinverse(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[efield_mapped],
+     &     CHF_CONST_FRA[njinverse],
+     &     CHF_FRA[efield]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], m, row, col
+      double precision sum
+
+      CHF_MULTIDO[box;i;j;k]
+
+         m = 0
+         do row = 0, CH_SPACEDIM-1
+            sum = zero
+            do col = 0, CH_SPACEDIM-1
+               sum = sum + njinverse(CHF_IX[i;j;k],m) * efield_mapped(CHF_IX[i;j;k],col)
+               m = m + 1
+            enddo
+            efield(CHF_IX[i;j;k],row) = sum
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine project_onto_parallel(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_FRA[vector]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k] 
+      double precision fac
+
+      fac = 0  
+      CHF_MULTIDO[box;i;j;k]
+
+#if CH_SPACEDIM==3
+
+        do n = 0, CHF_NCOMP[vector]-1
+         fac = fac + vector(CHF_IX[i;j;k],n) * bunit(CHF_IX[i;j;k],n) 
+        enddo
+
+        do n = 0, CHF_NCOMP[vector]-1
+          vector(CHF_IX[i;j;k],n) = fac * bunit(CHF_IX[i;j;k],n) 
+        enddo
+
+#else
+         fac = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0) 
+     &       + vector(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],2)                
+
+
+          vector(CHF_IX[i;j;k],0) = fac * bunit(CHF_IX[i;j;k],0) 
+          vector(CHF_IX[i;j;k],1) = fac * bunit(CHF_IX[i;j;k],2)       
+   
+#endif
+      
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine compute_radial_projection(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_CONST_FRA[vector],
+     &     CHF_CONST_FRA1[vector_r]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k] 
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k]
+
+         fac = sqrt(bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0) 
+     &             +bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2))                
+        
+         if (CHF_NCOMP[vector]. eq. 2) then 
+
+           vector_r(CHF_IX[i;j;k]) = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],2)/fac
+     &                             - vector(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],0)/fac 
+           
+   
+         else  
+
+           vector_r(CHF_IX[i;j;k]) = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],2)/fac
+     &                             - vector(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],0)/fac 
+
+
+         endif
+      
+      CHF_ENDDO
+      
+      return
+      end
+
+
+      subroutine compute_poloidal_projection(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_CONST_FRA[vector],
+     &     CHF_CONST_FRA1[vector_pol]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k] 
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k]
+
+         fac = sqrt(bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0) 
+     &             +bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2))                
+        
+         if (CHF_NCOMP[vector]. eq. 2) then
+
+           vector_pol(CHF_IX[i;j;k]) = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0)/fac
+     &                               + vector(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],2)/fac 
+   
+         else  
+
+           vector_pol(CHF_IX[i;j;k]) = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0)/fac
+     &                               + vector(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2)/fac 
+
+         endif
+      
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine cell_centered_grad_component(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INT[order],
+     &     CHF_FRA1[Efield]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir)]
+
+      if (order .eq. 4) then
+
+         CHF_MULTIDO[box; i; j; k]
+      
+            Efield(CHF_IX[i;j;k]) = (
+     &        phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
+     &        - eight * phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + eight * phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &        - phi(CHF_IX[i+2*ii;j+2*jj;k+2*kk])
+     &        ) / (twelve * h(dir))
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box; i; j; k]
+
+            Efield(CHF_IX[i;j;k]) = (
+     &        - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &        ) / (two * h(dir))
+          
+         CHF_ENDDO
+
+      endif
+
+      return
+      end
+
+      subroutine face_centered_grad_component(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INT[order],
+     &     CHF_FRA1[Efield]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir)]
+
+      if (order .eq. 4) then
+
+         CHF_MULTIDO[box; i; j; k]
+
+            Efield(CHF_IX[i;j;k]) = (
+     &        27.d0 * (phi(CHF_IX[i     ;j     ;k     ])
+     &               - phi(CHF_IX[i-  ii;j-  jj;k-  kk]))
+     &               - phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &               + phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
+     &        ) / (24.d0 * h(dir))
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box; i; j; k]
+
+            Efield(CHF_IX[i;j;k]) = (
+     &        - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + phi(CHF_IX[i     ;j     ;k     ])
+     &        ) / h(dir)
+
+         CHF_ENDDO
+
+      endif
+
+      return
+      end
+

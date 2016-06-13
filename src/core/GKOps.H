@@ -37,6 +37,8 @@
 #include "MagGeom.H"
 #include "BoltzmannElectron.H"
 #include "NewGKPoissonBoltzmann.H"
+#include "GKFluidOp.H"
+#include "GKFieldOp.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -101,18 +103,17 @@ public:
     *  @param[in] pp the input database.
     */
 
-   void initialize( const KineticSpeciesPtrVect& kinetic_species,
-                    const int cur_step );
+   void initializeElectricField( const GKState& state, const int cur_step );
 
    inline
-   void applyInitialConditions( KineticSpeciesPtrVect& a_kinetic_species,
-                                const Real a_time )
+   void initializeState( GKState& a_state, const Real a_time )
    {
-      m_initial_conditions->initializeSystem( a_kinetic_species, m_phi, a_time );
-      enforceQuasiNeutrality( a_kinetic_species, m_phi );
+// JAFH: need to generalize ICs to all of state
+      m_initial_conditions->initializeSystem( a_state, m_phi, a_time );
+      enforceQuasiNeutrality( a_state.dataKinetic(), m_phi );
    }
-   
-   inline
+
+  inline
    void initializePotential( const Real a_time )
    {
       m_initial_conditions->initializePotentialField( m_phi, a_time );
@@ -127,37 +128,67 @@ public:
    /**
     * Returns the Vlasov time scale.
     */
-   Real dtScale_Vlasov( const KineticSpeciesPtrVect& soln, const int step_number ) { return m_TimeScale_Vlasov; }
+   Real dtScaleVlasov( const GKState& state, const int step_number )
+   {
+      return m_time_scale_vlasov;
+   }
 
    /// Returns the collisions time scale.
    /**
     * Returns the collisions time scale.
     */
-   Real dtScale_Collisions( const KineticSpeciesPtrVect& soln, const int step_number ) { return m_TimeScale_Collisions; }
+   Real dtScaleCollisions( const GKState& a_state, const int step_number )
+   {
+      return m_time_scale_collisions;
+   }
 
    /// Returns the transport time scale.
    /**
     * Returns the transport time scale.
     */
-   Real dtScale_Transport( const KineticSpeciesPtrVect& soln, const int step_number ) { return m_TimeScale_Transport; }
+   Real dtScaleTransport( const GKState& a_state,  const int step_number )
+   {
+      return m_time_scale_transport;
+   }
 
+   /// Returns the time scale for the field components.
+   /**
+    * Returns the time scale for the field components.
+    */
+   Real dtScaleFields( const GKState& a_state,  const int step_number )
+   {
+      return m_time_scale_fields;
+   }
+   
+   /// Returns the time scale for the fluid components.
+   /**
+    * Returns the time scale for the fluid components.
+    */
+   Real dtScaleFluids( const GKState& a_state,  const int step_number )
+   {
+      return m_time_scale_fluids;
+   }
+   
    /// Returns the neutrals time scale.
    /**
     * Returns the neutrals time scale.
     */
-   Real dtScale_Neutrals( const KineticSpeciesPtrVect& soln, const int step_number ) { return m_TimeScale_Neutrals; }
+   Real dtScaleNeutrals( const GKState& a_state, const int step_number )
+   {
+      return m_time_scale_neutrals;
+   }
 
    /// Compute a stable time step for explicit time integration
    /**
     * Computes and returns a stable time step estimate.
     */
-   Real stableDtExpl( const KineticSpeciesPtrVect& soln, const int step_number );
+   Real stableDtExpl( const GKState& a_state, const int step_number );
 
    /// Compute a stable time step for IMEX time integration
    /**
     * Computes and returns a stable time step estimate.
     */
-   Real stableDtImEx( const KineticSpeciesPtrVect& soln, const int step_number );
+   Real stableDtImEx( const GKState& a_state, const int step_number );
 
    /// Evaluates the RHS of the ODE.
    /**
@@ -173,6 +204,8 @@ public:
    GKOps() :
       m_vlasov(NULL),
       m_collisions(NULL),
+      m_fieldOp(NULL),
+      m_fluidOp(NULL),
       m_neutrals(NULL),
       m_transport(NULL),
       m_poisson(NULL),
@@ -195,14 +228,24 @@ public:
       m_hist_count(0),
       m_expand_incr(100),
       m_hist_fieldname("field"),
-      m_dt_Vlasov(-1),
-      m_dt_Collisions(-1),
-      m_dt_Transport(-1),
-      m_dt_Neutrals(-1),
-      m_TimeScale_Vlasov(-1),
-      m_TimeScale_Collisions(-1),
-      m_TimeScale_Transport(-1),
-      m_TimeScale_Neutrals(-1),
+      m_dt_vlasov(DBL_MAX),
+      m_dt_collisions(DBL_MAX),
+      m_dt_transport(DBL_MAX),
+      m_dt_fields(DBL_MAX),
+      m_dt_fluids(DBL_MAX),
+      m_dt_neutrals(DBL_MAX),
+      m_time_scale_vlasov(-1),
+      m_time_scale_collisions(-1),
+      m_time_scale_transport(-1),
+      m_time_scale_fields(-1),
+      m_time_scale_fluids(-1),
+      m_time_scale_neutrals(-1),
+      m_count_vlasov(0),
+      m_count_collision(0),
+      m_count_transport(0),
+      m_count_fields(0),
+      m_count_fluids(0),
+      m_count_neutrals(0),
       m_verbosity(0) {;}   
    
    void define( const GKState& a_state, const Real a_dt );
@@ -216,37 +259,82 @@ public:
       m_dt = a_dt;
    }
 
-   void preTimeStep  (const int,const Real,const GKState&);
-   void postTimeStep (const int,const Real,const GKState&);
-   void postTimeStage(const int,const Real,const GKState&);
+   void preTimeStep( const int,const Real,const GKState& );
 
-   void setElectricField (const Real a_time, const GKState& a_state);
+   void postTimeStep( const int,const Real,const GKState& );
 
-   void explicitOp    (GKRHSData& a_rhs,const Real a_time,const GKState& a_state,const int a_stage = 1);
-   void explicitOpImEx(GKRHSData& a_rhs,const Real a_time,const GKState& a_state,const int a_stage = 1);
-   void implicitOpImEx(GKRHSData& a_rhs,const Real a_time,const GKState& a_state,const int a_stage = 1, 
-                       const int a_flag = 1);
+   void postTimeStage( const int,const Real,const GKState&, const int );
+
+   void setElectricField ( const Real a_time, const GKState& a_state );
+
+   void explicitOp( GKRHSData& a_rhs,
+                    const Real a_time,
+                    const GKState& a_state,
+                    const int a_stage = 1 );
+
+   void explicitOpImEx( GKRHSData& a_rhs,
+                        const Real a_time,
+                        const GKState& a_state,
+                        const int a_stage = 1 );
+
+   void implicitOpImEx( GKRHSData& a_rhs,
+                        const Real a_time,
+                        const GKState& a_state,
+                        const int a_stage = 1,
+                        const int a_flag = 1);
    
-   void explicitOp    (GKRHSData& a_rhs,const Real a_time,const GKRHSData& a_state,
-                       const int a_stage = 1);
-   void explicitOpImEx(GKRHSData& a_rhs,const Real a_time,const GKRHSData& a_state,
-                       const int a_stage = 1);
-   void implicitOpImEx(GKRHSData& a_rhs,const Real a_time,const GKRHSData& a_state,
-                       const int a_stage = 1, const int a_flag = 1);
+   void explicitOp( GKRHSData& a_rhs,
+                    const Real a_time,
+                    const GKRHSData& a_state,
+                    const int a_stage = 1 );
+
+   void explicitOpImEx( GKRHSData& a_rhs,
+                        const Real a_time,
+                        const GKRHSData& a_state,
+                        const int a_stage = 1 );
+
+   void implicitOpImEx( GKRHSData& a_rhs,
+                        const Real a_time,
+                        const GKRHSData& a_state,
+                        const int a_stage = 1,
+                        const int a_flag = 1);
 
    bool setupPCImEx (void*,GKState&);
+
    bool setupPCImEx (void*,GKRHSData&);
-   inline void assemblePCImEx(void *a_P,const GKState& a_state) 
-     { m_collisions->assemblePrecondMatrix(a_P,a_state.data(),a_state.mapping()); }
-   inline void assemblePCImEx(void *a_P,const GKRHSData& a_state) 
-     { m_collisions->assemblePrecondMatrix(a_P,a_state.data(),a_state.mapping()); }
+
+   inline
+   void assemblePCImEx( void *a_P,const GKState& a_state ) 
+     {
+        m_collisions->assemblePrecondMatrix( a_P,
+                                             a_state.dataKinetic(),
+                                             a_state.mapping() );
+     }
    
-   void computeElectricField( LevelData<FluxBox>&          a_E_field,
-                              const KineticSpeciesPtrVect& a_kinetic_species,
-                              const int                    a_step_number );
+   inline
+   void assemblePCImEx( void *a_P,const GKRHSData& a_state ) 
+     {
+        m_collisions->assemblePrecondMatrix( a_P,
+                                             a_state.dataKinetic(),
+                                             a_state.mapping() );
+     }
+   
+   void computeElectricField( LevelData<FluxBox>&              a_E_field,
+                              const KineticSpeciesPtrVect&     a_kinetic_species,
+                              const CFG::FluidSpeciesPtrVect&  a_fluid_species,
+                              const CFG::FieldPtrVect&         a_fields,
+                              const int                        a_step_number );
     
    void divideJ( const KineticSpeciesPtrVect& soln_mapped,
                  KineticSpeciesPtrVect&       soln_physical );
+
+   void divideJ( const CFG::FluidSpeciesPtrVect& soln_mapped,
+                 CFG::FluidSpeciesPtrVect&       soln_physical );
+
+   void divideJ( const CFG::FieldPtrVect& soln_mapped,
+                 CFG::FieldPtrVect&       soln_physical );
+
+   void divideJ( const GKState& soln_mapped, GKState& soln_physical );
 
    inline
    bool usingBoltzmannElectrons() const
@@ -309,6 +397,14 @@ public:
                                   const KineticSpecies& soln_species,
                                   const double&         time ) const;
 
+   void plotFluids( const std::string&       filename,
+                    const CFG::FluidSpecies& fluid_species,
+                    const double&            time ) const;
+
+   void plotFields( const std::string&    filename,
+                    const CFG::Field&     soln_species,
+                    const double&         time ) const;
+
    void plotDeltaF( const std::string&    filename,
                     const KineticSpecies& soln_species,
                     const double&         time ) const;
@@ -346,7 +442,7 @@ public:
                            const double&         time ) const;
 
    void plotChargeDensity( const std::string&     filename,
-                           KineticSpeciesPtrVect& species,
+                           const KineticSpeciesPtrVect& species,
                            const double&          time ) const;
 
    void plotParallelMomentum( const std::string&    filename,
@@ -418,13 +514,31 @@ public:
 
    inline bool isLinear() { return(m_collisions->isLinear()); }
 
-   inline void getFunctionCounts(int *a_count_Vlasov, int *a_count_Collision,
-                                 int *a_count_Transport, int *a_count_Neutrals)
+   inline void getFunctionCounts( int& a_count_vlasov,
+                                  int& a_count_collision,
+                                  int& a_count_transport,
+                                  int& a_count_fields,
+                                  int& a_count_fluids,
+                                  int& a_count_neutrals )
     {
-      if (a_count_Vlasov)     *a_count_Vlasov = m_count_Vlasov;
-      if (a_count_Collision)  *a_count_Collision = m_count_Collision;
-      if (a_count_Transport)  *a_count_Transport = m_count_Transport;
-      if (a_count_Neutrals)   *a_count_Neutrals = m_count_Neutrals;
+       if (a_count_vlasov) {
+          a_count_vlasov = m_count_vlasov;
+       }
+       if (a_count_collision) {
+          a_count_collision = m_count_collision;
+       }
+       if (a_count_transport) {
+          a_count_transport = m_count_transport;
+       }
+       if (a_count_fields) {
+          a_count_fields = m_count_fields;
+       }
+       if (a_count_fluids) {
+          a_count_fluids = m_count_fluids;
+       }
+       if (a_count_neutrals) {
+          a_count_neutrals = m_count_neutrals;
+       }
     }
    
 private:
@@ -442,10 +556,23 @@ private:
 
    void createTemporarySpeciesVector( KineticSpeciesPtrVect& out,
                                       const KineticSpeciesPtrVect& in );
+   
+   void createTemporarySpeciesVector( CFG::FluidSpeciesPtrVect& out,
+                                      const CFG::FluidSpeciesPtrVect& in );
 
+   void createTemporaryFieldVector( CFG::FieldPtrVect& out,
+                                      const CFG::FieldPtrVect& in );
+
+   void createTemporaryState( GKState& out, const GKState& in );
+
+   // JAFH: To be deprecated
    void fillGhostCells( KineticSpeciesPtrVect&       species_phys,
                         const LevelData<FluxBox>&    E_field,
                         const Real&                  time );
+
+   void fillGhostCells( GKState&                  state_phys,
+                        const LevelData<FluxBox>& E_field,
+                        const Real&               time );
 
    void applyVlasovOperator( KineticSpeciesPtrVect&       rhs,
                              const KineticSpeciesPtrVect& soln,
@@ -457,7 +584,7 @@ private:
                                 const Real&                  time,
                                 const int                    flag = 1);
 
-   void applyNeutralsOperator(   KineticSpeciesPtrVect&       rhs,
+   void applyNeutralsOperator(   KineticSpeciesPtrVect&      rhs,
                                 const KineticSpeciesPtrVect& soln,
                                 const Real&                  time );
     
@@ -465,6 +592,20 @@ private:
    void applyTransportOperator( KineticSpeciesPtrVect&       rhs,
                                 const KineticSpeciesPtrVect& soln,
                                 const Real&                  time );
+
+   void applyFieldOperator( CFG::FieldPtrVect&                   rhs,
+                            const CFG::FieldPtrVect&             fields,
+                            const CFG::FluidSpeciesPtrVect&      fluids,
+                            const KineticSpeciesPtrVect&         soln,
+                            const CFG::LevelData<CFG::FluxBox>&  E_field,
+                            const Real&                          time);
+
+   void applyFluidOperator( CFG::FluidSpeciesPtrVect&            rhs,
+                            const CFG::FieldPtrVect&             fields,
+                            const CFG::FluidSpeciesPtrVect&      fluids,
+                            const KineticSpeciesPtrVect&         soln,
+                            const CFG::LevelData<CFG::FluxBox>&  E_field,
+                            const Real&                          time);
    
    /// Compute the total charge density
    /**
@@ -535,10 +676,12 @@ private:
       CFG::LevelData<CFG::FArrayBox>& a_initial_density,
       CFG::LevelData<CFG::FArrayBox>& a_quasineutral_density ) const;
 
-   void computeEField( CFG::LevelData<CFG::FluxBox>&   E_field_face,
-                       CFG::LevelData<CFG::FArrayBox>& E_field_cell,
-                       const KineticSpeciesPtrVect&    soln,
-                       const int                       step_number );
+   void computeEField( CFG::LevelData<CFG::FluxBox>&     E_field_face,
+                       CFG::LevelData<CFG::FArrayBox>&   E_field_cell,
+                       const KineticSpeciesPtrVect&      soln_kinetic,
+                       const CFG::FluidSpeciesPtrVect&   soln_fluid,
+                       const CFG::FieldPtrVect&          soln_field,
+                       const int                         step_number );
    
    void setCoreBC( const double      core_inner_bv,
                    const double      core_outer_bv,
@@ -548,6 +691,8 @@ private:
    GKCollisions*                  m_collisions;
    GKNeutrals*                    m_neutrals;
    GKTransport*                   m_transport;
+   CFG::GKFieldOp*                m_fieldOp;
+   CFG::GKFluidOp*                m_fluidOp;
    CFG::GKPoisson*                m_poisson;
    
    CFG::LevelData<CFG::FluxBox>   m_E_field_face;
@@ -594,7 +739,8 @@ private:
    bool                           m_enforce_quasineutrality;
    bool                           m_Esol_extrapolation;
    bool                           m_dealignment_corrections;
-
+   bool                           m_vorticity_model;
+   
    GKState                        m_Y;
 
    bool m_history;   // whether to write out histories
@@ -606,8 +752,18 @@ private:
    std::string m_hist_fieldname; // type of field, e.g. "potential", now a temporary
 
    /* stable time step sizes and time scales */
-   Real m_dt_Vlasov, m_dt_Collisions, m_dt_Transport, m_dt_Neutrals;
-   Real m_TimeScale_Vlasov, m_TimeScale_Collisions, m_TimeScale_Transport, m_TimeScale_Neutrals;
+   Real m_dt_vlasov;
+   Real m_dt_collisions;
+   Real m_dt_transport;
+   Real m_dt_fields;
+   Real m_dt_fluids;
+   Real m_dt_neutrals;
+   Real m_time_scale_vlasov;
+   Real m_time_scale_collisions;
+   Real m_time_scale_transport;
+   Real m_time_scale_fields;
+   Real m_time_scale_fluids;
+   Real m_time_scale_neutrals;
 
    // stores data pertaining to a watchpoint history
    typedef struct {
@@ -623,13 +779,16 @@ private:
    
    Vector<FieldHist> m_fieldHistLists; // for saving all histories internally
    
-   int                            m_verbosity;
-
    /* Function counters */
-   int m_count_Vlasov,
-       m_count_Collision,
-       m_count_Transport,
-       m_count_Neutrals;
+   int m_count_vlasov;
+   int m_count_collision;
+   int m_count_transport;
+   int m_count_fields;
+   int m_count_fluids;
+   int m_count_neutrals;
+
+   int m_verbosity;
+
 };
 
 #include "NamespaceFooter.H"

@@ -39,6 +39,8 @@
 #include "MagCoordSys.H"
 #include "MagGeom.H"
 #include "MultiBlockLevelGeom.H"
+#include "Field.H"
+#include "FluidSpecies.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -116,98 +118,20 @@ class GKSystem
        */
       virtual ~GKSystem();
 
-      virtual void initialize(const int cur_step);
-
-      /// Define Vector<SpeciesModel> data holder for data.
-      /**
-       * Concrete implementation of pure virtual base class member function.
-       * Defines the Vector<SpeciesModel> data holder for data without ghost
-       * cells.
-       *
-       * @param[out] rhs data holder for rhs (without ghost cells).
-       * @param[in] prototype prototype data holder.
-       */
-      virtual void defineRHSData( KineticSpeciesPtrVect&       rhs,
-                                  const KineticSpeciesPtrVect& prototype );
-
-      /// Defines the Vector<SpeciesModel> data holder for data with ghost cells.
-      /**
-       * Concrete implementation of pure virtual base class member function.
-       * Defines the Vector<SpeciesModel> data holder for data with ghost cells.
-       *
-       * @param[out] soln data holder for solution with ghost cells.
-       * @param[in] prototype prototype data holder.
-       */
-      virtual void defineSolnData( KineticSpeciesPtrVect&       soln,
-                                   const KineticSpeciesPtrVect& prototype );
-
-      /// Checks for conformity between soln and protoSoln.
-      /**
-       * Concrete implementation of pure virtual base class member function.
-       * Checks for conformity between soln and protoSoln.
-       *
-       * @param[out] soln data holder.
-       * @param[in] protoSoln prototype soln data holder.
-       */
-      virtual bool validSolnData( const KineticSpeciesPtrVect& soln,
-                                  const KineticSpeciesPtrVect& protoSoln );
-
-      /// Checks for conformity between rhs and protoSoln.
-      /**
-       * Concrete implementation of pure virtual base class member function.
-       * Checks for conformity between soln and protoSoln ignoring ghost cells.
-       *
-       * @param[out] rhs data holder.
-       * @param[in] protoSoln prototype soln data holder.
-       */
-      virtual bool validRHSData( const KineticSpeciesPtrVect& rhs,
-                                 const KineticSpeciesPtrVect& protoSoln );
-
-      /// Sets the Vector<SpeciesModel> data to zero.
-      /**
-       * Concrete implementation of pure virtual base class member function.
-       * Sets the Vector<SpeciesModel> data to zero.
-       *
-       * @param[out] soln data holder.
-       */
-      virtual void zeroSolnData( KineticSpeciesPtrVect& soln );
-
-      /// Adds (scale * increment) to the Vector<SpeciesModel> data holder.
-      /**
-       * Concrete implementation of pure virtual base class member function.
-       * Adds (scale * increment) to the Vector<SpeciesModel> data holder.
-       *
-       * @param[out] soln solution data to which is added.
-       * @param[in] increment amount to add.
-       * @param[in] scale multiplier by which to scale increment.
-       */
-      virtual void addSolnData( KineticSpeciesPtrVect&       soln,
-                                const KineticSpeciesPtrVect& increment,
-                                const Real                   scale );
-
-      /// Copies all data from srcSoln to dstSoln.
-      /**
-       * Concrete implementation of pure virtual base class member function.
-       * Copies all data from srcSoln to dstSoln.
-       *
-       * @param[out] dstSoln destination data holder.
-       * @param[in] srcSoln source data holder.
-       */
-      virtual void copySolnData( KineticSpeciesPtrVect&       dstSoln,
-                                 const KineticSpeciesPtrVect& srcSoln );
-
+      virtual void initialize( const int cur_step );
+   
       /// Compute a stable time step.
       /**
        * Computes and returns a stable time step estimate.
        */
-      Real stableDt(const int step_number);
+      Real stableDt( const int step_number );
 
       /// Advances the solution.
       /**
        * Advance the solution by a single time step.  Returns the current
        * simulation time.
        */
-      void advance( Real* cur_time, Real* dt, int* step_number );
+      void advance( Real& cur_time, Real& dt, int& step_number );
 
       /// Callback to allow for additional operations after stage advance.
       /**
@@ -222,7 +146,7 @@ class GKSystem
        * Write plotting data to HDF5 files with a common prefix.
        *
        */
-      void writePlotFile(const char *prefix, const int cur_step, const double& cur_time );
+      void writePlotFile( const char *prefix, const int cur_step, const double& cur_time );
 
       // Read history parameters from input file (see writeFieldHistory)
 
@@ -265,48 +189,59 @@ class GKSystem
       void printDiagnostics();
 
       void preTimeStep  (int,Real);
+   
       void postTimeStep (int,Real,Real);
-      inline void postTimeStage(const int a_step,const Real a_time)
-        { m_gk_ops->postTimeStage(a_step,a_time,m_state); }
 
-      int  getVectorSize()  { return m_state.getVectorSize(); }
-      int  getNComponents() { return m_state.getNComponents();}
+      inline
+      void postTimeStage( const int a_step,const Real a_time, const int a_stage )
+        {
+           m_gk_ops->postTimeStage( a_step, a_time, m_state_comp, a_stage );
+        }
+
+      int  getVectorSize()  { return m_state_comp.getVectorSize(); }
+//      int  getNComponents() { return m_state.getNComponents();}
 
       inline void assemblePCImEx(void* a_Pmat)
-        { m_gk_ops->assemblePCImEx(a_Pmat,m_state); }
+        { m_gk_ops->assemblePCImEx( a_Pmat, m_state_comp ); }
 
       inline void setupPCImEx(void *a_Pmat)
-        { m_gk_ops->setupPCImEx(a_Pmat,m_state); }
+        { m_gk_ops->setupPCImEx( a_Pmat, m_state_comp ); }
 
-      inline void copyStateToArray   (Real *Y) { m_state.copyTo(Y);   }
-      inline void copyStateFromArray (Real *Y) { m_state.copyFrom(Y); }
+      inline void copyStateToArray   (Real *Y) { m_state_comp.copyTo(Y);   }
+      inline void copyStateFromArray (Real *Y) { m_state_comp.copyFrom(Y); }
       inline void copyRHSToArray     (Real *Y) { m_rhs.copyTo(Y);   }
       inline void copyRHSFromArray   (Real *Y) { m_rhs.copyFrom(Y); }
-      inline void addStateFromArray  (Real *Y, Real a_scale = 1.0) { m_state.addFrom(Y,a_scale); }
+      inline void addStateFromArray  (Real *Y, Real a_scale = 1.0) { m_state_comp.addFrom(Y,a_scale); }
 
-      inline void computeRHSFunctionExp (Real t) { m_gk_ops->explicitOp     (m_rhs,t,m_state); }
-      inline void computeRHSFunctionImEx(Real t) { m_gk_ops->explicitOpImEx (m_rhs,t,m_state); }
+      inline void computeRHSFunctionExp (Real t) { m_gk_ops->explicitOp     (m_rhs,t,m_state_comp); }
+      inline void computeRHSFunctionImEx(Real t) { m_gk_ops->explicitOpImEx (m_rhs,t,m_state_comp); }
       inline void computeIFunctionImEx  (Real t,int flag=1) 
-        { m_gk_ops->implicitOpImEx (m_rhs,t,m_state,1,flag); }
+        { m_gk_ops->implicitOpImEx (m_rhs,t,m_state_comp,1,flag); }
 
       inline bool isLinear()  { return m_gk_ops->isLinear(); }
-      inline void getFunctionCounts(int *a,int *b,int *c,int *d) 
+      inline void getFunctionCounts( int& a, int& b, int& c, int& d, int& e, int& f )
         {
-          m_gk_ops->getFunctionCounts(a,b,c,d);
+          m_gk_ops->getFunctionCounts( a, b, c, d, e, f );
           return;
         }
-      inline void getTimeIntegratorCounts(int *a,int *b, int *c)
+      inline void getTimeIntegratorCounts( int& a, int& b, int& c ) 
         {
-          m_integrator->getCounts(a,b,c);
+          m_integrator->getCounts( a, b, c );
           return;
         }
 
    private:
 
-      void createSpecies();
+      void createState();
+   
+      void createFluidSpecies( CFG::FluidSpeciesPtrVect& a_fluid_species );
+
+      void createFields( CFG::FieldPtrVect& a_fields );
+
+      void createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species );
 
       VEL::ProblemDomain getVelocityDomain() const;
-
+   
       void createConfigurationSpace();
 
       void createVelocitySpace();
@@ -357,27 +292,28 @@ class GKSystem
 
       std::string m_ti_class;
       std::string m_ti_method;
-      short int   m_ti_type;
 
-      GKUnits*                  m_units;
-      CFG::MagGeom*             m_mag_geom;
-      CFG::MagCoordSys*         m_mag_geom_coords;
-      VEL::VelCoordSys*         m_velocity_coords;
+      GKUnits*                 m_units;
+      CFG::MagGeom*            m_mag_geom;
+      CFG::MagCoordSys*        m_mag_geom_coords;
+      VEL::VelCoordSys*        m_velocity_coords;
 
-      RefCountedPtr<PhaseGeom>  m_phase_geom;
-      PhaseCoordSys* m_phase_coords;
+      RefCountedPtr<PhaseGeom> m_phase_geom;
+      PhaseCoordSys*           m_phase_coords;
 
-      PhaseGrid*                     m_phase_grid;
-      KineticSpeciesPtrVect          m_species;
-      KineticSpeciesPtrVect          m_kinetic_species;
-      VelocityPtrVect                m_velocity;
+      PhaseGrid*               m_phase_grid;
+//      KineticSpeciesPtrVect    m_kinetic_species;
+//      CFG::FluidSpeciesPtrVect m_fluid_species;
+//      CFG::FieldPtrVect        m_fields;
+      VelocityPtrVect          m_velocity;
 
       GKOps* m_gk_ops;
       GKSystemIC* m_initial_conditions;
       GKSystemBC* m_boundary_conditions;
 
       TimeIntegrator<GKState, GKRHSData, GKOps> *m_integrator;
-      GKState m_state;
+      GKState m_state_comp;
+      GKState m_state_phys;
       GKRHSData m_rhs;
 
      // Parameters to control plotting
@@ -404,12 +340,14 @@ class GKSystem
       bool m_hdf_dfn;
       bool m_hdf_deltaF;
       bool m_hdf_dfn_at_mu;
+      bool m_hdf_fluids;
+      bool m_hdf_fields;
       std::vector<int> m_fixed_plotindices;
 
       PositivityPostProcessor m_positivity_post_processor;
 
       int m_verbosity;
-      bool m_useNativeTimeIntegrator;
+      bool m_use_native_time_integrator;
 };
 
 #include "NamespaceFooter.H"

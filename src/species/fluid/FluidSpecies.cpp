@@ -146,7 +146,7 @@ bool FluidSpecies::conformsTo( const FluidSpecies& a_rhs,
 
 
 RefCountedPtr<FluidSpecies>
-FluidSpecies::clone( const IntVect ghostVect, const bool copy_soln_data ) const
+FluidSpecies::clone( const IntVect a_ghost_vect, const bool a_copy_soln_data ) const
 {
    RefCountedPtr<FluidSpecies> result
       = RefCountedPtr<FluidSpecies>(
@@ -154,9 +154,9 @@ FluidSpecies::clone( const IntVect ghostVect, const bool copy_soln_data ) const
 
    result->m_state.define( m_state.disjointBoxLayout(),
                            m_state.nComp(),
-                           ghostVect );
+                           a_ghost_vect );
 
-   if (copy_soln_data) {
+   if (a_copy_soln_data) {
       LevelData<FArrayBox>& result_state( result->m_state );
       for (DataIterator dit( result_state.dataIterator() ); dit.ok(); ++dit) {
          result_state[dit].copy( m_state[dit] );

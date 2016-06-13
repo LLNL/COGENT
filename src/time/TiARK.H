@@ -23,13 +23,13 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
     /**
      * Constructor: set m_is_Defined to false.
      */ 
-    TiARK<Solution,RHS,Ops>() { m_is_Defined = false; }
+   TiARK<Solution,RHS,Ops>() : m_is_Defined(false) {}
 
     /// Destructor
     /*
      * Clean up allocations
      */
-    ~TiARK();
+    virtual ~TiARK();
 
     /// Define the specific ARK method
     /**
@@ -37,7 +37,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_name string containing the method name
      */
-    void define(ParmParse& a_pp, std::string a_name, Solution& a_state, Real a_dt);
+     virtual void define( ParmParse& a_pp, std::string a_name, Solution& a_state, Real a_dt );
 
     /// Advance one time step
     /**
@@ -47,7 +47,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      * @param[in] a_time current simulation time
      * @param[out] a_Y solution
      */
-    void advance(Real a_time, Solution& a_Y);
+     virtual void advance( const Real& a_time, Solution& a_Y );
 
     /// Check if method is defined
     /**
@@ -59,7 +59,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
     /**
      * get the operators for the time integrator
      */
-    Ops& getOperators() { return m_Operators; }
+     virtual Ops& getOperators() { return m_Operators; }
 
     /// Set the time step size
     /**
@@ -67,7 +67,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_dt the specified time step size
      */
-    void setTimeStepSize(Real a_dt) { m_dt = a_dt; }
+     virtual void setTimeStepSize( const Real& a_dt ) { m_dt = a_dt; }
 
     /// Get the time step size
     /**
@@ -75,7 +75,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[out] a_dt the time step size
      */ 
-    void getTimeStepSize(Real *a_dt) { *a_dt = m_dt; }
+     virtual void getTimeStepSize( Real& a_dt ) const { a_dt = m_dt; }
 
     /// Set the time step 
     /**
@@ -83,7 +83,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_n the specified time step
      */
-    void setTimeStep(int a_n) { m_cur_step = a_n; }
+     virtual void setTimeStep( const int& a_n ) { m_cur_step = a_n; }
 
     /// Get the time step
     /**
@@ -91,7 +91,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[out] a_n the time step
      */ 
-    void getTimeStep(int *a_n) { *a_n = m_cur_step; }
+     virtual void getTimeStep( int& a_n ) const { a_n = m_cur_step; }
 
     /// Set the current simulation time 
     /**
@@ -99,7 +99,7 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_time the specified simulation time
      */ 
-    void setCurrentTime(Real a_time) { m_time = a_time; }
+     virtual void setCurrentTime( const Real& a_time ) { m_time = a_time; }
 
     /// Get the current simulation time
     /*
@@ -107,15 +107,25 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[out] a_time the current simulation time
      */ 
-    void getCurrentTime(Real *a_time) { *a_time = m_time; }
+    virtual void getCurrentTime( Real& a_time ) const { a_time = m_time; }
 
-    short int getType() { return _TI_IMEX_; }
+    virtual bool isExplicit() const { return false; }
+   
+    virtual bool isImEx() const { return true; }
 
-    void getCounts(int *a_ti, int *a_nonlinear, int *a_linear)
+    virtual bool isExternal() const { return false; }
+
+    virtual void getCounts( int& a_ti, int& a_nonlinear, int& a_linear ) const 
       {
-        if (a_ti)         *a_ti = m_count;
-        if (a_nonlinear)  *a_nonlinear = m_NewtonSolver.getCount();
-        if (a_linear)     *a_linear = m_NewtonSolver.getLinearCount();
+         if (a_ti) {
+            a_ti = m_count;
+         }
+         if (a_nonlinear) {
+            a_nonlinear = m_NewtonSolver.getCount();
+         }
+         if (a_linear) {
+            a_linear = m_NewtonSolver.getLinearCount();
+         }
         return;
       }
 
@@ -146,10 +156,10 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
     ImplicitStageJacobian<RHS,Ops>  *m_IJacobian;
     NewtonSolver<RHS,Ops>           m_NewtonSolver;
 
-    void setCoefficients(int,const Real*,const Real*,const Real*,const Real*,
-                         int,const Real*,const Real*);
+    void setCoefficients( int, const Real*, const Real*, const Real*, const Real*,
+                          int, const Real*, const Real*);
 
-    void extrapolate(Real,RHS&);
+    void extrapolate( Real, RHS& );
     void parseParameters( ParmParse& );
 };
 
@@ -527,12 +537,17 @@ TiARK<Solution, RHS, Ops>::~TiARK()
 }
 
 template <class Solution, class RHS, class Ops>
-void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
+void TiARK<Solution, RHS, Ops>::advance( const Real& a_time, Solution& a_Y )
 {
   //CH_TIMERS("TiARK::advance");
   CH_assert(isDefined());
   CH_assert(m_time == a_time);
   m_Z.copy(a_Y);
+
+  /* Assert explicit-first-stage - post-time-stage function implementation 
+   * in GKOps.cpp assumes that YStage(1) = y_n!
+  */
+  CH_assert(m_Ai[0] == 0.0);
 
   /* Stage calculations */
   int i, j;
@@ -542,7 +557,7 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
     for (j=0; j<i; j++) m_YStage.increment(m_rhsStage_imp[j],(m_dt*m_Ai[i*m_nstages+j]));
 
     /* implicit stage */
-    Real shift = m_Ai[i*m_nstages+j] * m_dt;
+    Real shift = m_Ai[i*m_nstages+i] * m_dt;
     if (shift != 0.0) {
       m_Ifunction->setShift(shift);
       m_Ifunction->setStageNumber(i);
@@ -565,7 +580,7 @@ void TiARK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
     }
 
     Real stage_time = m_time+m_ce[i]*m_dt;
-    m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage);
+    m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage,i);
     m_Operators.explicitOpImEx(m_rhsStage_exp[i],stage_time,m_YStage,i);
     m_Operators.implicitOpImEx(m_rhsStage_imp[i],stage_time,m_YStage,i,0);
   }

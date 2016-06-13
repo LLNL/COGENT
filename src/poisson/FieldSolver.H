@@ -160,22 +160,6 @@ public:
     
    void fillInternalGhosts( LevelData<FArrayBox>& phi ) const;
 
-   // Convert a 3-dimensional gradient in mapped coordinates to the physical frame
-   void unmapGradient( const LevelData<FArrayBox>& mapped_gradient,
-                       LevelData<FArrayBox>&       gradient ) const;
-
-   // Convert a 3-dimensional gradient in mapped coordinates to the physical frame
-   void unmapGradient( const LevelData<FluxBox>& mapped_gradient,
-                       LevelData<FluxBox>&       gradient ) const;
-
-   // Convert a poloidal gradient in mapped coordinates to the physical the frame
-   void unmapPoloidalGradient( const LevelData<FArrayBox>& mapped_gradient,
-                               LevelData<FArrayBox>&       gradient ) const;
-
-   // Convert a poloidal gradient in mapped coordinates to the physical the frame
-   void unmapPoloidalGradient( const LevelData<FluxBox>& mapped_gradient,
-                               LevelData<FluxBox>&       gradient ) const;
-
    void extractNormalComponent( const LevelData<FluxBox>& in,
                                 const int                 dir,
                                 LevelData<FluxBox>&       out ) const;
@@ -291,18 +275,6 @@ protected:
                                   const int                               dir,
                                   const int                               order,
                                   const Tuple<BlockBoundary, 2*SpaceDim>& block_boundaries) const;
-
-   void injectPoloidalVector( const LevelData<FArrayBox>& poloidal_vector,
-                              LevelData<FArrayBox>&       vector ) const;
-
-   void injectPoloidalVector( const LevelData<FluxBox>& poloidal_vector,
-                              LevelData<FluxBox>&       vector ) const;
-
-   void projectPoloidalVector( const LevelData<FArrayBox>& a_vector,
-                               LevelData<FArrayBox>&       a_poloidal_vector ) const;
-
-   void projectPoloidalVector( const LevelData<FluxBox>& vector,
-                               LevelData<FluxBox>&       poloidal_vector ) const;
 
    double L2Norm( const LevelData<FArrayBox>& data );
 

@@ -31,11 +31,6 @@ public:
     */
    virtual ~MBHypreSolver();
 
-   virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
-                                        LevelData<FluxBox>&   tensor_coefficient,
-                                        LevelData<FArrayBox>& beta_coefficient,
-                                        const PotentialBC&    bc );
-
    virtual void multiplyMatrix( const LevelData<FArrayBox>& in,
                                 LevelData<FArrayBox>&       out ) const;
 
@@ -56,7 +51,16 @@ public:
 
    static const std::string pp_name;
 
+   void extrapGhosts( const PotentialBC&    a_bc,
+                      const bool            a_fourth_order,
+                      LevelData<FArrayBox>& a_data ) const;
+
 protected:
+
+   virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
+                                        LevelData<FluxBox>&   tensor_coefficient,
+                                        LevelData<FArrayBox>& beta_coefficient,
+                                        const PotentialBC&    bc );
 
    void createHypreData();
 
@@ -75,7 +79,6 @@ protected:
                                       const PotentialBC&                        bc,
                                       FArrayBox&                                stencil_values,
                                       const bool                                fourthOrder,
-                                      const bool                                dropOrder,
                                       const LayoutData< BaseFab<IntVectSet> >&  unstructured_coupling,
                                       Vector< Vector<CoDim1Stencil> >&          codim1_stencils,
                                       Vector< Vector<CoDim2Stencil> >&          codim2_stencils,
@@ -90,7 +93,6 @@ protected:
                               const int                           diagonal_offset,
                               LayoutData< BaseFab<IntVectSet> >&  unstructured_coupling,
                               const bool                          fourthOrder,
-                              const bool                          dropOrder,
                               HYPRE_SStructMatrix&                matrix,
                               LevelData<FArrayBox>&               rhs_from_bc ) const;
 

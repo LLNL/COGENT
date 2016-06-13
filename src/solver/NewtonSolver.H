@@ -85,8 +85,8 @@ class NewtonSolver
 
     inline void setIsLinear(bool a_flag) { m_isLinear = a_flag; }
 
-    inline int  getCount() { return m_count; }
-    inline int  getLinearCount() { return m_LinearSolver.getCount(); }
+    inline int getCount() const { return m_count; }
+    inline int getLinearCount() const { return m_LinearSolver.getCount(); }
 
   protected:
 

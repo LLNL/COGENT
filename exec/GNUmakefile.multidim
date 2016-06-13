@@ -38,7 +38,8 @@ base_dir = .
 
 2dsrc_dirs =  ../src/coord/configuration ../src/coord/velocity 
 2dsrc_dirs += ../src/ibc/configuration ../src/poisson
-2dsrc_dirs += ../src/util ../src/ibc
+2dsrc_dirs += ../src/util ../src/ibc ../src/species/fluid
+2dsrc_dirs += ../src/fieldOp ../src/fluidOp
 
 3dsrc_dirs += ../src/util ../src/ibc
 
@@ -46,7 +47,7 @@ base_dir = .
 4dsrc_dirs +=  ../src/collisions ../src/transport ../src/neutrals
 #4dsrc_dirs +=  ../src/collisions 
 4dsrc_dirs += ../src/coord/phase ../src/ibc/phase ../src/util 
-4dsrc_dirs += ../src/advectUtil
+4dsrc_dirs += ../src/advectUtil ../src/species/kinetic
 4dsrc_dirs += ../src/ibc
 4dsrc_dirs += ../src/solver
 4dsrc_dirs += ../src/time

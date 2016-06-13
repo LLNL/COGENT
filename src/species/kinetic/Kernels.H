@@ -318,7 +318,6 @@ class PressureKernel : public Kernel
        * component of the distribution function, the next component
        * contain the second component of the distribution function, etc.
        *
-       * @param[in] result Cell-averaged distribution function.
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
@@ -349,65 +348,6 @@ class PressureKernel : public Kernel
 
 };
 
-/// Parallel heat flux kernel.
-/**
- */
-class ParallelHeatFluxKernel : public Kernel
-{
-public:
-   
-   ParallelHeatFluxKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift);
-   
-   /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
-   virtual ~ParallelHeatFluxKernel() {;}
-   
-   /// Computes the integrand for a ParallelHeatFlux moment calculation.
-   /**
-    * Computes the integrand by multiplying the input distribution function
-    * by the scalar velocity squared.
-    *
-    * The number of kernel components is one.  If the distribution function
-    * has more than one component, the first component of the result
-    * will contain the moment of the first distribution function component,
-    * the next component will contain the moment of the second
-    * distribution function component, etc.  Upon entry, it is assumed
-    * that result has already been initialized with the distribution function
-    * correspondingly, ie., the first component contains the first
-    * component of the distribution function, the next component
-    * contain the second component of the distribution function, etc.
-    *
-    * @param[in] result Cell-averaged distribution function.
-    * @param[out] result Cell-averaged integrand.
-    * @param[in] kinetic_species Kinetic species object.
-    */
-   virtual void eval( LevelData<FArrayBox>& result,
-                     const KineticSpecies& kinetic_species ) const;
-   
-   /// Returns the kernel scale.
-   /**
-    * Returns the kernel scale, which is 1..
-    *
-    * @param[in] kinetic_species Kinetic species object.
-    * @return real-valued scale to be applied in configuration space.
-    */
-   virtual Real scale( const KineticSpecies& kinetic_species ) const
-   { return 1.; }
-   
-   /// Returns the number of kernel components
-   /**
-    * Returns the number of kernel components.
-    *
-    * @param[in] kinetic_species Kinetic species object.
-    */
-   virtual int nComponents() const { return 1; }
-   
-private:
-   
-   const CFG::LevelData<CFG::FArrayBox>& m_v_parallel_shift;
-   
-};
-
-
 /// perp energy kernel.
 /**
  */
@@ -423,7 +363,6 @@ class PerpEnergyKernel : public Kernel
        * Computes the integrand by multiplying the input distribution function
        * by the scalar perp velocity squared.
        *
-       * @param[in] result Cell-averaged distribution function.
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
@@ -474,8 +413,7 @@ class ParallelMomKernel : public Kernel
        * component of the distribution function, the next component
        * contain the second component of the distribution function, etc.
        *
-       * @param[in] result Cell-averaged distribution function.
-       * @param[out] result Cell-averaged integrand. 
+       * @param[out] result Cell-averaged integrand.
        * @param[in] kinetic_species Kinetic species object.
        */
       virtual void eval( LevelData<FArrayBox>& result,
@@ -530,7 +468,6 @@ class ParticleFluxKernel : public Kernel
        * component of the distribution function, the next component
        * contain the second component of the distribution function, etc.
        *
-       * @param[in] result Cell-averaged distribution function.
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
@@ -591,8 +528,7 @@ class HeatFluxKernel : public Kernel
        * component of the distribution function, the next component
        * contain the second component of the distribution function, etc.
        *
-       * @param[in] result Cell-averaged distribution function.
-       * @param[out] result Cell-averaged integrand. 
+       * @param[out] result Cell-averaged integrand.
        * @param[in] kinetic_species Kinetic species object.
        */
       virtual void eval( LevelData<FArrayBox>& result,
@@ -623,20 +559,80 @@ class HeatFluxKernel : public Kernel
 
 };
 
-/// Poloidal Momentum moment.
+/// Perpendicular current density kernel.
 /**
  */
-class PoloidalMomKernel : public Kernel
+class PerpCurrentDensityKernel : public Kernel
+{
+public:
+   /// Constructor with initialization.
+   /**
+    *  Initialized with potentail, which is used to get phase-velocity
+    */
+   PerpCurrentDensityKernel( const LevelData<FluxBox>& field );
+   
+   /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
+   virtual ~PerpCurrentDensityKernel() {;}
+   
+   /// Computes the integrand for a PerpCurrent moment calculation.
+   /**
+    * Computes the integrand by multiplying the input distribution function
+    * by the perpendicular component of the drift velocity.
+    *
+    * The number of kernel components is CFG_DIM.  If the distribution function
+    * has more than one component, the first component of the result
+    * will contain the moment of the first distribution function component,
+    * the next component will contain the moment of the second
+    * distribution function component, etc.  Upon entry, it is assumed
+    * that result has already been initialized with the distribution function
+    * correspondingly, ie., the first component contains the first
+    * component of the distribution function, the next component
+    * contain the second component of the distribution function, etc.
+    *
+    * @param[out] result Cell-averaged integrand.
+    * @param[in] kinetic_species Kinetic species object.
+    */
+   virtual void eval( LevelData<FArrayBox>& result,
+                     const KineticSpecies& kinetic_species ) const;
+   
+   /// Returns the kernel scale.
+   /**
+    * Returns the kernel scale, which is 1..
+    *
+    * @param[in] kinetic_species Kinetic species object.
+    * @return real-valued scale to be applied in configuration space.
+    */
+   virtual Real scale( const KineticSpecies& kinetic_species ) const
+   { return kinetic_species.charge(); }
+   
+   /// Returns the number of kernel components
+   /**
+    * Returns the number of kernel components.
+    *
+    * @param[in] kinetic_species Kinetic species object.
+    */
+   virtual int nComponents() const { return CFG_DIM; }
+   
+private:
+   
+   const LevelData<FluxBox>& m_field;
+};
+
+
+/// Guding Center Poloidal Momentum moment.
+/**
+ */
+class GuidingCenterPoloidalMomKernel : public Kernel
 {
    public:
        /// Constructor with initialization.
        /**
         *  Initialized with potentail, which is used to get phase-velocity
         */
-       PoloidalMomKernel( const LevelData<FluxBox>& field, const double larmor );
+       GuidingCenterPoloidalMomKernel( const LevelData<FluxBox>& field );
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
-      virtual ~PoloidalMomKernel() {;}
+      virtual ~GuidingCenterPoloidalMomKernel() {;}
 
       /// Computes the integrand for a PoloidalMom moment calculation.
       /**
@@ -653,8 +649,7 @@ class PoloidalMomKernel : public Kernel
        * component of the distribution function, the next component
        * contain the second component of the distribution function, etc.
        *
-       * @param[in] result Cell-averaged distribution function.
-       * @param[out] result Cell-averaged integrand. 
+       * @param[out] result Cell-averaged integrand.
        * @param[in] kinetic_species Kinetic species object.
        */
       virtual void eval( LevelData<FArrayBox>& result,
@@ -681,10 +676,62 @@ class PoloidalMomKernel : public Kernel
     private:
 
         const LevelData<FluxBox>& m_field;
-        const double m_larmor;
 };
 
-/// Heat flux kernel.
+
+/// Magnetization kernel.
+/**
+ */
+class MagnetizationKernel : public Kernel
+{
+public:
+   
+   /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
+   virtual ~MagnetizationKernel() {;}
+   
+   /// Computes the integrand for a Magnetization moment calculation.
+   /**
+    * Computes the integrand by multiplying the input distribution function
+    * by the magneitc moment.
+    *
+    * The number of kernel components is one.  If the distribution function
+    * has more than one component, the first component of the result
+    * will contain the moment of the first distribution function component,
+    * the next component will contain the moment of the second
+    * distribution function component, etc.  Upon entry, it is assumed
+    * that result has already been initialized with the distribution function
+    * correspondingly, ie., the first component contains the first
+    * component of the distribution function, the next component
+    * contain the second component of the distribution function, etc.
+    *
+    * @param[out] result Cell-averaged integrand.
+    * @param[in] kinetic_species Kinetic species object.
+    */
+   virtual void eval( LevelData<FArrayBox>& result,
+                      const KineticSpecies& kinetic_species ) const;
+   
+   /// Returns the kernel scale.
+   /**
+    * Returns the kernel scale, which is 1..
+    *
+    * @param[in] kinetic_species Kinetic species object.
+    * @return real-valued scale to be applied in configuration space.
+    */
+   virtual Real scale( const KineticSpecies& kinetic_species ) const
+   { return 1.; }
+   
+   /// Returns the number of kernel components
+   /**
+    * Returns the number of kernel components.
+    *
+    * @param[in] kinetic_species Kinetic species object.
+    */
+   virtual int nComponents() const { return 1; }
+};
+
+
+
+/// Delta F kernel.
 /**
  */
 class DeltaFKernel : public Kernel

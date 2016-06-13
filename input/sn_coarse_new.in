@@ -55,8 +55,6 @@ singlenull.decomp.lsol.phase          =  1  1  1  1
 singlenull.decomp.rsol.configuration  =  1  1
 singlenull.decomp.rsol.phase          =  1  1  1  1
 
-singlenull.geometry_file = "../input/coarse_mapping"
-
 gksystem.num_velocity_cells =  40  20
 gksystem.velocity_decomp    =  4  2
 
@@ -65,6 +63,7 @@ gksystem.velocity_decomp    =  4  2
 # Magnetic Geometry Definitions
 #####################################################
 gksystem.magnetic_geometry_mapping = "SingleNull"
+gksystem.magnetic_geometry_mapping.singlenull.geometry_file = "../input/coarse_mapping"
 gksystem.magnetic_geometry_mapping.singlenull.verbose  = true
 gksystem.magnetic_geometry_mapping.singlenull.inner_radial_bdry = 0.1
 gksystem.magnetic_geometry_mapping.singlenull.outer_radial_bdry = 0.9

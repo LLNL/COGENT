@@ -206,7 +206,9 @@ void Simulation<SYSTEM>::advance()
 {
    if (m_verbosity >= 1) {
       pout() << endl << "Step " << m_cur_step << endl;
-      if(procID()==0) cout << endl << "Step " << m_cur_step+1 << endl;
+      if (procID()==0) {
+         cout << endl << "Step " << m_cur_step+1 << endl;
+      }
    }
    preTimeStep();
 
@@ -216,11 +218,12 @@ void Simulation<SYSTEM>::advance()
             cout << "  --\n";
             cout << "  Subiteration:" << sub_iter << " of " << m_subiterations << endl;
          }
-         m_system->advance( &m_cur_time, &m_sub_dt, &m_cur_step );
+         m_system->advance( m_cur_time, m_sub_dt, m_cur_step );
       }
-      m_cur_step=m_cur_step-m_subiterations+1;
-   } else {
-      m_system->advance( &m_cur_time, &m_cur_dt, &m_cur_step );
+      m_cur_step = m_cur_step - m_subiterations + 1;
+   }
+   else {
+      m_system->advance( m_cur_time, m_cur_dt, m_cur_step );
    }
 
    postTimeStep();
@@ -229,8 +232,10 @@ void Simulation<SYSTEM>::advance()
       m_system->printDiagnostics();
       pout() << "Step " << m_cur_step << " completed, simulation time is "
              << m_cur_time << endl;
-      if(procID()==0) cout << "Step " << m_cur_step << " completed, simulation time is "
-                           << m_cur_time << endl << "----" << endl;
+      if(procID()==0) {
+         cout << "Step " << m_cur_step << " completed, simulation time is "
+              << m_cur_time << endl << "----" << endl;
+      }
    }
 
    if ( (m_cur_step % m_plot_interval)==0 ) {
@@ -265,25 +270,40 @@ void Simulation<SYSTEM>::finalize()
       writeCheckpointFile();
    }
 
-   int countVlasov, countCollision, countTransport, countNeutrals;
-   m_system->getFunctionCounts(&countVlasov,&countCollision,&countTransport,&countNeutrals);
-   int countTI, countNonLinear, countLinear;
-   m_system->getTimeIntegratorCounts(&countTI,&countNonLinear,&countLinear);
+   int count_vlasov;
+   int count_collision;
+   int count_transport;
+   int count_fields;
+   int count_fluids;
+   int count_neutrals;
+   m_system->getFunctionCounts( count_vlasov,
+                                count_collision,
+                                count_transport,
+                                count_fields,
+                                count_fluids,
+                                count_neutrals);
+
+   int count_TI;
+   int count_nonlinear;
+   int count_linear;
+   m_system->getTimeIntegratorCounts( count_TI, count_nonlinear, count_linear);
+
    if (!procID()) {
      cout << "----\n";
      cout << "  Function counts:-\n";
-     cout << "    Vlasov     : " << countVlasov     << "\n";
-     cout << "    Collision  : " << countCollision  << "\n";
-     cout << "    Transport  : " << countTransport  << "\n";
-     cout << "    Neutrals   : " << countNeutrals   << "\n";
+     cout << "    Vlasov     : " << count_vlasov     << "\n";
+     cout << "    Collision  : " << count_collision  << "\n";
+     cout << "    Transport  : " << count_transport  << "\n";
+     cout << "    Fields     : " << count_fields     << "\n";
+     cout << "    Fluids     : " << count_fluids     << "\n";
+     cout << "    Neutrals   : " << count_neutrals   << "\n";
      cout << "----\n";
      cout << "  Time integrator counts:-\n";
-     cout << "    Time steps          : " << countTI         << "\n";
-     cout << "    Nonlinear iterations: " << countNonLinear  << "\n";
-     cout << "    Linear iterations   : " << countLinear     << "\n";
+     cout << "    Time steps          : " << count_TI         << "\n";
+     cout << "    Nonlinear iterations: " << count_nonlinear  << "\n";
+     cout << "    Linear iterations   : " << count_linear     << "\n";
      cout << "----\n";
    }
-
 
 #ifdef CH_USE_TIMER
    m_shutdown_timer->stop() ;
@@ -395,33 +415,33 @@ inline void Simulation<SYSTEM>::setFixedTimeStep( const Real& a_dt_stable )
 template <class SYSTEM>
 void Simulation<SYSTEM>::postTimeStep()
 {
-   m_system->postTimeStep(m_cur_step,m_cur_dt,m_cur_dt);
+   m_system->postTimeStep( m_cur_step, m_cur_dt, m_cur_dt );
 }
 
 template <class SYSTEM>
 void Simulation<SYSTEM>::preTimeStep()
 {
-   m_system->preTimeStep(m_cur_step,m_cur_time);
-   Real dtStable = m_system->stableDt(m_cur_step) * m_cfl;
-   CH_assert(dtStable > 1.0e-16);
+   m_system->preTimeStep( m_cur_step, m_cur_time );
+   Real dt_stable = m_system->stableDt( m_cur_step ) * m_cfl;
+   CH_assert( dt_stable > 1.0e-16 );
 
    if ( m_cur_time>0.0 ) { 
       // not initial time step
       if ( m_adapt_dt ) { 
          // adjustable time step
-         m_cur_dt = std::min( dtStable, m_max_dt_grow * m_cur_dt );
+         m_cur_dt = std::min( dt_stable, m_max_dt_grow * m_cur_dt );
       } else {                 
          // fixed time step
-         setFixedTimeStep(dtStable);
+         setFixedTimeStep( dt_stable );
       }
    } else { 
       // initial time step
       if ( m_adapt_dt ) { 
          // adjustable time step
-         m_cur_dt = m_init_dt_frac * dtStable;
+         m_cur_dt = m_init_dt_frac * dt_stable;
       } else {                 
          // fixed time step
-         setFixedTimeStep(dtStable);
+         setFixedTimeStep( dt_stable );
       }
    }
 

@@ -18,7 +18,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
     /**
      * Constructor: set m_is_Defined to false.
      */ 
-    TiRK<Solution,RHS,Ops>() { m_is_Defined = false; }
+   TiRK<Solution,RHS,Ops>() : m_is_Defined(false) {}
 
     /// Destructor
     /*
@@ -32,7 +32,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_name string containing the method name
      */
-    void define(ParmParse& a_pp, std::string a_name, Solution& a_state, Real a_dt);
+    virtual void define( ParmParse& a_pp, std::string a_name, Solution& a_state, Real a_dt );
 
     /// Advance one time step
     /**
@@ -42,7 +42,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      * @param[in] a_time current simulation time
      * @param[out] a_Y solution
      */
-    void advance(Real a_time, Solution& a_Y);
+    virtual void advance( const Real& a_time, Solution& a_Y );
 
     /// Check if method is defined
     /**
@@ -55,7 +55,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      * get the operators for the time integrator
      *
      */
-    Ops& getOperators() { return m_Operators; }
+    virtual Ops& getOperators() { return m_Operators; }
 
     /// Set the time step size
     /**
@@ -63,7 +63,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_dt the specified time step size
      */
-    void setTimeStepSize(Real a_dt) { m_dt = a_dt; }
+    virtual void setTimeStepSize( const Real& a_dt ) { m_dt = a_dt; }
 
     /// Get the time step size
     /**
@@ -71,7 +71,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[out] a_dt the time step size
      */ 
-    void getTimeStepSize(Real *a_dt) { *a_dt = m_dt; }
+    virtual void getTimeStepSize( Real& a_dt ) const { a_dt = m_dt; }
 
     /// Set the time step
     /**
@@ -79,7 +79,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_n the specified time step
      */
-    void setTimeStep(int a_n) { m_cur_step = a_n; }
+    virtual void setTimeStep( const int& a_n ) { m_cur_step = a_n; }
 
     /// Get the time step
     /**
@@ -87,7 +87,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[out] a_n the time step
      */ 
-    void getTimeStep(int *a_n) { *a_n = m_cur_step; }
+    virtual void getTimeStep( int& a_n ) const { a_n = m_cur_step; }
 
     /// Set the current simulation time 
     /**
@@ -95,7 +95,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[in] a_time the specified simulation time
      */ 
-    void setCurrentTime(Real a_time) { m_time = a_time; }
+    virtual void setCurrentTime( const Real& a_time ) { m_time = a_time; }
 
     /// Get the current simulation time
     /*
@@ -103,7 +103,7 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      *
      * @param[out] a_time the current simulation time
      */ 
-    void getCurrentTime(Real *a_time) { *a_time = m_time; }
+    virtual void getCurrentTime( Real& a_time ) const { a_time = m_time; }
 
     /// Set Butcher tableaux coefficients
     /*
@@ -113,19 +113,29 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
      * @param[in] a_A Stage calculation coefficients
      * @param[in] a_b Step completion coefficients
      */ 
-    void setCoefficients(int a_nstages, const Real* a_A,const Real* a_b);
+    virtual void setCoefficients(int a_nstages, const Real* a_A, const Real* a_b);
 
-    void getCounts(int *a_ti, int *a_nonlinear, int *a_linear)
+    virtual bool isExplicit() const { return true; }
+   
+    virtual bool isImEx() const { return false; }
+
+    virtual bool isExternal() const { return false; }
+
+    virtual void getCounts( int& a_ti, int& a_nonlinear, int& a_linear ) const 
       {
-        if (a_ti)           *a_ti         = m_count;
-        if (a_nonlinear)    *a_nonlinear  = 0;
-        if (a_linear)       *a_linear     = 0;
-        return;
+         if (a_ti) {
+            a_ti = m_count;
+         }
+         if (a_nonlinear) {
+            a_nonlinear = 0;
+         }
+         if (a_linear) {
+            a_linear = 0;
+         }
+         return;
       }
 
-  protected:
-
-  private:
+private:
     bool        m_is_Defined;
     std::string m_name;
     int         m_nstages;
@@ -139,7 +149,9 @@ class TiRK : public TimeIntegrator<Solution,RHS,Ops>
 };
 
 template <class Solution, class RHS, class Ops>
-void TiRK<Solution,RHS,Ops>::define(ParmParse& a_pp, std::string a_name, Solution& a_state, Real a_dt)
+void TiRK<Solution,RHS,Ops>::define( ParmParse& a_pp,
+                                     std::string a_name, Solution& a_state,
+                                     Real a_dt )
 {
   m_dt = a_dt;
 
@@ -258,7 +270,7 @@ TiRK<Solution, RHS, Ops>::~TiRK()
 }
 
 template <class Solution, class RHS, class Ops>
-void TiRK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
+void TiRK<Solution, RHS, Ops>::advance( const Real& a_time, Solution& a_Y )
 {
   //CH_TIMERS("TiRK::advance");
   CH_assert(isDefined());
@@ -270,7 +282,7 @@ void TiRK<Solution, RHS, Ops>::advance(Real a_time, Solution& a_Y)
     m_YStage.copy(a_Y);
     for (j=0; j<i; j++) m_YStage.increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
     Real stage_time = m_time+m_c[i]*m_dt;
-    m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage);
+    m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage,i);
     m_Operators.explicitOp(m_rhsStage[i],stage_time,m_YStage,i);
   }
   /* Step completion */

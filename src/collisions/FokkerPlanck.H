@@ -61,10 +61,11 @@ public:
    */
   inline bool isLinear() { return false; }
 
-  bool setupPrecondMatrix(void *a_P,int a_N,int a_bs)
+//  bool setupPrecondMatrix(void *a_P,int a_N,int a_bs)
+  bool setupPrecondMatrix( void *a_P, int a_N )
     {
       BandedMatrix *P = (BandedMatrix*) a_P;
-      P->define(a_N,m_nbands,a_bs);
+      P->define( a_N, m_nbands, 1 );
       return(P->isDefined());
     }
 
@@ -72,8 +73,12 @@ public:
 
   inline void preTimeStep  ( const KineticSpeciesPtrVect& a_soln, const int a_species, const Real a_time)
     { computePotentialsAndCoeffs( a_soln, a_species, a_time, true ); }
-  inline void postTimeStage( const KineticSpeciesPtrVect& a_soln, const int a_species, const Real a_time)
-    { computePotentialsAndCoeffs( a_soln, a_species, a_time, false ); }
+  inline void postTimeStage( const KineticSpeciesPtrVect& a_soln, const int a_species, const Real a_time, const int a_stage)
+    { 
+      if (a_stage) {
+        computePotentialsAndCoeffs( a_soln, a_species, a_time, false ); 
+      }
+    }
 
 private:
 

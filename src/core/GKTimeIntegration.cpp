@@ -1,358 +1,390 @@
 #include "GKTimeIntegration.H"
 #include "inspect.H"
 
+#include "GKUtils.H.multidim"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM CFG_DIM
+#include "GKUtils.H.multidim"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM PDIM
+
 #include "NamespaceHeader.H"
 
+////////////////////////////////////////////////////////////////////
+
+inline
+void copyData( KineticSpeciesPtrVect& a_kinetic_species_dst,
+               const KineticSpeciesPtrVect& a_kinetic_species_src,
+               CFG::FluidSpeciesPtrVect& a_fluid_species_dst,
+               const CFG::FluidSpeciesPtrVect& a_fluid_species_src,
+               CFG::FieldPtrVect& a_field_dst,
+               const CFG::FieldPtrVect& a_field_src )
+{
+   a_kinetic_species_dst.resize( a_kinetic_species_src.size() );
+   for (int s(0); s<a_kinetic_species_dst.size(); s++) {
+      a_kinetic_species_dst[s]->copy( *(a_kinetic_species_src[s]) );
+   }
+   a_fluid_species_dst.resize( a_fluid_species_src.size() );
+   for (int s(0); s<a_fluid_species_dst.size(); s++) {
+      a_fluid_species_dst[s]->copy( *(a_fluid_species_src[s]) );
+   }
+   a_field_dst.resize( a_field_src.size() );
+   for (int s(0); s<a_field_dst.size(); s++) {
+      a_field_dst[s]->copy( *(a_field_src[s]) );
+   }
+}
+   
 void GKState::copy( const GKState& a_state )
 {
-  m_species_mapped.resize( a_state.m_species_mapped.size() );
-  for (int s(0); s<m_species_mapped.size(); s++) {
-    m_species_mapped[s]->copy( *(a_state.m_species_mapped[s]) );
-  }
+   copyData( m_kinetic_species, a_state.dataKinetic(),
+             m_fluid_species, a_state.dataFluid(),
+             m_fields, a_state.dataField() );
 }
 
 void GKState::copy( const GKRHSData& a_rhs )
 {
-  const KineticSpeciesPtrVect& rhs_species_mapped( a_rhs.data() ); 
-  m_species_mapped.resize( rhs_species_mapped.size() );
-  for (int s(0); s<m_species_mapped.size(); s++) {
-    m_species_mapped[s]->copy( *(rhs_species_mapped[s]) );
-  }
+   copyData( m_kinetic_species, a_rhs.dataKinetic(),
+             m_fluid_species, a_rhs.dataFluid(),
+             m_fields, a_rhs.dataField() );
 }
 
 void GKRHSData::copy( const GKRHSData& a_rhs )
 {
-  m_species_mapped.resize( a_rhs.m_species_mapped.size() );
-  for (int s(0); s<m_species_mapped.size(); s++) {
-    m_species_mapped[s]->copy( *(a_rhs.m_species_mapped[s]) );
-  }
+   copyData( m_kinetic_species, a_rhs.dataKinetic(),
+             m_fluid_species, a_rhs.dataFluid(),
+             m_fields, a_rhs.dataField() );
 }
 
-void GKRHSData::copy( const GKState& a_rhs )
+void GKRHSData::copy( const GKState& a_state )
 {
-  const KineticSpeciesPtrVect& rhs_species_mapped( a_rhs.data() ); 
-  m_species_mapped.resize( rhs_species_mapped.size() );
-  for (int s(0); s<m_species_mapped.size(); s++) {
-    m_species_mapped[s]->copy( *(rhs_species_mapped[s]) );
-  }
+   copyData( m_kinetic_species, a_state.dataKinetic(),
+             m_fluid_species, a_state.dataFluid(),
+             m_fields, a_state.dataField() );
+}
+
+////////////////////////////////////////////////////////////////////
+
+inline
+int computeVectorSize( const KineticSpeciesPtrVect& a_kinetic_species,
+                       const CFG::FluidSpeciesPtrVect& a_fluid_species,
+                       const CFG::FieldPtrVect& a_fields )
+{
+   int total_size(0);
+   for (int s(0); s<a_kinetic_species.size(); s++) {
+      total_size += a_kinetic_species[s]->size();
+   }
+   for (int s(0); s<a_fluid_species.size(); s++) {
+      total_size += a_fluid_species[s]->size();
+   }
+   for (int s(0); s<a_fields.size(); s++) {
+      total_size += a_fields[s]->size();
+   }
+   return total_size;
 }
 
 int GKState::getVectorSize()
 {
-  CH_assert( isDefined() );
-  int TotalSize = 0;
-  for (int s=0; s < m_species_mapped.size(); s++) {
-    const LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
-    const DisjointBoxLayout& dbl = x.disjointBoxLayout();
-    DataIterator dit = dbl.dataIterator();
-    for (dit.begin(); dit.ok(); ++dit) TotalSize += dbl[dit].numPts();
-  }
-  return TotalSize;
+   CH_assert( isDefined() );
+   return computeVectorSize( m_kinetic_species, m_fluid_species, m_fields );
 }
 
 int GKRHSData::getVectorSize()
 {
-  CH_assert( isDefined() );
-  int TotalSize = 0;
-  for (int s=0; s < m_species_mapped.size(); s++) {
-    const LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
-    const DisjointBoxLayout& dbl = x.disjointBoxLayout();
-    DataIterator dit = dbl.dataIterator();
-    for (dit.begin(); dit.ok(); ++dit) TotalSize += dbl[dit].numPts();
-  }
-  return TotalSize;
-}
-
-int GKState::getNComponents()
-{
-  CH_assert( isDefined() );
-  int NComponents = 0;
-  for (int s=0; s < m_species_mapped.size(); s++) {
-    const LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
-    DataIterator dit = x.dataIterator();
-    for (dit.begin(); dit.ok(); ++dit) NComponents = x[dit].nComp();
-  }
-  return NComponents;
-}
-
-int GKRHSData::getNComponents()
-{
-  CH_assert( isDefined() );
-  int NComponents = 0;
-  for (int s=0; s < m_species_mapped.size(); s++) {
-    const LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
-    DataIterator dit = x.dataIterator();
-    for (dit.begin(); dit.ok(); ++dit) NComponents = x[dit].nComp();
-  }
-  return NComponents;
-}
-
-void GKState::copyTo(Real *Y)
-{
    CH_assert( isDefined() );
-   int offset = 0;
-   for (int s=0; s < m_species_mapped.size(); s++) {
-     const LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
-     const DisjointBoxLayout& dbl = x.disjointBoxLayout();
-     DataIterator dit = x.dataIterator();
-     for (dit.begin(); dit.ok(); ++dit) {
-       FArrayBox tmp(dbl[dit],1,(Y+offset));
-       tmp.copy(x[dit]);
-       offset += dbl[dit].numPts();
-     }
+   return computeVectorSize( m_kinetic_species, m_fluid_species, m_fields );
+}
+
+////////////////////////////////////////////////////////////////////
+
+inline
+void copyToArray( Real* a_dst,
+                  const KineticSpeciesPtrVect& a_kinetic_species,
+                  const CFG::FluidSpeciesPtrVect& a_fluid_species,
+                  const CFG::FieldPtrVect& a_fields )
+{
+   int offset(0);
+   for (int s(0); s<a_kinetic_species.size(); s++) {
+      offset += GKUtils::copyFromLevelData(
+         a_dst + offset,
+         a_kinetic_species[s]->distributionFunction() );
+   }
+   for (int s(0); s<a_fluid_species.size(); s++) {
+      offset += CFG::GKUtils::copyFromLevelData( a_dst + offset,
+                                                 a_fluid_species[s]->data() );
+   }
+   for (int s(0); s<a_fields.size(); s++) {
+      offset += CFG::GKUtils::copyFromLevelData( a_dst + offset,
+                                                 a_fields[s]->data() );
    }
 }
 
-void GKState::copyFrom(Real *Y)
+void GKState::copyTo( Real* a_vector ) const
 {
    CH_assert( isDefined() );
-   int offset = 0;
-   for (int s=0; s < m_species_mapped.size(); s++) {
-     LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
-     const DisjointBoxLayout& dbl = x.disjointBoxLayout();
-     DataIterator dit = x.dataIterator();
-     for (dit.begin(); dit.ok(); ++dit) {
-       const FArrayBox tmp(dbl[dit],1,(Y+offset));
-       x[dit].copy(tmp);
-       offset += dbl[dit].numPts();
-     }
+   copyToArray( a_vector, m_kinetic_species, m_fluid_species, m_fields );
+}
+
+void GKRHSData::copyTo( Real* a_vector ) const 
+{
+   CH_assert( isDefined() );
+   copyToArray( a_vector, m_kinetic_species, m_fluid_species, m_fields );
+}
+
+////////////////////////////////////////////////////////////////////
+
+inline
+void copyFromArray( KineticSpeciesPtrVect& a_kinetic_species,
+                    CFG::FluidSpeciesPtrVect& a_fluid_species,
+                    CFG::FieldPtrVect& a_fields,
+                    Real* a_src )
+{
+   int offset(0);
+   for (int s(0); s<a_kinetic_species.size(); s++) {
+      offset += GKUtils::copyToLevelData(
+         a_kinetic_species[s]->distributionFunction(),
+         a_src + offset );
+   }
+   for (int s(0); s<a_fluid_species.size(); s++) {
+      offset += CFG::GKUtils::copyToLevelData( a_fluid_species[s]->data(),
+                                               a_src + offset );
+   }
+   for (int s(0); s<a_fields.size(); s++) {
+      offset += CFG::GKUtils::copyToLevelData( a_fields[s]->data(),
+                                               a_src + offset );
    }
 }
 
-void GKState::addFrom(Real *Y, Real a_a)
+void GKState::copyFrom( Real* a_vector )
 {
    CH_assert( isDefined() );
-   int offset = 0;
-   for (int s=0; s < m_species_mapped.size(); s++) {
-     LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
-     const DisjointBoxLayout& dbl = x.disjointBoxLayout();
-     DataIterator dit = x.dataIterator();
-     for (dit.begin(); dit.ok(); ++dit) {
-       const FArrayBox tmp(dbl[dit],1,(Y+offset));
-       x[dit].plus(tmp,a_a);
-       offset += dbl[dit].numPts();
-     }
+   copyFromArray( m_kinetic_species, m_fluid_species, m_fields, a_vector );
+}
+
+void GKRHSData::copyFrom( Real* a_vector )
+{
+   CH_assert( isDefined() );
+   copyFromArray( m_kinetic_species, m_fluid_species, m_fields, a_vector );
+}
+
+////////////////////////////////////////////////////////////////////
+
+inline
+void addFromArray( KineticSpeciesPtrVect& a_kinetic_species,
+                   CFG::FluidSpeciesPtrVect& a_fluid_species,
+                   CFG::FieldPtrVect& a_fields,
+                   Real* a_src,
+                   const Real& a_factor )
+{
+   int offset(0);
+   for (int s(0); s<a_kinetic_species.size(); s++) {
+      offset += GKUtils::addToLevelData(
+         a_kinetic_species[s]->distributionFunction(),
+         a_src + offset,
+         a_factor );
+   }
+   for (int s(0); s<a_fluid_species.size(); s++) {
+      offset += CFG::GKUtils::addToLevelData( a_fluid_species[s]->data(),
+                                              a_src + offset,
+                                              a_factor );
+   }
+   for (int s(0); s<a_fields.size(); s++) {
+      offset += CFG::GKUtils::addToLevelData( a_fields[s]->data(),
+                                              a_src + offset,
+                                              a_factor );
    }
 }
 
-void GKRHSData::copyTo(Real *Y)
+void GKState::addFrom( Real* a_vector, const Real& a_factor )
 {
    CH_assert( isDefined() );
-   int offset = 0;
-   for (int s=0; s < m_species_mapped.size(); s++) {
-     const LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
-     const DisjointBoxLayout& dbl = x.disjointBoxLayout();
-     DataIterator dit = x.dataIterator();
-     for (dit.begin(); dit.ok(); ++dit) {
-       FArrayBox tmp(dbl[dit],1,(Y+offset));
-       tmp.copy(x[dit]);
-       offset += dbl[dit].numPts();
-     }
+   addFromArray( m_kinetic_species, m_fluid_species, m_fields, a_vector, a_factor );
+}
+
+////////////////////////////////////////////////////////////////////
+
+inline
+void scaleData( KineticSpeciesPtrVect& a_kinetic_species,
+                CFG::FluidSpeciesPtrVect& a_fluid_species,
+                CFG::FieldPtrVect& a_fields,
+                const Real& a_factor )
+{
+   for (int s(0); s<a_kinetic_species.size(); s++) {
+      GKUtils::scaleLevelData( a_kinetic_species[s]->distributionFunction(), a_factor );
+   }
+   for (int s(0); s<a_fluid_species.size(); s++) {
+      CFG::GKUtils::scaleLevelData( a_fluid_species[s]->data(), a_factor );
+   }
+   for (int s(0); s<a_fields.size(); s++) {
+      CFG::GKUtils::scaleLevelData( a_fields[s]->data(), a_factor );
    }
 }
 
-void GKRHSData::copyFrom(Real *Y)
+void GKState::scale( const Real& a_factor )
 {
    CH_assert( isDefined() );
-   int offset = 0;
-   for (int s=0; s < m_species_mapped.size(); s++) {
-     LevelData<FArrayBox>& x = m_species_mapped[s]->distributionFunction();
-     const DisjointBoxLayout& dbl = x.disjointBoxLayout();
-     DataIterator dit = x.dataIterator();
-     for (dit.begin(); dit.ok(); ++dit) {
-       const FArrayBox tmp(dbl[dit],1,(Y+offset));
-       x[dit].copy(tmp);
-       offset += dbl[dit].numPts();
-     }
+   scaleData( m_kinetic_species, m_fluid_species, m_fields, a_factor );
+}
+
+void GKRHSData::scale( const Real& a_factor )
+{
+   CH_assert( isDefined() );
+   scaleData( m_kinetic_species, m_fluid_species, m_fields, a_factor );
+}
+
+////////////////////////////////////////////////////////////////////
+
+inline
+void incrementData( KineticSpeciesPtrVect& a_kinetic_species,
+                    const KineticSpeciesPtrVect& a_dkinetic_species,
+                    CFG::FluidSpeciesPtrVect& a_fluid_species,
+                    const CFG::FluidSpeciesPtrVect& a_dfluid_species,
+                    CFG::FieldPtrVect& a_fields,
+                    const CFG::FieldPtrVect& a_dfields,
+                    const Real& a_factor )
+{
+   CH_assert( a_kinetic_species.size()==a_dkinetic_species.size() );
+   CH_assert( a_fluid_species.size()==a_dfluid_species.size() );
+   CH_assert( a_fields.size()==a_dfields.size() );
+   for (int s(0); s<a_kinetic_species.size(); s++) {
+//      GKUtils::incrementLevelData( *(a_kinetic_species[s]),
+//                                   *(a_dkinetic_species[s]),
+//                                   a_factor );
+      a_kinetic_species[s]->addData( *(a_dkinetic_species[s]), a_factor );
+   }
+   for (int s(0); s<a_fluid_species.size(); s++) {
+//      CFG::GKUtils::incrementLevelData( *(a_fluid_species[s]),
+//                                        *(a_dfluid_species[s]),
+//                                        a_factor );
+      a_fluid_species[s]->addData( *(a_dfluid_species[s]), a_factor );
+   }
+   for (int s(0); s<a_fields.size(); s++) {
+//      CFG::GKUtils::incrementLevelData( *(a_field[s]),
+//                                        *(a_dfield[s]),
+//                                        a_factor );
+      a_fields[s]->addData( *(a_dfields[s]), a_factor );
    }
 }
 
-void GKState::increment( const GKState& a_state,
-                         Real a_factor,
-                         bool a_update_flux_register )
+void GKState::increment( const GKState& a_delta,
+                         const Real& a_factor,
+                         const bool a_update_flux_register )
 {
    CH_assert( isDefined() );
-   const KineticSpeciesPtrVect& rhs_species( a_state.data() );
-   CH_assert( m_species_mapped.size()==rhs_species.size() );
-   for (int s(0); s<m_species_mapped.size(); s++) {
-      m_species_mapped[s]->addData( *(rhs_species[s]), a_factor );
-   }
+   incrementData( m_kinetic_species, a_delta.dataKinetic(),
+                  m_fluid_species, a_delta.dataFluid(),
+                  m_fields, a_delta.dataField(),
+                  a_factor );
 }
 
-void GKState::increment( const GKRHSData& a_rhs,
-                         Real a_factor,
-                         bool a_update_flux_register )
+void GKState::increment( const GKRHSData& a_delta,
+                         const Real& a_factor,
+                         const bool a_update_flux_register )
 {
    CH_assert( isDefined() );
-   const KineticSpeciesPtrVect& rhs_species( a_rhs.data() );
-   CH_assert( m_species_mapped.size()==rhs_species.size() );
-   for (int s(0); s<m_species_mapped.size(); s++) {
-//      inspect( rhs_species[s]->distributionFunction() );
-      m_species_mapped[s]->addData( *(rhs_species[s]), a_factor );
-//      inspect( m_species_mapped[s]->distributionFunction() );
-   }
+   incrementData( m_kinetic_species, a_delta.dataKinetic(),
+                  m_fluid_species, a_delta.dataFluid(),
+                  m_fields, a_delta.dataField(),
+                  a_factor );
 }
 
-
-void GKRHSData::scale(const Real& a_factor)
+void GKRHSData::increment( const GKRHSData& a_delta,
+                           const Real& a_factor,
+                           const bool a_update_flux_register )
 {
    CH_assert( isDefined() );
-   for (int s(0); s<m_species_mapped.size(); s++) {
-      LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
-      DataIterator dit = solution.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) solution[dit] *= a_factor;
-   }
+   incrementData( m_kinetic_species, a_delta.dataKinetic(),
+                  m_fluid_species, a_delta.dataFluid(),
+                  m_fields, a_delta.dataField(),
+                  a_factor );
 }
 
-
-void GKRHSData::increment( const GKRHSData& a_increment,
-                           Real a_factor,
-                           bool a_update_flux_register )
+void GKRHSData::increment( const GKState& a_delta,
+                           const Real& a_factor,
+                           const bool a_update_flux_register )
 {
    CH_assert( isDefined() );
-   const KineticSpeciesPtrVect& increment_species( a_increment.data() );
-   CH_assert( m_species_mapped.size()==increment_species.size() );
-   for (int s(0); s<m_species_mapped.size(); s++) {
-//      inspect( increment_species[s]->distributionFunction() );
-      m_species_mapped[s]->addData( *(increment_species[s]), a_factor );
-//      inspect( m_species_mapped[s]->distributionFunction() );
-   }
+   incrementData( m_kinetic_species, a_delta.dataKinetic(),
+                  m_fluid_species, a_delta.dataFluid(),
+                  m_fields, a_delta.dataField(),
+                  a_factor );
 }
 
+////////////////////////////////////////////////////////////////////
 
-Real GKRHSData::dotProduct(const GKRHSData& a_Y)
+Real GKRHSData::dotProduct( const GKRHSData& a_vector )
 {
    CH_assert( isDefined() );
-   Real dotProduct_local = 0, dotProduct = 0;
-   const KineticSpeciesPtrVect& Y_species( a_Y.data() );
-   CH_assert( m_species_mapped.size()==Y_species.size() );
-   for (int s(0); s<m_species_mapped.size(); s++) {
-      const LevelData<FArrayBox>& vec_a = m_species_mapped[s]->distributionFunction();
-      const LevelData<FArrayBox>& vec_b = Y_species[s]->distributionFunction();
-      const DisjointBoxLayout& grids = vec_a.disjointBoxLayout();
-      DataIterator dit = vec_a.dataIterator();
-      for (dit.begin();dit.ok();++dit) dotProduct_local += vec_a[dit].dotProduct(vec_b[dit],grids[dit]);
+   double sum_local(0);
+
+   const KineticSpeciesPtrVect& b_kinetic_species( a_vector.dataKinetic() );
+   CH_assert( m_kinetic_species.size()==b_kinetic_species.size() );
+   for (int s(0); s<m_kinetic_species.size(); s++) {
+      sum_local += GKUtils::innerProductLevelData(
+         m_kinetic_species[s]->distributionFunction(),
+         b_kinetic_species[s]->distributionFunction() );
    }
-   MPI_Allreduce(&dotProduct_local,&dotProduct,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-   return dotProduct;
+   
+   const  CFG::FluidSpeciesPtrVect& b_fluid_species( a_vector.dataFluid() );
+   CH_assert( m_fluid_species.size()==b_fluid_species.size() );
+   for (int s(0); s<m_fluid_species.size(); s++) {
+      sum_local += CFG::GKUtils::innerProductLevelData(
+         m_fluid_species[s]->data(),
+         b_fluid_species[s]->data() );
+   }
+   
+   const  CFG::FieldPtrVect& b_fields( a_vector.dataField() );
+   CH_assert( m_fields.size()==b_fields.size() );
+   for (int s(0); s<m_fields.size(); s++) {
+      sum_local += CFG::GKUtils::innerProductLevelData(
+         m_fields[s]->data(),
+         b_fields[s]->data() );
+   }
+   
+   double sum(0.0);
+
+#ifdef CH_MPI
+   MPI_Allreduce( &sum_local, &sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
+#else
+   sum = sum_local;
+#endif
+
+   return sum;
+}
+   
+////////////////////////////////////////////////////////////////////
+   
+inline
+Real normLp( const KineticSpeciesPtrVect& a_kinetic_species,
+             const CFG::FluidSpeciesPtrVect& a_fluid_species,
+             const CFG::FieldPtrVect& a_fields,
+             const int a_p )
+{
+   double accum(0);
+   for (int s(0); s<a_kinetic_species.size(); s++) {
+      accum += GKUtils::accumulateLevelData( a_kinetic_species[s]->distributionFunction(), a_p );
+   }
+   for (int s(0); s<a_fluid_species.size(); s++) {
+      accum += CFG::GKUtils::accumulateLevelData( a_fluid_species[s]->data(), a_p );
+   }
+   for (int s(0); s<a_fluid_species.size(); s++) {
+      accum += CFG::GKUtils::accumulateLevelData( a_fields[s]->data(), a_p );
+   }
+   return GKUtils::reduce( accum, a_p );
 }
 
-Real GKState::computeNorm( int a_ord) const
+   
+Real GKState::computeNorm( const int a_p ) const
 {
-  CH_assert(isDefined());
-  CH_assert((a_ord <= 2) && (a_ord >= 0));
-  Real local_norm = 0, norm = 0;
-
-  if (a_ord == 0) {
-    /* max norm */
-    for (int s(0); s<m_species_mapped.size(); s++) {
-      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
-      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
-      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
-      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
-      geom.getCellVolumes(volume);
-      DataIterator dit = solution.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) {
-        FArrayBox tmp(grids[dit],1);
-        tmp.copy(solution[dit]);
-        tmp.abs();
-        double box_max = tmp.max(grids[dit]);
-        if (box_max > local_norm) local_norm = box_max;
-      }
-    }
-    MPI_Allreduce(&local_norm,&norm, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-  } else if (a_ord == 1) {
-    /* L1 */
-    for (int s(0); s<m_species_mapped.size(); s++) {
-      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
-      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
-      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
-      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
-      geom.getCellVolumes(volume);
-      DataIterator dit = solution.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) {
-        FArrayBox tmp(grids[dit],1);
-        tmp.copy(solution[dit]);
-        tmp.abs();
-        local_norm += tmp.sum(grids[dit],0,1);
-      }
-    }
-    MPI_Allreduce(&local_norm, &norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  } else {
-    /* L2 */
-    for (int s(0); s<m_species_mapped.size(); s++) {
-      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
-      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
-      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
-      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
-      geom.getCellVolumes(volume);
-      DataIterator dit = solution.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) local_norm += solution[dit].sumPow(grids[dit]);
-    }
-    MPI_Allreduce(&local_norm, &norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    norm = sqrt(norm);
-  }
-
-  return(norm);
+   CH_assert(isDefined()); 
+   CH_assert((a_p <= 2) && (a_p >= 0));
+   return normLp( m_kinetic_species, m_fluid_species, m_fields, a_p );
 }
 
-Real GKRHSData::computeNorm( int a_ord) const
+Real GKRHSData::computeNorm( const int a_p ) const
 {
-  CH_assert(isDefined());
-  CH_assert((a_ord <= 2) && (a_ord >= 0));
-  Real local_norm = 0, norm = 0;
-
-  if (a_ord == 0) {
-    /* max norm */
-    for (int s(0); s<m_species_mapped.size(); s++) {
-      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
-      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
-      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
-      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
-      geom.getCellVolumes(volume);
-      DataIterator dit = solution.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) {
-        FArrayBox tmp(grids[dit],1);
-        tmp.copy(solution[dit]);
-        tmp.abs();
-        double box_max = tmp.max(grids[dit]);
-        if (box_max > local_norm) local_norm = box_max;
-      }
-    }
-    MPI_Allreduce(&local_norm,&norm, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-  } else if (a_ord == 1) {
-    /* L1 */
-    for (int s(0); s<m_species_mapped.size(); s++) {
-      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
-      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
-      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
-      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
-      geom.getCellVolumes(volume);
-      DataIterator dit = solution.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) {
-        FArrayBox tmp(grids[dit],1);
-        tmp.copy(solution[dit]);
-        tmp.abs();
-        local_norm += tmp.sum(grids[dit],0,1);
-      }
-    }
-    MPI_Allreduce(&local_norm, &norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  } else {
-    /* L2 */
-    for (int s(0); s<m_species_mapped.size(); s++) {
-      const LevelData<FArrayBox>& solution = m_species_mapped[s]->distributionFunction();
-      const PhaseGeom& geom = m_species_mapped[s]->phaseSpaceGeometry();
-      const DisjointBoxLayout& grids = solution.disjointBoxLayout();
-      LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
-      geom.getCellVolumes(volume);
-      DataIterator dit = solution.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit) local_norm += solution[dit].sumPow(grids[dit]);
-    }
-    MPI_Allreduce(&local_norm, &norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    norm = sqrt(norm);
-  }
-
-  return(norm);
+   CH_assert(isDefined());
+   CH_assert((a_p <= 2) && (a_p >= 0));
+   return normLp( m_kinetic_species, m_fluid_species, m_fields, a_p );
 }
 
 #include "NamespaceFooter.H"

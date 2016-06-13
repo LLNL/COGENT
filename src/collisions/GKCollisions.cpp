@@ -129,15 +129,16 @@ void GKCollisions::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
 
 Real GKCollisions::computeDt( const KineticSpeciesPtrVect& soln )
 {
+  Real dt(DBL_MAX);
+//  int count(0);
   std::map<std::string,int>::iterator it;
-  Real dt = DBL_MAX;
-  int count = 0;
   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
     Real tmp = m_collision_model[it->second]->computeDt(soln);
     dt = (tmp < dt ? tmp : dt);
-    count++;
+//    count++;
   }
-  return (count ? dt : -1);
+//  return (count ? dt : -1);
+  return dt;
 }
 
 Real GKCollisions::computeTimeScale( const KineticSpeciesPtrVect& soln )
@@ -155,24 +156,30 @@ Real GKCollisions::computeTimeScale( const KineticSpeciesPtrVect& soln )
 
 bool GKCollisions::isLinear()
 {
-  bool linearFlag = true;
-  std::map<std::string,int>::iterator it;
-  for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it)
-    linearFlag = (linearFlag && m_collision_model[it->second]->isLinear());
-  return linearFlag;
-}
-
-bool GKCollisions::setupPrecondMatrix(void *a_P,int a_N,int a_bs)
-{
-  int count = 0;
-  bool flag = true;
-  if (!procID()) {
-    cout << "Setting up preconditioner matrix for collision model(s)... ";
-  }
+  bool linear_flag = true;
   std::map<std::string,int>::iterator it;
   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
-    flag = (flag && m_collision_model[it->second]->setupPrecondMatrix(a_P,a_N,a_bs));
-    count++;
+    int index = getCollisionModelIndex( it );
+    linear_flag = (linear_flag && m_collision_model[index]->isLinear());
+  }
+  return linear_flag;
+}
+
+//bool GKCollisions::setupPrecondMatrix(void *a_P,int a_N,int a_bs)
+bool GKCollisions::setupPrecondMatrix( void *a_P, int a_N )
+{
+   int count = 0;
+   bool flag = true;
+   if (!procID()) {
+      cout << "Setting up preconditioner matrix for collision model(s)... ";
+   }
+   std::map<std::string,int>::iterator it;
+   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
+      int index = getCollisionModelIndex( it );
+//     bool done = m_collision_model[it->second]->setupPrecondMatrix(a_P,a_N,a_bs);
+      bool done = m_collision_model[index]->setupPrecondMatrix( a_P, a_N );
+      flag = (flag && done );
+      count++;
   }
   CH_assert(count<=1);
   if (!procID()) {
@@ -204,13 +211,13 @@ void GKCollisions::preTimeStep( const KineticSpeciesPtrVect& a_soln, const Real 
    }
 }
 
-void GKCollisions::postTimeStage( const KineticSpeciesPtrVect& a_soln, const Real a_time )
+void GKCollisions::postTimeStage( const KineticSpeciesPtrVect& a_soln, const Real a_time, const int a_stage )
 {
    for (int species(0); species<a_soln.size(); species++) {
       KineticSpecies& soln_species( *(a_soln[species]) );
       const std::string species_name( soln_species.name() );
       CLSInterface& CLS( collisionModel( species_name ) );
-      CLS.postTimeStage( a_soln, species, a_time );
+      CLS.postTimeStage( a_soln, species, a_time, a_stage );
    }
 }
 

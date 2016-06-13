@@ -316,49 +316,6 @@ PhaseBlockCoordSys::projectOntoFluxSurfaceNormal( FluxBox& a_data ) const
 }
 
 
-
-void
-PhaseBlockCoordSys::projectOntoRadial( FArrayBox& a_data ) const
-{
-   CH_assert(a_data.nComp() == SpaceDim);
-
-   const Box& box = a_data.box();
-   CFG::Box cfg_box(config_restrict(box.smallEnd()),config_restrict(box.bigEnd()));
-   CFG::FArrayBox cfg_unit_radial(cfg_box,CFG_DIM);
-   m_configuration_coords.computeUnitRadial(cfg_unit_radial);
-
-   FArrayBox unit_radial;
-   injectConfigurationToPhase(cfg_unit_radial, unit_radial);
-
-   FORT_PHASE_BLOCK_PROJECT(CHF_BOX(a_data.box()),
-                            CHF_CONST_FRA(unit_radial),
-                            CHF_FRA(a_data));
-}
-
-
-
-void
-PhaseBlockCoordSys::projectOntoRadial( FluxBox& a_data ) const
-{
-   CH_assert(a_data.nComp() == SpaceDim);
-
-   const Box& box = a_data.box();
-   CFG::Box cfg_box(config_restrict(box.smallEnd()),config_restrict(box.bigEnd()));
-   CFG::FluxBox cfg_unit_radial(cfg_box,CFG_DIM);
-   m_configuration_coords.computeUnitRadial(cfg_unit_radial);
-
-   FluxBox unit_radial;
-   injectConfigurationToPhase(cfg_unit_radial, unit_radial);
-
-   for (int dir=0; dir<SpaceDim; ++dir) {
-      FArrayBox& this_data = a_data[dir];
-      FORT_PHASE_BLOCK_PROJECT(CHF_BOX(this_data.box()),
-                               CHF_CONST_FRA(unit_radial[dir]),
-                               CHF_FRA(this_data));
-   }
-}
-
-
 void
 PhaseBlockCoordSys::computePsiThetaProjections( FArrayBox& a_data ) const
 {
@@ -407,51 +364,6 @@ PhaseBlockCoordSys::computePsiThetaProjections( FluxBox& a_data ) const
                                             CHF_FRA(this_data));
    }
 }
-
-
-
-void
-PhaseBlockCoordSys::computeGradFFactor( FArrayBox& a_data ) const
-{
-   CH_assert(a_data.nComp() == 1);
-
-   const Box& box = a_data.box();
-   CFG::Box cfg_box(config_restrict(box.smallEnd()),config_restrict(box.bigEnd()));
-   CFG::FArrayBox cfg_gradf_factor(cfg_box,1);
-   m_configuration_coords.computeGradFFactor(cfg_gradf_factor);
-
-   FArrayBox gradf_factor;
-   injectConfigurationToPhase(cfg_gradf_factor, gradf_factor);
-
-   FORT_PHASE_BLOCK_GRADF_FACTOR(CHF_BOX(a_data.box()),
-                                 CHF_CONST_FRA1(gradf_factor,0),
-                                 CHF_FRA1(a_data,0));
-
-}
-
-
-
-void
-PhaseBlockCoordSys::computeGradFFactor( FluxBox& a_data ) const
-{
-   CH_assert(a_data.nComp() == 1);
-
-   const Box& box = a_data.box();
-   CFG::Box cfg_box(config_restrict(box.smallEnd()),config_restrict(box.bigEnd()));
-   CFG::FluxBox cfg_gradf_factor(cfg_box,1);
-   m_configuration_coords.computeGradFFactor(cfg_gradf_factor);
-
-   FluxBox gradf_factor;
-   injectConfigurationToPhase(cfg_gradf_factor, gradf_factor);
-
-   for (int dir=0; dir<SpaceDim; ++dir) {
-      FArrayBox& this_data = a_data[dir];
-      FORT_PHASE_BLOCK_GRADF_FACTOR(CHF_BOX(this_data.box()),
-                                    CHF_CONST_FRA1(gradf_factor[dir],0),
-                                    CHF_FRA1(this_data,0));
-   }
-}
-
 
 
 CFG::RealVect

@@ -29,11 +29,6 @@ public:
     */
    virtual ~MBPETScSolver();
 
-   virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
-                                        LevelData<FluxBox>&   diffusion_coefficient,
-                                        LevelData<FArrayBox>& beta_coefficient,
-                                        const PotentialBC&    bc );
-
    virtual void multiplyMatrix( const LevelData<FArrayBox>& in,
                                 LevelData<FArrayBox>&       out ) const;
 
@@ -53,6 +48,11 @@ public:
                    const bool    precond_verbose );
 
 protected:
+
+   virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
+                                        LevelData<FluxBox>&   diffusion_coefficient,
+                                        LevelData<FArrayBox>& beta_coefficient,
+                                        const PotentialBC&    bc );
 
    /// Create the PETSc data structures
    /**
@@ -88,7 +88,6 @@ protected:
                                       const PotentialBC&                       bc,
                                       FArrayBox&                               stencil_values,
                                       const bool                               fourthOrder,
-                                      const bool                               dropOrder,
                                       const LayoutData< BaseFab<IntVectSet> >& unstructured_coupling,
                                       Vector< Vector<CoDim1Stencil> >&         codim1_stencils,
                                       Vector< Vector<CoDim2Stencil> >&         codim2_stencils,
@@ -102,7 +101,6 @@ protected:
                               const int                          diagonal_offset,
                               LayoutData< BaseFab<IntVectSet> >& unstructured_coupling,
                               const bool                         fourthOrder,
-                              const bool                         dropOrder,
                               Mat&                               matrix,
                               LevelData<FArrayBox>&              rhs_from_bc ) const;
 

@@ -6,17 +6,16 @@
 
 #include "NamespaceHeader.H" 
 
-RosenbluthPotentials::RosenbluthPotentials(LevelData<FArrayBox>& a_phi_one,
-                      LevelData<FArrayBox>& a_phi_two,
-                      const LevelData<FArrayBox>& a_rho,
-                      const PhaseGeom& a_phase_geom,
-                      const Real a_mass,
-                      const Real a_pcg_tol,
-                      const Real a_pcg_maxiter,
-                      const int a_mult_num,
-                      const int a_verbocity) 
 
-
+RosenbluthPotentials::RosenbluthPotentials( LevelData<FArrayBox>&       a_phi_one,
+                                            LevelData<FArrayBox>&       a_phi_two,
+                                            const LevelData<FArrayBox>& a_rho,
+                                            const PhaseGeom&            a_phase_geom,
+                                            const Real                  a_mass,
+                                            const Real                  a_pcg_tol,
+                                            const Real                  a_pcg_maxiter,
+                                            const int                   a_mult_num,
+                                            const int                   a_verbocity ) 
    : m_verbosity(a_verbocity),
      m_phase_geom(a_phase_geom),
      m_mass(a_mass),
@@ -24,7 +23,6 @@ RosenbluthPotentials::RosenbluthPotentials(LevelData<FArrayBox>& a_phi_one,
      m_pcg_maxiter(a_pcg_maxiter),
      m_mult_num(a_mult_num)
 {
-
    const DisjointBoxLayout& grids( a_rho.getBoxes() );
    const int n_comp( a_rho.nComp() );
    LevelData<FArrayBox> rhs_withBC( grids, n_comp, IntVect::Zero );
@@ -34,19 +32,20 @@ RosenbluthPotentials::RosenbluthPotentials(LevelData<FArrayBox>& a_phi_one,
 
    imposeBC2(rhs_withBC, a_phi_one, a_rho);
    solve(a_phi_two,rhs_withBC);
-
 }
+
+
 
 RosenbluthPotentials::~RosenbluthPotentials()
 {
 }
 
 
-void RosenbluthPotentials::imposeBC1(LevelData<FArrayBox>& a_rhsBC,
-                                 const LevelData<FArrayBox>& a_rho) const
+
+void RosenbluthPotentials::imposeBC1( LevelData<FArrayBox>&       a_rhsBC,
+                                      const LevelData<FArrayBox>& a_rho ) const
 
 {
-
    //Compute multipole coefficients 
    const CFG::MagGeom& mag_geom( m_phase_geom.magGeom() );
    CFG::LevelData<CFG::FArrayBox> multipole_coeff( mag_geom.grids(), m_mult_num, CFG::IntVect::Zero );
@@ -82,9 +81,11 @@ void RosenbluthPotentials::imposeBC1(LevelData<FArrayBox>& a_rhsBC,
    }
 }
 
-void RosenbluthPotentials::imposeBC2(LevelData<FArrayBox>& a_rhsBC,
-                                 const LevelData<FArrayBox>& a_phi_one,
-                                 const LevelData<FArrayBox>& a_rho) const
+
+
+void RosenbluthPotentials::imposeBC2( LevelData<FArrayBox>&       a_rhsBC,
+                                      const LevelData<FArrayBox>& a_phi_one,
+                                      const LevelData<FArrayBox>& a_rho ) const
 
 {
    // Get velocity coordinate system parameters and Bfield
@@ -148,12 +149,12 @@ void RosenbluthPotentials::imposeBC2(LevelData<FArrayBox>& a_rhsBC,
    }
 }
 
-void RosenbluthPotentials::computeMultipoleCoeff(CFG::LevelData<CFG::FArrayBox>& a_mult_coeff,
-                                                 const LevelData<FArrayBox>& a_rho) const
 
+
+void RosenbluthPotentials::computeMultipoleCoeff( CFG::LevelData<CFG::FArrayBox>& a_mult_coeff,
+                                                  const LevelData<FArrayBox>&     a_rho ) const
 {
-
-   //Create the untility species object for calculating moments
+   //Create the utility species object for calculating moments
    string name;
    name.assign("utility_species");
 
@@ -187,8 +188,10 @@ void RosenbluthPotentials::computeMultipoleCoeff(CFG::LevelData<CFG::FArrayBox>&
    utility_spec->chargeDensity( a_mult_coeff );   
 }
 
-void RosenbluthPotentials::solve(LevelData<FArrayBox>& a_solution,
-                                 const LevelData<FArrayBox>& a_rhs) const
+
+
+void RosenbluthPotentials::solve( LevelData<FArrayBox>&       a_solution,
+                                  const LevelData<FArrayBox>& a_rhs ) const
 {
    // Get coordinate system parameters 
    const PhaseGrid& phase_grid = m_phase_geom.phaseGrid();
@@ -208,13 +211,14 @@ void RosenbluthPotentials::solve(LevelData<FArrayBox>& a_solution,
       const MPI_Comm& config_box_comm = phase_grid.configBoxComm(k);
       const List<VEL::Box>& velocity_slice = phase_grid.velocitySlice(k);
 
-      // Make the Hypre solver and vectors
-
+      // Make the Hypre data (except the solvers, see below)
+      HYPRE_StructGrid grid;
+      HYPRE_StructStencil stencil;
       HYPRE_StructMatrix A;
       HYPRE_StructVector x;
       HYPRE_StructVector b;
       HYPRE_StructSolver solver;
-      createHypreData(config_box_comm, velocity_slice, A, x, b, solver);
+      createHypreData(config_box_comm, velocity_slice, grid, stencil, A, x, b, solver);
 
       // Loop over configuration space
 
@@ -222,6 +226,21 @@ void RosenbluthPotentials::solve(LevelData<FArrayBox>& a_solution,
       CFG::BoxIterator bit(config_box);
       for (bit.begin(); bit.ok(); ++bit) {
          CFG::IntVect cfg_iv = bit();
+
+         // Not sure why we can't construct the preconditioner just once
+         // for the whole config box (like the other Hypre data above), but
+         // this solver (PFMG, but the same problem also occurs with SMG)
+         // object seems to hold onto some state that can only be freed by
+         // destructing the entire object to avoid a huge memory leak.
+         HYPRE_StructSolver precond;
+         HYPRE_StructPFMGCreate(config_box_comm, &precond);
+         HYPRE_StructPFMGSetMaxIter(precond, 1);
+         HYPRE_StructPFMGSetTol(precond, 0.0);
+         HYPRE_StructPFMGSetZeroGuess(precond);
+         HYPRE_StructPFMGSetNumPreRelax(precond, 1);
+         HYPRE_StructPFMGSetNumPostRelax(precond, 1);
+         HYPRE_StructPCGSetPrecond(solver, HYPRE_StructPFMGSolve,
+                                   HYPRE_StructPFMGSetup, precond);
 
          List<Box> phase_slices;
          getSliceBoxes(cfg_iv, velocity_slice, phase_slices);
@@ -267,6 +286,7 @@ void RosenbluthPotentials::solve(LevelData<FArrayBox>& a_solution,
                if (overlap.ok()) {
                   FArrayBox this_data(overlap,1);
                   this_data.copy(a_rhs[dit], overlap);
+                  this_data.negate();  // To account for the fact that the operator is the negative Laplacian
 
                   VEL::IntVect vlo = m_phase_geom.vel_restrict(overlap.smallEnd());
                   VEL::IntVect vhi = m_phase_geom.vel_restrict(overlap.bigEnd());
@@ -282,7 +302,6 @@ void RosenbluthPotentials::solve(LevelData<FArrayBox>& a_solution,
          HYPRE_StructVectorAssemble(x);
 
          // Solve the linear system         
-
          HYPRE_StructPCGSetup(solver, A, b, x);
          HYPRE_StructPCGSolve(solver, A, b, x);
 
@@ -316,9 +335,11 @@ void RosenbluthPotentials::solve(LevelData<FArrayBox>& a_solution,
                }
             }
          }
+
+         HYPRE_StructPFMGDestroy(precond);
       }
 
-      destroyHypreData(A, x, b, solver);
+      destroyHypreData(solver, b, x, A, stencil, grid);
    }
 
    if (m_verbosity) {
@@ -337,17 +358,20 @@ void RosenbluthPotentials::solve(LevelData<FArrayBox>& a_solution,
 
 }
 
-void RosenbluthPotentials::createHypreData(const MPI_Comm&       a_comm,
-                                   const List<VEL::Box>& a_boxes,
-                                   HYPRE_StructMatrix&   a_matrix,
-                                   HYPRE_StructVector&   a_x,
-                                   HYPRE_StructVector&   a_b,
-                                   HYPRE_StructSolver&   a_solver) const
+
+
+void RosenbluthPotentials::createHypreData( const MPI_Comm&       a_comm,
+                                            const List<VEL::Box>& a_boxes,
+                                            HYPRE_StructGrid&     a_grid,
+                                            HYPRE_StructStencil&  a_stencil,
+                                            HYPRE_StructMatrix&   a_matrix,
+                                            HYPRE_StructVector&   a_x,
+                                            HYPRE_StructVector&   a_b,
+                                            HYPRE_StructSolver&   a_solver ) const
 {
    /* Create the grid */
 
-   HYPRE_StructGrid grid;
-   HYPRE_StructGridCreate(a_comm, VEL_DIM, &grid);
+   HYPRE_StructGridCreate(a_comm, VEL_DIM, &a_grid);
 
    for (ListIterator<VEL::Box> it(a_boxes); it.ok(); ++it) {
       const VEL::Box& box = it();
@@ -355,10 +379,10 @@ void RosenbluthPotentials::createHypreData(const MPI_Comm&       a_comm,
       IntVect lower(box.loVect());
       IntVect upper(box.hiVect());
 
-      HYPRE_StructGridSetExtents(grid, lower.dataPtr(), upper.dataPtr());
+      HYPRE_StructGridSetExtents(a_grid, lower.dataPtr(), upper.dataPtr());
    }
 
-   HYPRE_StructGridAssemble(grid);
+   HYPRE_StructGridAssemble(a_grid);
 
    /* Define the discretization stencil for the system matrix A */
 
@@ -369,32 +393,27 @@ void RosenbluthPotentials::createHypreData(const MPI_Comm&       a_comm,
    int stencil_size = 5;
 
    /* Create an empty 2D stencil object */
-   HYPRE_StructStencil stencil;
-   HYPRE_StructStencilCreate(VEL_DIM, stencil_size, &stencil);
+   HYPRE_StructStencilCreate(VEL_DIM, stencil_size, &a_stencil);
 
    /* Assign each of the stencil entries */
    int entry;
    for (entry = 0; entry < stencil_size; entry++)
-      HYPRE_StructStencilSetElement(stencil, entry, offsets[entry]);
-   
-   /* Create an empty matrix object */
-   HYPRE_StructMatrixCreate(a_comm, grid, stencil, &a_matrix);
-   HYPRE_StructMatrixInitialize(a_matrix);
+      HYPRE_StructStencilSetElement(a_stencil, entry, offsets[entry]);
 
+   /* Create an empty matrix object */
+   HYPRE_StructMatrixCreate(a_comm, a_grid, a_stencil, &a_matrix);
+   HYPRE_StructMatrixInitialize(a_matrix);
 
    /* Set up Struct Vectors for b and x. */
 
    /* Create an empty vector object */
-   HYPRE_StructVectorCreate(a_comm, grid, &a_b);
-   HYPRE_StructVectorCreate(a_comm, grid, &a_x);
+   HYPRE_StructVectorCreate(a_comm, a_grid, &a_b);
+   HYPRE_StructVectorCreate(a_comm, a_grid, &a_x);
 
    HYPRE_StructVectorInitialize(a_b);
    HYPRE_StructVectorInitialize(a_x);
 
-   /* Set up the solver (See the Hypre Reference Manual for
-      descriptions of all of the options.) */
-
-   // Make the PCG solver
+   /* Make the PCG solver */
 
    HYPRE_StructPCGCreate(a_comm, &a_solver);
 
@@ -403,37 +422,31 @@ void RosenbluthPotentials::createHypreData(const MPI_Comm&       a_comm,
    HYPRE_StructPCGSetMaxIter(a_solver, m_pcg_maxiter);
    HYPRE_StructPCGSetLogging(a_solver, 1);
    HYPRE_StructPCGSetPrintLevel(a_solver, 0); /* amount of info. printed */
-
-/*
-   // Make the preconditioner
-
-   HYPRE_StructSolver precond;
-   HYPRE_StructPFMGCreate(a_comm, &precond);
-   HYPRE_StructPFMGSetMaxIter(precond, 1);
-   HYPRE_StructPFMGSetTol(precond, 0.0);
-   HYPRE_StructPFMGSetZeroGuess(precond);
-   HYPRE_StructPFMGSetRAPType(precond, 0);
-   HYPRE_StructPFMGSetRelaxType(precond, 1);
-   HYPRE_StructPFMGSetNumPreRelax(precond, 1);
-   HYPRE_StructPFMGSetNumPostRelax(precond, 1);
-   HYPRE_StructPFMGSetPrintLevel(precond, 0);
-   HYPRE_StructPFMGSetLogging(precond, 0);
-   HYPRE_StructPCGSetPrecond(a_solver,
-                             HYPRE_StructPFMGSolve,
-                             HYPRE_StructPFMGSetup,
-                             precond);
-
-*/
-   HYPRE_StructStencilDestroy(stencil);
-   HYPRE_StructGridDestroy(grid);
 }
 
 
+void RosenbluthPotentials::destroyHypreData( HYPRE_StructSolver&   a_solver,
+                                             HYPRE_StructVector&   a_b,
+                                             HYPRE_StructVector&   a_x,
+                                             HYPRE_StructMatrix&   a_matrix,
+                                             HYPRE_StructStencil&  a_stencil,
+                                             HYPRE_StructGrid&     a_grid ) const
+{
+   HYPRE_StructPCGDestroy(a_solver);
+   HYPRE_StructVectorDestroy(a_b);
+   HYPRE_StructVectorDestroy(a_x);
+   HYPRE_StructMatrixDestroy(a_matrix);
+   HYPRE_StructStencilDestroy(a_stencil);
+   HYPRE_StructGridDestroy(a_grid);
+}
+
+
+
 void RosenbluthPotentials::constructMatrix( const VEL::ProblemDomain&  a_domain,
-                                    const VEL::RealVect&       a_dx,
-                                    const List<VEL::Box>&      a_boxes,
-                                    const double&              a_Bfield,
-                                    HYPRE_StructMatrix&        a_matrix) const
+                                            const VEL::RealVect&       a_dx,
+                                            const List<VEL::Box>&      a_boxes,
+                                            const double&              a_Bfield,
+                                            HYPRE_StructMatrix&        a_matrix ) const
 {
    /*
      Fills a_matrix with the coeffients corresponding to the standard
@@ -476,11 +489,11 @@ void RosenbluthPotentials::constructMatrix( const VEL::ProblemDomain&  a_domain,
          double mu_coeff_HiFace = 4.0 * (m_mass/a_Bfield) * (iv[1]+1) * a_dx[1];
          double mu_coeff_LoFace = 4.0 * (m_mass/a_Bfield) * (iv[1]) * a_dx[1];
 
-         // Second-order centered difference Laplacian 
-         values[i] = -2.0 * (dx_inv2[0] + mu_coeff * dx_inv2[1]);
-         values[i+1] = values[i+2] = dx_inv2[0];
-         values[i+3] = mu_coeff_LoFace * dx_inv2[1];
-         values[i+4] = mu_coeff_HiFace * dx_inv2[1];
+         // Second-order centered difference negative Laplacian 
+         values[i] = 2.0 * (dx_inv2[0] + mu_coeff * dx_inv2[1]);
+         values[i+1] = values[i+2] = -dx_inv2[0];
+         values[i+3] = -mu_coeff_LoFace * dx_inv2[1];
+         values[i+4] = -mu_coeff_HiFace * dx_inv2[1];
 
          // Homogeneous Dirichlet boundary condition modifications
          if (iv[0] == domain_lo[0]) {
@@ -510,22 +523,11 @@ void RosenbluthPotentials::constructMatrix( const VEL::ProblemDomain&  a_domain,
    delete [] stencil_indices;
 }
 
-void RosenbluthPotentials::destroyHypreData(HYPRE_StructMatrix& a_matrix,
-                                    HYPRE_StructVector& a_x,
-                                    HYPRE_StructVector& a_b,
-                                    HYPRE_StructSolver& a_solver) const
-{
-   HYPRE_StructPCGDestroy(a_solver);
-   HYPRE_StructVectorDestroy(a_b);
-   HYPRE_StructVectorDestroy(a_x);
-   HYPRE_StructMatrixDestroy(a_matrix);
-}
 
 
-
-void RosenbluthPotentials::getSliceBoxes(const CFG::IntVect     a_cfg_iv,
-                                 const List<VEL::Box>&  a_vel_boxes,
-                                 List<Box>&             a_phase_boxes) const
+void RosenbluthPotentials::getSliceBoxes( const CFG::IntVect     a_cfg_iv,
+                                          const List<VEL::Box>&  a_vel_boxes,
+                                          List<Box>&             a_phase_boxes ) const
 {
    IntVect lo, hi;
    for (int n=0; n<CFG_DIM; ++n) {
@@ -545,5 +547,6 @@ void RosenbluthPotentials::getSliceBoxes(const CFG::IntVect     a_cfg_iv,
       a_phase_boxes.add(Box(lo,hi));
    }
 }
+
                                  
 #include "NamespaceFooter.H"

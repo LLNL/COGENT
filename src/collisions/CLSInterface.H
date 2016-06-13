@@ -41,11 +41,16 @@ class CLSInterface
 
       virtual inline bool isLinear() { return false; }
       
-      virtual Real computeDt(const KineticSpeciesPtrVect& soln) { return -1; }
-      virtual Real TimeScale(const KineticSpeciesPtrVect& soln) { return -1; }
+      virtual Real computeDt(const KineticSpeciesPtrVect& soln) { return DBL_MAX; }
+      virtual Real TimeScale(const KineticSpeciesPtrVect& soln) { return DBL_MAX; }
 
-      virtual bool setupPrecondMatrix(void *a_P,int a_N,int a_bs) { return false; }
-      virtual void assemblePrecondMatrix( void *a_P,
+//      virtual bool setupPrecondMatrix(void *a_P,int a_N,int a_bs) { return false; }
+      virtual bool setupPrecondMatrix( void *a_P, int a_N )
+   {
+      return false;
+   }
+
+   virtual void assemblePrecondMatrix( void *a_P,
                                           const KineticSpeciesPtrVect& a_soln,
                                           int a_i,
                                           const Mapping& a_mapping) { }
@@ -53,7 +58,7 @@ class CLSInterface
       virtual void preTimeStep  (const KineticSpeciesPtrVect& soln,
                                  const int, const Real ) { }
       virtual void postTimeStage(const KineticSpeciesPtrVect& soln,
-                                 const int, const Real ) { }
+                                 const int, const Real, const int ) { }
 };
 
 #include "NamespaceFooter.H"

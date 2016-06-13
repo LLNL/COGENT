@@ -281,7 +281,11 @@ static PetscErrorCode PostTimeStage(TS ts, PetscReal stagetime, PetscInt stagein
   TSGetTimeStepNumber (ts,&cur_step);
 
   context->copyStateFromPetsc(Y[stageindex],system);
-  system->postTimeStage(cur_step,stagetime);
+  /* DG: last argument should be stage number, but set to 1 here!
+   * PETSc has no function to return the stage number, so need to
+   * find a way to compute it.
+  */
+  system->postTimeStage(cur_step,stagetime,1);
   return(0);
 }
 

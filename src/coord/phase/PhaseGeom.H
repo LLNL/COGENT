@@ -406,6 +406,18 @@ public:
 
    const PhaseGrid& phaseGrid() const {return m_phase_grid;}
 
+   //Extract configuraion component of a 4D vector (e.g., GKVelocity)
+   void getConfigurationComponents( LevelData<FArrayBox>& configComp,
+                                    const LevelData<FArrayBox>& vector) const;
+   
+   //Compute vector projection onto the direction of phi x bpol
+   void computeRadialProjection( LevelData<FArrayBox>& radComp,
+                                 const LevelData<FArrayBox>& vector) const;
+
+   //Compute vector projection onto the direction of bpol
+   void computePoloidalProjection( LevelData<FArrayBox>& poloidalComp,
+                                   const LevelData<FArrayBox>& vector) const;
+
 protected:
 
    Box configurationFlatten( const Box& disjointBox,

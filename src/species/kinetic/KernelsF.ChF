@@ -1,0 +1,88 @@
+#include "CONSTANTS.H"
+
+      subroutine compute_vel_cell(
+     &     CHF_FRA[velCell],
+     &     CHF_FRA[velFace],
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox]
+     &     )
+
+c     //This is the second-order calculation (same as in EdgeToCell, BoxTools Chombo)
+c     //Should make it fourth order 
+c     local variables
+      integer CHF_DDECL[i;j;k;l], CHF_DDECL[ii;jj;kk;ll]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir);
+      ll = CHF_ID(3,dir);
+      mm = CHF_ID(4,dir)]
+
+      CHF_MULTIDO[gridbox;i;j;k;l]
+
+         velCell(CHF_IX[i;j;k;l],dir) = half * (velFace(CHF_IX[i;j;k;l;m],dir)
+     &                                + velFace(CHF_IX[i+ ii;j+ jj;k+ kk;l+ ll;m+ mm],dir)) 
+             
+      CHF_ENDDO
+
+      return
+      end
+
+
+
+      subroutine compute_perp_vel(
+     &     CHF_BOX[box],
+     &     CHF_FRA[result],
+     &     CHF_CONST_FRA1[dfn],
+     &     CHF_CONST_FRA[gkVel],
+     &     CHF_CONST_FRA[velCoords],
+     &     CHF_CONST_FRA[b]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m] 
+      double precision bR, bZ, vpar_R, vpar_Phi, vpar_Z, vperp_R, vperp_Phi, vperp_Z 
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+
+          bR = b(i,j,CHF_LBOUND[b;2],CHF_LBOUND[b;3],0) 
+          bZ = b(i,j,CHF_LBOUND[b;2],CHF_LBOUND[b;3],2) 
+    
+          vpar_R = velCoords(CHF_IX[i;j;k;l;m],0) * bR
+          vpar_Z = velCoords(CHF_IX[i;j;k;l;m],0) * bZ
+
+          vperp_R =  gkVel(CHF_IX[i;j;k;l;m],0) - vpar_R    
+          vperp_Z =  gkVel(CHF_IX[i;j;k;l;m],1) - vpar_Z
+          
+          result(CHF_IX[i;j;k;l;m],0) = vperp_R * dfn(CHF_IX[i;j;k;l;m])
+          result(CHF_IX[i;j;k;l;m],1) = vperp_Z * dfn(CHF_IX[i;j;k;l;m])
+
+
+#else        
+
+          bR = b(i,j,k,CHF_LBOUND[b;2],CHF_LBOUND[b;3],0) 
+          bZ = b(i,j,k,CHF_LBOUND[b;2],CHF_LBOUND[b;3],2)
+          bphi =  b(i,j,k,CHF_LBOUND[b;2],CHF_LBOUND[b;3],1)
+
+          vpar_R   = velCoords(CHF_IX[i;j;k;l;m],0) * bR
+          vpar_Phi = velCoords(CHF_IX[i;j;k;l;m],0) * bPhi
+          vpar_Z   = velCoords(CHF_IX[i;j;k;l;m],0) * bZ
+
+          vperp_R   =  gkVel(CHF_IX[i;j;k;l;m],0) - vpar_R    
+          vperp_Phi =  gkVel(CHF_IX[i;j;k;l;m],1) - vpar_Phi
+          vperp_Z   =  gkVel(CHF_IX[i;j;k;l;m],2) - vpar_Z
+
+          result(CHF_IX[i;j;k;l;m],0) = vperp_R   * dfn(CHF_IX[i;j;k;l;m])
+          result(CHF_IX[i;j;k;l;m],1) = vperp_Phi * dfn(CHF_IX[i;j;k;l;m])
+          result(CHF_IX[i;j;k;l;m],2) = vperp_Z   * dfn(CHF_IX[i;j;k;l;m])
+
+#endif
+
+      CHF_ENDDO
+
+      return
+      end
+

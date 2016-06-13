@@ -1,31 +1,3 @@
-      subroutine mult_njinverse(
-     &     CHF_BOX[box],
-     &     CHF_CONST_FRA[efield_mapped],
-     &     CHF_CONST_FRA[njinverse],
-     &     CHF_FRA[efield]
-     &     )
-
-c     local variables
-      integer CHF_DDECL[i;j;k]
-      double precision nji11, nji12, nji21, nji22
-
-      CHF_MULTIDO[box;i;j;k]
-
-         nji11 = njinverse(i,j,0)
-         nji12 = njinverse(i,j,1)
-         nji21 = njinverse(i,j,2)
-         nji22 = njinverse(i,j,3)
-
-         efield(CHF_IX[i;j;k],0) = nji11 * efield_mapped(CHF_IX[i;j;k],0)
-     &                           + nji12 * efield_mapped(CHF_IX[i;j;k],1)
-         efield(CHF_IX[i;j;k],1) = nji21 * efield_mapped(CHF_IX[i;j;k],0)
-     &                           + nji22 * efield_mapped(CHF_IX[i;j;k],1)
-
-      CHF_ENDDO
-
-      return
-      end
-
       subroutine cell_centered_field_component(
      &     CHF_BOX[box],
      &     CHF_CONST_INT[dir],

@@ -420,6 +420,8 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
       Real *D_sw;
       Real ac, an, as, ae, aw, ane, anw, ase, asw, aee, aww, ann, ass;
 
+//      std::vector<Real> D_c( m_nD );
+      
       D_c  = new Real[m_nD];
       D_e  = new Real[m_nD];
       D_w  = new Real[m_nD];
@@ -430,6 +432,7 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
       D_se = new Real[m_nD];
       D_sw = new Real[m_nD];
 
+      m_D[dit].getVal( &D_c[0], ic );
       m_D[dit].getVal(&D_c [0],ic );
       m_D[dit].getVal(&D_e [0],ie );
       m_D[dit].getVal(&D_w [0],iw );

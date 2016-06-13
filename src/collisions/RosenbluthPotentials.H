@@ -21,71 +21,75 @@ class RosenbluthPotentials
 {
 public:
 
-  /// Constructor with initialization.
+   /// Constructor with initialization.
 
-  RosenbluthPotentials(LevelData<FArrayBox>& a_phi_one,
-                      LevelData<FArrayBox>& a_phi_two,
-                      const LevelData<FArrayBox>& a_rhs,
-                      const PhaseGeom& a_phase_geom,
-                      const Real a_mass,
-                      const Real a_pcg_tol,
-                      const Real a_pcg_maxiter,
-                      const int a_mult_num,   
-                      const int a_verbocity);
+   RosenbluthPotentials( LevelData<FArrayBox>&      phi_one,
+                         LevelData<FArrayBox>&       phi_two,
+                         const LevelData<FArrayBox>& rhs,
+                         const PhaseGeom&            phase_geom,
+                         const Real                  mass,
+                         const Real                  pcg_tol,
+                         const Real                  pcg_maxiter,
+                         const int                   mult_num,   
+                         const int                   verbocity );
 
-  /// Destructor.
-  /**
+   /// Destructor.
+   /**
+    */
+   virtual ~RosenbluthPotentials();
+
+   /// Solves the Laplace equation 
+   void solve( LevelData<FArrayBox>&       solution,
+               const LevelData<FArrayBox>& rhs ) const;
+
+   ///Computes multipole coefficients
+   void computeMultipoleCoeff( CFG::LevelData<CFG::FArrayBox>&  multipole_coeff,
+                               const LevelData<FArrayBox>&      rho ) const;
+
+   ///Imposes multipole BC for the Poisson eq-n for phi_one
+   void imposeBC1( LevelData<FArrayBox>&       rhsBC,
+                   const LevelData<FArrayBox>& rho ) const;
+
+   ///Imposes multipole BC for the Poisson eq-n for phi_two
+   /* Here, the situation is more comples, since solution for phi_one
+      does not rapidly decay inside the computational domain. Therefore, 
+      we fisrt separate the inner part of phi_one, and use it for multipole 
+      solution as in imposeBC1. For the outer part of phi_one and its 
+      multipole contributions we use the analytic expression in the 
+      entire velocity space 
    */
-  virtual ~RosenbluthPotentials();
+   void imposeBC2( LevelData<FArrayBox>&       rhsBC,
+                   const LevelData<FArrayBox>& phi_one,
+                   const LevelData<FArrayBox>& rho ) const;
 
-  /// Solves the Laplace equation 
-  void solve( LevelData<FArrayBox>&       a_solution,
-              const LevelData<FArrayBox>&      a_rhs) const;
+   ///Hypre routines
 
-  ///Computes multipole coefficients
-  void computeMultipoleCoeff( CFG::LevelData<CFG::FArrayBox>&  a_multipole_coeff,
-                              const LevelData<FArrayBox>&      a_rho) const;
+   void createHypreData( const MPI_Comm&       comm,
+                         const List<VEL::Box>& boxes,
+                         HYPRE_StructGrid&     grid,
+                         HYPRE_StructStencil&  stencil,
+                         HYPRE_StructMatrix&   matrix,
+                         HYPRE_StructVector&   x,
+                         HYPRE_StructVector&   b,
+                         HYPRE_StructSolver&   solver ) const;
 
-  ///Imposes multipole BC for the Poisson eq-n for phi_one
-  void imposeBC1(LevelData<FArrayBox>& a_rhsBC,
-                 const LevelData<FArrayBox>& a_rho) const;
+   void destroyHypreData( HYPRE_StructSolver&  solver,
+                          HYPRE_StructVector&  b,
+                          HYPRE_StructVector&  x,
+                          HYPRE_StructMatrix&  matrix,
+                          HYPRE_StructStencil& stencil,
+                          HYPRE_StructGrid&    grid ) const;
 
-  ///Imposes multipole BC for the Poisson eq-n for phi_two
-  /* Here, the situation is more comples, since solution for phi_one
-     does not rapidly decay inside the computational domain. Therefore, 
-     we fisrt separate the inner part of phi_one, and use it for multipole 
-     solution as in imposeBC1. For the outer part of phi_one and its 
-     multipole contributions we use the analytic expression in the 
-     entire velocity space 
-  */
-  void imposeBC2(LevelData<FArrayBox>& a_rhsBC,
-                 const LevelData<FArrayBox>& a_phi_one,
-                 const LevelData<FArrayBox>& a_rho) const;
+   void constructMatrix( const VEL::ProblemDomain& domain,
+                         const VEL::RealVect&      dx,
+                         const List<VEL::Box>&     boxes,
+                         const double&             Bfield,
+                         HYPRE_StructMatrix&       matrix ) const;
 
-  ///Hypre routines
-  void createHypreData(const MPI_Comm&       comm,
-                       const List<VEL::Box>& boxes,
-                       HYPRE_StructMatrix&   matrix,
-                       HYPRE_StructVector&   x,
-                       HYPRE_StructVector&   b,
-                       HYPRE_StructSolver&   solver) const;
-
-  void constructMatrix( const VEL::ProblemDomain& domain,
-                        const VEL::RealVect&      dx,
-                        const List<VEL::Box>&     boxes,
-                        const double&             Bfield,
-                        HYPRE_StructMatrix&       matrix) const;
-
-
-  void destroyHypreData(HYPRE_StructMatrix& matrix,
-                        HYPRE_StructVector& x,
-                        HYPRE_StructVector& b,
-                        HYPRE_StructSolver& solver) const;
-
-  /// Utility function (used to make proper block arrangement)
-  void getSliceBoxes(const CFG::IntVect     cfg_iv,
-                     const List<VEL::Box>&  vel_boxes,
-                     List<Box>&             phase_boxes) const;
+   /// Utility function (used to make proper block arrangement)
+   void getSliceBoxes( const CFG::IntVect     cfg_iv,
+                       const List<VEL::Box>&  vel_boxes,
+                       List<Box>&             phase_boxes ) const;
 
 private:
  

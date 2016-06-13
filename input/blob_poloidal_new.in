@@ -8,7 +8,7 @@ gksystem.hdf_density = true
 #####################################################
 # Time Stepping Definitions
 #####################################################
-simulation.max_step            = 100
+simulation.max_step            = 10
 simulation.max_time            = 3.14159
 simulation.max_dt_grow         = 1.1
 simulation.cfl_number          = 0.75

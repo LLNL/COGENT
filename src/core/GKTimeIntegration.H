@@ -7,6 +7,13 @@
 #include "PhaseGeom.H"
 #include "Mapping.H"
 
+#undef CH_SPACEDIM
+#define CH_SPACEDIM CFG_DIM
+#include "FluidSpecies.H"
+#include "Field.H"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM PDIM
+
 #include "NamespaceHeader.H"
 
 class GKRHSData;
@@ -42,7 +49,10 @@ public:
         m_ghost_vect( a_state.m_ghost_vect )
    {
       if (&a_state!=this) {
-         define( a_state.m_species_mapped, a_state.m_geometry );
+         define( a_state.m_kinetic_species,
+                 a_state.m_fluid_species,
+                 a_state.m_fields,
+                 a_state.m_geometry );
       }
    }
    
@@ -50,17 +60,30 @@ public:
    virtual ~GKState() {;}
   
    inline
-   void define( const KineticSpeciesPtrVect& a_species,
+   void define( const KineticSpeciesPtrVect&    a_kinetic_species,
+                const CFG::FluidSpeciesPtrVect& a_fluid_species,
+                const CFG::FieldPtrVect&        a_fields,
                 const RefCountedPtr<PhaseGeom>& a_geometry )
    {
-      const int n( a_species.size() );
-      m_species_mapped.resize( n );
-      for (int s(0); s<n; s++) {
-         m_species_mapped[s] = a_species[s]->clone( m_ghost_vect );
+      m_kinetic_species.resize( a_kinetic_species.size() );
+      for (int s(0); s<a_kinetic_species.size(); s++) {
+         m_kinetic_species[s] = a_kinetic_species[s]->clone( m_ghost_vect );
       }
+
+      const CFG::IntVect ghost_vect( configSpaceGhostVector() );
+      m_fluid_species.resize( a_fluid_species.size() );
+      for (int s(0); s<a_fluid_species.size(); s++) {
+         m_fluid_species[s] = a_fluid_species[s]->clone( ghost_vect );
+      }
+      
+      m_fields.resize( a_fields.size() );
+      for (int s(0); s<a_fields.size(); s++) {
+         m_fields[s] = a_fields[s]->clone( ghost_vect );
+      }
+
       m_geometry = a_geometry;
       CH_assert(!m_geometry.isNull());
-      m_mapping.define(m_species_mapped);
+      m_mapping.define( a_kinetic_species );
       m_is_defined = true;
    }
    
@@ -69,7 +92,21 @@ public:
    void define( const GKState& a_state )
    {
       m_ghost_vect = a_state.m_ghost_vect;
-      define( a_state.m_species_mapped, a_state.m_geometry );
+      define( a_state.m_kinetic_species,
+              a_state.m_fluid_species,
+              a_state.m_fields,
+              a_state.m_geometry );
+   }
+   
+   
+   inline
+   void define( const GKState& a_state, const IntVect& a_ghost_vect )
+   {
+      m_ghost_vect = a_ghost_vect;
+      define( a_state.m_kinetic_species,
+              a_state.m_fluid_species,
+              a_state.m_fields,
+              a_state.m_geometry );
    }
    
    
@@ -81,25 +118,34 @@ public:
    inline
    void zero()
    {
-      for (int s(0); s<m_species_mapped.size(); s++) {
-         m_species_mapped[s]->zeroData();
+      for (int s(0); s<m_kinetic_species.size(); s++) {
+         m_kinetic_species[s]->zeroData();
+      }
+      for (int s(0); s<m_fluid_species.size(); s++) {
+         m_fluid_species[s]->zeroData();
+      }
+      for (int s(0); s<m_kinetic_species.size(); s++) {
+         m_fields[s]->zeroData();
       }
    }
 
    int getVectorSize();
-   int getNComponents();
+   
+//   int getNComponents();
 
    
    void increment( const GKState& a_state,
-                   Real a_factor = 1.0,
-                   bool a_update_flux_register = false );
+                   const Real& a_factor = 1.0,
+                   const bool a_update_flux_register = false );
 
    void increment( const GKRHSData& a_rhs,
-                   Real a_factor = 1.0,
-                   bool a_update_flux_register = false );
+                   const Real& a_factor = 1.0,
+                   const bool a_update_flux_register = false );
 
 
-   Real computeNorm ( int a_ord) const; 
+   Real computeNorm ( const int a_p ) const; 
+
+   void scale( const Real& a_factor );
 
    
    inline
@@ -110,10 +156,10 @@ public:
 
    
    inline
-   KineticSpeciesPtrVect& data()
+   KineticSpeciesPtrVect& dataKinetic()
    {
       CH_assert( isDefined() );
-      return m_species_mapped;
+      return m_kinetic_species;
    }
 
    inline 
@@ -124,10 +170,38 @@ public:
    }
    
    inline
-   const KineticSpeciesPtrVect& data() const
+   const KineticSpeciesPtrVect& dataKinetic() const
    {
       CH_assert( isDefined() );
-      return m_species_mapped;
+      return m_kinetic_species;
+   }
+
+   inline
+   CFG::FluidSpeciesPtrVect& dataFluid()
+   {
+      CH_assert( isDefined() );
+      return m_fluid_species;
+   }
+   
+   inline
+   const CFG::FluidSpeciesPtrVect& dataFluid() const
+   {
+      CH_assert( isDefined() );
+      return m_fluid_species;
+   }
+
+   inline
+   CFG::FieldPtrVect& dataField()
+   {
+      CH_assert( isDefined() );
+      return m_fields;
+   }
+   
+   inline
+   const CFG::FieldPtrVect& dataField() const
+   {
+      CH_assert( isDefined() );
+      return m_fields;
    }
 
    inline
@@ -144,19 +218,32 @@ public:
       return m_geometry;
    }
 
-   void copyTo   (Real *a_Y);
-   void copyFrom (Real *a_Y);
-   void addFrom  (Real *a_Y, Real a_a=1.0);
+   void copyTo( Real* a_Y ) const;
+
+   void copyFrom( Real* a_Y );
+
+   void addFrom( Real *a_Y, const Real& a_a=1.0 );
 
 private:
 
+   CFG::IntVect configSpaceGhostVector()
+   {
+      CFG::IntVect ghost_vect;
+      for (int d(0); d<CFG_DIM; d++) {
+         ghost_vect[d] = m_ghost_vect[d];
+      }
+      return ghost_vect;
+   }
+   
    // Disallowed for all the usual reasons
    void operator=(const GKState&);
 //   GKState(const GKState&);
 
    bool                     m_is_defined;
    IntVect                  m_ghost_vect;
-   KineticSpeciesPtrVect    m_species_mapped;
+   KineticSpeciesPtrVect    m_kinetic_species;
+   CFG::FluidSpeciesPtrVect m_fluid_species;
+   CFG::FieldPtrVect        m_fields;
    RefCountedPtr<PhaseGeom> m_geometry;
    Mapping                  m_mapping;
 };
@@ -175,14 +262,23 @@ public:
 
    
    inline
-   void define( const KineticSpeciesPtrVect& a_species )
+   void define( const KineticSpeciesPtrVect&    a_kinetic_species,
+                const CFG::FluidSpeciesPtrVect& a_fluid_species,
+                const CFG::FieldPtrVect&        a_fields )
    {
-      const int n( a_species.size() );
-      m_species_mapped.resize( n );
-      for (int s(0); s<n; s++) {
-         m_species_mapped[s] = a_species[s]->clone( IntVect::Zero );
+      m_kinetic_species.resize( a_kinetic_species.size() );
+      for (int s(0); s<a_kinetic_species.size(); s++) {
+         m_kinetic_species[s] = a_kinetic_species[s]->clone( IntVect::Zero );
       }
-      m_mapping.define(m_species_mapped);
+      m_fluid_species.resize( a_fluid_species.size() );
+      for (int s(0); s<a_fluid_species.size(); s++) {
+         m_fluid_species[s] = a_fluid_species[s]->clone( CFG::IntVect::Zero );
+      }
+      m_fields.resize( a_fields.size() );
+      for (int s(0); s<a_fields.size(); s++) {
+         m_fields[s] = a_fields[s]->clone( CFG::IntVect::Zero );
+      }
+      m_mapping.define( a_kinetic_species );
       m_is_defined = true;
    }
 
@@ -190,38 +286,50 @@ public:
    inline
    void define( const GKState& a_state )
    {
-      define( a_state.data() );
+      define( a_state.dataKinetic(), a_state.dataFluid(), a_state.dataField() );
    }
 
    
    inline
    void define( const GKRHSData& a_rhs )
    {
-      define( a_rhs.data() );
+      define( a_rhs.dataKinetic(), a_rhs.dataFluid(), a_rhs.dataField() );
    }
 
    void scale(const Real& a_factor);
 
    
    void copy( const GKRHSData& a_rhs );
+
    void copy( const GKState& a_rhs );
 
    
    inline
    void zero()
    {
-      for (int s(0); s<m_species_mapped.size(); s++) {
-         m_species_mapped[s]->zeroData();
+      for (int s(0); s<m_kinetic_species.size(); s++) {
+         m_kinetic_species[s]->zeroData();
+      }
+      for (int s(0); s<m_fluid_species.size(); s++) {
+         m_fluid_species[s]->zeroData();
+      }
+      for (int s(0); s<m_fields.size(); s++) {
+         m_fields[s]->zeroData();
       }
    }
 
    
    void increment( const GKRHSData& a_increment,
-                   Real a_factor = 1.0,
-                   bool a_update_flux_register = false );
+                   const Real& a_factor = 1.0,
+                   const bool a_update_flux_register = false );
 
 
-   Real computeNorm ( int a_ord ) const;
+   void increment( const GKState& a_increment,
+                   const Real& a_factor = 1.0,
+                   const bool a_update_flux_register = false );
+
+
+   Real computeNorm ( const int a_p ) const;
 
    Real dotProduct (const GKRHSData& a_Y);
    
@@ -233,10 +341,10 @@ public:
 
    
    inline
-   KineticSpeciesPtrVect& data()
+   KineticSpeciesPtrVect& dataKinetic()
    {
       CH_assert( isDefined() );
-      return m_species_mapped;
+      return m_kinetic_species;
    }
    
    inline 
@@ -247,27 +355,57 @@ public:
    }
    
    inline
-   const KineticSpeciesPtrVect& data() const
+   const KineticSpeciesPtrVect& dataKinetic() const
    {
       CH_assert( isDefined() );
-      return m_species_mapped;
+      return m_kinetic_species;
+   }
+
+   inline
+   CFG::FluidSpeciesPtrVect& dataFluid()
+   {
+      CH_assert( isDefined() );
+      return m_fluid_species;
    }
    
-   void copyTo    (Real*);
-   void copyFrom  (Real*);
+   inline
+   const CFG::FluidSpeciesPtrVect& dataFluid() const
+   {
+      CH_assert( isDefined() );
+      return m_fluid_species;
+   }
+
+   inline
+   CFG::FieldPtrVect& dataField()
+   {
+      CH_assert( isDefined() );
+      return m_fields;
+   }
+   
+   inline
+   const CFG::FieldPtrVect& dataField() const
+   {
+      CH_assert( isDefined() );
+      return m_fields;
+   }
+
+   void copyTo( Real* a_Y ) const;
+
+   void copyFrom( Real* a_Y );
 
    int getVectorSize();
-   int getNComponents();
-
+   
 private:
 
    // Disallowed for all the usual reasons
    void operator=(const GKRHSData&);
    GKRHSData(const GKRHSData&);
 
-   bool                  m_is_defined;
-   KineticSpeciesPtrVect m_species_mapped;
-   Mapping               m_mapping;
+   bool                     m_is_defined;
+   KineticSpeciesPtrVect    m_kinetic_species;
+   CFG::FluidSpeciesPtrVect m_fluid_species;
+   CFG::FieldPtrVect        m_fields;
+   Mapping                  m_mapping;
 };
 
 

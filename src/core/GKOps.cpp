@@ -41,6 +41,8 @@
 #include "newMappedGridIO.H"
 #include "FourthOrderUtil.H"
 #include "DataArray.H"
+#include "FluidSpecies.H"
+#include "Field.H"
 #include "inspect.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -57,8 +59,6 @@
 #include "Directions.H"
 
 #include "NamespaceHeader.H"
-
-#define EXTRAPOLATE_FIELD
 
 using namespace CH_MultiDim;
 
@@ -90,13 +90,15 @@ void GKOps::define( const GKState& a_state,
    m_units = new GKUnits( ppgksys );
 
    ParmParse pp;
-   m_initial_conditions = new GKSystemIC( pp, *m_phase_geometry, a_state.data() );
-   m_boundary_conditions = new GKSystemBC( pp, *m_phase_geometry, a_state.data() );
+   m_boundary_conditions = new GKSystemBC( pp, a_state );
+   m_initial_conditions = new GKSystemIC( pp, a_state );
    
    const double larmor( m_units->larmorNumber() );
    ParmParse pp_vlasov(GKVlasov::pp_name);
    m_vlasov      = new GKVlasov( pp_vlasov, larmor );
    m_collisions  = new GKCollisions( m_verbosity );
+   m_fieldOp     = new CFG::GKFieldOp( m_verbosity );
+   m_fluidOp     = new CFG::GKFluidOp( m_verbosity );
    if (m_transport_model_on) {
       m_transport = new GKTransport( m_verbosity );
    }
@@ -107,35 +109,43 @@ void GKOps::define( const GKState& a_state,
    m_Y.define(a_state);
 
    CFG::IntVect phi_ghost_vect( 4*CFG::IntVect::Unit );
-   m_phi.define( m_phase_geometry->magGeom().grids(), 1, phi_ghost_vect );
-
-   m_count_Vlasov = m_count_Collision
-                  = m_count_Transport
-                  = m_count_Neutrals = 0;
+   m_phi.define( m_phase_geometry->magGeom().gridsFull(), 1, phi_ghost_vect );
 
    m_is_defined = true;
 }
 
 
 void
-GKOps::initialize( const KineticSpeciesPtrVect& a_kinetic_species,
-                   const int                    a_cur_step )
+GKOps::initializeElectricField( const GKState& a_state, const int a_cur_step )
 {
-   KineticSpeciesPtrVect initial_kinetic_species;
+   GKState initial_state( a_state );
+   
+   const KineticSpeciesPtrVect kinetic_species( a_state.dataKinetic() );
+   KineticSpeciesPtrVect& initial_kinetic_species( initial_state.dataKinetic() );
+   for (int s(0); s<kinetic_species.size(); s++) {
+      initial_kinetic_species[s] = kinetic_species[s]->clone( IntVect::Zero );
+   }
 
-   // Would use createTemporarySpeciesVector() here, but it clones with ghost cells
-   // and divides by J....
-   initial_kinetic_species.resize( a_kinetic_species.size() );
-   for (int s(0); s<a_kinetic_species.size(); s++) {
-      initial_kinetic_species[s] = a_kinetic_species[s]->clone( IntVect::Zero );
+   const CFG::FluidSpeciesPtrVect fluid_species( a_state.dataFluid() );
+   CFG::FluidSpeciesPtrVect& initial_fluid_species( initial_state.dataFluid() );
+   for (int s(0); s<fluid_species.size(); s++) {
+      initial_fluid_species[s] = fluid_species[s]->clone( CFG::IntVect::Zero );
+   }
+
+   const CFG::FieldPtrVect fields( a_state.dataField() );
+   CFG::FieldPtrVect& initial_fields( initial_state.dataField() );
+   for (int s(0); s<fields.size(); s++) {
+      initial_fields[s] = fields[s]->clone( CFG::IntVect::Zero );
    }
 
    if ( a_cur_step > 0 ) {
       // If we are restarting, initial_kinetic_species contains the current
-      // solution, so overwrite it with the initial condition.
-      applyInitialConditions( initial_kinetic_species, 0. );
+      // solution, so overwrite it with the initial condition. In particular,
+      // we need this to pass initial ion desnity into some electron models
+      initializeState( initial_state, 0. );
 
-      // And get rid of J
+      //NB: Although the input parametr a_state is physical satate, initialize state gives
+      //mapped_space (a.k.a. comp_state). Thus we need to get rid of J to bring it to physical space.
       for (int s(0); s<initial_kinetic_species.size(); s++) {
          LevelData<FArrayBox>& dfn( initial_kinetic_species[s]->distributionFunction() );
          const PhaseGeom& geometry( initial_kinetic_species[s]->phaseSpaceGeometry() );
@@ -148,7 +158,7 @@ GKOps::initialize( const KineticSpeciesPtrVect& a_kinetic_species,
    }
 
    const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-   const CFG::DisjointBoxLayout& mag_grids = mag_geom.grids();
+   const CFG::DisjointBoxLayout& mag_grids = mag_geom.gridsFull();
 
    if (m_consistent_potential_bcs) {
 
@@ -171,20 +181,17 @@ GKOps::initialize( const KineticSpeciesPtrVect& a_kinetic_species,
    }
    
    CFG::LevelData<CFG::FArrayBox> initial_ion_charge_density( mag_grids, 1, CFG::IntVect::Zero);
+   // JAFH: Need to include non-kinetic charges
    computeIonChargeDensity( initial_ion_charge_density, initial_kinetic_species );
-
+   
+   //We need this to communicate the initial density to certain adiabatic electron models
    createGKPoisson( initial_ion_charge_density );
    
    if ( m_ampere_law && a_cur_step == 0 ) {
       //Initialize E-field
       m_poisson->fillInternalGhosts( m_phi );
-#ifdef EXTRAPOLATE_FIELD
       m_poisson->computeField( m_phi, m_Er_average_cell );
       m_poisson->computeField( m_phi, m_Er_average_face );
-#else
-      m_poisson->computeField( m_phi, m_Er_average_cell );
-      m_poisson->computeField( m_phi, m_Er_average_face );
-#endif
    }
    
    CH_assert( isDefined() );
@@ -193,7 +200,9 @@ GKOps::initialize( const KineticSpeciesPtrVect& a_kinetic_species,
    m_E_field_cell.define( mag_grids, 3, CFG::IntVect::Unit );
    computeEField( m_E_field_face,
                   m_E_field_cell,
-                  a_kinetic_species,
+                  kinetic_species,
+                  fluid_species,
+                  fields,
                   a_cur_step );
    
    //Improve Er field calculation to take into accout the dealigment between the grid and magnetic surfaces
@@ -208,6 +217,8 @@ GKOps::~GKOps()
 {
    if (m_boltzmann_electron) delete m_boltzmann_electron;
    delete m_collisions;
+   delete m_fieldOp;
+   delete m_fluidOp;
    if (m_transport) delete m_transport;
    if (m_neutrals)  delete m_neutrals;
    delete m_vlasov;
@@ -220,49 +231,63 @@ GKOps::~GKOps()
    }
 }
 
-Real GKOps::stableDtExpl( const KineticSpeciesPtrVect& a_soln,
-                          const int a_step_number )
+Real GKOps::stableDtExpl( const GKState& a_state, const int a_step_number )
 {
    CH_assert( isDefined() );
-
-   Real dt_stable = DBL_MAX;
-
-   dt_stable = Min(dt_stable, (m_dt_Vlasov>0?m_dt_Vlasov:DBL_MAX));
-   dt_stable = Min( dt_stable, (m_dt_Collisions>0?m_dt_Collisions:DBL_MAX));
-   if (m_transport_model_on) dt_stable = Min( dt_stable, (m_dt_Transport>0?m_dt_Transport:DBL_MAX));
-   if (m_neutrals_model_on) dt_stable = Min( dt_stable, (m_dt_Neutrals>0?m_dt_Neutrals:DBL_MAX));
- 
+   Real dt_stable( DBL_MAX );
+   dt_stable = Min( dt_stable, m_dt_vlasov );
+   dt_stable = Min( dt_stable, m_dt_collisions );
+   dt_stable = Min( dt_stable, m_dt_fields );
+   dt_stable = Min( dt_stable, m_dt_fluids );
+   if (m_transport_model_on) {
+      dt_stable = Min( dt_stable, m_dt_transport );
+   }
+   if (m_neutrals_model_on) {
+      dt_stable = Min( dt_stable, m_dt_neutrals );
+   }
    return dt_stable;
 }
 
-Real GKOps::stableDtImEx( const KineticSpeciesPtrVect& a_soln,
-                          const int a_step_number )
+Real GKOps::stableDtImEx( const GKState& a_state, const int a_step_number )
 {
    CH_assert( isDefined() );
-
-   Real dt_stable = DBL_MAX;
-   dt_stable = Min(dt_stable, (m_dt_Vlasov>0?m_dt_Vlasov:DBL_MAX));
-   if (m_neutrals_model_on) dt_stable = Min( dt_stable, (m_dt_Neutrals>0?m_dt_Neutrals:DBL_MAX));
- 
+   Real dt_stable( DBL_MAX );
+   dt_stable = Min( dt_stable, m_dt_vlasov );
+   dt_stable = Min( dt_stable, m_dt_fields );
+   dt_stable = Min( dt_stable, m_dt_fluids );
+   if (m_neutrals_model_on) {
+      dt_stable = Min( dt_stable, m_dt_neutrals );
+   }
    return dt_stable;
 }
 
-void GKOps::preTimeStep (const int a_step, const Real a_time, const GKState& a_state)
+void GKOps::preTimeStep(const int a_step, const Real a_time, const GKState& a_state)
 {
-  setElectricField(a_time,a_state);
-  const KineticSpeciesPtrVect& soln(a_state.data());
+  setElectricField( a_time, a_state );
+  const KineticSpeciesPtrVect& soln( a_state.dataKinetic() );
 
-  m_dt_Vlasov            = m_vlasov->computeDt( m_E_field, soln );
-  m_dt_Collisions        = m_collisions->computeDt( soln );
-  m_TimeScale_Vlasov     = m_vlasov->computeTimeScale(m_E_field, soln);
-  m_TimeScale_Collisions = m_collisions->computeTimeScale( soln );
+  m_dt_vlasov = m_vlasov->computeDt( m_E_field, soln );
+  m_time_scale_vlasov = m_vlasov->computeTimeScale (m_E_field, soln );
+
+  m_dt_collisions = m_collisions->computeDt( soln );
+  m_time_scale_collisions = m_collisions->computeTimeScale( soln );
+
+  const CFG::FluidSpeciesPtrVect& fluids_comp( a_state.dataFluid() );
+  const CFG::FieldPtrVect& fields_comp( a_state.dataField() );
+
+  m_dt_fields = m_fieldOp->computeDt( fields_comp, fluids_comp );
+  m_time_scale_fields = m_fieldOp->computeTimeScale( fields_comp, fluids_comp );
+ 
+  m_dt_fluids = m_fluidOp->computeDt( fields_comp, fluids_comp );
+  m_time_scale_fluids = m_fluidOp->computeTimeScale( fields_comp, fluids_comp );
+
   if (m_transport_model_on) {
-    m_dt_Transport = m_transport->computeDt( soln );
-    m_TimeScale_Transport = m_transport->computeTimeScale( soln );
+    m_dt_transport = m_transport->computeDt( soln );
+    m_time_scale_transport = m_transport->computeTimeScale( soln );
   }
   if (m_neutrals_model_on) {
-    m_dt_Neutrals = m_neutrals->computeDt( soln );
-    m_TimeScale_Neutrals = m_neutrals->computeTimeScale( soln );
+    m_dt_neutrals = m_neutrals->computeDt( soln );
+    m_time_scale_neutrals = m_neutrals->computeTimeScale( soln );
   }
   m_collisions->preTimeStep( soln, a_time );
 }
@@ -272,23 +297,29 @@ void GKOps::postTimeStep (const int a_step, const Real a_time, const GKState& a_
   /* nothing to do here for now */
 }
 
-void GKOps::postTimeStage(const int a_step, const Real a_time, const GKState& a_state)
+void GKOps::postTimeStage(const int a_step, const Real a_time, const GKState& a_state, const int a_stage )
 {
-  setElectricField(a_time,a_state);
-  const KineticSpeciesPtrVect& soln(a_state.data());
-  m_collisions->postTimeStage( soln, a_time );
+  /* Stage number follows C convention: they go from 0, ..., n_stages-1 */
+  if (a_stage) {
+    setElectricField( a_time, a_state );
+  }
+  const KineticSpeciesPtrVect& soln( a_state.dataKinetic() );
+  m_collisions->postTimeStage( soln, a_time, a_stage );
 }
 
 void GKOps::setElectricField( const Real a_time, const GKState& a_state)
 {
-   const KineticSpeciesPtrVect& species_comp( a_state.data() );
+   const KineticSpeciesPtrVect& species_comp( a_state.dataKinetic() );
+   const CFG::FluidSpeciesPtrVect& fluids_comp( a_state.dataFluid() );
+   const CFG::FieldPtrVect& fields_comp( a_state.dataField() );
+   
    if (m_consistent_potential_bcs) {
       // We're not fourth-order accurate with this option anyway,
       // so only compute the field at the beginning of the step.
-      computeElectricField( m_E_field, species_comp, -1 );
+      computeElectricField( m_E_field, species_comp, fluids_comp, fields_comp, -1 );
    }
    else {
-      computeElectricField( m_E_field, species_comp, -1 );
+      computeElectricField( m_E_field, species_comp, fluids_comp, fields_comp, -1 );
    }
    return;
 }
@@ -300,22 +331,28 @@ void GKOps::explicitOp( GKRHSData& a_rhs,
 {
    CH_assert( isDefined() );
    a_rhs.zero();
-   const KineticSpeciesPtrVect& species_comp( a_state.data() );
-   
+   const KineticSpeciesPtrVect& species_comp( a_state.dataKinetic() );
+      
    KineticSpeciesPtrVect species_phys;
    createTemporarySpeciesVector( species_phys, species_comp );
    fillGhostCells( species_phys, m_E_field, a_time );
-   applyVlasovOperator( a_rhs.data(), species_phys, m_E_field, a_time );
+   applyVlasovOperator( a_rhs.dataKinetic(), species_phys, m_E_field, a_time );
 
    if (m_transport_model_on) {
-      applyTransportOperator( a_rhs.data(), species_phys, a_time );
+      applyTransportOperator( a_rhs.dataKinetic(), species_phys, a_time );
    }
     
    if (m_neutrals_model_on) {
-      applyNeutralsOperator( a_rhs.data(), species_comp, a_time );
+      applyNeutralsOperator( a_rhs.dataKinetic(), species_comp, a_time );
    }
 
-   applyCollisionOperator( a_rhs.data(), species_comp, a_time );
+   applyCollisionOperator( a_rhs.dataKinetic(), species_comp, a_time );
+   
+   const CFG::FluidSpeciesPtrVect& fluids_comp( a_state.dataFluid() );
+   const CFG::FieldPtrVect& fields_comp( a_state.dataField() );
+
+   applyFieldOperator( a_rhs.dataField(), fields_comp, fluids_comp, species_phys, m_E_field_face, a_time );
+   applyFluidOperator( a_rhs.dataFluid(), fields_comp, fluids_comp, species_phys, m_E_field_face, a_time );
 
    /* The following is hard-coded for a 4-stage time integrator!! */
    if (a_stage == 0) m_stage0_time = a_time;
@@ -341,7 +378,7 @@ void GKOps::explicitOp( GKRHSData& a_rhs,
          if (!m_ampere_cold_electrons) {
 
             const CFG::MagGeom& mag_geom = m_phase_geometry->magGeom();
-            const CFG::DisjointBoxLayout& mag_grids = mag_geom.grids();
+            const CFG::DisjointBoxLayout& mag_grids = mag_geom.gridsFull();
 
             // Compute the poloidal variation phi_tilde.  The poloidal variation of the
             // current potential is used as the initial guess for the interative procedure.
@@ -393,16 +430,18 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
 {
    CH_assert( isDefined() );
    a_rhs.zero();
-   const KineticSpeciesPtrVect& species_comp( a_state.data() );
+   const KineticSpeciesPtrVect& species_comp( a_state.dataKinetic() );
    
    KineticSpeciesPtrVect species_phys;
    createTemporarySpeciesVector( species_phys, species_comp );
    fillGhostCells( species_phys, m_E_field, a_time );
-   applyVlasovOperator( a_rhs.data(), species_phys, m_E_field, a_time );
+   applyVlasovOperator( a_rhs.dataKinetic(), species_phys, m_E_field, a_time );
 
    if (m_neutrals_model_on) {
-      applyNeutralsOperator( a_rhs.data(), species_comp, a_time );
+      applyNeutralsOperator( a_rhs.dataKinetic(), species_comp, a_time );
    }
+
+// JAFH: Need to add operations on fluids and fields here
 
    /* The following is hard-coded for a 4-stage time integrator!! */
    if (a_stage == 0) m_stage0_time = a_time;
@@ -428,7 +467,7 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
          if (!m_ampere_cold_electrons) {
 
             const CFG::MagGeom& mag_geom = m_phase_geometry->magGeom();
-            const CFG::DisjointBoxLayout& mag_grids = mag_geom.grids();
+            const CFG::DisjointBoxLayout& mag_grids = mag_geom.gridsFull();
 
             // Compute the poloidal variation phi_tilde.  The poloidal variation of the
             // current potential is used as the initial guess for the interative procedure.
@@ -481,16 +520,18 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
 {
    CH_assert( isDefined() );
    a_rhs.zero();
-   const KineticSpeciesPtrVect& species_comp( a_state.data() );
+   const KineticSpeciesPtrVect& species_comp( a_state.dataKinetic() );
 
    KineticSpeciesPtrVect species_phys;
    createTemporarySpeciesVector( species_phys, species_comp );
    fillGhostCells( species_phys, m_E_field, a_time );
 
    if (m_transport_model_on) {
-      applyTransportOperator( a_rhs.data(), species_phys, a_time );
+      applyTransportOperator( a_rhs.dataKinetic(), species_phys, a_time );
    }
-   applyCollisionOperator( a_rhs.data(), species_comp, a_time, a_flag );
+   applyCollisionOperator( a_rhs.dataKinetic(), species_comp, a_time, a_flag );
+
+// JAFH: Need to add operations on fluids and fields here
 }
 
 void GKOps::implicitOpImEx( GKRHSData& a_rhs,
@@ -503,48 +544,112 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
   implicitOpImEx(a_rhs,a_time,m_Y,a_stage,a_flag);
 }
 
-bool GKOps::setupPCImEx( void *a_P, GKState& a_state)
+bool GKOps::setupPCImEx( void *a_P, GKState& a_state )
 {
-  bool  flag;
-  int   VecSize = a_state.getVectorSize(),
-        nComp   = a_state.getNComponents();
-
-  flag = m_collisions->setupPrecondMatrix(a_P,VecSize,nComp);
-  return flag;
+   bool flag;
+   int vec_size( a_state.getVectorSize() );
+//   int n_comp( a_state.getNComponents() );
+//   return m_collisions->setupPrecondMatrix( a_P, vec_size, n_comp );
+   return m_collisions->setupPrecondMatrix( a_P, vec_size );
 }
 
-bool GKOps::setupPCImEx( void *a_P, GKRHSData& a_state)
+bool GKOps::setupPCImEx( void *a_P, GKRHSData& a_state )
 {
-  bool  flag;
-  int   VecSize = a_state.getVectorSize(),
-        nComp   = a_state.getNComponents();
-
-  flag = m_collisions->setupPrecondMatrix(a_P,VecSize,nComp);
-  return flag;
+   bool flag;
+   int vec_size( a_state.getVectorSize() );
+//   int n_comp( a_state.getNComponents() );
+//   return m_collisions->setupPrecondMatrix( a_P, vec_size, n_comp );
+   return m_collisions->setupPrecondMatrix( a_P, vec_size );
 }
 
 inline
-void GKOps::computeElectricField( LevelData<FluxBox>&          a_E_field,
-                                  const KineticSpeciesPtrVect& a_kinetic_species,
-                                  const int                    a_step_number )
+void GKOps::computeElectricField( LevelData<FluxBox>&               a_E_field,
+                                  const KineticSpeciesPtrVect&      a_kinetic_species,
+                                  const CFG::FluidSpeciesPtrVect&   a_fluid_species,
+                                  const CFG::FieldPtrVect&          a_fields,
+                                  const int                         a_step_number )
 {
    CH_assert( isDefined() );
-   const int num_kinetic_species( a_kinetic_species.size() );
-   KineticSpeciesPtrVect result;
-   result.resize(num_kinetic_species);
-   for (int species(0); species<num_kinetic_species; species++) {
-      result[species] = a_kinetic_species[species]->clone( m_ghost_vect );
+   
+   CFG::IntVect ghost_vect_cfg;
+   for (int d(0); d<CFG_DIM; d++) {
+      ghost_vect_cfg[d] = m_ghost_vect[d];
    }
-   divideJ( a_kinetic_species, result ); /// FIXME
+   
+   //Obtain physical solutions
+   const int num_kinetic_species( a_kinetic_species.size() );
+   KineticSpeciesPtrVect kinetic_result;
+   kinetic_result.resize(num_kinetic_species);
+   for (int species(0); species<num_kinetic_species; species++) {
+      kinetic_result[species] = a_kinetic_species[species]->clone( m_ghost_vect );
+   }
+   divideJ( a_kinetic_species, kinetic_result );
+   
+   const int num_fluid_species( a_fluid_species.size() );
+   CFG::FluidSpeciesPtrVect fluid_result;
+   fluid_result.resize(num_fluid_species);
+
+   for (int species(0); species<num_fluid_species; species++) {
+      fluid_result[species] = a_fluid_species[species]->clone( ghost_vect_cfg );
+   }
+   divideJ( a_fluid_species, fluid_result );
+   
+   const int num_field_comp( a_fields.size() );
+   CFG::FieldPtrVect field_result;
+   field_result.resize(num_field_comp);
+   for (int comp(0); comp<num_field_comp; comp++) {
+      field_result[comp] = a_fields[comp]->clone( ghost_vect_cfg );
+   }
+   divideJ( a_fields, field_result );
+
+   
    computeEField( m_E_field_face,
                   m_E_field_cell,
-                  result,
+                  kinetic_result,
+                  fluid_result,
+                  field_result,
                   a_step_number );
 
    CH_assert( m_phase_geometry != NULL );
    m_phase_geometry->injectConfigurationToPhase( m_E_field_face,
                                                  m_E_field_cell,
                                                  a_E_field );
+}
+
+
+inline
+void GKOps::createTemporaryFieldVector( CFG::FieldPtrVect& a_out,
+                                        const CFG::FieldPtrVect& a_in )
+{
+   CFG::IntVect ghost_vect;
+   for (int d(0); d<CFG_DIM; d++) {
+      ghost_vect[d] = m_ghost_vect[d];
+   }
+   a_out.resize( a_in.size() );
+   for (int s(0); s<a_in.size(); s++) {
+      a_out[s] = a_in[s]->clone( ghost_vect );
+      CFG::LevelData<CFG::FArrayBox>& out_data( a_out[s]->data() );
+      const CFG::MagGeom& geometry( a_in[s]->configurationSpaceGeometry() );
+      geometry.divideJonValid( out_data );
+   }
+}
+
+
+inline
+void GKOps::createTemporarySpeciesVector( CFG::FluidSpeciesPtrVect& a_out,
+                                          const CFG::FluidSpeciesPtrVect& a_in )
+{
+   CFG::IntVect ghost_vect;
+   for (int d(0); d<CFG_DIM; d++) {
+      ghost_vect[d] = m_ghost_vect[d];
+   }
+   a_out.resize( a_in.size() );
+   for (int s(0); s<a_in.size(); s++) {
+      a_out[s] = a_in[s]->clone( ghost_vect );
+      CFG::LevelData<CFG::FArrayBox>& out_data( a_out[s]->data() );
+      const CFG::MagGeom& geometry( a_in[s]->configurationSpaceGeometry() );
+      geometry.divideJonValid( out_data );
+   }
 }
 
 
@@ -563,6 +668,14 @@ void GKOps::createTemporarySpeciesVector( KineticSpeciesPtrVect& a_out,
 
 
 inline
+void GKOps::createTemporaryState( GKState& a_out, const GKState& a_in )
+{
+   createTemporarySpeciesVector( a_out.dataKinetic(), a_in.dataKinetic() );
+   createTemporarySpeciesVector( a_out.dataFluid(), a_in.dataFluid() );
+   createTemporaryFieldVector( a_out.dataField(), a_in.dataField() );
+}
+
+inline
 void GKOps::fillGhostCells(
    KineticSpeciesPtrVect&       a_species_phys,
    const LevelData<FluxBox>&    a_E_field,
@@ -570,6 +683,18 @@ void GKOps::fillGhostCells(
 {
    CH_assert( isDefined() );
    m_boundary_conditions->fillGhostCells( a_species_phys,
+                                          m_phi,
+                                          a_E_field,
+                                          a_time );
+}
+
+inline
+void GKOps::fillGhostCells( GKState&                  a_state_phys,
+                            const LevelData<FluxBox>& a_E_field,
+                            const Real&               a_time )
+{
+   CH_assert( isDefined() );
+   m_boundary_conditions->fillGhostCells( a_state_phys,
                                           m_phi,
                                           a_E_field,
                                           a_time );
@@ -584,7 +709,7 @@ void GKOps::applyVlasovOperator(
    const Real&                  a_time )
 {
    CH_assert( isDefined() );
-   m_count_Vlasov++;
+   m_count_vlasov++;
 
    if (m_consistent_potential_bcs) {
       m_lo_radial_flux_divergence_average = 0.;
@@ -617,7 +742,7 @@ void GKOps::applyCollisionOperator( KineticSpeciesPtrVect&       a_rhs,
                                     const int                    a_flag )
 {
    CH_assert( isDefined() );
-   m_count_Collision++;
+   m_count_collision++;
    m_collisions->accumulateRHS( a_rhs, a_soln, a_time, a_flag );
 }
 
@@ -628,7 +753,7 @@ void GKOps::applyTransportOperator( KineticSpeciesPtrVect&       a_rhs,
                                     const Real&                  a_time )
 {
    CH_assert( isDefined() );
-   m_count_Transport++;
+   m_count_transport++;
    m_transport->accumulateRHS( a_rhs, a_soln, a_time );
 
 }
@@ -639,11 +764,36 @@ void GKOps::applyNeutralsOperator( KineticSpeciesPtrVect&       a_rhs,
                                    const Real&                  a_time )
 {
     CH_assert( isDefined() );
-    m_count_Neutrals++;
+    m_count_neutrals++;
     m_neutrals->accumulateRHS( a_rhs, a_soln, a_time );
     
 }
 
+inline
+void GKOps::applyFieldOperator( CFG::FieldPtrVect&                         a_rhs,
+                                const CFG::FieldPtrVect&                   a_fields,
+                                const CFG::FluidSpeciesPtrVect&            a_fluids,
+                                const KineticSpeciesPtrVect&               a_soln,
+                                const CFG::LevelData<CFG::FluxBox>&        a_E_field,
+                                const Real&                                a_time)
+{
+   CH_assert( isDefined() );
+   m_count_fields++;
+   m_fieldOp->accumulateRHS( a_rhs, a_fields, a_fluids, a_soln, a_E_field, a_time );
+}
+
+inline
+void GKOps::applyFluidOperator( CFG::FluidSpeciesPtrVect&                  a_rhs,
+                                const CFG::FieldPtrVect&                   a_fields,
+                                const CFG::FluidSpeciesPtrVect&            a_fluids,
+                                const KineticSpeciesPtrVect&               a_soln,
+                                const CFG::LevelData<CFG::FluxBox>&        a_E_field,
+                                const Real&                                a_time)
+{
+   CH_assert( isDefined() );
+   m_count_fluids++;
+   m_fluidOp->accumulateRHS( a_rhs, a_fields, a_fluids, a_soln, a_E_field, a_time );
+}
 
 inline
 void setZero( CFG::LevelData<CFG::FArrayBox>& a_data )
@@ -661,7 +811,7 @@ GKOps::computeTotalChargeDensity( CFG::LevelData<CFG::FArrayBox>& a_charge_densi
    // Container for individual species charge density
    CH_assert( m_phase_geometry != NULL );
    const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-   CFG::LevelData<CFG::FArrayBox> species_charge_density( mag_geom.grids(),
+   CFG::LevelData<CFG::FArrayBox> species_charge_density( mag_geom.gridsFull(),
                                                           1,
                                                           CFG::IntVect::Zero );
 
@@ -688,7 +838,7 @@ GKOps::computeIonChargeDensity( CFG::LevelData<CFG::FArrayBox>& a_ion_charge_den
    // Container for individual species charge density
    CH_assert( m_phase_geometry != NULL );
    const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-   CFG::LevelData<CFG::FArrayBox> species_charge_density( mag_geom.grids(),
+   CFG::LevelData<CFG::FArrayBox> species_charge_density( mag_geom.gridsFull(),
                                                           1,
                                                           CFG::IntVect::Zero );
 
@@ -716,7 +866,7 @@ GKOps::computeIonParallelCurrentDensity( CFG::LevelData<CFG::FArrayBox>& a_ion_c
    // Container for individual species charge density
    CH_assert( m_phase_geometry != NULL );
    const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-   CFG::LevelData<CFG::FArrayBox> species_current_density( mag_geom.grids(),
+   CFG::LevelData<CFG::FArrayBox> species_current_density( mag_geom.gridsFull(),
                                                           1,
                                                           CFG::IntVect::Zero );
 
@@ -747,7 +897,7 @@ GKOps::computeSignedChargeDensities( CFG::LevelData<CFG::FArrayBox>& a_pos_charg
    // Container for individual species charge density
    CH_assert( m_phase_geometry != NULL );
    const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-   CFG::LevelData<CFG::FArrayBox> species_charge_density( mag_geom.grids(),
+   CFG::LevelData<CFG::FArrayBox> species_charge_density( mag_geom.gridsFull(),
                                                           1,
                                                           CFG::IntVect::Zero );
 
@@ -783,7 +933,7 @@ GKOps::computeIonMassDensity( CFG::LevelData<CFG::FArrayBox>& a_mass_density,
    // Container for individual species charge density
    CH_assert( m_phase_geometry != NULL );
    const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-   CFG::LevelData<CFG::FArrayBox> species_mass_density( mag_geom.grids(),
+   CFG::LevelData<CFG::FArrayBox> species_mass_density( mag_geom.gridsFull(),
                                                         1,
                                                         CFG::IntVect::Zero );
 
@@ -805,10 +955,12 @@ GKOps::computeIonMassDensity( CFG::LevelData<CFG::FArrayBox>& a_mass_density,
 }
 
 
-void GKOps::computeEField( CFG::LevelData<CFG::FluxBox>&   a_E_field_face,
-                           CFG::LevelData<CFG::FArrayBox>& a_E_field_cell,
-                           const KineticSpeciesPtrVect&    a_soln,
-                           const int                       a_step_number )
+void GKOps::computeEField( CFG::LevelData<CFG::FluxBox>&       a_E_field_face,
+                           CFG::LevelData<CFG::FArrayBox>&     a_E_field_cell,
+                           const KineticSpeciesPtrVect&        a_soln_kinetic,
+                           const CFG::FluidSpeciesPtrVect&     a_soln_fluid,
+                           const CFG::FieldPtrVect&            a_soln_field,
+                           const int                           a_step_number )
 {
    CH_assert(a_E_field_face.ghostVect() == CFG::IntVect::Unit);
    CH_assert(a_E_field_cell.ghostVect() == CFG::IntVect::Unit);
@@ -818,22 +970,36 @@ void GKOps::computeEField( CFG::LevelData<CFG::FluxBox>&   a_E_field_face,
       CFG::PotentialBC& bc = m_boundary_conditions->getPotentialBC();
 
       const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-      const CFG::DisjointBoxLayout& grids( mag_geom.grids() );
+      const CFG::DisjointBoxLayout& grids( mag_geom.gridsFull() );
 
       if (!m_fixed_efield){
          CH_assert( m_phase_geometry != NULL );
          // Update the potential and field, if not fixed_efield
 
          CFG::LevelData<CFG::FArrayBox> ion_mass_density( grids, 1, CFG::IntVect::Zero );
-         computeIonMassDensity( ion_mass_density, a_soln );
+         computeIonMassDensity( ion_mass_density, a_soln_kinetic );
 
          if (m_boltzmann_electron == NULL) {
             m_poisson->setOperatorCoefficients( ion_mass_density, bc );
 
-            CFG::LevelData<CFG::FArrayBox> total_charge_density( grids, 1, CFG::IntVect::Zero );
-            computeTotalChargeDensity( total_charge_density, a_soln );
-            m_poisson->computePotential( m_phi, total_charge_density );
+            CFG::LevelData<CFG::FArrayBox> gkPoissonRHS( grids, 1, CFG::IntVect::Zero );
 
+            if (m_vorticity_model) {
+               CH_assert(a_soln_field.size()>0);
+               CFG::Field& field( *(a_soln_field[0]) );
+               CFG::LevelData<CFG::FArrayBox>& vorticity( field.data() );
+
+               for (CFG::DataIterator dit(gkPoissonRHS.dataIterator()); dit.ok(); ++dit) {
+                  gkPoissonRHS[dit].copy(vorticity[dit]);
+               }
+            }
+            
+            else {
+               computeTotalChargeDensity( gkPoissonRHS, a_soln_kinetic );
+            }
+            
+            m_poisson->computePotential( m_phi, gkPoissonRHS );
+            
          }
          else {
 
@@ -844,14 +1010,14 @@ void GKOps::computeEField( CFG::LevelData<CFG::FluxBox>&   a_E_field_face,
             }
 
             CFG::LevelData<CFG::FArrayBox> ion_charge_density( grids, 1, CFG::IntVect::Zero );
-            computeIonChargeDensity( ion_charge_density, a_soln );
+            computeIonChargeDensity( ion_charge_density, a_soln_kinetic );
             
             bool single_null = typeid(*(mag_geom.getCoordSys())) == typeid(CFG::SingleNullCoordSys);
 
             if (single_null) {
 
                CFG::LevelData<CFG::FArrayBox> ion_parallel_current_density( grids, 1, CFG::IntVect::Zero );
-               computeIonParallelCurrentDensity( ion_parallel_current_density, a_soln );
+               computeIonParallelCurrentDensity( ion_parallel_current_density, a_soln_kinetic );
 
               ((CFG::NewGKPoissonBoltzmann*)m_poisson)
                  ->setDivertorBVs( ion_charge_density, ion_parallel_current_density, bc );
@@ -916,15 +1082,9 @@ void GKOps::computeEField( CFG::LevelData<CFG::FluxBox>&   a_E_field_face,
             }
          }
          else {
-
-#ifdef EXTRAPOLATE_FIELD
             m_poisson->computeField( m_phi, a_E_field_cell );
             m_poisson->computeField( m_phi, a_E_field_face );
-#else
-            m_poisson->computeField( m_phi, a_E_field_cell );
-            m_poisson->computeField( m_phi, a_E_field_face );
-#endif
-         }          
+         }
          m_initializedE = true;
       }
    }
@@ -976,7 +1136,7 @@ GKOps::computePhiTilde( const KineticSpeciesPtrVect&          a_kinetic_species,
                         const CFG::BoltzmannElectron&         a_ne,
                         CFG::LevelData<CFG::FArrayBox>&       a_phi_tilde ) const
 {
-   CFG::LevelData<CFG::FArrayBox> Zni(m_phase_geometry->magGeom().grids(), 1, CFG::IntVect::Zero);
+   CFG::LevelData<CFG::FArrayBox> Zni(m_phase_geometry->magGeom().gridsFull(), 1, CFG::IntVect::Zero);
    computeIonChargeDensity( Zni, a_kinetic_species );
 
    if ( CFG::GKPoissonBoltzmann* gkpb = dynamic_cast<CFG::GKPoissonBoltzmann*>(m_poisson) ) {
@@ -1003,16 +1163,16 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
    CH_assert(a_Er_average_cell.ghostVect() == CFG::IntVect::Unit);
    CH_assert(a_flux_divergence.ghostVect() == CFG::IntVect::Zero);
 
-    //Geometry parameters
+   //Geometry parameters
     const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
     const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
     
     //Create face-centered increment for the mapped E-field (- grad Phi )
-    CFG::LevelData<CFG::FluxBox> Er_mapped_face(mag_geom.grids(), 3, CFG::IntVect::Unit );
+    CFG::LevelData<CFG::FluxBox> Er_mapped_face(mag_geom.gridsFull(), 3, CFG::IntVect::Unit );
     
     //Creating tmp arrays with extra layers of ghost cells
-    CFG::LevelData<CFG::FArrayBox> gkp_divergence_tmp( mag_geom.grids(), 1, 2*CFG::IntVect::Unit );
-    CFG::LevelData<CFG::FArrayBox> flux_divergence_tmp( mag_geom.grids(), 1, 2*CFG::IntVect::Unit );
+    CFG::LevelData<CFG::FArrayBox> gkp_divergence_tmp( mag_geom.gridsFull(), 1, 2*CFG::IntVect::Unit );
+    CFG::LevelData<CFG::FArrayBox> flux_divergence_tmp( mag_geom.gridsFull(), 1, 2*CFG::IntVect::Unit );
     
     setZero(gkp_divergence_tmp);
     setZero(flux_divergence_tmp);
@@ -1032,7 +1192,7 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
         CFG::FArrayBox& this_gkp_divergence = gkp_divergence_tmp[dit];
         CFG::FArrayBox& this_flux_divergence = flux_divergence_tmp[dit];
         
-        int block_number( coords.whichBlock( mag_geom.grids()[dit] ) );
+        int block_number( coords.whichBlock( mag_geom.gridsFull()[dit] ) );
         const CFG::MagBlockCoordSys& block_coord_sys = (const CFG::MagBlockCoordSys&)(*(coords.getCoordSys(block_number)));
         int lo_radial_index = block_coord_sys.domain().domainBox().smallEnd(RADIAL_DIR);
         int hi_radial_index = block_coord_sys.domain().domainBox().bigEnd(RADIAL_DIR);
@@ -1059,7 +1219,7 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
                     else {
                         
                         CFG::IntVect iv_tmp = bit();
-                        iv_tmp[1] = mag_geom.grids()[dit].smallEnd(POLOIDAL_DIR);
+                        iv_tmp[1] = mag_geom.gridsFull()[dit].smallEnd(POLOIDAL_DIR);
                         
                         if ( dir == RADIAL_DIR ) {
                             this_Er_mapped_dir(iv,0) =   dt * ( - this_flux_divergence(iv_tmp,0) / this_gkp_divergence(iv_tmp,0) );
@@ -1135,7 +1295,7 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
     }
 
     //Compute cell-centered increment for the mapped E-field
-    CFG::LevelData<CFG::FArrayBox> Er_mapped_cell(mag_geom.grids(), 3, CFG::IntVect::Unit );
+    CFG::LevelData<CFG::FArrayBox> Er_mapped_cell(mag_geom.gridsFull(), 3, CFG::IntVect::Unit );
     CFG::DataIterator dit( Er_mapped_cell.dataIterator() );
     for (dit.begin(); dit.ok(); ++dit) {
         CFG::Box box( Er_mapped_cell[dit].box() );
@@ -1151,11 +1311,11 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
     }
     
     //Multiply by NJtranspose (E_fs_average = - NJInverse * grad Phi)
-    CFG::LevelData<CFG::FluxBox> Er_face_incr( mag_geom.grids(), 3, CFG::IntVect::Unit );
-    m_poisson->unmapGradient(Er_mapped_face, Er_face_incr);
+    CFG::LevelData<CFG::FluxBox> Er_face_incr( mag_geom.gridsFull(), 3, CFG::IntVect::Unit );
+    mag_geom.unmapGradient(Er_mapped_face, Er_face_incr);
     
-    CFG::LevelData<CFG::FArrayBox> Er_cell_incr( mag_geom.grids(), 3, CFG::IntVect::Unit );
-    m_poisson->unmapGradient(Er_mapped_cell, Er_cell_incr);
+    CFG::LevelData<CFG::FArrayBox> Er_cell_incr( mag_geom.gridsFull(), 3, CFG::IntVect::Unit );
+    mag_geom.unmapGradient(Er_mapped_cell, Er_cell_incr);
     
     //Update E-field
     for (CFG::DataIterator dit(a_Er_average_face.dataIterator()); dit.ok(); ++dit) {
@@ -1184,7 +1344,7 @@ GKOps::updateAveragedEfield( CFG::LevelData<CFG::FluxBox>&   a_Er_average_face,
         if (!m_Esol_extrapolation)
         {
             for (CFG::DataIterator dit(a_Er_average_face.dataIterator()); dit.ok(); ++dit) {
-                int block_number( coords.whichBlock( mag_geom.grids()[dit] ) );
+                int block_number( coords.whichBlock( mag_geom.gridsFull()[dit] ) );
                 if ((block_number == RPF) || (block_number == LPF)) {
                   a_Er_average_face[dit].setVal(0.0);
                   a_Er_average_cell[dit].setVal(0.0);
@@ -1219,11 +1379,13 @@ GKOps::updateEfieldPoloidalVariation( const CFG::LevelData<CFG::FluxBox>&   a_E_
       CH_assert(a_E_tilde_mapped_cell.ghostVect() == CFG::IntVect::Unit);
       CH_assert(a_phi_tilde_fs_average.ghostVect() == CFG::IntVect::Zero);
 
-      m_poisson->unmapGradient(a_E_tilde_mapped_face, a_E_tilde_phys_face);
-      m_poisson->unmapGradient(a_E_tilde_mapped_cell, a_E_tilde_phys_cell);
+      const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
+
+      mag_geom.unmapGradient(a_E_tilde_mapped_face, a_E_tilde_phys_face);
+      mag_geom.unmapGradient(a_E_tilde_mapped_cell, a_E_tilde_phys_cell);
       
-      CFG::LevelData<CFG::FluxBox> Er_average_face_pol_contrib(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
-      CFG::LevelData<CFG::FArrayBox> Er_average_cell_pol_contrib(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
+      CFG::LevelData<CFG::FluxBox> Er_average_face_pol_contrib(mag_geom.gridsFull(), 3, CFG::IntVect::Unit);
+      CFG::LevelData<CFG::FArrayBox> Er_average_cell_pol_contrib(mag_geom.gridsFull(), 3, CFG::IntVect::Unit);
  
       updateAveragedEfield( Er_average_face_pol_contrib, Er_average_cell_pol_contrib,
                             a_phi_tilde_fs_average, a_phi_tilde_fs_average_lo, a_phi_tilde_fs_average_hi, -1.0 );
@@ -1238,7 +1400,7 @@ GKOps::updateEfieldPoloidalVariation( const CFG::LevelData<CFG::FluxBox>&   a_E_
 void
 GKOps::setErAverage( const LevelData<FluxBox>& Er_face_injected )
 {
-   m_Er_average_face.define(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
+   m_Er_average_face.define(m_phase_geometry->magGeom().gridsFull(), 3, CFG::IntVect::Unit);
    for (CFG::DataIterator dit(m_Er_average_face.disjointBoxLayout()); dit.ok(); ++dit) {
       m_Er_average_face[dit].setVal(0.);
    }
@@ -1248,14 +1410,14 @@ GKOps::setErAverage( const LevelData<FluxBox>& Er_face_injected )
 void
 GKOps::setErAverage( const LevelData<FArrayBox>& Er_cell_injected)
 {
-   m_Er_average_cell.define(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
+   m_Er_average_cell.define(m_phase_geometry->magGeom().gridsFull(), 3, CFG::IntVect::Unit);
    m_phase_geometry->projectPhaseToConfiguration(Er_cell_injected, m_Er_average_cell);
 }
 
 void
 GKOps::setETilde( const LevelData<FluxBox>& E_tilde_face_injected )
 {
-   m_E_tilde_face.define(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
+   m_E_tilde_face.define(m_phase_geometry->magGeom().gridsFull(), 3, CFG::IntVect::Unit);
    for (CFG::DataIterator dit(m_E_tilde_face.disjointBoxLayout()); dit.ok(); ++dit) {
       m_E_tilde_face[dit].setVal(0.);
    }
@@ -1265,7 +1427,7 @@ GKOps::setETilde( const LevelData<FluxBox>& E_tilde_face_injected )
 void
 GKOps::setETilde( const LevelData<FArrayBox>& E_tilde_cell_injected)
 {
-   m_E_tilde_cell.define(m_phase_geometry->magGeom().grids(), 3, CFG::IntVect::Unit);
+   m_E_tilde_cell.define(m_phase_geometry->magGeom().gridsFull(), 3, CFG::IntVect::Unit);
    m_phase_geometry->projectPhaseToConfiguration(E_tilde_cell_injected, m_E_tilde_cell);
 }
 
@@ -1291,6 +1453,59 @@ void GKOps::divideJ( const KineticSpeciesPtrVect& a_soln_mapped,
 }
 
 
+void GKOps::divideJ( const CFG::FluidSpeciesPtrVect& a_soln_mapped,
+                     CFG::FluidSpeciesPtrVect&       a_soln_physical )
+{
+   CH_assert( isDefined() );
+   for (int species(0); species<a_soln_physical.size(); species++) {
+      const  CFG::FluidSpecies& soln_species_mapped( *(a_soln_mapped[species]) );
+      CFG::FluidSpecies& soln_species_physical( *(a_soln_physical[species]) );
+      
+      const CFG::LevelData<CFG::FArrayBox>& dfn_mapped( soln_species_mapped.data() );
+      CFG::LevelData<CFG::FArrayBox>& dfn_physical( soln_species_physical.data() );
+
+      for (CFG::DataIterator dit( dfn_physical.dataIterator() ); dit.ok(); ++dit) {
+         dfn_physical[dit].copy( dfn_mapped[dit] );
+      }
+
+      CH_assert( m_phase_geometry != NULL );
+      const CFG::MagGeom& mag_geometry( m_phase_geometry->magGeom() );
+      mag_geometry.divideJonValid( dfn_physical );
+   }
+}
+
+
+void GKOps::divideJ( const CFG::FieldPtrVect& a_soln_mapped,
+                     CFG::FieldPtrVect&       a_soln_physical )
+{
+   CH_assert( isDefined() );
+   for (int species(0); species<a_soln_physical.size(); species++) {
+      const  CFG::Field& soln_species_mapped( *(a_soln_mapped[species]) );
+      CFG::Field& soln_species_physical( *(a_soln_physical[species]) );
+      
+      const CFG::LevelData<CFG::FArrayBox>& dfn_mapped( soln_species_mapped.data() );
+      CFG::LevelData<CFG::FArrayBox>& dfn_physical( soln_species_physical.data() );
+
+      for (CFG::DataIterator dit( dfn_physical.dataIterator() ); dit.ok(); ++dit) {
+         dfn_physical[dit].copy( dfn_mapped[dit] );
+      }
+
+      CH_assert( m_phase_geometry != NULL );
+      const CFG::MagGeom& mag_geometry( m_phase_geometry->magGeom() );
+      mag_geometry.divideJonValid( dfn_physical );
+   }
+}
+
+
+void GKOps::divideJ( const GKState& a_soln_mapped, GKState& a_soln_physical )
+{
+   CH_assert( isDefined() );
+   divideJ( a_soln_mapped.dataKinetic(), a_soln_physical.dataKinetic() );
+   divideJ( a_soln_mapped.dataFluid(), a_soln_physical.dataFluid() );
+   divideJ( a_soln_mapped.dataField(), a_soln_physical.dataField() );
+}
+
+
 void GKOps::parseParameters( ParmParse& a_ppgksys )
 {
    if (a_ppgksys.contains("fixed_efield")) {
@@ -1300,6 +1515,13 @@ void GKOps::parseParameters( ParmParse& a_ppgksys )
       m_fixed_efield = false;
    }
 
+   if (a_ppgksys.contains("vorticity_model")) {
+      a_ppgksys.get("vorticity_model", m_vorticity_model);
+   }
+   else {
+      m_vorticity_model = false;
+   }
+   
    if (a_ppgksys.contains("consistent_potential_bcs")) {
       a_ppgksys.query( "consistent_potential_bcs", m_consistent_potential_bcs );
    }
@@ -1393,7 +1615,7 @@ void GKOps::parseParameters( ParmParse& a_ppgksys )
    if (using_boltzmann_electrons) {
       CH_assert( m_phase_geometry != NULL );
       const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-      CFG::LevelData<CFG::FArrayBox> temp( mag_geom.grids(),
+      CFG::LevelData<CFG::FArrayBox> temp( mag_geom.gridsFull(),
                                            1,
                                            CFG::IntVect::Unit );
       for (CFG::DataIterator dit( temp.dataIterator() ); dit.ok(); ++dit) {
@@ -1454,7 +1676,7 @@ void GKOps::plotEField( const std::string& a_filename,
    if (m_poisson) { // Plot the psi and theta projections of the physical field
 
       const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-      CFG::LevelData<CFG::FluxBox> Efield( mag_geom.grids(), 2, CFG::IntVect::Unit);
+      CFG::LevelData<CFG::FluxBox> Efield( mag_geom.gridsFull(), 2, CFG::IntVect::Unit);
 
 #if 1
       m_poisson->computePoloidalField( m_phi, Efield );
@@ -1462,7 +1684,7 @@ void GKOps::plotEField( const std::string& a_filename,
       ((CFG::NewGKPoissonBoltzmann*)m_poisson)->getFaceCenteredFieldOnCore( m_phi, Efield );
 #endif
       
-      const CFG::DisjointBoxLayout& grids = mag_geom.grids();
+      const CFG::DisjointBoxLayout& grids = mag_geom.gridsFull();
       for (CFG::DataIterator dit(Efield.dataIterator()); dit.ok(); ++dit) {
         CFG::FluxBox& this_Efield = Efield[dit];
         mag_geom.getBlockCoordSys(grids[dit]).computePsiThetaProjections(this_Efield);
@@ -1497,6 +1719,21 @@ void GKOps::plotDistributionFunction( const std::string&    a_filename,
    species_geometry.plotData( a_filename.c_str(), dfn, a_time );
 }
 
+void GKOps::plotFluids( const std::string&       a_filename,
+                        const CFG::FluidSpecies& a_fluid_species,
+                        const double&            a_time ) const
+{
+   m_phase_geometry->plotConfigurationData( a_filename.c_str(), a_fluid_species.data(), a_time );
+}
+
+void GKOps::plotFields(const std::string&       a_filename,
+                       const CFG::Field&        a_field_comp,
+                       const double&            a_time ) const
+{
+   m_phase_geometry->plotConfigurationData( a_filename.c_str(), a_field_comp.data(), a_time );
+}
+
+
 void GKOps::plotBStarParallel( const std::string&    a_filename,
                                const KineticSpecies& a_soln_species,
                                const double&         a_time ) const
@@ -1519,16 +1756,16 @@ void GKOps::plotDeltaF( const std::string&    a_filename,
    const PhaseGeom& phase_geometry( *m_phase_geometry );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
 
-   CFG::LevelData<CFG::FArrayBox> density( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.numberDensity( density );
 
-   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.ParallelMomentum( ParallelMom );
 
    for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
       ParallelMom[dit].divide(density[dit]);
    }
-   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.pressureMoment(pressure, ParallelMom);
 
    for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
@@ -1627,33 +1864,32 @@ void GKOps::plotVParallelMu( const std::string&    a_filename,
 }
 
 
-
 void GKOps::plotChargeDensity( const std::string&    a_filename,
-                               const KineticSpecies& a_soln_species,
-                               const double&         a_time ) const
+                              const KineticSpecies& a_soln_species,
+                              const double&         a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
    const PhaseGeom& phase_geometry( *m_phase_geometry );
-
+   
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   CFG::LevelData<CFG::FArrayBox> charge_density( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> charge_density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.chargeDensity( charge_density );
-
+   
    phase_geometry.plotConfigurationData( a_filename.c_str(), charge_density, a_time );
 }
 
 
 void GKOps::plotChargeDensity( const std::string&     a_filename,
-                               KineticSpeciesPtrVect& a_species,
+                               const KineticSpeciesPtrVect& a_species,
                                const double&          a_time ) const
 {
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
    const PhaseGeom& phase_geometry( *m_phase_geometry );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   CFG::LevelData<CFG::FArrayBox> charge_density( mag_geom.grids(), 1, CFG::IntVect::Zero );
-   CFG::LevelData<CFG::FArrayBox> species_charge_density( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> charge_density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> species_charge_density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
 
    for (CFG::DataIterator dit(charge_density.dataIterator()); dit.ok(); ++dit) {
       charge_density[dit].setVal(0.);
@@ -1688,7 +1924,7 @@ void GKOps::plotParallelMomentum( const std::string&    a_filename,
    CH_assert( m_phase_geometry != NULL );
    const PhaseGeom& phase_geometry( *m_phase_geometry );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   CFG::LevelData<CFG::FArrayBox> parallel_mom( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> parallel_mom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.ParallelMomentum(parallel_mom);
    phase_geometry.plotConfigurationData( a_filename.c_str(), parallel_mom, a_time );
 }
@@ -1708,7 +1944,7 @@ void GKOps::plotPoloidalMomentum( const std::string&    a_filename,
                                               E_field_tmp );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
 
-   CFG::LevelData<CFG::FArrayBox> poloidal_mom( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> poloidal_mom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.PoloidalMomentum( poloidal_mom, E_field_tmp, larmor_number );
 
    phase_geometry.plotConfigurationData( a_filename.c_str(), poloidal_mom, a_time );
@@ -1724,15 +1960,15 @@ void GKOps::plotPressure( const std::string&    a_filename,
    const PhaseGeom& phase_geometry( *m_phase_geometry );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
 
-   CFG::LevelData<CFG::FArrayBox> density( mag_geom.grids(), 1, CFG::IntVect::Zero );
-   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.numberDensity( density );
    a_soln_species.ParallelMomentum( ParallelMom );
 
    for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
       ParallelMom[dit].divide(density[dit]);
    }
-   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.pressureMoment(pressure, ParallelMom);
 
    phase_geometry.plotConfigurationData( a_filename.c_str(), pressure, a_time );
@@ -1742,23 +1978,25 @@ void GKOps::plotParallelHeatFlux( const std::string&    a_filename,
                                   const KineticSpecies& a_soln_species,
                                   const double&         a_time ) const
 {
+#if 0
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
    const PhaseGeom& phase_geometry( *m_phase_geometry );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
    
-   CFG::LevelData<CFG::FArrayBox> density( mag_geom.grids(), 1, CFG::IntVect::Zero );
-   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.numberDensity( density );
    a_soln_species.ParallelMomentum( ParallelMom );
    
    for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
       ParallelMom[dit].divide(density[dit]);
    }
-   CFG::LevelData<CFG::FArrayBox> parallelHeatFlux( mag_geom.grids(), 1, CFG::IntVect::Zero );
-   a_soln_species.parallelHeatFluxMoment(parallelHeatFlux, ParallelMom);
+   CFG::LevelData<CFG::FArrayBox> parallelHeatFlux( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   a_soln_species.ParallelHeatFluxMoment( parallelHeatFlux, ParallelMom );
    
    phase_geometry.plotConfigurationData( a_filename.c_str(), parallelHeatFlux, a_time );
+#endif
 }
 
 
@@ -1770,16 +2008,16 @@ void GKOps::plotTemperature( const std::string&    a_filename,
    CH_assert( m_phase_geometry != NULL );
    const PhaseGeom& phase_geometry( *m_phase_geometry );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   CFG::LevelData<CFG::FArrayBox> density( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.numberDensity( density );
 
-   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.ParallelMomentum( ParallelMom );
    for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
       ParallelMom[dit].divide(density[dit]);
    }
 
-   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.pressureMoment(pressure, ParallelMom);
 
    CFG::LevelData<CFG::FArrayBox> temperature;
@@ -1801,19 +2039,19 @@ void GKOps::plotFourthMoment( const std::string&    a_filename,
    CH_assert( m_phase_geometry != NULL );
    const PhaseGeom& phase_geometry( *m_phase_geometry );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   CFG::LevelData<CFG::FArrayBox> density( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.numberDensity( density );
 
-   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.ParallelMomentum( ParallelMom );
    for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
       ParallelMom[dit].divide(density[dit]);
    }
 
-   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.pressureMoment(pressure, ParallelMom);
 
-   CFG::LevelData<CFG::FArrayBox> fourthMoment( mag_geom.grids(), 1, CFG::IntVect::Zero);
+   CFG::LevelData<CFG::FArrayBox> fourthMoment( mag_geom.gridsFull(), 1, CFG::IntVect::Zero);
    a_soln_species.fourthMoment( fourthMoment );
 
    CFG::LevelData<CFG::FArrayBox> temp;
@@ -1843,7 +2081,7 @@ void GKOps::plotParticleFlux( const std::string&    a_filename,
                                               E_field_tmp );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
    
-   CFG::LevelData<CFG::FArrayBox> particle_flux( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> particle_flux( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.ParticleFlux( particle_flux, E_field_tmp );
 
    phase_geometry.plotConfigurationData( a_filename.c_str(), particle_flux, a_time );
@@ -1865,7 +2103,7 @@ void GKOps::plotHeatFlux( const std::string&    a_filename,
    phase_geometry.injectConfigurationToPhase( m_phi, phi_injected_tmp );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
 
-   CFG::LevelData<CFG::FArrayBox> heat_flux( mag_geom.grids(), 1, CFG::IntVect::Zero );
+   CFG::LevelData<CFG::FArrayBox> heat_flux( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
    a_soln_species.HeatFlux( heat_flux, E_field_tmp, phi_injected_tmp );
 
    phase_geometry.plotConfigurationData( a_filename.c_str(), heat_flux, a_time );
@@ -1881,10 +2119,10 @@ void GKOps::plotAmpereErIncrement( const std::string&    a_filename,
   const PhaseGeom& phase_geometry( *m_phase_geometry );
   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
    
-  CFG::LevelData<CFG::FArrayBox> AmpereErIncr( mag_geom.grids(), 1, CFG::IntVect::Zero );
+  CFG::LevelData<CFG::FArrayBox> AmpereErIncr( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
 
-  CFG::LevelData<CFG::FArrayBox> flux_div_grown( mag_geom.grids(), 1, CFG::IntVect::Unit );
-  CFG::LevelData<CFG::FArrayBox> gkp_div_grown( mag_geom.grids(), 1, CFG::IntVect::Unit );
+  CFG::LevelData<CFG::FArrayBox> flux_div_grown( mag_geom.gridsFull(), 1, CFG::IntVect::Unit );
+  CFG::LevelData<CFG::FArrayBox> gkp_div_grown( mag_geom.gridsFull(), 1, CFG::IntVect::Unit );
   for (CFG::DataIterator dit(AmpereErIncr.dataIterator()); dit.ok(); ++dit) {
     flux_div_grown[dit].copy(m_radial_flux_divergence_average[dit]);
     gkp_div_grown[dit].copy(m_radial_gkp_divergence_average[dit]);
@@ -1897,7 +2135,7 @@ void GKOps::plotAmpereErIncrement( const std::string&    a_filename,
   int hi_radial_index = block0_coord_sys.domain().domainBox().bigEnd(RADIAL_DIR);
 
   for (CFG::DataIterator dit(AmpereErIncr.dataIterator()); dit.ok(); ++dit) {
-    int block_number( coords.whichBlock( mag_geom.grids()[dit] ) );
+    int block_number( coords.whichBlock( mag_geom.gridsFull()[dit] ) );
         
     if ( block_number < 2 ) {
             
@@ -2463,7 +2701,7 @@ void GKOps::enforceQuasiNeutrality(
       
       CH_assert( m_phase_geometry != NULL );
       const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-      const CFG::DisjointBoxLayout& grids( mag_geom.grids() );
+      const CFG::DisjointBoxLayout& grids( mag_geom.gridsFull() );
       CFG::LevelData<CFG::FArrayBox> ion_density( grids, 1, CFG::IntVect::Zero );
       CFG::LevelData<CFG::FArrayBox> electron_density( grids, 1, CFG::IntVect::Zero );
       

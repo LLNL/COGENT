@@ -2967,5 +2967,62 @@ PhaseGeom::getMagBlockCoordSys(const Box& a_box) const
 }
 
 
+void
+PhaseGeom::getConfigurationComponents( LevelData<FArrayBox>& a_configComps,
+                                       const LevelData<FArrayBox>& a_vector) const
+{
+   CH_assert(a_vector.nComp() == SpaceDim);
+   CH_assert(a_configComps.nComp() == CFG_DIM);
+   
+   for (DataIterator dit(a_vector.dataIterator()); dit.ok(); ++dit) {
+      const FArrayBox& this_vector = a_vector[dit];
+      FArrayBox& this_cfg_comps = a_configComps[dit];
+      this_cfg_comps.copy(this_vector, 0, 0, CFG_DIM);
+   }
+   
+}
+
+void
+PhaseGeom::computeRadialProjection( LevelData<FArrayBox>& a_radComp,
+                                    const LevelData<FArrayBox>& a_vector) const
+{
+   CH_assert(a_vector.nComp() == CFG_DIM);
+   
+   const CFG::LevelData<CFG::FArrayBox>& unit_b_cfg = m_mag_geom.getCCBFieldDir();
+
+   LevelData<FArrayBox> unit_b;
+   injectConfigurationToPhase(unit_b_cfg, unit_b);
+   
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      
+      FORT_COMPUTE_RADIAL_PROJECTION(CHF_BOX(a_radComp[dit].box()),
+                                     CHF_CONST_FRA(unit_b[dit]),
+                                     CHF_CONST_FRA(a_vector[dit]),
+                                     CHF_FRA1(a_radComp[dit],0));
+      
+   }
+}
+
+void
+PhaseGeom::computePoloidalProjection( LevelData<FArrayBox>& a_polComp,
+                                      const LevelData<FArrayBox>& a_vector) const
+{
+   CH_assert(a_vector.nComp() == CFG_DIM);
+   
+   const CFG::LevelData<CFG::FArrayBox>& unit_b_cfg = m_mag_geom.getCCBFieldDir();
+   
+   LevelData<FArrayBox> unit_b;
+   injectConfigurationToPhase(unit_b_cfg, unit_b);
+   
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      
+      FORT_COMPUTE_POLOIDAL_PROJECTION(CHF_BOX(a_polComp[dit].box()),
+                                       CHF_CONST_FRA(unit_b[dit]),
+                                       CHF_CONST_FRA(a_vector[dit]),
+                                       CHF_FRA1(a_polComp[dit],0));
+      
+   }
+}
+
 
 #include "NamespaceFooter.H"

@@ -45,6 +45,8 @@ public:
 
    void multJonValid( LevelData<FArrayBox>& dfn ) const;
 
+   void divideJonValid( LevelData<FArrayBox>& dfn ) const;
+
    void multPointwiseJ( LevelData<FArrayBox>& dfn,
                         const BoundaryBoxLayout& bdry_layout ) const;
 
@@ -147,7 +149,62 @@ public:
    //Returns the magnetic surface lalel (Z coordinate along the top cut)
    double getMagFS( const RealVect& xi ) const;
 
+   // Convert a 3-dimensional gradient in mapped coordinates to the physical frame
+   void unmapGradient( const LevelData<FArrayBox>& mapped_gradient,
+                       LevelData<FArrayBox>&       gradient ) const;
 
+   // Convert a 3-dimensional gradient in mapped coordinates to the physical frame
+   void unmapGradient( const LevelData<FluxBox>& mapped_gradient,
+                       LevelData<FluxBox>&       gradient ) const;
+
+   // Convert a poloidal gradient in mapped coordinates to the physical the frame
+   void unmapPoloidalGradient( const LevelData<FArrayBox>& mapped_gradient,
+                               LevelData<FArrayBox>&       gradient ) const;
+
+   // Convert a poloidal gradient in mapped coordinates to the physical the frame
+   void unmapPoloidalGradient( const LevelData<FluxBox>& mapped_gradient,
+                               LevelData<FluxBox>&       gradient ) const;
+
+   void injectPoloidalVector( const LevelData<FArrayBox>& poloidal_vector,
+                              LevelData<FArrayBox>&       vector ) const;
+
+   void injectPoloidalVector( const LevelData<FluxBox>& poloidal_vector,
+                              LevelData<FluxBox>&       vector ) const;
+
+   void projectPoloidalVector( const LevelData<FArrayBox>& vector,
+                               LevelData<FArrayBox>&       poloidal_vector ) const;
+
+   void projectPoloidalVector( const LevelData<FluxBox>& vector,
+                               LevelData<FluxBox>&       poloidal_vector ) const;
+
+   //Project vector onto the parallel (to the magneitc field) direction
+   void projectOntoParallel( LevelData<FArrayBox>& vector ) const;
+   
+   void projectOntoParallel( LevelData<FluxBox>& vector ) const;
+   
+   //Compute vector projection onto the direction of phi x bpol
+   void computeRadialProjection( LevelData<FArrayBox>& radComp,
+                                 const LevelData<FArrayBox>& vector) const;
+
+   void computeRadialProjection( LevelData<FluxBox>& radComp,
+                                 const LevelData<FluxBox>& vector) const;
+
+   //Compute vector projection onto the direction of bpol
+   void computePoloidalProjection( LevelData<FArrayBox>& polComp,
+                                   const LevelData<FArrayBox>& vector) const;
+   
+   void computePoloidalProjection( LevelData<FluxBox>& polComp,
+                                   const LevelData<FluxBox>& vector) const;
+   
+   void computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& phi,
+                                                 LevelData<FArrayBox>&       field,
+                                                 const int                   order ) const;
+
+   void computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& phi,
+                                                LevelData<FluxBox>&          field,
+                                                const int                    order ) const;
+
+   
 private:
 
    void computeFieldData( LevelData<FArrayBox>& BField,
