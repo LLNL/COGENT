@@ -302,9 +302,6 @@ class GKSystem
       PhaseCoordSys*           m_phase_coords;
 
       PhaseGrid*               m_phase_grid;
-//      KineticSpeciesPtrVect    m_kinetic_species;
-//      CFG::FluidSpeciesPtrVect m_fluid_species;
-//      CFG::FieldPtrVect        m_fields;
       VelocityPtrVect          m_velocity;
 
       GKOps* m_gk_ops;

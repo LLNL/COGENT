@@ -48,9 +48,9 @@ void MomentOp::computeIntegrand( LevelData<FArrayBox>& a_integrand,
    // Initialize the integrand with the distribution function.
    DataIterator dit = a_integrand.dataIterator();
    for (dit.begin(); dit.ok(); ++dit) {
-     for (int comp=0; comp<kernel_ncomp; ++comp) {
-       a_integrand[dit].copy(dfn[dit],0,comp,1);
-     }
+      for (int dfn_comp=0; dfn_comp<dfn_ncomp; ++dfn_comp) {
+         a_integrand[dit].copy(dfn[dit],dfn_comp,dfn_comp*kernel_ncomp,kernel_ncomp);
+      }
    }
 
    a_kernel.eval( a_integrand, a_kinetic_species );

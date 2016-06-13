@@ -157,11 +157,6 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
 void
 GKSystem::initialize( const int a_cur_step )
 {
-   // Create the physical state variables; note that we use them to set the
-   // initial conditions, not because they are physical, but because they
-   // have no ghost cells 
-   m_state_phys.define( m_state_comp, IntVect::Zero );
-
    if ( a_cur_step == 0 ) {
       // If this is the first step, then set the initial conditions for the
       // full GK system (i.e., distribution functions and potential)
@@ -176,8 +171,11 @@ GKSystem::initialize( const int a_cur_step )
       m_gk_ops->initializePotential( 0.0 );
    }
 
-   // Initialize the physical state variables
+   // Initialize the computational state variables
+   // NB: On restart, m_state_phys is filled from the file
    m_state_comp.copy( m_state_phys );
+
+   // Initialize the physical state variables
    m_gk_ops->divideJ( m_state_comp, m_state_phys );
    
    // Initialize the electric field:
@@ -740,6 +738,8 @@ void GKSystem::createState()
    createFields( fields );
 
    m_state_comp.define( kinetic_species, fluid_species, fields, m_phase_geom );
+
+   m_state_phys.define( m_state_comp, IntVect::Zero );
 }
 
 void
@@ -1533,7 +1533,7 @@ void GKSystem::writeCheckpointFile( HDF5Handle&  a_handle,
       write(a_handle,E_tilde_face_injected,"data",E_tilde_face_injected.ghostVect());
    }
    
-   const KineticSpeciesPtrVect& kinetic_species( m_state_phys.dataKinetic() );
+   const KineticSpeciesPtrVect& kinetic_species( m_state_comp.dataKinetic() );
    for (int species(0); species<kinetic_species.size(); species++) {
 
       // Get solution distribution function for the current species
@@ -1603,7 +1603,7 @@ void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
       m_gk_ops->setETilde( E_tilde_face_injected );
    }
 
-   const KineticSpeciesPtrVect& kinetic_species( m_state_phys.dataKinetic() );
+   KineticSpeciesPtrVect& kinetic_species( m_state_phys.dataKinetic() );
    for (int species(0); species<kinetic_species.size(); species++) {
 
       // Get solution distribution function for the current species
