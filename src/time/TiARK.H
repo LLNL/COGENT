@@ -113,8 +113,6 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
    
     virtual bool isImEx() const { return true; }
 
-    virtual bool isExternal() const { return false; }
-
     virtual void printCounts() const
       {
         if (!procID()) {

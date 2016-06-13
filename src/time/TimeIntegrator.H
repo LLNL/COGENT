@@ -42,8 +42,6 @@ public:
 
    virtual bool isImEx() const = 0;
 
-   virtual bool isExternal() const = 0;
-
    virtual void printCounts() const = 0;
 
 };

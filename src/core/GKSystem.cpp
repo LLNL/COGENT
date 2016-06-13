@@ -115,7 +115,6 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
    createState(); 
 
    const Real BASE_DT( 1.0 );
-//   m_use_native_time_integrator = !a_use_external_TI;
    if (!m_use_native_time_integrator) {
       m_gk_ops = new GKOps;
       m_gk_ops->define( m_state_comp, BASE_DT );
@@ -1073,16 +1072,16 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
 
 Real GKSystem::stableDt( const int a_step_number )
 {
-   if ( m_integrator->isExplicit() ) {
+  if (m_use_native_time_integrator) {
+    if ( m_integrator->isExplicit() ) {
       return m_gk_ops->stableDtExpl( m_state_comp, a_step_number );
-   }
-   else if ( m_integrator->isImEx() ) {
+    } else if ( m_integrator->isImEx() ) {
       return m_gk_ops->stableDtImEx( m_state_comp, a_step_number );
-   }
-   else if ( m_integrator->isExternal() ) {
-      return m_gk_ops->stableDtExpl( m_state_comp, a_step_number );
-   }
-   return DBL_MAX;
+    }
+  } else {
+    return m_gk_ops->stableDtExpl( m_state_comp, a_step_number );
+  }
+  return DBL_MAX;
 }
 
 
@@ -1656,7 +1655,7 @@ void GKSystem::printDiagnostics()
 
 void GKSystem::preTimeStep(int a_cur_step, Real a_cur_time)
 {
-   if ( !(m_integrator->isExternal()) ) {
+   if (m_use_native_time_integrator) {
       m_integrator->setCurrentTime( a_cur_time );
       m_integrator->setTimeStep( a_cur_step );
    }

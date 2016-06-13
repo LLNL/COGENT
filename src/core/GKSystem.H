@@ -220,7 +220,13 @@ class GKSystem
 
       inline bool isLinear()  { return m_gk_ops->isLinear(); }
       inline void printFunctionCounts() { m_gk_ops->printFunctionCounts(); }
-      inline void printTimeIntegratorCounts() { m_integrator->printCounts(); }
+      inline void printTimeIntegratorCounts() 
+      { 
+        if (m_use_native_time_integrator) {
+          m_integrator->printCounts();
+        }
+        return;
+      }
 
    private:
 
