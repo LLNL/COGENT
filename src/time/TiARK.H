@@ -115,18 +115,14 @@ class TiARK : public TimeIntegrator<Solution,RHS,Ops>
 
     virtual bool isExternal() const { return false; }
 
-    virtual void getCounts( int& a_ti, int& a_nonlinear, int& a_linear ) const 
+    virtual void printCounts() const
       {
-         if (a_ti) {
-            a_ti = m_count;
-         }
-         if (a_nonlinear) {
-            a_nonlinear = m_NewtonSolver.getCount();
-         }
-         if (a_linear) {
-            a_linear = m_NewtonSolver.getLinearCount();
-         }
-        return;
+        if (!procID()) {
+          cout << "  Time integrator counts:-\n";
+          cout << "    Time steps          : " << m_count << "\n";
+          cout << "    Nonlinear iterations: " << m_NewtonSolver.getCount() << "\n";
+          cout << "    Linear iterations   : " << m_NewtonSolver.getLinearCount() << "\n";
+        }
       }
 
   protected:

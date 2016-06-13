@@ -219,16 +219,8 @@ class GKSystem
         { m_gk_ops->implicitOpImEx (m_rhs,t,m_state_comp,1,flag); }
 
       inline bool isLinear()  { return m_gk_ops->isLinear(); }
-      inline void getFunctionCounts( int& a, int& b, int& c, int& d, int& e, int& f )
-        {
-          m_gk_ops->getFunctionCounts( a, b, c, d, e, f );
-          return;
-        }
-      inline void getTimeIntegratorCounts( int& a, int& b, int& c ) 
-        {
-          m_integrator->getCounts( a, b, c );
-          return;
-        }
+      inline void printFunctionCounts() { m_gk_ops->printFunctionCounts(); }
+      inline void printTimeIntegratorCounts() { m_integrator->printCounts(); }
 
    private:
 

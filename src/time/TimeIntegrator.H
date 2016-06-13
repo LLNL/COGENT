@@ -38,13 +38,13 @@ public:
 
    virtual void getCurrentTime( Real& a_time ) const = 0;
    
-   virtual void getCounts( int& a, int& b, int& c ) const = 0;
-
    virtual bool isExplicit() const = 0;
 
    virtual bool isImEx() const = 0;
 
    virtual bool isExternal() const = 0;
+
+   virtual void printCounts() const = 0;
 
 };
 

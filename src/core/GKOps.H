@@ -512,33 +512,19 @@ public:
 
    inline bool isLinear() { return(m_collisions->isLinear()); }
 
-   inline void getFunctionCounts( int& a_count_vlasov,
-                                  int& a_count_collision,
-                                  int& a_count_transport,
-                                  int& a_count_fields,
-                                  int& a_count_fluids,
-                                  int& a_count_neutrals )
-    {
-       if (a_count_vlasov) {
-          a_count_vlasov = m_count_vlasov;
-       }
-       if (a_count_collision) {
-          a_count_collision = m_count_collision;
-       }
-       if (a_count_transport) {
-          a_count_transport = m_count_transport;
-       }
-       if (a_count_fields) {
-          a_count_fields = m_count_fields;
-       }
-       if (a_count_fluids) {
-          a_count_fluids = m_count_fluids;
-       }
-       if (a_count_neutrals) {
-          a_count_neutrals = m_count_neutrals;
-       }
+   void printFunctionCounts()
+   {
+    if (!procID()) {
+      cout << "  Function counts:-\n";
+      cout << "    Vlasov     : " << m_count_vlasov     << "\n";
+      cout << "    Collision  : " << m_count_collision  << "\n";
+      cout << "    Transport  : " << m_count_transport  << "\n";
+      cout << "    Fields     : " << m_count_fields     << "\n";
+      cout << "    Fluids     : " << m_count_fluids     << "\n";
+      cout << "    Neutrals   : " << m_count_neutrals   << "\n";
     }
-   
+   }
+
 private:
    
    /// Parse parameters.
