@@ -3,8 +3,8 @@
 #include "NamespaceHeader.H"
 
 Field::Field( const std::string& a_name, const MagGeom& a_geometry )
-   : m_geometry(a_geometry),
-     m_name(a_name)
+   : m_name(a_name),
+     m_geometry(a_geometry)
 {
 }
 

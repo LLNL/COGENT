@@ -7,21 +7,21 @@ FluidSpecies::FluidSpecies( const string&  a_name,
                             const Real     a_charge,
                             const string&  a_model,
                             const MagGeom& a_geometry )
-  : m_geometry( a_geometry ),
-    m_name( a_name ),
+  : m_name( a_name ),
+    m_model( a_model ),
     m_mass( a_mass ),
     m_charge( a_charge ),
-    m_model( a_model )
+    m_geometry( a_geometry )
 {
 }
 
 
 FluidSpecies::FluidSpecies( const FluidSpecies& a_foo )
-  : m_geometry( a_foo.m_geometry ),
-    m_name( a_foo.m_name ),
+  : m_name( a_foo.m_name ),
+    m_model( a_foo.m_model ),
     m_mass( a_foo.m_mass ),
     m_charge( a_foo.m_charge ),
-    m_model( a_foo.m_model )
+    m_geometry( a_foo.m_geometry )
 {
    m_state.define( a_foo.m_state );
 }

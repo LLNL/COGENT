@@ -546,7 +546,6 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
 
 bool GKOps::setupPCImEx( void *a_P, GKState& a_state )
 {
-   bool flag;
    int vec_size( a_state.getVectorSize() );
 //   int n_comp( a_state.getNComponents() );
 //   return m_collisions->setupPrecondMatrix( a_P, vec_size, n_comp );
@@ -555,7 +554,6 @@ bool GKOps::setupPCImEx( void *a_P, GKState& a_state )
 
 bool GKOps::setupPCImEx( void *a_P, GKRHSData& a_state )
 {
-   bool flag;
    int vec_size( a_state.getVectorSize() );
 //   int n_comp( a_state.getNComponents() );
 //   return m_collisions->setupPrecondMatrix( a_P, vec_size, n_comp );

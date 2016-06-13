@@ -617,7 +617,6 @@ Kernel::computeVelCell(LevelData<FArrayBox>& a_velCell,
    a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel);
 
    for (DataIterator dit(a_velCell.dataIterator()); dit.ok(); ++dit) {
-     const PhaseBlockCoordSys& block_coord_sys = a_phase_geom.getBlockCoordSys(grids[dit]);
      FArrayBox& this_velCell = a_velCell[dit];
      for (int dir=0; dir<SpaceDim; dir++) {
           FArrayBox& this_FaceVelDir = pointwiseFaceVel[dit][dir];

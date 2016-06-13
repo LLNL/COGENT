@@ -90,10 +90,10 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
      m_hdf_AmpereErIncrement(false),
      m_hdf_total_density(false),
      m_hdf_dfn(false),
-     m_hdf_fluids(false),
-     m_hdf_fields(false),
      m_hdf_deltaF(false),
      m_hdf_dfn_at_mu(false),
+     m_hdf_fluids(false),
+     m_hdf_fields(false),
      m_verbosity(0),
      m_use_native_time_integrator( !a_use_external_TI )
 {
