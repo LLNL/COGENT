@@ -445,7 +445,11 @@ void GKOps::explicitOpImEx( GKRHSData& a_rhs,
       applyNeutralsOperator( a_rhs.dataKinetic(), species_comp, a_time );
    }
 
-// JAFH: Need to add operations on fluids and fields here
+   const CFG::FluidSpeciesPtrVect& fluids_comp( a_state.dataFluid() );
+   const CFG::FieldPtrVect& fields_comp( a_state.dataField() );
+
+   applyFieldOperator( a_rhs.dataField(), fields_comp, fluids_comp, species_phys, m_E_field_face, a_time );
+   applyFluidOperator( a_rhs.dataFluid(), fields_comp, fluids_comp, species_phys, m_E_field_face, a_time );
 
    /* The following is hard-coded for a 4-stage time integrator!! */
    if (a_stage == 0) m_stage0_time = a_time;
@@ -534,8 +538,6 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
       applyTransportOperator( a_rhs.dataKinetic(), species_phys, a_time );
    }
    applyCollisionOperator( a_rhs.dataKinetic(), species_comp, a_time, a_flag );
-
-// JAFH: Need to add operations on fluids and fields here
 }
 
 void GKOps::implicitOpImEx( GKRHSData& a_rhs,
