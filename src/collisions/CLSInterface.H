@@ -44,13 +44,9 @@ class CLSInterface
       virtual Real computeDt(const KineticSpeciesPtrVect& soln) { return DBL_MAX; }
       virtual Real TimeScale(const KineticSpeciesPtrVect& soln) { return DBL_MAX; }
 
-//      virtual bool setupPrecondMatrix(void *a_P,int a_N,int a_bs) { return false; }
-      virtual bool setupPrecondMatrix( void *a_P, int a_N )
-   {
-      return false;
-   }
+      virtual int precondMatrixBands() { return(0); }
 
-   virtual void assemblePrecondMatrix( void *a_P,
+      virtual void assemblePrecondMatrix( void *a_P,
                                           const KineticSpeciesPtrVect& a_soln,
                                           int a_i,
                                           const Mapping& a_mapping) { }

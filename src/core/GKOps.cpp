@@ -550,20 +550,32 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
   implicitOpImEx(a_rhs,a_time,m_Y,a_stage,a_flag);
 }
 
+static inline bool setupPrecondMatrix(void *a_P, 
+                                      const int a_N,
+                                      GKCollisions *a_collisions)
+{
+  /* find the maximum number of bands */
+  int nbands_max = 0;
+  nbands_max = a_collisions->precondMatrixBands();
+
+  /* define the matrix */
+  if (!procID()) {
+    cout << "Setting up banded matrix with " << a_N << " rows ";
+    cout << "and " << nbands_max << " bands for the preconditioner.\n";
+  }
+  BandedMatrix *P = (BandedMatrix*) a_P;
+  P->define(a_N,nbands_max,1);
+  return(P->isDefined());
+}
+
 bool GKOps::setupPCImEx( void *a_P, GKState& a_state )
 {
-   int vec_size( a_state.getVectorSize() );
-//   int n_comp( a_state.getNComponents() );
-//   return m_collisions->setupPrecondMatrix( a_P, vec_size, n_comp );
-   return m_collisions->setupPrecondMatrix( a_P, vec_size );
+   return(setupPrecondMatrix( a_P, a_state.getVectorSize(), m_collisions ));
 }
 
 bool GKOps::setupPCImEx( void *a_P, GKRHSData& a_state )
 {
-   int vec_size( a_state.getVectorSize() );
-//   int n_comp( a_state.getNComponents() );
-//   return m_collisions->setupPrecondMatrix( a_P, vec_size, n_comp );
-   return m_collisions->setupPrecondMatrix( a_P, vec_size );
+   return(setupPrecondMatrix( a_P, a_state.getVectorSize(), m_collisions ));
 }
 
 inline

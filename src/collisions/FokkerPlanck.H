@@ -62,13 +62,7 @@ public:
    */
   inline bool isLinear() { return false; }
 
-//  bool setupPrecondMatrix(void *a_P,int a_N,int a_bs)
-  bool setupPrecondMatrix( void *a_P, int a_N )
-    {
-      BandedMatrix *P = (BandedMatrix*) a_P;
-      P->define( a_N, m_nbands, 1 );
-      return(P->isDefined());
-    }
+  inline int precondMatrixBands() { return(m_nbands); }
 
   void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,int,const Mapping&);
 

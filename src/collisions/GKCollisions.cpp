@@ -2,6 +2,7 @@
 
 #include <float.h>
 #include <sstream>
+#include <algorithm>
 
 #include "NamespaceHeader.H"
 
@@ -165,27 +166,15 @@ bool GKCollisions::isLinear()
   return linear_flag;
 }
 
-//bool GKCollisions::setupPrecondMatrix(void *a_P,int a_N,int a_bs)
-bool GKCollisions::setupPrecondMatrix( void *a_P, int a_N )
+int GKCollisions::precondMatrixBands()
 {
-   int count = 0;
-   bool flag = true;
-   if (!procID()) {
-      cout << "Setting up preconditioner matrix for collision model(s)... ";
-   }
-   std::map<std::string,int>::iterator it;
-   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
-      int index = getCollisionModelIndex( it );
-//     bool done = m_collision_model[it->second]->setupPrecondMatrix(a_P,a_N,a_bs);
-      bool done = m_collision_model[index]->setupPrecondMatrix( a_P, a_N );
-      flag = (flag && done );
-      count++;
+  int max_bands = 0;
+  std::map<std::string,int>::iterator it;
+  for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
+    int index = getCollisionModelIndex( it );
+    max_bands = std::max(max_bands, m_collision_model[index]->precondMatrixBands());
   }
-  CH_assert(count<=1);
-  if (!procID()) {
-    cout << "Done.\n";
-  }
-  return flag;
+  return max_bands;
 }
 
 void GKCollisions::assemblePrecondMatrix( void *a_P,
