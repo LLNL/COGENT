@@ -36,7 +36,7 @@ void convertToCellAverage( const MultiBlockCoordSys&  a_coord_sys,
    a_dfn.exchange();
 }
 
-};
+}
 
 #include "NamespaceFooter.H"
 
