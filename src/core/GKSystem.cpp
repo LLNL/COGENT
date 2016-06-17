@@ -112,7 +112,7 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
 
    createPhaseSpace( ppgksys );
 
-   createState(); 
+   createState();
 
    const Real BASE_DT( 1.0 );
    if (!m_use_native_time_integrator) {
@@ -134,6 +134,9 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
       m_gk_ops = &( m_integrator->getOperators() );
    }
    
+   createGlobalDOF();
+   m_state_comp.setGlobalDOF(&m_global_dof);
+
    if ( m_using_electrons && m_gk_ops->usingBoltzmannElectrons() ) {
       MayDay::Error( "GKSystem::createSpecies():  Electrons input as both kinetic and Boltzmann" );
    }
@@ -718,7 +721,6 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
 
   m_phase_geom.neverDelete();  // workaround for some problem with RefCountedPtr
 }
-
 
 inline
 void GKSystem::createState()

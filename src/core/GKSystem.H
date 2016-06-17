@@ -27,6 +27,8 @@
 #include "GKSystemBC.H"
 #include "GKOps.H"
 
+#include "GlobalDOF.H"
+
 #undef CH_SPACEDIM
 #define CH_SPACEDIM VEL_DIM
 #include "VelCoordSys.H"
@@ -237,6 +239,15 @@ class GKSystem
 
       void createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species );
 
+      inline
+      void createGlobalDOF()
+      {
+        m_global_dof.define( m_state_comp.getVectorSize(),
+                             m_state_comp.dataKinetic(),
+                             m_state_comp.dataFluid(),
+                             m_state_comp.dataField() );
+      }
+
       VEL::ProblemDomain getVelocityDomain() const;
    
       void createConfigurationSpace();
@@ -309,6 +320,8 @@ class GKSystem
       GKState m_state_comp;
       GKState m_state_phys;
       GKRHSData m_rhs;
+
+      GlobalDOF m_global_dof;
 
      // Parameters to control plotting
      /**

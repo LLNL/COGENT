@@ -39,7 +39,8 @@ public:
    inline
    GKState( const IntVect& a_ghost_vect )
       : m_is_defined( false ),
-        m_ghost_vect( a_ghost_vect )
+        m_ghost_vect( a_ghost_vect ),
+        m_global_dof ( NULL )
    {
    }
    
@@ -53,6 +54,7 @@ public:
                  a_state.m_fluid_species,
                  a_state.m_fields,
                  a_state.m_geometry );
+         m_global_dof = a_state.m_global_dof;
       }
    }
    
@@ -84,9 +86,6 @@ public:
       m_geometry = a_geometry;
       CH_assert(!m_geometry.isNull());
       m_is_defined = true;
-
-      int nv = getVectorSize();
-      m_global_dof.define( nv,m_kinetic_species,m_fluid_species,m_fields );
    }
    
    
@@ -98,6 +97,7 @@ public:
               a_state.m_fluid_species,
               a_state.m_fields,
               a_state.m_geometry );
+      m_global_dof = a_state.m_global_dof;
    }
    
    
@@ -109,12 +109,25 @@ public:
               a_state.m_fluid_species,
               a_state.m_fields,
               a_state.m_geometry );
+      m_global_dof = a_state.m_global_dof;
    }
    
    
    void copy( const GKState& a_state );
 
    void copy( const GKRHSData& a_rhs );
+
+   inline
+   void setGlobalDOF( GlobalDOF *a_global_dof)
+   {
+     m_global_dof = a_global_dof;
+   }
+
+   inline
+   GlobalDOF* getGlobalDOF() const
+   {
+     return m_global_dof;
+   }
    
    
    inline
@@ -162,13 +175,6 @@ public:
       return m_kinetic_species;
    }
 
-   inline 
-   const GlobalDOF& globalDOF() const
-   {
-     CH_assert(isDefined());
-     return m_global_dof;
-   }
-   
    inline
    const KineticSpeciesPtrVect& dataKinetic() const
    {
@@ -245,7 +251,7 @@ private:
    CFG::FluidSpeciesPtrVect m_fluid_species;
    CFG::FieldPtrVect        m_fields;
    RefCountedPtr<PhaseGeom> m_geometry;
-   GlobalDOF                m_global_dof;
+   GlobalDOF                *m_global_dof;
 };
 
 
@@ -256,7 +262,8 @@ public:
    
    inline
    GKRHSData()
-      : m_is_defined( false )
+      : m_is_defined( false ),
+        m_global_dof ( NULL )
    {
    }
 
@@ -279,9 +286,6 @@ public:
          m_fields[s] = a_fields[s]->clone( CFG::IntVect::Zero );
       }
       m_is_defined = true;
-
-      int nv = getVectorSize();
-      m_global_dof.define( nv,m_kinetic_species,m_fluid_species,m_fields );
    }
 
    
@@ -289,6 +293,7 @@ public:
    void define( const GKState& a_state )
    {
       define( a_state.dataKinetic(), a_state.dataFluid(), a_state.dataField() );
+      m_global_dof = a_state.getGlobalDOF();
    }
 
    
@@ -296,6 +301,7 @@ public:
    void define( const GKRHSData& a_rhs )
    {
       define( a_rhs.dataKinetic(), a_rhs.dataFluid(), a_rhs.dataField() );
+      m_global_dof = a_rhs.getGlobalDOF();
    }
 
    void scale(const Real& a_factor);
@@ -305,6 +311,17 @@ public:
 
    void copy( const GKState& a_rhs );
 
+   inline
+   void setGlobalDOF( GlobalDOF *a_global_dof)
+   {
+     m_global_dof = a_global_dof;
+   }
+
+   inline
+   GlobalDOF* getGlobalDOF() const
+   {
+     return m_global_dof;
+   }
    
    inline
    void zero()
@@ -347,13 +364,6 @@ public:
    {
       CH_assert( isDefined() );
       return m_kinetic_species;
-   }
-   
-   inline 
-   const GlobalDOF& globalDOF() const
-   {
-     CH_assert(isDefined());
-     return m_global_dof;
    }
    
    inline
@@ -407,7 +417,7 @@ private:
    KineticSpeciesPtrVect    m_kinetic_species;
    CFG::FluidSpeciesPtrVect m_fluid_species;
    CFG::FieldPtrVect        m_fields;
-   GlobalDOF                m_global_dof;
+   GlobalDOF                *m_global_dof;
 };
 
 
