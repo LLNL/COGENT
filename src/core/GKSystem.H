@@ -199,7 +199,6 @@ class GKSystem
         }
 
       int  getVectorSize()  { return m_state_comp.getVectorSize(); }
-//      int  getNComponents() { return m_state.getNComponents();}
 
       inline void assemblePCImEx(void* a_Pmat)
         { m_gk_ops->assemblePCImEx( a_Pmat, m_state_comp ); }

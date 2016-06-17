@@ -5,7 +5,7 @@
 #include "CLSInterface.H"
 #include "KineticSpecies.H"
 #include "ParmParse.H"
-#include "Mapping.H"
+#include "GlobalDOF.H"
 
 #include "Krook.H"
 #include "MyKrook.H"
@@ -70,7 +70,9 @@ class GKCollisions
 
       int precondMatrixBands();
 
-      void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,const Mapping&);
+      void assemblePrecondMatrix( void*,
+                                  const KineticSpeciesPtrVect&,
+                                  const GlobalDOFKineticSpeciesPtrVect&);
 
       /// returns the collision model associated with the input name
       /**

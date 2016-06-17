@@ -4,7 +4,7 @@
 #include "REAL.H"
 #include "ParmParse.H"
 #include "KineticSpecies.H"
-#include "Mapping.H"
+#include "GlobalDOF.H"
 
 #include "NamespaceHeader.H"
 
@@ -46,10 +46,9 @@ class CLSInterface
 
       virtual int precondMatrixBands() { return(0); }
 
-      virtual void assemblePrecondMatrix( void *a_P,
-                                          const KineticSpeciesPtrVect& a_soln,
-                                          int a_i,
-                                          const Mapping& a_mapping) { }
+      virtual void assemblePrecondMatrix( void*,
+                                          const KineticSpecies&,
+                                          const GlobalDOFKineticSpecies& ) { }
 
       virtual void preTimeStep  (const KineticSpeciesPtrVect&,
                                  const int, const Real,

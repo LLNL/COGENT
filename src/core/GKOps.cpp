@@ -550,9 +550,10 @@ void GKOps::implicitOpImEx( GKRHSData& a_rhs,
   implicitOpImEx(a_rhs,a_time,m_Y,a_stage,a_flag);
 }
 
-static inline bool setupPrecondMatrix(void *a_P, 
-                                      const int a_N,
-                                      GKCollisions *a_collisions)
+static inline bool setupPrecondMatrix(void              *a_P, 
+                                      const int         a_N,
+                                      const GlobalDOF&  a_global_dof,
+                                      GKCollisions      *a_collisions )
 {
   /* find the maximum number of bands */
   int nbands_max = 0;
@@ -564,18 +565,73 @@ static inline bool setupPrecondMatrix(void *a_P,
     cout << "and " << nbands_max << " bands for the preconditioner.\n";
   }
   BandedMatrix *P = (BandedMatrix*) a_P;
-  P->define(a_N,nbands_max,1);
+  P->define(a_N,nbands_max,a_global_dof.mpi_offset());
   return(P->isDefined());
 }
 
 bool GKOps::setupPCImEx( void *a_P, GKState& a_state )
 {
-   return(setupPrecondMatrix( a_P, a_state.getVectorSize(), m_collisions ));
+   return(setupPrecondMatrix( a_P, 
+                              a_state.getVectorSize(), 
+                              a_state.globalDOF(),
+                              m_collisions ));
 }
 
 bool GKOps::setupPCImEx( void *a_P, GKRHSData& a_state )
 {
-   return(setupPrecondMatrix( a_P, a_state.getVectorSize(), m_collisions ));
+   return(setupPrecondMatrix( a_P, 
+                              a_state.getVectorSize(), 
+                              a_state.globalDOF(),
+                              m_collisions ));
+}
+
+static inline void assemblePrecondMatrix(
+                                          void                            *a_P,
+                                          const KineticSpeciesPtrVect&    a_kinetic_species,
+                                          const CFG::FluidSpeciesPtrVect& a_fluid_species,
+                                          const CFG::FieldPtrVect&        a_fields,
+                                          const GlobalDOF&                a_global_dof,
+                                          GKCollisions                    *a_collisions
+                                          /* CFG::GKFieldOp                  *a_fluid_op  */
+                                          /* CFG::GKFluidOp                  *a_field_op  */
+                                        )
+{
+  BandedMatrix *Pmat = (BandedMatrix*) a_P;
+  Pmat->zeroEntries();
+  a_collisions->assemblePrecondMatrix(Pmat,a_kinetic_species,a_global_dof.dataKinetic());
+  /* a_fluid_op->assemblePrecondMatrix(Pmat,a_fluid_species,a_global_dof.dataFluid()); */
+  /* a_field_op->assemblePrecondMatrix(Pmat,a_fields,a_global_dof.dataFields()); */
+  return;
+}
+
+void GKOps::assemblePCImEx( void *a_P, const GKState& a_state )
+{
+  assemblePrecondMatrix(
+                        a_P,
+                        a_state.dataKinetic(),
+                        a_state.dataFluid(),
+                        a_state.dataField(),
+                        a_state.globalDOF(),
+                        m_collisions
+                        /* m_fluidOp */
+                        /* m_fieldOp */
+                       );
+  return;
+}
+
+void GKOps::assemblePCImEx( void *a_P, const GKRHSData& a_state )
+{
+  assemblePrecondMatrix(
+                        a_P,
+                        a_state.dataKinetic(),
+                        a_state.dataFluid(),
+                        a_state.dataField(),
+                        a_state.globalDOF(),
+                        m_collisions
+                        /* m_fluidOp */
+                        /* m_fieldOp */
+                       );
+  return;
 }
 
 inline

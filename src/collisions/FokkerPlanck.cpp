@@ -366,25 +366,22 @@ void FokkerPlanck::evalClsRHS_LowOrder( KineticSpeciesPtrVect& a_rhs,
    }
 }
 
-void FokkerPlanck::assemblePrecondMatrix( void *a_P,
-                                          const KineticSpeciesPtrVect& a_soln,
-                                          int a_species,
-                                          const Mapping& a_mapping)
+void FokkerPlanck::assemblePrecondMatrix( void                            *a_P,
+                                          const KineticSpecies&           a_species,
+                                          const GlobalDOFKineticSpecies&  a_global_dofs )
 {
   BandedMatrix *Pmat = (BandedMatrix*) a_P;
 
-  const KineticSpecies&       soln_species(*(a_soln[a_species]));
-  const LevelData<FArrayBox>& soln_dfn    (soln_species.distributionFunction());
+  const LevelData<FArrayBox>& soln_dfn    (a_species.distributionFunction());
   const DisjointBoxLayout&    grids       (soln_dfn.disjointBoxLayout());
-  const PhaseGeom&            phase_geom  (soln_species.phaseSpaceGeometry());
+  const PhaseGeom&            phase_geom  (a_species.phaseSpaceGeometry());
   const int                   n_comp      (soln_dfn.nComp());
   const VEL::VelCoordSys&     vel_coords  (phase_geom.velSpaceCoordSys());
   const VEL::RealVect&        vel_dx      (vel_coords.dx());
-  const LevelData<FArrayBox>& pMapping    (a_mapping.getPointMapping()); 
+  const LevelData<FArrayBox>& pMapping    (a_global_dofs.data()); 
 
   Real  dv = 1.0/vel_dx[0], dmu = 1.0/vel_dx[1], dv_sq = dv*dv, dmu_sq = dmu*dmu;
   DataIterator dit = grids.dataIterator();
-  int count = 0;
   for (dit.begin(); dit.ok(); ++dit) {
     const Box& grid = grids[dit];
     const FArrayBox& pMap = pMapping[dit];
@@ -424,260 +421,261 @@ void FokkerPlanck::assemblePrecondMatrix( void *a_P,
       iww[SpaceDim-2]-=2;                        /* west-west   */
       inn[SpaceDim-1]+=2;                        /* north-north */
       iss[SpaceDim-1]-=2;                        /* south-south */
-      /* global row/column numbers */
-      int pc, pe, pw, pn, ps, pne, pnw, pse, psw, pee, pww, pnn, pss, pcl;
-      pc  = (int) pMap.get(ic ,0);
-      pn  = (int) pMap.get(in ,0);
-      ps  = (int) pMap.get(is ,0);
-      pe  = (int) pMap.get(ie ,0);
-      pw  = (int) pMap.get(iw ,0);
-      pne = (int) pMap.get(ine,0);
-      pnw = (int) pMap.get(inw,0);
-      pse = (int) pMap.get(ise,0);
-      psw = (int) pMap.get(isw,0);
-      pee = (int) pMap.get(iee,0);
-      pww = (int) pMap.get(iww,0);
-      pnn = (int) pMap.get(inn,0);
-      pss = (int) pMap.get(iss,0);
-      pcl = (int) pMap.get(ic ,1);
 
-      /* coefficients */
-      Real *D_c;
-      Real *D_e;
-      Real *D_w;
-      Real *D_n;
-      Real *D_s;
-      Real *D_ne;
-      Real *D_nw;
-      Real *D_se;
-      Real *D_sw;
-      Real ac, an, as, ae, aw, ane, anw, ase, asw, aee, aww, ann, ass;
+      for (int n(0); n < n_comp; n++) {
+        /* global row/column numbers */
+        int pc, pe, pw, pn, ps, pne, pnw, pse, psw, pee, pww, pnn, pss;
+        pc  = (int) pMap.get(ic ,n);
+        pn  = (int) pMap.get(in ,n);
+        ps  = (int) pMap.get(is ,n);
+        pe  = (int) pMap.get(ie ,n);
+        pw  = (int) pMap.get(iw ,n);
+        pne = (int) pMap.get(ine,n);
+        pnw = (int) pMap.get(inw,n);
+        pse = (int) pMap.get(ise,n);
+        psw = (int) pMap.get(isw,n);
+        pee = (int) pMap.get(iee,n);
+        pww = (int) pMap.get(iww,n);
+        pnn = (int) pMap.get(inn,n);
+        pss = (int) pMap.get(iss,n);
+
+        /* coefficients */
+        Real *D_c;
+        Real *D_e;
+        Real *D_w;
+        Real *D_n;
+        Real *D_s;
+        Real *D_ne;
+        Real *D_nw;
+        Real *D_se;
+        Real *D_sw;
+        Real ac, an, as, ae, aw, ane, anw, ase, asw, aee, aww, ann, ass;
 
 //      std::vector<Real> D_c( m_nD );
       
-      D_c  = new Real[m_nD];
-      D_e  = new Real[m_nD];
-      D_w  = new Real[m_nD];
-      D_n  = new Real[m_nD];
-      D_s  = new Real[m_nD];
-      D_ne = new Real[m_nD];
-      D_nw = new Real[m_nD];
-      D_se = new Real[m_nD];
-      D_sw = new Real[m_nD];
+        D_c  = new Real[m_nD];
+        D_e  = new Real[m_nD];
+        D_w  = new Real[m_nD];
+        D_n  = new Real[m_nD];
+        D_s  = new Real[m_nD];
+        D_ne = new Real[m_nD];
+        D_nw = new Real[m_nD];
+        D_se = new Real[m_nD];
+        D_sw = new Real[m_nD];
 
-      m_D[dit].getVal( &D_c[0], ic );
-      m_D[dit].getVal(&D_c [0],ic );
-      m_D[dit].getVal(&D_e [0],ie );
-      m_D[dit].getVal(&D_w [0],iw );
-      m_D[dit].getVal(&D_n [0],in );
-      m_D[dit].getVal(&D_s [0],is );
-      m_D[dit].getVal(&D_ne[0],ine);
-      m_D[dit].getVal(&D_nw[0],inw);
-      m_D[dit].getVal(&D_se[0],ise);
-      m_D[dit].getVal(&D_sw[0],isw);
+        m_D[dit].getVal( &D_c[0], ic );
+        m_D[dit].getVal(&D_c [0],ic );
+        m_D[dit].getVal(&D_e [0],ie );
+        m_D[dit].getVal(&D_w [0],iw );
+        m_D[dit].getVal(&D_n [0],in );
+        m_D[dit].getVal(&D_s [0],is );
+        m_D[dit].getVal(&D_ne[0],ine);
+        m_D[dit].getVal(&D_nw[0],inw);
+        m_D[dit].getVal(&D_se[0],ise);
+        m_D[dit].getVal(&D_sw[0],isw);
 
-      if (m_subtract_background) {
-        Real *D0_c,
-             *D0_e,
-             *D0_w,
-             *D0_n,
-             *D0_s,
-             *D0_ne,
-             *D0_nw,
-             *D0_se,
-             *D0_sw;
+        if (m_subtract_background) {
+          Real  *D0_c,
+                *D0_e,
+                *D0_w,
+                *D0_n,
+                *D0_s,
+                *D0_ne,
+                *D0_nw,
+                *D0_se,
+                *D0_sw;
 
-        D0_c  = new Real[m_nD];
-        D0_e  = new Real[m_nD];
-        D0_w  = new Real[m_nD];
-        D0_n  = new Real[m_nD];
-        D0_s  = new Real[m_nD];
-        D0_ne = new Real[m_nD];
-        D0_nw = new Real[m_nD];
-        D0_se = new Real[m_nD];
-        D0_sw = new Real[m_nD];
+          D0_c  = new Real[m_nD];
+          D0_e  = new Real[m_nD];
+          D0_w  = new Real[m_nD];
+          D0_n  = new Real[m_nD];
+          D0_s  = new Real[m_nD];
+          D0_ne = new Real[m_nD];
+          D0_nw = new Real[m_nD];
+          D0_se = new Real[m_nD];
+          D0_sw = new Real[m_nD];
 
-        m_D_F0[dit].getVal(&D0_c [0],ic );
-        m_D_F0[dit].getVal(&D0_e [0],ie );
-        m_D_F0[dit].getVal(&D0_w [0],iw );
-        m_D_F0[dit].getVal(&D0_n [0],in );
-        m_D_F0[dit].getVal(&D0_s [0],is );
-        m_D_F0[dit].getVal(&D0_ne[0],ine);
-        m_D_F0[dit].getVal(&D0_nw[0],inw);
-        m_D_F0[dit].getVal(&D0_se[0],ise);
-        m_D_F0[dit].getVal(&D0_sw[0],isw);
+          m_D_F0[dit].getVal(&D0_c [0],ic );
+          m_D_F0[dit].getVal(&D0_e [0],ie );
+          m_D_F0[dit].getVal(&D0_w [0],iw );
+          m_D_F0[dit].getVal(&D0_n [0],in );
+          m_D_F0[dit].getVal(&D0_s [0],is );
+          m_D_F0[dit].getVal(&D0_ne[0],ine);
+          m_D_F0[dit].getVal(&D0_nw[0],inw);
+          m_D_F0[dit].getVal(&D0_se[0],ise);
+          m_D_F0[dit].getVal(&D0_sw[0],isw);
 
-        for (int v=0; v<m_nD; v++) {
-          D_c [v] += D0_c [v];
-          D_n [v] += D0_n [v];
-          D_s [v] += D0_s [v];
-          D_e [v] += D0_e [v];
-          D_w [v] += D0_w [v];
-          D_ne[v] += D0_ne[v];
-          D_nw[v] += D0_nw[v];
-          D_se[v] += D0_se[v];
-          D_sw[v] += D0_sw[v];
+          for (int v=0; v<m_nD; v++) {
+            D_c [v] += D0_c [v];
+            D_n [v] += D0_n [v];
+            D_s [v] += D0_s [v];
+            D_e [v] += D0_e [v];
+            D_w [v] += D0_w [v];
+            D_ne[v] += D0_ne[v];
+            D_nw[v] += D0_nw[v];
+            D_se[v] += D0_se[v];
+            D_sw[v] += D0_sw[v];
+          }
+
+          delete[] D0_c;
+          delete[] D0_e;
+          delete[] D0_w;
+          delete[] D0_n;
+          delete[] D0_s;
+          delete[] D0_ne;
+          delete[] D0_nw;
+          delete[] D0_se;
+          delete[] D0_sw;
         }
 
-        delete[] D0_c;
-        delete[] D0_e;
-        delete[] D0_w;
-        delete[] D0_n;
-        delete[] D0_s;
-        delete[] D0_ne;
-        delete[] D0_nw;
-        delete[] D0_se;
-        delete[] D0_sw;
-      }
+        /*
+         * D[0] -> D_v
+         * D[1] -> D_mu
+         * D[2] -> D_v_v
+         * D[3] -> D_v_mu
+         * D[4] -> D_mu_mu
+        */
 
-      /*
-       * D[0] -> D_v
-       * D[1] -> D_mu
-       * D[2] -> D_v_v
-       * D[3] -> D_v_mu
-       * D[4] -> D_mu_mu
-       */
+        ac  = -0.25*dv_sq*(D_e[2]+D_w[2]) - dmu_sq*(D_n[4]+D_s[4]);
+        ae  =  0.50*dv*D_e[0];
+        aw  = -0.50*dv*D_w[0];
+        an  =  dmu*D_n[1];
+        as  = -dmu*D_s[1];
+        ane =  0.50*dv*dmu*(D_e[3]+D_n[3]);
+        anw = -0.50*dv*dmu*(D_w[3]+D_n[3]);
+        ase = -0.50*dv*dmu*(D_e[3]+D_s[3]);
+        asw =  0.50*dv*dmu*(D_w[3]+D_s[3]);
+        aee =  0.25*dv_sq*D_e[2];
+        aww =  0.25*dv_sq*D_w[2];
+        ann =  dmu_sq*D_n[4];
+        ass =  dmu_sq*D_s[4];
 
-      ac  = -0.25*dv_sq*(D_e[2]+D_w[2]) - dmu_sq*(D_n[4]+D_s[4]);
-      ae  =  0.50*dv*D_e[0];
-      aw  = -0.50*dv*D_w[0];
-      an  =  dmu*D_n[1];
-      as  = -dmu*D_s[1];
-      ane =  0.50*dv*dmu*(D_e[3]+D_n[3]);
-      anw = -0.50*dv*dmu*(D_w[3]+D_n[3]);
-      ase = -0.50*dv*dmu*(D_e[3]+D_s[3]);
-      asw =  0.50*dv*dmu*(D_w[3]+D_s[3]);
-      aee =  0.25*dv_sq*D_e[2];
-      aww =  0.25*dv_sq*D_w[2];
-      ann =  dmu_sq*D_n[4];
-      ass =  dmu_sq*D_s[4];
+        delete[] D_c;
+        delete[] D_e;
+        delete[] D_w;
+        delete[] D_n;
+        delete[] D_s;
+        delete[] D_ne;
+        delete[] D_nw;
+        delete[] D_se;
+        delete[] D_sw;
 
-      delete[] D_c;
-      delete[] D_e;
-      delete[] D_w;
-      delete[] D_n;
-      delete[] D_s;
-      delete[] D_ne;
-      delete[] D_nw;
-      delete[] D_se;
-      delete[] D_sw;
+        if (m_fixed_cls_freq) {
+          ac  *= m_cls_freq;
+          ae  *= m_cls_freq;
+          aw  *= m_cls_freq;
+          an  *= m_cls_freq;
+          as  *= m_cls_freq;
+          ane *= m_cls_freq;
+          anw *= m_cls_freq;
+          ase *= m_cls_freq;
+          asw *= m_cls_freq;
+          aee *= m_cls_freq;
+          aww *= m_cls_freq;
+          ann *= m_cls_freq;
+          ass *= m_cls_freq;
+        } else {
+          ac  *= m_cls_norm;
+          ae  *= m_cls_norm;
+          aw  *= m_cls_norm;
+          an  *= m_cls_norm;
+          as  *= m_cls_norm;
+          ane *= m_cls_norm;
+          anw *= m_cls_norm;
+          ase *= m_cls_norm;
+          asw *= m_cls_norm;
+          aee *= m_cls_norm;
+          aww *= m_cls_norm;
+          ann *= m_cls_norm;
+          ass *= m_cls_norm;
+        }
 
-      if (m_fixed_cls_freq) {
-        ac  *= m_cls_freq;
-        ae  *= m_cls_freq;
-        aw  *= m_cls_freq;
-        an  *= m_cls_freq;
-        as  *= m_cls_freq;
-        ane *= m_cls_freq;
-        anw *= m_cls_freq;
-        ase *= m_cls_freq;
-        asw *= m_cls_freq;
-        aee *= m_cls_freq;
-        aww *= m_cls_freq;
-        ann *= m_cls_freq;
-        ass *= m_cls_freq;
-      } else {
-        ac  *= m_cls_norm;
-        ae  *= m_cls_norm;
-        aw  *= m_cls_norm;
-        an  *= m_cls_norm;
-        as  *= m_cls_norm;
-        ane *= m_cls_norm;
-        anw *= m_cls_norm;
-        ase *= m_cls_norm;
-        asw *= m_cls_norm;
-        aee *= m_cls_norm;
-        aww *= m_cls_norm;
-        ann *= m_cls_norm;
-        ass *= m_cls_norm;
-      }
+        int  ncols = m_nbands, ix = 0;
+        int  *icols = (int*)  calloc (ncols,sizeof(int));
+        Real *data  = (Real*) calloc (ncols,sizeof(Real));
 
-      int  ncols = m_nbands, bs = n_comp*n_comp, ix = 0;
-      int  *icols = (int*)  calloc (ncols,sizeof(int));
-      Real *data  = (Real*) calloc (ncols*bs,sizeof(Real));
+        /* center element */
+        icols[ix] = pc; 
+        data[ix] = ac;
+        ix++;
+        /* east element */
+        if (pe >= 0) {
+          icols[ix] = pe;
+          data[ix] = ae;
+          ix++;
+        }
+        /* west element */
+        if (pw >= 0) {
+          icols[ix] = pw;
+          data[ix] = aw;
+          ix++;
+        }
+        /* north element */
+        if (pn >= 0) {
+          icols[ix] = pn;
+          data[ix] = an;
+          ix++;
+        }
+        /* south element */
+        if (ps >= 0) {
+          icols[ix] = ps;
+          data[ix] = as;
+          ix++;
+        }
+        /* north east element */
+        if (pne >= 0) {
+          icols[ix] = pne;
+          data[ix] = ane;
+          ix++;
+        }
+        /* north west element */
+        if (pnw >= 0) {
+          icols[ix] = pnw;
+          data[ix] = anw;
+          ix++;
+        }
+        /* south east element */
+        if (pse >= 0) {
+          icols[ix] = pse;
+          data[ix] = ase;
+          ix++;
+        }
+        /* south west element */
+        if (psw >= 0) {
+          icols[ix] = psw;
+          data[ix] = asw;
+          ix++;
+        }
+        /* east-east element */
+        if (pee >= 0) {
+          icols[ix] = pee;
+          data[ix] = aee;
+          ix++;
+        }
+        /* west-west element */
+        if (pww >= 0) {
+          icols[ix] = pww;
+          data[ix] = aww;
+          ix++;
+        }
+        /* north-north element */
+        if (pnn >= 0) {
+          icols[ix] = pnn;
+          data[ix] = ann;
+          ix++;
+        }
+        /* south-south element */
+        if (pss >= 0) {
+          icols[ix] = pss;
+          data[ix] = ass;
+          ix++;
+        }
 
-      /* center element */
-      icols[ix] = pc; 
-      for (int v=0; v<bs; v++) data[ix*bs+v] = ac;
-      ix++;
-      /* east element */
-      if (pe >= 0) {
-        icols[ix] = pe;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = ae;
-        ix++;
+        Pmat->setRowValues(pc,ix,icols,data);
+        free(data);
+        free(icols);
       }
-      /* west element */
-      if (pw >= 0) {
-        icols[ix] = pw;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = aw;
-        ix++;
-      }
-      /* north element */
-      if (pn >= 0) {
-        icols[ix] = pn;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = an;
-        ix++;
-      }
-      /* south element */
-      if (ps >= 0) {
-        icols[ix] = ps;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = as;
-        ix++;
-      }
-      /* north east element */
-      if (pne >= 0) {
-        icols[ix] = pne;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = ane;
-        ix++;
-      }
-      /* north west element */
-      if (pnw >= 0) {
-        icols[ix] = pnw;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = anw;
-        ix++;
-      }
-      /* south east element */
-      if (pse >= 0) {
-        icols[ix] = pse;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = ase;
-        ix++;
-      }
-      /* south west element */
-      if (psw >= 0) {
-        icols[ix] = psw;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = asw;
-        ix++;
-      }
-      /* east-east element */
-      if (pee >= 0) {
-        icols[ix] = pee;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = aee;
-        ix++;
-      }
-      /* west-west element */
-      if (pww >= 0) {
-        icols[ix] = pww;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = aww;
-        ix++;
-      }
-      /* north-north element */
-      if (pnn >= 0) {
-        icols[ix] = pnn;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = ann;
-        ix++;
-      }
-      /* south-south element */
-      if (pss >= 0) {
-        icols[ix] = pss;
-        for (int v=0; v<bs; v++) data[ix*bs+v] = ass;
-        ix++;
-      }
-
-      Pmat->setRowValues(pcl,pc,ix,icols,data);
-      free(data);
-      free(icols);
     }
-    count++;
   }
 
   return;

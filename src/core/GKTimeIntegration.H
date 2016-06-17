@@ -5,7 +5,7 @@
 #include "RefCountedPtr.H"
 #include "KineticSpecies.H"
 #include "PhaseGeom.H"
-#include "Mapping.H"
+#include "GlobalDOF.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -83,8 +83,10 @@ public:
 
       m_geometry = a_geometry;
       CH_assert(!m_geometry.isNull());
-      m_mapping.define( a_kinetic_species );
       m_is_defined = true;
+
+      int nv = getVectorSize();
+      m_global_dof.define( nv,m_kinetic_species,m_fluid_species,m_fields );
    }
    
    
@@ -131,8 +133,6 @@ public:
 
    int getVectorSize();
    
-//   int getNComponents();
-
    
    void increment( const GKState& a_state,
                    const Real& a_factor = 1.0,
@@ -163,10 +163,10 @@ public:
    }
 
    inline 
-   const Mapping& mapping() const
+   const GlobalDOF& globalDOF() const
    {
      CH_assert(isDefined());
-     return m_mapping;
+     return m_global_dof;
    }
    
    inline
@@ -245,7 +245,7 @@ private:
    CFG::FluidSpeciesPtrVect m_fluid_species;
    CFG::FieldPtrVect        m_fields;
    RefCountedPtr<PhaseGeom> m_geometry;
-   Mapping                  m_mapping;
+   GlobalDOF                m_global_dof;
 };
 
 
@@ -278,8 +278,10 @@ public:
       for (int s(0); s<a_fields.size(); s++) {
          m_fields[s] = a_fields[s]->clone( CFG::IntVect::Zero );
       }
-      m_mapping.define( a_kinetic_species );
       m_is_defined = true;
+
+      int nv = getVectorSize();
+      m_global_dof.define( nv,m_kinetic_species,m_fluid_species,m_fields );
    }
 
    
@@ -348,10 +350,10 @@ public:
    }
    
    inline 
-   const Mapping& mapping() const
+   const GlobalDOF& globalDOF() const
    {
      CH_assert(isDefined());
-     return m_mapping;
+     return m_global_dof;
    }
    
    inline
@@ -405,7 +407,7 @@ private:
    KineticSpeciesPtrVect    m_kinetic_species;
    CFG::FluidSpeciesPtrVect m_fluid_species;
    CFG::FieldPtrVect        m_fields;
-   Mapping                  m_mapping;
+   GlobalDOF                m_global_dof;
 };
 
 

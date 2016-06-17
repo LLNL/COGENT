@@ -25,7 +25,7 @@
 #include "PhaseGeom.H"
 #include "GKSystemIC.H"
 #include "GKSystemBC.H"
-#include "Mapping.H"
+#include "GlobalDOF.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM VEL_DIM
@@ -298,24 +298,10 @@ public:
                         const int a_flag = 1);
 
    bool setupPCImEx (void*,GKState&);
-
    bool setupPCImEx (void*,GKRHSData&);
 
-   inline
-   void assemblePCImEx( void *a_P,const GKState& a_state ) 
-     {
-        m_collisions->assemblePrecondMatrix( a_P,
-                                             a_state.dataKinetic(),
-                                             a_state.mapping() );
-     }
-   
-   inline
-   void assemblePCImEx( void *a_P,const GKRHSData& a_state ) 
-     {
-        m_collisions->assemblePrecondMatrix( a_P,
-                                             a_state.dataKinetic(),
-                                             a_state.mapping() );
-     }
+   void assemblePCImEx( void*,const GKState& ) ;
+   void assemblePCImEx( void*,const GKRHSData& );
    
    void computeElectricField( LevelData<FluxBox>&              a_E_field,
                               const KineticSpeciesPtrVect&     a_kinetic_species,

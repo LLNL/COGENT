@@ -85,8 +85,7 @@ class PetscTimeIntegrator
     std::string m_plot_prefix;
 
     int         m_local_size,
-                m_ndims, 
-                m_ncomp;
+                m_ndims;
 
     Real  m_shift,
           m_epsilon_jfnk;
@@ -351,7 +350,6 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
     m_plot_prefix( "plt" ),
     m_local_size(0),
     m_ndims(2),
-    m_ncomp(1),
     m_shift(1.0),
     m_epsilon_jfnk(1e-6),
     m_is_linear("true"),
@@ -374,7 +372,6 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
   
   /* create and initialize the PETSc solution vector */
   m_local_size = m_system->getVectorSize();
-  m_ncomp      = m_system->getNComponents();
   VecCreate(MPI_COMM_WORLD,&m_Y);
   VecSetSizes(m_Y,m_local_size,PETSC_DECIDE);
   VecSetUp(m_Y);
@@ -423,7 +420,6 @@ PetscTimeIntegrator<System>::PetscTimeIntegrator( ParmParse &a_pp, bool usePetsc
       MatCreate(MPI_COMM_WORLD,&m_Pre);
       MatSetType(m_Pre,MATMPIAIJ);
       MatSetSizes(m_Pre,m_local_size,m_local_size,PETSC_DETERMINE,PETSC_DETERMINE);
-      MatSetBlockSize(m_Pre,m_ncomp);
       MatMPIAIJSetPreallocation(m_Pre,m_Pmat.getNBands(),NULL,m_Pmat.getNBands(),NULL);
       /* Set the IJacobian function for TS */
       TSSetIJacobian(m_ts,m_Jac,m_Pre,IJacobianIMEX,this);

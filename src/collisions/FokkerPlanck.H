@@ -9,7 +9,7 @@
 #include "KineticSpecies.H"
 #include "KineticFunction.H"
 #include "REAL.H"
-#include "Mapping.H"
+#include "GlobalDOF.H"
 #include "CLSInterface.H"
 #include "ParmParse.H"
 #include <sstream>
@@ -64,7 +64,9 @@ public:
 
   inline int precondMatrixBands() { return(m_nbands); }
 
-  void assemblePrecondMatrix(void*,const KineticSpeciesPtrVect&,int,const Mapping&);
+  void assemblePrecondMatrix( void*,
+                              const KineticSpecies&,
+                              const GlobalDOFKineticSpecies& );
 
   inline void preTimeStep  ( const KineticSpeciesPtrVect& a_soln_mapped, 
                              const int a_species, 

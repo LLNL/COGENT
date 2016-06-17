@@ -179,14 +179,15 @@ int GKCollisions::precondMatrixBands()
 
 void GKCollisions::assemblePrecondMatrix( void *a_P,
                                           const KineticSpeciesPtrVect& a_soln,
-                                          const Mapping& a_mapping)
+                                          const GlobalDOFKineticSpeciesPtrVect& a_gdofs)
 {
-  CH_assert(a_soln.size() == 1);
   for (int species(0); species<a_soln.size(); species++) {
-    KineticSpecies& soln_species(*(a_soln[species]));
-    const std::string species_name(soln_species.name());
-    CLSInterface& CLS(collisionModel(species_name));
-    CLS.assemblePrecondMatrix(a_P,a_soln,species,a_mapping);
+    KineticSpecies&           soln_species(*(a_soln[species]));
+    GlobalDOFKineticSpecies&  gdofs_species(*(a_gdofs[species]));
+    const std::string         species_name(soln_species.name());
+    CLSInterface&             CLS(collisionModel(species_name));
+
+    CLS.assemblePrecondMatrix(a_P,soln_species,gdofs_species);
   }
 }
 

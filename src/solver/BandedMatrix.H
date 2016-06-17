@@ -20,7 +20,6 @@ class BandedMatrix
         m_nbands    = 0;
         m_nrow      = 0; 
         m_ncols     = NULL;
-        m_bs        = 0;
         m_irows     = NULL;
         m_icols     = NULL;
         m_data      = NULL; 
@@ -41,23 +40,21 @@ class BandedMatrix
     inline bool isDefined() { return(m_is_Defined); }
     inline int  getNBands() { return m_nbands; }
 
-    void setRowValues(int,int,int,int*,Real*);
+    void setRowValues(int,int,int*,Real*);
 
 #ifdef with_petsc
     void copyToPetscMat(Mat);
 #endif
 
   private:
-    bool  m_is_Defined;
-    int   m_nbands,
-          m_nrow,
-          *m_ncols,
-          m_bs,
-          *m_irows,
-          *m_icols,
-          m_rstride,
-          m_cstride;
-    Real  *m_data;
+    bool  m_is_Defined;   /*! is defined?                         */
+    int   m_nbands,       /*! number of bands                     */
+          m_nrow,         /*! number of rows (local)              */
+          *m_ncols,       /*! number of columns in each row       */
+          *m_irows,       /*! global row numbers for each row     */
+          *m_icols,       /*! global column numbers in each row   */
+          m_istart;       /*! global row number of first row      */
+    Real  *m_data;        /*! array to store the matrix elements  */
 };
 
 #include "NamespaceFooter.H"
