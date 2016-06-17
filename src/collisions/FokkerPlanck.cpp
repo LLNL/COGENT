@@ -440,70 +440,47 @@ void FokkerPlanck::assemblePrecondMatrix( void                            *a_P,
         pss = (int) pMap.get(iss,n);
 
         /* coefficients */
-        Real *D_c;
-        Real *D_e;
-        Real *D_w;
-        Real *D_n;
-        Real *D_s;
-        Real *D_ne;
-        Real *D_nw;
-        Real *D_se;
-        Real *D_sw;
-        Real ac, an, as, ae, aw, ane, anw, ase, asw, aee, aww, ann, ass;
 
-//      std::vector<Real> D_c( m_nD );
-      
-        D_c  = new Real[m_nD];
-        D_e  = new Real[m_nD];
-        D_w  = new Real[m_nD];
-        D_n  = new Real[m_nD];
-        D_s  = new Real[m_nD];
-        D_ne = new Real[m_nD];
-        D_nw = new Real[m_nD];
-        D_se = new Real[m_nD];
-        D_sw = new Real[m_nD];
+        std::vector<Real> D_c (m_nD);
+        std::vector<Real> D_e (m_nD);
+        std::vector<Real> D_w (m_nD);
+        std::vector<Real> D_n (m_nD);
+        std::vector<Real> D_s (m_nD);
+        std::vector<Real> D_ne(m_nD);
+        std::vector<Real> D_nw(m_nD);
+        std::vector<Real> D_se(m_nD);
+        std::vector<Real> D_sw(m_nD);
 
-        m_D[dit].getVal( &D_c[0], ic );
-        m_D[dit].getVal(&D_c [0],ic );
-        m_D[dit].getVal(&D_e [0],ie );
-        m_D[dit].getVal(&D_w [0],iw );
-        m_D[dit].getVal(&D_n [0],in );
-        m_D[dit].getVal(&D_s [0],is );
-        m_D[dit].getVal(&D_ne[0],ine);
-        m_D[dit].getVal(&D_nw[0],inw);
-        m_D[dit].getVal(&D_se[0],ise);
-        m_D[dit].getVal(&D_sw[0],isw);
+        m_D[dit].getVal( D_c.data() , ic  );
+        m_D[dit].getVal( D_e.data() , ie  );
+        m_D[dit].getVal( D_w.data() , iw  );
+        m_D[dit].getVal( D_n.data() , in  );
+        m_D[dit].getVal( D_s.data() , is  );
+        m_D[dit].getVal( D_ne.data(), ine );
+        m_D[dit].getVal( D_nw.data(), inw );
+        m_D[dit].getVal( D_se.data(), ise );
+        m_D[dit].getVal( D_sw.data(), isw );
 
         if (m_subtract_background) {
-          Real  *D0_c,
-                *D0_e,
-                *D0_w,
-                *D0_n,
-                *D0_s,
-                *D0_ne,
-                *D0_nw,
-                *D0_se,
-                *D0_sw;
+          std::vector<Real> D0_c (m_nD);
+          std::vector<Real> D0_e (m_nD);
+          std::vector<Real> D0_w (m_nD);
+          std::vector<Real> D0_n (m_nD);
+          std::vector<Real> D0_s (m_nD);
+          std::vector<Real> D0_ne(m_nD);
+          std::vector<Real> D0_nw(m_nD);
+          std::vector<Real> D0_se(m_nD);
+          std::vector<Real> D0_sw(m_nD);
 
-          D0_c  = new Real[m_nD];
-          D0_e  = new Real[m_nD];
-          D0_w  = new Real[m_nD];
-          D0_n  = new Real[m_nD];
-          D0_s  = new Real[m_nD];
-          D0_ne = new Real[m_nD];
-          D0_nw = new Real[m_nD];
-          D0_se = new Real[m_nD];
-          D0_sw = new Real[m_nD];
-
-          m_D_F0[dit].getVal(&D0_c [0],ic );
-          m_D_F0[dit].getVal(&D0_e [0],ie );
-          m_D_F0[dit].getVal(&D0_w [0],iw );
-          m_D_F0[dit].getVal(&D0_n [0],in );
-          m_D_F0[dit].getVal(&D0_s [0],is );
-          m_D_F0[dit].getVal(&D0_ne[0],ine);
-          m_D_F0[dit].getVal(&D0_nw[0],inw);
-          m_D_F0[dit].getVal(&D0_se[0],ise);
-          m_D_F0[dit].getVal(&D0_sw[0],isw);
+          m_D_F0[dit].getVal( D0_c.data() , ic  );
+          m_D_F0[dit].getVal( D0_e.data() , ie  );
+          m_D_F0[dit].getVal( D0_w.data() , iw  );
+          m_D_F0[dit].getVal( D0_n.data() , in  );
+          m_D_F0[dit].getVal( D0_s.data() , is  );
+          m_D_F0[dit].getVal( D0_ne.data(), ine );
+          m_D_F0[dit].getVal( D0_nw.data(), inw );
+          m_D_F0[dit].getVal( D0_se.data(), ise );
+          m_D_F0[dit].getVal( D0_sw.data(), isw );
 
           for (int v=0; v<m_nD; v++) {
             D_c [v] += D0_c [v];
@@ -516,16 +493,6 @@ void FokkerPlanck::assemblePrecondMatrix( void                            *a_P,
             D_se[v] += D0_se[v];
             D_sw[v] += D0_sw[v];
           }
-
-          delete[] D0_c;
-          delete[] D0_e;
-          delete[] D0_w;
-          delete[] D0_n;
-          delete[] D0_s;
-          delete[] D0_ne;
-          delete[] D0_nw;
-          delete[] D0_se;
-          delete[] D0_sw;
         }
 
         /*
@@ -536,6 +503,7 @@ void FokkerPlanck::assemblePrecondMatrix( void                            *a_P,
          * D[4] -> D_mu_mu
         */
 
+        Real ac, an, as, ae, aw, ane, anw, ase, asw, aee, aww, ann, ass;
         ac  = -0.25*dv_sq*(D_e[2]+D_w[2]) - dmu_sq*(D_n[4]+D_s[4]);
         ae  =  0.50*dv*D_e[0];
         aw  = -0.50*dv*D_w[0];
@@ -549,16 +517,6 @@ void FokkerPlanck::assemblePrecondMatrix( void                            *a_P,
         aww =  0.25*dv_sq*D_w[2];
         ann =  dmu_sq*D_n[4];
         ass =  dmu_sq*D_s[4];
-
-        delete[] D_c;
-        delete[] D_e;
-        delete[] D_w;
-        delete[] D_n;
-        delete[] D_s;
-        delete[] D_ne;
-        delete[] D_nw;
-        delete[] D_se;
-        delete[] D_sw;
 
         if (m_fixed_cls_freq) {
           ac  *= m_cls_freq;
