@@ -4,6 +4,7 @@
 #include "DisjointBoxLayout.H"
 #include "FourthOrderUtil.H"
 #include "PhaseGeom.H"
+#include "KineticFunctionUtils.H"
 
 #include "NamespaceHeader.H"
 
@@ -17,7 +18,7 @@ void ConstantKineticFunction::assign( KineticSpecies& a_species,
    }
    const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
    geometry.multBStarParallel( data );
-   convertToCellAverage( *geometry.coordSysPtr(), data );
+   KineticFunctionUtils::convertToCellAverage( *geometry.coordSysPtr(), data );
    geometry.multJonValid( data );
 }
 
@@ -46,35 +47,6 @@ void ConstantKineticFunction::assign( KineticSpecies& a_species,
    }
    data_tmp.copyTo( data );
    data.exchange();
-}
-
-void ConstantKineticFunction::convertToCellAverage(
-   const MultiBlockCoordSys&  a_coord_sys,
-   LevelData<FArrayBox>&      a_dfn ) const
-{
-   LevelData<FArrayBox> dfn_tmp(a_dfn.disjointBoxLayout(),
-                                a_dfn.nComp(),
-                                a_dfn.ghostVect()+IntVect::Unit);
-
-   const DisjointBoxLayout& grids( a_dfn.disjointBoxLayout() );
-
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-      dfn_tmp[dit].copy( a_dfn[dit] );
-   }
-   dfn_tmp.exchange();
-
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-      const int block_number( a_coord_sys.whichBlock( grids[dit] ) );
-      const PhaseBlockCoordSys* coord_sys
-         = dynamic_cast<const PhaseBlockCoordSys*>( a_coord_sys.getCoordSys( block_number ) );
-
-      fourthOrderAverageCell( dfn_tmp[dit], coord_sys->domain(), grids[dit] );
-   }
-   dfn_tmp.exchange();
-
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-      a_dfn[dit].copy( dfn_tmp[dit] );
-   }
 }
 
 #include "NamespaceFooter.H"

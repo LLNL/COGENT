@@ -44,7 +44,7 @@ void Lorentz::evalClsRHS( KineticSpeciesPtrVect&       a_rhs,
    const LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
    
    // Create reference (J*Bstar_par*dfn_init) distribution
-   KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Zero, false ) );
+   KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Unit, false ) );
    m_ref_func->assign( *ref_species, a_time );
    const LevelData<FArrayBox>& init_dfn( ref_species->distributionFunction() );
 

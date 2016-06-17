@@ -123,19 +123,19 @@ GKOps::initializeElectricField( const GKState& a_state, const int a_cur_step )
    const KineticSpeciesPtrVect kinetic_species( a_state.dataKinetic() );
    KineticSpeciesPtrVect& initial_kinetic_species( initial_state.dataKinetic() );
    for (int s(0); s<kinetic_species.size(); s++) {
-      initial_kinetic_species[s] = kinetic_species[s]->clone( IntVect::Zero );
+      initial_kinetic_species[s] = kinetic_species[s]->clone( IntVect::Unit );
    }
 
    const CFG::FluidSpeciesPtrVect fluid_species( a_state.dataFluid() );
    CFG::FluidSpeciesPtrVect& initial_fluid_species( initial_state.dataFluid() );
    for (int s(0); s<fluid_species.size(); s++) {
-      initial_fluid_species[s] = fluid_species[s]->clone( CFG::IntVect::Zero );
+      initial_fluid_species[s] = fluid_species[s]->clone( CFG::IntVect::Unit );
    }
 
    const CFG::FieldPtrVect fields( a_state.dataField() );
    CFG::FieldPtrVect& initial_fields( initial_state.dataField() );
    for (int s(0); s<fields.size(); s++) {
-      initial_fields[s] = fields[s]->clone( CFG::IntVect::Zero );
+      initial_fields[s] = fields[s]->clone( CFG::IntVect::Unit );
    }
 
    if ( a_cur_step > 0 ) {

@@ -117,12 +117,6 @@ class ConstantKineticFunction : public KineticFunction
          }
       }
 
-      /// Convert cell center pointwise values to cell averaged values.
-      /**
-       */
-      void convertToCellAverage( const MultiBlockCoordSys&  a_coord_sys,
-                                 LevelData<FArrayBox>&      a_dfn ) const;
-
       Real m_value;
       int m_verbosity;
 };

@@ -119,12 +119,6 @@ class TensorProductSineKineticFunction : public KineticFunction
        */
       inline void checkGeometryValidity( const PhaseGeom& a_geometry ) const;
 
-      /// Convert cell center pointwise values to cell averaged values.
-      /**
-       */
-      void convertToCellAverage( const MultiBlockCoordSys&  a_coord_sys,
-                                 LevelData<FArrayBox>&      a_dfn ) const;
-
       int m_verbosity;
 
       Real m_amplitude;

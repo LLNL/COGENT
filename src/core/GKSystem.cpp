@@ -160,7 +160,7 @@ GKSystem::initialize( const int a_cur_step )
    if ( a_cur_step == 0 ) {
       // If this is the first step, then set the initial conditions for the
       // full GK system (i.e., distribution functions and potential)
-      m_gk_ops->initializeState( m_state_phys, 0.0 );
+      m_gk_ops->initializeState( m_state_comp, 0.0 );
    }
    else if ( m_gk_ops->fixedEField() ) {
       // If this is a restart and the fixed_efield option is true, just
@@ -171,16 +171,12 @@ GKSystem::initialize( const int a_cur_step )
       m_gk_ops->initializePotential( 0.0 );
    }
 
-   // Initialize the computational state variables
-   // NB: On restart, m_state_phys is filled from the file
-   m_state_comp.copy( m_state_phys );
-
    // Initialize the physical state variables
    m_gk_ops->divideJ( m_state_comp, m_state_phys );
    
    // Initialize the electric field:
    // a.  If the fixed_efield option is true, then the field is calculated
-   //     from the potential set in the prior call to m_gk_ops->initializeState()
+   //     from the potential set in prior call to m_gk_ops->initializeState()
    //     or (if restarting) m_gk_ops->initializePotential().
    // b.  If the fixed_efield option is false, then both the potential and
    //     associated field are computed.
@@ -815,7 +811,7 @@ GKSystem::createFields( CFG::FieldPtrVect& a_fields )
    }
 
    if ( procID() == 0 && m_verbosity ) {
-      cout << "Done adding congiration space variables" << endl;
+      cout << "Done adding configuration space variables" << endl;
    }
 }
 
@@ -1603,7 +1599,7 @@ void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
       m_gk_ops->setETilde( E_tilde_face_injected );
    }
 
-   KineticSpeciesPtrVect& kinetic_species( m_state_phys.dataKinetic() );
+   KineticSpeciesPtrVect& kinetic_species( m_state_comp.dataKinetic() );
    for (int species(0); species<kinetic_species.size(); species++) {
 
       // Get solution distribution function for the current species

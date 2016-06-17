@@ -401,7 +401,7 @@ class cloud {
                         const point &xmin, const point &xmax, const point &x)
                 {
                     for(size_t d = 0; d < NDIM; ++d) {
-                        static const double eps = 1e-16;
+                        static const double eps = 1e-12;
 
                         if (x[d] - eps <  xmin[d]) return false;
                         if (x[d] + eps >= xmax[d]) return false;

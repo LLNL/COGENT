@@ -18,6 +18,7 @@
 #include "DataIterator.H"
 #include "DisjointBoxLayout.H"
 #include "ProblemDomain.H"
+#include "MayDay.H"
 
 #include "KineticSpecies.H"
 #include "PhaseBlockCoordSys.H"
@@ -48,9 +49,20 @@ void MomentOp::computeIntegrand( LevelData<FArrayBox>& a_integrand,
    // Initialize the integrand with the distribution function.
    DataIterator dit = a_integrand.dataIterator();
    for (dit.begin(); dit.ok(); ++dit) {
-      for (int dfn_comp=0; dfn_comp<dfn_ncomp; ++dfn_comp) {
+     if (dfn_ncomp > 1 && kernel_ncomp == 1) {
+       for (int dfn_comp=0; dfn_comp<dfn_ncomp; ++dfn_comp) {
          a_integrand[dit].copy(dfn[dit],dfn_comp,dfn_comp*kernel_ncomp,kernel_ncomp);
-      }
+       }
+     }
+     else if (dfn_ncomp == 1 && kernel_ncomp >= 1) {
+       for (int comp=0; comp<kernel_ncomp; ++comp) {
+	  a_integrand[dit].copy(dfn[dit],0,comp,1);
+       }
+     }
+     else {
+       const std::string msg( "MomentOp: Not implemented for this combination of dfn_comp and kernel_comp. ");
+       MayDay::Error( msg.c_str() );
+     }
    }
 
    a_kernel.eval( a_integrand, a_kinetic_species );
@@ -67,12 +79,23 @@ void MomentOp::computeIntegrand( LevelData<FArrayBox>& a_integrand,
    int kernel_ncomp = a_kernel.nComponents();
    a_integrand.define( a_function.getBoxes(), func_ncomp*kernel_ncomp, a_function.ghostVect());
 
-   // Initialize the integrand with the a_function
+   // Initialize the integrand with the distribution function.                                                                               
    DataIterator dit = a_integrand.dataIterator();
    for (dit.begin(); dit.ok(); ++dit) {
-      for (int ncomp=0; ncomp<func_ncomp; ++ncomp) {
-         a_integrand[dit].copy(a_function[dit],ncomp,ncomp*kernel_ncomp,kernel_ncomp);
-      }
+     if (func_ncomp > 1 && kernel_ncomp == 1) {
+       for (int ncomp=0; ncomp<func_ncomp; ++ncomp) {
+	 a_integrand[dit].copy(a_function[dit],ncomp,ncomp*kernel_ncomp,kernel_ncomp);
+       }
+     }
+     else if (func_ncomp == 1 && kernel_ncomp >= 1) {
+       for (int comp=0; comp<kernel_ncomp; ++comp) {
+	 a_integrand[dit].copy(a_function[dit],0,comp,1);
+       }
+     }
+     else {
+       const std::string msg( "MomentOp: Not implemented for this combination of func_comp and kernel_comp. ");
+       MayDay::Error( msg.c_str() );
+     }
    }
 
    a_kernel.eval( a_integrand, a_kinetic_species );
@@ -106,6 +129,7 @@ void MomentOp::partialIntegralMu( CP1::LevelData<CP1::FArrayBox>& a_result,
    const ReductionCopier reduceCopier( a_integrand.getBoxes(),
                                        degenerate_integrand.getBoxes(),
                                        a_domain,
+				       degenerate_ghosts,
                                        MU_DIR );
 
    const SumOp op_mu( MU_DIR );
@@ -115,7 +139,7 @@ void MomentOp::partialIntegralMu( CP1::LevelData<CP1::FArrayBox>& a_result,
                        reduceCopier,
                        op_mu );
 
-   sliceLevelData( a_result, degenerate_integrand, a_slice_mu );
+   sliceLevelDataLocalOnly( a_result, degenerate_integrand, a_slice_mu );
 }
 
 
@@ -146,6 +170,7 @@ void MomentOp::partialIntegralVp( CFG::LevelData<CFG::FArrayBox>&       a_result
    const CP1::ReductionCopier reduceCopier( a_integrand.getBoxes(),
                                             degenerate_integrand.getBoxes(),
                                             a_domain,
+					    degenerate_ghosts,
                                             VPARALLEL_DIR );
    const CP1::SumOp op_vp( VPARALLEL_DIR );
    a_integrand.copyTo( a_integrand.interval(),
@@ -154,7 +179,7 @@ void MomentOp::partialIntegralVp( CFG::LevelData<CFG::FArrayBox>&       a_result
                        reduceCopier,
                        op_vp );
 
-   sliceLevelData( a_result, degenerate_integrand, a_slice_vp );
+   sliceLevelDataLocalOnly( a_result, degenerate_integrand, a_slice_vp );
 }
 
 
@@ -210,7 +235,20 @@ void MomentOp::compute( CFG::LevelData<CFG::FArrayBox>& a_result,
    const Real factor = scale * area / mass;
    scaleResult( moment, factor, geometry );
 
-   moment.copyTo( a_result );
+   const CFG::DisjointBoxLayout& src_dbl = moment.disjointBoxLayout();
+   const CFG::DisjointBoxLayout& dst_dbl = a_result.disjointBoxLayout();
+
+   const CFG::ProblemDomain& config_domain = dst_dbl.physDomain();
+
+   CFG::Copier copier;
+   copier.ghostDefine(src_dbl,
+                      dst_dbl,
+                      config_domain,
+                      moment.ghostVect(),
+                      a_result.ghostVect());
+
+   moment.exchange();
+   moment.copyTo(a_result, copier);
 }
 
 // modified compute to take moments of arbitrary LevelData<FArrayBox>
@@ -244,7 +282,20 @@ void MomentOp::compute( CFG::LevelData<CFG::FArrayBox>& a_result,
    const Real factor = scale * area / mass;
    scaleResult( moment, factor, geometry );
 
-   moment.copyTo( a_result );
+   const CFG::DisjointBoxLayout& src_dbl = moment.disjointBoxLayout();
+   const CFG::DisjointBoxLayout& dst_dbl = a_result.disjointBoxLayout();
+
+   const CFG::ProblemDomain& config_domain = dst_dbl.physDomain();
+
+   CFG::Copier copier;
+   copier.ghostDefine(src_dbl,
+                      dst_dbl,
+                      config_domain,
+                      moment.ghostVect(),
+                      a_result.ghostVect());
+
+   moment.exchange();
+   moment.copyTo(a_result, copier);
 }
 
 #include "NamespaceFooter.H"

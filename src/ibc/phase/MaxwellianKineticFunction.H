@@ -129,6 +129,7 @@ class MaxwellianKineticFunction : public KineticFunction
       inline void initializeField( LevelData<FArrayBox>& a_field,
                                    const CFG::GridFunction& a_ic,
                                    const PhaseGeom& a_phase_geometry,
+                                   const CFG::IntVect& a_nghosts,
                                    const Real& a_time ) const;
 
       /// Initialize density or temperature field on a box.
@@ -149,12 +150,6 @@ class MaxwellianKineticFunction : public KineticFunction
       /**
        */
       inline void checkGeometryValidity( const PhaseGeom& a_geometry ) const;
-
-      /// Convert cell center pointwise values to cell averaged values.
-      /**
-       */
-      void convertToCellAverage( const MultiBlockCoordSys&  a_coord_sys,
-                                 LevelData<FArrayBox>&      a_dfn ) const;
 
       int m_verbosity;
 

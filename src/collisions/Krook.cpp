@@ -48,7 +48,7 @@ void Krook::evalClsRHS( KineticSpeciesPtrVect&       a_rhs,
    const LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
 
    // Create reference (J*Bstar_par*dfn_init) distribution
-   KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Zero, false ) );
+   KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Unit, false ) );
    m_ref_func->assign( *ref_species, a_time );
    const LevelData<FArrayBox>& init_dfn( ref_species->distributionFunction() );
 
@@ -478,7 +478,7 @@ void Krook::addReferenceDfn( KineticSpecies& a_result,
 {
    LevelData<FArrayBox>& result_dfn( a_result.distributionFunction() );
          
-   KineticSpeciesPtr ref_species( a_result.clone( IntVect::Zero, false ) );
+   KineticSpeciesPtr ref_species( a_result.clone( IntVect::Unit, false ) );
    m_ref_func->assign( *ref_species, a_time );
    const LevelData<FArrayBox>& ref_dfn( ref_species->distributionFunction() );
    for (DataIterator dit(result_dfn.dataIterator()); dit.ok(); ++dit) {

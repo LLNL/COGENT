@@ -19,6 +19,8 @@
 #include "SingleNullPhaseCoordSys.H"
 #include "Vector.H"
 
+#include "KineticFunctionUtils.H"
+
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "GridFunctionLibrary.H"
@@ -35,36 +37,6 @@ MaxwellianKineticFunction::MaxwellianKineticFunction( ParmParse& a_pp,
    : m_verbosity(a_verbosity)
 {
    parseParameters( a_pp );
-}
-
-
-void MaxwellianKineticFunction::convertToCellAverage(
-   const MultiBlockCoordSys&  a_coord_sys,
-   LevelData<FArrayBox>&      a_dfn ) const
-{
-   LevelData<FArrayBox> dfn_tmp(a_dfn.disjointBoxLayout(),
-                                a_dfn.nComp(),
-                                a_dfn.ghostVect()+IntVect::Unit);
-
-   const DisjointBoxLayout& grids( a_dfn.disjointBoxLayout() );
-
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-      dfn_tmp[dit].copy( a_dfn[dit] );
-   }
-   dfn_tmp.exchange();
-
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-      const int block_number( a_coord_sys.whichBlock( grids[dit] ) );
-      const PhaseBlockCoordSys* coord_sys
-         = dynamic_cast<const PhaseBlockCoordSys*>( a_coord_sys.getCoordSys( block_number ) );
-
-      fourthOrderAverageCell( dfn_tmp[dit], coord_sys->domain(), grids[dit] );
-   }
-   dfn_tmp.exchange();
-
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-      a_dfn[dit].copy( dfn_tmp[dit] );
-   }
 }
 
 
@@ -102,16 +74,21 @@ void MaxwellianKineticFunction::assign( KineticSpecies& a_species,
    LevelData<FArrayBox>& dfn( a_species.distributionFunction() );
    const DisjointBoxLayout& grids( dfn.disjointBoxLayout() );
 
+   CFG::IntVect nghosts( CFG::IntVect::Zero );
+   for (int d(0); d<CFG_DIM; d++) {
+      nghosts[d] = (dfn.ghostVect())[d];
+   }
+   
    LevelData<FArrayBox> injected_density;
-   initializeField( injected_density, *m_ic_density, geometry, a_time );
+   initializeField( injected_density, *m_ic_density, geometry, nghosts, a_time );
    CH_assert( isNonNegative( injected_density ) );
 
    LevelData<FArrayBox> injected_temperature;
-   initializeField( injected_temperature, *m_ic_temperature, geometry, a_time );
+   initializeField( injected_temperature, *m_ic_temperature, geometry, nghosts, a_time );
    CH_assert( isPositiveDefinite( injected_temperature ) );
 
    LevelData<FArrayBox> injected_vparallel;
-   initializeField( injected_vparallel, *m_ic_vparallel, geometry, a_time );
+   initializeField( injected_vparallel, *m_ic_vparallel, geometry, nghosts, a_time );
    //CH_assert( isPositiveDefinite( injected_vparallel ) );
  
    const LevelData<FArrayBox>& injected_B( geometry.getBFieldMagnitude() );
@@ -129,7 +106,7 @@ void MaxwellianKineticFunction::assign( KineticSpecies& a_species,
 
    geometry.multBStarParallel( dfn );
    if ( !(geometry.secondOrder()) )  {
-      convertToCellAverage( *geometry.coordSysPtr(), dfn );
+      KineticFunctionUtils::convertToCellAverage( *geometry.coordSysPtr(), dfn );
    }
    geometry.multJonValid( dfn );
    dfn.exchange();
@@ -232,15 +209,15 @@ inline
 void MaxwellianKineticFunction::initializeField( LevelData<FArrayBox>& a_field,
                                                  const CFG::GridFunction& a_ic,
                                                  const PhaseGeom& a_phase_geometry,
+                                                 const CFG::IntVect& a_nghosts, 
                                                  const Real& a_time ) const
 {
    const CFG::MultiBlockLevelGeom& mag_geometry( a_phase_geometry.magGeom() );
    const CFG::DisjointBoxLayout& grids( mag_geometry.grids() );
    const int SCALAR(1);
-   const CFG::IntVect nghosts(CFG::IntVect::Unit);
    const bool cell_average( false );
 
-   CFG::LevelData<CFG::FArrayBox> cfg_field( grids, SCALAR, nghosts );
+   CFG::LevelData<CFG::FArrayBox> cfg_field( grids, SCALAR, a_nghosts );
    a_ic.assign( cfg_field, mag_geometry, a_time, cell_average );
    a_phase_geometry.injectConfigurationToPhase( cfg_field, a_field );
 }

@@ -1,0 +1,185 @@
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 1 
+gksystem.verbosity   = 1
+
+gksystem.hdf_density      = true
+gksystem.hdf_pressure     = false
+gksystem.hdf_efield       = true
+gksystem.hdf_potential    = true
+gksystem.hdf_ParticleFlux = false
+gksystem.hdf_HeatFlux     = false
+gksystem.hdf_vpartheta    = false
+gksystem.hdf_frtheta      = false
+gksystem.fixed_plot_indices = 2 0 0 6 2
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 4000
+simulation.max_time            = 1200.
+simulation.max_dt_grow         = 1.1
+simulation.initial_dt_fraction = 0.8
+simulation.checkpoint_interval = 4000
+simulation.checkpoint_prefix   = "chk"
+simulation.plot_interval       = 50
+simulation.plot_prefix         = "plt"
+simulation.histories = true
+simulation.1.history_field = "potential"
+simulation.1.history_indices = 16 0
+simulation.2.history_field = "Efield"
+simulation.2.history_indices = 16 0
+
+#####################################################
+# Computational Grid Definitions
+#####################################################
+gksystem.num_cells   = 32 32 64 32
+gksystem.is_periodic =  0  1  0  0
+
+gksystem.configuration_decomp = 4 4
+gksystem.velocity_decomp      =     4 4
+gksystem.phase_decomp         = 4 4 4 4
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 1.0e19
+units.temperature    = 10.0
+units.length         = 1.0
+units.mass           = 1.0
+units.magnetic_field = 1.0 
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "Miller"
+gksystem.magnetic_geometry_mapping.miller.verbose  = true
+gksystem.magnetic_geometry_mapping.miller.inner_radial_bdry = 0.8075
+gksystem.magnetic_geometry_mapping.miller.outer_radial_bdry = 0.8925
+gksystem.magnetic_geometry_mapping.miller.kappa   = 1.
+gksystem.magnetic_geometry_mapping.miller.delta   = 0.
+gksystem.magnetic_geometry_mapping.miller.dpsidr  = 3.20625
+gksystem.magnetic_geometry_mapping.miller.drR0    = 0.0
+gksystem.magnetic_geometry_mapping.miller.s_kappa = 0.0
+gksystem.magnetic_geometry_mapping.miller.s_delta = 0.0
+gksystem.magnetic_geometry_mapping.miller.origin  = 8.50 0.
+gksystem.magnetic_geometry_mapping.miller.Btor_scale  = 38.475
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 3
+phase_space_mapping.mu_max = 4
+phase_space_mapping.velocity_type = "gyrokinetic"
+
+#####################################################
+# Vlasov Operator Definitions
+#####################################################
+gkvlasov.verbose = false
+gkvlasov.face_avg_type = "bweno"
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gksystem.fixed_efield = false
+gksystem.consistent_potential_bcs = true
+
+gkpoissonboltzmann.prefactor = fs_neutrality_initial_fs_ni
+gkpoissonboltzmann.verbose = true
+gkpoissonboltzmann.preserve_initial_ni_average = true
+
+gkpoissonboltzmann.subspace_iteration_solve = true
+
+#####################################################
+# Species Definitions
+#####################################################
+kinetic_species.1.name   = "hydrogen"
+kinetic_species.1.mass   = 2.0
+kinetic_species.1.charge = 1.0
+kinetic_species.1.ics    = "maxwelltanh"
+kinetic_species.1.bcs    = "maxwelltanh"
+kinetic_species.1.cls    = "Linearized"
+
+boltzmann_electron.name        = "electron"
+boltzmann_electron.mass        = 1.0
+boltzmann_electron.charge      = -1.0
+boltzmann_electron.temperature = 1.0
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.potential.function = "zero"
+IC.hydrogen.function  = "maxwellian_tanh_0"
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.hydrogen.radial_inner.function = "maxwellian_tanh_0"
+BC.hydrogen.radial_outer.function = "maxwellian_tanh_0"
+BC.hydrogen.vpar_lower.function   = "maxwellian_tanh_0"
+BC.hydrogen.vpar_upper.function   = "maxwellian_tanh_0"
+BC.hydrogen.mu_lower.function     = "maxwellian_tanh_0"
+BC.hydrogen.mu_upper.function     = "maxwellian_tanh_0"
+
+BC.potential.radial_inner.type = "neumann"
+BC.potential.radial_outer.type = "neumann"
+
+#####################################################
+# Collisions Definitions
+#####################################################
+CLS.hydrogen.cls_freq = 0.00041
+CLS.hydrogen.conserve_momentum  = true
+CLS.hydrogen.conserve_energy  = true
+CLS.hydrogen.ref_function = "maxwellian_tanh_0"
+CLS.hydrogen.ref_temperature = "T0"
+
+#####################################################
+# Kinetic Function Definitions
+#####################################################
+kinetic_function_library.number = 2
+kinetic_function_library.verbosity = 1
+kinetic_function_library.list = "maxwellian_tanh_0" "maxwellian_tanh_eq"
+
+kinetic_function_library.maxwellian_tanh_0.type = "maxwellian"
+kinetic_function_library.maxwellian_tanh_0.v_parallel_shift = 0.0
+kinetic_function_library.maxwellian_tanh_0.density.function = "N0"
+kinetic_function_library.maxwellian_tanh_0.temperature.function = "T0"
+
+kinetic_function_library.maxwellian_tanh_eq.type = "maxwellian"
+kinetic_function_library.maxwellian_tanh_eq.v_parallel_shift = 0.0
+kinetic_function_library.maxwellian_tanh_eq.density.function = "Neq"
+kinetic_function_library.maxwellian_tanh_eq.temperature.function = "Teq"
+
+#####################################################
+# Grid Function Definitions
+#####################################################
+grid_function_library.number = 5
+grid_function_library.verbosity = 1
+grid_function_library.list = "zero" "N0" "T0" "Neq" "Teq"
+
+grid_function_library.zero.type = "zero" 
+
+grid_function_library.N0.type = "tanh"
+grid_function_library.N0.inner_radial_value = 1.05
+grid_function_library.N0.outer_radial_value = 0.95
+grid_function_library.N0.radial_midpoint = 0.85 
+grid_function_library.N0.radial_width = 0.012
+
+grid_function_library.T0.type = "tanh"
+grid_function_library.T0.inner_radial_value = 1.05
+grid_function_library.T0.outer_radial_value = 0.95
+grid_function_library.T0.radial_midpoint = 0.85 
+grid_function_library.T0.radial_width = 0.012
+
+grid_function_library.Neq.type = "tanh"
+grid_function_library.Neq.inner_radial_value = 1.00
+grid_function_library.Neq.outer_radial_value = 1.00
+grid_function_library.Neq.radial_midpoint = 0.85 
+grid_function_library.Neq.radial_width = 0.012
+
+grid_function_library.Teq.type = "tanh"
+grid_function_library.Teq.inner_radial_value = 1.00
+grid_function_library.Teq.outer_radial_value = 1.00
+grid_function_library.Teq.radial_midpoint = 0.85 
+grid_function_library.Teq.radial_width = 0.012

@@ -86,7 +86,7 @@ void FokkerPlanck::computeReferenceSolution(const KineticSpeciesPtrVect& a_soln,
   } else {
 
     /* use the specified reference distribution function */
-    KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Zero, false ) );
+    KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Unit, false ) );
     m_ref_func->assign( *ref_species, a_time );
     LevelData<FArrayBox>& ref_dfn( ref_species->distributionFunction() );
     for (DataIterator dit(m_F0.dataIterator()); dit.ok(); ++dit) {
