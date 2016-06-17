@@ -12,6 +12,7 @@ void GlobalDOFKineticSpecies::define(
   const int                   ncomp = dfn.nComp();
 
   m_gdofs.define(grids,ncomp,dfn.ghostVect());
+  long box_offset(0);
   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
     m_gdofs[dit].setVal(-1);
     
@@ -25,9 +26,10 @@ void GlobalDOFKineticSpecies::define(
       IntVect index = bit();
       int p; _BoxIndexDOF_(p,(index-smallEnd),gridSize,PDIM);
       for (int n(0); n < ncomp; n++) {
-        m_gdofs[dit].set(index,n,((ncomp*p+n)+a_offset));
+        m_gdofs[dit].set(index,n,((ncomp*p+n)+a_offset+box_offset));
       }
     }
+    box_offset += box.numPts();
   }
   m_gdofs.exchange();
 
@@ -45,6 +47,7 @@ void GlobalDOFFluidSpecies::define(
   const int                             ncomp = data.nComp();
 
   m_gdofs.define(grids,ncomp,data.ghostVect());
+  long box_offset(0);
   for (CFG::DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
     m_gdofs[dit].setVal(-1);
     
@@ -58,9 +61,10 @@ void GlobalDOFFluidSpecies::define(
       CFG::IntVect index = bit();
       int p; _BoxIndexDOF_(p,(index-smallEnd),gridSize,CFG_DIM);
       for (int n(0); n < ncomp; n++) {
-        m_gdofs[dit].set(index,n,((ncomp*p+n)+a_offset));
+        m_gdofs[dit].set(index,n,((ncomp*p+n)+a_offset+box_offset));
       }
     }
+    box_offset += box.numPts();
   }
   m_gdofs.exchange();
 
@@ -78,6 +82,7 @@ void GlobalDOFField::define(
   const int                             ncomp = data.nComp();
 
   m_gdofs.define(grids,ncomp,data.ghostVect());
+  long box_offset(0);
   for (CFG::DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
     m_gdofs[dit].setVal(-1);
     
@@ -91,9 +96,10 @@ void GlobalDOFField::define(
       CFG::IntVect index = bit();
       int p; _BoxIndexDOF_(p,(index-smallEnd),gridSize,CFG_DIM);
       for (int n(0); n < ncomp; n++) {
-        m_gdofs[dit].set(index,n,((ncomp*p+n)+a_offset));
+        m_gdofs[dit].set(index,n,((ncomp*p+n)+a_offset+box_offset));
       }
     }
+    box_offset += box.numPts();
   }
   m_gdofs.exchange();
 
