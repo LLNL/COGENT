@@ -279,12 +279,23 @@ static PetscErrorCode PostTimeStage(TS ts, PetscReal stagetime, PetscInt stagein
   TSGetTimeStep       (ts,&dt);
   TSGetTimeStepNumber (ts,&cur_step);
 
+  static int step_number  = 0;
+  static int stage_number = -1;
+  if (cur_step == step_number+1) {
+    step_number++;
+    stage_number = -1;
+  } else if (cur_step == step_number) {
+    stage_number++;
+  } else {
+    if (!procID()) {
+      std::cout << "Error in PostTimeStage() in src/driver/PETScTimeIntegration.H: cur_step=" 
+                << cur_step << ", step_number=" << step_number << "."
+                << " Something has caused stage-counting to go haywire.\n";
+    }
+  }
+
   context->copyStateFromPetsc(Y[stageindex],system);
-  /* DG: last argument should be stage number, but set to 1 here!
-   * PETSc has no function to return the stage number, so need to
-   * find a way to compute it.
-  */
-  system->postTimeStage(cur_step,stagetime,1);
+  system->postTimeStage(cur_step,stagetime,stage_number);
   return(0);
 }
 
