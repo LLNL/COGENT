@@ -114,6 +114,9 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
 
    createState();
 
+   createGlobalDOF();
+   m_state_comp.setGlobalDOF(&m_global_dof);
+
    const Real BASE_DT( 1.0 );
    if (!m_use_native_time_integrator) {
       m_gk_ops = new GKOps;
@@ -134,9 +137,6 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
       m_gk_ops = &( m_integrator->getOperators() );
    }
    
-   createGlobalDOF();
-   m_state_comp.setGlobalDOF(&m_global_dof);
-
    if ( m_using_electrons && m_gk_ops->usingBoltzmannElectrons() ) {
       MayDay::Error( "GKSystem::createSpecies():  Electrons input as both kinetic and Boltzmann" );
    }
