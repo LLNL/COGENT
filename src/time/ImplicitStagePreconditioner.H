@@ -39,8 +39,8 @@ void ImplicitStagePreconditioner<T,Ops>::updateP(const T& a_x)
   if (!m_is_Defined) {
     m_P.zeroEntries();
     m_ops->assemblePCImEx((void*)&m_P,a_x);
-    m_P.scaleEntries(-m_shift);
-    m_P.shift(1.0);
+    m_P.scaleEntries(-1.0);
+    m_P.shift(m_shift);
   }
   return;
 }

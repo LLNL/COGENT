@@ -80,12 +80,12 @@ void ImplicitStageJacobian<T,Ops>::residual(
 }
 
 /* To compute: a_F = [L]a_y where [L] is the Jacobian of an implicit ARK stage,
- * i.e., [L] = [I - alpha*F'(Y)] where F(Y) is the part of the right-hand-side
+ * i.e., [L] = [alpha*I - F'(Y)] where F(Y) is the part of the right-hand-side
  * being treated implicitly, and alpha is m_shift.
  * F'(Y) is approximated using a direction derivative, and its action on a vector
  * y is computed as: [F'(Y)]y ~ (1/eps)[F(Y+eps*y) - F(Y)].
  * Thus, the action of the Jacobian operator [L] on a vector y is:
- * [L]y = y - alpha * (1/eps) * [F(Y+eps*y) - F(Y)]
+ * [L]y = alpha * y - (1/eps) * [F(Y+eps*y) - F(Y)]
  *
  * For linear F(Y), eps = 1.
 */
@@ -102,8 +102,12 @@ void ImplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y)
     m_Z.copy(m_Y0); m_Z.increment(a_y,eps);
     m_ops->implicitOpImEx(m_F,m_StageTime,m_Z,m_Stage,0);
 
-    m_Z.copy(m_F); m_Z.increment(m_F0,-1);
-    a_F.copy(a_y); a_F.increment(m_Z,(-m_shift/eps));
+    m_Z.copy(m_F); 
+    m_Z.increment(m_F0,-1);
+
+    a_F.copy(a_y); 
+    a_F.scale(m_shift);
+    a_F.increment(m_Z,(-1.0/eps));
   }
 }
 

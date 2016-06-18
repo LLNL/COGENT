@@ -551,8 +551,10 @@ void TiARK<Solution, RHS, Ops>::advance( const Real& a_time, Solution& a_Y )
     for (j=0; j<i; j++) m_YStage.increment(m_rhsStage_imp[j],(m_dt*m_Ai[i*m_nstages+j]));
 
     /* implicit stage */
-    Real shift = m_Ai[i*m_nstages+i] * m_dt;
-    if (shift != 0.0) {
+    if (m_Ai[i*m_nstages+i] != 0.0) {
+      
+      Real shift = 1.0 / (m_Ai[i*m_nstages+i] * m_dt);
+
       m_Ifunction->setShift(shift);
       m_Ifunction->setStageNumber(i);
       m_Ifunction->setStageTime(m_time+m_ce[i]*m_dt);
@@ -560,7 +562,9 @@ void TiARK<Solution, RHS, Ops>::advance( const Real& a_time, Solution& a_Y )
       m_IJacobian->setStageNumber(i);
       m_IJacobian->setStageTime(m_time+m_ce[i]*m_dt);
 
-      m_R.copy(m_YStage);  /* right-hand side */
+      /* right-hand side */
+      m_R.copy(m_YStage);  
+      m_R.scale(shift);
       /* Before the Newton solve begins, m_Z contains the
        * initial guess, which is:
        * first stage - a_Y
