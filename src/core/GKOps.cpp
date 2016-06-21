@@ -2050,7 +2050,6 @@ void GKOps::plotParallelHeatFlux( const std::string&    a_filename,
                                   const KineticSpecies& a_soln_species,
                                   const double&         a_time ) const
 {
-#if 0
    CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
    const PhaseGeom& phase_geometry( *m_phase_geometry );
@@ -2065,10 +2064,9 @@ void GKOps::plotParallelHeatFlux( const std::string&    a_filename,
       ParallelMom[dit].divide(density[dit]);
    }
    CFG::LevelData<CFG::FArrayBox> parallelHeatFlux( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.ParallelHeatFluxMoment( parallelHeatFlux, ParallelMom );
+   a_soln_species.parallelHeatFluxMoment( parallelHeatFlux, ParallelMom );
    
    phase_geometry.plotConfigurationData( a_filename.c_str(), parallelHeatFlux, a_time );
-#endif
 }
 
 

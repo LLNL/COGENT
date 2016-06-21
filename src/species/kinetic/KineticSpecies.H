@@ -104,6 +104,12 @@ class KineticSpecies
                              const LevelData<FluxBox>& field,
                              const LevelData<FArrayBox>& phi ) const;
 
+      /// Returns species parallel heat flux.
+      /**
+       */
+      virtual void parallelHeatFluxMoment( CFG::LevelData<CFG::FArrayBox>& parallelHeatFlux,
+                                           CFG::LevelData<CFG::FArrayBox>& vparshift ) const;
+
       /// Returns species perpendicular current density.
       /**
        */
