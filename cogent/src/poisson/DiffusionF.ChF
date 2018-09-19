@@ -1,0 +1,108 @@
+      subroutine compute_mapped_diffusion_coefficients(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[n],
+     &     CHF_CONST_FRA[d_tensor],
+     &     CHF_CONST_FRA[njinverse],
+     &     CHF_FRA[coef]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], row, col, m
+      double precision n_mat(0:CH_SPACEDIM-1,0:CH_SPACEDIM-1),
+     &       nji_mat(0:CH_SPACEDIM-1,0:CH_SPACEDIM-1),
+     &       d_mat(0:CH_SPACEDIM-1,0:CH_SPACEDIM-1),
+     &       dnji_mat(0:CH_SPACEDIM-1,0:CH_SPACEDIM-1),
+     &       coef_mat(0:CH_SPACEDIM-1,0:CH_SPACEDIM-1)
+
+      CHF_MULTIDO[box;i;j;k]
+
+c        Coefficients in cylindrical coordinate frame
+#if CH_SPACEDIM==3
+         d_mat(0,0) = d_tensor(CHF_IX[i;j;k],0)
+         d_mat(0,1) = d_tensor(CHF_IX[i;j;k],1)
+         d_mat(0,2) = d_tensor(CHF_IX[i;j;k],2)
+         d_mat(1,0) = d_tensor(CHF_IX[i;j;k],3)
+         d_mat(1,1) = d_tensor(CHF_IX[i;j;k],4)
+         d_mat(1,2) = d_tensor(CHF_IX[i;j;k],5)
+         d_mat(2,0) = d_tensor(CHF_IX[i;j;k],6)
+         d_mat(2,1) = d_tensor(CHF_IX[i;j;k],7)
+         d_mat(2,2) = d_tensor(CHF_IX[i;j;k],8)
+         
+         nji_mat(0,0) = njinverse(CHF_IX[i;j;k],0)
+         nji_mat(0,1) = njinverse(CHF_IX[i;j;k],1)
+         nji_mat(0,2) = njinverse(CHF_IX[i;j;k],2)
+         nji_mat(1,0) = njinverse(CHF_IX[i;j;k],3)
+         nji_mat(1,1) = njinverse(CHF_IX[i;j;k],4)
+         nji_mat(1,2) = njinverse(CHF_IX[i;j;k],5)
+         nji_mat(2,0) = njinverse(CHF_IX[i;j;k],6)
+         nji_mat(2,1) = njinverse(CHF_IX[i;j;k],7)
+         nji_mat(2,2) = njinverse(CHF_IX[i;j;k],8)
+
+         n_mat(0,0) = n(CHF_IX[i;j;k],0)
+         n_mat(0,1) = n(CHF_IX[i;j;k],1)
+         n_mat(0,2) = n(CHF_IX[i;j;k],2)
+         n_mat(1,0) = n(CHF_IX[i;j;k],3)
+         n_mat(1,1) = n(CHF_IX[i;j;k],4)
+         n_mat(1,2) = n(CHF_IX[i;j;k],5)
+         n_mat(2,0) = n(CHF_IX[i;j;k],6)
+         n_mat(2,1) = n(CHF_IX[i;j;k],7)
+         n_mat(2,2) = n(CHF_IX[i;j;k],8)
+#else
+         d_mat(0,0) = d_tensor(CHF_IX[i;j;k],0)
+         d_mat(0,1) = d_tensor(CHF_IX[i;j;k],1)
+         d_mat(1,0) = d_tensor(CHF_IX[i;j;k],2)
+         d_mat(1,1) = d_tensor(CHF_IX[i;j;k],3)
+         
+         nji_mat(0,0) = njinverse(CHF_IX[i;j;k],0)
+         nji_mat(0,1) = njinverse(CHF_IX[i;j;k],1)
+         nji_mat(1,0) = njinverse(CHF_IX[i;j;k],2)
+         nji_mat(1,1) = njinverse(CHF_IX[i;j;k],3)
+
+         n_mat(0,0) = n(CHF_IX[i;j;k],0)
+         n_mat(0,1) = n(CHF_IX[i;j;k],1)
+         n_mat(1,0) = n(CHF_IX[i;j;k],2)
+         n_mat(1,1) = n(CHF_IX[i;j;k],3)
+#endif
+
+c        Multiply the coefficient matrix times the NJInverse matrix
+         do row = 0, CH_SPACEDIM-1
+            do col = 0, CH_SPACEDIM-1
+               dnji_mat(row,col) = zero
+               do m = 0, CH_SPACEDIM-1
+                  dnji_mat(row,col) = dnji_mat(row,col) + d_mat(row,m) * nji_mat(m,col)
+               enddo
+            enddo
+         enddo
+
+
+c        Premultiply by the NTranspose matrix
+         do row = 0, CH_SPACEDIM-1
+            do col = 0, CH_SPACEDIM-1
+               coef_mat(row,col) = zero
+               do m = 0, CH_SPACEDIM-1
+                  coef_mat(row,col) = coef_mat(row,col) + n_mat(m,row) * dnji_mat(m,col)
+               enddo
+            enddo
+         enddo
+
+#if CH_SPACEDIM==3
+         coef(CHF_IX[i;j;k],0) = coef_mat(0,0)
+         coef(CHF_IX[i;j;k],1) = coef_mat(0,1)
+         coef(CHF_IX[i;j;k],2) = coef_mat(0,2)
+         coef(CHF_IX[i;j;k],3) = coef_mat(1,0)
+         coef(CHF_IX[i;j;k],4) = coef_mat(1,1)
+         coef(CHF_IX[i;j;k],5) = coef_mat(1,2)
+         coef(CHF_IX[i;j;k],6) = coef_mat(2,0)
+         coef(CHF_IX[i;j;k],7) = coef_mat(2,1)
+         coef(CHF_IX[i;j;k],8) = coef_mat(2,2)
+#else
+         coef(CHF_IX[i;j;k],0) = coef_mat(0,0)
+         coef(CHF_IX[i;j;k],1) = coef_mat(0,1)
+         coef(CHF_IX[i;j;k],2) = coef_mat(1,0)
+         coef(CHF_IX[i;j;k],3) = coef_mat(1,1)
+#endif
+
+      CHF_ENDDO
+
+      return
+      end

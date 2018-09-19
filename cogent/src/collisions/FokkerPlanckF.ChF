@@ -1,0 +1,912 @@
+#include "CONSTANTS.H"
+
+      SUBROUTINE eval_dv( 
+     &                     CHF_FRA1[Dv],
+     &                     CHF_CONST_FRA[phi],
+     &                     CHF_CONST_FRA1[bmag],
+     &                     CHF_BOX[grid],
+     &                     CHF_CONST_REALVECT[dx],
+     &                     CHF_CONST_REAL[mTP],
+     &                     CHF_CONST_REAL[mFP],
+     &                     CHF_CONST_INT[Nvpar],
+     &                     CHF_CONST_INT[Nmu]
+     &                  )
+
+!     Local Variables
+      INTEGER           CHF_DDECL[i;j;k;l;m]
+      DOUBLE PRECISION  dv_inv, b, h_v
+      DOUBLE PRECISION, PARAMETER :: c1 = 1.0_8 / 24.0_8,
+     &                               c2 = 9.0_8 / 8.0_8
+
+!     First executable statement
+      dv_inv = (1.0_8/dx(0))
+
+#if CH_SPACEDIM==5
+      CHF_MULTIDO[grid;i;j;m;k;l]
+
+        IF ((k .EQ. -Nvpar/2) .OR. (k .EQ. Nvpar/2)) THEN
+
+          Dv(CHF_IX[i;j;m;k;l]) = 0.0_8
+
+        ELSE
+        
+          h_v = dv_inv * (
+     &                        c1 * phi(CHF_IX[i;j;m;k-2;l],0)
+     &                      - c2 * phi(CHF_IX[i;j;m;k-1;l],0)
+     &                      + c2 * phi(CHF_IX[i;j;m;k  ;l],0)
+     &                      - c1 * phi(CHF_IX[i;j;m;k+1;l],0)
+     &                   )
+
+          Dv(CHF_IX[i;j;m;k;l]) = (mTP/mFP) * h_v;
+
+        ENDIF
+
+      CHF_ENDDO
+#else
+      CHF_MULTIDO[grid;i;j;k;l]
+
+        IF ((k .EQ. -Nvpar/2) .OR. (k .EQ. Nvpar/2)) THEN
+
+          Dv(CHF_IX[i;j;k;l]) = 0.0_8
+
+        ELSE
+        
+          h_v = dv_inv * (
+     &                        c1 * phi(CHF_IX[i;j;k-2;l],0)
+     &                      - c2 * phi(CHF_IX[i;j;k-1;l],0)
+     &                      + c2 * phi(CHF_IX[i;j;k  ;l],0)
+     &                      - c1 * phi(CHF_IX[i;j;k+1;l],0)
+     &                   )
+
+          Dv(CHF_IX[i;j;k;l]) = (mTP/mFP) * h_v;
+
+        ENDIF
+
+      CHF_ENDDO
+#endif
+
+      RETURN
+
+      END SUBROUTINE !eval_dv
+
+      SUBROUTINE eval_dmu( 
+     &                     CHF_FRA1[Dmu],
+     &                     CHF_CONST_FRA[phi],
+     &                     CHF_CONST_FRA1[bmag],
+     &                     CHF_BOX[grid],
+     &                     CHF_CONST_REALVECT[dx],
+     &                     CHF_CONST_REAL[mTP],
+     &                     CHF_CONST_REAL[mFP],
+     &                     CHF_CONST_INT[Nvpar],
+     &                     CHF_CONST_INT[Nmu]
+     &                   )
+
+!     Local Variables
+      INTEGER           CHF_DDECL[i;j;k;l;m]
+      DOUBLE PRECISION  dmu_inv, b, mu, h_mu
+      DOUBLE PRECISION, PARAMETER :: c1 = 1.0_8 / 24.0_8,
+     &                               c2 = 9.0_8 / 8.0_8
+
+!     First executable statement
+      dmu_inv = (1.0_8/dx(1))
+
+#if CH_SPACEDIM==5
+      CHF_MULTIDO[grid;i;j;m;k;l]
+ 
+        IF ((l .EQ. 0) .OR. (l .EQ. Nmu)) THEN
+
+          Dmu(CHF_IX[i;j;m;k;l]) = 0.0_8
+
+        ELSE
+        
+          mu = l*dx(1)
+          b = bmag(i,j,m,CHF_LBOUND[bmag;3],CHF_LBOUND[bmag;4])
+
+          h_mu = dmu_inv * (
+     &                         c1 * phi(CHF_IX[i;j;m;k;l-2],0)
+     &                       - c2 * phi(CHF_IX[i;j;m;k;l-1],0)
+     &                       + c2 * phi(CHF_IX[i;j;m;k;l  ],0)
+     &                       - c1 * phi(CHF_IX[i;j;m;k;l+1],0)
+     &                     )
+
+          Dmu(CHF_IX[i;j;m;k;l]) = 2.0_8 * (mTP/mFP) * (mTP/b) * mu * h_mu
+
+        ENDIF
+
+      CHF_ENDDO
+#else
+      CHF_MULTIDO[grid;i;j;k;l]
+ 
+        IF ((l .EQ. 0) .OR. (l .EQ. Nmu)) THEN
+
+          Dmu(CHF_IX[i;j;k;l]) = 0.0_8
+
+        ELSE
+        
+          mu = l*dx(1)
+          b = bmag(i,j,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+
+          h_mu = dmu_inv * (
+     &                         c1 * phi(CHF_IX[i;j;k;l-2],0)
+     &                       - c2 * phi(CHF_IX[i;j;k;l-1],0)
+     &                       + c2 * phi(CHF_IX[i;j;k;l  ],0)
+     &                       - c1 * phi(CHF_IX[i;j;k;l+1],0)
+     &                     )
+
+          Dmu(CHF_IX[i;j;k;l]) = 2.0_8 * (mTP/mFP) * (mTP/b) * mu * h_mu
+
+        ENDIF
+
+      CHF_ENDDO
+#endif
+
+      RETURN
+
+      END SUBROUTINE !eval_dmu
+
+      SUBROUTINE eval_dvv( 
+     &                     CHF_FRA1[Dvv],
+     &                     CHF_CONST_FRA[phi],
+     &                     CHF_CONST_FRA1[bmag],
+     &                     CHF_BOX[grid],
+     &                     CHF_CONST_REALVECT[dx],
+     &                     CHF_CONST_REAL[mTP],
+     &                     CHF_CONST_REAL[mFP],
+     &                     CHF_CONST_INT[Nvpar],
+     &                     CHF_CONST_INT[Nmu]
+     &                   )
+
+!     Local Variables
+      INTEGER           CHF_DDECL[i;j;k;l;m]
+      DOUBLE PRECISION  dvsq_inv, g_vv1, g_vv2
+      DOUBLE PRECISION, PARAMETER :: d1 = 1.0_8/12.0_8,
+     &                               d2 = 4.0_8/3.0_8,
+     &                               d3 = 5.0_8/2.0_8
+
+!     First executable statement
+      dvsq_inv = (1.0_8/dx(0)) * (1.0_8/dx(0))
+
+#if CH_SPACEDIM==5
+      CHF_MULTIDO[grid;i;j;m;k;l]
+
+        IF ((k .EQ. -Nvpar/2) .OR. (k .EQ. Nvpar/2)) THEN
+
+          Dvv(CHF_IX[i;j;m;k;l]) = 0.0_8
+
+        ELSE
+
+          g_vv1 = dvsq_inv * (
+     &                          - d1 * phi(CHF_IX[i;j;m;k+1;l],1) 
+     &                          + d2 * phi(CHF_IX[i;j;m;k  ;l],1) 
+     &                          - d3 * phi(CHF_IX[i;j;m;k-1;l],1) 
+     &                          + d2 * phi(CHF_IX[i;j;m;k-2;l],1)
+     &                          - d1 * phi(CHF_IX[i;j;m;k-3;l],1) 
+     &                       )
+          g_vv2 = dvsq_inv * (
+     &                          - d1 * phi(CHF_IX[i;j;m;k+2;l],1) 
+     &                          + d2 * phi(CHF_IX[i;j;m;k+1;l],1) 
+     &                          - d3 * phi(CHF_IX[i;j;m;k  ;l],1) 
+     &                          + d2 * phi(CHF_IX[i;j;m;k-1;l],1)
+     &                          - d1 * phi(CHF_IX[i;j;m;k-2;l],1) 
+     &                       )
+
+          Dvv(CHF_IX[i;j;m;k;l]) = -0.5_8 * (g_vv1 + g_vv2)
+
+        ENDIF
+
+      CHF_ENDDO
+#else
+      CHF_MULTIDO[grid;i;j;k;l]
+
+        IF ((k .EQ. -Nvpar/2) .OR. (k .EQ. Nvpar/2)) THEN
+
+          Dvv(CHF_IX[i;j;k;l]) = 0.0_8
+
+        ELSE
+
+          g_vv1 = dvsq_inv * (
+     &                          - d1 * phi(CHF_IX[i;j;k+1;l],1) 
+     &                          + d2 * phi(CHF_IX[i;j;k  ;l],1) 
+     &                          - d3 * phi(CHF_IX[i;j;k-1;l],1) 
+     &                          + d2 * phi(CHF_IX[i;j;k-2;l],1)
+     &                          - d1 * phi(CHF_IX[i;j;k-3;l],1) 
+     &                       )
+          g_vv2 = dvsq_inv * (
+     &                          - d1 * phi(CHF_IX[i;j;k+2;l],1) 
+     &                          + d2 * phi(CHF_IX[i;j;k+1;l],1) 
+     &                          - d3 * phi(CHF_IX[i;j;k  ;l],1) 
+     &                          + d2 * phi(CHF_IX[i;j;k-1;l],1)
+     &                          - d1 * phi(CHF_IX[i;j;k-2;l],1) 
+     &                       )
+
+          Dvv(CHF_IX[i;j;k;l]) = -0.5_8 * (g_vv1 + g_vv2)
+
+        ENDIF
+
+      CHF_ENDDO
+#endif
+
+      RETURN
+
+      END SUBROUTINE !eval_dvv
+
+      SUBROUTINE eval_dmumu( 
+     &                       CHF_FRA1[Dmumu],
+     &                       CHF_CONST_FRA[phi],
+     &                       CHF_CONST_FRA1[bmag],
+     &                       CHF_BOX[grid],
+     &                       CHF_CONST_REALVECT[dx],
+     &                       CHF_CONST_REAL[mTP],
+     &                       CHF_CONST_REAL[mFP],
+     &                       CHF_CONST_INT[Nvpar],
+     &                       CHF_CONST_INT[Nmu]
+     &                     )
+
+!     Local Variables
+      INTEGER           CHF_DDECL[i;j;k;l;m]
+      DOUBLE PRECISION  dmu_inv, dmusq_inv, b, mu, g_mu, g_mumu1, g_mumu2, g_mumu
+      DOUBLE PRECISION, PARAMETER :: d1 = 1.0_8/12.0_8,
+     &                               d2 = 4.0_8/3.0_8,
+     &                               d3 = 5.0_8/2.0_8,
+     &                               c1 = 1.0_8 / 24.0_8,
+     &                               c2 = 9.0_8 / 8.0_8
+
+!     First executable statement
+      dmu_inv = (1.0_8/dx(1))
+      dmusq_inv = dmu_inv * dmu_inv
+
+#if CH_SPACEDIM==5
+      CHF_MULTIDO[grid;i;j;m;k;l]
+
+        IF ((l .EQ. 0) .OR. (l .EQ. Nmu)) THEN
+
+          Dmumu(CHF_IX[i;j;m;k;l]) = 0.0_8
+
+        ELSE
+        
+          mu      = l*dx(1)
+          b       = bmag(i,j,m,CHF_LBOUND[bmag;3],CHF_LBOUND[bmag;4])
+
+          g_mu = dmu_inv * (
+     &                         c1 * phi(CHF_IX[i;j;m;k;l-2],1)
+     &                       - c2 * phi(CHF_IX[i;j;m;k;l-1],1)
+     &                       + c2 * phi(CHF_IX[i;j;m;k;l  ],1)
+     &                       - c1 * phi(CHF_IX[i;j;m;k;l+1],1)
+     &                     )
+          g_mumu1 = dmusq_inv * (
+     &                            - d1 * phi(CHF_IX[i;j;m;k;l-3],1)
+     &                            + d2 * phi(CHF_IX[i;j;m;k;l-2],1)
+     &                            - d3 * phi(CHF_IX[i;j;m;k;l-1],1)
+     &                            + d2 * phi(CHF_IX[i;j;m;k;l  ],1)
+     &                            - d1 * phi(CHF_IX[i;j;m;k;l+1],1)
+     &                          )
+          g_mumu2 = dmusq_inv * (
+     &                            - d1 * phi(CHF_IX[i;j;m;k;l-2],1)
+     &                            + d2 * phi(CHF_IX[i;j;m;k;l-1],1)
+     &                            - d3 * phi(CHF_IX[i;j;m;k;l  ],1)
+     &                            + d2 * phi(CHF_IX[i;j;m;k;l+1],1)
+     &                            - d1 * phi(CHF_IX[i;j;m;k;l+2],1)
+     &                          )
+          
+          g_mumu  = 0.5_8 * (g_mumu1 + g_mumu2)
+          Dmumu(CHF_IX[i;j;m;k;l]) = -(2.0_8*mTP*mTP*mu/(b*b)) * (2.0_8*mu*g_mumu + g_mu)
+
+        ENDIF
+
+      CHF_ENDDO
+#else
+      CHF_MULTIDO[grid;i;j;k;l]
+
+        IF ((l .EQ. 0) .OR. (l .EQ. Nmu)) THEN
+
+          Dmumu(CHF_IX[i;j;k;l]) = 0.0_8
+
+        ELSE
+        
+          mu      = l*dx(1)
+          b       = bmag(i,j,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+
+          g_mu = dmu_inv * (
+     &                         c1 * phi(CHF_IX[i;j;k;l-2],1)
+     &                       - c2 * phi(CHF_IX[i;j;k;l-1],1)
+     &                       + c2 * phi(CHF_IX[i;j;k;l  ],1)
+     &                       - c1 * phi(CHF_IX[i;j;k;l+1],1)
+     &                     )
+          g_mumu1 = dmusq_inv * (
+     &                            - d1 * phi(CHF_IX[i;j;k;l-3],1)
+     &                            + d2 * phi(CHF_IX[i;j;k;l-2],1)
+     &                            - d3 * phi(CHF_IX[i;j;k;l-1],1)
+     &                            + d2 * phi(CHF_IX[i;j;k;l  ],1)
+     &                            - d1 * phi(CHF_IX[i;j;k;l+1],1)
+     &                          )
+          g_mumu2 = dmusq_inv * (
+     &                            - d1 * phi(CHF_IX[i;j;k;l-2],1)
+     &                            + d2 * phi(CHF_IX[i;j;k;l-1],1)
+     &                            - d3 * phi(CHF_IX[i;j;k;l  ],1)
+     &                            + d2 * phi(CHF_IX[i;j;k;l+1],1)
+     &                            - d1 * phi(CHF_IX[i;j;k;l+2],1)
+     &                          )
+          
+          g_mumu  = 0.5_8 * (g_mumu1 + g_mumu2)
+          Dmumu(CHF_IX[i;j;k;l]) = -(2.0_8*mTP*mTP*mu/(b*b)) * (2.0_8*mu*g_mumu + g_mu)
+
+        ENDIF
+
+      CHF_ENDDO
+#endif
+
+      RETURN
+
+      END SUBROUTINE !eval_dmumu
+
+      SUBROUTINE eval_dvmu( 
+     &                      CHF_FRA1[Dvmu],
+     &                      CHF_CONST_FRA[phi],
+     &                      CHF_CONST_FRA1[bmag],
+     &                      CHF_BOX[grid],
+     &                      CHF_CONST_REALVECT[dx],
+     &                      CHF_CONST_REAL[mTP],
+     &                      CHF_CONST_REAL[mFP],
+     &                      CHF_CONST_INT[Nvpar],
+     &                      CHF_CONST_INT[Nmu]
+     &                    )
+
+!     Local Variables
+      INTEGER           CHF_DDECL[i;j;k;l;m]
+      DOUBLE PRECISION  dvpar_inv, dmu_inv, g_vmu, b, mu,
+     &                  g_mu_km3, g_mu_km2, g_mu_km1, g_mu_k, g_mu_kp1, g_mu_kp2
+      DOUBLE PRECISION, PARAMETER :: c1 = 1.0_8 / 24.0_8,
+     &                               c2 = 9.0_8 / 8.0_8
+
+!     First executable statement
+      dvpar_inv = (1.0_8/dx(0))
+      dmu_inv   = (1.0_8/dx(1))
+
+#if CH_SPACEDIM==5
+      CHF_MULTIDO[grid;i;j;m;k;l]
+
+        IF ((l .EQ. 0) .OR. (l .EQ. Nmu) .OR. (k .EQ. -Nvpar/2) .OR. (k .EQ. Nvpar/2)) THEN
+
+          Dvmu(CHF_IX[i;j;m;k;l]) = 0.0_8
+
+        ELSE
+
+          mu      = l*dx(1)
+          b       = bmag(i,j,m,CHF_LBOUND[bmag;3],CHF_LBOUND[bmag;4])
+
+          g_mu_km2 = dmu_inv * (
+     &                              c1 * phi(CHF_IX[i;j;m;k-2;l-2],1)
+     &                            - c2 * phi(CHF_IX[i;j;m;k-2;l-1],1)
+     &                            + c2 * phi(CHF_IX[i;j;m;k-2;l  ],1)
+     &                            - c1 * phi(CHF_IX[i;j;m;k-2;l+1],1)
+     &                         ) 
+          g_mu_km1 = dmu_inv * (
+     &                              c1 * phi(CHF_IX[i;j;m;k-1;l-2],1)
+     &                            - c2 * phi(CHF_IX[i;j;m;k-1;l-1],1)
+     &                            + c2 * phi(CHF_IX[i;j;m;k-1;l  ],1)
+     &                            - c1 * phi(CHF_IX[i;j;m;k-1;l+1],1)
+     &                         ) 
+          g_mu_k   = dmu_inv * (
+     &                              c1 * phi(CHF_IX[i;j;m;k;l-2],1)
+     &                            - c2 * phi(CHF_IX[i;j;m;k;l-1],1)
+     &                            + c2 * phi(CHF_IX[i;j;m;k;l  ],1)
+     &                            - c1 * phi(CHF_IX[i;j;m;k;l+1],1)
+     &                         ) 
+          g_mu_kp1 = dmu_inv * (
+     &                              c1 * phi(CHF_IX[i;j;m;k+1;l-2],1)
+     &                            - c2 * phi(CHF_IX[i;j;m;k+1;l-1],1)
+     &                            + c2 * phi(CHF_IX[i;j;m;k+1;l  ],1)
+     &                            - c1 * phi(CHF_IX[i;j;m;k+1;l+1],1)
+     &                         ) 
+          g_vmu = dvpar_inv * (
+     &                            c1 * g_mu_km2
+     &                          - c2 * g_mu_km1
+     &                          + c2 * g_mu_k  
+     &                          - c1 * g_mu_kp1
+     &                        )
+
+          Dvmu(CHF_IX[i;j;m;k;l]) = -2.0_8 * (mTP*mu/b) * g_vmu
+
+        ENDIF
+
+      CHF_ENDDO
+#else
+      CHF_MULTIDO[grid;i;j;k;l]
+
+        IF ((l .EQ. 0) .OR. (l .EQ. Nmu) .OR. (k .EQ. -Nvpar/2) .OR. (k .EQ. Nvpar/2)) THEN
+
+          Dvmu(CHF_IX[i;j;k;l]) = 0.0_8
+
+        ELSE
+
+          mu      = l*dx(1)
+          b       = bmag(i,j,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+
+          g_mu_km2 = dmu_inv * (
+     &                              c1 * phi(CHF_IX[i;j;k-2;l-2],1)
+     &                            - c2 * phi(CHF_IX[i;j;k-2;l-1],1)
+     &                            + c2 * phi(CHF_IX[i;j;k-2;l  ],1)
+     &                            - c1 * phi(CHF_IX[i;j;k-2;l+1],1)
+     &                         ) 
+          g_mu_km1 = dmu_inv * (
+     &                              c1 * phi(CHF_IX[i;j;k-1;l-2],1)
+     &                            - c2 * phi(CHF_IX[i;j;k-1;l-1],1)
+     &                            + c2 * phi(CHF_IX[i;j;k-1;l  ],1)
+     &                            - c1 * phi(CHF_IX[i;j;k-1;l+1],1)
+     &                         ) 
+          g_mu_k   = dmu_inv * (
+     &                              c1 * phi(CHF_IX[i;j;k;l-2],1)
+     &                            - c2 * phi(CHF_IX[i;j;k;l-1],1)
+     &                            + c2 * phi(CHF_IX[i;j;k;l  ],1)
+     &                            - c1 * phi(CHF_IX[i;j;k;l+1],1)
+     &                         ) 
+          g_mu_kp1 = dmu_inv * (
+     &                              c1 * phi(CHF_IX[i;j;k+1;l-2],1)
+     &                            - c2 * phi(CHF_IX[i;j;k+1;l-1],1)
+     &                            + c2 * phi(CHF_IX[i;j;k+1;l  ],1)
+     &                            - c1 * phi(CHF_IX[i;j;k+1;l+1],1)
+     &                         ) 
+          g_vmu = dvpar_inv * (
+     &                            c1 * g_mu_km2
+     &                          - c2 * g_mu_km1
+     &                          + c2 * g_mu_k  
+     &                          - c1 * g_mu_kp1
+     &                        )
+
+          Dvmu(CHF_IX[i;j;k;l]) = -2.0_8 * (mTP*mu/b) * g_vmu
+
+        ENDIF
+
+      CHF_ENDDO
+#endif
+
+      RETURN
+
+      END SUBROUTINE !eval_dvmu
+
+      SUBROUTINE flux_vpar(
+     &                       CHF_FRA[flux],
+     &                       CHF_CONST_FRA1[Dv],
+     &                       CHF_CONST_FRA1[Dvv],
+     &                       CHF_CONST_FRA1[Dvmu],
+     &                       CHF_CONST_FRA[dfn],
+     &                       CHF_CONST_FRA[dfn_f],
+     &                       CHF_BOX[grid],
+     &                       CHF_CONST_REALVECT[dx],
+     &                       CHF_CONST_INT[Nvpar],
+     &                       CHF_CONST_INT[Nmu],
+     &                       CHF_CONST_INT[flag]
+     &                    )
+
+!     Local Variables
+      INTEGER           CHF_DDECL[i;j;k;l;m]
+      DOUBLE PRECISION  dvpar_inv, dmu_inv, alpha, dfn_face, D_vv, f_v, D_vmu_times_f_mu,
+     &                  f_mu_1, f_mu_2, f_mu_11, f_mu_12, f_mu_21, f_mu_22 
+      DOUBLE PRECISION  mc !FPLimitersF.ChF
+      DOUBLE PRECISION, PARAMETER :: c1 = 1.0_8 / 24.0_8,
+     &                               c2 = 9.0_8 / 8.0_8
+
+!     First executable statement
+      dvpar_inv = 1.0_8 / dx(0)
+      dmu_inv   = 1.0_8 / dx(1)
+
+#if CH_SPACEDIM==5
+      CHF_MULTIDO[grid;i;j;m;k;l]
+
+        alpha = Dv(CHF_IX[i;j;m;k;l])
+        dfn_face = dfn_f(CHF_IX[i;j;m;k;l],0)
+
+        D_vv  = Dvv(CHF_IX[i;j;m;k;l])
+!       The following chunk is exactly implemented by the preconditioner. 
+!       Uncomment it to debug preconditioner matrix entries          
+!        f_v   = dvpar_inv * (dfn(CHF_IX[i;j;m;k;l],0) - dfn(CHF_IX[i;j;m;k-1;l],0))
+        f_v   = dvpar_inv * (
+     &                          c1 * dfn(CHF_IX[i;j;m;k-2;l],0) 
+     &                        - c2 * dfn(CHF_IX[i;j;m;k-1;l],0) 
+     &                        + c2 * dfn(CHF_IX[i;j;m;k  ;l],0) 
+     &                        - c1 * dfn(CHF_IX[i;j;m;k+1;l],0) 
+     &                      )
+
+        IF (flag .EQ. 0) THEN
+!         The following chunk is exactly implemented by the preconditioner. 
+!         Uncomment it to debug preconditioner matrix entries          
+!          D_vmu_times_f_mu  = 0.25_8 * Dvmu(CHF_IX[i;j;m;k;l])* dmu_inv 
+!     &                               * (dfn(CHF_IX[i;j;m;k-1;l],0)-dfn(CHF_IX[i;j;m;k-1;l-1],0) + dfn(CHF_IX[i;j;m;k;l],0)-dfn(CHF_IX[i;j;m;k;l-1],0)) 
+!     &                      + 0.25_8 * Dvmu(CHF_IX[i;j;m;k;l+1]) * dmu_inv 
+!     &                               * (dfn(CHF_IX[i;j;m;k-1;l+1],0)-dfn(CHF_IX[i;j;m;k-1;l],0) + dfn(CHF_IX[i;j;m;k;l+1],0)-dfn(CHF_IX[i;j;m;k;l],0)) 
+          f_mu_11 = dmu_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;m;k-1;l-2],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;m;k-1;l-1],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;m;k-1;l  ],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;m;k-1;l+1],0) 
+     &                        )
+          f_mu_12 = dmu_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;m;k;l-2],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;m;k;l-1],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;m;k;l  ],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;m;k;l+1],0) 
+     &                        )
+          f_mu_21 = dmu_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;m;k-1;l-1],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;m;k-1;l  ],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;m;k-1;l+1],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;m;k-1;l+2],0) 
+     &                        )
+          f_mu_22 = dmu_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;m;k;l-1],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;m;k;l  ],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;m;k;l+1],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;m;k;l+2],0) 
+     &                        )
+          f_mu_1 = 0.5_8 * (f_mu_11 + f_mu_12)
+          f_mu_2 = 0.5_8 * (f_mu_21 + f_mu_22)
+          D_vmu_times_f_mu  = 0.5_8 * ( Dvmu(CHF_IX[i;j;m;k;l]) * f_mu_1 + Dvmu(CHF_IX[i;j;m;k;l+1]) * f_mu_2 )
+
+        ELSE
+          D_vmu_times_f_mu = mc( 
+     &                            Dvmu(CHF_IX[i;j;m;k;l]) 
+     &                            * mc(
+     &                                  dmu_inv*(dfn(CHF_IX[i;j;m;k-1;l],0)-dfn(CHF_IX[i;j;m;k-1;l-1],0)),
+     &                                  dmu_inv*(dfn(CHF_IX[i;j;m;k;l],0)-dfn(CHF_IX[i;j;m;k;l-1],0))
+     &                                ), 
+     &                            Dvmu(CHF_IX[i;j;m;k;l+1])
+     &                            * mc(
+     &                                  dmu_inv*(dfn(CHF_IX[i;j;m;k-1;l+1],0)-dfn(CHF_IX[i;j;m;k-1;l],0)),
+     &                                  dmu_inv*(dfn(CHF_IX[i;j;m;k;l+1],0)-dfn(CHF_IX[i;j;m;k;l],0))
+     &                                ) 
+     &                        )
+        ENDIF
+
+        flux(CHF_IX[i;j;m;k;l],0) = alpha*dfn_face
+        flux(CHF_IX[i;j;m;k;l],1) = D_vv*f_v + 2.0_8*D_vmu_times_f_mu
+
+      CHF_ENDDO
+#else
+      CHF_MULTIDO[grid;i;j;k;l]
+
+        alpha = Dv(CHF_IX[i;j;k;l])
+        dfn_face = dfn_f(CHF_IX[i;j;k;l],0)
+
+        D_vv  = Dvv(CHF_IX[i;j;k;l])
+!       The following chunk is exactly implemented by the preconditioner. 
+!       Uncomment it to debug preconditioner matrix entries          
+!        f_v   = dvpar_inv * (dfn(CHF_IX[i;j;k;l],0) - dfn(CHF_IX[i;j;k-1;l],0))
+        f_v   = dvpar_inv * (
+     &                          c1 * dfn(CHF_IX[i;j;k-2;l],0) 
+     &                        - c2 * dfn(CHF_IX[i;j;k-1;l],0) 
+     &                        + c2 * dfn(CHF_IX[i;j;k  ;l],0) 
+     &                        - c1 * dfn(CHF_IX[i;j;k+1;l],0) 
+     &                      )
+
+        IF (flag .EQ. 0) THEN
+!         The following chunk is exactly implemented by the preconditioner. 
+!         Uncomment it to debug preconditioner matrix entries          
+!          D_vmu_times_f_mu  = 0.25_8 * Dvmu(CHF_IX[i;j;k;l])* dmu_inv 
+!     &                               * (dfn(CHF_IX[i;j;k-1;l],0)-dfn(CHF_IX[i;j;k-1;l-1],0) + dfn(CHF_IX[i;j;k;l],0)-dfn(CHF_IX[i;j;k;l-1],0)) 
+!     &                      + 0.25_8 * Dvmu(CHF_IX[i;j;k;l+1]) * dmu_inv 
+!     &                               * (dfn(CHF_IX[i;j;k-1;l+1],0)-dfn(CHF_IX[i;j;k-1;l],0) + dfn(CHF_IX[i;j;k;l+1],0)-dfn(CHF_IX[i;j;k;l],0)) 
+          f_mu_11 = dmu_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;k-1;l-2],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;k-1;l-1],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;k-1;l  ],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;k-1;l+1],0) 
+     &                        )
+          f_mu_12 = dmu_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;k;l-2],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;k;l-1],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;k;l  ],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;k;l+1],0) 
+     &                        )
+          f_mu_21 = dmu_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;k-1;l-1],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;k-1;l  ],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;k-1;l+1],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;k-1;l+2],0) 
+     &                        )
+          f_mu_22 = dmu_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;k;l-1],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;k;l  ],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;k;l+1],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;k;l+2],0) 
+     &                        )
+          f_mu_1 = 0.5_8 * (f_mu_11 + f_mu_12)
+          f_mu_2 = 0.5_8 * (f_mu_21 + f_mu_22)
+          D_vmu_times_f_mu  = 0.5_8 * ( Dvmu(CHF_IX[i;j;k;l]) * f_mu_1 + Dvmu(CHF_IX[i;j;k;l+1]) * f_mu_2 )
+
+        ELSE
+          D_vmu_times_f_mu = mc( 
+     &                            Dvmu(CHF_IX[i;j;k;l]) 
+     &                            * mc(
+     &                                  dmu_inv*(dfn(CHF_IX[i;j;k-1;l],0)-dfn(CHF_IX[i;j;k-1;l-1],0)),
+     &                                  dmu_inv*(dfn(CHF_IX[i;j;k;l],0)-dfn(CHF_IX[i;j;k;l-1],0))
+     &                                ), 
+     &                            Dvmu(CHF_IX[i;j;k;l+1])
+     &                            * mc(
+     &                                  dmu_inv*(dfn(CHF_IX[i;j;k-1;l+1],0)-dfn(CHF_IX[i;j;k-1;l],0)),
+     &                                  dmu_inv*(dfn(CHF_IX[i;j;k;l+1],0)-dfn(CHF_IX[i;j;k;l],0))
+     &                                ) 
+     &                        )
+        ENDIF
+
+        flux(CHF_IX[i;j;k;l],0) = alpha*dfn_face
+        flux(CHF_IX[i;j;k;l],1) = D_vv*f_v + 2.0_8*D_vmu_times_f_mu
+
+      CHF_ENDDO
+#endif
+
+      RETURN
+
+      END SUBROUTINE !flux_vpar
+
+      SUBROUTINE flux_mu(
+     &                     CHF_FRA[flux],
+     &                     CHF_CONST_FRA1[Dmu],
+     &                     CHF_CONST_FRA1[Dmumu],
+     &                     CHF_CONST_FRA1[Dvmu],
+     &                     CHF_CONST_FRA[dfn],
+     &                     CHF_CONST_FRA[dfn_f],
+     &                     CHF_BOX[grid],
+     &                     CHF_CONST_REALVECT[dx],
+     &                     CHF_CONST_INT[Nvpar],
+     &                     CHF_CONST_INT[Nmu],
+     &                     CHF_CONST_INT[flag]
+     &                  )
+
+!     Local Variables
+      INTEGER           CHF_DDECL[i;j;k;l;m]
+      DOUBLE PRECISION  dvpar_inv, dmu_inv, alpha, dfn_face, D_mumu, f_mu, D_vmu_times_f_v,
+     &                  f_v_1, f_v_2, f_v_11, f_v_12, f_v_21, f_v_22 
+      DOUBLE PRECISION  mc !FPLimitersF.ChF
+      DOUBLE PRECISION, PARAMETER :: c1 = 1.0_8 / 24.0_8,
+     &                               c2 = 9.0_8 / 8.0_8
+
+!     First executable statement
+      dvpar_inv = 1.0_8 / dx(0)
+      dmu_inv   = 1.0_8 / dx(1)
+
+#if CH_SPACEDIM==5
+      CHF_MULTIDO[grid;i;j;m;k;l]
+
+        alpha = Dmu(CHF_IX[i;j;m;k;l])
+        dfn_face = dfn_f(CHF_IX[i;j;m;k;l],0)
+
+        D_mumu  = Dmumu(CHF_IX[i;j;m;k;l])
+!       The following chunk is exactly implemented by the preconditioner. 
+!       Uncomment it to debug preconditioner matrix entries          
+!        f_mu    = dmu_inv * (dfn(CHF_IX[i;j;m;k;l],0) - dfn(CHF_IX[i;j;m;k;l-1],0))
+        f_mu  = dmu_inv * (
+     &                        c1 * dfn(CHF_IX[i;j;m;k;l-2],0)
+     &                      - c2 * dfn(CHF_IX[i;j;m;k;l-1],0) 
+     &                      + c2 * dfn(CHF_IX[i;j;m;k;l  ],0) 
+     &                      - c1 * dfn(CHF_IX[i;j;m;k;l+1],0) 
+     &                    )
+
+        IF (flag .EQ. 0) THEN
+!         The following chunk is exactly implemented by the preconditioner. 
+!         Uncomment it to debug preconditioner matrix entries          
+!          D_vmu_times_f_v = 0.25_8 * Dvmu(CHF_IX[i;j;m;k;l])   * dvpar_inv 
+!     &                             * (dfn(CHF_IX[i;j;m;k;l-1],0)-dfn(CHF_IX[i;j;m;k-1;l-1],0) + dfn(CHF_IX[i;j;m;k;l],0)-dfn(CHF_IX[i;j;m;k-1;l],0))
+!     &                    + 0.25_8 * Dvmu(CHF_IX[i;j;m;k+1;l]) * dvpar_inv 
+!     &                             * (dfn(CHF_IX[i;j;m;k+1;l-1],0)-dfn(CHF_IX[i;j;m;k;l-1],0) + dfn(CHF_IX[i;j;m;k+1;l],0)-dfn(CHF_IX[i;j;m;k;l],0))
+          f_v_11 = dvpar_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;m;k-2;l-1],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;m;k-1;l-1],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;m;k  ;l-1],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;m;k+1;l-1],0) 
+     &                         )
+          f_v_12 = dvpar_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;m;k-2;l],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;m;k-1;l],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;m;k  ;l],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;m;k+1;l],0) 
+     &                         )
+          f_v_21 = dvpar_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;m;k-1;l-1],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;m;k  ;l-1],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;m;k+1;l-1],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;m;k+2;l-1],0) 
+     &                         )
+          f_v_22 = dvpar_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;m;k-1;l],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;m;k  ;l],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;m;k+1;l],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;m;k+2;l],0) 
+     &                         )
+          f_v_1 = 0.5_8 * (f_v_11 + f_v_12)
+          f_v_2 = 0.5_8 * (f_v_21 + f_v_22)
+          D_vmu_times_f_v = 0.5_8 * ( Dvmu(CHF_IX[i;j;m;k;l]) * f_v_1 + Dvmu(CHF_IX[i;j;m;k+1;l]) * f_v_2 )
+
+        ELSE
+          D_vmu_times_f_v = mc(
+     &                          Dvmu(CHF_IX[i;j;m;k;l])
+     &                          * mc(
+     &                                dvpar_inv * (dfn(CHF_IX[i;j;m;k;l-1],0)-dfn(CHF_IX[i;j;m;k-1;l-1],0)),
+     &                                dvpar_inv * (dfn(CHF_IX[i;j;m;k;l],0)-dfn(CHF_IX[i;j;m;k-1;l],0))
+     &                              ),
+     &                          Dvmu(CHF_IX[i;j;m;k+1;l])
+     &                          * mc(
+     &                                dvpar_inv * (dfn(CHF_IX[i;j;m;k+1;l-1],0)-dfn(CHF_IX[i;j;m;k;l-1],0)),
+     &                                dvpar_inv * (dfn(CHF_IX[i;j;m;k+1;l],0)-dfn(CHF_IX[i;j;m;k;l],0))
+     &                              )
+     &                        )
+        ENDIF
+
+        flux(CHF_IX[i;j;m;k;l],0) = 2.0_8 * alpha*dfn_face
+        flux(CHF_IX[i;j;m;k;l],1) = 2.0_8 * (D_vmu_times_f_v + 2.0_8*D_mumu*f_mu)
+
+      CHF_ENDDO
+#else
+      CHF_MULTIDO[grid;i;j;k;l]
+
+        alpha = Dmu(CHF_IX[i;j;k;l])
+        dfn_face = dfn_f(CHF_IX[i;j;k;l],0)
+
+        D_mumu  = Dmumu(CHF_IX[i;j;k;l])
+!       The following chunk is exactly implemented by the preconditioner. 
+!       Uncomment it to debug preconditioner matrix entries          
+!        f_mu    = dmu_inv * (dfn(CHF_IX[i;j;k;l],0) - dfn(CHF_IX[i;j;k;l-1],0))
+        f_mu  = dmu_inv * (
+     &                        c1 * dfn(CHF_IX[i;j;k;l-2],0)
+     &                      - c2 * dfn(CHF_IX[i;j;k;l-1],0) 
+     &                      + c2 * dfn(CHF_IX[i;j;k;l  ],0) 
+     &                      - c1 * dfn(CHF_IX[i;j;k;l+1],0) 
+     &                    )
+
+        IF (flag .EQ. 0) THEN
+!         The following chunk is exactly implemented by the preconditioner. 
+!         Uncomment it to debug preconditioner matrix entries          
+!          D_vmu_times_f_v = 0.25_8 * Dvmu(CHF_IX[i;j;k;l])   * dvpar_inv 
+!     &                             * (dfn(CHF_IX[i;j;k;l-1],0)-dfn(CHF_IX[i;j;k-1;l-1],0) + dfn(CHF_IX[i;j;k;l],0)-dfn(CHF_IX[i;j;k-1;l],0))
+!     &                    + 0.25_8 * Dvmu(CHF_IX[i;j;k+1;l]) * dvpar_inv 
+!     &                             * (dfn(CHF_IX[i;j;k+1;l-1],0)-dfn(CHF_IX[i;j;k;l-1],0) + dfn(CHF_IX[i;j;k+1;l],0)-dfn(CHF_IX[i;j;k;l],0))
+          f_v_11 = dvpar_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;k-2;l-1],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;k-1;l-1],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;k  ;l-1],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;k+1;l-1],0) 
+     &                         )
+          f_v_12 = dvpar_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;k-2;l],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;k-1;l],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;k  ;l],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;k+1;l],0) 
+     &                         )
+          f_v_21 = dvpar_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;k-1;l-1],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;k  ;l-1],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;k+1;l-1],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;k+2;l-1],0) 
+     &                         )
+          f_v_22 = dvpar_inv * (
+     &                            c1 * dfn(CHF_IX[i;j;k-1;l],0) 
+     &                          - c2 * dfn(CHF_IX[i;j;k  ;l],0) 
+     &                          + c2 * dfn(CHF_IX[i;j;k+1;l],0) 
+     &                          - c1 * dfn(CHF_IX[i;j;k+2;l],0) 
+     &                         )
+          f_v_1 = 0.5_8 * (f_v_11 + f_v_12)
+          f_v_2 = 0.5_8 * (f_v_21 + f_v_22)
+          D_vmu_times_f_v = 0.5_8 * ( Dvmu(CHF_IX[i;j;k;l]) * f_v_1 + Dvmu(CHF_IX[i;j;k+1;l]) * f_v_2 )
+
+        ELSE
+          D_vmu_times_f_v = mc(
+     &                          Dvmu(CHF_IX[i;j;k;l])
+     &                          * mc(
+     &                                dvpar_inv * (dfn(CHF_IX[i;j;k;l-1],0)-dfn(CHF_IX[i;j;k-1;l-1],0)),
+     &                                dvpar_inv * (dfn(CHF_IX[i;j;k;l],0)-dfn(CHF_IX[i;j;k-1;l],0))
+     &                              ),
+     &                          Dvmu(CHF_IX[i;j;k+1;l])
+     &                          * mc(
+     &                                dvpar_inv * (dfn(CHF_IX[i;j;k+1;l-1],0)-dfn(CHF_IX[i;j;k;l-1],0)),
+     &                                dvpar_inv * (dfn(CHF_IX[i;j;k+1;l],0)-dfn(CHF_IX[i;j;k;l],0))
+     &                              )
+     &                        )
+        ENDIF
+
+        flux(CHF_IX[i;j;k;l],0) = 2.0_8 * alpha*dfn_face
+        flux(CHF_IX[i;j;k;l],1) = 2.0_8 * (D_vmu_times_f_v + 2.0_8*D_mumu*f_mu)
+
+      CHF_ENDDO
+#endif
+
+      RETURN
+
+      END SUBROUTINE !flux_mu
+
+      SUBROUTINE eval_rhs_components(
+     &                                CHF_FRA[rhs],
+     &                                CHF_CONST_FRA[flux_vpar],
+     &                                CHF_CONST_FRA[flux_mu],
+     &                                CHF_BOX[grid],
+     &                                CHF_CONST_REALVECT[dx],
+     &                              )
+
+!     Local Variables
+      INTEGER           CHF_DDECL[i;j;k;l;m]
+      DOUBLE PRECISION  dvpar_inv, dmu_inv
+
+!     First executable statement
+
+      dvpar_inv = 1.0_8 / dx(0)
+      dmu_inv   = 1.0_8 / dx(1)
+
+#if CH_SPACEDIM==5
+      CHF_MULTIDO[grid;i;j;m;k;l]
+
+        rhs(CHF_IX[i;j;m;k;l],0) = dvpar_inv*(flux_vpar(CHF_IX[i;j;m;k+1;l],0)-flux_vpar(CHF_IX[i;j;m;k;l],0))
+     &                           + dmu_inv*(flux_mu(CHF_IX[i;j;m;k;l+1],0)-flux_mu(CHF_IX[i;j;m;k;l],0))
+        rhs(CHF_IX[i;j;m;k;l],1) = dvpar_inv*(flux_vpar(CHF_IX[i;j;m;k+1;l],1)-flux_vpar(CHF_IX[i;j;m;k;l],1))
+     &                           + dmu_inv*(flux_mu(CHF_IX[i;j;m;k;l+1],1)-flux_mu(CHF_IX[i;j;m;k;l],1))
+
+      CHF_ENDDO
+#else
+      CHF_MULTIDO[grid;i;j;k;l]
+
+        rhs(CHF_IX[i;j;k;l],0) = dvpar_inv*(flux_vpar(CHF_IX[i;j;k+1;l],0)-flux_vpar(CHF_IX[i;j;k;l],0))
+     &                         + dmu_inv*(flux_mu(CHF_IX[i;j;k;l+1],0)-flux_mu(CHF_IX[i;j;k;l],0))
+        rhs(CHF_IX[i;j;k;l],1) = dvpar_inv*(flux_vpar(CHF_IX[i;j;k+1;l],1)-flux_vpar(CHF_IX[i;j;k;l],1))
+     &                         + dmu_inv*(flux_mu(CHF_IX[i;j;k;l+1],1)-flux_mu(CHF_IX[i;j;k;l],1))
+
+      CHF_ENDDO
+#endif
+
+      RETURN
+
+      END SUBROUTINE !eval_rhs_components
+
+      SUBROUTINE eval_rhs(
+     &                      CHF_FRA1[rhs],
+     &                      CHF_CONST_FRA[flux_vpar],
+     &                      CHF_CONST_FRA[flux_mu],
+     &                      CHF_CONST_FRA1[e],
+     &                      CHF_BOX[grid],
+     &                      CHF_CONST_REALVECT[dx],
+     &                      CHF_CONST_INT[Nvpar],
+     &                      CHF_CONST_INT[Nmu],
+     &                      CHF_CONST_REAL[nu]
+     &                   )
+
+!     Local Variables
+      INTEGER           CHF_DDECL[i;j;k;l;m]
+      DOUBLE PRECISION  dvpar_inv, dmu_inv, efac
+
+!     First executable statement
+
+      dvpar_inv = 1.0_8 / dx(0)
+      dmu_inv   = 1.0_8 / dx(1)
+
+#if CH_SPACEDIM==5
+      CHF_MULTIDO[grid;i;j;m;k;l]
+
+        efac = e(i,j,m,CHF_LBOUND[e;3],CHF_LBOUND[e;4])
+
+        rhs(CHF_IX[i;j;m;k;l])  = nu * dvpar_inv 
+     &                               * (flux_vpar(CHF_IX[i;j;m;k+1;l],0) - flux_vpar(CHF_IX[i;j;m;k;l],0))
+     &                          + nu * dmu_inv   
+     &                               * (flux_mu(CHF_IX[i;j;m;k;l+1],0) - flux_mu(CHF_IX[i;j;m;k;l],0))
+     &                          + nu * efac * dvpar_inv 
+     &                               * (flux_vpar(CHF_IX[i;j;m;k+1;l],1) - flux_vpar(CHF_IX[i;j;m;k;l],1))
+     &                          + nu * efac * dmu_inv  
+     &                               * (flux_mu(CHF_IX[i;j;m;k;l+1],1) - flux_mu(CHF_IX[i;j;m;k;l],1))
+
+      CHF_ENDDO
+#else
+      CHF_MULTIDO[grid;i;j;k;l]
+
+        efac = e(i,j,CHF_LBOUND[e;2],CHF_LBOUND[e;3])
+
+        rhs(CHF_IX[i;j;k;l])  = nu * dvpar_inv 
+     &                             * (flux_vpar(CHF_IX[i;j;k+1;l],0) - flux_vpar(CHF_IX[i;j;k;l],0))
+     &                        + nu * dmu_inv   
+     &                             * (flux_mu(CHF_IX[i;j;k;l+1],0) - flux_mu(CHF_IX[i;j;k;l],0))
+     &                        + nu * efac * dvpar_inv 
+     &                             * (flux_vpar(CHF_IX[i;j;k+1;l],1) - flux_vpar(CHF_IX[i;j;k;l],1))
+     &                        + nu * efac * dmu_inv  
+     &                             * (flux_mu(CHF_IX[i;j;k;l+1],1) - flux_mu(CHF_IX[i;j;k;l],1))
+
+      CHF_ENDDO
+#endif
+
+      RETURN
+
+      END SUBROUTINE !eval_rhs
+

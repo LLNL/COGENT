@@ -1,0 +1,43 @@
+DIM=3
+DEBUG=FALSE
+OPT=TRUE
+PRECISION=DOUBLE
+PROFILE=FALSE
+MPI=TRUE
+
+CXX=CC
+FC=ftn
+MPICXX=CC
+
+USE_64=TRUE
+USE_MT=TRUE
+USE_COMPLEX=TRUE
+USE_TIMER=TRUE
+
+CH_CPP=$(CXX) -E -P -C
+
+RUN = aprun -n 2 ./#
+
+cxxoptflags += -O3 
+foptflags += -O2
+flibflags += -lgfortran
+XTRALDFLAGS += -Wl,-zmuldefs
+ldoptflags = -dynamic
+
+USE_HDF=TRUE
+
+# The environment variable HDF5_DIR is automatically set when
+# the module HDF5 is loaded
+
+HDFLIBFLAGS=   -L$(HDF5_DIR)/lib      -DH5_USE_16_API -lhdf5 -lz -dynamic
+HDFMPILIBFLAGS=-L$(HDF5_DIR)/lib      -DH5_USE_16_API -lhdf5 -lz -dynamic
+HDFINCFLAGS=   -I$(HDF5_DIR)/include  -DH5_USE_16_API
+HDFMPIINCFLAGS=-I$(HDF5_DIR)/include  -DH5_USE_16_API -dynamic
+
+AR=ar r
+CPP=$(CXX) -E -P -C
+DOXYGEN=doxygen
+LD=CC
+PERL=perl
+RANLIB=ranlib#  #set this to 'echo' for systems that dont have ranlib
+PROF=gprof

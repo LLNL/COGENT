@@ -1,0 +1,173 @@
+C      _______              __
+C     / ___/ /  ___  __ _  / /  ___
+C    / /__/ _ \/ _ \/  V \/ _ \/ _ \
+C    \___/_//_/\___/_/_/_/_.__/\___/
+C    Please refer to Copyright.txt, in Chombo's root directory.
+
+#include "CONSTANTS.H"
+
+c -------------------------------------------------------------
+c  increment with vector/vector outer product on direction:
+c  prod = prod + u_i * v_j
+c
+c  prod  <=> n-by-D tensor (result)
+c  u      => n vector
+c  v      => D vector
+c  box    => box over which prod is modified
+c -----------------------------------------------------------
+
+      subroutine INCREMENTFACEPROD(CHF_FRA[prod],
+     &                             CHF_CONST_FRA[u],
+     &                             CHF_CONST_FRA[v],
+     &                             CHF_BOX[box])
+
+      integer CHF_DDECL[i;j;k;l;m], n
+      integer d, nn
+
+      do n=0, CHF_NCOMP[u]-1
+        do d=0, CH_SPACEDIM-1
+          nn = n + d * CHF_NCOMP[u]
+
+          CHF_MULTIDO[box;i;j;k;l;m]
+
+          prod(CHF_IX[i;j;k;l;m],nn) = prod(CHF_IX[i;j;k;l;m],nn)
+     &             +u(CHF_IX[i;j;k;l;m],n)*v(CHF_IX[i;j;k;l;m],d)
+
+          CHF_ENDDO
+
+       enddo
+      enddo
+      return
+      end
+
+
+
+c -------------------------------------------------------------
+c  increment with vector/vector outer product on direction:
+c  prod = prod + u_i * v_j
+c
+c  prod  <=> n vector (result)
+c  u      => n vector
+c  v      => n vector
+c  box    => box over which prod is modified
+c -----------------------------------------------------------
+
+      subroutine INCREMENTFACEPRODNORMAL(CHF_FRA[prod],
+     &                                   CHF_CONST_FRA[u],
+     &                                   CHF_CONST_FRA[v],
+     &                                   CHF_BOX[box])
+
+      integer CHF_DDECL[i;j;k;l;m], n
+
+      do n=0, CHF_NCOMP[u]-1
+         CHF_MULTIDO[box;i;j;k;l;m]
+
+         prod(CHF_IX[i;j;k;l;m],n) = prod(CHF_IX[i;j;k;l;m],n)
+     &        +u(CHF_IX[i;j;k;l;m],n)*v(CHF_IX[i;j;k;l;m],n)
+
+         CHF_ENDDO
+
+      enddo
+      return
+      end
+
+
+
+c -------------------------------------------------------------
+c  increment with product of derivatives:
+c  prod = prod + factor*(du/dxdir)*(dv/dxdir)
+c
+c  prod  <=> n-by-D tensor (result)
+c  u      => n vector
+c  v      => D vector
+c  box    => box over which prod is modified
+c  dx     => grid spacing used in derivative
+c  factor => multiplicative weight
+c  dir    => derivative direction
+c -----------------------------------------------------------
+
+      subroutine INCREMENTFACEPRODGRAD(CHF_FRA[prod],
+     &                                 CHF_CONST_FRA[u],
+     &                                 CHF_CONST_FRA[v],
+     &                                 CHF_BOX[box],
+     &                                 CHF_REAL[dx],
+     &                                 CHF_REAL[factor],
+     &                                 CHF_INT[dir])
+
+      integer CHF_DDECL[i;j;k;l;m], n, nn, d
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T qtrOnDx2, du, dv
+
+      CHF_DTERM[ii = CHF_ID(0,dir);
+                jj = CHF_ID(1,dir);
+                kk = CHF_ID(2,dir);
+                ll = CHF_ID(3,dir);
+                mm = CHF_ID(4,dir)]
+
+      qtrOnDx2 = (half/dx)**2;
+
+      do n=0, CHF_NCOMP[u]-1
+        do d=0, CH_SPACEDIM-1
+          nn = n + d * CHF_NCOMP[u]
+
+          CHF_MULTIDO[box;i;j;k;l;m]
+            du = (u(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n) - u(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n))
+            dv = (v(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],d) - v(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],d))
+
+            prod(CHF_IX[i;j;k;l;m],nn) = prod(CHF_IX[i;j;k;l;m],nn)
+     &                             +factor*qtrOnDx2*du*dv
+
+         CHF_ENDDO
+
+        enddo
+      enddo
+      return
+      end
+
+c -------------------------------------------------------------
+c  increment with product of derivatives:
+c  prod = prod + factor*(du/dxdir)*(dv/dxdir)
+c
+c  prod  <=> n vector (result)
+c  u      => n vector
+c  v      => scalar
+c  box    => box over which prod is modified
+c  dx     => grid spacing used in derivative
+c  factor => multiplicative weight
+c  dir    => derivative direction
+c -----------------------------------------------------------
+
+      subroutine INCREMENTFACEPRODGRADNORMAL(CHF_FRA[prod],
+     &                                       CHF_CONST_FRA[u],
+     &                                       CHF_CONST_FRA[v],
+     &                                       CHF_BOX[box],
+     &                                       CHF_REAL[dx],
+     &                                       CHF_REAL[factor],
+     &                                       CHF_INT[dir])
+
+      integer CHF_DDECL[i;j;k;l;m], n
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T qtrOnDx2, du, dv
+
+      CHF_DTERM[ii = CHF_ID(0,dir);
+                jj = CHF_ID(1,dir);
+                kk = CHF_ID(2,dir);
+                ll = CHF_ID(3,dir);
+                mm = CHF_ID(4,dir)]
+
+      qtrOnDx2 = (half/dx)**2;
+
+      do n=0, CHF_NCOMP[u]-1
+
+         CHF_MULTIDO[box;i;j;k;l;m]
+            du = (u(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n) - u(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n))
+            dv = (v(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],0) - v(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],0))
+
+            prod(CHF_IX[i;j;k;l;m],n) = prod(CHF_IX[i;j;k;l;m],n)
+     &                             +factor*qtrOnDx2*du*dv
+
+         CHF_ENDDO
+
+      enddo
+      return
+      end

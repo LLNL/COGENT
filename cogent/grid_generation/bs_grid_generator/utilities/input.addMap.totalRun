@@ -1,0 +1,12 @@
+#resolution
+numRow = 16
+numCol = 16
+
+beginBlock = 0
+endBlock   = 9
+numBlocks  = 10
+
+geometryFileName = ../../mappingFiles/COGENT_mapping_3-22-16
+fieldFileName    = ../../mappingFiles/DCT_coefficients_3-22-16  
+
+evenSpacingCase = false

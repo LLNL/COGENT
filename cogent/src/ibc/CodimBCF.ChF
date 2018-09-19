@@ -1,0 +1,317 @@
+#include "CONSTANTS.H"
+
+      subroutine compute_limits(
+     &     CHF_CONST_INTVECT[ibeg],
+     &     CHF_CONST_INTVECT[iend],
+     &     CHF_CONST_INTVECT[istride],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_I1D[idir],
+     &     CHF_CONST_I1D[iside],
+     &     CHF_CONST_INT[icodim]
+     &     )
+c
+      integer ic,m,itmp
+c
+      CHF_DTERM[
+        ibeg(0) = CHF_LBOUND[bdrybox;0];
+        ibeg(1) = CHF_LBOUND[bdrybox;1];
+        ibeg(2) = CHF_LBOUND[bdrybox;2];
+        ibeg(3) = CHF_LBOUND[bdrybox;3];
+        ibeg(4) = CHF_LBOUND[bdrybox;4]]
+c
+      CHF_DTERM[
+        iend(0) = CHF_UBOUND[bdrybox;0];
+        iend(1) = CHF_UBOUND[bdrybox;1];
+        iend(2) = CHF_UBOUND[bdrybox;2];
+        iend(3) = CHF_UBOUND[bdrybox;3];
+        iend(4) = CHF_UBOUND[bdrybox;4]]
+c
+      do m=0,CH_SPACEDIM-1
+        istride(m) = 1
+      enddo
+c
+      do ic=0,CHF_UBOUND[idir]
+        if ((iside(ic).eq.0)) then
+          itmp = ibeg(idir(ic))
+          ibeg(idir(ic))    = iend(idir(ic))
+          iend(idir(ic))    = itmp
+          istride(idir(ic)) = -1
+        endif
+      enddo
+c
+      return
+      end
+
+
+      subroutine fill_codim_ghost_cells(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_I1D[idir],
+     &     CHF_CONST_I1D[iside],
+     &     CHF_CONST_INT[icodim]
+     &     )
+c
+      if (icodim.eq.2) then
+        CHF_CALL fill_codim2_ghost_cells(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_I1D[idir],
+     &     CHF_CONST_I1D[iside] )
+
+      else if (icodim.eq.3) then
+        CHF_CALL fill_codim3_ghost_cells(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_I1D[idir],
+     &     CHF_CONST_I1D[iside] )
+
+      else if (icodim.eq.4) then
+        CHF_CALL fill_codim4_ghost_cells(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_I1D[idir],
+     &     CHF_CONST_I1D[iside] )
+
+      endif
+      return
+      end
+
+
+      subroutine fill_codim2_ghost_cells(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_I1D[idir],
+     &     CHF_CONST_I1D[iside]
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[i10;j10;k10;l10;m10]
+      integer CHF_DDECL[i01;j01;k01;l01;m01]
+      integer CHF_DDECL[i11;j11;k11;l11;m11]
+      integer ibeg(0:CH_SPACEDIM-1)
+      integer iend(0:CH_SPACEDIM-1)
+      integer istride(0:CH_SPACEDIM-1)
+      integer isign(0:1)
+      integer ic,icodim,n
+c
+      icodim = 2
+      do ic=0,icodim-1
+        isign(ic) = 1-2*iside(ic)
+      enddo
+c
+      CHF_CALL compute_limits(
+     &     CHF_CONST_INTVECT[ibeg],
+     &     CHF_CONST_INTVECT[iend],
+     &     CHF_CONST_INTVECT[istride],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_I1D[idir],
+     &     CHF_CONST_I1D[iside],
+     &     CHF_CONST_INT[icodim] )
+c
+      do n=0,CHF_NCOMP[f]-1
+      CHF_DINVTERM[
+      do i=ibeg(0),iend(0),istride(0);
+      do j=ibeg(1),iend(1),istride(1);
+      do k=ibeg(2),iend(2),istride(2);
+      do l=ibeg(3),iend(3),istride(3);
+      do m=ibeg(4),iend(4),istride(4)]
+c
+        CHF_DTERM[
+        i10 = i+CHF_ID(idir(0),0)*isign(0);
+        j10 = j+CHF_ID(idir(0),1)*isign(0);
+        k10 = k+CHF_ID(idir(0),2)*isign(0);
+        l10 = l+CHF_ID(idir(0),3)*isign(0);
+        m10 = m+CHF_ID(idir(0),4)*isign(0)]
+c
+        CHF_DTERM[
+        i01 = i+CHF_ID(idir(1),0)*isign(1);
+        j01 = j+CHF_ID(idir(1),1)*isign(1);
+        k01 = k+CHF_ID(idir(1),2)*isign(1);
+        l01 = l+CHF_ID(idir(1),3)*isign(1);
+        m01 = m+CHF_ID(idir(1),4)*isign(1)]
+c
+        CHF_DTERM[
+        i11 = i10+i01-i;
+        j11 = j10+j01-j;
+        k11 = k10+k01-k;
+        l11 = l10+l01-l;
+        m11 = m10+m01-m]
+c
+        f(CHF_IX[i;j;k;l;m],n) = f(CHF_IX[i10;j10;k10;l10;m10],n)
+     &                       + f(CHF_IX[i01;j01;k01;l01;m01],n)
+     &                       - f(CHF_IX[i11;j11;k11;l11;m11],n)
+c
+      CHF_ENDDO
+      enddo
+c
+      return
+      end
+
+
+      subroutine fill_codim3_ghost_cells(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_I1D[idir],
+     &     CHF_CONST_I1D[iside]
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[i100;j100;k100;l100;m100]
+      integer CHF_DDECL[i010;j010;k010;l010;m010]
+      integer CHF_DDECL[i001;j001;k001;l001;m001]
+      integer CHF_DDECL[i111;j111;k111;l111;m111]
+      integer ibeg(0:CH_SPACEDIM-1)
+      integer iend(0:CH_SPACEDIM-1)
+      integer istride(0:CH_SPACEDIM-1)
+      integer isign(0:2)
+      integer ic,icodim,n
+c
+      icodim = 3
+      do ic=0,icodim-1
+        isign(ic) = 1-2*iside(ic)
+      enddo
+c
+      CHF_CALL compute_limits(
+     &     CHF_CONST_INTVECT[ibeg],
+     &     CHF_CONST_INTVECT[iend],
+     &     CHF_CONST_INTVECT[istride],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_I1D[idir],
+     &     CHF_CONST_I1D[iside],
+     &     CHF_CONST_INT[icodim] )
+c
+      do n=0,CHF_NCOMP[f]-1
+      CHF_DINVTERM[
+      do i=ibeg(0),iend(0),istride(0);
+      do j=ibeg(1),iend(1),istride(1);
+      do k=ibeg(2),iend(2),istride(2);
+      do l=ibeg(3),iend(3),istride(3);
+      do m=ibeg(4),iend(4),istride(4)]
+c
+        CHF_DTERM[
+        i100 = i+CHF_ID(idir(0),0)*isign(0);
+        j100 = j+CHF_ID(idir(0),1)*isign(0);
+        k100 = k+CHF_ID(idir(0),2)*isign(0);
+        l100 = l+CHF_ID(idir(0),3)*isign(0);
+        m100 = m+CHF_ID(idir(0),4)*isign(0)]
+c
+        CHF_DTERM[
+        i010 = i+CHF_ID(idir(1),0)*isign(1);
+        j010 = j+CHF_ID(idir(1),1)*isign(1);
+        k010 = k+CHF_ID(idir(1),2)*isign(1);
+        l010 = l+CHF_ID(idir(1),3)*isign(1);
+        m010 = m+CHF_ID(idir(1),4)*isign(1)]
+c
+        CHF_DTERM[
+        i001 = i+CHF_ID(idir(2),0)*isign(2);
+        j001 = j+CHF_ID(idir(2),1)*isign(2);
+        k001 = k+CHF_ID(idir(2),2)*isign(2);
+        l001 = l+CHF_ID(idir(2),3)*isign(2);
+        m001 = m+CHF_ID(idir(2),4)*isign(2)]
+c
+        CHF_DTERM[
+        i111 = i100+i010+i001-2*i;
+        j111 = j100+j010+j001-2*j;
+        k111 = k100+k010+k001-2*k;
+        l111 = l100+l010+l001-2*l;
+        m111 = m100+m010+m001-2*m]
+c
+        f(CHF_IX[i;j;k;l;m],n) = f(CHF_IX[i100;j100;k100;l100;m100],n)
+     &                       + f(CHF_IX[i010;j010;k010;l010;m010],n)
+     &                       + f(CHF_IX[i001;j001;k001;l001;m001],n)
+     &                 - two * f(CHF_IX[i111;j111;k111;l111;m111],n)
+c
+      CHF_ENDDO
+      enddo
+c
+      return
+      end
+
+
+      subroutine fill_codim4_ghost_cells(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_I1D[idir],
+     &     CHF_CONST_I1D[iside]
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[i1000;j1000;k1000;l1000;m1000]
+      integer CHF_DDECL[i0100;j0100;k0100;l0100;m0100]
+      integer CHF_DDECL[i0010;j0010;k0010;l0010;m0010]
+      integer CHF_DDECL[i0001;j0001;k0001;l0001;m0001]
+      integer CHF_DDECL[i1111;j1111;k1111;l1111;m1111]
+      integer ibeg(0:CH_SPACEDIM-1)
+      integer iend(0:CH_SPACEDIM-1)
+      integer istride(0:CH_SPACEDIM-1)
+      integer isign(0:3)
+      integer ic,icodim,n
+c
+      icodim = 4
+      do ic=0,icodim-1
+        isign(ic) = 1-2*iside(ic)
+      enddo
+c
+      CHF_CALL compute_limits(
+     &     CHF_CONST_INTVECT[ibeg],
+     &     CHF_CONST_INTVECT[iend],
+     &     CHF_CONST_INTVECT[istride],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_I1D[idir],
+     &     CHF_CONST_I1D[iside],
+     &     CHF_CONST_INT[icodim] )
+c
+      do n=0,CHF_NCOMP[f]-1
+      CHF_DINVTERM[
+      do i=ibeg(0),iend(0),istride(0);
+      do j=ibeg(1),iend(1),istride(1);
+      do k=ibeg(2),iend(2),istride(2);
+      do l=ibeg(3),iend(3),istride(3);
+      do m=ibeg(4),iend(4),istride(4)]
+c
+        CHF_DTERM[
+        i1000 = i+CHF_ID(idir(0),0)*isign(0);
+        j1000 = j+CHF_ID(idir(0),1)*isign(0);
+        k1000 = k+CHF_ID(idir(0),2)*isign(0);
+        l1000 = l+CHF_ID(idir(0),3)*isign(0);
+        m1000 = m+CHF_ID(idir(0),4)*isign(0)]
+c
+        CHF_DTERM[
+        i0100 = i+CHF_ID(idir(1),0)*isign(1);
+        j0100 = j+CHF_ID(idir(1),1)*isign(1);
+        k0100 = k+CHF_ID(idir(1),2)*isign(1);
+        l0100 = l+CHF_ID(idir(1),3)*isign(1);
+        m0100 = m+CHF_ID(idir(1),4)*isign(1)]
+c
+        CHF_DTERM[
+        i0010 = i+CHF_ID(idir(2),0)*isign(2);
+        j0010 = j+CHF_ID(idir(2),1)*isign(2);
+        k0010 = k+CHF_ID(idir(2),2)*isign(2);
+        l0010 = l+CHF_ID(idir(2),3)*isign(2);
+        m0010 = m+CHF_ID(idir(2),4)*isign(2)]
+c
+        CHF_DTERM[
+        i0001 = i+CHF_ID(idir(3),0)*isign(3);
+        j0001 = j+CHF_ID(idir(3),1)*isign(3);
+        k0001 = k+CHF_ID(idir(3),2)*isign(3);
+        l0001 = l+CHF_ID(idir(3),3)*isign(3);
+        m0001 = m+CHF_ID(idir(3),4)*isign(3)]
+c
+        CHF_DTERM[
+        i1111 = i1000+i0100+i0010+i0001-3*i;
+        j1111 = j1000+j0100+j0010+j0001-3*j;
+        k1111 = k1000+k0100+k0010+k0001-3*k;
+        l1111 = l1000+l0100+l0010+l0001-3*l;
+        m1111 = m1000+m0100+m0010+m0001-3*m]
+c
+        f(CHF_IX[i;j;k;l;m],n) = f(CHF_IX[i1000;j1000;k1000;l1000;m1000],n)
+     &                       + f(CHF_IX[i0100;j0100;k0100;l0100;m0100],n)
+     &                       + f(CHF_IX[i0010;j0010;k0010;l0010;m0010],n)
+     &                       + f(CHF_IX[i0001;j0001;k0001;l0001;m0001],n)
+     &                - four * f(CHF_IX[i1111;j1111;k1111;l1111;m1111],n)
+c
+      CHF_ENDDO
+      enddo
+c
+      return
+      end

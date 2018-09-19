@@ -1,0 +1,152 @@
+# -*- Mode: Makefile;  -*- 
+
+## Define the variables needed by Make.example
+
+# trace the chain of included makefiles
+makefiles += cogent
+
+# knowing this can be useful for things which are specific to 
+# specific machines
+UNAMEN = $(shell uname -n)
+
+
+# the base name(s) of the application(s) in this directory
+mdebase = cogent
+# in an example of true silliness, need to define ebase so that the 
+# realclean target will also remove my *.ex files...
+ebase = bogus
+
+# the location of Chombo lib dir
+CHOMBO_HOME = ../../Chombo/lib
+
+#this should be defined in your Make.defs.local file
+#LAPACKLIBS = -llapack  -lblas
+
+#LAPACKLIBS = -llapack-3 -llapack_atlas -lm
+
+# names of Chombo libraries needed by this program, in order of search.
+1dLibNames =  BoxTools BaseTools
+2dLibNames = HOMappedGeometry HOAMRTools AMRTimeDependent AMRTools BoxTools
+3dLibNames = HOMappedGeometry HOAMRTools AMRTimeDependent AMRTools BoxTools
+#ifeq ($(MAXDIM),4)
+#4dLibNames = HOMappedGeometry HOAMRTools AMRTools BoxTools
+#else
+4dLibNames = HOMappedGeometry HOAMRTools AMRTools BoxTools
+5dLibNames = HOMappedGeometry HOAMRTools AMRTools BoxTools
+#endif
+#5dLibNames = BoxTools
+#6dLibNames = BoxTools
+
+
+# relative paths to source code directories
+base_dir = .
+
+ifeq ($(MAXDIM),4)
+2dsrc_dirs =  ../src/coord/configuration ../src/coord/velocity 
+2dsrc_dirs += ../src/ibc/configuration ../src/poisson
+2dsrc_dirs += ../src/util ../src/ibc ../src/species/fluid
+2dsrc_dirs += ../src/fluidOp
+3dsrc_dirs += ../src/util ../src/ibc
+4dsrc_dirs =  ../src/core ../src/driver ../src/vlasov
+4dsrc_dirs += ../src/collisions ../src/transport ../src/neutrals
+4dsrc_dirs += ../src/coord/phase ../src/ibc/phase ../src/util 
+4dsrc_dirs += ../src/advectUtil ../src/species/kinetic
+4dsrc_dirs += ../src/ibc
+4dsrc_dirs += ../src/bandedMatrix
+4dsrc_dirs += ../src/solver
+4dsrc_dirs += ../src/time
+4dsrc_dirs += ../src/scalarOp ../src/species/scalar
+else
+2dsrc_dirs =  ../src/coord/velocity 
+3dsrc_dirs  = ../src/coord/configuration  
+3dsrc_dirs += ../src/ibc ../src/ibc/configuration  
+3dsrc_dirs += ../src/poisson  
+3dsrc_dirs += ../src/util  
+3dsrc_dirs += ../src/species/fluid
+3dsrc_dirs += ../src/fluidOp
+5dsrc_dirs =  ../src/driver ../src/core
+5dsrc_dirs += ../src/species/kinetic
+5dsrc_dirs += ../src/advectUtil ../src/vlasov   
+5dsrc_dirs += ../src/coord/phase   
+5dsrc_dirs += ../src/ibc ../src/ibc/phase  
+5dsrc_dirs += ../src/bandedMatrix
+5dsrc_dirs += ../src/transport ../src/neutrals
+5dsrc_dirs += ../src/collisions   
+5dsrc_dirs += ../src/util  
+5dsrc_dirs += ../src/solver
+5dsrc_dirs += ../src/time
+5dsrc_dirs += ../src/scalarOp ../src/species/scalar
+endif
+
+mdsrc_dirs = ../src/ibc/multidim
+
+# input file for 'run' target
+INPUT = regression.inputs
+
+
+# shared code for building example programs
+include $(CHOMBO_HOME)/mk/Make.example.multidim
+
+# application-specific variables
+
+ifeq ($(MAXDIM),4)
+CXXFLAGS += -DCFG_DIM=2 -std=c++0x -ftemplate-depth=128 
+else
+CXXFLAGS += -DCFG_DIM=3 -std=c++0x -ftemplate-depth=128 
+endif
+
+ifeq ($(MPI),TRUE)
+#HYPRE_LOC = /usr/local/installed/hypre-2.9.0b
+HYPRE_LOC = ../hypre-2.9.0b/hypre_loc
+else
+#HYPRE_LOC = /usr/local/installed/hypre-2.9.0b
+HYPRE_LOC = ../hypre-2.9.0b/hypre_loc_serial
+endif
+
+XTRACPPFLAGS += -I$(HYPRE_LOC)/include
+XTRALIBFLAGS += -L$(HYPRE_LOC)/lib -lHYPRE $(LAPACKLIBS)
+
+#########################################################################
+
+# Set this to TRUE or FALSE to compile with or without PETSc interface
+USE_PETSC = FALSE
+# Set the machine name (i.e., "cab","cori",etc). Make sure 
+# PETSC_LIB_FLAGS_$(MACHINE_NAME) (i.e., PETSC_LIB_FLAGS_cab, 
+# PETSC_LIB_FLAGS_cori, etc) for the machine being used is defined 
+# below. If not, follow the instructions and define it.
+MACHINE_NAME = cab
+
+# Note: PETSc must already be installed and the environment variables 
+# PETSC_DIR and PETSC_ARCH *must* be present.
+
+ifeq ($(USE_PETSC),TRUE)
+
+CXXFLAGS += -Dwith_petsc
+XTRACPPFLAGS += -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
+XTRALIBFLAGS += -Wl,-rpath,$(PETSC_DIR)/$(PETSC_ARCH)/lib -L$(PETSC_DIR)/$(PETSC_ARCH)/lib -lpetsc
+
+# The following are machine-specific flags needed by PETSc so that the executable can find all
+# the libraries. To figure this out for a machine not listed below, 
+# 1) Install PETSc
+# 2) Compile an example (eg. To compile $PETSC_DIR/src/ts/examples/tutorials/ex1.c, go to the folder
+#    and type "make ex1").
+# 3) Look at the linking command executed (eg. the line starting with 
+#    "mpicc -fPIC  -Wall -Wwrite-strings -Wno-strict-aliasing -Wno-unknown-pragmas -g3  -o ex1 ex1.o ..."
+#    Everything after "-lpetsc" needs to be copied and put below as PETSC_LIB_FLAGS_($MACHINE_NAME).
+
+# Cab (LC)
+PETSC_LIB_FLAGS_cab =  -Wl,-rpath,/g/g92/ghosh5/Codes/petsc/arch-opt/lib -lsuperlu_5.1 -lsuperlu_dist_4.3 -lHYPRE -Wl,-rpath,/usr/apps/gnu/4.7.4/lib64:/usr/apps/gnu/4.7.4/lib -Wl,-rpath,/usr/local/tools/pmgr/lib -L/usr/local/tools/pmgr/lib -Wl,-rpath,/usr/local/tools/mvapich2-gnu-1.7/lib -L/usr/local/tools/mvapich2-gnu-1.7/lib -Wl,-rpath,/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64/gcc/x86_64-unknown-linux-gnu/4.7.4 -L/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64/gcc/x86_64-unknown-linux-gnu/4.7.4 -Wl,-rpath,/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64/gcc -L/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64/gcc -Wl,-rpath,/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64 -L/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64 -Wl,-rpath,/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/x86_64-unknown-linux-gnu/lib -L/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/x86_64-unknown-linux-gnu/lib -lmpichcxx -lstdc++ -llapack -lblas -lparmetis -lmetis -lX11 -lhwloc -lssl -lcrypto -lm -Wl,-rpath,/usr/apps/gnu/4.7.4/lib -L/usr/apps/gnu/4.7.4/lib -lmpichf90 -lgfortran -lm -lgfortran -lm -lquadmath -lm -lmpichcxx -lstdc++ -Wl,-rpath,/usr/apps/gnu/4.7.4/lib64:/usr/apps/gnu/4.7.4/lib -Wl,-rpath,/usr/local/tools/pmgr/lib -L/usr/local/tools/pmgr/lib -Wl,-rpath,/usr/local/tools/mvapich2-gnu-1.7/lib -L/usr/local/tools/mvapich2-gnu-1.7/lib -Wl,-rpath,/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64/gcc/x86_64-unknown-linux-gnu/4.7.4 -L/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64/gcc/x86_64-unknown-linux-gnu/4.7.4 -Wl,-rpath,/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64/gcc -L/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64/gcc -Wl,-rpath,/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64 -L/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64 -Wl,-rpath,/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/x86_64-unknown-linux-gnu/lib -L/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/x86_64-unknown-linux-gnu/lib -Wl,-rpath,/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64 -L/collab/usr/gapps/opnsrc/gnu/dev/lnx-2.12-o/4.7.4/lib64 -Wl,-rpath,/usr/local/tools/pmgr/lib -lpsm_infinipath -ldl -Wl,-rpath,/usr/local/tools/mvapich2-gnu-1.7/lib -lmpich -lpmi -lopa -lmpl -lpthread -lgcc_s -ldl
+# Cori (NERSC)
+PETSC_LIB_FLAGS_cori = -L/opt/cray/libsci/13.2.0/GNU/5.1/x86_64/lib -L/opt/cray/mpt/7.2.5/gni/sma/lib64 -L/opt/cray/dmapp/default/lib64 -L/opt/cray/mpt/7.2.5/gni/mpich2-gnu/5.1/lib -L/opt/cray/rca/1.0.0-2.0502.60530.1.62.ari/lib64 -L/opt/cray/alps/5.2.4-2.0502.9774.31.11.ari/lib64 -L/opt/cray/xpmem/0.1-2.0502.64982.5.3.ari/lib64 -L/opt/cray/dmapp/7.0.1-1.0502.11080.8.76.ari/lib64 -L/opt/cray/pmi/5.0.9-1.0000.10911.0.0.ari/lib64 -L/opt/cray/ugni/6.0-1.0502.10863.8.29.ari/lib64 -L/opt/cray/udreg/2.3.2-1.0502.10518.2.17.ari/lib64 -L/opt/cray/atp/1.8.3/libApp -L/opt/cray/wlm_detect/1.0-1.0502.64649.2.1.ari/lib64 -L/opt/gcc/5.1.0/snos/lib/gcc/x86_64-suse-linux/5.1.0 -L/opt/gcc/5.1.0/snos/lib64 -L/opt/gcc/5.1.0/snos/lib -lgfortran -lm -lmpichf90_gnu_51 -lgfortran -lm -lmpichcxx_gnu_51 -lstdc++ -L/opt/cray/libsci/13.2.0/GNU/5.1/x86_64/lib -L/opt/cray/mpt/7.2.5/gni/sma/lib64 -L/opt/cray/dmapp/default/lib64 -L/opt/cray/mpt/7.2.5/gni/mpich2-gnu/5.1/lib -L/opt/cray/rca/1.0.0-2.0502.60530.1.62.ari/lib64 -L/opt/cray/alps/5.2.4-2.0502.9774.31.11.ari/lib64 -L/opt/cray/xpmem/0.1-2.0502.64982.5.3.ari/lib64 -L/opt/cray/dmapp/7.0.1-1.0502.11080.8.76.ari/lib64 -L/opt/cray/pmi/5.0.9-1.0000.10911.0.0.ari/lib64 -L/opt/cray/ugni/6.0-1.0502.10863.8.29.ari/lib64 -L/opt/cray/udreg/2.3.2-1.0502.10518.2.17.ari/lib64 -L/opt/cray/atp/1.8.3/libApp -L/opt/cray/wlm_detect/1.0-1.0502.64649.2.1.ari/lib64 -L/opt/gcc/5.1.0/snos/lib/gcc/x86_64-suse-linux/5.1.0 -L/opt/gcc/5.1.0/snos/lib64 -L/opt/gcc/5.1.0/snos/lib -ldl -lAtpSigHandler -lAtpSigHCommData -lpthread -lsci_gnu_51_mpi -lsci_gnu_51 -lsma -lpmi -ldmapp -lmpich_gnu_51 -lrt -lugni -lalpslli -lwlm_detect -lalpsutil -lrca -lxpmem -ludreg -lgfortran -lquadmath -lgcc_eh -ldl
+
+PETSC_LIB_FLAGS_cab2 = -Wl,-rpath,/g/g10/dorr/Codes/COGENT/hypre-2.9.0b/lib/cab-mpicxx-gfortran-opt/lib -L/g/g10/dorr/Codes/COGENT/hypre-2.9.0b/lib/cab-mpicxx-gfortran-opt/lib -lHYPRE -Wl,-rpath,/usr/local/tools/pmgr/lib -L/usr/local/tools/pmgr/lib -Wl,-rpath,/usr/local/tools/mvapich2-gnu-2.1/lib -L/usr/local/tools/mvapich2-gnu-2.1/lib -Wl,-rpath,/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -lmpicxx -lstdc++ -llapack -lblas -lX11 -lssl -lcrypto -lmpifort -lgfortran -lm -lmpicxx -lstdc++ -Wl,-rpath,/usr/local/tools/pmgr/lib -L/usr/local/tools/pmgr/lib -Wl,-rpath,/usr/local/tools/mvapich2-gnu-2.1/lib -L/usr/local/tools/mvapich2-gnu-2.1/lib -Wl,-rpath,/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -Wl,-rpath,/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -L/usr/lib/gcc/x86_64-redhat-linux/4.4.7 -Wl,-rpath,/usr/local/tools/pmgr/lib -ldl -Wl,-rpath,/usr/local/tools/mvapich2-gnu-2.1/lib -lmpi -lpmi -lgcc_s -ldl
+
+
+XTRALIBFLAGS += $(PETSC_LIB_FLAGS_$(MACHINE_NAME))
+
+endif #($(PETSC),TRUE)
+
+#########################################################################
+
+# application-specific targets
+

@@ -1,0 +1,65 @@
+This directory contains:
+
+I)sub-directories
+
+II)script: totalRun.py and totalRun.inputs
+
+III)GNUmakefile.multidim (because this was always here, and I'm not sure when/how it will be used)
+
+I)Sub-Directories
+
+  1) blocks/ contains 
+     a)bs.cpp, the Brackbill-Salzman code  
+     b)input.Brackbill-Salzman  
+     c)diagnostic/ and outputMapping/
+     
+  2)checkpoint/ is where the different .cpp write checkpoint files
+  
+  3) ghostCellExtrapBS/ contains
+   
+    a) ghostCell.BS.10.block.cpp, which does a combination of extrapolation and Brackbill-Salzman smoothing on the ghost cells
+    b) input.ghost and input.ghost.totalRun
+    c) diagnostic/
+
+  4) mappingFiles/ contains the ten-block map and DCT file that are the inputs to grid generation.
+
+  5) magGeom/ contains magGeom.cpp and octave scripts, which we use to visualize the geometry as a whole.
+
+  6) newBoundaryNodesIC/ contains
+   
+    a)newBdInit.cpp, which moves the boundary nodes and sets up an iniital condition for the Euler-Lagrange problem in the Brackbill-Salzman algorithm. 
+    b)input.newBd and input.newBd.totalRun
+    c)diagnostic/
+    d)ResultsIC/, which will soon be renamed outputMapping/
+
+  7)src/ contains FieldData and interpolation classes.
+
+  8)utilities/ contains
+    a)addMap.cpp which facilitates the parallelization strategy of calculating the maps on each block independently
+    b) input.addMap and input.addMap.totalRun
+    c) outputMapping 
+             
+II) script
+
+ 1) totalRun.py instantiates the complete algorithm:
+   a) Move the boundary nodes
+   b) Run Brackbill-Salzman (using 10 processes) on all blocks
+   c) Combine the output of 10 processes into a single map
+   d) Create ghost cells.
+
+ 2) totalRun.py uses input.totalRun to create Results/, which contains the final product and intermediate results. In particlar Results/ contains 
+
+   a)block0/, block1/, ...,block9/. These directories resemble grid_generator/blocks/. However, blocks/ typically will contain information about any or all blocks,
+     while the directories under Results are specific to a block.
+   b)outputMapping/ contains the map that we will use for grid generation.
+   c)directories analagous to those in grid_generator, which contain the intermediate results specific to the choices made in input.totalRun
+    i  ) newBoundaryNodesIC/
+    ii ) ghostCellExtrapBS/
+    iii) utilities
+  
+   d) input.totalRun
+
+III) Should we move GNUmakefile.multidim somewhere?
+
+    
+     

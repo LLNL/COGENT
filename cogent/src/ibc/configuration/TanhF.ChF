@@ -1,0 +1,42 @@
+#include "CONSTANTS.H"
+
+      subroutine set_tanh(
+     &     CHF_FRA[phi],
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[x],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[f1],
+     &     CHF_CONST_REAL[x1],
+     &     CHF_CONST_REAL[f2],
+     &     CHF_CONST_REAL[x2],
+     &     CHF_CONST_REAL[x0],
+     &     CHF_CONST_REAL[width]
+     &     )
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+      integer n
+      REAL_T a,b,arg,invwidth
+      REAL_T tanhx1,tanhx2
+      REAL_T tanh
+c
+      invwidth = one / width
+c
+      tanhx1 = tanh( (x1 - x0) * invwidth )
+      tanhx2 = tanh( (x2 - x0) * invwidth )
+      a = (f1 - f2) / (tanhx1 - tanhx2)
+      b = f2 - a * tanhx2
+c
+      do n=0,CHF_NCOMP[phi]-1
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+c       ***Have to do this in case the constant minor radius option is ON
+        x(CHF_IX[i;j;k;l;m],0) = (i + half)*dx(0)
+
+        arg = (x(CHF_IX[i;j;k;l;m],0) - x0) * invwidth
+        phi(CHF_IX[i;j;k;l;m],n) = a * tanh( arg ) + b
+
+      CHF_ENDDO
+      enddo
+c
+      return
+      end

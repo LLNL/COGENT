@@ -1,0 +1,261 @@
+COGENT TEST SCRIPT OVERVIEW
+
+M. Dorr
+12/21/2017
+
+The scripts in this directory support COGENT testing.  It is assumed
+that the user has a collection of test problems that he/she regards as
+"correct" and would like to use as baselines against which to compare
+subsequent COGENT runs using the same inputs.  The typical use case is
+to verify that new code modifications have not changed its behavior
+unexpectedly before committing those modifications to the repo.
+Another use case is to facilitate routine periodic testing, e.g, via
+the execution of tests using a crontab script.
+
+The first step in using the scripts is to set up a directory
+containing the baseline tests, assuming that someone else hasn't
+already done so in a shared location (See the CREATING THE BASELINE
+DIRECTORY section below).  The directory can be located anywhere
+accessible to the machine on which the test scripts are being
+executed; the directory path will be set as part of the script setup
+(see the CONFIGURING THE SCRIPTS section below).
+
+After configuration, interactive tests (i.e., using an interactive
+"pdebug" partition rather than a batch job) can be run using the
+"run_tests" script with the problem name supplied as the argument:
+
+   run_tests gam0
+
+Multiple tests can be run using a single-quoted list as the argument:
+
+   run_tests 'gam0 neoclassical_1 DIID_loss_cone'
+
+The tests will be run sequentially as partition nodes become
+available.  The name of the test being run will be printed to the
+screen, but to see if the job is actually running or just waiting for
+resources, you will need to use whatever method you normally use to
+see the partition status (e.g., squeue).
+
+The results of the test(s) will be placed in a directory of your
+choice (see the CONFIGURING THE SCRIPTS section below), which will be
+created automatically if it doesn't already exist.  The results of
+each execution of "run_tests" will be placed in a subdirectory of that
+directory named with the date and time stamp corresponding to when the
+script was executed.  Under each of those date/time-stamped
+directories will be subdirectories labeled with the test problem
+name(s).
+
+For each test problem, the scripts will compare ALL of the HDF5 files
+found in the baseline directory with the test results using h5diff.  A
+tolerance can specified below which any differences will be ignored.
+The results of the comparison are aggregated in a file named "report"
+and emailed to you.  If the run was deemed successful (no differences
+whatsoever), an entry will be added to a file named
+"certification_log" in the baseline directory to record the fact that
+a successful test was performed at that date and time.
+
+Analogous to the run_tests script is a "run_batch_tests" script that
+performs the same workflow using a batch job, e.g.:
+
+   run_batch_tests 'gam_0 neoclassical_old DIID_loss_cone'
+
+This script automatically constructs the script submitted to the batch
+system, as well as actually submitting the job.  A simple
+acknowledgment that the job was submitted is printed to the screen, as
+well as an email acknowledgment from the batch system.  When the job
+completes, another email will be received from the batch system.  The
+current script has only been tested on SLURM systems; it will need to
+be appropriately modified to work with other job scheduling systems.
+
+
+CREATING THE BASELINE DIRECTORY
+
+A baseline directory contains a subdirectory for each test problem.
+The subdirectory name serves as the name of the test, so it should be
+chosen in some meaningful way to remind you what the test is about.
+The test subdirectories contain all of the input needed to run the
+problem, as well as the sample output against which tests will be
+compared.  You can include anything you want in the baseline
+directory, with the following caveats:
+
+(1) The name of the input file must be consistent with the test name
+(and therefore also the subdirectory name).  For example, if we have
+placed a GAM test in a test subdirectory named gam0, then the name of
+the input file must be gam0.in
+
+(2) Each input file must be prepended with a line of the form
+
+#TEST np=256, timelimit=1:00:00
+
+specifying the number of processors and time limit for the test.
+These quantities are parsed by the test scripts in order to submit the
+test to the interactive or batch queues.
+
+(3) All HDF5 files found in any subdirectory of the baseline test
+directory will be used for the test comparison.  If you include a lot
+of files, you will get a lot of output and the test will run longer.
+You should therefore only include files you really want to have
+compared, e.g, the plot files at the first and last step.
+
+The "create_baselines" script can be used to create a baseline
+directory from a directory (specified as the single command line
+argument) containing a collection of test problems, e.g.,
+ 
+    create_baselines COGENT/sample_inputs
+
+The results are computed using the version of COGENT located at
+COGENT_TEST_COGENT_DIR and are placed at COGENT_TEST_BASELINES_DIR
+(See the CONFIGURING THE SCRIPTS section below).  The latter variables
+can be set as environment variables or by editing the configuration
+parameter section at the top of the script.  The baseline directory
+will be created if it doesn't already exist.
+
+
+CONFIGURING THE SCRIPTS
+
+Use of the run_tests, run_batch_test and create_baselines scripts
+require the setting of a handful of variables, either through the
+setting of environment variables or by manually editing the scripts
+in the "CONFIGURATION PARAMETER SECTION" at the top of each script.
+To ensure the consistent setting of variables, the use of environment
+variables is highly recommended.  The variables to be set are:
+
+COGENT_TEST_COGENT_DIR      : COGENT root directory
+COGENT_TEST_CHOMBO_DIR      : Chombo root directory
+COGENT_TEST_RESULTS_DIR     : Directory in which tests are run and results placed
+COGENT_TEST_BASELINES_DIR   : Directory containing the baselines for the tests
+COGENT_TEST_TOLERANCE       : Tolerance used for test comparisons
+
+These variables may be set in your environment as, for example,
+
+# export COGENT_TEST_COGENT_DIR=/path/to/cogent (sh,bash)
+# setenv COGENT_TEST_COGENT_DIR /path/to/cogent (csh,tcsh)
+
+Alternatively, the values can be set in the configuration parameter
+section at the beginning of the script.  Manually setting the
+parameters in this way will override any corresponding environment
+variables if present.
+
+########################################################################################
+# CONFIGURATION PARAMETER SECTION
+
+# Leave these settings commented out to read them from your environment;
+# otherwise, uncomment them and set them, which will also override any
+# corresponding environment variables.
+
+# COGENT root directory 
+COGENT_TEST_COGENT_DIR=/path/to/cogent
+
+# Chombo root directory
+COGENT_TEST_CHOMBO_DIR =/path/to/chombo
+
+# Test results directory
+COGENT_TEST_RESULTS_DIR=/path/to/results
+
+# Baseline directory
+COGENT_TEST_BASELINES_DIR=/path/to/baselines
+
+# Tolerance
+COGENT_TEST_TOLERANCE=value
+
+########################################################################################
+
+Configuration of the "run_batch_tests" is similar to run_tests, except
+that it also requires two additional items needed for construction of
+the batch scripts.
+
+########################################################################################
+# CONFIGURATION PARAMETER SECTION
+
+# Leave the COGENT_TEST* settings commented out to read them from your environment;
+# otherwise, uncomment them and set them, which will also override any
+# corresponding environment variables.
+
+# COGENT root directory 
+COGENT_TEST_COGENT_DIR=/path/to/cogent
+
+# Chombo root directory
+COGENT_TEST_CHOMBO_DIR =/path/to/chombo
+
+# Test results directory
+COGENT_TEST_RESULTS_DIR=/path/to/results
+
+# Baseline directory
+COGENT_TEST_BASELINES_DIR=/path/to/baselines
+
+# Tolerance
+COGENT_TEST_TOLERANCE=value
+
+# The number of processors per node on the test platform and the batch bank
+# need to be set here:
+ppn=16
+bank=comp
+########################################################################################
+
+The "checkout_and_build" script will perform a fresh checkout and
+build of COGENT, Hypre and Chombo.  It is not necessary to use this
+script if you already have versions of COGENT and Chombo that you want
+to use for your tests, but it can be useful in constructing, for
+example, a script to perform nightly regression tests to ensure that a
+set of tests still works correctly with the current repo version of
+COGENT, Hypre and Chombo.  The script will install COGENT and Chombo
+at the locations specified by the COGENT_TEST_COGENT_DIR and
+COGENT_TEST_CHOMBO_DIR variables, respectively, which can again either
+be set in your environment or manually in the configuration section at
+the beginning of the script.
+
+When the checkout_and_build script is run, it automatically constructs
+and installs the Make.defs.local file needed by the Chombo build
+system, as well as the the doconfig and doinstall scripts used to
+configure and build Hypre.  N.B.: This means that any existing
+Make.defs.local will be overwritten, so if you have one you treasure
+you'll need to save it elsewhere.  If any "dotkits" or "modules" are
+used to set the build environment, they should be included at the
+beginning of the CONFIGURATION PARAMETER SECTION of the
+checkout_and_build script, with several parameters consistent with
+those dotkits/modules following.  For example:
+
+########################################################################################
+# CONFIGURATION PARAMETER SECTION
+
+# COGENT root directory (Leave this commented out to read it from your environment)
+#COGENT_TEST_COGENT_DIR=
+
+# Chombo root directory (Leave this commented out to read it from your environment)
+#COGENT_TEST_CHOMBO_DIR=
+
+# Set the master configuration parameters to be used in all
+# of the builds.  The options must, of course, be consistent
+# with the dotkits.  It dotkits are not available, the lines
+# below can just be commented out.
+
+. /usr/local/tools/dotkit/init.sh
+use mvapich2-gnu-2.1
+
+MACHINE=cab
+OPT=TRUE
+DEBUG=FALSE
+MPICXX=mpicxx
+MPICC=mpicc
+CXX=g++
+CC=gcc
+FC=gfortran
+HYPRE_DIR=hypre-2.9.0b
+HDF5_SERIAL_DIR=/usr/local/tools/hdf5-gnu-serial-1.8.10
+HDF5_PARALLEL_DIR=/usr/local/tools/hdf5-gnu-parallel-mvapich2-1.8.10
+
+# You can set the following flag to true if you know that hypre is
+# already built.  Otherwise, the copying of headers performed by the
+# hypre doinstall (regardless of whether anything is recompiled or
+# not) will trigger a recompilation of the COGENT files that include
+# those headers.
+
+skip_hypre_build=false
+########################################################################################
+
+Since Hypre is rarely rebuilt, the last configuration parameter can be
+set to false to bypass it.  If set to true, execution of the doinstall
+script will cause several headers to be recopied even if nothing has
+changed.  This will then cause any COGENT files that include those
+headers to be recompiled.
+

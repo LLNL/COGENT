@@ -1,0 +1,94 @@
+********************************
+*This program creates an extended flux-aligned or de-aligned grids and 
+*the corresponding COGENT mapping for a given g-eqdsk file.
+*******************************
+
+******************************
+*How to build the code
+******************************
+
+make gridGenerator MPI=FALSE (or MPI=TRUE) OPT=TRUE DEBUG=FALSE DIM=2
+
+************************************
+*How to run the grid-generator 
+************************************
+
+Provided python is available, run 
+
+cd ../
+python scripts/pyRun.py <DCT_file> <output_file>
+
+This will run the grid generator and produce .pdf plots of the entire grid and 
+all grid blocks (if requested). The plots are placed into the output folder
+
+All input parameters are specified in the USER-SPECIFIED INPUT
+portion of the pyRun.py script (top of of file). The pyRun.py script can also be used 
+only for plotting purposes, if run_GridGenerator and smooth_Ghosts are both set to 0.
+
+
+The grid generator can also be run directly as follows 
+
+for de-algined grids (coarse and fine examples)
+
+<gridGenerator_ex_file> utilities/g153523.03745_dct COGENT_mapping 0.8 1.1 48 32 6 6 20 20 2 0 4 2 0.2 0.6 0.6 1.4 -1.05 1.6 0.0 1 0
+<gridGenerator_ex_file> utilities/g153523.03745_dct COGENT_mapping 0.8 1.1 192 128 24 24 80 80 6 0 16 8 0.2 0.6 0.6 1.4 -1.05 1.6 0.0 1 0
+
+for flux-algined grids (coarse and fine examples)
+
+<gridGenerator_ex_file> utilities/g153523.03745_dct COGENT_mapping 0.8 1.1 48 32 6 6 20 20 2 0 4 2 -0.2 0.7 0.6 1.4 -1.05 1.6 0.0 1 0
+<gridGenerator_ex_file> utilities/g153523.03745_dct COGENT_mapping 0.8 1.1 192 128 24 24 80 80 6 0 16 8 -0.2 0.7 0.6 1.4 -1.05 1.6 0.0 1 0
+
+
+*************************************
+*Utilities / how to create a DCT file
+*************************************
+
+The subfolder utilities contains matlab scripts to read g-eqdsk file,
+extract the magnetic flux data, smooth it, and produce a DCT-file. smoothed
+ of the g-eqdsk file, which contains the smoothed-psi is generated as well.
+
+Example:
+
+smooth_eqdsk('g153523.03745', 1000) 
+
+will run the matlab script on the g-file g153523.03745 (currently exists in /utilities folder)
+with the smoothing parameter s = 1000, and will produce two output files: 
+g153523.03745_dct and g153523.03745_smoothed. This example should be run by setting 
+zSmin = -1.3 in smooth_eqdsk.m in order to have smoothed psi structure in the bottom-left corner
+(required later for longer-leg extrapolation in the above gridGenerator example). 
+
+The smoothing occurs as a result of two steps:
+(a) A least-square fit is obtained by making use of the RBF functions: I[n]/(r[n]+r0). 
+(b) A robust smoothing algorithm [Garcia D, Computational Statistics & Data Analysis, 2009]
+ is applied to the fit.
+
+
+***********************************
+*Additional general notes/comments:
+***********************************
+
+(1) Smooth_eqdsk computes Xpt for the smoothed geometry, but returns the magnetic 
+axis location for the original geometry. 
+
+(2) For the case of a fine poloidal mesh we may need to increase the number of radial cells
+as well (see the high-resolution example). Otherwise, the radial gridlines launched from
+the separatrix in the X-point vicinity may cross block cuts.
+
+
+****************************************************
+*How to view the output — OLD OPTION (STILL WORKS)
+****************************************************
+
+The output is dumped into /output folder, which also contains 
+matlab scripts to view the results:
+
+-Plot entire grid
+plotEntireGrid() 
+
+-Plot valid cells of a given block (e.g., block 1).
+load coords1
+plot_coords(coords1) 
+
+-Plot extended grid for a given block (e.g., block 0)
+load extended_coords0
+plot_coords(extended_coords0) 

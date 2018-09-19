@@ -1,0 +1,321 @@
+#include "CONSTANTS.H"
+
+      subroutine get_miller_field_data(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[RBpol],
+     &     CHF_CONST_FRA1[dRBpoldt],
+     &     CHF_CONST_REAL[RBtor],
+     &     CHF_CONST_FRA1[Rmaj],
+     &     CHF_CONST_FRA1[Rr],
+     &     CHF_CONST_FRA1[Rt],
+     &     CHF_CONST_FRA1[Zr],
+     &     CHF_CONST_FRA1[Zt],
+     &     CHF_CONST_FRA1[Rtt],
+     &     CHF_CONST_FRA1[Ztt],
+     &     CHF_FRA[b_pt],
+     &     CHF_FRA1[Bmag_pt],
+     &     CHF_FRA[bunit_pt],
+     &     CHF_FRA[gradb_pt],
+     &     CHF_FRA[curlb_pt],
+     &     CHF_FRA1[bdotcurlb_pt]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], l
+      double precision
+     &     jac, RB, bdotcurlb, bunit(0:2),
+     &     bunitR, dbunitRdt, bunitphi, dbunitphidt, bunitZ, dbunitZdt,
+     &     dRBdt, rsphert, rsphertsq, wronsk, curlb(0:2), bporb
+
+      CHF_MULTIDO[gridbox;i;j;k]
+
+c        Rmaj times total field magnitude
+         RB = dsqrt(RBpol(CHF_IX[i;j;k])**2 + RBtor**2)
+
+         jac = Rr(CHF_IX[i;j;k]) * Zt(CHF_IX[i;j;k]) - Zr(CHF_IX[i;j;k]) * Rt(CHF_IX[i;j;k])
+
+c        Compute the (theta) derivative of Rmaj*field magnitude
+
+         dRBdt = RBpol(CHF_IX[i;j;k]) * dRBpoldt(CHF_IX[i;j;k]) / RB
+
+c        Compute the field unit vector and its theta derivative
+
+c        rsphert is theta derivative of spherical-coordinate radius (not Miller's r paramter)
+         rsphertsq = Zt(CHF_IX[i;j;k])**2 + Rt(CHF_IX[i;j;k])**2
+         rsphert = dsqrt(rsphertsq)
+         bunitR = RBpol(CHF_IX[i;j;k]) * Rt(CHF_IX[i;j;k]) / (rsphert*RB)
+         bunitphi = RBtor / RB
+         bunitZ = RBpol(CHF_IX[i;j;k]) * Zt(CHF_IX[i;j;k]) / (rsphert*RB)
+         bunit(0) = bunitR
+         bunit(1) = bunitphi
+         bunit(2) = bunitZ
+
+         wronsk = (Rt(CHF_IX[i;j;k])*Ztt(CHF_IX[i;j;k]) - Zt(CHF_IX[i;j;k])*Rtt(CHF_IX[i;j;k]))/rsphertsq
+         dbunitRdt = ((dRBpoldt(CHF_IX[i;j;k])/RBpol(CHF_IX[i;j;k]))-drBdt/RB)*bunitR - bunitZ*wronsk
+         dbunitZdt = ((dRBpoldt(CHF_IX[i;j;k])/RBpol(CHF_IX[i;j;k]))-drBdt/RB)*bunitZ + bunitZ*wronsk
+         dbunitphidt = -(RBtor/(RB)**2)*dRBdt
+
+         do l = 0, 2
+            bunit_pt(CHF_IX[i;j;k],l) = bunit(l)
+            b_pt(CHF_IX[i;j;k],l)     = bunit(l) * (RB/Rmaj(CHF_IX[i;j;k]))
+         end do
+         bporb = RBpol(CHF_IX[i;j;k])/(Rmaj(CHF_IX[i;j;k])*RB*jac)
+         gradb_pt(CHF_IX[i;j;k],0) = - (RB/Rmaj(CHF_IX[i;j;k])**2)-Zr(CHF_IX[i;j;k])*bporb*dRBdt
+         gradb_pt(CHF_IX[i;j;k],1) = zero
+         gradb_pt(CHF_IX[i;j;k],2) = Rr(CHF_IX[i;j;k])*bporb*dRBdt
+
+c        R, phi, Z components of curl b
+         curlb(0) = -Rr(CHF_IX[i;j;k])*dbunitphidt/jac
+         curlb(1) = (Rr(CHF_IX[i;j;k])*dbunitRdt + Zr(CHF_IX[i;j;k])*dbunitZdt)/jac
+         curlb(2)  = bunitphi/Rmaj(CHF_IX[i;j;k]) - Zr(CHF_IX[i;j;k])*dbunitphidt/jac
+         bdotcurlb = zero
+         do l=0, 2
+            curlb_pt(CHF_IX[i;j;k],l) = curlb(l)
+            bdotcurlb = bdotcurlb + curlb(l) * bunit(l)
+         end do
+         Bmag_pt(CHF_IX[i;j;k]) = RB/Rmaj(CHF_IX[i;j;k])
+         bdotcurlb_pt(CHF_IX[i;j;k]) = bdotcurlb
+
+      CHF_ENDDO
+
+      return
+      end
+
+      function BpolR(t, beta, kappa, dpsidr, drr0, sk, sd)
+      implicit none
+      double precision BpolR, t, beta, kappa, dpsidr, drr0, sk, sd
+
+c     Major radius times poloidal magnetic field component given by equation (37) of
+c     R. L. Miller et al., "Noncircular, finite aspect ratio, local
+c     equilibrium model", Phys. Plasmas, Vol. 5, No. 4, April 1998.
+
+c     local variables
+      double precision st, ct, tpbs
+
+      st = dsin(t)
+      ct = dcos(t)
+      tpbs = t + beta*st
+
+      BpolR = (dpsidr / kappa) *
+     &     dsqrt( (dsin(tpbs)*(one + beta*ct))**2 + (kappa*ct)**2) /
+     &     (dcos(beta*st) + drr0*ct + (sk - sd*ct + (one + sk)*beta*ct)
+     &     *st*dsin(tpbs))
+
+      return
+      end
+
+      function dBpolRdt(t, beta, kappa, dpsidr, drr0, sk, sd)
+      implicit none
+      double precision dBpolRdt, t, beta, kappa, dpsidr, drr0, sk, sd
+
+c     Poloidal magnetic field component given by equation (37) of
+c     R. L. Miller et al., "Noncircular, finite aspect ratio, local
+c     equilibrium model", Phys. Plasmas, Vol. 5, No. 4, April 1998.
+
+c     local variables
+      double precision st, ct, tpbs, stpbs, ctpbs, opct, n, d, dndt, dddt
+
+      st = dsin(t)
+      ct = dcos(t)
+      tpbs = t + beta*st
+      stpbs = dsin(tpbs)
+      ctpbs = dcos(tpbs)
+      opct = one + beta*ct
+
+      n = dsqrt( (stpbs*opct)**2 + (kappa*ct)**2)
+      d = dcos(beta*st) + drr0*ct + (sk - sd*ct
+     &     + (one + sk)*beta*ct)*st*dsin(tpbs)
+      dndt = ( opct*stpbs*(-beta*stpbs*st + opct**2*ctpbs ) - kappa**2 * st*ct )/n
+      dddt = -dsin(beta*st)*beta*ct - drr0*st
+     &     + (sk - sd*ct + (one + sk)*beta*ct)*(st*ctpbs*opct + ct*stpbs)
+     &     + (sd - (one + sk)*beta) * st*st * stpbs
+
+      dBpolRdt = (dpsidr / kappa) * (d*dndt - n*dddt) / d**2
+
+      return
+      end
+
+
+      subroutine get_rbpol_miller(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_REAL[beta],
+     &     CHF_CONST_REAL[kappa],
+     &     CHF_CONST_REAL[dpsidr],
+     &     CHF_CONST_REAL[r0],
+     &     CHF_CONST_REAL[drr0],
+     &     CHF_CONST_REAL[s_kappa],
+     &     CHF_CONST_REAL[s_delta],
+     &     CHF_FRA1[RBpol],
+     &     CHF_FRA1[dRBpoldt]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], l
+      double precision t, BpolR, dBpolRdt
+      external BpolR, dBpolRdt
+
+      CHF_MULTIDO[gridbox;i;j;k]
+
+         t = ( j + half*(1-CHF_ID(1,dir)) )*h(1)
+
+c        RBpol is R*poloidal field
+         RBpol(CHF_IX[i;j;k])    = BpolR(t, beta, kappa, dpsidr, drr0, s_kappa, s_delta)
+
+c        (d/d theta)(RBpol)
+         dRBpoldt(CHF_IX[i;j;k]) = dBpolRdt(t, beta, kappa, dpsidr, drr0, s_kappa, s_delta)
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine miller_dxdxi(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REAL[beta],
+     &     CHF_CONST_REAL[kappa],
+     &     CHF_CONST_FRA[Xi],
+     &     CHF_CONST_INT[destComp],
+     &     CHF_CONST_INT[dirX],
+     &     CHF_CONST_INT[dirXi],
+     &     CHF_FRA[dXdXi]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision r, theta
+
+      if (dirX .eq. 0) then
+
+         if (dirXi .eq. 0) then
+c           dR/dr = cos(theta + beta*sin(theta))
+
+            CHF_MULTIDO[box;i;j;k]
+               r     = Xi(CHF_IX[i;j;k],0)
+               theta = Xi(CHF_IX[i;j;k],1)
+               dXdXi(CHF_IX[i;j;k],destComp) = dcos(theta + beta*dsin(theta))
+            CHF_ENDDO
+
+         else if (dirXi == 1) then
+c           dR/dtheta = -rsin(theta + beta*sin(theta))*(1 + beta*cos(theta))
+
+            CHF_MULTIDO[box;i;j;k]
+               r     = Xi(CHF_IX[i;j;k],0)
+               theta = Xi(CHF_IX[i;j;k],1)
+               dXdXi(CHF_IX[i;j;k],destComp) = -r*dsin(theta + beta*dsin(theta))*(1. + beta*dcos(theta))
+            CHF_ENDDO
+
+         endif
+
+      else if (dirX .eq. 1) then
+
+         if (dirXi .eq. 0) then
+c           dZ/dr = kappa*sin(theta)
+
+            CHF_MULTIDO[box;i;j;k]
+               r     = Xi(CHF_IX[i;j;k],0)
+               theta = Xi(CHF_IX[i;j;k],1)
+               dXdXi(CHF_IX[i;j;k],destComp) = kappa * dsin(theta)
+            CHF_ENDDO
+
+         else if (dirXi .eq. 1) then
+c            dZ/dtheta = r kappa cos(theta)
+
+            CHF_MULTIDO[box;i;j;k]
+               r     = Xi(CHF_IX[i;j;k],0)
+               theta = Xi(CHF_IX[i;j;k],1)
+               dXdXi(CHF_IX[i;j;k],destComp) = r * kappa * dcos(theta)
+            CHF_ENDDO
+
+         endif
+
+      endif
+
+      return
+      end
+
+      subroutine get_miller_nc_mapped_coords(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[rmid],
+     &     CHF_CONST_INT[constminorrad],
+     &     CHF_FRA[xi]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      if (constminorrad .ne. 0) then
+         CHF_MULTIDO[box;i;j;k]
+            xi(CHF_IX[i;j;k],0) = rmid;
+            xi(CHF_IX[i;j;k],1) = j*dx(1);
+         CHF_ENDDO
+      else
+         CHF_MULTIDO[box;i;j;k]
+            xi(CHF_IX[i;j;k],0) = i*dx(0);
+            xi(CHF_IX[i;j;k],1) = j*dx(1);
+         CHF_ENDDO
+      endif
+
+      return
+      end
+
+      subroutine get_miller_cc_mapped_coords(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[rmid],
+     &     CHF_CONST_INT[constminorrad],
+     &     CHF_FRA[xi]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      if (constminorrad .ne. 0) then
+         CHF_MULTIDO[box;i;j;k]
+            xi(CHF_IX[i;j;k],0) = rmid;
+            xi(CHF_IX[i;j;k],1) = (j + half)*dx(1);
+         CHF_ENDDO
+      else
+         CHF_MULTIDO[box;i;j;k]
+            xi(CHF_IX[i;j;k],0) = (i + half)*dx(0);
+            xi(CHF_IX[i;j;k],1) = (j + half)*dx(1);
+         CHF_ENDDO
+      endif
+
+      return
+      end
+
+      subroutine get_miller_fc_mapped_coords(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[rmid],
+     &     CHF_CONST_INT[constminorrad],
+     &     CHF_FRA[xi]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision offset(0:1)
+
+      offset(0) = half
+      offset(1) = half
+      offset(dir) = zero
+
+      if (constminorrad .ne. 0) then
+         CHF_MULTIDO[box;i;j;k]
+            xi(CHF_IX[i;j;k],0) = rmid;
+            xi(CHF_IX[i;j;k],1) = (j + offset(1))*dx(1);
+         CHF_ENDDO
+      else
+         CHF_MULTIDO[box;i;j;k]
+            xi(CHF_IX[i;j;k],0) = (i + offset(0))*dx(0);
+            xi(CHF_IX[i;j;k],1) = (j + offset(1))*dx(1);
+         CHF_ENDDO
+      endif
+
+      return
+      end
+

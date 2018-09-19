@@ -1,0 +1,77 @@
+# resolution
+log2MinRes_BrackbillSalzman = 4
+log2MaxRes_BrackbillSalzman = 4
+
+# creates aspect ratio in mcore and mcsol for the radial lines
+refRatioEta = 2
+
+# stopping criterion for iteration
+maxTol = 1.0e-20
+
+#max iterations in point Jacobi 
+maxIter_BrackbillSalzman = 1
+printFreq_BrackbillSalzman = 1000
+
+xiEtaWeight  = 0.5
+
+# parameters for setSmoothWeight             
+sigma        = 9.0
+expo         = 2.0
+    
+# parameters for computeTargetSpacing             
+spacing_sigma  = 1.0
+spacing_expo   = 2.0
+
+xiTangent  = false
+etaTangent = true
+
+evenSpacingCase = true
+
+evenGeometryBaseName    = ../newBoundaryNodesIC/outputMapping/even.curr  
+alignedGeometryBaseName = ../newBoundaryNodesIC/outputMapping/aligned.curr       
+
+evenCheckpointBaseName    = ../checkpoint/even.curr      
+alignedCheckpointBaseName = ../checkpoint/aligned.curr
+
+evenOutputBaseName    = outputMapping/even.curr
+alignedOutputBaseName = outputMapping/aligned.curr
+
+fieldFileName = ../mappingFiles/DCT_coefficients_3-22-16
+
+writeInfo = false
+writePlot = true
+
+#parameters for shifting boundary points: 
+shiftDist  = 0
+smoothness = 0.0
+refRatio   = 9
+
+blending    = false       
+startFrac   = 0.0
+endFrac     = 0.0
+
+beginBlockBS = 0
+endBlockBS   = 0         
+numBlocks    = 10
+
+origin = 0.0 0.0 
+
+incScale = 1.0
+moveInterior = true
+
+checkAnn = false
+
+Spower =  1
+Jpower =  -1
+
+fieldAligned = false
+tanDirScale  = .9999
+
+#writes the current state
+checkPointInt = 1000
+
+oneSidedEtaDiff = true
+
+readFromCheckpoint = false
+numInitSmooth = 5000
+

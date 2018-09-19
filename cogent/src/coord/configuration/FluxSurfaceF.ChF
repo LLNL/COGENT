@@ -1,0 +1,105 @@
+      subroutine add_flux_surface_array(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[radial],
+     &     CHF_FRA[data]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], m, ncomp
+
+      ncomp = CHF_NCOMP[data]
+
+      do m = 0, ncomp-1
+         CHF_AUTOMULTIDO[gridbox;i]
+#if CH_SPACEDIM == 3
+            data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
+     &           + radial(i0,CHF_LBOUND[radial;1],0)
+#else
+            data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
+     &           + radial(i0,CHF_LBOUND[radial;1])
+#endif
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+      subroutine subtract_flux_surface_array(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[radial],
+     &     CHF_FRA[data]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], m, ncomp
+
+      ncomp = CHF_NCOMP[data]
+
+      do m = 0, ncomp-1
+         CHF_AUTOMULTIDO[gridbox;i]
+#if CH_SPACEDIM == 3
+            data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
+     &           - radial(i0,CHF_LBOUND[radial;1],0)
+#else
+            data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
+     &           - radial(i0,CHF_LBOUND[radial;1])
+#endif
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+      subroutine multiply_flux_surface_array(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[radial],
+     &     CHF_FRA[data]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], m, ncomp
+
+      ncomp = CHF_NCOMP[data]
+
+      do m = 0, ncomp-1
+         CHF_AUTOMULTIDO[gridbox;i]
+#if CH_SPACEDIM == 3
+            data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
+     &           * radial(i0,CHF_LBOUND[radial;1],0)
+#else
+            data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
+     &           * radial(i0,CHF_LBOUND[radial;1])
+#endif
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+      subroutine divide_flux_surface_array(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[radial],
+     &     CHF_FRA[data]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], m, ncomp
+
+      ncomp = CHF_NCOMP[data]
+
+      do m = 0, ncomp-1
+         CHF_AUTOMULTIDO[gridbox;i]
+#if CH_SPACEDIM == 3
+            data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
+     &           / radial(i0,CHF_LBOUND[radial;1],0)
+#else
+            data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
+     &           / radial(i0,CHF_LBOUND[radial;1])
+#endif
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+

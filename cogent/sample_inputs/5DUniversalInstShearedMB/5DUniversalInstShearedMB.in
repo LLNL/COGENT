@@ -1,0 +1,227 @@
+#TEST np=1024, timelimit=00:05:00
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 10
+gksystem.verbosity   = 10
+gksystem.hdf_density = true
+gksystem.hdf_momentum = false
+gksystem.hdf_potential = true
+#gksystem.hdf_temperature = true
+gksystem.hdf_dfn = false
+gksystem.hdf_efield = true
+gksystem.hdf_vparmu = true
+#gksystem.hdf_ParallelMomentum = true
+#gksystem.hdf_PoloidalMomentum = true
+gksystem.fixed_plot_indices = 2 0 0 6 2
+
+gksystem.ti_class = "rk"
+gksystem.ti_method = "4"
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 2
+simulation.max_time            = 100000.0
+#simulation.max_dt_grow         = 1.1
+simulation.initial_dt_fraction = 1.0
+simulation.cfl_number          = 0.9
+#simulation.fixed_dt           = 0.00024
+#simulation.fixed_dt_subiteration  = true
+##simulation.fixed_dt           = 0.001
+simulation.checkpoint_interval = 400
+simulation.checkpoint_prefix   = "chk"
+#simulation.restart_file = "chk0400.5d.hdf5"
+simulation.plot_interval       = 20
+simulation.plot_prefix         = "plt"
+#simulation.histories = true
+#simulation.1.history_field = "potential"
+#simulation.1.history_indices = 6 8 16
+
+
+#####################################################
+# Computational Grid Definitions
+#####################################################
+gksystem.num_cells   = 12 32 32 32 16
+gksystem.is_periodic = 0  0  1  0  0
+
+gksystem.configuration_decomp = 2 8 4
+gksystem.velocity_decomp      =       2 4
+gksystem.phase_decomp         = 2 8 4 4 4
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 1.0e20
+units.temperature    = 400.0
+units.length         = 1.0
+units.mass           = 1.0
+units.magnetic_field = 1.0 
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "slab"
+gksystem.magnetic_geometry_mapping.slab.verbose  = true
+gksystem.magnetic_geometry_mapping.slab.visit_plotfile  = "SlabViz"
+gksystem.magnetic_geometry_mapping.slab.num_quad_points = 5
+gksystem.magnetic_geometry_mapping.slab.axisymmetric = false
+gksystem.magnetic_geometry_mapping.slab.x_max = 0.008
+gksystem.magnetic_geometry_mapping.slab.y_max = 10.0
+gksystem.magnetic_geometry_mapping.slab.z_max = 0.008
+gksystem.magnetic_geometry_mapping.slab.By_inner = 3.0
+gksystem.magnetic_geometry_mapping.slab.By_outer = 3.0
+gksystem.magnetic_geometry_mapping.slab.Bz_inner = 0.0
+gksystem.magnetic_geometry_mapping.slab.Bz_outer = 0.0024
+
+gksystem.magnetic_geometry_mapping.slab.field_aligned = true
+gksystem.magnetic_geometry_mapping.slab.number_of_blocks = 8
+gksystem.magnetic_geometry_mapping.sheared_multiblock_geometry = true
+
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 3.0
+phase_space_mapping.mu_max = 5.0
+phase_space_mapping.second_order = true
+phase_space_mapping.velocity_type = "gyrokinetic"
+
+#####################################################
+# Vlasov Operator Definitions
+#####################################################
+gkvlasov.verbose = true
+gkvlasov.time_step_diagnostics = true
+
+#gkvlasov.face_avg_type = uw1
+gkvlasov.face_avg_type = uw3
+#gkvlasov.face_avg_type = uw5
+#gkvlasov.face_avg_type = weno5
+#gkvlasov.face_avg_type = bweno
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gksystem.fixed_efield = false
+gkpoisson.verbose = true
+gkpoisson.second_order = true
+
+#gkpoisson.linear_solver.method = "GMRES"
+#gkpoisson.linear_solver.max_iter = 50
+#gkpoisson.linear_solver.tol = 1.e-6
+gkpoisson.linear_solver.verbose = true
+#gkpoisson.linear_solver.precond.method = "AMG"
+#gkpoisson.linear_solver.precond.max_iter = 1
+#gkpoisson.linear_solver.precond.tol = 1.e-6
+#gkpoisson.linear_solver.precond.verbose = true
+
+#####################################################
+# Species Definitions
+#####################################################
+kinetic_species.1.name   = "hydrogen"
+kinetic_species.1.mass   = 2.0
+kinetic_species.1.charge = 1.0
+kinetic_species.1.velocity_renormalization = true
+
+kinetic_species.2.name   = "electron"
+kinetic_species.2.mass   = 0.01
+kinetic_species.2.charge = -1.0
+#kinetic_species.2.cls    = "Krook"
+kinetic_species.2.velocity_renormalization = true 
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.potential.function = "zero_grid_func"
+IC.hydrogen.function = "maxwellian_phase_func" 
+IC.electron.function = "maxwellian_electron_phase_func"
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.hydrogen.radial_lower.function = "maxwellian_phase_func"
+BC.hydrogen.radial_upper.function = "maxwellian_phase_func"
+BC.hydrogen.poloidal_lower.function = "maxwellian_phase_func"
+BC.hydrogen.poloidal_upper.function = "maxwellian_phase_func"
+BC.hydrogen.toroidal_lower.function = "maxwellian_phase_func"
+BC.hydrogen.toroidal_upper.function = "maxwellian_phase_func"
+BC.hydrogen.vpar_lower.function = "maxwellian_phase_func"
+BC.hydrogen.vpar_upper.function = "maxwellian_phase_func"
+BC.hydrogen.mu_lower.function = "maxwellian_phase_func"
+BC.hydrogen.mu_upper.function = "maxwellian_phase_func"
+
+BC.electron.radial_lower.function = "maxwellian_electron_phase_func"
+BC.electron.radial_upper.function = "maxwellian_electron_phase_func"
+BC.electron.poloidal_lower.function = "maxwellian_electron_phase_func"
+BC.electron.poloidal_upper.function = "maxwellian_electron_phase_func"
+BC.electron.toroidal_lower.function = "maxwellian_electron_phase_func"
+BC.electron.toroidal_upper.function = "maxwellian_electron_phase_func"
+BC.electron.vpar_lower.function = "maxwellian_electron_phase_func"
+BC.electron.vpar_upper.function = "maxwellian_electron_phase_func"
+BC.electron.mu_lower.function = "maxwellian_electron_phase_func"
+BC.electron.mu_upper.function = "maxwellian_electron_phase_func"
+
+BC.potential.radial_lower.type = "dirichlet"
+BC.potential.radial_upper.type = "dirichlet"
+BC.potential.poloidal_lower.type = "neumann"
+BC.potential.poloidal_upper.type = "neumann"
+BC.potential.toroidal_lower.type = "neumann"
+BC.potential.toroidal_upper.type = "neumann"
+
+#####################################################
+# Collisions Definitions
+#####################################################
+CLS.electron.cls_freq = 20.5
+CLS.electron.conserve_momentum  = false
+CLS.electron.conserve_particle = true
+CLS.electron.ref_function = "maxwellian_electron_phase_func"
+CLS.electron.ref_temperature = "T0_grid_func"
+
+
+#####################################################
+# Kinetic Function Definitions
+#####################################################
+kinetic_function_library.number = 2
+kinetic_function_library.verbosity = 1
+kinetic_function_library.list = "maxwellian_phase_func" "maxwellian_electron_phase_func"
+
+kinetic_function_library.maxwellian_phase_func.type = "maxwellian"
+kinetic_function_library.maxwellian_phase_func.vparallel.function = "Ion_vpar_grid_func"
+kinetic_function_library.maxwellian_phase_func.density.function = "N0_grid_func" 
+kinetic_function_library.maxwellian_phase_func.temperature.function = "T0_grid_func" 
+
+kinetic_function_library.maxwellian_electron_phase_func.type = "maxwellian"
+kinetic_function_library.maxwellian_electron_phase_func.vparallel.function = "ele_vpar_grid_func"
+kinetic_function_library.maxwellian_electron_phase_func.density.function = "N0_grid_func" 
+kinetic_function_library.maxwellian_electron_phase_func.temperature.function = "T0_grid_func" 
+
+#####################################################
+# Grid Function Definitions
+#####################################################
+grid_function_library.number = 7
+grid_function_library.verbosity = 1
+grid_function_library.list = "zero_grid_func" "T0_grid_func" "eT0_grid_func" "N0_grid_func" "eN0_grid_func" "Ion_vpar_grid_func" "ele_vpar_grid_func"
+
+grid_function_library.zero_grid_func.type = "zero" 
+
+grid_function_library.T0_grid_func.type = "constant"
+grid_function_library.T0_grid_func.value = 1.0
+
+grid_function_library.eT0_grid_func.type = "constant"
+grid_function_library.eT0_grid_func.value = 1.0
+
+
+#computational coordinate X runs 0 to 2pi. physical coordinate runs 0 to L.
+grid_function_library.N0_grid_func.type = "arbitrary"
+grid_function_library.N0_grid_func.coordinate_type= "physical"
+grid_function_library.N0_grid_func.function = "exp(-x/(4.0*0.008))+0.00000001*sin(2.0*pi*y/10.0+2.0*pi*z/0.008)*sin(pi*x/0.008)"
+
+grid_function_library.eN0_grid_func.type = "arbitrary"
+grid_function_library.eN0_grid_func.coordinate_type= "physical"
+grid_function_library.eN0_grid_func.function = "exp(-x/(4.0*0.008))+0.0000000*sin(2.0*pi*y/10.0+2.0*pi*z/0.008)*sin(pi*x/0.008)"
+
+grid_function_library.Ion_vpar_grid_func.type = "constant"
+grid_function_library.Ion_vpar_grid_func.value = 0.0
+
+grid_function_library.ele_vpar_grid_func.type = "constant"
+grid_function_library.ele_vpar_grid_func.value = 0.0
+

@@ -1,0 +1,26 @@
+#!/bin/sh
+
+file_name=$(basename $0)
+config_name=$(echo ${file_name} | sed s/^doconfig-//)
+base_dir=$(dirname $0)
+base_dir=$(cd ${base_dir}; pwd)
+install_dir=${base_dir}/lib/${config_name}
+
+mpicc_suffix=/bin/mpicc
+mpicc_path=$(which mpicc)
+where_stuff_is=${mpicc_path%$mpicc_suffix}
+gnu_dir="${where_stuff_is}"
+
+cd ${base_dir}/src
+./configure "--enable-debug" \
+            CC=${gnu_dir}/bin/mpicc \
+            CFLAGS="-g " \
+            CXX=${gnu_dir}/bin/mpicxx \
+            CXXFLAGS="-g " \
+            F77=${gnu_dir}/bin/mpif77 \
+            F77FLAGS="-g " \
+            --with-MPI-include=${gnu_dir}/include \
+            --with-MPI-libs="mpi mpich mpicxx mpifort" \
+            --with-MPI-lib-dirs=${gnu_dir}/lib \
+            --prefix=$install_dir
+

@@ -1,0 +1,13 @@
+#!/bin/bash
+
+grep lcore $1
+grep rcore $1
+grep lcsol $1
+grep rcsol $1
+grep lsol $1
+grep rsol $1
+grep lpf $1
+grep rpf $1
+grep mcore $1
+grep mcsol $1
+

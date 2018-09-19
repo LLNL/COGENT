@@ -1,0 +1,91 @@
+#  model_mapping_1024_m6_m12  with blending factor 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.12 40 1024 72 72 24 768 0 0 8 32 0.1 1.6 0.4 1.6 1.76 
+
+#  model_mapping_512_m6_m12  with blending factor 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.12 40 512 40 40 24 384 0 0 8 16 0.1 1.6 0.4 1.6 1.76 
+
+#  model_mapping_256_m6_m12  with blending_factor = 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.12 40 256 24 24 24 192 0 0 8 8 0.1 1.6 0.4 1.6 1.76 
+
+#  model_mapping_128_m6_m12  with blending_factor = 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.12 40 128 16 16 24 96 0 0 8 8 0.1 1.6 0.4 1.6 1.76
+
+#  model_mapping_64_m6_m12  with blending_factor = 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.12 40 64 12 12 24 48 0 0 8 8 0.1 1.6 0.4 1.6 1.76
+
+#  model_mapping_32_m6_m12  with blending_factor = 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.12 40 32 6 6 24 24 0 0 8 4 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_16_32  with blending_factor = 0.68
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 32 32 8 8 32 24 0 0 16 4 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_16_64  with blending_factor = 0.68
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 32 64 16 16 32 48 0 0 16 8 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_16_128  with blending_factor = 0.68
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 32 128 24 24 32 96 0 0 16 8 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_16_256  with blending_factor = 0.68
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 32 256 48 48 32 192 0 0 16 16 0.1 1.6 0.4 1.6 1.76 
+
+#  newmodel_mapping_16_512  with blending_factor = 0.68
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 32 512 96 96 32 384 0 0 16 32 0.1 1.6 0.4 1.6 1.76 
+
+#  newmodel_mapping_16_1024  with blending_factor = 0.68
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 32 1024 192 192 32 768 0 0 16 64 0.1 1.6 0.4 1.6 1.76 
+
+#  newmodel_mapping_24_32  with blending_factor = 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 40 32 8 8 40 24 0 0 16 4 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_24_64  with blending_factor = 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 40 64 16 16 40 48 0 0 16 8 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_24_128  with blending_factor = 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 40 128 24 24 40 96 0 0 16 8 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_24_256  with blending_factor = 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 40 256 48 48 40 192 0 0 16 16 0.1 1.6 0.4 1.6 1.76 
+./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 40 256 48 48 40 192 0 0 8 8 0.1 1.6 0.4 1.6 1.76 
+
+#  newmodel_mapping_24_512  with blending_factor = 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 40 512 96 96 40 384 0 0 16 32 0.1 1.6 0.4 1.6 1.76 
+
+#  newmodel_mapping_24_1024  with blending factor 0.6
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 40 1024 192 192 40 768 0 0 16 64 0.1 1.6 0.4 1.6 1.76 
+
+#  newmodel_mapping_32_32  with blending_factor = 0.53
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 48 32 8 8 48 24 0 0 16 4 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_32_64  with blending_factor = 0.53
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 48 64 16 16 48 48 0 0 16 8 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_32_128  with blending_factor = 0.53
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 48 128 24 24 48 96 0 0 16 8 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_32_256  with blending_factor = 0.53
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 48 256 48 48 48 192 0 0 16 16 0.1 1.6 0.4 1.6 1.76 
+
+#  newmodel_mapping_32_512  with blending_factor = 0.53
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 48 512 96 96 48 384 0 0 16 32 0.1 1.6 0.4 1.6 1.76 
+
+#  newmodel_mapping_32_1024  with blending factor 0.53
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 48 1024 192 192 48 768 0 0 16 64 0.1 1.6 0.4 1.6 1.76 
+
+#  newmodel_mapping_64_32  with blending_factor = 0.38
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 80 32 8 8 80 24 0 0 16 4 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_64_64  with blending_factor = 0.38
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 80 64 16 16 80 48 0 0 16 8 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_64_128  with blending_factor = 0.38
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 80 128 24 24 80 96 0 0 16 8 0.1 1.6 0.4 1.6 1.76
+
+#  newmodel_mapping_64_256  with blending_factor = 0.38
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 80 256 48 48 80 192 0 0 16 16 0.1 1.6 0.4 1.6 1.76 
+
+#  newmodel_mapping_64_512  with blending_factor = 0.38
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 80 512 96 96 80 384 0 0 16 32 0.1 1.6 0.4 1.6 1.76 
+
+#  newmodel_mapping_64_1024  with blending factor 0.38
+#./gridGenerator2d.Linux.64.g++.gfortran.OPT.ex utilities/DCT_model_geom 0.8 1.2 80 1024 192 192 80 768 0 0 16 64 0.1 1.6 0.4 1.6 1.76 
+

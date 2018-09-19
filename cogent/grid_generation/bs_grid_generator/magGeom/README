@@ -1,0 +1,46 @@
+//input picture at two resolutions
+
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 lcore
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 rcore
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 lcsol
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 rcsol
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 lsol
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 rsol
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 lpf
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 rpf
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 mcore
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 mcsol
+
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 lcore
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 rcore
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 lcsol
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 rcsol
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 lsol
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 rsol
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 lpf
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 rpf
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 mcore
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../mappingFiles/COGENT_mapping_3-22-16 ../mappingFiles/DCT_coefficients_3-22-16 mcsol
+
+// output picture at two resolutions
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 lcore
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 rcore
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 lcsol
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 rcsol
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 lsol
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 rsol
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 lpf
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 rpf
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 mcore
+magGeomData_502d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 mcsol
+
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 lcore
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 rcore
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 lcsol
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 rcsol
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 lsol
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 rsol
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 lpf
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 rpf
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 mcore
+magGeomData_102d.Linux.64.g++.gfortran.OPT.ex ../Results/outputMapping/extended_map.17.2d.txt ../mappingFiles/DCT_coefficients_3-22-16 mcsol

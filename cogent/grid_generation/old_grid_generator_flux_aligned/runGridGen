@@ -1,0 +1,9 @@
+# COGENT_mapping_7_13
+#./gridGenerator2d.Linux.64.mpicxx.gfortran.OPT.MPI.ex utilities/g153523.03745_dct 0.8 1.12 40 256 24 24 24 192 0 0 8 8 0.1 1.4 -1.05 1.6 0.0
+# COGENT_mapping_7_17
+#./gridGenerator2d.Linux.64.mpicxx.gfortran.OPT.MPI.ex utilities/g153523.03745_dct 0.8 1.12 40 128 16 16 24 96 0 0 8 8 0.1 1.4 -1.05 1.6 0.0
+# COGENT_mapping_7_18
+./gridGenerator2d.Linux.64.mpicxx.gfortran.OPT.MPI.ex utilities/g153523.03745_dct 0.8 1.12 40 64 12 12 24 48 0 0 8 8 0.1 1.4 -1.05 1.6 0.0
+
+
+

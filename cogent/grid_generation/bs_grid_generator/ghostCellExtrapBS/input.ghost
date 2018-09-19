@@ -1,0 +1,50 @@
+log2MinRes_ghostCellExtrapBS = 4
+log2MaxRes_ghostCellExtrapBS = 4
+
+# base names for the two maps 
+alignedGeometryBaseNameGhost = ../utilities/outputMapping/aligned.curr
+evenGeometryBaseNameGhost    = ../utilities/outputMapping/even.curr
+
+fieldFileNameGhost  = ../mappingFiles/DCT_coefficients_3-22-16  
+
+writeInfo = true
+writePlot = true
+
+numGhost      = 4
+numExtraGhost = 0
+order         = 2
+
+blending    = false       
+startFrac   = 0.0
+endFrac     = 0.0
+
+beginBlock = 0
+endBlock   = 9            
+numBlocks  = 10
+
+origin = 0.0 0.0 
+
+maxIter_ghostCellExtrapBS = 10
+
+Spower =  1
+Jpower = -1       
+outputFileName = outputMapping/extended_map
+
+printFreq_ghostCellExtrapBS = 10000
+
+refRatio = 2
+
+incScale = 1.0
+
+#whichGhostMethod 
+# 0 aligned
+# 1 even
+# 2 weighted
+
+#one value for each block
+#block number      0 1 2 3 4 5 6 7 8 9
+whichGhostMethod = 2 2 2 2 2 2 2 2 0 0
+
+# creates aspect ratio in mcore and mcsol for the radial lines
+refRatioEta  = 2
+

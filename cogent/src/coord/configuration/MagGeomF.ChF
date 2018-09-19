@@ -1,0 +1,571 @@
+      subroutine mult_njinverse(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[efield_mapped],
+     &     CHF_CONST_FRA[njinverse],
+     &     CHF_FRA[efield]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], m, row, col
+      double precision sum
+
+      CHF_MULTIDO[box;i;j;k]
+
+         m = 0
+         do row = 0, CH_SPACEDIM-1
+            sum = zero
+            do col = 0, CH_SPACEDIM-1
+               sum = sum + njinverse(CHF_IX[i;j;k],m) * efield_mapped(CHF_IX[i;j;k],col)
+               m = m + 1
+            enddo
+            efield(CHF_IX[i;j;k],row) = sum
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine project_onto_parallel(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_FRA[vector]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k],n
+      double precision fac
+
+      fac = 0  
+      CHF_MULTIDO[box;i;j;k]
+
+#if CH_SPACEDIM==3
+
+        do n = 0, CHF_NCOMP[vector]-1
+         fac = fac + vector(CHF_IX[i;j;k],n) * bunit(CHF_IX[i;j;k],n) 
+        enddo
+
+        do n = 0, CHF_NCOMP[vector]-1
+          vector(CHF_IX[i;j;k],n) = fac * bunit(CHF_IX[i;j;k],n) 
+        enddo
+
+#else
+         fac = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0) 
+     &       + vector(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],2)                
+
+
+          vector(CHF_IX[i;j;k],0) = fac * bunit(CHF_IX[i;j;k],0) 
+          vector(CHF_IX[i;j;k],1) = fac * bunit(CHF_IX[i;j;k],2)       
+   
+#endif
+      
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine compute_radial_projection(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_CONST_FRA[vector],
+     &     CHF_CONST_FRA1[vector_r]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k] 
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k]
+
+         fac = sqrt(bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0) 
+     &             +bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2))                
+        
+         if (CHF_NCOMP[vector]. eq. 2) then 
+
+           vector_r(CHF_IX[i;j;k]) = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],2)/fac
+     &                             - vector(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],0)/fac 
+           
+   
+         else  
+
+           vector_r(CHF_IX[i;j;k]) = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],2)/fac
+     &                             - vector(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],0)/fac 
+
+
+         endif
+      
+      CHF_ENDDO
+      
+      return
+      end
+
+
+      subroutine compute_poloidal_projection(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_CONST_FRA[vector],
+     &     CHF_CONST_FRA1[vector_pol]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k] 
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k]
+
+         fac = sqrt(bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0) 
+     &             +bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2))                
+        
+         if (CHF_NCOMP[vector]. eq. 2) then
+
+           vector_pol(CHF_IX[i;j;k]) = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0)/fac
+     &                               + vector(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],2)/fac 
+   
+         else  
+
+           vector_pol(CHF_IX[i;j;k]) = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0)/fac
+     &                               + vector(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2)/fac 
+
+         endif
+      
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine cell_centered_grad_component(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INT[order],
+     &     CHF_FRA1[Efield]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir)]
+
+      if (order .eq. 4) then
+
+         CHF_MULTIDO[box; i; j; k]
+      
+            Efield(CHF_IX[i;j;k]) = (
+     &        phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
+     &        - eight * phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + eight * phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &        - phi(CHF_IX[i+2*ii;j+2*jj;k+2*kk])
+     &        ) / (twelve * h(dir))
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box; i; j; k]
+
+            Efield(CHF_IX[i;j;k]) = (
+     &        - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &        ) / (two * h(dir))
+          
+         CHF_ENDDO
+
+      endif
+
+      return
+      end
+
+      subroutine face_centered_grad_component(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INT[order],
+     &     CHF_FRA1[Efield]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir)]
+
+      if (order .eq. 4) then
+
+         CHF_MULTIDO[box; i; j; k]
+
+            Efield(CHF_IX[i;j;k]) = (
+     &        27.d0 * (phi(CHF_IX[i     ;j     ;k     ])
+     &               - phi(CHF_IX[i-  ii;j-  jj;k-  kk]))
+     &               - phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &               + phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
+     &        ) / (24.d0 * h(dir))
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box; i; j; k]
+
+            Efield(CHF_IX[i;j;k]) = (
+     &        - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + phi(CHF_IX[i     ;j     ;k     ])
+     &        ) / h(dir)
+
+         CHF_ENDDO
+
+      endif
+
+      return
+      end
+
+      subroutine compute_face_Binverse_integrals(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_FRA1[integral])
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision area
+
+      area = dx(1-dir)
+
+      CHF_MULTIDO[box;i;j;k]
+         integral(CHF_IX[i;j;k]) = area / B(CHF_IX[i;j;k])
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine compute_face_bXgradB_integrals(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_FRA1[integral])
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk], tdir
+
+      tdir = 1 - dir
+
+      CHF_DTERM[
+      ii = CHF_ID(0,tdir);
+      jj = CHF_ID(1,tdir);
+      kk = CHF_ID(2,tdir)]
+
+      CHF_MULTIDO[box;i;j;k]
+         integral(CHF_IX[i;j;k]) = dlog(B(CHF_IX[i;j;k])/B(CHF_IX[i+ii;j+jj;k+kk]))
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine compute_face_transverse_E(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_FRA1[E])
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk], tdir
+
+      tdir = 1 - dir
+
+      CHF_DTERM[
+      ii = CHF_ID(0,tdir);
+      jj = CHF_ID(1,tdir);
+      kk = CHF_ID(2,tdir)]
+
+      CHF_MULTIDO[box;i;j;k]
+         E(CHF_IX[i;j;k]) = (phi(CHF_IX[i;j;k]) - phi(CHF_IX[i+ii;j+jj;k+kk])) / dx(tdir)
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine compute_volume_B_integrals(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_FRA[B],
+     &     CHF_CONST_FRA1[jacobian],
+     &     CHF_FRA[integral])
+c     local variables
+      integer CHF_DDECL[i;j;k], comp
+      double precision sum, area
+
+      area = dx(0) * dx(1)
+
+      CHF_MULTIDO[box;i;j;k]
+      
+         do comp = 0, 2
+            integral(CHF_IX[i;j;k],comp) = B(CHF_IX[i;j;k],comp) * jacobian(CHF_IX[i;j;k]) * area
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine compute_volume_B_dot_E_integrals(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[E],
+     &     CHF_CONST_FRA[Bintegral],
+     &     CHF_FRA1[integral])
+c     local variables
+      integer CHF_DDECL[i;j;k], comp
+      double precision sum
+
+      CHF_MULTIDO[box;i;j;k]
+      
+         sum = zero
+         do comp = 0, 2
+            sum = sum + E(CHF_IX[i;j;k],comp) * Bintegral(CHF_IX[i;j;k],comp) 
+         enddo
+
+         integral(CHF_IX[i;j;k]) = sum
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine compute_volume_B_dot_E_integrals_field_aligned(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[phi_node],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_FRA[njinverse],
+     &     CHF_CONST_FRA[Bintegral],
+     &     CHF_FRA1[integral])
+c     local variables
+      integer CHF_DDECL[i;j;k], comp, m, row, col
+      double precision sum, Epol_mapped(0:1), Epol_phys(0:1), E_phys(0:2)
+
+      CHF_MULTIDO[box;i;j;k]
+      
+         Epol_mapped(0) = 0.0
+         Epol_mapped(1) = -0.5 * (phi_node(CHF_IX[i;j+1;k]) - phi_node(CHF_IX[i;j;k]) + phi_node(CHF_IX[i+1;j+1;k]) - phi_node(CHF_IX[i+1;j;k]))
+
+         Epol_mapped(1) = Epol_mapped(1)/dx(1)
+
+         m = 0
+         do row = 0, CH_SPACEDIM-1
+            sum = zero
+            do col = 0, CH_SPACEDIM-1
+               sum = sum + njinverse(CHF_IX[i;j;k],m) * Epol_mapped(col)
+	              m = m + 1
+            enddo
+            Epol_phys(row) = sum
+         enddo
+
+         E_phys(0) = Epol_phys(0)
+         E_phys(1) = 0.0
+         E_phys(2) = Epol_phys(1)
+
+         sum = zero
+         do comp = 0, 2
+            sum = sum + E_phys(comp) * Bintegral(CHF_IX[i;j;k],comp) 
+         enddo
+
+         integral(CHF_IX[i;j;k]) = sum
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+
+      subroutine compute_volume_B_dot_gradB_integrals(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_FRA[B],
+     &     CHF_CONST_FRA[gradB],
+     &     CHF_CONST_FRA1[jacobian],
+     &     CHF_FRA1[integral])
+c     local variables
+      integer CHF_DDECL[i;j;k], comp
+      double precision sum, area
+
+      area = dx(0) * dx(1)
+
+      CHF_MULTIDO[box;i;j;k]
+      
+         sum = zero
+         do comp = 0, 2
+            sum = sum - gradB(CHF_IX[i;j;k],comp) * B(CHF_IX[i;j;k],comp) 
+         enddo
+
+         integral(CHF_IX[i;j;k]) = sum * jacobian(CHF_IX[i;j;k]) * area
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine compute_elliptic_op_coeff(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_FRA[perp_coef],
+     &     CHF_FRA[par_coef],
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      CHF_MULTIDO[box;i;j;k]
+
+c        Coefficients in cylindrical coordinate frame
+
+#if CH_SPACEDIM==3
+         perp_coef(CHF_IX[i;j;k],0) = one - bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0)
+         perp_coef(CHF_IX[i;j;k],1) =     - bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],1)
+         perp_coef(CHF_IX[i;j;k],2) =     - bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],2)
+         perp_coef(CHF_IX[i;j;k],3) =     - bunit(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],0)
+         perp_coef(CHF_IX[i;j;k],4) = one - bunit(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],1)
+         perp_coef(CHF_IX[i;j;k],5) =     - bunit(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],2)
+         perp_coef(CHF_IX[i;j;k],6) =     - bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],0)
+         perp_coef(CHF_IX[i;j;k],7) =     - bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],1)
+         perp_coef(CHF_IX[i;j;k],8) = one - bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2)
+
+         par_coef(CHF_IX[i;j;k],0) = bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0)
+         par_coef(CHF_IX[i;j;k],1) = bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],1)
+         par_coef(CHF_IX[i;j;k],2) = bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],2)
+         par_coef(CHF_IX[i;j;k],3) = bunit(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],0)
+         par_coef(CHF_IX[i;j;k],4) = bunit(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],1)
+         par_coef(CHF_IX[i;j;k],5) = bunit(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],2)
+         par_coef(CHF_IX[i;j;k],6) = bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],0)
+         par_coef(CHF_IX[i;j;k],7) = bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],1)
+         par_coef(CHF_IX[i;j;k],8) = bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2)
+
+#else
+         perp_coef(CHF_IX[i;j;k],0) =  one - bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0)
+         perp_coef(CHF_IX[i;j;k],1) =      - bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],2)
+         perp_coef(CHF_IX[i;j;k],2) =      - bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],0)
+         perp_coef(CHF_IX[i;j;k],3) =  one - bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2)
+
+         par_coef(CHF_IX[i;j;k],0) =   bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0)
+         par_coef(CHF_IX[i;j;k],1) =   bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],2)
+         par_coef(CHF_IX[i;j;k],2) =   bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],0)
+         par_coef(CHF_IX[i;j;k],3) =   bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2)
+#endif
+
+         
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine compute_elliptic_op_coeff_mapped(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[n],
+     &     CHF_CONST_FRA[njinverse],
+     &     CHF_FRA[coef]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], row, col, m
+      double precision n_mat(0:CH_SPACEDIM-1,0:CH_SPACEDIM-1), nji_mat(0:CH_SPACEDIM-1,0:CH_SPACEDIM-1),
+     &     d_mat(0:CH_SPACEDIM-1,0:CH_SPACEDIM-1), dnji_mat(0:CH_SPACEDIM-1,0:CH_SPACEDIM-1),
+     &     coef_mat(0:CH_SPACEDIM-1,0:CH_SPACEDIM-1)
+
+      CHF_MULTIDO[box;i;j;k]
+
+c        Coefficients in cylindrical coordinate frame
+
+#if CH_SPACEDIM==3
+         d_mat(0,0) = coef(CHF_IX[i;j;k],0)
+         d_mat(0,1) = coef(CHF_IX[i;j;k],1)
+         d_mat(0,2) = coef(CHF_IX[i;j;k],2)
+         d_mat(1,0) = coef(CHF_IX[i;j;k],3)
+         d_mat(1,1) = coef(CHF_IX[i;j;k],4)
+         d_mat(1,2) = coef(CHF_IX[i;j;k],5)
+         d_mat(2,0) = coef(CHF_IX[i;j;k],6)
+         d_mat(2,1) = coef(CHF_IX[i;j;k],7)
+         d_mat(2,2) = coef(CHF_IX[i;j;k],8)
+
+         nji_mat(0,0) = njinverse(CHF_IX[i;j;k],0)
+         nji_mat(0,1) = njinverse(CHF_IX[i;j;k],1)
+         nji_mat(0,2) = njinverse(CHF_IX[i;j;k],2)
+         nji_mat(1,0) = njinverse(CHF_IX[i;j;k],3)
+         nji_mat(1,1) = njinverse(CHF_IX[i;j;k],4)
+         nji_mat(1,2) = njinverse(CHF_IX[i;j;k],5)
+         nji_mat(2,0) = njinverse(CHF_IX[i;j;k],6)
+         nji_mat(2,1) = njinverse(CHF_IX[i;j;k],7)
+         nji_mat(2,2) = njinverse(CHF_IX[i;j;k],8)
+
+         n_mat(0,0) = n(CHF_IX[i;j;k],0)
+         n_mat(0,1) = n(CHF_IX[i;j;k],1)
+         n_mat(0,2) = n(CHF_IX[i;j;k],2)
+         n_mat(1,0) = n(CHF_IX[i;j;k],3)
+         n_mat(1,1) = n(CHF_IX[i;j;k],4)
+         n_mat(1,2) = n(CHF_IX[i;j;k],5)
+         n_mat(2,0) = n(CHF_IX[i;j;k],6)
+         n_mat(2,1) = n(CHF_IX[i;j;k],7)
+         n_mat(2,2) = n(CHF_IX[i;j;k],8)
+#else
+         d_mat(0,0) = coef(CHF_IX[i;j;k],0)
+         d_mat(0,1) = coef(CHF_IX[i;j;k],1)
+         d_mat(1,0) = coef(CHF_IX[i;j;k],2)
+         d_mat(1,1) = coef(CHF_IX[i;j;k],3)
+
+         nji_mat(0,0) = njinverse(CHF_IX[i;j;k],0)
+         nji_mat(0,1) = njinverse(CHF_IX[i;j;k],1)
+         nji_mat(1,0) = njinverse(CHF_IX[i;j;k],2)
+         nji_mat(1,1) = njinverse(CHF_IX[i;j;k],3)
+
+         n_mat(0,0) = n(CHF_IX[i;j;k],0)
+         n_mat(0,1) = n(CHF_IX[i;j;k],1)
+         n_mat(1,0) = n(CHF_IX[i;j;k],2)
+         n_mat(1,1) = n(CHF_IX[i;j;k],3)
+#endif
+
+c        Multiply the coefficient matrix times the NJInverse matrix
+         do row = 0, CH_SPACEDIM-1
+            do col = 0, CH_SPACEDIM-1
+               dnji_mat(row,col) = zero
+               do m = 0, CH_SPACEDIM-1
+                  dnji_mat(row,col) = dnji_mat(row,col) + d_mat(row,m) * nji_mat(m,col)
+               enddo
+            enddo
+         enddo
+
+c        Premultiply by the NTranspose matrix
+         do row = 0, CH_SPACEDIM-1
+            do col = 0, CH_SPACEDIM-1
+               coef_mat(row,col) = zero
+               do m = 0, CH_SPACEDIM-1
+                  coef_mat(row,col) = coef_mat(row,col) + n_mat(m,row) * dnji_mat(m,col)
+               enddo
+            enddo
+         enddo
+
+#if CH_SPACEDIM==3
+         coef(CHF_IX[i;j;k],0) = coef_mat(0,0)
+         coef(CHF_IX[i;j;k],1) = coef_mat(0,1)
+         coef(CHF_IX[i;j;k],2) = coef_mat(0,2)
+         coef(CHF_IX[i;j;k],3) = coef_mat(1,0)
+         coef(CHF_IX[i;j;k],4) = coef_mat(1,1)
+         coef(CHF_IX[i;j;k],5) = coef_mat(1,2)
+         coef(CHF_IX[i;j;k],6) = coef_mat(2,0)
+         coef(CHF_IX[i;j;k],7) = coef_mat(2,1)
+         coef(CHF_IX[i;j;k],8) = coef_mat(2,2)
+#else
+         coef(CHF_IX[i;j;k],0) = coef_mat(0,0)
+         coef(CHF_IX[i;j;k],1) = coef_mat(0,1)
+         coef(CHF_IX[i;j;k],2) = coef_mat(1,0)
+         coef(CHF_IX[i;j;k],3) = coef_mat(1,1)
+#endif
+
+      CHF_ENDDO
+
+      return
+      end
+

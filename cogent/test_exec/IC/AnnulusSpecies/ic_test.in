@@ -1,0 +1,63 @@
+#####################################################
+# Computational Grid Definitions
+#####################################################
+num_cells   = 32 256 4 4
+is_periodic =  1  1 0 0
+configuration_decomp = 4 4
+velocity_decomp      =     1 1
+phase_decomp         = 4 4 1 1
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+magnetic_geometry_mapping = "Miller"
+magnetic_geometry_mapping.miller.verbose  = true
+magnetic_geometry_mapping.miller.visit_plotfile  = "MillerViz"
+magnetic_geometry_mapping.miller.num_quad_points = 5
+magnetic_geometry_mapping.miller.inner_radial_bdry = 0.4
+magnetic_geometry_mapping.miller.outer_radial_bdry = 0.6
+magnetic_geometry_mapping.miller.kappa   = 1.
+magnetic_geometry_mapping.miller.delta   = 0.
+magnetic_geometry_mapping.miller.dpsidr   = 0.5
+magnetic_geometry_mapping.miller.drR0    = -0.0
+magnetic_geometry_mapping.miller.s_kappa = 0.0
+magnetic_geometry_mapping.miller.s_delta = 0.0
+magnetic_geometry_mapping.miller.origin  = 1.7 0.
+magnetic_geometry_mapping.miller.Btor_scale  = 0.
+magnetic_geometry_mapping.miller.l_const_minorrad  = 0
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 1.0
+phase_space_mapping.mu_max = 1.0
+phase_space_mapping.velocity_type = "annular_poloidal_velocity"
+phase_space_mapping.no_drifts = true
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.zero.type = "zero"
+
+IC.constant.type = "constant"
+IC.constant.value = 1.4
+
+IC.localized.type = "localized"
+IC.localized.amplitude = 1.0 
+//IC.localized.location = 1.97 0.42 0 0 
+IC.localized.location = 2.2 0.0 0 0 
+IC.localized.width = 0.025 0.025 0.1 0.1
+
+IC.maxwellian.type = "maxwellian"
+IC.maxwellian.v_parallel_shift = 0.0 
+IC.maxwellian.temperature.type = "constant"
+IC.maxwellian.temperature.value = 0.1
+//IC.maxwellian.temperature.inner_radial_value = 1.0
+//IC.maxwellian.temperature.outer_radial_value = 2.0
+//IC.maxwellian.temperature.radial_midpoint = 0.5
+//IC.maxwellian.temperature.radial_width = 0.1
+IC.maxwellian.density.type = "tanh"
+IC.maxwellian.density.inner_radial_value = 0.0
+IC.maxwellian.density.outer_radial_value = 1.0
+IC.maxwellian.density.radial_midpoint = 0.5
+IC.maxwellian.density.radial_width = 0.1

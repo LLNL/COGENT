@@ -1,0 +1,74 @@
+# -*- Mode: Makefile;  -*- 
+
+## Define the variables needed by Make.example
+
+# trace the chain of included makefiles
+makefiles += test_Annulus
+
+# knowing this can be useful for things which are specific to 
+# specific machines
+UNAMEN = $(shell uname -n)
+
+
+# the base name(s) of the application(s) in this directory
+mdebase = esl
+# in an example of true silliness, need to define ebase so that the 
+# realclean target will also remove my *.ex files...
+ebase = bogus
+
+# the location of Chombo lib dir
+CHOMBO_HOME = $(shell pwd)/../../../Chombo/lib
+
+LAPACKLIBS = -llapack  -lblas
+
+# names of Chombo libraries needed by this program, in order of search.
+1dLibNames =  BoxTools BaseTools
+2dLibNames = AMRTimeDependent AMRTools BoxTools
+#3dLibNames = AMRTimeDependent AMRTools BoxTools
+#4dLibNames = BoxTools
+#5dLibNames = BoxTools
+#6dLibNames = BoxTools
+
+
+# relative paths to source code directories
+base_dir = .
+
+COGENT_SRC = ../../src
+
+1dsrc_dirs = $(COGENT_SRC)/util
+
+2dsrc_dirs = $(COGENT_SRC)/coord/configuration 
+2dsrc_dirs += $(COGENT_SRC)/ibc $(COGENT_SRC)/ibc/configuration
+2dsrc_dirs += $(COGENT_SRC)/advectUtil 
+2dsrc_dirs += $(COGENT_SRC)/util $(COGENT_SRC)/driver 
+2dsrc_dirs += ../../test_src/Annulus
+
+3dsrc_dirs =
+4dsrc_dirs = 
+
+mdsrc_dirs = 
+
+# input file for 'run' target
+INPUT = regression.inputs
+
+
+# shared code for building example programs
+include $(CHOMBO_HOME)/mk/Make.example.multidim
+
+# application-specific variables
+
+CXXFLAGS += -DCFG_DIM=2
+
+ifeq ($(MPI),TRUE)
+HYPRE_LOC = ../../../hypre/hypre_loc
+else
+HYPRE_LOC = ../../../hypre/hypre_loc_serial
+endif
+
+XTRACPPFLAGS += -I$(HYPRE_LOC)/include
+XTRALIBFLAGS += -L$(HYPRE_LOC)/lib -lHYPRE $(LAPACKLIBS)
+
+
+
+# application-specific targets
+

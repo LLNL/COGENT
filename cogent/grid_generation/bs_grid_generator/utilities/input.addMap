@@ -1,0 +1,17 @@
+#resolution
+
+log2MinRes_BrackbillSalzman = 4
+log2MaxRes_BrackbillSalzman = 4
+
+
+beginBlockAddMap = 0
+endBlockAddMap   = 9
+numBlocks  = 10
+
+geometryFileNameAddMap = ../mappingFiles/COGENT_mapping_3-22-16_cf
+fieldFileNameAddMap    = ../mappingFiles/DCT_coefficients_3-22-16  
+
+evenSpacingCase = false
+
+# creates aspect ratio in mcore and mcsol for the radial lines
+refRatioEta  = 2

@@ -1,0 +1,8 @@
+#!/bin/sh
+
+cd src
+gmake -j8 install
+name=$(grep "^prefix='" config.log | sed s/\'//g | sed 's/.*\///')
+cd ..
+rm -f hypre_loc
+ln -s lib/$name hypre_loc

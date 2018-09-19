@@ -1,0 +1,8 @@
+#!/bin/bash
+#
+# The environment variable COGENT_TEST_BASELINES_DIR is assumed to
+# be set to a directory of short running "smoke test" problems.
+#
+
+./run_tests "`ls $COGENT_TEST_BASELINES_DIR`"
+

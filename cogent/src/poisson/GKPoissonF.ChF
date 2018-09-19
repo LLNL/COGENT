@@ -1,0 +1,24 @@
+      subroutine compute_conductivity(
+     &     CHF_BOX[box],
+     &     CHF_FRA1[sigma],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_CONST_REAL[coeff],
+     &     CHF_CONST_REAL[sigma_max]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l]
+
+      CHF_MULTIDO[box;i;j;k]
+
+       sigma(CHF_IX[i;j;k]) = coeff * T(CHF_IX[i;j;k])**(three/two)
+       
+       if (sigma(CHF_IX[i;j;k]).ge.sigma_max) then
+          sigma(CHF_IX[i;j;k]) = sigma_max
+       endif
+     
+      CHF_ENDDO
+
+      return
+
+      end

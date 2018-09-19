@@ -1,0 +1,100 @@
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 1 
+snsystem.verbosity   = 1
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 500
+simulation.max_time            = 500.
+simulation.max_dt_grow         = 1.1
+simulation.initial_dt_fraction = 0.5
+#simulation.cfl_number          = 0.5
+#simulation.fixed_dt           = 0.00025
+simulation.checkpoint_interval = 100
+simulation.checkpoint_prefix   = "chk"
+simulation.plot_interval       = 1
+simulation.plot_prefix         = "plt"
+
+#####################################################
+# Grid and Data Layout Definitions
+#####################################################
+singlenull.numcells.core         =  32 128
+singlenull.numcells.pf_radial    =  32
+singlenull.numcells.lpf_poloidal =  8
+singlenull.numcells.rpf_poloidal =  8
+singlenull.numcells.sol_radial   =  16
+
+singlenull.decomp.core.configuration  =  4  4
+
+singlenull.decomp.lpf.configuration   =  4  1
+
+singlenull.decomp.rpf.configuration   =  4  1
+
+singlenull.decomp.csol.configuration  =  4  4 
+
+singlenull.decomp.lsol.configuration  =  4  1
+
+singlenull.decomp.rsol.configuration  =  4  1
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+snsystem.magnetic_geometry_mapping = "SingleNull"
+snsystem.magnetic_geometry_mapping.singlenull.geometry_file = "new_DIIID_mapping"
+snsystem.magnetic_geometry_mapping.singlenull.field_coefficients_file = "DCT_coefficients.txt"
+snsystem.magnetic_geometry_mapping.singlenull.psi_expansion_order = 32
+snsystem.magnetic_geometry_mapping.singlenull.verbose  = true
+snsystem.magnetic_geometry_mapping.singlenull.inner_radial_bdry = 0.1
+snsystem.magnetic_geometry_mapping.singlenull.outer_radial_bdry = 0.9
+snsystem.magnetic_geometry_mapping.singlenull.Btor_scale  = 2.565
+snsystem.magnetic_geometry_mapping.singlenull.axisymmetric = true
+snsystem.magnetic_geometry_mapping.correct_field = false
+snsystem.enforce_positivity = true
+
+#####################################################
+# Advection Operator Definitions
+#####################################################
+#Advect.velocity = 0. -1.
+Advect.flux_type = "bweno"
+Advect.second_order = false
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+field_correction.linear_solver.method = "GMRES"
+field_correction.linear_solver.tol = 1.e-6
+field_correction.linear_solver.max_iter = 20
+field_correction.linear_solver.verbose = true
+field_correction.linear_solver.precond.method = "AMG"
+field_correction.linear_solver.precond.tol = 0.
+field_correction.linear_solver.precond.max_iter = 1
+field_correction.linear_solver.precond.verbose = false
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.scalar.function = "const"
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.scalar.radial_core.function = "const"
+BC.scalar.radial_sol.function = "zero"
+BC.scalar.radial_pf.function = "zero"
+BC.scalar.poloidal_inner_div.function = "zero"
+BC.scalar.poloidal_outer_div.function = "zero"
+
+#####################################################
+# Fluid Function Definitions
+#####################################################
+fluid_function_library.number = 2
+fluid_function_library.verbosity = 1
+fluid_function_library.list = "zero" "const"
+
+fluid_function_library.zero.type = "zero" 
+
+fluid_function_library.const.type = "constant"
+fluid_function_library.const.value = 1.0

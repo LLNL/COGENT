@@ -1,0 +1,131 @@
+#!/bin/bash -login
+
+# This scripts updates Chombo and COGENT, or checks them out
+# if they don't yet exist.  It then (re)builds them, as well
+# as hypre.
+
+# Milo Dorr  7/28/2018
+
+########################################################################################
+# CONFIGURATION PARAMETER SECTION
+
+# COGENT root directory (Leave this commented out to read it from your environment;
+# otherwise, uncomment and set it)
+#COGENT_TEST_COGENT_DIR=
+
+# COGENT build dimension (Leave this commented out to read it from your environment
+# or accept the default value; otherwise, uncomment and set it)
+#COGENT_TEST_DIM=4
+
+# Chombo root directory (Leave this commented out to read it from your environment;
+# otherwise, uncomment and set it)
+#COGENT_TEST_CHOMBO_DIR=
+
+# Set the master configuration parameters to be used in all
+# of the builds.  The options must, of course, be consistent
+# with the dotkits or modules.
+
+# The following sets the compiler and MPI enviroment at Livermore Computing
+# using the Texas Advanced Computing Center LMOD system.  For other systems,
+# this will need to be replaced accordingly.
+if [ -f /usr/share/lmod/lmod/init/bash ]; then
+   . /usr/share/lmod/lmod/init/bash
+fi
+module load gcc/4.9.3
+
+MACHINE=quartz
+OPT=TRUE
+DEBUG=FALSE
+MPICXX=mpicxx
+MPICC=mpicc
+CXX=g++
+CC=gcc
+FC=gfortran
+HYPRE_DIR=hypre-2.9.0b
+HDF5_SERIAL_DIR=/usr/tce/packages/hdf5/hdf5-serial-1.8.18-gcc-4.9.3
+HDF5_PARALLEL_DIR=/usr/tce/packages/hdf5/hdf5-parallel-1.8.18-gcc-4.9.3-mvapich2-2.2
+
+# You can set the following flag to true if you know that hypre is
+# already built.  Otherwise, the copying of headers performed by the
+# hypre doinstall (regardless of whether anything is recompiled or
+# not) will trigger a recompilation of the COGENT files that include
+# those headers.
+
+skip_hypre_build=false
+########################################################################################
+
+: ${COGENT_TEST_COGENT_DIR:?"Please set COGENT_TEST_COGENT_DIR in your environment or manually above"}
+: ${COGENT_TEST_CHOMBO_DIR:?"Please set COGENT_TEST_CHOMBO_DIR in your environment or manually above"}
+
+# Update Chombo if it exists, otherwise check it out
+if [ -d $COGENT_TEST_CHOMBO_DIR ]; then
+   echo Updating Chombo...
+   cd $COGENT_TEST_CHOMBO_DIR
+   svn update
+   cd ..
+else
+   echo Checking out Chombo...
+   svn checkout https://anag-repo.lbl.gov/svn/Chombo/trunk $COGENT_TEST_CHOMBO_DIR
+fi
+
+# Update COGENT if it exists, otherwise check it out
+if [ -d $COGENT_TEST_COGENT_DIR ]; then
+   echo Updating COGENT...
+   cd $COGENT_TEST_COGENT_DIR
+   svn update
+   cd ..
+else
+   echo Checking out COGENT...
+   svn checkout https://anag-repo.lbl.gov/svn/COGENT/trunk $COGENT_TEST_COGENT_DIR
+   skip_hypre_build=false
+fi
+
+# If COGENT_TEST_DIM has been defined, then use it to set the build dimension in the COGENT
+# GNUmakefile.  Otherwise, the dimension currently set in GNUmakefile (either just checked out
+# or perhaps locally modified) will be used
+if [ ! -z $COGENT_TEST_DIM ]; then
+   cd $COGENT_TEST_COGENT_DIR/exec
+   sed -e "s/MAXDIM\s=\s\S/MAXDIM = $COGENT_TEST_DIM/" < GNUmakefile > GNUmakefile_tmp
+   mv -f GNUmakefile_tmp GNUmakefile
+   cd ../..
+fi
+
+if [ "$skip_hypre_build" = false ]; then
+
+   # Build hypre
+   cd $COGENT_TEST_COGENT_DIR/$HYPRE_DIR
+   if [ "$OPT" = TRUE ]; then
+      hypre_opt=opt
+   else
+      hypre_opt=dbg
+   fi
+   sed -e "s:MASTER_CXX:"$MPICXX":" \
+       -e "s:MASTER_CC:"$MPICC":" \
+       -e "s:MASTER_FC:"$FC":" \
+       -e "s:MASTER_OPT:"$hypre_opt":" \
+       -e "s:MASTER_MACHINE:"$MACHINE":" \
+       < $COGENT_TEST_COGENT_DIR/config/hypre_doconfig_template > doconfig
+   chmod u+x doconfig
+   echo Building hypre...
+   ./doconfig
+   ./doinstall
+   cd ../..
+else
+   echo Skipping the hypre build...
+fi
+
+# Install the Chombo makefile
+sed -e "s:MASTER_MPICXX:"$MPICXX":" \
+    -e "s:MASTER_CXX:"$CXX":" \
+    -e "s:MASTER_CC:"$CC":" \
+    -e "s:MASTER_FC:"$FC":" \
+    -e "s:MASTER_HDF5_SERIAL_DIR:"$HDF5_SERIAL_DIR":" \
+    -e "s:MASTER_HDF5_PARALLEL_DIR:"$HDF5_PARALLEL_DIR":" \
+    < $COGENT_TEST_COGENT_DIR/config/Chombo_Make.defs.local_template > $COGENT_TEST_CHOMBO_DIR/lib/mk/Make.defs.local
+
+# Build COGENT
+cd $COGENT_TEST_COGENT_DIR/exec
+gmake realclean
+echo Building COGENT...
+gmake -j all OPT=$OPT DEBUG=$DEBUG
+

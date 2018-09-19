@@ -1,0 +1,19 @@
+#!/bin/sh
+
+debug="--enable-opt";
+
+mpi_include=`echo '-I/usr/local/include' | sed 's/-I//g'`
+
+install_dir=$PWD/lib/darwin-cpp-gfortran-opt
+
+cd src
+./configure $debug \
+            --with-CC=/usr/bin/mpicc \
+            --with-CFLAGS="-O " \
+            --with-CXX=/usr/bin/mpicxx \
+            --with-CXXFLAGS="-O " \
+            --with-F77=/usr/local/bin/mpif90 \
+            --with-F77FLAGS="-O " \
+            --prefix=$install_dir
+cd ..
+

@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# This script "certifies" the set of test problems listed (in quotes) on the command line, together
+# with the name of the test directory and the absolute tolerance, e.g.,
+#
+#    certify_problems 'gam_0 DIIID_0 single_null_0' regression_tests baselines 1.e-12
+#
+# For each problem, a new line will be added to a file named certification_log in the corresponding
+# baseline directory containing the current time stamp and the SVN version numbers of the 
+# installed COGENT and Chombo files.
+
+pushd $2 > /dev/null
+cogent_version=`svn info | grep Revision | sed -e 's/Revision: //'`
+popd > /dev/null
+
+pushd $3 > /dev/null
+chombo_version=`svn info | grep Revision | sed -e 's/Revision: //'`
+popd > /dev/null
+
+date=`date`
+
+for prob_dir in $1; do
+   echo Certifying $prob_dir
+   echo $date\; COGENT version: r$cogent_version\; Chombo version: r$chombo_version\; atol = $5 >> $4/$prob_dir/certification_log
+done

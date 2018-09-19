@@ -1,0 +1,112 @@
+#!/bin/bash
+
+# This script tests one or more problems against results in a baseline directory
+# by running batch jobs.  It is invoked by listing the names of the test problems
+# (enclosed by single quotes unless there's only one name) on the command line, e.g.,
+#
+#    run_batch_tests 'gam_3 DIIID_coarse single_null_old'
+#
+# The results are placed in a subdirectory of the user-specified results directory,
+# in a subdirectory named by a date/time stamp corresponding to when this script
+# was executed.
+#
+# N.B.: This script is specifically intended to submit jobs to a batch partition
+# of a machine scheduled by the SLURM job scheduler using srun.  To submit interactive
+# jobs on such systems, use the run_tests script instead.  Use of this script on a
+# system with a different job scheduler will require modification.
+# 
+########################################################################################
+# CONFIGURATION PARAMETER SECTION
+
+# Leave the COGENT_TEST* settings commented out to read them from your environment;
+# otherwise, uncomment them and set them, which will also override any
+# corresponding environment variables.
+
+# COGENT root directory 
+#COGENT_TEST_COGENT_DIR=/path/to/cogent
+
+# Chombo root directory
+#COGENT_TEST_CHOMBO_DIR =/path/to/chombo
+
+# Test results directory
+#COGENT_TEST_RESULTS_DIR=/path/to/results
+
+# Baseline directory
+#COGENT_TEST_BASELINES_DIR=/path/to/baselines
+
+# Tolerance
+#COGENT_TEST_TOLERANCE=value
+
+# The number of processors per node on the test platform and the batch bank
+# need to be set here:
+ppn=16
+bank=comp
+########################################################################################
+
+: ${COGENT_TEST_COGENT_DIR:?"Please set COGENT_TEST_COGENT_DIR in your environment or manually above"}
+: ${COGENT_TEST_CHOMBO_DIR:?"Please set COGENT_TEST_CHOMBO_DIR in your environment or manually above"}
+: ${COGENT_TEST_RESULTS_DIR:?"Please set COGENT_TEST_RESULTS_DIR in your environment or manually above"}
+: ${COGENT_TEST_BASELINES_DIR:?"Please set COGENT_TEST_BASELINES_DIR in your environment or manually above"}
+: ${COGENT_TEST_TOLERANCE:?"Please set COGENT_TEST_TOLERANCE in your environment or manually above"}
+
+# Location of h5diff
+diff_prog=$(which h5diff)
+
+# Get the COGENT executable name
+pushd $COGENT_TEST_COGENT_DIR/exec > /dev/null
+   cogent_executable=`ls cogent.*.ex`
+popd > /dev/null
+
+# Make the directory to hold the test results if it's not already there
+if [ ! -d $COGENT_TEST_RESULTS_DIR ]; then
+   mkdir $COGENT_TEST_RESULTS_DIR
+fi
+cd $COGENT_TEST_RESULTS_DIR
+
+# Use the current date and time to name a subdirectory that will contain
+# the results of this script run.  Replace spaces with underbars to construct
+# a safer directory name.  Replace colons with periods, since some Visit
+# mapped grid scripts can't handle directory names containing them.
+test_outputs=`date | sed -e 's/ /_/g' -e 's/:/./g'`
+rm -rf $test_outputs
+mkdir $test_outputs
+cd $test_outputs
+
+for prob_dir in $1; do
+
+   # Copy the baseline; determine the number of processors and timelimit
+   mkdir $prob_dir
+   cp -r $COGENT_TEST_BASELINES_DIR/$prob_dir/* $prob_dir
+   cd $prob_dir
+   rm -rf plt* chk* stdout report
+   input_file=$prob_dir.in
+   np=`grep TEST $input_file | sed -e 's/.*\(np=\)/\1/' -e 's/\(,\).*//' -e 's/np=//'`
+   num_nodes=$(($np/$ppn))
+   tlimit=`grep TEST $input_file | sed -e "s/.*\(timelimit=\)/\1/" -e "s/\(,\).*//" -e "s/timelimit=//"`
+
+   # Construct the batch script
+   rm -rf runCOGENT
+   echo \#!/bin/csh > runCOGENT
+   echo \#MSUB -A $bank >> runCOGENT
+   echo \#MSUB -N $prob_dir >> runCOGENT
+   echo \#MSUB -l nodes=$num_nodes\:ppn=16  >> runCOGENT
+   echo \#MSUB -l walltime=$tlimit  >> runCOGENT
+   echo \#MSUB -m b  >> runCOGENT
+   echo set echo  >> runCOGENT
+   echo umask 027  >> runCOGENT
+   echo setenv CODEDIR $PWD >> runCOGENT
+   echo "srun -n $np -p pbatch $COGENT_TEST_COGENT_DIR/exec/$cogent_executable $input_file >& stdout"  >> runCOGENT
+   echo "cd ..; $COGENT_TEST_COGENT_DIR/test_scripts/check_problem $prob_dir $COGENT_TEST_COGENT_DIR $COGENT_TEST_CHOMBO_DIR $COGENT_TEST_BASELINES_DIR $diff_prog $COGENT_TEST_TOLERANCE >> $prob_dir/report" >> runCOGENT
+   echo "\`cat $prob_dir/report | mail -s \"COGENT test batch job report\" $USER\`" >> runCOGENT
+
+   # Submit the job
+   echo Submitting batch run of test problem $prob_dir on $np processors
+   job_number=`msub runCOGENT`
+   echo Job number $job_number
+   cd ..
+
+done
+
+
+
+

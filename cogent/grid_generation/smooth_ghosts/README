@@ -1,0 +1,12 @@
+This script smoothly extrapolates ghost cells.
+
+   To build:
+
+      make smoothGhosts MPI=FALSE OPT=TRUE DEBUG=FALSE DIM=2
+
+   Usage:
+
+      smoothGhosts grid_file mapping_file
+
+   where grid_file is the name of a file created by the generateGrid utility and
+   mapping_file is the resulting output file for use by COGENT

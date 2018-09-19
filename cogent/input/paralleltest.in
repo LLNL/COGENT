@@ -1,0 +1,116 @@
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 1 
+gksystem.verbosity   = 1
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 1000
+simulation.max_time            = 100000.0
+simulation.max_dt_grow         = 1.1
+simulation.initial_dt_fraction = 0.1
+#simulation.fixed_dt           = 0.19
+#simulation.fixed_dt = 1000.
+simulation.checkpoint_interval = 10000
+simulation.checkpoint_prefix   = "chk"
+simulation.plot_interval       = 1
+simulation.plot_prefix         = "plt"
+
+#####################################################
+# Computational Grid Definitions
+#####################################################
+gksystem.num_cells   = 8 32 10 4
+gksystem.is_periodic =  1  1  0  0
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 1.0e20
+units.temperature    = 1000.
+units.length         = 1.0
+units.mass           = 1.0
+units.magnetic_field = 1.0 
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "Miller"
+gksystem.magnetic_geometry_mapping.miller.verbose  = true
+gksystem.magnetic_geometry_mapping.miller.visit_plotfile  = "MillerViz"
+gksystem.magnetic_geometry_mapping.miller.num_quad_points = 5
+gksystem.magnetic_geometry_mapping.miller.inner_radial_bdry = 0.1
+gksystem.magnetic_geometry_mapping.miller.outer_radial_bdry = 0.9
+gksystem.magnetic_geometry_mapping.miller.kappa   = 1.
+gksystem.magnetic_geometry_mapping.miller.delta   = 0.
+gksystem.magnetic_geometry_mapping.miller.dpsidr  = 5.0
+#gksystem.magnetic_geometry_mapping.miller.dpsidr  = 0.00005
+gksystem.magnetic_geometry_mapping.miller.drR0    = 0.0
+gksystem.magnetic_geometry_mapping.miller.s_kappa = 0.0
+gksystem.magnetic_geometry_mapping.miller.s_delta = 0.0
+gksystem.magnetic_geometry_mapping.miller.origin  = 17. 0.
+gksystem.magnetic_geometry_mapping.miller.Btor_scale  = 20.
+gksystem.magnetic_geometry_mapping.miller.l_const_minorrad  = 1
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 2.
+phase_space_mapping.mu_max = 0.4
+phase_space_mapping.velocity_type = "gyrokinetic"
+#phase_space_mapping.velocity_type = "ExB"
+phase_space_mapping.no_drifts = true
+phase_space_mapping.physical_velocity_components = true
+
+#####################################################
+# Vlasov Operator Definitions
+#####################################################
+gkvlasov.verbose = false
+gksystem.fixed_efield = true
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+#gkpoisson.parameter1 = 
+
+#####################################################
+# Species Definitions
+#####################################################
+kinetic_species.1.name   = "hydrogen"
+kinetic_species.1.mass   = 1.0
+kinetic_species.1.charge = 1.0
+kinetic_species.1.ics    = "localized"
+kinetic_species.1.bcs    = "localized"
+
+#boltzmann_electron.mass              = 1.0
+#boltzmann_electron.charge            = 1.0
+#boltzmann_electron.temperature_shape = "uniform"
+#boltzmann_electron.temperature       = 1.0
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IBC.hydrogen.psi_0 = 0.55
+IBC.hydrogen.delpsi = 0.01
+IBC.hydrogen.theta_0 = 1.0
+IBC.hydrogen.deltheta = 0.1
+#Use the next 4 lines if want localized in all 4D
+IBC.hydrogen.vpar_0 = 0.0
+IBC.hydrogen.delvpar = 0.2
+IBC.hydrogen.mu_0 = 0.05
+IBC.hydrogen.delmu = 0.05
+#Use the following to get blob localized in space, not in v
+#IBC.hydrogen.vpar_0 = 0.0
+#IBC.hydrogen.delvpar = 1000000.0
+#IBC.hydrogen.mu_0 = 1.0
+#IBC.hydrogen.delmu = 1000000.0
+
+IBC.potential_model = "cos"
+IBC.potential.const_amp = 0.0
+IBC.potential.cos_amp = 10.0
+#IBC.potential.cos_amp = 0.0
+IBC.potential.mode_rad = 0
+IBC.potential.mode_pol = 1
+IBC.potential.phase_pol = 0.0
+IBC.potential.phase_rad = 0

@@ -1,0 +1,293 @@
+      subroutine cell_centered_field_component(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INT[order],
+     &     CHF_FRA1[Efield]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir)]
+
+      if (order .eq. 4) then
+
+         CHF_MULTIDO[box; i; j; k]
+      
+            Efield(CHF_IX[i;j;k]) = -(
+     &        phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
+     &        - eight * phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + eight * phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &        - phi(CHF_IX[i+2*ii;j+2*jj;k+2*kk])
+     &        ) / (twelve * h(dir))
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box; i; j; k]
+
+            Efield(CHF_IX[i;j;k]) = -(
+     &        - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &        ) / (two * h(dir))
+          
+         CHF_ENDDO
+
+      endif
+
+      return
+      end
+
+      subroutine face_centered_field_component(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INT[order],
+     &     CHF_FRA1[Efield]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir)]
+
+      if (order .eq. 4) then
+
+         CHF_MULTIDO[box; i; j; k]
+
+            Efield(CHF_IX[i;j;k]) = -(
+     &        27.d0 * (phi(CHF_IX[i     ;j     ;k     ])
+     &               - phi(CHF_IX[i-  ii;j-  jj;k-  kk]))
+     &               - phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &               + phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk])
+     &        ) / (24.d0 * h(dir))
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box; i; j; k]
+
+            Efield(CHF_IX[i;j;k]) = -(
+     &        - phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &        + phi(CHF_IX[i     ;j     ;k     ])
+     &        ) / h(dir)
+
+         CHF_ENDDO
+
+      endif
+
+      return
+      end
+
+      subroutine face_interpolate(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[order],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_FRA1[data]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir)]
+
+      if (order .eq. 4) then
+
+         CHF_MULTIDO[box;i;j;k]
+
+            data(CHF_IX[i;j;k]) = (
+     &        9.d0 * (phi(CHF_IX[i     ;j     ;k     ])
+     &              + phi(CHF_IX[i-  ii;j-  jj;k-  kk]))
+     &             - (phi(CHF_IX[i+  ii;j+  jj;k+  kk])
+     &              + phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk]))
+     &        ) / 16.d0
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box;i;j;k]
+
+         data(CHF_IX[i;j;k]) = (
+     &            phi(CHF_IX[i-  ii;j-  jj;k-  kk])
+     &          + phi(CHF_IX[i     ;j     ;k     ])
+     &        ) / 2.d0
+
+         CHF_ENDDO
+
+      endif
+
+      return
+      end
+
+      subroutine extrap_for_cc_ops(
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[side],
+     &     CHF_CONST_INT[order],
+     &     CHF_BOX[facebox],
+     &     CHF_BOX[interiorbox],
+     &     CHF_FRA[array]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i,id,ni;j,jd,nj;k,kd,nk], m, n, comp, ncomp
+      double precision sum, coef2(0:2,2), coef4(0:4,3)
+      data coef2 /  3.d0, -3.d0, 1.d0,
+     &             6.d0, -8.d0, 3.d0 /
+      data coef4 /  5.d0,  -10.d0,  10.d0,  -5.d0,  1.d0,
+     &            15.d0,  -40.d0,  45.d0, -24.d0,  5.d0,
+     &            35.d0, -105.d0, 126.d0, -70.d0, 15.d0 /
+
+c
+c     If order = 2, this routine second-order extrapolates to at most two ghost cells
+c     If order = 4, this routine fourth-order extrapolates to at most three ghost cells
+c
+
+      ncomp = CHF_NCOMP[array]
+
+      CHF_DTERM[
+      id = CHF_ID(0,dir)*side;
+      jd = CHF_ID(1,dir)*side;
+      kd = CHF_ID(2,dir)*side
+      ]
+
+      CHF_MULTIDO[facebox; i; j; k]
+
+        if (side .eq. -1) then
+           CHF_DTERM[
+           ni = id*(i-CHF_LBOUND[interiorbox;0])
+           n = ni;
+           nj = jd*(j-CHF_LBOUND[interiorbox;1])
+           n = n + nj;
+           nk = kd*(k-CHF_LBOUND[interiorbox;2])
+           n = n + nk
+           ]
+         else if (side .eq. 1) then
+            CHF_DTERM[
+            ni = id*(i-CHF_UBOUND[interiorbox;0])
+            n = ni;
+            nj = jd*(j-CHF_UBOUND[interiorbox;1])
+            n = n + nj;
+            nk = kd*(k-CHF_UBOUND[interiorbox;2])
+            n = n + nk
+            ]
+          endif
+
+          do comp = 0, ncomp-1
+
+             sum = zero
+             if (order .eq. 4) then
+
+                do m = 0, 4
+                   sum = sum + coef4(m,n)*array(CHF_DDECL[i-id*(ni+m);j-jd*(nj+m);k-kd*(nk+m)],comp)
+                enddo
+                array(CHF_IX[i;j;k],comp) = sum
+
+             else if (order .eq. 2) then
+
+                do m = 0, 2
+                   sum = sum + coef2(m,n)*array(CHF_DDECL[i-id*(ni+m);j-jd*(nj+m);k-kd*(nk+m)],comp)
+                enddo
+                array(CHF_IX[i;j;k],comp) = sum
+
+             endif
+
+          enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine extrap_for_fc_ops(
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[side],
+     &     CHF_CONST_INT[order],
+     &     CHF_BOX[facebox],
+     &     CHF_BOX[interiorbox],
+     &     CHF_FRA[array]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i,id,ni;j,jd,nj;k,kd,nk], m, n, comp, ncomp
+      double precision sum, coef2(0:2,2), coef4(0:4,2)
+      data coef2 /  3.d0, -3.d0, 1.d0,
+     &             6.d0, -8.d0, 3.d0 /
+      data coef4 /  4.625d0, -8.5d0, 7.75d0, -3.5d0, 0.625d0,
+     &             11.25d0, -25.d0, 22.5d0,  -9.d0, 1.25d0 /
+
+c
+c     If order = 2, this routine second-order extrapolates to at most two ghost cells
+c     If order = 4, this routine fourth-order extrapolates to at most two ghost cells
+c
+
+      ncomp = CHF_NCOMP[array]
+
+      CHF_DTERM[
+      id = CHF_ID(0,dir)*side;
+      jd = CHF_ID(1,dir)*side;
+      kd = CHF_ID(2,dir)*side
+      ]
+
+      CHF_MULTIDO[facebox; i; j; k]
+
+        if (side .eq. -1) then
+           CHF_DTERM[
+           ni = id*(i-CHF_LBOUND[interiorbox;0])
+           n = ni;
+           nj = jd*(j-CHF_LBOUND[interiorbox;1])
+           n = n + nj;
+           nk = kd*(k-CHF_LBOUND[interiorbox;2])
+           n = n + nk
+           ]
+         else if (side .eq. 1) then
+            CHF_DTERM[
+            ni = id*(i-CHF_UBOUND[interiorbox;0])
+            n = ni;
+            nj = jd*(j-CHF_UBOUND[interiorbox;1])
+            n = n + nj;
+            nk = kd*(k-CHF_UBOUND[interiorbox;2])
+            n = n + nk
+            ]
+          endif
+
+          do comp = 0, ncomp-1
+
+             sum = zero
+             if (order .eq. 4) then
+
+                do m = 0, 4
+                   sum = sum + coef4(m,n)*array(CHF_DDECL[i-id*(ni+m);j-jd*(nj+m);k-kd*(nk+m)],comp)
+                enddo
+                array(CHF_IX[i;j;k],comp) = sum
+
+             else if (order .eq. 2) then
+
+                do m = 0, 2
+                   sum = sum + coef2(m,n)*array(CHF_DDECL[i-id*(ni+m);j-jd*(nj+m);k-kd*(nk+m)],comp)
+                enddo
+                array(CHF_IX[i;j;k],comp) = sum
+
+             endif
+
+          enddo
+
+      CHF_ENDDO
+
+      return
+      end

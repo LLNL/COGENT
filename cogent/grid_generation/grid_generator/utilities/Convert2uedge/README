@@ -1,0 +1,41 @@
+Build the utilities for exporting as gridue:
+cd Uegrid; make; cd ..; rm -f io_gridue.so; ln -s Uegrid/io_gridue.so
+
+
+Assuming there is a local COGENT grid file (with 8 blocks), e.g.,
+ln -s /afs/fepcluster/home/umansky1/Projects/AToM2/COGENT_gridue_new/COGENT_mapping_UE
+
+
+idl
+.r Uegrid/io_gridue.pro
+.r import_cogent_grid.pro, 
+.r show_cogent_grid.pro, 
+.r remap_cogent_grid.pro
+.r concatenate_cogent_grid.pro
+
+
+
+Import_Cogent_Grid, dall
+
+;;-make the PF radial grid dimension same as in the code to conform to UEDGE standard
+Remap_Cogent_Grid, dall, dall2
+
+
+WINDOW,1, xs=800, ys=1200
+Show_Cogent_Grid, dall
+
+WINDOW,2, xs=800, ys=1200
+Show_Cogent_Grid, dall2
+
+
+Concatenate_cogent_grid, dall2, /export
+
+
+
+To run a UEDGE case on the gridue generated from COGENT data, do this:
+
+brun -s $XUEDGE
+read lsn1.bas #-a sample solution with 4 eqs
+
+read lsn2.bas #-time evolution for Te only
+ 

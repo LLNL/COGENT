@@ -1,0 +1,262 @@
+      DOUBLE PRECISION FUNCTION minmod(a,b)
+
+        DOUBLE PRECISION, INTENT(IN) :: a,b
+
+        IF ((a .LT. 0) .AND. (b .LT. 0)) THEN
+          minmod = MAX(a,b)
+        ELSEIF ((a .GT. 0) .AND. (b .GT. 0)) THEN
+          minmod = MIN(a,b)
+        ELSE                                  
+          minmod = 0.0_8
+        ENDIF
+
+        RETURN
+
+      END FUNCTION !minmod
+
+      DOUBLE PRECISION FUNCTION mc(a,b)
+
+        DOUBLE PRECISION, INTENT(IN)  :: a,b
+        DOUBLE PRECISION              :: minmod
+
+        mc = minmod(2.0_8*minmod(a,b),0.5_8*(a+b))
+
+        RETURN
+
+      END FUNCTION !mc
+      
+      DOUBLE PRECISION FUNCTION med(a,b,c)
+        
+        DOUBLE PRECISION, INTENT(IN)  :: a,b,c
+        med = a + b + c - MAX(a,b,c) - MIN(a,b,c)
+        RETURN
+
+      END FUNCTION !med
+
+      SUBROUTINE reconstruct_dfn_face_vpar(
+     &                                      CHF_FRA1[f],
+     &                                      CHF_CONST_FRA1[a],
+     &                                      CHF_CONST_FRA1[u],
+     &                                      CHF_BOX[grid],
+     &                                      CHF_CONST_INT[flag],
+     &                                      CHF_CONST_INT[Nvpar]
+     &                                    )
+
+!       Local Variables
+        INTEGER                     :: CHF_DDECL[i;j;k;l;m]
+        DOUBLE PRECISION            :: fc, fu, fd, f3, fq, med
+        DOUBLE PRECISION, PARAMETER :: flc_fac = 0.25, one_by_eight = 0.125,
+     &                                 one_by_thirty        = 1.0_8/30.0_8,
+     &                                 thirteen_by_sixty    = 13.0_8/60.0_8,
+     &                                 fortyseven_by_sixty  = 47.0_8/60.0_8,
+     &                                 twentyseven_by_sixty = 27.0_8/60.0_8,
+     &                                 one_by_twenty        = 1.0_8/20.0_8
+
+!       First executable statement
+
+        IF (flag .EQ. 1) THEN
+#if CH_SPACEDIM==5
+          CHF_MULTIDO[grid;i;j;m;k;l]
+            fc = 0.5_8 * (u(CHF_IX[i;j;m;k-1;l]) + u(CHF_IX[i;j;m;k;l]))
+            IF (a(CHF_IX[i;j;m;k;l]) .LT. 0.0_8) THEN
+              fu = u(CHF_IX[i;j;m;k-1;l])
+              fd = u(CHF_IX[i;j;m;k;l])
+              fq = fc - one_by_eight * (u(CHF_IX[i;j;m;k-2;l])+u(CHF_IX[i;j;m;k;l])-2.0_8*u(CHF_IX[i;j;m;k-1;l]))
+            ELSE
+              fu = u(CHF_IX[i;j;m;k;l])
+              fd = u(CHF_IX[i;j;m;k-1;l])
+              fq = fc - one_by_eight * (u(CHF_IX[i;j;m;k+1;l])+u(CHF_IX[i;j;m;k-1;l])-2.0_8*u(CHF_IX[i;j;m;k;l]))
+            ENDIF
+            f3 = fu + flc_fac * (fc - fu)
+            f(CHF_IX[i;j;m;k;l]) = med(fc,med(fc,fd,f3),fq)
+          CHF_ENDDO
+#else
+          CHF_MULTIDO[grid;i;j;k;l]
+            fc = 0.5_8 * (u(CHF_IX[i;j;k-1;l]) + u(CHF_IX[i;j;k;l]))
+            IF (a(CHF_IX[i;j;k;l]) .LT. 0.0_8) THEN
+              fu = u(CHF_IX[i;j;k-1;l])
+              fd = u(CHF_IX[i;j;k;l])
+              fq = fc - one_by_eight * (u(CHF_IX[i;j;k-2;l])+u(CHF_IX[i;j;k;l])-2.0_8*u(CHF_IX[i;j;k-1;l]))
+            ELSE
+              fu = u(CHF_IX[i;j;k;l])
+              fd = u(CHF_IX[i;j;k-1;l])
+              fq = fc - one_by_eight * (u(CHF_IX[i;j;k+1;l])+u(CHF_IX[i;j;k-1;l])-2.0_8*u(CHF_IX[i;j;k;l]))
+            ENDIF
+            f3 = fu + flc_fac * (fc - fu)
+            f(CHF_IX[i;j;k;l]) = med(fc,med(fc,fd,f3),fq)
+          CHF_ENDDO
+#endif
+
+        ELSE
+
+#if CH_SPACEDIM==5
+          CHF_MULTIDO[grid;i;j;m;k;l]
+
+!           The following chunk is exactly implemented by the preconditioner. 
+!           Uncomment it to debug preconditioner matrix entries          
+!            IF (a(CHF_IX[i;j;m;k;l]) .LT. 0.0_8) THEN
+!              f(CHF_IX[i;j;m;k;l]) = u(CHF_IX[i;j;m;k-1;l]) 
+!            ELSE
+!              f(CHF_IX[i;j;m;k;l]) = u(CHF_IX[i;j;m;k;l]) 
+!            ENDIF
+
+            IF (a(CHF_IX[i;j;m;k;l]) .LT. 0.0_8) THEN
+              f(CHF_IX[i;j;m;k;l]) =   one_by_thirty        * u(CHF_IX[i;j;m;k-3;l])
+     &                               - thirteen_by_sixty    * u(CHF_IX[i;j;m;k-2;l])
+     &                               + fortyseven_by_sixty  * u(CHF_IX[i;j;m;k-1;l])
+     &                               + twentyseven_by_sixty * u(CHF_IX[i;j;m;k  ;l])
+     &                               - one_by_twenty        * u(CHF_IX[i;j;m;k+1;l])
+            ELSE
+              f(CHF_IX[i;j;m;k;l]) =   one_by_thirty        * u(CHF_IX[i;j;m;k+2;l])
+     &                               - thirteen_by_sixty    * u(CHF_IX[i;j;m;k+1;l])
+     &                               + fortyseven_by_sixty  * u(CHF_IX[i;j;m;k  ;l])
+     &                               + twentyseven_by_sixty * u(CHF_IX[i;j;m;k-1;l])
+     &                               - one_by_twenty        * u(CHF_IX[i;j;m;k-2;l])
+            ENDIF
+
+          CHF_ENDDO
+#else
+          CHF_MULTIDO[grid;i;j;k;l]
+
+!           The following chunk is exactly implemented by the preconditioner. 
+!           Uncomment it to debug preconditioner matrix entries          
+!            IF (a(CHF_IX[i;j;k;l]) .LT. 0.0_8) THEN
+!              f(CHF_IX[i;j;k;l]) = u(CHF_IX[i;j;k-1;l]) 
+!            ELSE
+!              f(CHF_IX[i;j;k;l]) = u(CHF_IX[i;j;k;l]) 
+!            ENDIF
+
+            IF (a(CHF_IX[i;j;k;l]) .LT. 0.0_8) THEN
+              f(CHF_IX[i;j;k;l]) =   one_by_thirty        * u(CHF_IX[i;j;k-3;l])
+     &                             - thirteen_by_sixty    * u(CHF_IX[i;j;k-2;l])
+     &                             + fortyseven_by_sixty  * u(CHF_IX[i;j;k-1;l])
+     &                             + twentyseven_by_sixty * u(CHF_IX[i;j;k  ;l])
+     &                             - one_by_twenty        * u(CHF_IX[i;j;k+1;l])
+            ELSE
+              f(CHF_IX[i;j;k;l]) =   one_by_thirty        * u(CHF_IX[i;j;k+2;l])
+     &                             - thirteen_by_sixty    * u(CHF_IX[i;j;k+1;l])
+     &                             + fortyseven_by_sixty  * u(CHF_IX[i;j;k  ;l])
+     &                             + twentyseven_by_sixty * u(CHF_IX[i;j;k-1;l])
+     &                             - one_by_twenty        * u(CHF_IX[i;j;k-2;l])
+            ENDIF
+
+          CHF_ENDDO
+#endif
+
+        ENDIF
+
+      END SUBROUTINE !reconstruct_dfn_face_vpar
+
+      SUBROUTINE reconstruct_dfn_face_mu(
+     &                                    CHF_FRA1[f],
+     &                                    CHF_CONST_FRA1[a],
+     &                                    CHF_CONST_FRA1[u],
+     &                                    CHF_BOX[grid],
+     &                                    CHF_CONST_INT[flag],
+     &                                    CHF_CONST_INT[Nmu]
+     &                                  )
+
+!       Local Variables
+        INTEGER                     :: CHF_DDECL[i;j;k;l;m]
+        DOUBLE PRECISION            :: fc, fu, fd, f3, fq, med
+        DOUBLE PRECISION, PARAMETER :: flc_fac = 0.25, one_by_eight = 0.125,
+     &                                 one_by_thirty        = 1.0_8/30.0_8,
+     &                                 thirteen_by_sixty    = 13.0_8/60.0_8,
+     &                                 fortyseven_by_sixty  = 47.0_8/60.0_8,
+     &                                 twentyseven_by_sixty = 27.0_8/60.0_8,
+     &                                 one_by_twenty        = 1.0_8/20.0_8
+
+!       First executable statement
+        IF (flag .EQ. 1) THEN
+
+#if CH_SPACEDIM==5
+          CHF_MULTIDO[grid;i;j;m;k;l]
+            fc = 0.5_8 * (u(CHF_IX[i;j;m;k;l-1]) + u(CHF_IX[i;j;m;k;l]))
+            IF (a(CHF_IX[i;j;m;k;l]) .LT. 0.0_8) THEN
+              fu = u(CHF_IX[i;j;m;k;l-1])
+              fd = u(CHF_IX[i;j;m;k;l])
+              fq = fc - one_by_eight * (u(CHF_IX[i;j;m;k;l-2])+u(CHF_IX[i;j;m;k;l])-2.0_8*u(CHF_IX[i;j;m;k;l-1]))
+            ELSE
+              fu = u(CHF_IX[i;j;m;k;l])
+              fd = u(CHF_IX[i;j;m;k;l-1])
+              fq = fc - one_by_eight * (u(CHF_IX[i;j;m;k;l+1])+u(CHF_IX[i;j;m;k;l-1])-2.0_8*u(CHF_IX[i;j;m;k;l]))
+            ENDIF
+            f3 = fu + flc_fac * (fc - fu)
+            f(CHF_IX[i;j;m;k;l]) = med(fc,med(fc,fd,f3),fq)
+          CHF_ENDDO
+#else
+          CHF_MULTIDO[grid;i;j;k;l]
+            fc = 0.5_8 * (u(CHF_IX[i;j;k;l-1]) + u(CHF_IX[i;j;k;l]))
+            IF (a(CHF_IX[i;j;k;l]) .LT. 0.0_8) THEN
+              fu = u(CHF_IX[i;j;k;l-1])
+              fd = u(CHF_IX[i;j;k;l])
+              fq = fc - one_by_eight * (u(CHF_IX[i;j;k;l-2])+u(CHF_IX[i;j;k;l])-2.0_8*u(CHF_IX[i;j;k;l-1]))
+            ELSE
+              fu = u(CHF_IX[i;j;k;l])
+              fd = u(CHF_IX[i;j;k;l-1])
+              fq = fc - one_by_eight * (u(CHF_IX[i;j;k;l+1])+u(CHF_IX[i;j;k;l-1])-2.0_8*u(CHF_IX[i;j;k;l]))
+            ENDIF
+            f3 = fu + flc_fac * (fc - fu)
+            f(CHF_IX[i;j;k;l]) = med(fc,med(fc,fd,f3),fq)
+          CHF_ENDDO
+#endif
+
+        ELSE
+
+#if CH_SPACEDIM==5
+          CHF_MULTIDO[grid;i;j;m;k;l]
+
+!           The following chunk is exactly implemented by the preconditioner. 
+!           Uncomment it to debug preconditioner matrix entries          
+!            IF (a(CHF_IX[i;j;m;k;l]) .LT. 0.0_8) THEN
+!              f(CHF_IX[i;j;m;k;l]) = u(CHF_IX[i;j;m;k;l-1])
+!            ELSE
+!              f(CHF_IX[i;j;m;k;l]) = u(CHF_IX[i;j;m;k;l])
+!            ENDIF
+
+            IF (a(CHF_IX[i;j;m;k;l]) .LT. 0.0_8) THEN
+              f(CHF_IX[i;j;m;k;l]) =   one_by_thirty        * u(CHF_IX[i;j;m;k;l-3])
+     &                               - thirteen_by_sixty    * u(CHF_IX[i;j;m;k;l-2])
+     &                               + fortyseven_by_sixty  * u(CHF_IX[i;j;m;k;l-1])
+     &                               + twentyseven_by_sixty * u(CHF_IX[i;j;m;k;l  ])
+     &                               - one_by_twenty        * u(CHF_IX[i;j;m;k;l+1])
+            ELSE
+              f(CHF_IX[i;j;m;k;l]) =   one_by_thirty        * u(CHF_IX[i;j;m;k;l+2])
+     &                               - thirteen_by_sixty    * u(CHF_IX[i;j;m;k;l+1])
+     &                               + fortyseven_by_sixty  * u(CHF_IX[i;j;m;k;l  ])
+     &                               + twentyseven_by_sixty * u(CHF_IX[i;j;m;k;l-1])
+     &                               - one_by_twenty        * u(CHF_IX[i;j;m;k;l-2])
+            ENDIF
+
+          CHF_ENDDO
+#else
+          CHF_MULTIDO[grid;i;j;k;l]
+
+!           The following chunk is exactly implemented by the preconditioner. 
+!           Uncomment it to debug preconditioner matrix entries          
+!            IF (a(CHF_IX[i;j;k;l]) .LT. 0.0_8) THEN
+!              f(CHF_IX[i;j;k;l]) = u(CHF_IX[i;j;k;l-1])
+!            ELSE
+!              f(CHF_IX[i;j;k;l]) = u(CHF_IX[i;j;k;l])
+!            ENDIF
+
+            IF (a(CHF_IX[i;j;k;l]) .LT. 0.0_8) THEN
+              f(CHF_IX[i;j;k;l]) =   one_by_thirty        * u(CHF_IX[i;j;k;l-3])
+     &                             - thirteen_by_sixty    * u(CHF_IX[i;j;k;l-2])
+     &                             + fortyseven_by_sixty  * u(CHF_IX[i;j;k;l-1])
+     &                             + twentyseven_by_sixty * u(CHF_IX[i;j;k;l  ])
+     &                             - one_by_twenty        * u(CHF_IX[i;j;k;l+1])
+            ELSE
+              f(CHF_IX[i;j;k;l]) =   one_by_thirty        * u(CHF_IX[i;j;k;l+2])
+     &                             - thirteen_by_sixty    * u(CHF_IX[i;j;k;l+1])
+     &                             + fortyseven_by_sixty  * u(CHF_IX[i;j;k;l  ])
+     &                             + twentyseven_by_sixty * u(CHF_IX[i;j;k;l-1])
+     &                             - one_by_twenty        * u(CHF_IX[i;j;k;l-2])
+            ENDIF
+
+          CHF_ENDDO
+#endif
+
+        ENDIF
+
+      END SUBROUTINE !reconstruct_dfn_face_mu

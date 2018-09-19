@@ -1,0 +1,44 @@
+# resolution
+log2MinRes_newBdNodesIC = 3
+log2MaxRes_newBdNodesIC = 3
+
+xiEtaWeight  = 0.5
+
+# parameters for computeTargetSpacing             
+sigma_core       = 0.25
+expo_core        = 2.0
+
+sigma_scrape_off = 0.25
+expo_scrape_off  = 2.0
+
+sigma_private_flux = 0.25                 
+expo_private_flux  = 2.0
+
+geometryFileNameNewBd = ../mappingFiles/COGENT_mapping_3-22-16_cf
+fieldFileNameNewBd    = ../mappingFiles/DCT_coefficients_3-22-16
+
+# verbosity
+writeInfo = false
+writePlot = true
+
+# creates aspect ratio in mcore and mcsol for the radial lines
+refRatioEta  = 2
+
+#      parameters below this are not currently under discussion #
+########################################################################3
+
+#parameters for shifting boundary points: 
+shiftDist  = 0
+smoothness = 0.0
+refRatio   = 10
+
+numBlocks   = 10
+
+origin = 0.0 0.0 
+
+incScale = 1.0
+moveInterior = true
+
+moveMcoreMcsol = false
+
+

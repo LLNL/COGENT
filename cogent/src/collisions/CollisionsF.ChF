@@ -1,0 +1,748 @@
+#include "CONSTANTS.H"
+
+
+      function NuD(x)
+      implicit none
+      double precision NuD, x, pi, G, F
+      pi=3.14159265358979
+      G=(erf(x)-x*2.0/sqrt(pi)*exp(-x*x))/(2.0*x*x)
+      F=erf(x)
+      NuD=1/(x*x*x)*(F-G)
+      return
+      end
+
+      function NuS(x)
+      implicit none
+      double precision NuS, x, pi, G
+      pi=3.14159265358979
+      G=(erf(x)-x*2.0/sqrt(pi)*exp(-x*x))/(2.0*x*x)
+      NuS=4.0*G/x
+      return
+      end
+
+      function NuPar(x)
+      implicit none
+      double precision NuPar, x, pi, G
+      pi=3.14159265358979
+      G=(erf(x)-x*2.0/sqrt(pi)*exp(-x*x))/(2.0*x*x)
+      NuPar=2.0*G/(x*x*x)
+      return
+      end
+
+
+      subroutine evaluate_tp_lorentz_const_nud(
+     &     CHF_FRA[ClsFlux],
+     &     CHF_CONST_FRA1[f],
+     &     CHF_CONST_FRA1[b],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[m]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision fmu,fvpar
+      double precision CfmuLorentz,CfvparLorentz
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+
+c       ***Calculate fourth-order cell-centered derivatives
+#if CH_SPACEDIM==5
+        fmu=(1.0/12.0/dx(1))*(8.0*(f(CHF_IX[i0;i1;i2;i3;i4+1])-f(CHF_IX[i0;i1;i2;i3;i4-1]))-(f(CHF_IX[i0;i1;i2;i3;i4+2])-f(CHF_IX[i0;i1;i2;i3;i4-2])))
+        fvpar=(1.0/12.0/dx(0))*(8.0*(f(CHF_IX[i0;i1;i2;i3+1;i4])-f(CHF_IX[i0;i1;i2;i3-1;i4]))-(f(CHF_IX[i0;i1;i2;i3+2;i4])-f(CHF_IX[i0;i1;i2;i3-2;i4])))
+#else
+        fmu=(1.0/12.0/dx(1))*(8.0*(f(CHF_IX[i0;i1;i2;i3+1])-f(CHF_IX[i0;i1;i2;i3-1]))-(f(CHF_IX[i0;i1;i2;i3+2])-f(CHF_IX[i0;i1;i2;i3-2])))
+        fvpar=(1.0/12.0/dx(0))*(8.0*(f(CHF_IX[i0;i1;i2+1;i3])-f(CHF_IX[i0;i1;i2-1;i3]))-(f(CHF_IX[i0;i1;i2+2;i3])-f(CHF_IX[i0;i1;i2-2;i3])))
+#endif
+
+c       ***Calculate one-sided 4-th order accurate derivatives at mu=0 bnd
+#if CH_SPACEDIM==5
+        if ((i4.eq.0) .or. (i4.eq.1)) then
+          fmu=1.0/dx(1)*(-25.0/12.0*f(CHF_AUTOIX[i])+4.0*f(CHF_IX[i0;i1;i2;i3;i4+1])-3.0*f(CHF_IX[i0;i1;i2;i3;i4+2])+4.0/3.0*f(CHF_IX[i0;i1;i2;i3;i4+3])-1.0/4.0*f(CHF_IX[i0;i1;i2;i3;i4+4]))
+        endif
+#else
+        if ((i3.eq.0) .or. (i3.eq.1)) then
+          fmu=1.0/dx(1)*(-25.0/12.0*f(CHF_AUTOIX[i])+4.0*f(CHF_IX[i0;i1;i2;i3+1])-3.0*f(CHF_IX[i0;i1;i2;i3+2])+4.0/3.0*f(CHF_IX[i0;i1;i2;i3+3])-1.0/4.0*f(CHF_IX[i0;i1;i2;i3+4]))
+        endif
+#endif
+
+#if CH_SPACEDIM==5
+        CfvparLorentz = 0.5*(b(i0,i1,i2,CHF_LBOUND[b;3],CHF_LBOUND[b;4])/m*dx(1)*(i4+0.5)*fvpar-2.0*dx(0)*(i3+0.5)*dx(1)*(i4+0.5)*fmu)
+        CfmuLorentz = 0.5*(4.0*m/b(i0,i1,i2,CHF_LBOUND[b;3],CHF_LBOUND[b;4])*dx(0)*dx(0)*(i3+0.5)*(i3+0.5)*(i4+0.5)*dx(1)*fmu-2.0*dx(0)*(i3+0.5)*dx(1)*(i4+0.5)*fvpar)
+#else
+        CfvparLorentz = 0.5*(b(i0,i1,CHF_LBOUND[b;2],CHF_LBOUND[b;3])/m*dx(1)*(i3+0.5)*fvpar-2.0*dx(0)*(i2+0.5)*dx(1)*(i3+0.5)*fmu)
+        CfmuLorentz = 0.5*(4.0*m/b(i0,i1,CHF_LBOUND[b;2],CHF_LBOUND[b;3])*dx(0)*dx(0)*(i2+0.5)*(i2+0.5)*(i3+0.5)*dx(1)*fmu-2.0*dx(0)*(i2+0.5)*dx(1)*(i3+0.5)*fvpar)
+#endif
+
+c       ***Fill the (cell-centered) collsion flux 
+        ClsFlux(CHF_AUTOIX[i],0) =  CfvparLorentz
+        ClsFlux(CHF_AUTOIX[i],1) =  CfmuLorentz
+
+
+      CHF_ENDDO
+
+      return
+
+      end
+
+      subroutine evaluate_tp_lorentz(
+     &     CHF_FRA[ClsFlux],
+     &     CHF_CONST_FRA1[f],
+     &     CHF_CONST_FRA1[bmag],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[m]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision fmu,fvpar, nu_D, NuD, b , v_th, x
+      double precision CfmuLorentz,CfvparLorentz
+
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+c       ***Calculate local v_th=sqrt(2*T/m) and collision frequencies
+#if CH_SPACEDIM==5
+        b = bmag(i0,i1,i2,CHF_LBOUND[bmag;3],CHF_LBOUND[bmag;4])
+        v_th=sqrt(2.0*T(i0,i1,i2,CHF_LBOUND[T;3],CHF_LBOUND[T;4])/m)
+        x=sqrt((i3+0.5)*(i3+0.5)*dx(0)*dx(0)+(i4+0.5)*dx(1)*b/m)/v_th
+#else
+        b = bmag(i0,i1,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+        v_th=sqrt(2.0*T(i0,i1,CHF_LBOUND[T;2],CHF_LBOUND[T;3])/m)
+        x=sqrt((i2+0.5)*(i2+0.5)*dx(0)*dx(0)+(i3+0.5)*dx(1)*b/m)/v_th
+#endif
+        nu_D = NuD(x)
+
+
+c       ***Calculate fourth-order cell-centered derivatives
+#if CH_SPACEDIM==5
+        fmu=(1.0/12.0/dx(1))*(8.0*(f(CHF_IX[i0;i1;i2;i3;i4+1])-f(CHF_IX[i0;i1;i2;i3;i4-1]))-(f(CHF_IX[i0;i1;i2;i3;i4+2])-f(CHF_IX[i0;i1;i2;i3;i4-2])))
+        fvpar=(1.0/12.0/dx(0))*(8.0*(f(CHF_IX[i0;i1;i2;i3+1;i4])-f(CHF_IX[i0;i1;i2;i3-1;i4]))-(f(CHF_IX[i0;i1;i2;i3+2;i4])-f(CHF_IX[i0;i1;i2;i3-2;i4])))
+#else
+        fmu=(1.0/12.0/dx(1))*(8.0*(f(CHF_IX[i0;i1;i2;i3+1])-f(CHF_IX[i0;i1;i2;i3-1]))-(f(CHF_IX[i0;i1;i2;i3+2])-f(CHF_IX[i0;i1;i2;i3-2])))
+        fvpar=(1.0/12.0/dx(0))*(8.0*(f(CHF_IX[i0;i1;i2+1;i3])-f(CHF_IX[i0;i1;i2-1;i3]))-(f(CHF_IX[i0;i1;i2+2;i3])-f(CHF_IX[i0;i1;i2-2;i3])))
+#endif
+
+c       ***Calculate one-sided 4-th order accurate derivatives at mu=0 bnd
+#if CH_SPACEDIM==5
+        if ((i4.eq.0) .or. (i4.eq.1)) then
+          fmu=1.0/dx(1)*(-25.0/12.0*f(CHF_AUTOIX[i])+4.0*f(CHF_IX[i0;i1;i2;i3;i4+1])-3.0*f(CHF_IX[i0;i1;i2;i3;i4+2])+4.0/3.0*f(CHF_IX[i0;i1;i2;i3;i4+3])-1.0/4.0*f(CHF_IX[i0;i1;i2;i3;i4+4]))
+        endif
+#else
+        if ((i3.eq.0) .or. (i3.eq.1)) then
+          fmu=1.0/dx(1)*(-25.0/12.0*f(CHF_AUTOIX[i])+4.0*f(CHF_IX[i0;i1;i2;i3+1])-3.0*f(CHF_IX[i0;i1;i2;i3+2])+4.0/3.0*f(CHF_IX[i0;i1;i2;i3+3])-1.0/4.0*f(CHF_IX[i0;i1;i2;i3+4]))
+        endif
+#endif
+
+#if CH_SPACEDIM==5
+        CfvparLorentz = 0.5*(b/m*dx(1)*(i4+0.5)*nu_D*fvpar-2.0*dx(0)*(i3+0.5)*dx(1)*(i4+0.5)*nu_D*fmu)
+        CfmuLorentz = 0.5*(4.0*m/b*dx(0)*dx(0)*(i3+0.5)*(i3+0.5)*(i4+0.5)*dx(1)*nu_D*fmu-2.0*dx(0)*(i3+0.5)*dx(1)*(i4+0.5)*nu_D*fvpar)
+#else
+        CfvparLorentz = 0.5*(b/m*dx(1)*(i3+0.5)*nu_D*fvpar-2.0*dx(0)*(i2+0.5)*dx(1)*(i3+0.5)*nu_D*fmu)
+        CfmuLorentz = 0.5*(4.0*m/b*dx(0)*dx(0)*(i2+0.5)*(i2+0.5)*(i3+0.5)*dx(1)*nu_D*fmu-2.0*dx(0)*(i2+0.5)*dx(1)*(i3+0.5)*nu_D*fvpar)
+#endif
+
+
+c       ***Fill the (cell-centered) collsion flux 
+        ClsFlux(CHF_AUTOIX[i],0) = CfvparLorentz
+        ClsFlux(CHF_AUTOIX[i],1) = CfmuLorentz
+
+      CHF_ENDDO
+
+      return
+
+      end
+
+      subroutine evaluate_tp_energ_diff(
+     &     CHF_FRA[ClsFlux],
+     &     CHF_CONST_FRA1[f],
+     &     CHF_CONST_FRA1[bmag],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[m]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision x, v_th, b, fmu,fvpar, nu_S, nu_Par, NuD, NuS, NuPar
+      double precision CfmuEdiff,CfvparEdiff
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+c       ***Calculate local v_th=sqrt(2*T/m) and collision frequencies
+#if CH_SPACEDIM==5
+        b = bmag(i0,i1,i2,CHF_LBOUND[bmag;3],CHF_LBOUND[bmag;4])
+        v_th=sqrt(2.0*T(i0,i1,i2,CHF_LBOUND[T;3],CHF_LBOUND[T;4])/m)
+        x=sqrt((i3+0.5)*(i3+0.5)*dx(0)*dx(0)+(i4+0.5)*dx(1)*b/m)/v_th
+#else
+        b = bmag(i0,i1,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+        v_th=sqrt(2.0*T(i0,i1,CHF_LBOUND[T;2],CHF_LBOUND[T;3])/m)
+        x=sqrt((i2+0.5)*(i2+0.5)*dx(0)*dx(0)+(i3+0.5)*dx(1)*b/m)/v_th
+#endif
+
+        nu_S=NuS(x)
+        nu_Par=NuPar(x)
+
+c       ***Calculate fourth-order cell-centered derivatives
+#if CH_SPACEDIM==5
+        fmu=(1.0/12.0/dx(1))*(8.0*(f(CHF_IX[i0;i1;i2;i3;i4+1])-f(CHF_IX[i0;i1;i2;i3;i4-1]))-(f(CHF_IX[i0;i1;i2;i3;i4+2])-f(CHF_IX[i0;i1;i2;i3;i4-2])))
+        fvpar=(1.0/12.0/dx(0))*(8.0*(f(CHF_IX[i0;i1;i2;i3+1;i4])-f(CHF_IX[i0;i1;i2;i3-1;i4]))-(f(CHF_IX[i0;i1;i2;i3+2;i4])-f(CHF_IX[i0;i1;i2;i3-2;i4])))
+#else
+        fmu=(1.0/12.0/dx(1))*(8.0*(f(CHF_IX[i0;i1;i2;i3+1])-f(CHF_IX[i0;i1;i2;i3-1]))-(f(CHF_IX[i0;i1;i2;i3+2])-f(CHF_IX[i0;i1;i2;i3-2])))
+        fvpar=(1.0/12.0/dx(0))*(8.0*(f(CHF_IX[i0;i1;i2+1;i3])-f(CHF_IX[i0;i1;i2-1;i3]))-(f(CHF_IX[i0;i1;i2+2;i3])-f(CHF_IX[i0;i1;i2-2;i3])))
+#endif
+
+c       ***Calculate one-sided 4-th order accurate derivatives at mu=0 bnd
+#if CH_SPACEDIM==5
+        if ((i4.eq.0) .or. (i4.eq.1)) then
+          fmu=1.0/dx(1)*(-25.0/12.0*f(CHF_AUTOIX[i])+4.0*f(CHF_IX[i0;i1;i2;i3;i4+1])-3.0*f(CHF_IX[i0;i1;i2;i3;i4+2])+4.0/3.0*f(CHF_IX[i0;i1;i2;i3;i4+3])-1.0/4.0*f(CHF_IX[i0;i1;i2;i3;i4+4]))
+        endif
+#else
+        if ((i3.eq.0) .or. (i3.eq.1)) then
+          fmu=1.0/dx(1)*(-25.0/12.0*f(CHF_AUTOIX[i])+4.0*f(CHF_IX[i0;i1;i2;i3+1])-3.0*f(CHF_IX[i0;i1;i2;i3+2])+4.0/3.0*f(CHF_IX[i0;i1;i2;i3+3])-1.0/4.0*f(CHF_IX[i0;i1;i2;i3+4]))
+        endif
+#endif
+
+c       ***Add the energy-diffusion part of the full test-particle operator
+#if CH_SPACEDIM==5
+        ClsFlux(CHF_AUTOIX[i],0) = ClsFlux(CHF_AUTOIX[i],0) + 0.5*nu_S*f(CHF_AUTOIX[i])*(i3+0.5)*dx(0)+0.5*nu_Par*(i3+0.5)*dx(0)*(2.0*(i4+0.5)*dx(1)*fmu+(i3+0.5)*dx(0)*fvpar)
+        ClsFlux(CHF_AUTOIX[i],1) = ClsFlux(CHF_AUTOIX[i],1) + nu_S*f(CHF_AUTOIX[i])*(i4+0.5)*dx(1)+nu_Par*(i4+0.5)*dx(1)*(2.0*(i4+0.5)*dx(1)*fmu+(i3+0.5)*dx(0)*fvpar)
+#else
+        ClsFlux(CHF_AUTOIX[i],0) = ClsFlux(CHF_AUTOIX[i],0) + 0.5*nu_S*f(CHF_AUTOIX[i])*(i2+0.5)*dx(0)+0.5*nu_Par*(i2+0.5)*dx(0)*(2.0*(i3+0.5)*dx(1)*fmu+(i2+0.5)*dx(0)*fvpar)
+        ClsFlux(CHF_AUTOIX[i],1) = ClsFlux(CHF_AUTOIX[i],1) + nu_S*f(CHF_AUTOIX[i])*(i3+0.5)*dx(1)+nu_Par*(i3+0.5)*dx(1)*(2.0*(i3+0.5)*dx(1)*fmu+(i2+0.5)*dx(0)*fvpar)
+#endif
+
+      CHF_ENDDO
+
+      return
+
+      end
+
+
+
+      subroutine evaluate_coll_flux_combined(
+     &     CHF_FRA[fluxRHS],
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[fluxFace],
+     &     CHF_CONST_FRA[fluxCell],
+     &     CHF_CONST_INT[Nvpar],
+     &     CHF_CONST_INT[Nmu]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+         fluxRHS(CHF_IX[i;j;k;l;m],0) = zero
+         fluxRHS(CHF_IX[i;j;k;l;m],1) = zero
+         fluxRHS(CHF_IX[i;j;k;l;m],2) = fluxFace(CHF_IX[i;j;k;l;m],0)
+         fluxRHS(CHF_IX[i;j;k;l;m],3) = fluxFace(CHF_IX[i;j;k;l;m],1)
+
+#if CH_SPACEDIM==5
+         if (m.eq.1) then
+          fluxRHS(CHF_IX[i;j;k;l;m],3) = 1.0/4.0 * fluxCell(CHF_IX[i;j;k;l;m-1],1)
+     &                               + 13.0/12.0 * fluxCell(CHF_IX[i;j;k;l;m],1)
+     &                               - 5.0/12.0 * fluxCell(CHF_IX[i;j;k;l;m+1],1)
+     &                               + 1.0/12.0 * fluxCell(CHF_IX[i;j;k;l;m+2],1)
+         endif
+#else
+         if (l.eq.1) then
+          fluxRHS(CHF_IX[i;j;k;l],3) = 1.0/4.0 * fluxCell(CHF_IX[i;j;k;l-1],1)
+     &                               + 13.0/12.0 * fluxCell(CHF_IX[i;j;k;l],1)
+     &                               - 5.0/12.0 * fluxCell(CHF_IX[i;j;k;l+1],1)
+     &                               + 1.0/12.0 * fluxCell(CHF_IX[i;j;k;l+2],1)
+         endif
+#endif
+
+c        *** Zero out fluxes at the domain bnds to avoid continous sink of particles
+#if CH_SPACEDIM==5
+         if ((m.eq.0).or.(m.eq.Nmu)) then
+          fluxRHS(CHF_IX[i;j;k;l;m],3) = 0.0
+         endif
+
+         if ((l.eq.-Nvpar/2).or.(l.eq.Nvpar/2)) then
+          fluxRHS(CHF_IX[i;j;k;l;m],2) = 0.0
+         endif
+#else
+         if ((l.eq.0).or.(l.eq.Nmu)) then
+          fluxRHS(CHF_IX[i;j;k;l],3) = 0.0
+         endif
+
+         if ((k.eq.-Nvpar/2).or.(k.eq.Nvpar/2)) then
+          fluxRHS(CHF_IX[i;j;k;l],2) = 0.0
+         endif
+#endif
+
+      CHF_ENDDO
+      return
+      end
+
+
+      subroutine evaluate_full_er_flux(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[box],
+     &     CHF_FRA[flux],
+     &     CHF_CONST_FRA1[ERest],
+     &     CHF_CONST_FRA1[ENorm],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_CONST_FRA1[b],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_INT[Nvpar],
+     &     CHF_CONST_INT[Nmu],
+     &     CHF_CONST_REAL[m]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision x,v_th, Norm, nu_S, NuS
+
+
+      CHF_AUTOMULTIDO[box;i]
+
+       flux(CHF_AUTOIX[i],0) = zero
+       flux(CHF_AUTOIX[i],1) = zero
+
+#if CH_SPACEDIM==5
+       Norm = ERest(i0,i1,i2,CHF_LBOUND[ERest;3],CHF_LBOUND[ERest;4])/ENorm(i0,i1,i2,CHF_LBOUND[ENorm;3],CHF_LBOUND[ENorm;4])
+       v_th=sqrt(2.0*T(i0,i1,i2,CHF_LBOUND[T;3],CHF_LBOUND[T;4])/m)
+#else
+       Norm = ERest(i0,i1,CHF_LBOUND[ERest;2],CHF_LBOUND[ERest;3])/ENorm(i0,i1,CHF_LBOUND[ENorm;2],CHF_LBOUND[ENorm;3])
+       v_th=sqrt(2.0*T(i0,i1,CHF_LBOUND[T;2],CHF_LBOUND[T;3])/m)
+#endif
+
+#if CH_SPACEDIM==5
+       if ((i4.eq.0) .and. (i3.eq.0)) then
+
+          flux(CHF_AUTOIX[i],2) = 0.0
+          flux(CHF_AUTOIX[i],3) = 0.0
+
+       else
+
+c       ***Calculate local v_th=sqrt(2*T/m) and collision frequencies
+
+         x=sqrt((i3)*(i3)*dx(0)*dx(0)+(i4+0.5)*dx(1)*b(i0,i1,i2,CHF_LBOUND[b;3],CHF_LBOUND[b;4])/m)/v_th
+         nu_S=NuS(x)
+         if ((i3.eq.-Nvpar/2).or.(i3.eq.Nvpar/2)) then
+            flux(CHF_AUTOIX[i],2) = 0.0
+         else
+           flux(CHF_AUTOIX[i],2) = (i3)*dx(0)*0.5*v_th*v_th*nu_S*exp(-x*x)*Norm
+         endif
+
+         x=sqrt((i3+0.5)*(i3+0.5)*dx(0)*dx(0)+(i4)*dx(1)*b(i0,i1,i2,CHF_LBOUND[b;3],CHF_LBOUND[b;4])/m)/v_th
+         nu_S=NuS(x)
+         if (i4.eq.Nmu) then
+            flux(CHF_AUTOIX[i],3) = 0.0
+         else
+           flux(CHF_AUTOIX[i],3) = (i4)*dx(1)*v_th*v_th*nu_S*exp(-x*x)*Norm
+         endif
+
+       endif
+#else
+       if ((i3.eq.0) .and. (i2.eq.0)) then
+
+          flux(CHF_AUTOIX[i],2) = 0.0
+          flux(CHF_AUTOIX[i],3) = 0.0
+
+       else
+
+c       ***Calculate local v_th=sqrt(2*T/m) and collision frequencies
+
+         x=sqrt((i2)*(i2)*dx(0)*dx(0)+(i3+0.5)*dx(1)*b(i0,i1,CHF_LBOUND[b;2],CHF_LBOUND[b;3])/m)/v_th
+         nu_S=NuS(x)
+         if ((i2.eq.-Nvpar/2).or.(i2.eq.Nvpar/2)) then
+            flux(CHF_AUTOIX[i],2) = 0.0
+         else
+           flux(CHF_AUTOIX[i],2) = (i2)*dx(0)*0.5*v_th*v_th*nu_S*exp(-x*x)*Norm
+         endif
+
+         x=sqrt((i2+0.5)*(i2+0.5)*dx(0)*dx(0)+(i3)*dx(1)*b(i0,i1,CHF_LBOUND[b;2],CHF_LBOUND[b;3])/m)/v_th
+         nu_S=NuS(x)
+         if (i3.eq.Nmu) then
+            flux(CHF_AUTOIX[i],3) = 0.0
+         else
+           flux(CHF_AUTOIX[i],3) = (i3)*dx(1)*v_th*v_th*nu_S*exp(-x*x)*Norm
+         endif
+
+       endif
+#endif
+
+
+      CHF_ENDDO
+
+      return
+
+      end
+
+
+      subroutine evaluate_norm_er_flux(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[box],
+     &     CHF_FRA[flux],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_CONST_FRA1[b],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_INT[Nvpar],
+     &     CHF_CONST_INT[Nmu],
+     &     CHF_CONST_REAL[m]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision x,v_th, nu_S, NuS
+
+
+      CHF_AUTOMULTIDO[box;i]
+
+       flux(CHF_AUTOIX[i],0) = zero
+       flux(CHF_AUTOIX[i],1) = zero
+
+#if CH_SPACEDIM==5
+       v_th=sqrt(2.0*T(i0,i1,i2,CHF_LBOUND[T;3],CHF_LBOUND[T;4])/m)
+
+       if ((i4.eq.0) .and. (i3.eq.0)) then
+
+          flux(CHF_AUTOIX[i],2) = 0.0
+          flux(CHF_AUTOIX[i],3) = 0.0
+
+       else
+
+c       ***Calculate flux at the vpar faces
+
+         x=sqrt((i3)*(i3)*dx(0)*dx(0)+(i4+0.5)*dx(1)*b(i0,i1,i2,CHF_LBOUND[b;3],CHF_LBOUND[b;4])/m)/v_th
+         nu_S=NuS(x)
+
+         if ((i3.eq.-Nvpar/2).or.(i3.eq.Nvpar/2)) then
+            flux(CHF_AUTOIX[i],2) = 0.0
+         else
+            flux(CHF_AUTOIX[i],2) = -i3*dx(0)*0.5*v_th*v_th*nu_S*exp(-x*x)
+         endif
+
+
+c       ***Calculate flux at the mu faces
+
+         x=sqrt((i3+0.5)*(i3+0.5)*dx(0)*dx(0)+(i4)*dx(1)*b(i0,i1,i2,CHF_LBOUND[b;3],CHF_LBOUND[b;4])/m)/v_th
+         nu_S=NuS(x)
+
+         if (i4.eq.Nmu) then
+            flux(CHF_AUTOIX[i],3) = 0.0
+         else
+            flux(CHF_AUTOIX[i],3) = -i4*dx(1)*v_th*v_th*nu_S*exp(-x*x)
+         endif
+
+
+       endif
+#else
+
+       v_th=sqrt(2.0*T(i0,i1,CHF_LBOUND[T;2],CHF_LBOUND[T;3])/m)
+
+       if ((i3.eq.0) .and. (i2.eq.0)) then
+
+          flux(CHF_AUTOIX[i],2) = 0.0
+          flux(CHF_AUTOIX[i],3) = 0.0
+
+       else
+
+c       ***Calculate flux at the vpar faces
+
+         x=sqrt((i2)*(i2)*dx(0)*dx(0)+(i3+0.5)*dx(1)*b(i0,i1,CHF_LBOUND[b;2],CHF_LBOUND[b;3])/m)/v_th
+         nu_S=NuS(x)
+
+         if ((i2.eq.-Nvpar/2).or.(i2.eq.Nvpar/2)) then
+            flux(CHF_AUTOIX[i],2) = 0.0
+         else
+            flux(CHF_AUTOIX[i],2) = -i2*dx(0)*0.5*v_th*v_th*nu_S*exp(-x*x)
+         endif
+
+
+c       ***Calculate flux at the mu faces
+
+         x=sqrt((i2+0.5)*(i2+0.5)*dx(0)*dx(0)+(i3)*dx(1)*b(i0,i1,CHF_LBOUND[b;2],CHF_LBOUND[b;3])/m)/v_th
+         nu_S=NuS(x)
+
+         if (i3.eq.Nmu) then
+            flux(CHF_AUTOIX[i],3) = 0.0
+         else
+            flux(CHF_AUTOIX[i],3) = -i3*dx(1)*v_th*v_th*nu_S*exp(-x*x)
+         endif
+
+
+       endif
+
+#endif
+      CHF_ENDDO
+
+      return
+
+      end
+
+
+
+      subroutine compute_sc_cls_freq(
+     &     CHF_BOX[box],
+     &     CHF_FRA1[cls_freq],
+     &     CHF_CONST_FRA1[n],
+     &     CHF_CONST_FRA1[T]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==5
+       cls_freq(CHF_IX[i;j;k;l;m]) = n(i,j,k,CHF_LBOUND[n;3],CHF_LBOUND[n;4]) 
+     &                          / (T(i,j,k,CHF_LBOUND[T;3],CHF_LBOUND[T;4])**(3.0/2.0)) 
+#else
+       cls_freq(CHF_IX[i;j;k;l]) = n(i,j,CHF_LBOUND[n;2],CHF_LBOUND[n;3]) 
+     &                          / (T(i,j,CHF_LBOUND[T;2],CHF_LBOUND[T;3])**(3.0/2.0)) 
+#endif
+     
+      CHF_ENDDO
+
+      return
+
+      end
+
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+ccccc FORTRAN ROUTINES FOR ConsDragDiff COLLISION MODEL
+
+      subroutine eval_consdragdiff_flux(
+     &     CHF_BOX[box],
+     &     CHF_FRA[fluxes],
+     &     CHF_CONST_FRA1[fBJ],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[Nvp],
+     &     CHF_CONST_INT[Nmu] )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m], B2, B3, B4
+      double precision fBJ_face, dfBJdvp, dfBJdmu
+
+c      print*, "shape(fBJ) =", shape(fBJ)
+c    NOTE THAT THE FLUXES ARE SET TO ZERO AT VELOCITY SPACE
+c    BOUNDARIES SO THAT DENSITY IS CONSERVED. SIMILARLY,
+c    VALUES ARE SET AT FIRST FACE INSIDE VPAR BOUNDARIES
+c    SO THAT FIRST MOMENT OF DIFFUSIVE FLUX IS EXACTLY ZERO
+
+      B2 = CHF_LBOUND[B;2]
+      B3 = CHF_LBOUND[B;3]
+#if CH_SPACEDIM==5
+      B4 = CHF_LBOUND[B;4]
+#endif
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==5
+       if (dir==2) then
+
+         if ((l==Nvp/2) .or. (l==-Nvp/2)) then
+           fBJ_face = zero
+           dfBJdvp  = zero
+         else
+c           fBJ_face = (fBJ(i,j,k,l)+fBJ(i,j,k-1,l))/two
+c           dfBJdvp  = (fBJ(i,j,k,l)-fBJ(i,j,k-1,l))/dx(2)
+         if (l==Nvp/2-1) then
+           fBJ_face = ( three*fBJ(i,j,k,l,m)+13.0d0*fBJ(i,j,k,l-1,m)-five*fBJ(i,j,k,l-2,m)+fBJ(i,j,k,l-3,m) )/12.0d0
+           dfBJdvp  = ( ten*fBJ(i,j,k,l,m)-five*fBJ(i,j,k,l-1,m)-nine*fBJ(i,j,k,l-2,m)+five*fBJ(i,j,k,l-3,m)-fBJ(i,j,k,l-4,m) )/12.0d0/dx(2)
+         else
+         if (l==-Nvp/2+1) then
+           fBJ_face = ( three*fBJ(i,j,k,l-1,m)+13.0d0*fBJ(i,j,k,l,m)-five*fBJ(i,j,k,l+1,m)+fBJ(i,j,k,l+2,m) )/12.0d0
+           dfBJdvp  = (-ten*fBJ(i,j,k,l-1,m)+five*fBJ(i,j,k,l,m)+nine*fBJ(i,j,k,l+1,m)-five*fBJ(i,j,k,l+2,m)+fBJ(i,j,k,l+3,m) )/12.0d0/dx(2)
+         else
+           fBJ_face = ( seven*(fBJ(i,j,k,l,m)+fBJ(i,j,k,l-1,m))-(fBJ(i,j,k,l+1,m)+fBJ(i,j,k,l-2,m)) )/12.0d0
+           dfBJdvp  = (15.0d0*(fBJ(i,j,k,l,m)-fBJ(i,j,k,l-1,m))-(fBJ(i,j,k,l+1,m)-fBJ(i,j,k,l-2,m)) )/12.0d0/dx(2)
+         endif
+         endif
+         endif
+
+         fluxes(CHF_IX[i;j;k;l;m],0) = k*dx(2)*fBJ_face
+         fluxes(CHF_IX[i;j;k;l;m],1) = fBJ_face
+         fluxes(CHF_IX[i;j;k;l;m],2) = dfBJdvp/mass
+
+       else
+       if (dir==3) then
+
+         if ((m==0) .or. (m==Nmu)) then
+           fBJ_face = zero
+           dfBJdmu  = zero
+         else
+c           fBJ_face = (fBJ(i,j,k,l)+fBJ(i,j,k,l-1))/two
+c           dfBJdmu  = (fBJ(i,j,k,l)-fBJ(i,j,k,l-1))/dx(3)
+         if (m==Nmu-1) then
+           fBJ_face = ( three*fBJ(i,j,k,l,m)+13.0d0*fBJ(i,j,k,l,m-1)-five*fBJ(i,j,k,l,m-2)+fBJ(i,j,k,l,m-3) )/12.0d0
+           dfBJdmu  = ( ten*fBJ(i,j,k,l,m)-five*fBJ(i,j,k,l,m-1)-nine*fBJ(i,j,k,l,m-2)+five*fBJ(i,j,k,l,m-3)-fBJ(i,j,k,l,m-4) )/12.0d0/dx(3)
+         else
+         if (m==1) then
+           fBJ_face = ( three*fBJ(i,j,k,l,m-1)+13.0d0*fBJ(i,j,k,l,m)-five*fBJ(i,j,k,l,m+1)+fBJ(i,j,k,l,m+2) )/12.0d0
+           dfBJdmu  = (-ten*fBJ(i,j,k,l,m-1)+five*fBJ(i,j,k,l,m)+nine*fBJ(i,j,k,l,m+1)-five*fBJ(i,j,k,l,m+2)+fBJ(i,j,k,l,m+3) )/12.0d0/dx(3)
+         else
+           fBJ_face = ( seven*(fBJ(i,j,k,l,m)+fBJ(i,j,k,l,m-1))-(fBJ(i,j,k,l,m+1)+fBJ(i,j,k,l,m-2)) )/12.0d0
+           dfBJdmu  = (15.0d0*(fBJ(i,j,k,l,m)-fBJ(i,j,k,l,m-1))-(fBJ(i,j,k,l,m+1)-fBJ(i,j,k,l,m-2)) )/12.0d0/dx(3)
+         endif
+         endif
+         endif
+
+         fluxes(CHF_IX[i;j;k;l;m],0) = two*m*dx(3)*fBJ_face
+         fluxes(CHF_IX[i;j;k;l;m],1) = zero
+         fluxes(CHF_IX[i;j;k;l;m],2) = four*m*dx(3)/B(i,j,k,B3,B4)*dfBJdmu
+ 
+       else
+
+         fluxes(CHF_IX[i;j;k;l;m],0) = zero
+         fluxes(CHF_IX[i;j;k;l;m],1) = zero
+         fluxes(CHF_IX[i;j;k;l;m],2) = zero
+
+       endif
+       endif
+
+#else
+       if (dir==2) then
+
+         if ((k==Nvp/2) .or. (k==-Nvp/2)) then
+           fBJ_face = zero
+           dfBJdvp  = zero
+         else
+c           fBJ_face = (fBJ(i,j,k,l)+fBJ(i,j,k-1,l))/two
+c           dfBJdvp  = (fBJ(i,j,k,l)-fBJ(i,j,k-1,l))/dx(2)
+         if (k==Nvp/2-1) then
+           fBJ_face = ( three*fBJ(i,j,k,l)+13.0d0*fBJ(i,j,k-1,l)-five*fBJ(i,j,k-2,l)+fBJ(i,j,k-3,l) )/12.0d0
+           dfBJdvp  = ( ten*fBJ(i,j,k,l)-five*fBJ(i,j,k-1,l)-nine*fBJ(i,j,k-2,l)+five*fBJ(i,j,k-3,l)-fBJ(i,j,k-4,l) )/12.0d0/dx(2)
+         else
+         if (k==-Nvp/2+1) then
+           fBJ_face = ( three*fBJ(i,j,k-1,l)+13.0d0*fBJ(i,j,k,l)-five*fBJ(i,j,k+1,l)+fBJ(i,j,k+2,l) )/12.0d0
+           dfBJdvp  = (-ten*fBJ(i,j,k-1,l)+five*fBJ(i,j,k,l)+nine*fBJ(i,j,k+1,l)-five*fBJ(i,j,k+2,l)+fBJ(i,j,k+3,l) )/12.0d0/dx(2)
+         else
+           fBJ_face = ( seven*(fBJ(i,j,k,l)+fBJ(i,j,k-1,l))-(fBJ(i,j,k+1,l)+fBJ(i,j,k-2,l)) )/12.0d0
+           dfBJdvp  = (15.0d0*(fBJ(i,j,k,l)-fBJ(i,j,k-1,l))-(fBJ(i,j,k+1,l)-fBJ(i,j,k-2,l)) )/12.0d0/dx(2)
+         endif
+         endif
+         endif
+
+         fluxes(CHF_IX[i;j;k;l],0) = k*dx(2)*fBJ_face
+         fluxes(CHF_IX[i;j;k;l],1) = fBJ_face
+         fluxes(CHF_IX[i;j;k;l],2) = dfBJdvp/mass
+
+       else
+       if (dir==3) then
+
+         if ((l==0) .or. (l==Nmu)) then
+           fBJ_face = zero
+           dfBJdmu  = zero
+         else
+c           fBJ_face = (fBJ(i,j,k,l)+fBJ(i,j,k,l-1))/two
+c           dfBJdmu  = (fBJ(i,j,k,l)-fBJ(i,j,k,l-1))/dx(3)
+         if (l==Nmu-1) then
+           fBJ_face = ( three*fBJ(i,j,k,l)+13.0d0*fBJ(i,j,k,l-1)-five*fBJ(i,j,k,l-2)+fBJ(i,j,k,l-3) )/12.0d0
+           dfBJdmu  = ( ten*fBJ(i,j,k,l)-five*fBJ(i,j,k,l-1)-nine*fBJ(i,j,k,l-2)+five*fBJ(i,j,k,l-3)-fBJ(i,j,k,l-4) )/12.0d0/dx(3)
+         else
+         if (l==1) then
+           fBJ_face = ( three*fBJ(i,j,k,l-1)+13.0d0*fBJ(i,j,k,l)-five*fBJ(i,j,k,l+1)+fBJ(i,j,k,l+2) )/12.0d0
+           dfBJdmu  = (-ten*fBJ(i,j,k,l-1)+five*fBJ(i,j,k,l)+nine*fBJ(i,j,k,l+1)-five*fBJ(i,j,k,l+2)+fBJ(i,j,k,l+3) )/12.0d0/dx(3)
+         else
+           fBJ_face = ( seven*(fBJ(i,j,k,l)+fBJ(i,j,k,l-1))-(fBJ(i,j,k,l+1)+fBJ(i,j,k,l-2)) )/12.0d0
+           dfBJdmu  = (15.0d0*(fBJ(i,j,k,l)-fBJ(i,j,k,l-1))-(fBJ(i,j,k,l+1)-fBJ(i,j,k,l-2)) )/12.0d0/dx(3)
+         endif
+         endif
+         endif
+
+         fluxes(CHF_IX[i;j;k;l],0) = two*l*dx(3)*fBJ_face
+         fluxes(CHF_IX[i;j;k;l],1) = zero
+         fluxes(CHF_IX[i;j;k;l],2) = four*l*dx(3)/B(i,j,B2,B3)*dfBJdmu
+
+       else
+
+         fluxes(CHF_IX[i;j;k;l],0) = zero
+         fluxes(CHF_IX[i;j;k;l],1) = zero
+         fluxes(CHF_IX[i;j;k;l],2) = zero
+
+       endif
+       endif
+
+#endif
+
+      CHF_ENDDO
+
+      return
+
+      end
+
+      subroutine eval_cons_upar_temp( CHF_BOX[box],
+     &                                CHF_FRA1[Upar],
+     &                                CHF_FRA1[Temp],
+     &                                CHF_CONST_FRA[vmoms],
+     &                                CHF_CONST_FRA[pmoms] )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m], L2, L3 ,L4
+      double precision denom
+
+      L2 = CHF_LBOUND[Upar;2]
+      L3 = CHF_LBOUND[Upar;3]
+#if CH_SPACEDIM==5
+      L4 = CHF_LBOUND[Upar;4]
+#endif
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==5
+       denom = pmoms(i,j,k,L3,L4,2)*vmoms(i,j,k,L3,L4,1)-pmoms(i,j,k,L3,L4,1)*vmoms(i,j,k,L3,L4,2)
+       Upar(i,j,k,L3,L4) = (pmoms(i,j,k,L3,L4,2)*vmoms(i,j,k,L3,L4,0)-pmoms(i,j,k,L3,L4,0)*vmoms(i,j,k,L3,L4,2))/denom
+       Temp(i,j,k,L3,L4) = (pmoms(i,j,k,L3,L4,1)*vmoms(i,j,k,L3,L4,0)-pmoms(i,j,k,L3,L4,0)*vmoms(i,j,k,L3,L4,1))/denom
+#else
+       denom = pmoms(i,j,L2,L3,2)*vmoms(i,j,L2,L3,1)-pmoms(i,j,L2,L3,1)*vmoms(i,j,L2,L3,2)
+       Upar(i,j,L2,L3) = (pmoms(i,j,L2,L3,2)*vmoms(i,j,L2,L3,0)-pmoms(i,j,L2,L3,0)*vmoms(i,j,L2,L3,2))/denom
+       Temp(i,j,L2,L3) = (pmoms(i,j,L2,L3,1)*vmoms(i,j,L2,L3,0)-pmoms(i,j,L2,L3,0)*vmoms(i,j,L2,L3,1))/denom
+#endif
+
+      CHF_ENDDO
+
+      return
+
+      end
+
+      subroutine eval_consdragdiff_rhs( CHF_BOX[box],
+     &                                  CHF_FRA1[rhs_cls],
+
+     &                                  CHF_CONST_REAL[nu],
+     &                                  CHF_CONST_FRA1[Upar],
+     &                                  CHF_CONST_FRA1[Temp],
+     &                                  CHF_CONST_FRA[Jpsi] )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m], L2, L3, L4
+
+      L2 = CHF_LBOUND[Upar;2]
+      L3 = CHF_LBOUND[Upar;3]
+#if CH_SPACEDIM==5
+      L4 = CHF_LBOUND[Upar;4]
+#endif
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==5
+       rhs_cls(CHF_IX[i;j;k;l;m]) = nu*(Jpsi(CHF_IX[i;j;k;l;m],0)
+     &          - Upar(i,j,k,L3,L4)*Jpsi(CHF_IX[i;j;k;l;m],1)
+     &          + Temp(i,j,k,L2,L3)*Jpsi(CHF_IX[i;j;k;l;m],2))
+#else
+       rhs_cls(CHF_IX[i;j;k;l]) = nu*(Jpsi(CHF_IX[i;j;k;l],0)
+     &          -     Upar(i,j,L2,L3)*Jpsi(CHF_IX[i;j;k;l],1)
+     &          +     Temp(i,j,L2,L3)*Jpsi(CHF_IX[i;j;k;l],2))
+#endif
+
+      CHF_ENDDO
+
+      return
+
+      end
+

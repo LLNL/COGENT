@@ -1,0 +1,135 @@
+#ifndef  _SINGLENULLCONFIGURATIONBC_H_
+#define  _SINGLENULLCONFIGURATIONBC_H_
+
+//#include "BoundaryBoxLayout.H.multidim"
+//#include "BoundaryBoxLayout.H"
+#include "GridFunction.H"
+#include "FluidSpeciesBC.H"
+
+#include "NamespaceHeader.H"
+
+/**
+ * Boundary condition interface class for fluid quantities in single null geometries
+ *
+*/
+class SingleNullConfigurationBC
+   : public FluidSpeciesBC
+{
+   public:
+
+      // Constructor
+      SingleNullConfigurationBC( const std::string& name,
+                         ParmParse& pp,
+                         const int& verbosity = 0 );
+
+      /// Destructor.
+      /**
+       */
+      virtual ~SingleNullConfigurationBC();
+
+      /// Set the boundary conditions.
+      /**
+       * Sets the boundary condition on the species for the given geometry
+       * at the given time.  Assumes distribution function is in computational
+       * coordinates.
+       *
+       * @param[out] species_phys Fluid species to set.
+       * @param[in] phi           Potential field.
+       * @param[in] velocity      Phase space velocity field.
+       * @param[in] time          Time value at which to evaluate the function.
+       */
+      virtual void apply( FluidSpecies& species_comp,
+                          //                          const LevelData<FArrayBox>& phi,
+                          const Real& time );
+
+      /// Check association with variable
+      /**
+       * Returns true if this boundary condition corresponds to the variable
+       * identified by the name parameter.  This assumes that all derived
+       * types store the name of the variable to which they apply.
+       *
+       * @param[in] name String identifier of the name.
+       */
+      virtual bool isForVariable( const std::string& a_name ) const
+      {
+         return (m_name==a_name);
+      }
+
+      /// Print object parameters.
+      /**
+       */
+      virtual void printParameters() const;
+
+   private:
+
+      // prohibit copying
+      SingleNullConfigurationBC( const SingleNullConfigurationBC& );
+      SingleNullConfigurationBC& operator=( const SingleNullConfigurationBC& );
+
+      void fillInflowData( FluidSpeciesPtrVect& a_bdry_data,
+                           Vector<std::string>& a_bc_type,
+                           const BoundaryBoxLayoutPtrVect& a_bdry_layout,
+                           const Real& a_time );
+ 
+//      void createReflectedData( LevelData<FArrayBox>&       a_rflct_data,
+//                              AuxDataMap&                 a_rflct_data_map,
+//                              const LevelData<FArrayBox>& a_soln,
+//                              const MultiBlockCoordSys&   a_coord_sys,
+//                              const Side::LoHiSide&       a_side ) const;
+
+//      void applyPoloidalReflections( BoundaryBoxData&            a_inflow_data,
+//                                   const LevelData<FArrayBox>& a_soln,
+//                                   const MultiBlockLevelGeom&  a_geometry,
+//                                   const BCAuxData&            a_aux_data ) const;
+
+      /// Parse the input database for parameters.
+      /**
+       */
+   
+   
+#if 0
+      void applyLogicalSheathBC( KineticSpecies& a_species,
+                                 const BoundaryBoxLayoutPtrVect& a_bdry_layout,
+                                 const LevelData<FluxBox>& a_velocity,
+                                 const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                 const Real& a_time );
+#endif
+
+      inline void parseParameters( ParmParse& a_pp );
+
+      inline GridFunction& radialInflowFunc( const Side::LoHiSide& a_side,
+                                              const int& a_block_type );
+
+      inline GridFunction& poloidalInflowFunc( const Side::LoHiSide& a_side );
+
+      inline GridFunction& inflowFunc( const int& a_dir,
+                                        const Side::LoHiSide& a_side );
+   
+      inline std::string radialBcType( const Side::LoHiSide& a_side,
+                                       const int& a_block_type );
+   
+      inline std::string poloidalBcType( const Side::LoHiSide& a_side );
+
+      inline std::string getBcType( const int& a_dir,
+                                    const Side::LoHiSide& a_side );
+
+
+
+      const std::string m_name;
+      int m_verbosity;
+      bool m_logical_sheath; 
+
+      enum {INVALID=-1,
+            RADIAL_CORE, RADIAL_SOL, RADIAL_PF,
+            POLOIDAL_INNER_DIV, POLOIDAL_OUTER_DIV,
+            NUM_INFLOW};
+
+      Vector<RefCountedPtr<GridFunction> > m_inflow_function;
+      Vector<std::string> m_bdry_name;
+      Vector<std::string> m_bc_type;
+};
+
+#include "NamespaceFooter.H"
+
+#endif
+

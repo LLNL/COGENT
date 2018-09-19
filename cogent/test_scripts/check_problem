@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# This script compares the HDF5 files produced by a
+# specifed test problem against its baseline using
+# a prescribed absolute tolerance
+
+# Name of the test problem to be checked
+prob_dir=$1
+
+COGENT_root=$2
+Chombo_root=$3
+
+# Baseline directory.  The test name passed in $1 must
+# match a directory in the baseline directory
+base_dir=$4
+
+# Location of h5diff
+diff_prog=$5
+
+# Absolute tolerance used for comparisons
+atol=$6
+
+if [ -d "$prob_dir" ]; then
+   echo Checking $prob_dir
+
+   # Loop over the plot file subdirectories
+   m=0
+   success=1
+   for base_plot_dir in $base_dir/$prob_dir/*; do
+      if [ -d "$base_plot_dir" ]; then
+         for base_file in $base_plot_dir/*.hdf5; do
+            plot_dir=`echo $base_plot_dir | sed 's/.*\(\/\)//'`
+            file=`echo $base_file | sed 's/.*\(\/\)//'`
+            out=`$diff_prog --delta=$atol $prob_dir/$plot_dir/$file $base_file`
+            if [ "$out" != "" ]; then
+               echo $file\:
+               echo "   " $out
+               success=0
+            fi
+            ((m++))
+         done
+      fi
+   done
+   if [ $m == 0 ]; then
+      echo Found no files to compare
+   else
+      if (( success==1 )); then
+         echo All $m file comparisons were successful
+         $COGENT_root/test_scripts/certify_problems $prob_dir $COGENT_root $Chombo_root $base_dir $atol
+      fi
+   fi
+fi
+
+cd ..
+
+

@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# This script creates a baseline directory from a directory (specified as the
+# single command line argument) containing a collection of test problems, e.g.,
+# 
+#    create_baselines COGENT/sample_inputs
+#
+# The results are computed using the version of COGENT located at COGENT_TEST_COGENT_DIR
+# and are placed at COGENT_TEST_BASELINES_DIR.  The latter variables can be set as
+# environment variables or by editing the configuration parameter section at the top
+# of the script.  The baseline directory will be created if it doesn't already exist.
+# 
+########################################################################################
+# CONFIGURATION PARAMETER SECTION
+
+# Leave these settings commented out to read them from your environment;
+# otherwise, uncomment them and set them, which will also override any
+# corresponding environment variables.
+
+# COGENT root directory
+#COGENT_TEST_COGENT_DIR=
+
+# Baseline directory
+#COGENT_TEST_BASELINES_DIR=
+
+########################################################################################
+
+: ${COGENT_TEST_COGENT_DIR:?"Please set COGENT_TEST_COGENT_DIR in your environment or manually above"}
+: ${COGENT_TEST_BASELINES_DIR:?"Please set COGENT_TEST_BASELINES_DIR in your environment or manually above"}
+
+# Get the COGENT executable name
+pushd $COGENT_TEST_COGENT_DIR/exec > /dev/null
+cogent_executable=`ls cogent.*.ex`
+popd > /dev/null
+
+# Make the directory to hold the baselines if it's not already there
+if [ ! -d $COGENT_TEST_BASELINES_DIR ]; then
+   mkdir $COGENT_TEST_BASELINES_DIR
+fi
+
+# Loop over the test problems
+for prob_dir in $1/*; do
+
+   prob_name=`basename $prob_dir`
+   baseline_dir=$COGENT_TEST_BASELINES_DIR/$prob_name
+
+   # Copy the problem data; determine the number of processors and timelimit
+   rm -rf $baseline_dir
+   mkdir $baseline_dir
+   cp -r $prob_dir/* $baseline_dir
+   pushd $baseline_dir > /dev/null
+   rm -rf plt* stdout report
+   input_file=$prob_name.in
+   np=`grep TEST $input_file | sed -e 's/.*\(np=\)/\1/' -e 's/\(,\).*//' -e 's/np=//'`
+
+   # Submit the run
+   echo Running test problem $prob_name on $np processors
+   srun -n$np -ppdebug $COGENT_TEST_COGENT_DIR/exec/$cogent_executable $input_file >& stdout
+   echo Results written to $baseline_dir
+   echo
+   popd > /dev/null
+done

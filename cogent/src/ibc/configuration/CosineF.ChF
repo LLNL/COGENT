@@ -1,0 +1,37 @@
+#include "CONSTANTS.H"
+
+      subroutine set_cosine(
+     &     CHF_FRA[phi],
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[x],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[shift],
+     &     CHF_CONST_REAL[constant],
+     &     CHF_CONST_REAL[amplitude],
+     &     CHF_CONST_REALVECT[mode],
+     &     CHF_CONST_REALVECT[phase]
+     &     )
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+      integer d,n
+      REAL_T arg,product
+c
+      do n=0,CHF_NCOMP[phi]-1
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+c       ***NB: if the constant minor radius option is ON; mappedCoords have
+c       *** same values in the radial direction. 
+
+        x(CHF_IX[i;j;k;l;m],0) = (i + half)*dx(0) + shift
+
+        product = one
+        do d=0,CHF_NCOMP[x]-1
+          arg = mode(d) * x(CHF_IX[i;j;k;l;m],d) + phase(d)
+          product = product * cos( arg )
+        enddo
+        phi(CHF_IX[i;j;k;l;m],n) = constant + amplitude * product
+      CHF_ENDDO
+      enddo
+c
+      return
+      end

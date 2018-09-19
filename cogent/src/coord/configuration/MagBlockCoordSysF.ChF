@@ -1,0 +1,352 @@
+      subroutine get_nc_mapped_coords(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_FRA[xi]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      CHF_MULTIDO[box;i;j;k]
+        CHF_DTERM[xi(CHF_IX[i;j;k],0) = i*dx(0);
+                  xi(CHF_IX[i;j;k],1) = j*dx(1);
+                  xi(CHF_IX[i;j;k],2) = k*dx(2);]
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine get_cc_mapped_coords(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_FRA[xi]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      CHF_MULTIDO[box;i;j;k]
+        CHF_DTERM[xi(CHF_IX[i;j;k],0) = (i + half)*dx(0);
+                  xi(CHF_IX[i;j;k],1) = (j + half)*dx(1);
+                  xi(CHF_IX[i;j;k],2) = (k + half)*dx(2)]
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine get_fc_mapped_coords(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_FRA[xi]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision offset(0:CH_SPACEDIM-1)
+
+      CHF_DTERM[offset(0) = half;
+                offset(1) = half;
+                offset(2) = half]
+      offset(dir) = zero
+
+      CHF_MULTIDO[box;i;j;k]
+        CHF_DTERM[xi(CHF_IX[i;j;k],0) = (i + offset(0))*dx(0);
+                  xi(CHF_IX[i;j;k],1) = (j + offset(1))*dx(1);
+                  xi(CHF_IX[i;j;k],2) = (k + offset(2))*dx(2)]
+      CHF_ENDDO
+
+      return
+      end
+
+c  ----------------------------------------------------------------------------
+c  increment lapPhi with undivided 2nd-derivative difference of phi
+c  in direction dir
+c
+c  lapPhi <=>
+c  phi     =>
+c  gridBox =>
+c  dir     =>
+c  factor  =>
+c  ---------------------------------------------------------------------------
+      subroutine INCREMENTLAPLACIAN2(CHF_FRA[lapPhi],
+     &                              CHF_CONST_FRA[phi],
+     &                              CHF_BOX[gridBox],
+     &                              CHF_CONST_INT[dir],
+     &                              CHF_CONST_REAL[factor])
+
+      integer CHF_AUTODECL[i]
+      integer CHF_AUTODECL[ii]
+      integer comp
+      REAL_T thisLap
+
+      CHF_AUTOID[ii;dir]
+      do comp=0, CHF_NCOMP[phi]-1
+         CHF_AUTOMULTIDO[gridBox; i]
+            thisLap = phi(CHF_OFFSETIX[i; +ii], comp)
+     &              + phi(CHF_OFFSETIX[i; -ii], comp)
+     &           -two*phi(CHF_AUTOIX[i], comp)
+            lapPhi(CHF_AUTOIX[i], comp) =
+     &           lapPhi(CHF_AUTOIX[i], comp) + factor*thisLap
+         CHF_ENDDO
+      enddo
+
+      return
+      end
+
+      subroutine unit_fs_tangent(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_FRA[data]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k]
+        fac = one / dsqrt( dXdxi(CHF_IX[i;j;k],1)**2 + dXdxi(CHF_IX[i;j;k],3)**2 )
+        data(CHF_IX[i;j;k],0) = dXdxi(CHF_IX[i;j;k],1) * fac
+        data(CHF_IX[i;j;k],1) = dXdxi(CHF_IX[i;j;k],3) * fac
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine unit_fs_normal(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_FRA[data]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k]
+        fac = one / dsqrt( dXdxi(CHF_IX[i;j;k],1)**2 + dXdxi(CHF_IX[i;j;k],3)**2 )
+        data(CHF_IX[i;j;k],0) =  dXdxi(CHF_IX[i;j;k],3) * fac
+        data(CHF_IX[i;j;k],1) = -dXdxi(CHF_IX[i;j;k],1) * fac
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine unit_radial(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_FRA[data]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k]
+        fac = one / dsqrt( dXdxi(CHF_IX[i;j;k],0)**2 + dXdxi(CHF_IX[i;j;k],2)**2 )
+        data(CHF_IX[i;j;k],0) = dXdxi(CHF_IX[i;j;k],0) * fac
+        data(CHF_IX[i;j;k],1) = dXdxi(CHF_IX[i;j;k],2) * fac
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine gradf_factor(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_FRA1[data]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision fac1, fac2, v1(0:1), v2(0:1)
+
+      CHF_MULTIDO[box;i;j;k]
+        fac1 = one / dsqrt( dXdxi(CHF_IX[i;j;k],0)**2 + dXdxi(CHF_IX[i;j;k],2)**2 )
+        fac2 = one / dsqrt( dXdxi(CHF_IX[i;j;k],1)**2 + dXdxi(CHF_IX[i;j;k],3)**2 )
+
+        v1(0) = dXdxi(CHF_IX[i;j;k],0) * fac1
+        v1(1) = dXdxi(CHF_IX[i;j;k],2) * fac1
+
+        v2(0) =  dXdxi(CHF_IX[i;j;k],3) * fac2
+        v2(1) = -dXdxi(CHF_IX[i;j;k],1) * fac2
+
+        data(CHF_IX[i;j;k]) = fac1 * ( v1(0)*v2(0) + v1(1)*v2(1) )
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine mag_block_project(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[vec_src],
+     &     CHF_FRA[vec_dst],
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], comp, ncomp
+      double precision dotprod
+
+      ncomp = CHF_NCOMP[vec_src]
+
+      CHF_MULTIDO[box;i;j;k]
+
+        dotprod = zero
+        do comp = 0, ncomp - 1
+          dotprod = dotprod + vec_src(CHF_IX[i;j;k],comp) * vec_dst(CHF_IX[i;j;k],comp)
+        enddo     
+ 
+        do comp = 0, ncomp - 1
+          vec_dst(CHF_IX[i;j;k],comp) = dotprod * vec_src(CHF_IX[i;j;k],comp)
+        enddo     
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine mag_block_psitheta_projections(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[vec_psi],
+     &     CHF_CONST_FRA[vec_theta],
+     &     CHF_FRA[vec_dst],
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], comp, ncomp
+      double precision dotprod_psi, dotprod_theta
+
+      ncomp = CHF_NCOMP[vec_dst]
+
+      CHF_MULTIDO[box;i;j;k]
+
+        dotprod_psi = zero
+        do comp = 0, ncomp - 1
+          dotprod_psi = dotprod_psi + vec_psi(CHF_IX[i;j;k],comp) * vec_dst(CHF_IX[i;j;k],comp)
+        enddo     
+
+        dotprod_theta = zero
+        do comp = 0, ncomp - 1
+          dotprod_theta = dotprod_theta + vec_theta(CHF_IX[i;j;k],comp) * vec_dst(CHF_IX[i;j;k],comp)
+        enddo     
+ 
+        vec_dst(CHF_IX[i;j;k],0) = dotprod_psi
+        vec_dst(CHF_IX[i;j;k],1) = dotprod_theta
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine get_nodal_field_data(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[RZ],
+     &     CHF_CONST_FRA1[psi],
+     &     CHF_CONST_FRA[RB],
+     &     CHF_CONST_REAL[RBtor],
+     &     CHF_FRA[A],
+     &     CHF_FRA[bunit],
+     &     CHF_FRA[Bmag]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], n
+      double precision R, Z, Bmagnitude, B(0:2)
+
+      CHF_MULTIDO[gridbox;i;j;k]
+
+         R = RZ(CHF_IX[i;j;k],0);
+         Z = RZ(CHF_IX[i;j;k],1);
+
+         B(0) = RB(CHF_IX[i;j;k],0) / R
+         B(1) = RBtor / R
+         B(2) = RB(CHF_IX[i;j;k],1) / R
+
+         Bmagnitude = zero
+         do n = 0, 2
+            Bmagnitude = Bmagnitude + B(n)**2
+         enddo
+         Bmagnitude = sqrt(Bmagnitude)
+
+         do n = 0, 2
+            bunit(CHF_IX[i;j;k],n) = B(n) / Bmagnitude
+         enddo
+
+         Bmag(CHF_IX[i;j;k],0) = Bmagnitude
+
+         A(CHF_IX[i;j;k],0) = Z * RBtor / R
+         A(CHF_IX[i;j;k],1) = psi(CHF_IX[i;j;k]) / R
+         A(CHF_IX[i;j;k],2) = zero
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine get_field_data(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[RZ],
+     &     CHF_CONST_FRA[RB],
+     &     CHF_CONST_FRA[dRBdR],
+     &     CHF_CONST_FRA[dRBdZ],
+     &     CHF_CONST_REAL[RBtor],
+     &     CHF_FRA[B],
+     &     CHF_FRA1[Bmag],
+     &     CHF_FRA[bunit],
+     &     CHF_FRA[gradB],
+     &     CHF_FRA[curlb],
+     &     CHF_FRA1[bdotcurlb]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], n
+      double precision R, Z, Bmag2
+
+      CHF_MULTIDO[gridbox;i;j;k]
+
+         R = RZ(CHF_IX[i;j;k],0);
+         Z = RZ(CHF_IX[i;j;k],1);
+
+         B(CHF_IX[i;j;k],0) = RB(CHF_IX[i;j;k],0) / R
+         B(CHF_IX[i;j;k],1) = RBtor / R
+         B(CHF_IX[i;j;k],2) = RB(CHF_IX[i;j;k],1) / R
+
+         Bmag2 = zero
+         do n = 0, 2
+            Bmag2 = Bmag2 + B(CHF_IX[i;j;k],n)**2
+         enddo
+         Bmag(CHF_IX[i;j;k]) = sqrt(Bmag2)
+
+         do n = 0, 2
+            bunit(CHF_IX[i;j;k],n) = B(CHF_IX[i;j;k],n) / Bmag(CHF_IX[i;j;k])
+         enddo
+
+         gradB(CHF_IX[i;j;k],0) = (B(CHF_IX[i;j;k],0) * dRBdR(CHF_IX[i;j;k],0) + B(CHF_IX[i;j;k],2) * dRBdR(CHF_IX[i;j;k],1))
+     &                            / (R * Bmag(CHF_IX[i;j;k])) - Bmag(CHF_IX[i;j;k]) / R
+
+         gradB(CHF_IX[i;j;k],1) = zero
+
+         gradB(CHF_IX[i;j;k],2) = (B(CHF_IX[i;j;k],0) * dRBdZ(CHF_IX[i;j;k],0) + B(CHF_IX[i;j;k],2) * dRBdZ(CHF_IX[i;j;k],1))
+     &                            / (R * Bmag(CHF_IX[i;j;k]))
+
+         curlb(CHF_IX[i;j;k],0) =  bunit(CHF_IX[i;j;k],1) * gradB(CHF_IX[i;j;k],2) / Bmag(CHF_IX[i;j;k])
+
+         curlb(CHF_IX[i;j;k],1) = (dRBdZ(CHF_IX[i;j;k],0) - dRBdR(CHF_IX[i;j;k],1)) / (R * Bmag(CHF_IX[i;j;k]))
+     &                          + (bunit(CHF_IX[i;j;k],2) * gradB(CHF_IX[i;j;k],0) 
+     &                           - bunit(CHF_IX[i;j;k],0) * gradB(CHF_IX[i;j;k],2)) / Bmag(CHF_IX[i;j;k])
+     &                          + bunit(CHF_IX[i;j;k],2) / R
+
+         curlb(CHF_IX[i;j;k],2) = - bunit(CHF_IX[i;j;k],1) * gradB(CHF_IX[i;j;k],0) / Bmag(CHF_IX[i;j;k])
+
+         bdotcurlb(CHF_IX[i;j;k]) = zero
+         do n = 0, 2
+            bdotcurlb(CHF_IX[i;j;k]) = bdotcurlb(CHF_IX[i;j;k]) + bunit(CHF_IX[i;j;k],n) * curlb(CHF_IX[i;j;k],n) 
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+

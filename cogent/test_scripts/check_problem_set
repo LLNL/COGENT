@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# This script loops over a set of problems in a given test directory
+# (named by a time stamp, e.g., Fri_Apr_15_19:39:46_PDT_2016)
+# and runs the check_problem script on each with tolerance tol:
+
+   check_problem_set ./Fri_Apr_15_19:39:46_PDT_2016 1.e-10
+
+The resuls are sent to stdout.
+
+########################################################################################
+# CONFIGURATION PARAMETER SECTION
+
+# COGENT root directory
+COGENT_root=/usr/workspace/wsa/dorr/ESL/COGENT
+
+# Chombo root directory
+Chombo_root=/usr/workspace/wsa/dorr/ESL/Chombo
+
+# Baseline directory
+base_dir=/usr/workspace/wsa/dorr/ESL/regression_tests/baselines
+
+# Location of h5diff
+diff_prog=/usr/local/tools/hdf5-gnu-serial-1.8.10/bin/h5diff
+########################################################################################
+
+# Name of the directory containing the test results to be checked
+test_dir=$1
+
+# Absolute tolerance used for comparisons
+atol=$2
+
+cd $test_dir
+
+# Loop over test problems
+for prob_dir in *; do
+   $COGENT_root/test_scripts/check_problem $prob_dir $COGENT_root $Chombo_root $base_dir $diff_prog $atol
+   echo -----------------------------------------------------
+done
+

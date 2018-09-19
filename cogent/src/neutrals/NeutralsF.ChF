@@ -1,0 +1,121 @@
+#include "CONSTANTS.H"
+
+
+      subroutine compute_ionization(
+     &     CHF_BOX[box],
+     &     CHF_FRA1[rhs],
+     &     CHF_CONST_FRA1[fi],
+     &     CHF_CONST_FRA1[nn],
+     &     CHF_CONST_FRA1[sigmaV],
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+
+       rhs(CHF_IX[i;j;k;l]) = sigmaV(i,j,CHF_LBOUND[sigmaV;2],CHF_LBOUND[sigmaV;3])
+     &                      * nn(i,j,CHF_LBOUND[nn;2],CHF_LBOUND[nn;3]) 
+     &                      * fi(CHF_IX[i;j;k;l])
+
+#else
+
+       rhs(CHF_IX[i;j;k;l;m]) = sigmaV(i,j,k,CHF_LBOUND[sigmaV;3],CHF_LBOUND[sigmaV;4])
+     &                      * nn(i,j,k,CHF_LBOUND[nn;3],CHF_LBOUND[nn;4]) 
+     &                      * fi(CHF_IX[i;j;k;l;m])
+
+#endif
+     
+      CHF_ENDDO
+
+      return
+
+      end
+
+      subroutine compute_charge_exchange(
+     &     CHF_BOX[box],
+     &     CHF_FRA1[rhs],
+     &     CHF_CONST_FRA1[fi],
+     &     CHF_CONST_FRA1[ni],
+     &     CHF_CONST_FRA1[Ti],
+     &     CHF_CONST_FRA1[nn],
+     &     CHF_CONST_FRA1[fn],
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+
+       rhs(CHF_IX[i;j;k;l]) = ni(i,j,CHF_LBOUND[ni;2],CHF_LBOUND[ni;3]) * fn(CHF_IX[i;j;k;l])
+     &                      - nn(i,j,CHF_LBOUND[ni;2],CHF_LBOUND[ni;3]) * fi(CHF_IX[i;j;k;l]) 
+
+c     Multiply by the temperature dependence in the charge-exchange coefficient
+ 
+       rhs(CHF_IX[i;j;k;l]) = rhs(CHF_IX[i;j;k;l]) * sqrt(Ti(i,j,CHF_LBOUND[Ti;2],CHF_LBOUND[Ti;3]))
+
+#else
+
+       rhs(CHF_IX[i;j;k;l;m]) = ni(i,j,k,CHF_LBOUND[ni;3],CHF_LBOUND[ni;4]) * fn(CHF_IX[i;j;k;l;m])
+     &                        - nn(i,j,k,CHF_LBOUND[ni;3],CHF_LBOUND[ni;4]) * fi(CHF_IX[i;j;k;l;m]) 
+
+c     Multiply by the temperature dependence in the charge-exchange coefficient
+ 
+       rhs(CHF_IX[i;j;k;l;m]) = rhs(CHF_IX[i;j;k;l;m]) * sqrt(Ti(i,j,k,CHF_LBOUND[Ti;3],CHF_LBOUND[Ti;4]))
+
+#endif
+     
+      CHF_ENDDO
+
+      return
+
+      end
+
+      subroutine compute_model_charge_exchange(
+     &     CHF_BOX[box],
+     &     CHF_FRA1[rhs],
+     &     CHF_CONST_FRA1[nn],
+     &     CHF_CONST_FRA1[Ti],
+     &     CHF_CONST_FRA1[u_par],
+     &     CHF_CONST_FRA1[f0],
+     &     CHF_CONST_FRA1[v_par],
+     &     CHF_CONST_REAL[mass],
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+
+       rhs(CHF_IX[i;j;k;l]) = u_par(i,j,CHF_LBOUND[u_par;2],CHF_LBOUND[u_par;3]) * f0(CHF_IX[i;j;k;l])
+     &                      * v_par(CHF_IX[i;j;k;l]) * mass / Ti(i,j,CHF_LBOUND[Ti;2],CHF_LBOUND[Ti;3])
+
+c     Multiply by the temperature dependence in the charge-exchange coefficient and neutral density
+ 
+       rhs(CHF_IX[i;j;k;l]) = rhs(CHF_IX[i;j;k;l]) * sqrt(Ti(i,j,CHF_LBOUND[Ti;2],CHF_LBOUND[Ti;3]))
+     &                      * nn(i,j,CHF_LBOUND[nn;2],CHF_LBOUND[nn;3])
+
+#else
+
+       rhs(CHF_IX[i;j;k;l;m]) = u_par(i,j,k,CHF_LBOUND[u_par;3],CHF_LBOUND[u_par;4]) * f0(CHF_IX[i;j;k;l;m])
+     &                        * v_par(CHF_IX[i;j;k;l;m]) * mass / Ti(i,j,k,CHF_LBOUND[Ti;3],CHF_LBOUND[Ti;4])
+
+c     Multiply by the temperature dependence in the charge-exchange coefficient and neutral density
+ 
+       rhs(CHF_IX[i;j;k;l;m]) = rhs(CHF_IX[i;j;k;l;m]) * sqrt(Ti(i,j,k,CHF_LBOUND[Ti;3],CHF_LBOUND[Ti;4]))
+     &                        * nn(i,j,k,CHF_LBOUND[nn;3],CHF_LBOUND[nn;4])
+
+#endif
+     
+      CHF_ENDDO
+
+      return
+
+      end
+

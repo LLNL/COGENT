@@ -1,0 +1,31 @@
+#include "CONSTANTS.H"
+
+      subroutine set_localized(
+     &     CHF_FRA[f],
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[coord],
+     &     CHF_CONST_REAL[amp],
+     &     CHF_CONST_REALVECT[center],
+     &     CHF_CONST_REALVECT[width],
+     &     CHF_CONST_REAL[floor]
+     &     )
+c
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+      integer d,n
+      REAL_T beta, x
+c
+      do n=0,CHF_NCOMP[f]-1
+      CHF_MULTIDO[box;i;j;k;l;m]
+c
+        beta = zero
+        do d=0,CHF_NCOMP[coord]-1
+          x = coord(CHF_IX[i;j;k;l;m],d) - center(d)
+          beta = beta + ( x / width(d) )**2
+        enddo
+        f(CHF_IX[i;j;k;l;m],n) = amp * dexp(-beta) + floor
+      CHF_ENDDO
+      enddo
+c
+      return
+      end

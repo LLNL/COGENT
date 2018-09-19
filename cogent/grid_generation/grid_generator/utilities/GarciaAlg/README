@@ -1,0 +1,19 @@
+#Note to me: matlab on Madonna: /opt/MATLAB/R2014b/bin/matlab
+
+The algorithm here replicates figure 2 from smoothndemo.m in a simplified 
+case with: 
+ 
+ a)no missing data, 
+ b)the smoothing parameter specified by the user,
+ c)the input data equally weighted,
+
+The following command reads in a noisy file, noisyDataIn, writes out an hdf5
+version of noisyDataIn, noisyFabIn, and also produces 10 smoothed versions 
+in a directory called smoothFabsOut
+
+smoothnDemo2d.Linux.64.g++.gfortran.OPT.ex input.smoothnDemo < noisyDataIn
+
+The input file requires: info to create a range of smoothing parameters
+
+Note: The first two entries of noisyFab in are required to be the (whole number) dimensions of the data
+Note: The smoothing parameter should be between zero and one. 

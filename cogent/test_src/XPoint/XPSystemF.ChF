@@ -1,0 +1,27 @@
+      subroutine blob_initial_condition(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_FRA1[data]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision r, theta, r0, theta0, radius
+
+      r0 = 0.d0
+      theta0 = 0.d0
+
+      CHF_MULTIDO[gridbox;i;j;k]
+
+         r = ( i + half ) * h(0)
+         theta = ( j + half ) * h(1)
+
+         radius = sqrt( 100.d0 * (r-r0)**2 + 20.d0 * (theta-theta0)**2 )
+
+         data(CHF_IX[i;j;k]) = dexp(-radius)
+
+      CHF_ENDDO
+
+      return
+      end
+

@@ -1,0 +1,412 @@
+C      _______              __
+C     / ___/ /  ___  __ _  / /  ___
+C    / /__/ _ \/ _ \/  V \/ _ \/ _ \
+C    \___/_//_/\___/_/_/_/_.__/\___/
+C    Please refer to Copyright.txt, in Chombo's root directory.
+
+#include "CONSTANTS.H"
+
+#define twentyseven (27.0d0)
+#define fortyseven  (47.0d0)
+#define eleven      (11.0d0)
+#define thirteen    (13.0d0)
+#define sixtieth    (1.0d0 / 60.0d0)
+
+#define d0 (0.3d0)
+#define d1 (0.6d0)
+#define d2 (0.1d0)
+#define thirteentwelfths (13.d0 / 12.d0)
+#define quarter (0.25d0)
+
+c ----------------------------------------------------------
+c  limits face values based on Banks and Hittinger (2010) 
+c  IEEE Transactions on Plasma Science 38(9), pp. 2198-2207.
+c
+c  facePhi <=> face-centered phi value
+c  cellPhi  => cell-centered phi
+c  faceVel  => normal velocity on faces
+c  faceBox  =>
+c  idir     =>
+c  -------------------------------------------------------------
+      subroutine BWENOFACEVALUES(CHF_FRA[facePhi],
+     &                           CHF_CONST_FRA[cellPhi],
+     &                           CHF_CONST_FRA1[faceVel],
+     &                           CHF_BOX[faceBox],
+     &                           CHF_CONST_INT[idir] )
+
+
+      integer n, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T eps
+      REAL_T fl,fr,bl,br,al,ar,wl,wr
+      REAL_T c1l,c2l,c1r,c2r
+      REAL_T wmax,wmin
+      REAL_T onept5
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3);
+      mm = CHF_ID(idir, 4)]
+
+      onept5 = one + half
+
+c.....small parameter for mapping the weights
+      eps = 1.d-6
+
+      do n=0, (CHF_NCOMP[facePhi]-1)
+         CHF_MULTIDO[faceBox;i;j;k;l;m]
+
+c.......get left and right 3rd order approximations
+        fl = sixth*(
+     &             - cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n)
+     &             + five*cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+     &             + two*cellPhi(CHF_IX[i;j;k;l;m],n) )
+        fr = sixth*(
+     &               two*cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+     &             + five*cellPhi(CHF_IX[i;j;k;l;m],n)
+     &             - cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n) )
+
+c.......get smoothness indicators
+        c1l = ( cellPhi(CHF_IX[i;j;k;l;m],n)
+     &        - two*cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+     &        + cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n) )
+        c2l = ( cellPhi(CHF_IX[i;j;k;l;m],n)
+     &        - cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n) )
+        c1r = ( cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n)
+     &        - two*cellPhi(CHF_IX[i;j;k;l;m],n)
+     &        + cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n) )
+        c2r = ( cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n)
+     &        - cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n) )
+        bl  = four*(c1l**2)*third+half*c1l*c2l+fourth*c2l**2
+        br  = four*(c1r**2)*third-half*c1r*c2r+fourth*c2r**2
+
+c.......get weights
+        al = one/((eps+bl)**2)
+        ar = one/((eps+br)**2)
+        wl = al/(al+ar)
+        wr = ar/(al+ar)
+
+c.......perform mapping of the weights (mapped weno as in Henrick JCP 2005)
+        al = wl*(three*fourth+wl*(wl-onept5))
+        ar = wr*(three*fourth+wr*(wr-onept5))
+        wl = al/(al+ar)
+        wr = ar/(al+ar)
+
+        wmax = max(wl,wr)
+        wmin = min(wl,wr)
+        if( faceVel(CHF_IX[i;j;k;l;m]).gt.zero ) then
+          wl = wmax
+          wr = wmin
+        else
+          wl = wmin
+          wr = wmax
+        end if
+
+c.......assign face value
+        facePhi(CHF_IX[i;j;k;l;m],n) = ( wl*fl + wr*fr )
+
+        CHF_ENDDO
+      enddo
+
+      return
+      end
+
+
+      function g( w, d )
+      REAL_T g, w, d
+      g = (d*(1-w)+(w-d)**2)/(d**2+w*(1-two*d))
+      return
+      end
+      
+
+c ----------------------------------------------------------
+c  limits face values based on WENO 5
+c
+c  facePhi <=> face-centered phi value
+c  cellPhi  => cell-centered phi
+c  faceVel  => normal velocity on faces
+c  faceBox  =>
+c  idir     =>
+c  -------------------------------------------------------------
+      subroutine WENO5FACEVALUES(CHF_FRA[facePhi],
+     &                           CHF_CONST_FRA[cellPhi],
+     &                           CHF_CONST_FRA1[faceVel],
+     &                           CHF_BOX[faceBox],
+     &                           CHF_CONST_INT[idir] )
+
+
+      integer n, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T eps
+      REAL_T fl,fr,bl,br,al,ar,wl,wr
+      REAL_T c0,c1,c2,c3
+      REAL_T a0,a1,a2,asuminv
+      REAL_T b0,b1,b2
+      REAL_T v0,v1,v2
+      REAL_T w0,w1,w2
+      REAL_T g
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3);
+      mm = CHF_ID(idir, 4)]
+
+c.....small parameter for mapping the weights
+      eps = 1.d-6
+
+      do n=0, (CHF_NCOMP[facePhi]-1)
+         CHF_MULTIDO[faceBox;i;j;k;l;m]
+
+c.......get left, center, and right 3rd order approximations
+        if( faceVel(CHF_IX[i;j;k;l;m]).gt.zero ) then
+
+          v0 = sixth*(
+     &                 two*cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+     &               + five*cellPhi(CHF_IX[i;j;k;l;m],n)
+     &               - cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n) )
+          v1 = sixth*(
+     &               - cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n)
+     &               + five*cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+     &               + two*cellPhi(CHF_IX[i;j;k;l;m],n) )
+          v2 = sixth*(
+     &                 two*cellPhi(CHF_IX[i-3*ii;j-3*jj;k-3*kk;l-3*ll;m-3*mm],n)
+     &               - seven*cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n)
+     &               + eleven*cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n) )
+
+          c0 = cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n)
+     &       - cellPhi(CHF_IX[i;j;k;l;m],n)
+          c1 = cellPhi(CHF_IX[i;j;k;l;m],n) 
+     &       - cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n) 
+          c2 = cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n) 
+     &       - cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n)
+          c3 = cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n)
+     &       - cellPhi(CHF_IX[i-3*ii;j-3*jj;k-3*kk;l-3*ll;m-3*mm],n) 
+
+        else
+
+          v0 = sixth*(
+     &                 two*cellPhi(CHF_IX[i;j;k;l;m],n)
+     &               + five*cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+     &               - cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n) )
+          v1 = sixth*(
+     &               - cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n) 
+     &               + five*cellPhi(CHF_IX[i;j;k;l;m],n)
+     &               + two*cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n) )
+          v2 = sixth*(
+     &                 two*cellPhi(CHF_IX[i+2*ii;j+2*jj;k+2*kk;l+2*ll;m+2*mm],n)
+     &               - seven*cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n)
+     &               + eleven*cellPhi(CHF_IX[i;j;k;l;m],n) )
+
+          c0 = cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n)
+     &       - cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+          c1 = cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n) 
+     &       - cellPhi(CHF_IX[i;j;k;l;m],n) 
+          c2 = cellPhi(CHF_IX[i;j;k;l;m],n) 
+     &       - cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n)
+          c3 = cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n)
+     &       - cellPhi(CHF_IX[i+2*ii;j+2*jj;k+2*kk;l+2*ll;m+2*mm],n)
+
+        end if
+
+c.......get smoothness indicators
+        b0 = thirteentwelfths*(c1-c0)**2+quarter*(three*c1-c0)**2
+        b1 = thirteentwelfths*(c2-c1)**2+quarter*(c2+c1)**2
+        b2 = thirteentwelfths*(c3-c2)**2+quarter*(c3-three*c2)**2
+
+c.......get weights
+        a0 = d0/((eps+b0)**2)
+        a1 = d1/((eps+b1)**2)
+        a2 = d2/((eps+b2)**2)
+
+        asuminv = one/(a0+a1+a2)
+        w0 = a0*asuminv
+        w1 = a1*asuminv
+        w2 = a2*asuminv
+
+c.......perform mapping of the weights (mapped weno as in Henrik JCP 2005)
+c        a0 = g(w0,d0)
+c        a1 = g(w1,d1)
+c        a2 = g(w2,d2)
+
+c        asuminv = one/(a0+a1+a2)
+c        w0 = a0 * asuminv
+c        w1 = a1 * asuminv
+c        w2 = a2 * asuminv
+
+c.......assign face value
+        facePhi(CHF_IX[i;j;k;l;m],n) = ( w0*v0 + w1*v1 + w2*v2 )
+
+        CHF_ENDDO
+      enddo
+
+      return
+      end
+
+c ----------------------------------------------------------
+c  average face values based linear, 5th-order upwind
+c
+c  facePhi <=> face-centered phi value
+c  cellPhi  => cell-centered phi
+c  faceVel  => normal velocity on faces
+c  faceBox  =>
+c  idir     =>
+c  -------------------------------------------------------------
+      subroutine UW5FACEVALUES(CHF_FRA[facePhi],
+     &                         CHF_CONST_FRA[cellPhi],
+     &                         CHF_CONST_FRA1[faceVel],
+     &                         CHF_BOX[faceBox],
+     &                         CHF_CONST_INT[idir] )
+
+
+      integer n, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3);
+      mm = CHF_ID(idir, 4)]
+
+      do n=0, (CHF_NCOMP[facePhi]-1)
+         CHF_MULTIDO[faceBox;i;j;k;l;m]
+
+        if( faceVel(CHF_IX[i;j;k;l;m]).gt.zero ) then
+          val = two         
+     &          * cellPhi(CHF_IX[i-3*ii;j-3*jj;k-3*kk;l-3*ll;m-3*mm],n)
+     &        - thirteen    
+     &          * cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n)
+     &        + fortyseven  
+     &          * cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+     &        + twentyseven 
+     &          * cellPhi(CHF_IX[i;j;k;l;m],n)
+     &        - three       
+     &          * cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n)
+        else
+          val = two         
+     &          * cellPhi(CHF_IX[i+2*ii;j+2*jj;k+2*kk;l+2*ll;m+2*mm],n)
+     &        - thirteen    
+     &          * cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n)
+     &        + fortyseven  
+     &          * cellPhi(CHF_IX[i;j;k;l;m],n)
+     &        + twentyseven 
+     &          * cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+     &        - three       
+     &          * cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n)
+         end if
+
+c.......assign face value
+        facePhi(CHF_IX[i;j;k;l;m],n) = val * sixtieth
+
+        CHF_ENDDO
+      enddo
+
+      return
+      end
+
+c ----------------------------------------------------------
+c  average face values based linear, 3rd-order upwind
+c
+c  facePhi <=> face-centered phi value
+c  cellPhi  => cell-centered phi
+c  faceVel  => normal velocity on faces
+c  faceBox  =>
+c  idir     =>
+c  -------------------------------------------------------------
+      subroutine UW3FACEVALUES(CHF_FRA[facePhi],
+     &                         CHF_CONST_FRA[cellPhi],
+     &                         CHF_CONST_FRA1[faceVel],
+     &                         CHF_BOX[faceBox],
+     &                         CHF_CONST_INT[idir] )
+
+
+      integer n, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3);
+      mm = CHF_ID(idir, 4)]
+
+      do n=0, (CHF_NCOMP[facePhi]-1)
+         CHF_MULTIDO[faceBox;i;j;k;l;m]
+
+        if( faceVel(CHF_IX[i;j;k;l;m]).gt.zero ) then
+          val = - one         
+     &          * cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n)
+     &        + five    
+     &          * cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+     &        + two
+     &          * cellPhi(CHF_IX[i;j;k;l;m],n)
+        else
+          val = - one         
+     &          * cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],n)
+     &        + five  
+     &          * cellPhi(CHF_IX[i;j;k;l;m],n)
+     &        + two
+     &          * cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+         end if
+
+c.......assign face value
+        facePhi(CHF_IX[i;j;k;l;m],n) = val * sixth
+
+        CHF_ENDDO
+      enddo
+
+      return
+      end
+
+
+c ----------------------------------------------------------
+c  average face values based linear, 1rd-order upwind
+c
+c  facePhi <=> face-centered phi value
+c  cellPhi  => cell-centered phi
+c  faceVel  => normal velocity on faces
+c  faceBox  =>
+c  idir     =>
+c  -------------------------------------------------------------
+      subroutine UW1FACEVALUES(CHF_FRA[facePhi],
+     &                         CHF_CONST_FRA[cellPhi],
+     &                         CHF_CONST_FRA1[faceVel],
+     &                         CHF_BOX[faceBox],
+     &                         CHF_CONST_INT[idir] )
+
+
+      integer n, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3);
+      mm = CHF_ID(idir, 4)]
+
+      do n=0, (CHF_NCOMP[facePhi]-1)
+         CHF_MULTIDO[faceBox;i;j;k;l;m]
+
+        if( faceVel(CHF_IX[i;j;k;l;m]).gt.zero ) then
+          val = cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+        else
+          val = cellPhi(CHF_IX[i;j;k;l;m],n)
+         end if
+
+c.......assign face value
+        facePhi(CHF_IX[i;j;k;l;m],n) = val
+
+        CHF_ENDDO
+      enddo
+
+      return
+      end
+

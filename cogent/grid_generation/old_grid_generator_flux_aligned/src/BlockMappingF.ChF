@@ -1,0 +1,78 @@
+      subroutine dct_interp(
+     &     CHF_CONST_FRA1[coef],
+     &     CHF_CONST_INT[expansion_order],
+     &     CHF_CONST_INT[deriv1],
+     &     CHF_CONST_INT[deriv2],
+     &     CHF_R1D[fac1],
+     &     CHF_R1D[fac2],
+     &     CHF_R1D[sinfac1],
+     &     CHF_R1D[cosfac1],
+     &     CHF_R1D[sinfac2],
+     &     CHF_R1D[cosfac2],
+     &     CHF_R1D[lambda],
+     &     CHF_REAL[value]
+     &     )
+
+c     local variables
+      integer Nminus1, Mminus1, i, j
+
+      Nminus1 = CHF_UBOUND[coef;0]
+      Mminus1 = CHF_UBOUND[coef;1]
+
+      value = zero
+
+      if (deriv1 .eq. 0 .and. deriv2 .eq. 0) then
+
+         do j = 0, expansion_order - 1
+            do i = 0, expansion_order - 1
+               value = value + lambda(i) * lambda(j) * coef(i,j) * cosfac1(i) * cosfac2(j)
+            enddo
+         enddo
+
+      else if (deriv1 .eq. 1 .and. deriv2 .eq. 0) then
+
+         do j = 0, expansion_order - 1 
+            do i = 0, expansion_order - 1
+               value = value - lambda(i) * lambda(j) * coef(i,j) * sinfac1(i) * cosfac2(j) * fac1(i)
+            enddo
+         enddo
+
+      else if (deriv1 .eq. 0 .and. deriv2 .eq. 1) then
+
+         do j = 0, expansion_order - 1
+            do i = 0, expansion_order - 1
+               value = value - lambda(i) * lambda(j) * coef(i,j) * cosfac1(i) * sinfac2(j) * fac2(j)
+            enddo
+         enddo
+
+      else if (deriv1 .eq. 2 .and. deriv2 .eq. 0) then
+
+         do j = 0, expansion_order - 1
+            do i = 0, expansion_order - 1
+               value = value - lambda(i) * lambda(j) * coef(i,j) * cosfac1(i) * cosfac2(j) * fac1(i)**2
+            enddo
+         enddo
+
+      else if (deriv1 .eq. 0 .and. deriv2 .eq. 2) then
+
+         do j = 0, expansion_order - 1
+            do i = 0, expansion_order - 1
+               value = value - lambda(i) * lambda(j) * coef(i,j) * cosfac1(i) * cosfac2(j) * fac2(j)**2
+            enddo
+         enddo
+
+      else if (deriv1 .eq. 1 .and. deriv2 .eq. 1) then
+
+         do j = 0, expansion_order - 1
+            do i = 0, expansion_order - 1
+               value = value + lambda(i) * lambda(j) * coef(i,j) * sinfac1(i) * sinfac2(j) * fac1(i) * fac2(j)
+            enddo
+         enddo
+
+      endif
+
+      value = value * two / dsqrt((Nminus1+one)*(Mminus1+one))
+
+      return
+      end
+ 

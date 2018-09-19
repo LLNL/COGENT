@@ -1,0 +1,135 @@
+
+#which even spacing map, indexed by nCell
+nCell = 3
+
+# resolution
+log2MinRes_newBdNodesIC      = 3
+log2MaxRes_newBdNodesIC      = 3
+
+log2MinRes_BrackbillSalzman  = 3
+log2MaxRes_BrackbillSalzman  = 3
+
+log2MinRes_ghostCellExtrapBS = 3
+log2MaxRes_ghostCellExtrapBS = 3
+
+#max iterations in point Jacobi 
+maxIter_BrackbillSalzman  = 1
+maxIter_ghostCellExtrapBS = 1
+
+#print frequency
+printFreq_BrackbillSalzman  = 20000
+printFreq_ghostCellExtrapBS = 20000
+
+#number of ghost cells
+numGhost = 4
+
+evenSpacingCase = false
+
+#whichGhostMethod 
+# 0 aligned
+# 1 even
+# 2 weighted
+
+# parameters for computeTargetSpacing             
+sigma_core       = 0.25
+expo_core        = 2.0
+
+sigma_scrape_off = 0.25
+expo_scrape_off  = 2.0
+
+sigma_private_flux = 0.25                 
+expo_private_flux  = 2.0
+
+#one whichGhostMethod value for each block
+#block number      0 1 2 3 4 5 6 7 8 9
+whichGhostMethod = 2 2 2 2 2 2 2 2 2 2
+
+readFromCheckpoint = false
+numInitSmooth      = 50000
+
+# creates aspect ratio in mcore and mcsol for the radial lines
+refRatioEta  = 1
+
+#       parameters below this are not currently under discussion       #
+########################################################################
+moveMcoreMcsol = false
+
+evenGeometryBaseName    = mappingFiles/even.curr  
+alignedGeometryBaseName = mappingFiles/aligned.curr       
+
+evenCheckpointBaseName    = ../../checkpoint/even.curr      
+alignedCheckpointBaseName = ../../checkpoint/aligned.curr
+
+evenOutputBaseName    = outputMapping/even.curr
+alignedOutputBaseName = outputMapping/aligned.curr
+
+fieldFileName = mappingFiles/DCT_coefficients_3-22-16
+
+geometryFileNameNewBd = ../../mappingFiles/COGENT_mapping_3-22-16_cf
+fieldFileNameNewBd    = ../../mappingFiles/DCT_coefficients_3-22-16
+
+xiEtaWeight  = 0.5
+
+# parameters for setSmoothWeight             
+sigma        = 0.000001
+expo         = 2.0
+
+xiTangent  = false
+etaTangent = true
+
+#parameters for shifting boundary points: 
+shiftDist  = 0
+smoothness = 0.0
+refRatio   = 9
+
+blending    = false       
+startFrac   = 0.0
+endFrac     = 0.0
+
+numBlocks   = 10
+
+origin = 0.0 0.0 
+
+incScale = 1.0
+moveInterior = true
+
+checkAnn = false
+
+Spower =  1
+Jpower =  -1
+
+fieldAligned = false
+tanDirScale  = .9999
+
+#writes the current state
+checkPointInt = 1000
+
+oneSidedEtaDiff = true
+
+outputFileName = outputMapping/extended_map
+
+numExtraGhost = 0
+order         = 2
+
+# stopping criterion for iteration
+maxTol = 1.0e-20
+
+beginBlockBS  = BLOCK
+endBlockBS    = BLOCK 
+
+beginBlock  = 0
+endBlock    = 9 
+
+writeInfo = false
+writePlot = true
+
+alignedGeometryBaseNameGhost = ../utilities/outputMapping/aligned.curr
+evenGeometryBaseNameGhost    = ../utilities/outputMapping/even.curr
+
+fieldFileNameGhost  = ../../mappingFiles/DCT_coefficients_3-22-16  
+
+beginBlockAddMap = 0
+endBlockAddMap   = 9
+
+geometryFileNameAddMap = ../../mappingFiles/COGENT_mapping_3-22-16_cf
+fieldFileNameAddMap    = ../../mappingFiles/DCT_coefficients_3-22-16  

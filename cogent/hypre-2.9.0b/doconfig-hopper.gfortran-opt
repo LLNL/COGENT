@@ -1,0 +1,25 @@
+#!/bin/sh
+
+debug="--enable-opt";
+
+mpi_include=`echo '-I/usr/local/include' | sed 's/-I//g'`
+
+install_dir=$PWD/lib/hopper-cpp-gfortran-opt
+
+CC=cc
+CXX=CC
+F77=ftn
+CPP=cpp
+
+cd src
+./configure $debug \
+            --with-CPP=cpp \
+            --with-CC=cc \
+            --with-CFLAGS="-O " \
+            --with-CXX=CC \
+            --with-CXXFLAGS="-O " \
+            --with-F77=ftn \
+            --with-F77FLAGS="-O " \
+            --prefix=$install_dir
+cd ..
+

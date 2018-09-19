@@ -1,0 +1,6 @@
+.r import2idl, show_grid, show_data
+
+path="/global/homes/u/umansky/TMPNEW/RUNS/DIII-D_vorticity/plt_density_plots/"
+Import2idl, p, path=path, filename="plt.1.hydrogen.density0002.2d.hdf5"
+Show_grid,p, /wcolor
+Show_data, p        

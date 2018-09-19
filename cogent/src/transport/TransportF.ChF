@@ -1,0 +1,499 @@
+#include "CONSTANTS.H"
+
+c    2ND ORDER TRANSPORT ACROSS FLUX SURFACES
+c    USING FIELD ALIGNED GRID
+
+      subroutine eval_anom_flux(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_FRA[lame_face],
+     &     CHF_CONST_FRA[D_cfg],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_INT[Nr],
+     &     CHF_CONST_INT[simpleDiffusion],
+     &     CHF_CONST_FRA1[fB],
+     &     CHF_CONST_FRA1[dfBdmu],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_FRA1[N],
+     &     CHF_CONST_FRA1[U],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_CONST_FRA1[C],
+     &     CHF_CONST_FRA1[P],
+     &     CHF_FRA1[flux]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], L3, L4, kk
+      double precision hr, htheta, hphi, vparr2, vperp2, v2, coef
+      double precision fB_face, B_face, T_face, N_face, U_face, C_face
+      double precision dfB_dr, dfB_dmu, dB_dr, dT_dr, dn_dr
+      double precision FluxR, FluxZ, Upsi, Dpsi
+      double precision D0, D1, D2, D3, DN
+      double precision vp_RealCoord, mu_RealCoord
+
+      CHF_DTERM[ ; ;
+      kk = CHF_LBOUND[B;2];
+      L3 = CHF_LBOUND[B;3];
+      L4 = CHF_LBOUND[B;4]]
+
+c        print*,"shape(fB) = ", shape(fB)
+c        print*,"DN0 = ", DN0
+
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+#if CH_SPACEDIM==5
+         kk = i2
+#endif
+
+c        Define real space lame coefficients on cell faces
+         hr     = lame_face(CHF_IX[i0;i1;kk;L3;L4],0)
+         htheta = lame_face(CHF_IX[i0;i1;kk;L3;L4],1)
+         hphi   = lame_face(CHF_IX[i0;i1;kk;L3;L4],2)
+
+
+c        Set spatially dependent transport coefficients on cell faces
+         D0 = D_cfg(CHF_IX[i0;i1;kk;L3;L4],0)
+         D1 = D_cfg(CHF_IX[i0;i1;kk;L3;L4],1)
+         D2 = D_cfg(CHF_IX[i0;i1;kk;L3;L4],2)
+         D3 = D_cfg(CHF_IX[i0;i1;kk;L3;L4],3)
+         DN = D_cfg(CHF_IX[i0;i1;kk;L3;L4],4)
+
+c         if (dir==0) then
+c           if (i2==L2) then
+c             if(i3==L3) then
+c               print*,"D0 = ", D0
+c               print*,"D1 = ", D1
+c               print*,"D2 = ", D2
+c               print*,"D3 = ", D3
+c               print*,"DN = ", DN
+c             endif
+c           endif
+c         endif
+
+
+c        Create fB, B, N, U, P, T and derivatives on r-faces
+         if (dir==0) then
+
+            dfB_dr  = (fB(CHF_AUTOIX[i])-fB(CHF_IX[i0-1;i1;i2;i3;i4]))/dx(0)
+            fB_face = (fB(CHF_AUTOIX[i])+fB(CHF_IX[i0-1;i1;i2;i3;i4]))/two
+            dB_dr   = (B(CHF_IX[i0;i1;kk;L3;L4])-B(CHF_IX[i0-1;i1;kk;L3;L4]))/dx(0)
+            B_face  = (B(CHF_IX[i0;i1;kk;L3;L4])+B(CHF_IX[i0-1;i1;kk;L3;L4]))/two
+ 
+            N_face  = (N(CHF_IX[i0;i1;kk;L3;L4])+N(CHF_IX[i0-1;i1;kk;L3;L4]))/two
+            T_face  = (T(CHF_IX[i0;i1;kk;L3;L4])+T(CHF_IX[i0-1;i1;kk;L3;L4]))/two
+            U_face  = (U(CHF_IX[i0;i1;kk;L3;L4])+U(CHF_IX[i0-1;i1;kk;L3;L4]))/two
+            C_face  = (C(CHF_IX[i0;i1;kk;L3;L4])+C(CHF_IX[i0-1;i1;kk;L3;L4]))/two
+            
+            dfB_dmu = (dfBdmu(CHF_AUTOIX[i])+dfBdmu(CHF_IX[i0-1;i1;i2;i3;i4]))/two
+            
+            dN_dr   = (N(CHF_IX[i0;i1;kk;L3;L4])-N(CHF_IX[i0-1;i1;kk;L3;L4]))/dx(0)
+            dT_dr   = (T(CHF_IX[i0;i1;kk;L3;L4])-T(CHF_IX[i0-1;i1;kk;L3;L4]))/dx(0)
+
+c           Create normalized primed velocity squared: 0.5*m*(v-U)^2/T
+c           coef should equal unity for maxwellian
+ 
+            coef   = two*C_face/three-three/two
+
+#if CH_SPACEDIM==4
+            vp_RealCoord = (i2+half)*dx(2)
+            mu_RealCoord = (i3+half)*dx(3)
+#else
+            vp_RealCoord = (i3+half)*dx(3)
+            mu_RealCoord = (i4+half)*dx(4)
+#endif
+             
+            vparr2 = (vp_RealCoord-U_face)**2
+            vperp2 = mu_RealCoord*B_face
+            v2     = (mass*vparr2+vperp2)/two/T_face
+ 
+            Upsi = (DN+D2/coef*(v2-three/two))*dN_dr/N_face/hr
+     &           + (D1+D3/coef*(v2-three/two))*dT_dr/T_face/hr
+            Dpsi = D0
+
+
+            if (simpleDiffusion.eq.1) then
+               fluxR = hphi*htheta*( Dpsi*dfB_dr/hr )
+            else
+               fluxR = hphi*htheta*( Dpsi*(dfB_dr/hr - ( mu_RealCoord*dfB_dmu 
+     &                                     + fB_face )*dB_dr/B_face/hr ) - Upsi*fB_face )
+            endif
+
+         else
+
+            fluxR = 0.0
+
+         endif
+
+         flux(CHF_AUTOIX[i]) = fluxR
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    2ND ORDER TRANSPORT ACROSS FLUX SURFACES
+c    USING GRID THAT IS NOT FIELD ALIGNED
+
+      subroutine eval_anom_flux_not_aligned(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_FRA[NJinv],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_CONST_FRA[D_cfg],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_INT[Nr],
+     &     CHF_CONST_INT[simpleDiffusion],
+     &     CHF_CONST_FRA1[fB],
+     &     CHF_CONST_FRA1[dfBdmu],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_FRA1[N],
+     &     CHF_CONST_FRA1[U],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_CONST_FRA1[C],
+     &     CHF_CONST_FRA1[P],
+     &     CHF_FRA[flux]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], L3, L4, kk
+      double precision fB_face, dfB_dpsi, dfB_dtheta, dfB_dmu
+      double precision dB_dpsi, B_face, dB_dtheta
+      double precision fluxR, fluxZ, dot_product, bpol
+      double precision N_face, T_face, U_face, C_face
+      double precision dN_dpsi, dT_dpsi, dN_dtheta, dT_dtheta 
+      double precision vparr2, vperp2, v2, coef, Upsi, Utheta
+      double precision fluxpsi, fluxtheta
+      double precision D0, D1, D2, D3, DN
+      double precision vp_RealCoord, mu_RealCoord
+
+      CHF_DTERM[ ; ;
+      kk = CHF_LBOUND[B;2];
+      L3 = CHF_LBOUND[B;3];
+      L4 = CHF_LBOUND[B;4]] 
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+#if CH_SPACEDIM==5
+         kk = i2
+#endif
+
+c        get spatially dependent transport coefficients on cell faces
+         D0 = D_cfg(CHF_IX[i0;i1;kk;L3;L4],0)
+         D1 = D_cfg(CHF_IX[i0;i1;kk;L3;L4],1)
+         D2 = D_cfg(CHF_IX[i0;i1;kk;L3;L4],2)
+         D3 = D_cfg(CHF_IX[i0;i1;kk;L3;L4],3)
+         DN = D_cfg(CHF_IX[i0;i1;kk;L3;L4],4)
+
+
+
+c        Get mapped flux on faces  
+         if (dir.eq.0) then
+
+            fB_face = (fB(CHF_AUTOIX[i])+fB(CHF_IX[i0-1;i1;i2;i3;i4]))/two
+            B_face  = (B(CHF_IX[i0;i1;kk;L3;L4])+B(CHF_IX[i0-1;i1;kk;L3;L4]))/two
+            N_face  = (N(CHF_IX[i0;i1;kk;L3;L4])+N(CHF_IX[i0-1;i1;kk;L3;L4]))/two
+            T_face  = (T(CHF_IX[i0;i1;kk;L3;L4])+T(CHF_IX[i0-1;i1;kk;L3;L4]))/two
+            U_face  = (U(CHF_IX[i0;i1;kk;L3;L4])+U(CHF_IX[i0-1;i1;kk;L3;L4]))/two
+            C_face  = (C(CHF_IX[i0;i1;kk;L3;L4])+C(CHF_IX[i0-1;i1;kk;L3;L4]))/two
+
+            dfB_dpsi= (fB(CHF_AUTOIX[i])-fB(CHF_IX[i0-1;i1;i2;i3;i4]))/dx(0)
+            dB_dpsi = (B(CHF_IX[i0;i1;kk;L3;L4])-B(CHF_IX[i0-1;i1;kk;L3;L4]))/dx(0)
+            dN_dpsi = (N(CHF_IX[i0;i1;kk;L3;L4])-N(CHF_IX[i0-1;i1;kk;L3;L4]))/dx(0)
+            dT_dpsi = (T(CHF_IX[i0;i1;kk;L3;L4])-T(CHF_IX[i0-1;i1;kk;L3;L4]))/dx(0)
+
+            dfB_dtheta= (fB(CHF_IX[i0;i1+1;i2;i3;i4]) +fB(CHF_IX[i0-1;i1+1;i2;i3;i4]) -fB(CHF_IX[i0;i1-1;i2;i3;i4]) -fB(CHF_IX[i0-1;i1-1;i2;i3;i4]) )/four/dx(1)
+            dB_dtheta = (B(CHF_IX[i0;i1+1;kk;L3;L4])+B(CHF_IX[i0-1;i1+1;kk;L3;L4])-B(CHF_IX[i0;i1-1;kk;L3;L4])-B(CHF_IX[i0-1;i1-1;kk;L3;L4]))/four/dx(1)
+            dN_dtheta = (N(CHF_IX[i0;i1+1;kk;L3;L4])+N(CHF_IX[i0-1;i1+1;kk;L3;L4])-N(CHF_IX[i0;i1-1;kk;L3;L4])-N(CHF_IX[i0-1;i1-1;kk;L3;L4]))/four/dx(1)
+            dT_dtheta = (T(CHF_IX[i0;i1+1;kk;L3;L4])+T(CHF_IX[i0-1;i1+1;kk;L3;L4])-T(CHF_IX[i0;i1-1;kk;L3;L4])-T(CHF_IX[i0-1;i1-1;kk;L3;L4]))/four/dx(1)
+            dfB_dmu = (dfBdmu(CHF_IX[i0;i1;i2;i3;i4])+dfBdmu(CHF_IX[i0-1;i1;i2;i3;i4]))/two
+
+c            D0 = D_kinet(0) * (Shape(i,j,L2,L3) + Shape(i-1,j,L2,L3))/two
+
+         else if (dir.eq.1) then
+
+
+            fB_face = (fB(CHF_AUTOIX[i])+fB(CHF_IX[i0;i1-1;i2;i3;i4]))/two
+            B_face  = (B(CHF_IX[i0;i1;kk;L3;L4])+B(CHF_IX[i0;i1-1;kk;L3;L4]))/two
+            N_face  = (N(CHF_IX[i0;i1;kk;L3;L4])+N(CHF_IX[i0;i1-1;kk;L3;L4]))/two
+            T_face  = (T(CHF_IX[i0;i1;kk;L3;L4])+T(CHF_IX[i0;i1-1;kk;L3;L4]))/two
+            U_face  = (U(CHF_IX[i0;i1;kk;L3;L4])+U(CHF_IX[i0;i1-1;kk;L3;L4]))/two
+            C_face  = (C(CHF_IX[i0;i1;kk;L3;L4])+C(CHF_IX[i0;i1-1;kk;L3;L4]))/two
+
+            dfB_dtheta= (fB(CHF_AUTOIX[i])-fB(CHF_IX[i0;i1-1;i2;i3;i4]))/dx(1)
+            dB_dtheta = (B(CHF_IX[i0;i1;kk;L3;L4])-B(CHF_IX[i0;i1-1;kk;L3;L4]))/dx(1)
+            dN_dtheta = (N(CHF_IX[i0;i1;kk;L3;L4])-N(CHF_IX[i0;i1-1;kk;L3;L4]))/dx(1)
+            dT_dtheta = (T(CHF_IX[i0;i1;kk;L3;L4])-T(CHF_IX[i0;i1-1;kk;L3;L4]))/dx(1)
+
+            dfB_dpsi= (fB(CHF_IX[i0+1;i1;i2;i3;i4]) +fB(CHF_IX[i0+1;i1-1;i2;i3;i4]) -fB(CHF_IX[i0-1;i1;i2;i3;i4]) -fB(CHF_IX[i0-1;i1-1;i2;i3;i4]) )/four/dx(0)
+            dB_dpsi = (B(CHF_IX[i0+1;i1;kk;L3;L4])+B(CHF_IX[i0+1;i1-1;kk;L3;L4])-B(CHF_IX[i0-1;i1;kk;L3;L4])-B(CHF_IX[i0-1;i1-1;kk;L3;L4]))/four/dx(0)
+            dN_dpsi = (N(CHF_IX[i0+1;i1;kk;L3;L4])+N(CHF_IX[i0+1;i1-1;kk;L3;L4])-N(CHF_IX[i0-1;i1;kk;L3;L4])-N(CHF_IX[i0-1;i1-1;kk;L3;L4]))/four/dx(0)
+            dT_dpsi = (T(CHF_IX[i0+1;i1;kk;L3;L4])+T(CHF_IX[i0+1;i1-1;kk;L3;L4])-T(CHF_IX[i0-1;i1;kk;L3;L4])-T(CHF_IX[i0-1;i1-1;kk;L3;L4]))/four/dx(0)
+            dfB_dmu = (dfBdmu(CHF_IX[i0;i1;i2;i3;i4])+dfBdmu(CHF_IX[i0;i1-1;i2;i3;i4]))/two
+
+
+c            D0 = D_kinet(0) * (Shape(i,j,L2,L3) + Shape(i,j-1,L2,L3))/two        
+
+c        This is not nessesary (we do it anywasy for debugging purposes, e.g., when plotting flux)
+         else 
+            dfB_dpsi = (fB(CHF_IX[i0+1;i1;i2;i3;i4])-fB(CHF_IX[i0-1;i1;i2;i3;i4]))/two/dx(0)
+            dfB_dtheta = (fB(CHF_IX[i0;i1+1;i2;i3;i4])-fB(CHF_IX[i0;i1-1;i2;i3;i4]))/two/dx(1)
+
+c            D0 = D_kinet(0) * Shape(i,j,L2,L3)
+         endif
+
+c        Create normalized primed velocity squared: 0.5*m*(v-U)^2/T
+c        coef should equal unity for maxwellian
+ 
+         coef   = two*C_face/three-three/two
+
+
+#if CH_SPACEDIM==4
+         vp_RealCoord = (i2+half)*dx(2)
+         mu_RealCoord = (i3+half)*dx(3)
+#else
+         vp_RealCoord = (i3+half)*dx(3)
+         mu_RealCoord = (i4+half)*dx(4)
+#endif
+           
+         vparr2 = (vp_RealCoord-U_face)**2
+         vperp2 = mu_RealCoord*B_face
+         v2     = (mass*vparr2+vperp2)/two/T_face
+
+         Upsi   = (DN+D2/coef*(v2-three/two))*dN_dpsi/N_face 
+     &          + (D1+D3/coef*(v2-three/two))*dT_dpsi/T_face
+         Utheta = (DN+D2/coef*(v2-three/two))*dN_dtheta/N_face 
+     &          + (D1+D3/coef*(v2-three/two))*dT_dtheta/T_face
+
+
+         if (simpleDiffusion.eq.1) then
+            fluxpsi   = D0*dfB_dpsi
+            fluxtheta = D0*dfB_dtheta
+         else
+            fluxpsi   = D0*(dfB_dpsi - ( mu_RealCoord*dfB_dmu + fB_face )*dB_dpsi/B_face) 
+     &                - Upsi*fB_face
+            fluxtheta = D0*(dfB_dtheta - ( mu_RealCoord*dfB_dmu + fB_face )*dB_dtheta/B_face) 
+     &                - Utheta*fB_face
+         endif
+
+
+c        Get physical components of grad_fB (multiply by NJInverse)
+
+         fluxR = NJinv(CHF_IX[i0;i1;kk;L3;L4],0) * fluxpsi  + NJinv(CHF_IX[i0;i1;kk;L3;L4],1) * fluxtheta
+         fluxZ = NJinv(CHF_IX[i0;i1;kk;L3;L4],2) * fluxpsi  + NJinv(CHF_IX[i0;i1;kk;L3;L4],3) * fluxtheta
+
+c        Project fluxes onto the normal direction to magnetic flux surfaces
+          
+         bpol = sqrt(bunit(CHF_IX[i0;i1;kk;L3;L4],0)**2 + bunit(CHF_IX[i0;i1;kk;L3;L4],2)**2)
+         dot_product = fluxR * bunit(CHF_IX[i0;i1;kk;L3;L4],2)/bpol - fluxZ * bunit(CHF_IX[i0;i1;kk;L3;L4],0)/bpol   
+         fluxR = bunit(CHF_IX[i0;i1;kk;L3;L4],2)/bpol * dot_product  
+         fluxZ = -bunit(CHF_IX[i0;i1;kk;L3;L4],0)/bpol * dot_product
+
+c        Fill physical fluxes
+   
+         flux(CHF_AUTOIX[i],0) = fluxR
+         flux(CHF_AUTOIX[i],1) = fluxZ
+         flux(CHF_AUTOIX[i],2) = zero
+         flux(CHF_AUTOIX[i],3) = zero
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+
+c    COMPUTE dfB/dmu AT CELL CENTERS
+
+      subroutine dfBdmu_cell_center(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_INT[nmu],
+     &     CHF_CONST_FRA1[fB],
+     &     CHF_FRA1[dfB_dmu]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+
+c        print*,"dx(3)  = ", dx(3)
+
+c     NOTE THAT BOUNDARY CONDITIONS IN MU DIRECTION ARE dF/dmu = 0 at mu=0 and mu=mu_max and F=0 at mu=mu_max
+c     HOWEVER, BECAUSE OF FINITE VELOCITY GRID USE ONE SIDED DIFFERENCING NEAR mu=mu_max BOUNDARY
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m]
+     
+c       if(i==0) then
+c         if(j==0) then
+c           if(k==0) then
+c             print*,"l  = ", l
+c             if (l==0) then
+c               print*,"fB(0,0,0,-1)  = ", fB(0,0,0,-1)
+c               print*,"fB(0,0,0,0)  = ", fB(0,0,0,0)
+c               print*,"fB(0,0,0,1)  = ", fB(0,0,0,1)
+c               print*,"nmu  = ", nmu
+c             endif
+c           endif
+c         endif
+c       endif
+
+#if CH_SPACEDIM==4
+       if (l==0) then
+         dfB_dmu(CHF_IX[i;j;k;l]) = ( zero + ( fB(i,j,k,l+1)-fB(i,j,k,l) )/dx(3) )/two
+       else
+       if (l==nmu-1) then
+         dfB_dmu(CHF_IX[i;j;k;l]) = ( three*fB(i,j,k,l)-four*fB(i,j,k,l-1)+fB(i,j,k,l-2) )/two/dx(3)
+       else
+         dfB_dmu(CHF_IX[i;j;k;l]) = ( fB(i,j,k,l+1)-fB(i,j,k,l-1) )/two/dx(3)
+       endif
+       endif
+#else
+       if (m==0) then
+         dfB_dmu(CHF_IX[i;j;k;l;m]) = ( zero + ( fB(i,j,k,l,m+1)-fB(i,j,k,l,m) )/dx(4) )/two
+       else
+       if (m==nmu-1) then
+         dfB_dmu(CHF_IX[i;j;k;l;m]) = ( three*fB(i,j,k,l,m)-four*fB(i,j,k,l,m-1)+fB(i,j,k,l,m-2) )/two/dx(4)
+       else
+         dfB_dmu(CHF_IX[i;j;k;l;m]) = ( fB(i,j,k,l,m+1)-fB(i,j,k,l,m-1) )/two/dx(4)
+       endif
+       endif
+#endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+
+c    COMPUTE Lame coefficients hr, htheta, and hphi
+
+      subroutine lame_coefficients(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[N],
+     &     CHF_CONST_FRA[dXdq],
+     &     CHF_FRA[Lame_coeff]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], L3, L4, kk
+      double precision hr, htheta, hphi, Jacobian
+
+c        print*, "shape N_cent       = ", shape(N)
+
+      CHF_DTERM[ ; ;
+      kk = CHF_LBOUND[N;2];
+      L3 = CHF_LBOUND[N;3];
+      L4 = CHF_LBOUND[N;4]] 
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+#if CH_SPACEDIM==5
+         kk = i2
+#endif
+
+        hr       = sqrt(dXdq(CHF_IX[i0;i1;kk;L3;L4],0)**2 + dXdq(CHF_IX[i0;i1;kk;L3;L4],2)**2)
+        htheta   = sqrt(dXdq(CHF_IX[i0;i1;kk;L3;L4],1)**2 + dXdq(CHF_IX[i0;i1;kk;L3;L4],3)**2)
+        Jacobian = N(CHF_IX[i0;i1;kk;L3;L4],0)*dXdq(CHF_IX[i0;i1;kk;L3;L4],0) + N(CHF_IX[i0;i1;kk;L3;L4],1)*dXdq(CHF_IX[i0;i1;kk;L3;L4],1)
+        hphi     = Jacobian/hr/htheta
+
+        Lame_coeff(CHF_AUTOIX[i],0) = hr
+        Lame_coeff(CHF_AUTOIX[i],1) = htheta
+        Lame_coeff(CHF_AUTOIX[i],2) = hphi
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+
+c    calculate Upsi/Dpsi for stability calculation
+
+      subroutine eval_beta(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_VR[D_kinet],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_INT[Nr],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_FRA1[N],
+     &     CHF_CONST_FRA1[U],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_CONST_FRA1[C],
+     &     CHF_CONST_FRA1[P],
+     &     CHF_FRA1[beta] )
+
+c     local variables
+      integer CHF_AUTODECL[i], L3, L4, kk
+      double precision vparr2, vperp2, v2, coef, dlnB_dr, dlnN_dr, dlnT_dr
+      double precision DB, Upsi
+      double precision vp_RealCoord, mu_RealCoord
+
+
+      CHF_DTERM[ ; ;
+      kk = CHF_LBOUND[B;2];
+      L3 = CHF_LBOUND[B;3];
+      L4 = CHF_LBOUND[B;4]] 
+
+c     Convert fluid flux matrix components to anomalous flux components
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+#if CH_SPACEDIM==5
+         kk = i2
+#endif
+
+       DB = -two/three*D_kinet(0)*P(CHF_IX[i0;i1;kk;L3;L4])
+
+c      Create dB/dr, dN/dr, dT/dr on cell-centers
+
+       dlnB_dr   = (B(CHF_IX[i0+1;i1;kk;L3;L4])-B(CHF_IX[i0-1;i1;kk;L3;L4]))/two/dx(0)/B(CHF_IX[i0;i1;kk;L3;L4])
+
+       if (i0==0) then
+         dlnN_dr   = (-three*N(CHF_IX[i0;i1;kk;L3;L4])+four*N(CHF_IX[i0+1;i1;kk;L3;L4])-N(CHF_IX[i0+2;i1;kk;L3;L4]))/two/dx(0)/N(CHF_IX[i0;i1;kk;L3;L4])
+         dlnT_dr   = (-three*T(CHF_IX[i0;i1;kk;L3;L4])+four*T(CHF_IX[i0+1;i1;kk;L3;L4])-T(CHF_IX[i0+2;i1;kk;L3;L4]))/two/dx(0)/T(CHF_IX[i0;i1;kk;L3;L4])
+       else
+       if (i0==Nr-1) then
+         dlnN_dr   = (three*N(CHF_IX[i0;i1;kk;L3;L4])-four*N(CHF_IX[i0-1;i1;kk;L3;L4])+N(CHF_IX[i0-2;i1;kk;L3;L4]))/two/dx(0)/N(CHF_IX[i0;i1;kk;L3;L4])
+         dlnT_dr   = (three*T(CHF_IX[i0;i1;kk;L3;L4])-four*T(CHF_IX[i0-1;i1;kk;L3;L4])+T(CHF_IX[i0-2;i1;kk;L3;L4]))/two/dx(0)/T(CHF_IX[i0;i1;kk;L3;L4])
+       else
+         dlnN_dr   = (N(CHF_IX[i0+1;i1;kk;L3;L4])-N(CHF_IX[i0-1;i1;kk;L3;L4]))/two/dx(0)/N(CHF_IX[i0;i1;kk;L3;L4])
+         dlnT_dr   = (T(CHF_IX[i0+1;i1;kk;L3;L4])-T(CHF_IX[i0-1;i1;kk;L3;L4]))/two/dx(0)/T(CHF_IX[i0;i1;kk;L3;L4])
+       endif
+       endif
+
+c      Create normalized primed velocity squared: 0.5*m*(v-U)^2/T
+
+       coef   = two/three*C(CHF_IX[i0;i1;kk;L3;L4])-three/two
+
+#if CH_SPACEDIM==4
+       vp_RealCoord = (i2+half)*dx(2)
+       mu_RealCoord = (i3+half)*dx(3)
+#else
+       vp_RealCoord = (i3+half)*dx(3)
+       mu_RealCoord = (i4+half)*dx(4)
+#endif
+           
+       vparr2 = (vp_RealCoord-U(CHF_IX[i0;i1;kk;L3;L4]))**2
+       vperp2 = mu_RealCoord*B(CHF_IX[i0;i1;kk;L3;L4])
+       v2     = (mass*vparr2+vperp2)/two/T(CHF_IX[i0;i1;kk;L3;L4])
+
+       Upsi   = D_kinet(2)/coef*(v2-three/two)*dlnN_dr + (D_kinet(1)+D_kinet(3)/coef*(v2-three/two))*dlnT_dr
+       Upsi   = Upsi + DB*coef*(v2-three/two)*dlnB_dr
+
+       beta(CHF_AUTOIX[i]) = Upsi**2/D_kinet(0)
+
+      CHF_ENDDO
+
+      return
+      end
+

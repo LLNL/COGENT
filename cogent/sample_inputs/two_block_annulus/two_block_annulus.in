@@ -1,0 +1,189 @@
+#TEST np=32, timelimit=00:29:00
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 1 
+gksystem.verbosity   = 1
+
+gksystem.hdf_density          = true
+gksystem.hdf_rtheta           = false
+gksystem.hdf_vparmu           = false
+gksystem.hdf_dfn              = false
+gksystem.hdf_potential        = false
+gksystem.hdf_efield           = true
+gksystem.hdf_deltaF           = false
+gksystem.hdf_ParallelMomentum = false
+gksystem.hdf_PoloidalMomentum = false
+
+gksystem.ampere_law =       true
+gksystem.ampere_cold_electrons = false
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 2
+simulation.max_time            = 10000.
+simulation.max_dt_grow         = 1.1
+simulation.initial_dt_fraction = 0.8
+simulation.cfl_number          = 0.5
+simulation.checkpoint_interval = 400
+simulation.checkpoint_prefix   = "chk"
+simulation.plot_interval       = 1
+simulation.plot_prefix         = "plt"
+simulation.histories           = false
+#simulation.restart_file = "chk0300.4d.hdf5"
+
+#####################################################
+# Grid and Data Layout Definitions
+#####################################################
+sncore.numcells.core_radial   =  16
+sncore.numcells.lcore_poloidal = 32
+sncore.numcells.rcore_poloidal = 32
+
+sncore.decomp.lcore.configuration =  2  4
+sncore.decomp.lcore.phase         =  2  4  4  2
+
+sncore.decomp.rcore.configuration =  2  4
+sncore.decomp.rcore.phase         =  2  4  4  2
+
+gksystem.num_velocity_cells =  40  32
+gksystem.velocity_decomp    =  4  2
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "SNCore"
+gksystem.magnetic_geometry_mapping.sncore.geometry_file = "AnnulusMapping.txt"
+gksystem.magnetic_geometry_mapping.sncore.verbose  = true
+gksystem.magnetic_geometry_mapping.sncore.Btor_scale  = -3.565
+gksystem.magnetic_geometry_mapping.sncore.axisymmetric = true
+gksystem.magnetic_geometry_mapping.correct_field = false
+gksystem.enforce_positivity = true
+gksystem.fixed_efield = false
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.velocity_type = gyrokinetic
+phase_space_mapping.div_free_velocity = true
+phase_space_mapping.no_parallel_streaming = true
+phase_space_mapping.v_parallel_max = 3.
+phase_space_mapping.mu_max = 10.
+
+#####################################################
+# Vlasov Operator Definitions
+#####################################################
+gkvlasov.verbose = false
+gkvlasov.face_avg_type = "weno5"
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gkpoissonboltzmann.prefactor = fs_neutrality_initial_fs_ni
+gkpoissonboltzmann.verbose = true
+gkpoissonboltzmann.preserve_initial_ni_average = true
+
+gkpoissonboltzmann.radial_solve_only = false
+gkpoissonboltzmann.subspace_iteration_solve = false
+
+#####################################################
+# Species Definitions
+#####################################################
+kinetic_species.1.name   = "hydrogen"
+kinetic_species.1.mass   = 2.0
+kinetic_species.1.charge = 1.0
+
+boltzmann_electron.name        = "electron"
+boltzmann_electron.mass        = 1.0
+boltzmann_electron.charge      = -1.0
+boltzmann_electron.temperature = 1.0
+
+scalar.1.name = "Er_boundary"
+scalar.1.operator_type = "SelfConsistentBCOp"
+
+fluid_species.1.name = "Er_flux_surfaces"
+fluid_species.1.operator_type = "AmpereErAverageOp"
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.potential.function = "zero"
+IC.hydrogen.function  = "maxwellian_const"
+IC.Er_flux_surfaces.function = "zero"
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.hydrogen.radial_inner.function = "maxwellian_const"
+BC.hydrogen.radial_outer.function = "maxwellian_const"
+BC.hydrogen.vpar_lower.function = "zero"
+BC.hydrogen.vpar_upper.function = "zero"
+BC.hydrogen.mu_lower.function = "maxwellian_const"
+BC.hydrogen.mu_upper.function = "zero"
+
+BC.potential.radial_inner.type = "neumann"
+BC.potential.radial_inner.value = 0.
+BC.potential.radial_outer.type = "neumann"
+BC.potential.radial_outer.value = 0.
+
+#####################################################
+# Collisions Definitions
+#####################################################
+#CLS.hydrogen.cls_freq = 0.1
+#CLS.hydrogen.conserve_particle  = true
+#CLS.hydrogen.conserve_momentum = false
+CLS.hydrogen.max_interation_number = 100000
+CLS.hydrogen.convergence_tolerance = 1.e-6
+CLS.hydrogen.ref_function = "maxwellian_const"
+CLS.hydrogen.ref_temperature = "T0"
+CLS.hydrogen.ref_density = "N0"
+
+#####################################################
+# Kinetic Function Definitions
+#####################################################
+kinetic_function_library.number = 3
+kinetic_function_library.verbosity = 1
+kinetic_function_library.list = "zero" "maxwellian_const" "maxwellian_eq"
+
+kinetic_function_library.zero.type = "zero"
+
+kinetic_function_library.maxwellian_const.type = "maxwellian"
+kinetic_function_library.maxwellian_const.v_parallel_shift = 0.0
+kinetic_function_library.maxwellian_const.density.function = "N0"
+kinetic_function_library.maxwellian_const.temperature.function = "T0"
+
+kinetic_function_library.maxwellian_eq.type = "maxwellian"
+kinetic_function_library.maxwellian_eq.v_parallel_shift = 0.0
+kinetic_function_library.maxwellian_eq.density.function = "Neq"
+kinetic_function_library.maxwellian_eq.temperature.function = "Teq"
+
+#####################################################
+# Grid Function Definitions
+#####################################################
+grid_function_library.number = 5
+grid_function_library.verbosity = 1
+grid_function_library.list = "zero" "N0" "T0" "Neq" "Teq"
+
+grid_function_library.zero.type = "zero" 
+
+grid_function_library.N0.type = "constant"
+grid_function_library.N0.value = 1.0
+
+grid_function_library.T0.type = "constant"
+grid_function_library.T0.value = 1.0
+
+grid_function_library.Neq.type = "constant"
+grid_function_library.Neq.value = 1.5
+
+grid_function_library.Teq.type = "constant"
+grid_function_library.Teq.value = 1.5
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 1.0e20
+units.temperature    = 0.3e3
+units.length         = 1.0
+units.mass           = 1.0
+units.magnetic_field = 1.0 
+

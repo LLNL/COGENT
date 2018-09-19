@@ -1,0 +1,57 @@
+
+
+#To run the complete algorithm type: "totalRun.py". 
+
+totalRun.py uses input.totalRun to create Results/, which contains the final product and intermediate results. In particlar Results/ contains 
+
+1)block0/, block1/, ...,block9/. These directories resemble grid_generator/blocks/. However, blocks/ typically will contain information about any or all blocks,
+     while the directories under Results are specific to a block.
+2)outputMapping/ contains the map that we will use for grid generation.
+3)directories analagous to those in grid_generator, which contain the intermediate results specific to the choices made in input.totalRun
+  a) newBoundaryNodesIC/
+  b) ghostCellExtrapBS/
+  c) utilities
+  
+4) input.totalRun contains inputs for three main programs.
+
+  a) newBdInit.cpp, which relocates the boundary nodes and initializes the map
+    i) log2MinRes_newBdNodesIC denotes the logarithm in base 2 of the resolution that will be uses to compute the initial condition.
+   ii) maxIter_newBdNodesIC denotes the maximum number of iterations used to estimate the solution to the ellipitic problem at the core of Brackbill-Salzman 
+   iii)computeTargetSpacing(...) is a function in newBdInit.cpp that takes a Gaussian blending function as input. If the Gaussian has a large variance, 
+       which we denote by the variable spacing_sigma, then the boundary points are nearly evenly spaced. If the Gaussian has a small variance then the 
+       boundary points are nearly field aligned.
+    
+  b) bs.bpp, which uses Brackbill-Salzman to smooth the map
+    i) log2MinRes_Brackbill-Salzman denotes the logarithm in base 2 of the resolution that will be uses to compute the initial condition.
+   ii) maxIter_Brackbill-Salzman denotes the maximum number of iterations used to estimate the solution to the ellipitic problem at the core of Brackbill-Salzman 
+   
+  c) ghostCell.BS.10.block.cpp, which uses a combination of extrapolation and Brackbill-Salzman to create ghost cells
+    i) log2MinRes_ghostCellExtrapBS denotes the logarithm in base 2 of the resolution that will be uses to compute the initial condition.
+   ii) maxIter_ghostCellExtrapBS denotes the maximum number of iterations used to estimate the solution to the ellipitic problem at the core of Brackbill-Salzman 
+  iii) numGhost denotes the number of ghost cells desired  
+
+ 5) Modifying the input file
+ 
+   a)Here is an except from input.totalRun:
+
+     # parameters for computeTargetSpacing                                                                |
+     spacing_sigma          = 0.25                                                                        |
+     spacing_sigma_lpf_rpf  = 0.25                                                                        |
+     spacing_expo           = 2.0   
+
+    Either one of the first two parameters combined with the third determines a Gaussian, G(x), which is evaluated based on the distance, d(x), from the x-point: 
+    G(x) = exp(d(x)^spacing_expo/spacing_sigma). G(x) is a weighting function that contributes to a convex combination of equal spacing and field-line following spacing.
+
+    Having determined spacing_sigma for a given x-point edge, excepting the boundary between ref and lpf, one is forced with by flux matching to use the same sigma 
+    for all the other x-point edges, except the boundary between lpf and rpf. That boundary between lpf and ref can be determined independently. 
+
+
+
+#Usage hint:
+
+#Check the progress in block [j] of the run by the command
+
+grep iter Results/block<block number>/out or 
+tail -f Results/block<block number>/out | grep iter
+
+This shows how many iterations of Brackbill-Salzman have been completed.

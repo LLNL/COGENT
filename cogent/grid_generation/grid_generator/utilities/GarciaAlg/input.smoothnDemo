@@ -1,0 +1,6 @@
+#input
+
+numSVal =  9
+sInit  = 0.1
+deltaS = 0.1
+

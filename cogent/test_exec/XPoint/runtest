@@ -1,0 +1,9 @@
+#!/bin/csh
+
+rm -rf plots_* plt_density_plots
+
+foreach i (32 64 128 256)
+srun -n 32 -p pdebug test_XPoint.Linux.mpiicc.ifort.DEBUG.OPT.MPI.ex xptest_$i.in
+mv plt_density_plots plots_$i
+end
+
