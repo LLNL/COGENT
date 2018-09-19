@@ -1,0 +1,62 @@
+# vars affecting the configuration string
+DIM=3
+DEBUG=FALSE
+OPT=FALSE
+PRECISION=DOUBLE
+PROFILE=FALSE
+MPI=TRUE
+CXX=g++
+FC=gfortran
+# Note: if MPI=TRUE, MPICXX is used to compile but CXX is used to
+#       determine the type of the base C++ compiler
+MPICXX=mpicxx
+XTRACONFIG=
+
+#cxxcppflags = -std=c++0x
+
+# main compiler/linker options
+CPPFLAGS= 
+CXXFLAGS=
+CHFFLAGS=
+FFLAGS=
+LDFLAGS=
+XTRALIBFLAGS+= -llapack  -lblas
+
+# Chombo optional features
+USE_64=TRUE#        #64bit pointers
+USE_MT=TRUE#         #memory tracking
+# USE_SETVAL=TRUE#     #initialize FAB data
+USE_COMPLEX=TRUE#    #type for complex numbers
+USE_TIMER=TRUE#      #Chombo::Timer
+
+USE_HDF=TRUE#        #HDF5 file i/o
+
+HDFINCFLAGS=-I$(HDF5_DIR_SERIAL)/include
+ifeq ($(USE_HDF),TRUE)
+HDFLIBFLAGS=-L$(HDF5_DIR_SERIAL)/lib -lhdf5 -lz
+endif
+HDFMPIINCFLAGS=-I$(HDF5_DIR_PARALLEL)/include
+HDFMPILIBFLAGS=-L$(HDF5_DIR_PARALLEL)/lib -lhdf5 -lz
+
+USE_FFTW=FALSE#      #use FFTW library in $(FFTWDIR)/{include,lib}
+FFTWDIR=
+
+ifeq ($(USE_MF),TRUE)
+  export USE_EB=TRUE
+  export USE_MF
+endif
+
+# makefile control variables
+ECHO=@#  #set this to null on the command line to increase verbosity
+QUIET=#  #set this to @ on the command line to decrease verbosity
+
+# these usually can be used without change
+AR=ar r
+CPP=$(CXX) -E -P
+DOXYGEN=doxygen
+# Note: if $(LD) is blank, $(CXX) or $(MPICXX) is used to link
+LD=mpicxx
+PERL=perl
+RANLIB=ranlib#  #set this to 'echo' for systems that dont have ranlib
+PROF=gprof
+
