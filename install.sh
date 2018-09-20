@@ -4,7 +4,7 @@ CH_MAKEFILE_DIR=Chombo_Makefile
 CH_MAKEFILE=Make.defs.local
 CH_LIB_DIR=Chombo/lib/mk
 
-COGENT_DIR=cogent
+COGENT_DIR=COGENT
 HYPRE_DIR=hypre-2.9.0b
 COGENT_EXEC_DIR=exec
 
