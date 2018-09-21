@@ -1,4 +1,4 @@
-#include "SingleNullPotentialBC.H"
+#include "SingleNullEllipticOpBC.H"
 #include "SingleNullBlockCoordSys.H"
 #include "GridFunctionLibrary.H"
 #include "MagGeom.H"
@@ -8,18 +8,18 @@
 
 
 
-SingleNullPotentialBC::SingleNullPotentialBC()
-   : PotentialBC(NUM_BOUNDARIES)
+SingleNullEllipticOpBC::SingleNullEllipticOpBC()
+   : EllipticOpBC(NUM_BOUNDARIES)
 {
    setNames();
 }
 
 
 
-SingleNullPotentialBC::SingleNullPotentialBC( const std::string& a_name,
-                                              ParmParse&         a_pp,
-                                              const int&         a_verbosity )
-   : PotentialBC(NUM_BOUNDARIES),
+SingleNullEllipticOpBC::SingleNullEllipticOpBC( const std::string&  a_name,
+                                                ParmParse&          a_pp,
+                                                const int&          a_verbosity )
+   : EllipticOpBC(NUM_BOUNDARIES),
      m_name(a_name),
      m_verbosity(a_verbosity)
 {
@@ -30,7 +30,7 @@ SingleNullPotentialBC::SingleNullPotentialBC( const std::string& a_name,
 
 
 void
-SingleNullPotentialBC::setNames()
+SingleNullEllipticOpBC::setNames()
 {
    m_bdry_name[RADIAL_CORE] = "radial_core";
    m_bdry_name[RADIAL_SOL] = "radial_sol";
@@ -42,10 +42,10 @@ SingleNullPotentialBC::setNames()
 
 
 void
-SingleNullPotentialBC::setBCType( const int a_block_number,
-                                  const int a_dir,
-                                  const int a_side,
-                                  const int a_type )
+SingleNullEllipticOpBC::setBCType( const int  a_block_number,
+                                   const int  a_dir,
+                                   const int  a_side,
+                                   const int  a_type )
 {
    CH_assert(a_side == 0 || a_side == 1);
 
@@ -58,7 +58,7 @@ SingleNullPotentialBC::setBCType( const int a_block_number,
             m_bc_type[RADIAL_CORE] = a_type;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCType(): Invalid argument");
          }
          break;
       case MCSOL:
@@ -68,7 +68,7 @@ SingleNullPotentialBC::setBCType( const int a_block_number,
             m_bc_type[RADIAL_SOL] = a_type;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCType(): Invalid argument");
          }
          break;
       case LSOL:
@@ -79,7 +79,7 @@ SingleNullPotentialBC::setBCType( const int a_block_number,
             m_bc_type[POLOIDAL_INNER_DIV] = a_type;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCType(): Invalid argument");
          }
          break;
       case RSOL:
@@ -90,7 +90,7 @@ SingleNullPotentialBC::setBCType( const int a_block_number,
             m_bc_type[POLOIDAL_OUTER_DIV] = a_type;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCType(): Invalid argument");
          }
          break;
       case LPF:
@@ -101,7 +101,7 @@ SingleNullPotentialBC::setBCType( const int a_block_number,
             m_bc_type[POLOIDAL_INNER_DIV] = a_type;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCType(): Invalid argument");
          }
          break;
       case RPF:
@@ -112,19 +112,19 @@ SingleNullPotentialBC::setBCType( const int a_block_number,
             m_bc_type[POLOIDAL_OUTER_DIV] = a_type;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCType(): Invalid argument");
          }
          break;
       default:
-         MayDay::Error("SingleNullPotentialBC::setBCType(): Unrecognized block number");
+         MayDay::Error("SingleNullEllipticOpBC::setBCType(): Unrecognized block number");
       }
 }
 
 
 int
-SingleNullPotentialBC::getBCType( const int a_block_number,
-                                  const int a_dir,
-                                  const int a_side ) const
+SingleNullEllipticOpBC::getBCType( const int  a_block_number,
+                                   const int  a_dir,
+                                   const int  a_side ) const
 {
    CH_assert(a_side == 0 || a_side == 1);
    int bc_type = UNDEFINED;
@@ -138,7 +138,7 @@ SingleNullPotentialBC::getBCType( const int a_block_number,
             bc_type = m_bc_type[RADIAL_CORE];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
       case MCSOL:
@@ -148,7 +148,7 @@ SingleNullPotentialBC::getBCType( const int a_block_number,
             bc_type = m_bc_type[RADIAL_SOL];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
       case LSOL:
@@ -159,7 +159,7 @@ SingleNullPotentialBC::getBCType( const int a_block_number,
             bc_type = m_bc_type[POLOIDAL_INNER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
       case RSOL:
@@ -170,7 +170,7 @@ SingleNullPotentialBC::getBCType( const int a_block_number,
             bc_type = m_bc_type[POLOIDAL_OUTER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
       case LPF:
@@ -181,7 +181,7 @@ SingleNullPotentialBC::getBCType( const int a_block_number,
             bc_type = m_bc_type[POLOIDAL_INNER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
       case RPF:
@@ -192,11 +192,11 @@ SingleNullPotentialBC::getBCType( const int a_block_number,
             bc_type = m_bc_type[POLOIDAL_OUTER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCType(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
       default:
-         MayDay::Error("SingleNullPotentialBC::getBCType(): Unrecognized block number");
+         MayDay::Error("SingleNullEllipticOpBC::getBCType(): Unrecognized block number");
       }
 
    return bc_type;
@@ -205,10 +205,10 @@ SingleNullPotentialBC::getBCType( const int a_block_number,
 
 
 void
-SingleNullPotentialBC::setBCValue( const int    a_block_number,
-                                   const int    a_dir,
-                                   const int    a_side,
-                                   const double a_value )
+SingleNullEllipticOpBC::setBCValue( const int     a_block_number,
+                                    const int     a_dir,
+                                    const int     a_side,
+                                    const double  a_value )
 {
    CH_assert(a_side == 0 || a_side == 1);
 
@@ -221,7 +221,7 @@ SingleNullPotentialBC::setBCValue( const int    a_block_number,
             m_bc_value[RADIAL_CORE] = a_value;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Invalid argument");
          }
          break;
       case MCSOL:
@@ -231,7 +231,7 @@ SingleNullPotentialBC::setBCValue( const int    a_block_number,
             m_bc_value[RADIAL_SOL] = a_value;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Invalid argument");
          }
          break;
       case LSOL:
@@ -242,7 +242,7 @@ SingleNullPotentialBC::setBCValue( const int    a_block_number,
             m_bc_value[POLOIDAL_INNER_DIV] = a_value;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Invalid argument");
          }
          break;
       case RSOL:
@@ -253,7 +253,7 @@ SingleNullPotentialBC::setBCValue( const int    a_block_number,
             m_bc_value[POLOIDAL_OUTER_DIV] = a_value;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Invalid argument");
          }
          break;
       case LPF:
@@ -264,7 +264,7 @@ SingleNullPotentialBC::setBCValue( const int    a_block_number,
             m_bc_value[POLOIDAL_INNER_DIV] = a_value;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Invalid argument");
          }
          break;
       case RPF:
@@ -275,20 +275,20 @@ SingleNullPotentialBC::setBCValue( const int    a_block_number,
             m_bc_value[POLOIDAL_OUTER_DIV] = a_value;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Invalid argument");
          }
          break;
       default:
-         MayDay::Error("SingleNullPotentialBC::setBCValue(): Unrecognized block number");
+         MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Unrecognized block number");
       }
 }
 
 
 
 double
-SingleNullPotentialBC::getBCValue( const int a_block_number,
-                                   const int a_dir,
-                                   const int a_side ) const
+SingleNullEllipticOpBC::getBCValue( const int  a_block_number,
+                                    const int  a_dir,
+                                    const int  a_side ) const
 {
    CH_assert(a_side == 0 || a_side == 1);
    double bc_value = BASEFAB_REAL_SETVAL;
@@ -302,7 +302,7 @@ SingleNullPotentialBC::getBCValue( const int a_block_number,
             bc_value = m_bc_value[RADIAL_CORE];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Invalid argument");
          }
          break;
       case MCSOL:
@@ -312,7 +312,7 @@ SingleNullPotentialBC::getBCValue( const int a_block_number,
             bc_value = m_bc_value[RADIAL_SOL];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Invalid argument");
          }
          break;
       case LSOL:
@@ -323,7 +323,7 @@ SingleNullPotentialBC::getBCValue( const int a_block_number,
             bc_value = m_bc_value[POLOIDAL_INNER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Invalid argument");
          }
          break;
       case RSOL:
@@ -334,7 +334,7 @@ SingleNullPotentialBC::getBCValue( const int a_block_number,
             bc_value = m_bc_value[POLOIDAL_OUTER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Invalid argument");
          }
          break;
       case LPF:
@@ -345,7 +345,7 @@ SingleNullPotentialBC::getBCValue( const int a_block_number,
             bc_value = m_bc_value[POLOIDAL_INNER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Invalid argument");
          }
          break;
       case RPF:
@@ -356,11 +356,11 @@ SingleNullPotentialBC::getBCValue( const int a_block_number,
             bc_value = m_bc_value[POLOIDAL_OUTER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCValue(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Invalid argument");
          }
          break;
       default:
-         MayDay::Error("SingleNullPotentialBC::getBCValue(): Unrecognized block number");
+         MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Unrecognized block number");
       }
 
    return bc_value;
@@ -369,10 +369,10 @@ SingleNullPotentialBC::getBCValue( const int a_block_number,
 
 
 void
-SingleNullPotentialBC::setBCFunction( const int                          a_block_number,
-                                      const int                          a_dir,
-                                      const int                          a_side,
-                                      const RefCountedPtr<GridFunction>& a_function )
+SingleNullEllipticOpBC::setBCFunction( const int                           a_block_number,
+                                       const int                           a_dir,
+                                       const int                           a_side,
+                                       const RefCountedPtr<GridFunction>&  a_function )
 {
    CH_assert(a_side == 0 || a_side == 1);
 
@@ -385,7 +385,7 @@ SingleNullPotentialBC::setBCFunction( const int                          a_block
             m_bc_function[RADIAL_CORE] = a_function;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCFunction(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Invalid argument");
          }
          break;
       case MCSOL:
@@ -395,7 +395,7 @@ SingleNullPotentialBC::setBCFunction( const int                          a_block
             m_bc_function[RADIAL_SOL] = a_function;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCFunction(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Invalid argument");
          }
          break;
       case LSOL:
@@ -406,7 +406,7 @@ SingleNullPotentialBC::setBCFunction( const int                          a_block
             m_bc_function[POLOIDAL_INNER_DIV] = a_function;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCFunction(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Invalid argument");
          }
          break;
       case RSOL:
@@ -417,7 +417,7 @@ SingleNullPotentialBC::setBCFunction( const int                          a_block
             m_bc_function[POLOIDAL_OUTER_DIV] = a_function;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCFunction(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Invalid argument");
          }
          break;
       case LPF:
@@ -428,7 +428,7 @@ SingleNullPotentialBC::setBCFunction( const int                          a_block
             m_bc_function[POLOIDAL_INNER_DIV] = a_function;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCFunction(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Invalid argument");
          }
          break;
       case RPF:
@@ -439,20 +439,20 @@ SingleNullPotentialBC::setBCFunction( const int                          a_block
             m_bc_function[POLOIDAL_OUTER_DIV] = a_function;
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::setBCFunction(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Invalid argument");
          }
          break;
       default:
-         MayDay::Error("SingleNullPotentialBC::setBCFunction(): Unrecognized block number");
+         MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Unrecognized block number");
       }
 }
 
 
 
 RefCountedPtr<GridFunction>
-SingleNullPotentialBC::getBCFunction( const int a_block_number,
-                                      const int a_dir,
-                                      const int a_side ) const
+SingleNullEllipticOpBC::getBCFunction( const int  a_block_number,
+                                       const int  a_dir,
+                                       const int  a_side ) const
 {
    CH_assert(a_side == 0 || a_side == 1);
    RefCountedPtr<GridFunction> function;
@@ -466,7 +466,7 @@ SingleNullPotentialBC::getBCFunction( const int a_block_number,
             function = m_bc_function[RADIAL_CORE];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCFunction(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCFunction(): Invalid argument");
          }
          break;
       case MCSOL:
@@ -484,7 +484,7 @@ SingleNullPotentialBC::getBCFunction( const int a_block_number,
             function = m_bc_function[POLOIDAL_INNER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCFunction(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCFunction(): Invalid argument");
          }
          break;
       case RSOL:
@@ -495,7 +495,7 @@ SingleNullPotentialBC::getBCFunction( const int a_block_number,
             function = m_bc_function[POLOIDAL_OUTER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCFunction(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCFunction(): Invalid argument");
          }
          break;
       case LPF:
@@ -506,7 +506,7 @@ SingleNullPotentialBC::getBCFunction( const int a_block_number,
             function = m_bc_function[POLOIDAL_INNER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCFunction(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCFunction(): Invalid argument");
          }
          break;
       case RPF:
@@ -517,11 +517,11 @@ SingleNullPotentialBC::getBCFunction( const int a_block_number,
             function = m_bc_function[POLOIDAL_OUTER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::getBCFunction(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::getBCFunction(): Invalid argument");
          }
          break;
       default:
-         MayDay::Error("SingleNullPotentialBC::getBCFunction(): Unrecognized block number");
+         MayDay::Error("SingleNullEllipticOpBC::getBCFunction(): Unrecognized block number");
       }
 
    return function;
@@ -530,12 +530,12 @@ SingleNullPotentialBC::getBCFunction( const int a_block_number,
 
 
 void
-SingleNullPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
-                              const Box&                 a_coord_sys_box,
-                              const double&              a_time,
-                              const int                  a_dir,
-                              const int                  a_side,
-                              FArrayBox&                 a_phi ) const
+SingleNullEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
+                               const Box&                  a_coord_sys_box,
+                               const double&               a_time,
+                               const int                   a_dir,
+                               const int                   a_side,
+                               FArrayBox&                  a_phi ) const
 {
    RefCountedPtr<GridFunction> function;
    double value;
@@ -553,7 +553,7 @@ SingleNullPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
             value = m_bc_value[RADIAL_CORE];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::apply(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::apply(): Invalid argument");
          }
          break;
       case MCSOL:
@@ -564,7 +564,7 @@ SingleNullPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
             value = m_bc_value[RADIAL_SOL];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::apply(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::apply(): Invalid argument");
          }
          break;
       case LSOL:
@@ -577,7 +577,7 @@ SingleNullPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
             value = m_bc_value[POLOIDAL_INNER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::apply(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::apply(): Invalid argument");
          }
          break;
       case RSOL:
@@ -590,7 +590,7 @@ SingleNullPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
             value = m_bc_value[POLOIDAL_OUTER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::apply(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::apply(): Invalid argument");
          }
          break;
       case LPF:
@@ -603,7 +603,7 @@ SingleNullPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
             value = m_bc_value[POLOIDAL_INNER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::apply(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::apply(): Invalid argument");
          }
          break;
       case RPF:
@@ -616,11 +616,11 @@ SingleNullPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
             value = m_bc_value[POLOIDAL_OUTER_DIV];
          }
          else {
-            MayDay::Error("SingleNullPotentialBC::apply(): Invalid argument");
+            MayDay::Error("SingleNullEllipticOpBC::apply(): Invalid argument");
          }
          break;
       default:
-         MayDay::Error("SingleNullPotentialBC::apply(): Unrecognized block number");
+         MayDay::Error("SingleNullEllipticOpBC::apply(): Unrecognized block number");
       }
 
    if ( !function.isNull() ) {
@@ -633,11 +633,11 @@ SingleNullPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
 
 
 
-void SingleNullPotentialBC::printParameters() const
+void SingleNullEllipticOpBC::printParameters() const
 {
    if (procID()==0) {
       std::cout << std::endl;
-      std::cout << "SingleNullPotentialBC ================================" << std::endl;
+      std::cout << "SingleNullEllipticOpBC ================================" << std::endl;
       std::cout << "- variable: "  << m_name << "-------------" << std::endl;
       for (int i(0); i<m_bc_function.size(); i++) {
          std::cout << "  " << m_bdry_name[i] << ": " << std::endl;
@@ -653,7 +653,7 @@ void SingleNullPotentialBC::printParameters() const
 
 
 inline
-void SingleNullPotentialBC::parseParameters( ParmParse& a_pp )
+void SingleNullEllipticOpBC::parseParameters( ParmParse& a_pp )
 {
    GridFunctionLibrary* library = GridFunctionLibrary::getInstance();
 
@@ -671,7 +671,7 @@ void SingleNullPotentialBC::parseParameters( ParmParse& a_pp )
          m_bc_type[i] = NEUMANN;
       }
       else {
-         MayDay::Error("SingleNullPotentialBC::parseParameter(): Unrecognized potential bc type");
+         MayDay::Error("SingleNullEllipticOpBC::parseParameter(): Unrecognized potential bc type");
       }
 
       bool value_specified = fpp.contains("value");
@@ -689,7 +689,7 @@ void SingleNullPotentialBC::parseParameters( ParmParse& a_pp )
       }
 
       if (value_specified && function_specified) {
-         MayDay::Error("SingleNullPotentialBC::parseParameters(): Please specify either a value or a function, but not both");
+         MayDay::Error("SingleNullEllipticOpBC::parseParameters(): Please specify either a value or a function, but not both");
       }
    }
 

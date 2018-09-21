@@ -76,7 +76,7 @@ SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
          for (int side=0; side<2; ++side) {
             if ( blockBoundaries[dir + side*SpaceDim].isDomainBoundary() ) {
                double bc_value = 0.;
-               int bc_type = PotentialBC::DIRICHLET;     // Homogeneous Dirichlet
+               int bc_type = EllipticOpBC::DIRICHLET;     // Homogeneous Dirichlet
                m_divergence_cleaning_bc.setBCType(block, dir, side, bc_type);
                m_divergence_cleaning_bc.setBCValue(block, dir, side, bc_value);
             }
@@ -1611,9 +1611,9 @@ SingleNullCoordSys::findBlockNearXpt(const RealVect& X) const
 
 
 void
-SingleNullCoordSys::definePotentialBC( PotentialBC& a_bc ) const
+SingleNullCoordSys::defineEllipticOpBC( EllipticOpBC& a_bc ) const
 {
-   SingleNullPotentialBC& bc = (SingleNullPotentialBC&)a_bc;
+   SingleNullEllipticOpBC& bc = (SingleNullEllipticOpBC&)a_bc;
 
    // Radial core boundary
    RefCountedPtr<GridFunction> radial_core_function = bc.getCoreFunction();

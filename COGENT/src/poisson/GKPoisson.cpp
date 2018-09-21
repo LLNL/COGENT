@@ -15,7 +15,7 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
                       const MagGeom&     a_geom,
                       const Real         a_larmor_number,
                       const Real         a_debye_number )
-   : FieldSolver(a_pp, a_geom),
+   : EllipticOp(a_pp, a_geom),
      m_larmor_number2(a_larmor_number*a_larmor_number),
      m_debye_number2(a_debye_number*a_debye_number),
      m_dt_implicit(0.),
@@ -80,7 +80,7 @@ GKPoisson::~GKPoisson()
 
 
 void
-GKPoisson::updateBoundaries( const PotentialBC&  a_bc )
+GKPoisson::updateBoundaries( const EllipticOpBC&  a_bc )
 {
    // N.B.: The operator coefficient must computed prior to calling this function
    CH_TIME("GKPoisson::updateBoundaries");
@@ -92,7 +92,7 @@ GKPoisson::updateBoundaries( const PotentialBC&  a_bc )
 
 void
 GKPoisson::setOperatorCoefficients( const LevelData<FArrayBox>&  a_ion_mass_density,
-                                    const PotentialBC&           a_bc,
+                                    const EllipticOpBC&          a_bc,
                                     const bool                   a_update_preconditioner )
 {
    CH_TIME("GKPoisson::setOperatorCoefficients");
@@ -109,7 +109,7 @@ GKPoisson::setOperatorCoefficients( const LevelData<FArrayBox>&  a_ion_mass_dens
 
 void
 GKPoisson::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
-                                    const PotentialBC&          a_bc,
+                                    const EllipticOpBC&         a_bc,
                                     const bool                  a_update_preconditioner,
                                     double&                     a_lo_value,
                                     double&                     a_hi_value,

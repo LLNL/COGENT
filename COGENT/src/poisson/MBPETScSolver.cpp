@@ -141,7 +141,7 @@ void
 MBPETScSolver::constructMatrixGeneral( LevelData<FArrayBox>& a_alpha_coefficient,
                                        LevelData<FluxBox>&   a_tensor_coefficient,
                                        LevelData<FArrayBox>& a_beta_coefficient,
-                                       const PotentialBC&    a_bc )
+                                       const EllipticOpBC&   a_bc )
 {
    bool fourth_order = (m_discretization_order == 4);
 
@@ -548,7 +548,7 @@ MBPETScSolver::getNumNonzeros( const int                                a_radius
 void
 MBPETScSolver::addUnstructuredMatrixEntries(const LevelData<FArrayBox>&              a_alpha_coefficient,
                                             const LevelData<FluxBox>&                a_tensor_coefficient,
-                                            const PotentialBC&                       a_bc,
+                                            const EllipticOpBC&                      a_bc,
                                             FArrayBox&                               a_stencil_values,
                                             const bool                               a_fourthOrder,
                                             const LayoutData< BaseFab<IntVectSet> >& a_unstructured_coupling,
@@ -776,7 +776,7 @@ void
 MBPETScSolver::constructPETScMatrix( LevelData<FArrayBox>&              a_alpha_coefficient, 
                                      LevelData<FluxBox>&                a_tensor_coefficient,
                                      LevelData<FArrayBox>&              a_beta_coefficient,
-                                     const PotentialBC&                 a_bc,
+                                     const EllipticOpBC&                a_bc,
                                      FArrayBox&                         a_stencil_values,
                                      const int                          a_diagonal_offset,
                                      LayoutData< BaseFab<IntVectSet> >& a_unstructured_coupling,

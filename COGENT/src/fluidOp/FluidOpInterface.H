@@ -81,7 +81,7 @@ class FluidOpInterface
       }
 
       virtual void updatePC( const PS::KineticSpeciesPtrVect&  kinetic_species,
-                             const PotentialBC&                bc ) {};
+                             const EllipticOpBC&               bc ) {};
 
       virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                                 const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,

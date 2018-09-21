@@ -1,7 +1,7 @@
 #include "MBTridiagonalSolver.H"
 #include "Directions.H"
-#include "LogRectPotentialBC.H"
-#include "SNCorePotentialBC.H"
+#include "LogRectEllipticOpBC.H"
+#include "SNCoreEllipticOpBC.H"
 
 #include "NamespaceHeader.H"
 
@@ -41,7 +41,7 @@ void
 MBTridiagonalSolver::constructMatrixGeneral( LevelData<FArrayBox>&  a_alpha_coefficient,
                                              LevelData<FluxBox>&    a_tensor_coefficient,
                                              LevelData<FArrayBox>&  a_beta_coefficient,
-                                             const PotentialBC&     a_bc )
+                                             const EllipticOpBC&    a_bc )
 {
    bool fourthOrder = (m_discretization_order == 4);
 
@@ -96,7 +96,7 @@ void
 MBTridiagonalSolver::constructTridiagonalMatrix( LevelData<FArrayBox>&               a_alpha_coefficient, 
                                                  LevelData<FluxBox>&                 a_tensor_coefficient,
                                                  LevelData<FArrayBox>&               a_beta_coefficient,
-                                                 const PotentialBC&                  a_bc,
+                                                 const EllipticOpBC&                 a_bc,
                                                  FArrayBox&                          a_stencil_values,
                                                  LevelData<FArrayBox>&               a_radial,
                                                  const int                           a_diagonal_offset,
@@ -547,23 +547,23 @@ MBTridiagonalSolver::solveTridiagonalNeumann( const int            a_n,
 
 
 bool
-MBTridiagonalSolver::isCoreRadialPeriodicOrNeumannBC( const PotentialBC& a_bc ) const
+MBTridiagonalSolver::isCoreRadialPeriodicOrNeumannBC( const EllipticOpBC& a_bc ) const
 {
    bool flag = false;
 
-   if ( typeid(a_bc) == typeid(LogRectPotentialBC) ) {
+   if ( typeid(a_bc) == typeid(LogRectEllipticOpBC) ) {
       const ProblemDomain& domain = ((MagBlockCoordSys&)m_coord_sys_ptr[0]).domain();
 
       if ( domain.isPeriodic(RADIAL_DIR) ||
-           (a_bc.getBCType(0, RADIAL_DIR, 0) == PotentialBC::NEUMANN &&
-            a_bc.getBCType(0, RADIAL_DIR, 1) == PotentialBC::NEUMANN) ) {
+           (a_bc.getBCType(0, RADIAL_DIR, 0) == EllipticOpBC::NEUMANN &&
+            a_bc.getBCType(0, RADIAL_DIR, 1) == EllipticOpBC::NEUMANN) ) {
          flag = true;
       }
    }
 
-   if ( typeid(a_bc) == typeid(SNCorePotentialBC) ) {
-      if ( a_bc.getBCType(0, RADIAL_DIR, 0) == PotentialBC::NEUMANN &&
-           a_bc.getBCType(0, RADIAL_DIR, 1) == PotentialBC::NEUMANN ) {
+   if ( typeid(a_bc) == typeid(SNCoreEllipticOpBC) ) {
+      if ( a_bc.getBCType(0, RADIAL_DIR, 0) == EllipticOpBC::NEUMANN &&
+           a_bc.getBCType(0, RADIAL_DIR, 1) == EllipticOpBC::NEUMANN ) {
          flag = true;
       }
    }

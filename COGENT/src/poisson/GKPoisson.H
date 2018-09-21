@@ -10,7 +10,7 @@
 //#define PDIM 5
 //#endif
 
-#include "FieldSolver.H"
+#include "EllipticOp.H"
 #include "MultiBlockLevelExchangeAverage.H"
 #ifdef with_petsc
 #include "MBPETScSolver.H"
@@ -42,7 +42,7 @@
  * \f}
 */
 class GKPoisson
-   : public FieldSolver
+   : public EllipticOp
 {
 public:
 
@@ -63,7 +63,7 @@ public:
     */
    virtual ~GKPoisson();
 
-   virtual void updateBoundaries( const PotentialBC&  bc );
+   virtual void updateBoundaries( const EllipticOpBC&  bc );
 
    /// Construct the GKP operator coefficients
    /**
@@ -75,11 +75,11 @@ public:
     */
 
    virtual void setOperatorCoefficients( const LevelData<FArrayBox>& ni,
-                                         const PotentialBC&          bc,
+                                         const EllipticOpBC&         bc,
                                          const bool                  update_preconditioner );
 
    virtual void setOperatorCoefficients( const LevelData<FArrayBox>& ion_mass_density,
-                                         const PotentialBC&          bc,
+                                         const EllipticOpBC&         bc,
                                          const bool                  update_preconditioner,
                                          double&                     lo_value,
                                          double&                     hi_value,

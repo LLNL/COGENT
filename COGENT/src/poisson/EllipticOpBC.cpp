@@ -1,9 +1,9 @@
-#include "PotentialBC.H"
+#include "EllipticOpBC.H"
 
 #include "NamespaceHeader.H"
 
 
-PotentialBC::PotentialBC(const int a_num_boundaries)
+EllipticOpBC::EllipticOpBC(const int a_num_boundaries)
 {
    m_bc_function.resize(a_num_boundaries);
    m_bdry_name.resize(a_num_boundaries);
@@ -18,7 +18,7 @@ PotentialBC::PotentialBC(const int a_num_boundaries)
 }
 
 
-PotentialBC::~PotentialBC()
+EllipticOpBC::~EllipticOpBC()
 {
    m_bc_function.resize(0);
    m_bdry_name.resize(0);
@@ -28,7 +28,7 @@ PotentialBC::~PotentialBC()
 
 
 bool
-PotentialBC::hasNeumannCondition() const
+EllipticOpBC::hasNeumannCondition() const
 {
    int has = false;
 

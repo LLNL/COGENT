@@ -1,5 +1,5 @@
 #include "OneFieldOp.H"
-#include "PotentialBCFactory.H"
+#include "EllipticOpBCFactory.H"
 #include "FourthOrderUtil.H"
 
 #include "NamespaceHeader.H" 
@@ -19,21 +19,18 @@ OneFieldOp::OneFieldOp( ParmParse&      a_pp,
       printParameters();
    }
 
-   const std::string name("neutrals");
+   const std::string name("neutrals_diffusion");
    const std::string prefix( "BC." + name );
    ParmParse ppsp( prefix.c_str() );
-   PotentialBCFactory neutrals_bc_factory;
-   ParmParse pp("diffusion");
 
-   m_diffusion_op = new Diffusion(pp, a_geometry);
+   m_diffusion_op = new Diffusion(ppsp, a_geometry);
 
-   m_bc = neutrals_bc_factory.create( name,
-                                      pp,
-                                      a_geometry.getCoordSys()->type(),
-                                      false );
-
-   bool update_preconditioner = true;
-   m_diffusion_op->setOperatorCoefficients(m_D, m_D_shape, *m_bc, update_preconditioner);
+   EllipticOpBCFactory elliptic_op_bc_factory;
+   m_bc = elliptic_op_bc_factory.create( name,
+                                         ppsp,
+                                         a_geometry.getCoordSys()->type(),
+                                         false );
+   m_diffusion_op->setOperatorCoefficients(m_D, m_D_shape, *m_bc);
 }
 
 
@@ -50,18 +47,17 @@ void OneFieldOp::accumulateRHS(  FluidSpeciesPtrVect&               a_rhs,
                                  const Real                         a_time)
 // NB: kinetic species input corresponds fo the physical species
 {
-   //Get fluid rhs
-   //   FluidSpecies& rhs_fluid( *(a_rhs[a_fluidVecComp]) );
+   // Get fluid rhs
    FluidSpecies& rhs_fluid( static_cast<FluidSpecies&>(*(a_rhs[a_fluidVecComp])) );
    LevelData<FArrayBox>& rhs_data( rhs_fluid.cell_data() );
 
-   //Get fluid soln
-   //   const FluidSpecies& soln_fluid( *(a_fluid_species[a_fluidVecComp]) );
+   // Get fluid soln
    const FluidSpecies& soln_fluid( static_cast<FluidSpecies&>(*(a_fluid_species[a_fluidVecComp])) );
    const LevelData<FArrayBox>& soln_data( soln_fluid.cell_data() );
 
    const DisjointBoxLayout& grids( rhs_data.getBoxes() );
-   const MagGeom& mag_geom = rhs_fluid.configurationSpaceGeometry();
+
+#if 0
 
    //Copy soln_data to a temporary, and fill internal ghosts
    LevelData<FArrayBox> soln_copy(grids, soln_data.nComp(), 2*IntVect::Unit);
@@ -69,17 +65,17 @@ void OneFieldOp::accumulateRHS(  FluidSpeciesPtrVect&               a_rhs,
    for (DataIterator dit(grids); dit.ok(); ++dit) {
        soln_copy[dit].copy(soln_data[dit]);
    }
-   mag_geom.fillInternalGhosts( soln_copy );
+   m_geometry.fillInternalGhosts( soln_copy );
    
    //Compute mapped gradient
    LevelData<FluxBox> gradient_mapped(grids, SpaceDim, IntVect::Unit);
    //Do second order, lose information in one layer of ghosts
    int order = 2;
-   mag_geom.computeMappedPoloidalGradientWithGhosts(soln_copy, gradient_mapped, order);
+   m_geometry.computeMappedPoloidalGradientWithGhosts(soln_copy, gradient_mapped, order);
    
    //Rotate to physical frame
    LevelData<FluxBox> gradient_phys(grids, SpaceDim, IntVect::Unit);
-   mag_geom.unmapPoloidalGradient(gradient_mapped, gradient_phys);
+   m_geometry.unmapPoloidalGradient(gradient_mapped, gradient_phys);
   
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       for (int dir = 0; dir < SpaceDim; dir++) {
@@ -88,10 +84,10 @@ void OneFieldOp::accumulateRHS(  FluidSpeciesPtrVect&               a_rhs,
    }
    
    if (m_D_shape != NULL) {
-     LevelData<FArrayBox> D_shape_cell(mag_geom.grids(), 1, 4*IntVect::Unit);
-     LevelData<FluxBox> D_shape_face(mag_geom.grids(), 1, 2*IntVect::Unit);
-     m_D_shape->assign( D_shape_cell, mag_geom, a_time);
-     mag_geom.fillInternalGhosts( D_shape_cell );
+     LevelData<FArrayBox> D_shape_cell(m_geometry.grids(), 1, 4*IntVect::Unit);
+     LevelData<FluxBox> D_shape_face(m_geometry.grids(), 1, 2*IntVect::Unit);
+     m_D_shape->assign( D_shape_cell, m_geometry, a_time);
+     m_geometry.fillInternalGhosts( D_shape_cell );
      fourthOrderCellToFaceCenters(D_shape_face, D_shape_cell);
 
      for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -103,30 +99,59 @@ void OneFieldOp::accumulateRHS(  FluidSpeciesPtrVect&               a_rhs,
      }
    }
 
-   mag_geom.applyAxisymmetricCorrection( gradient_phys );
+   m_geometry.applyAxisymmetricCorrection( gradient_phys );
    
    bool isFourthOrder(false);
-   mag_geom.computeMappedGridDivergence( gradient_phys, rhs_data, isFourthOrder);
-
-   LevelData<FArrayBox> volumes(grids, 1, IntVect::Zero);
-   mag_geom.getCellVolumes(volumes);
+   m_geometry.computeMappedGridDivergence( gradient_phys, rhs_data, isFourthOrder);
 
    for (DataIterator dit( rhs_data.dataIterator() ); dit.ok(); ++dit) {
-      const MagBlockCoordSys& block_coord_sys = mag_geom.getBlockCoordSys(grids[dit]);
+      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
       double fac = 1. / block_coord_sys.getMappedCellVolume();
       rhs_data[dit] *= fac;
-      //      rhs_data[dit].divide(volumes[dit]);
    }
 
    //add source term
    if (m_source != NULL) {
-     LevelData<FArrayBox> source_dst(mag_geom.grids(), 1, IntVect::Zero);
-     m_source->assign( source_dst, mag_geom, a_time);
+     LevelData<FArrayBox> source_dst(m_geometry.grids(), 1, IntVect::Zero);
+     m_source->assign( source_dst, m_geometry, a_time);
 
      for (DataIterator dit(grids); dit.ok(); ++dit) {
        rhs_data[dit].plus(source_dst[dit]);
      }
    }
+
+#else
+
+   LevelData<FArrayBox> flux_div;
+   flux_div.define(rhs_data);
+
+   m_diffusion_op->computeFluxDivergence( soln_data, flux_div, false, false);
+
+   // The preceding call computes a negated physical flux divergence cell average.
+   // Since this function is being used to define the right-hand side of an evolution
+   // equation for a mapped unknown (i.e., containing a J factor), we therefore need
+   // to multiply by J.  We also flip the sign.
+   m_geometry.multJonValid(flux_div);
+   
+   for (DataIterator dit( flux_div.dataIterator() ); dit.ok(); ++dit) {
+      rhs_data[dit] -= flux_div[dit];
+   }
+
+   //add source term
+   if (m_source != NULL) {
+     LevelData<FArrayBox> source_dst(m_geometry.grids(), 1, IntVect::Zero);
+     m_source->assign( source_dst, m_geometry, a_time);
+
+     m_geometry.multJonValid(source_dst);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+       rhs_data[dit].plus(source_dst[dit]);
+     }
+   }
+
+#endif
+
+   
 }
 
 void OneFieldOp::accumulateExplicitRHS(  FluidSpeciesPtrVect&               a_rhs,
@@ -157,6 +182,14 @@ void OneFieldOp::accumulateImplicitRHS(  FluidSpeciesPtrVect&               a_rh
 }
 
 
+void OneFieldOp::updatePCImEx( const PS::KineticSpeciesPtrVect& a_kinetic_species,
+                               const double                     a_mshift )
+{
+   CH_TIME("OneFieldOp::updatePCImEx");
+
+   m_diffusion_op->updateImExPreconditioner( a_mshift, *m_bc );
+}
+
 void OneFieldOp::solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species_solution,
                               const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                               const FluidSpeciesPtrVect&        a_fluid_species_rhs,
@@ -164,8 +197,12 @@ void OneFieldOp::solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species_
 {
    CH_TIME("OneFieldOp::solvePCImEx");
    const FluidSpecies& rhs_species = static_cast<const FluidSpecies&>(*a_fluid_species_rhs[a_component]);
-   const LevelData<FArrayBox>& r = rhs_species.cell_data();
+   LevelData<FArrayBox> r_phys;
+   r_phys.define(rhs_species.cell_data());
 
+   // Convert the right-hand side to physical space
+   m_geometry.divideJonValid(r_phys);
+   
    FluidSpecies& sol_species = static_cast<FluidSpecies&>(*a_fluid_species_solution[a_component]);
    LevelData<FArrayBox>& z = sol_species.cell_data();
 
@@ -173,9 +210,16 @@ void OneFieldOp::solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species_
       z[dit].setVal(0.);
    }
 
-   m_diffusion_op->setPreconditionerConvergenceParams(0., 1, 0., 1);
-   m_diffusion_op->solvePreconditioner(r, z);
+   double tol = 0.;
+   double max_iter = 1;
+   double precond_tol = 0.;
+   double precond_max_iter = 1;
+   m_diffusion_op->setImExPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
 
+   m_diffusion_op->solveImExPreconditioner(r_phys, z);
+
+   // Convert the solution to mapped space
+   m_geometry.multJonValid(z);
 }
 
 

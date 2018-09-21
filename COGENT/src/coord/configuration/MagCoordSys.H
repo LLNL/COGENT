@@ -3,7 +3,7 @@
 
 #include "MagBlockCoordSys.H"
 #include "MultiBlockCoordSys.H"
-#include "PotentialBC.H"
+#include "EllipticOpBC.H"
 
 #include "NamespaceHeader.H"
 
@@ -57,9 +57,9 @@ public:
 
    virtual void postProcessMetricData( LevelData<FluxBox>& data ) const {;}
 
-   virtual const PotentialBC& getDivergenceCleaningBC() const = 0;
+   virtual const EllipticOpBC& getDivergenceCleaningBC() const = 0;
 
-   virtual void definePotentialBC( PotentialBC& bc ) const {};
+   virtual void defineEllipticOpBC( EllipticOpBC& bc ) const {};
 
    virtual std::string type() const = 0;
 

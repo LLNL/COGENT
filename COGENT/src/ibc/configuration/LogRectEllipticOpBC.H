@@ -1,25 +1,25 @@
-#ifndef _LOGRECTPOTENTIALBC_
-#define _LOGRECTPOTENTIALBC_
+#ifndef _LOGRECTELLIPTICOPBC_
+#define _LOGRECTELLIPTICOPBC_
 
 #include "ParmParse.H"
 #include "RefCountedPtr.H"
-#include "PotentialBC.H"
+#include "EllipticOpBC.H"
 
 #include "NamespaceHeader.H"
 
 
-class LogRectPotentialBC
-   : public PotentialBC
+class LogRectEllipticOpBC
+   : public EllipticOpBC
 {
 public:
 
-   LogRectPotentialBC();
+   LogRectEllipticOpBC();
 
-   LogRectPotentialBC( const std::string& name,
-                    ParmParse& pp,
-                    const int& verbosity );
+   LogRectEllipticOpBC( const std::string& name,
+                        ParmParse& pp,
+                        const int& verbosity );
 
-   virtual ~LogRectPotentialBC() {};
+   virtual ~LogRectEllipticOpBC() {};
 
    virtual void setBCType( const int block_number,
                            const int dir,
@@ -60,8 +60,8 @@ public:
 private:
 
    // prohibit copying
-   LogRectPotentialBC( const LogRectPotentialBC& );
-   LogRectPotentialBC& operator=( const LogRectPotentialBC& );
+   LogRectEllipticOpBC( const LogRectEllipticOpBC& );
+   LogRectEllipticOpBC& operator=( const LogRectEllipticOpBC& );
 
    void setNames();
 

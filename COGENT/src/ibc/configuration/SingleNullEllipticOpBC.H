@@ -1,26 +1,26 @@
-#ifndef _SINGLENULLPOTENTIALBC_
-#define _SINGLENULLPOTENTIALBC_
+#ifndef _SINGLENULLELLIPTICOPBC_
+#define _SINGLENULLELLIPTICOPBC_
 
 #include "ParmParse.H"
 #include "RefCountedPtr.H"
-#include "PotentialBC.H"
+#include "EllipticOpBC.H"
 #include "GridFunctionLibrary.H"
 
 #include "NamespaceHeader.H"
 
 
-class SingleNullPotentialBC
-   : public PotentialBC
+class SingleNullEllipticOpBC
+   : public EllipticOpBC
 {
 public:
 
-   SingleNullPotentialBC();
+   SingleNullEllipticOpBC();
 
-   SingleNullPotentialBC( const std::string& name,
-                          ParmParse& pp,
-                          const int& verbosity );
+   SingleNullEllipticOpBC( const std::string&  name,
+                           ParmParse&          pp,
+                           const int&          verbosity );
 
-   virtual ~SingleNullPotentialBC() {};
+   virtual ~SingleNullEllipticOpBC() {};
 
    virtual void setBCType( const int block_number,
                            const int dir,
@@ -76,8 +76,8 @@ public:
 private:
 
    // prohibit copying
-   SingleNullPotentialBC( const SingleNullPotentialBC& );
-   SingleNullPotentialBC& operator=( const SingleNullPotentialBC& );
+   SingleNullEllipticOpBC( const SingleNullEllipticOpBC& );
+   SingleNullEllipticOpBC& operator=( const SingleNullEllipticOpBC& );
 
    void setNames();
 

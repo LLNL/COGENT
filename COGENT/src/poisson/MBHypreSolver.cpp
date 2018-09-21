@@ -198,7 +198,7 @@ void
 MBHypreSolver::constructMatrixGeneral( LevelData<FArrayBox>&  a_alpha_coefficient,
                                        LevelData<FluxBox>&    a_tensor_coefficient,
                                        LevelData<FArrayBox>&  a_beta_coefficient,
-                                       const PotentialBC&     a_bc )
+                                       const EllipticOpBC&    a_bc )
 {
    bool fourth_order = (m_discretization_order == 4);
 
@@ -478,7 +478,7 @@ MBHypreSolver::addUnstructuredGraphEntries( const int                           
 void
 MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&               a_alpha_coefficient,
                                              const LevelData<FluxBox>&                 a_tensor_coefficient,
-                                             const PotentialBC&                        a_bc,
+                                             const EllipticOpBC&                       a_bc,
                                              FArrayBox&                                a_stencil_values,
                                              const bool                                a_fourth_order,
                                              const LayoutData< BaseFab<IntVectSet> >&  a_unstructured_coupling,
@@ -727,7 +727,7 @@ void
 MBHypreSolver::constructHypreMatrix( LevelData<FArrayBox>&               a_alpha_coefficient, 
                                      LevelData<FluxBox>&                 a_tensor_coefficient,
                                      LevelData<FArrayBox>&               a_beta_coefficient,
-                                     const PotentialBC&                  a_bc,
+                                     const EllipticOpBC&                 a_bc,
                                      HYPRE_SStructGraph&                 a_graph,
                                      FArrayBox&                          a_stencil_values,
                                      const int                           a_diagonal_offset,
@@ -935,7 +935,7 @@ MBHypreSolver::constructHypreMatrix( LevelData<FArrayBox>&               a_alpha
 
 
 void
-MBHypreSolver::extrapGhosts( const PotentialBC&    a_bc,
+MBHypreSolver::extrapGhosts( const EllipticOpBC&   a_bc,
                              const bool            a_fourth_order,
                              LevelData<FArrayBox>& a_data ) const
 {

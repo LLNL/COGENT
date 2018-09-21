@@ -56,6 +56,9 @@ public:
                                       const bool                         recompute_kinetic_terms,
                                       const Real                         time);
    
+   virtual void updatePCImEx( const PS::KineticSpeciesPtrVect&  kinetic_species,
+                              const double                      mshift );
+
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
                              const FluidSpeciesPtrVect&        fluid_species_rhs,
@@ -93,7 +96,7 @@ private:
    void printParameters();
    
    Diffusion* m_diffusion_op;
-   PotentialBC* m_bc;
+   EllipticOpBC* m_bc;
    
    double m_D;
    RefCountedPtr<GridFunction> m_D_shape;

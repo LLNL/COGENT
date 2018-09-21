@@ -77,11 +77,11 @@ NewGKPoissonBoltzmann::~NewGKPoissonBoltzmann()
 
 
 void
-NewGKPoissonBoltzmann::computePotentialAndElectronDensity( LevelData<FArrayBox>&       a_phi,
-                                                           BoltzmannElectron&          a_ne,
-                                                           const LevelData<FArrayBox>& a_Zni,
-                                                           const PotentialBC&          a_bc,
-                                                           const bool                  a_first_step )
+NewGKPoissonBoltzmann::computePotentialAndElectronDensity( LevelData<FArrayBox>&        a_phi,
+                                                           BoltzmannElectron&           a_ne,
+                                                           const LevelData<FArrayBox>&  a_Zni,
+                                                           const EllipticOpBC&          a_bc,
+                                                           const bool                   a_first_step )
 {
    if ( m_bc_core == NULL ) {
       MayDay::Error("NewGKPoissonBoltzmann::computePotentialAndElectronDensity(): setOperatorCoefficients has not been called");
@@ -194,16 +194,16 @@ NewGKPoissonBoltzmann::getPhiTilde( const LevelData<FArrayBox>& a_Zni,
 
 
 void
-NewGKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
-                                                const PotentialBC&          a_bc )
+NewGKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>&  a_ion_mass_density,
+                                                const EllipticOpBC&          a_bc )
 
 {
-   const SingleNullPotentialBC& sn_bc = (const SingleNullPotentialBC&)a_bc;
+   const SingleNullEllipticOpBC& sn_bc = (const SingleNullEllipticOpBC&)a_bc;
 
    if ( m_bc_core == NULL ) {
-      // Create an SNCorePotentialBC from the passed in SingleNullPotentialBC
-      m_bc_core = new SNCorePotentialBC( sn_bc,  PotentialBC::NEUMANN );
-      m_core_geometry->definePotentialBC(*m_bc_core);
+      // Create an SNCoreEllipticOpBC from the passed in SingleNullEllipticOpBC
+      m_bc_core = new SNCoreEllipticOpBC( sn_bc,  EllipticOpBC::NEUMANN );
+      m_core_geometry->defineEllipticOpBC(*m_bc_core);
    }
 
    // If the boundary conditions at the radial inner core boundary are set by a DataArray GridFunction,
@@ -246,19 +246,19 @@ NewGKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>& a_io
 
 
 void
-NewGKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
-                                                const PotentialBC&          a_bc,
-                                                const double                a_core_outer_bv,
-                                                double&                     a_lo_value,
-                                                double&                     a_hi_value,
-                                                LevelData<FArrayBox>&       a_radial_gkp_divergence_average)
+NewGKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>&  a_ion_mass_density,
+                                                const EllipticOpBC&          a_bc,
+                                                const double                 a_core_outer_bv,
+                                                double&                      a_lo_value,
+                                                double&                      a_hi_value,
+                                                LevelData<FArrayBox>&        a_radial_gkp_divergence_average)
 {
-   const SingleNullPotentialBC& sn_bc = (const SingleNullPotentialBC&)a_bc;
+   const SingleNullEllipticOpBC& sn_bc = (const SingleNullEllipticOpBC&)a_bc;
 
    if ( m_bc_core == NULL ) {
-      // Create an SNCorePotentialBC from the passed in SingleNullPotentialBC
-      m_bc_core = new SNCorePotentialBC( sn_bc,  PotentialBC::NEUMANN );
-      m_core_geometry->definePotentialBC(*m_bc_core);
+      // Create an SNCoreEllipticOpBC from the passed in SingleNullEllipticOpBC
+      m_bc_core = new SNCoreEllipticOpBC( sn_bc,  EllipticOpBC::NEUMANN );
+      m_core_geometry->defineEllipticOpBC(*m_bc_core);
    }
 
    // If the boundary conditions at the radial inner core boundary are set by a DataArray GridFunction,
@@ -332,11 +332,11 @@ NewGKPoissonBoltzmann::getFaceCenteredFieldOnCore( const LevelData<FArrayBox>& a
 
 
 void
-NewGKPoissonBoltzmann::setDivertorBVs( const LevelData<FArrayBox>& a_ion_charge_density,
-                                       const LevelData<FArrayBox>& a_ion_parallel_current_density,
-                                       PotentialBC&                a_bc )
+NewGKPoissonBoltzmann::setDivertorBVs( const LevelData<FArrayBox>&  a_ion_charge_density,
+                                       const LevelData<FArrayBox>&  a_ion_parallel_current_density,
+                                       EllipticOpBC&                a_bc )
 {
-   SingleNullPotentialBC& sn_bc = (SingleNullPotentialBC&)a_bc;
+   SingleNullEllipticOpBC& sn_bc = (SingleNullEllipticOpBC&)a_bc;
 
    RefCountedPtr<DataArray> inner_divertor_function = sn_bc.getInnerDivertorFunction();
    CH_assert( !inner_divertor_function.isNull() );
@@ -546,8 +546,8 @@ NewGKPoissonBoltzmann::computeBoundaryData( FArrayBox& a_inner_divertor_bvs,
   
   int norm_dir = (norm_dir_glob > 0) ? 1 : -1;
  
-  computeSheathPotentialBC(a_ne, jpar_outer_plate_glob, jpar_inner_plate_glob,
-                           bmag_outer_plate_glob, bmag_inner_plate_glob, norm_dir);
+  computeSheathEllipticOpBC(a_ne, jpar_outer_plate_glob, jpar_inner_plate_glob,
+                            bmag_outer_plate_glob, bmag_inner_plate_glob, norm_dir);
 
 
   delete [] jpar_outer_plate_glob;
@@ -587,14 +587,14 @@ NewGKPoissonBoltzmann::computeBoundaryData( FArrayBox& a_inner_divertor_bvs,
 
 
 void
-NewGKPoissonBoltzmann::computeSheathPotentialBC( const BoltzmannElectron& a_ne,
-                                              const double * a_jpar_outer_plate, 
-                                              const double * a_jpar_inner_plate,
-                                              const double * a_bmag_outer_plate, 
-                                              const double * a_bmag_inner_plate,
-                                              const int norm_dir )
+NewGKPoissonBoltzmann::computeSheathEllipticOpBC( const BoltzmannElectron&  a_ne,
+                                                  const double *            a_jpar_outer_plate, 
+                                                  const double *            a_jpar_inner_plate,
+                                                  const double *            a_bmag_outer_plate, 
+                                                  const double *            a_bmag_inner_plate,
+                                                  const int                 a_norm_dir )
 {
-  //Convention for norm_dir. norm_dir is equal to +1 (-1) 
+  //Convention for a_norm_dir. a_norm_dir is equal to +1 (-1) 
   // if the z-component of Bpol at the outer plate is up (down) 
 
   double me = a_ne.mass();
@@ -613,8 +613,8 @@ NewGKPoissonBoltzmann::computeSheathPotentialBC( const BoltzmannElectron& a_ne,
 
   for ( int irad = 0; irad < nrad; irad++) {
 
-   double parallel_ion_loss = (-norm_dir) * a_jpar_outer_plate[irad] / a_bmag_outer_plate[irad] 
-                            + (norm_dir) * a_jpar_inner_plate[irad] / a_bmag_inner_plate[irad];
+   double parallel_ion_loss = (-a_norm_dir) * a_jpar_outer_plate[irad] / a_bmag_outer_plate[irad] 
+                            + (a_norm_dir) * a_jpar_inner_plate[irad] / a_bmag_inner_plate[irad];
   
    double fac_outer = (1/a_bmag_outer_plate[irad] + 1/a_bmag_inner_plate[irad]);
    fac_outer *=  e * v_thermal_e * m_Zni_outer_plate[irad];

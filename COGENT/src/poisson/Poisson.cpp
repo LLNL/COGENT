@@ -10,7 +10,7 @@ const std::string Poisson::pp_name = "poisson";
 
 Poisson::Poisson( const ParmParse& a_pp,
                   const MagGeom&   a_geom )
-   : FieldSolver(a_pp, a_geom)
+   : EllipticOp(a_pp, a_geom)
 {
    const DisjointBoxLayout& grids = a_geom.grids();
 
@@ -48,7 +48,7 @@ Poisson::~Poisson()
 
 
 void
-Poisson::setOperatorCoefficients( const PotentialBC& a_bc )
+Poisson::setOperatorCoefficients( const EllipticOpBC& a_bc )
 {
    setBc(a_bc);
 

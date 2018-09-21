@@ -2,7 +2,7 @@
 #define _MB_PETSC_SOLVER_H_
 
 #include "MBSolver.H"
-#include "PotentialBC.H"
+#include "EllipticOpBC.H"
 
 // PETSc headers
 #include <petscksp.h>
@@ -55,7 +55,7 @@ protected:
    virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
                                         LevelData<FluxBox>&   diffusion_coefficient,
                                         LevelData<FArrayBox>& beta_coefficient,
-                                        const PotentialBC&    bc );
+                                        const EllipticOpBC&   bc );
 
    /// Create the PETSc data structures
    /**
@@ -88,7 +88,7 @@ protected:
 
    void addUnstructuredMatrixEntries( const LevelData<FArrayBox>&              alpha_coefficient,
                                       const LevelData<FluxBox>&                diffusion_coeffcient,
-                                      const PotentialBC&                       bc,
+                                      const EllipticOpBC&                      bc,
                                       FArrayBox&                               stencil_values,
                                       const bool                               fourthOrder,
                                       const LayoutData< BaseFab<IntVectSet> >& unstructured_coupling,
@@ -99,7 +99,7 @@ protected:
    void constructPETScMatrix( LevelData<FArrayBox>&              alpha_coefficient, 
                               LevelData<FluxBox>&                diffusion_coefficient,
                               LevelData<FArrayBox>&              beta_coefficient,
-                              const PotentialBC&                 bc,
+                              const EllipticOpBC&                bc,
                               FArrayBox&                         stencil_values,
                               const int                          diagonal_offset,
                               LayoutData< BaseFab<IntVectSet> >& unstructured_coupling,

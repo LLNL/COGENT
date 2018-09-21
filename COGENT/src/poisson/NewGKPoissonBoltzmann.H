@@ -20,25 +20,25 @@ public:
    ~NewGKPoissonBoltzmann();
 
    void computePotentialAndElectronDensity(
-      LevelData<FArrayBox>&       phi,
-      BoltzmannElectron&          ne,
-      const LevelData<FArrayBox>& ni,
-      const PotentialBC&          bc,
-      const bool                  first_step = false);
+      LevelData<FArrayBox>&        phi,
+      BoltzmannElectron&           ne,
+      const LevelData<FArrayBox>&  ni,
+      const EllipticOpBC&          bc,
+      const bool                   first_step = false);
 
-   virtual void setOperatorCoefficients( const LevelData<FArrayBox>& ni,
-                                         const PotentialBC&          bc ); 
+   virtual void setOperatorCoefficients( const LevelData<FArrayBox>&  ni,
+                                         const EllipticOpBC&          bc ); 
 
-   virtual void setOperatorCoefficients( const LevelData<FArrayBox>& ion_mass_density,
-                                         const PotentialBC&          bc,
-                                         const double                core_outer_bv,
-                                         double&                     lo_value,
-                                         double&                     hi_value,
-                                         LevelData<FArrayBox>&       radial_gkp_divergence_average);
+   virtual void setOperatorCoefficients( const LevelData<FArrayBox>&  ion_mass_density,
+                                         const EllipticOpBC&          bc,
+                                         const double                 core_outer_bv,
+                                         double&                      lo_value,
+                                         double&                      hi_value,
+                                         LevelData<FArrayBox>&        radial_gkp_divergence_average);
 
-   void setDivertorBVs( const LevelData<FArrayBox>& ion_charge_density,
-                        const LevelData<FArrayBox>& ion_parallel_current_density,
-                        PotentialBC&                bc );
+   void setDivertorBVs( const LevelData<FArrayBox>&  ion_charge_density,
+                        const LevelData<FArrayBox>&  ion_parallel_current_density,
+                        EllipticOpBC&                bc );
 
    ///
    /**
@@ -68,12 +68,12 @@ protected:
    int getConsequtiveRadialIndex( const int a_mapped_index,
                                   const int a_block_number ) const;
 
-   void computeSheathPotentialBC( const BoltzmannElectron& a_ne,
-                                  const double * a_jpar_outer_plate, 
-                                  const double * a_jpar_inner_plate,
-                                  const double * a_bmag_outer_plate, 
-                                  const double * a_bmag_inner_plate,
-                                  const int norm_dir );
+   void computeSheathEllipticOpBC( const BoltzmannElectron&  ne,
+                                   const double *            jpar_outer_plate, 
+                                   const double *            jpar_inner_plate,
+                                   const double *            bmag_outer_plate, 
+                                   const double *            bmag_inner_plate,
+                                   const int                 norm_dir );
 
    void copyToCore( const LevelData<FArrayBox>& a_in,
                     LevelData<FArrayBox>&       a_out ) const;
@@ -89,7 +89,7 @@ protected:
    SNCoreCoordSys* m_core_coord_sys;
    MagGeom* m_core_geometry;
 
-   SNCorePotentialBC* m_bc_core;
+   SNCoreEllipticOpBC* m_bc_core;
 
    GKPoissonBoltzmann* m_gkpb_solver;
 };

@@ -42,7 +42,7 @@ class GKSystemBC
 
 /// deprecated ////////////////////
 
-      CFG::PotentialBC& getPotentialBC() const {return *m_potential_bcs;}
+      CFG::EllipticOpBC& getEllipticOpBC() const {return *m_potential_bcs;}
 
    private:
 
@@ -93,7 +93,7 @@ class GKSystemBC
       const PhaseGeom&                    m_phase_geometry;
       std::vector<KineticSpeciesBC*>      m_kinetic_bcs;
       std::vector<CFG::FluidSpeciesBC*>   m_fluid_bcs;
-      CFG::PotentialBC*                   m_potential_bcs;
+      CFG::EllipticOpBC*                  m_potential_bcs;
 
       typedef std::map<std::string,RefCountedPtr<CFG::GridFunction> > FieldBCMap;
       FieldBCMap m_field_bcs;

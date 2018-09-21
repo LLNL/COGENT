@@ -1,5 +1,5 @@
-#include "FieldSolver.H"
-#include "FieldSolverF_F.H"
+#include "EllipticOp.H"
+#include "EllipticOpF_F.H"
 #include "BlockRegister.H"
 #include "EdgeToCell.H"
 #include "FourthOrderUtil.H"
@@ -19,8 +19,8 @@
 #undef INTERP_TO_NODES_WITH_BCS
 
 
-FieldSolver::FieldSolver( const ParmParse& a_pp,
-                          const MagGeom&   a_geom )
+EllipticOp::EllipticOp( const ParmParse& a_pp,
+                        const MagGeom&   a_geom )
    : m_geometry(a_geom)
 {
    const DisjointBoxLayout& grids = m_geometry.grids();
@@ -81,7 +81,7 @@ FieldSolver::FieldSolver( const ParmParse& a_pp,
       
 
 
-FieldSolver::~FieldSolver()
+EllipticOp::~EllipticOp()
 {
    if (m_Chombo_solver) delete m_Chombo_solver;
    if (m_mblex_potential_Ptr) delete m_mblex_potential_Ptr;
@@ -90,7 +90,7 @@ FieldSolver::~FieldSolver()
 
 
 void
-FieldSolver::defineLinearSolver( const ParmParse& a_pp )
+EllipticOp::defineLinearSolver( const ParmParse& a_pp )
 {
    // Defaults; over-ridden if present in ParmParse object
    m_method   = "BiCGStab";
@@ -132,11 +132,11 @@ FieldSolver::defineLinearSolver( const ParmParse& a_pp )
 
 
 void
-FieldSolver::parseMethodAndParams( const ParmParse& a_pp,
-                                   string&          a_method,
-                                   double&          a_tol,
-                                   int&             a_max_iter,
-                                   bool&            a_verbose ) const
+EllipticOp::parseMethodAndParams( const ParmParse&  a_pp,
+                                  string&           a_method,
+                                  double&           a_tol,
+                                  int&              a_max_iter,
+                                  bool&             a_verbose ) const
 {
    if (a_pp.contains("method")) {
       a_pp.get("method", a_method);
@@ -158,8 +158,8 @@ FieldSolver::parseMethodAndParams( const ParmParse& a_pp,
 
 
 void
-FieldSolver::computePotential( LevelData<FArrayBox>&       a_phi,
-                               const LevelData<FArrayBox>& a_charge_density )
+EllipticOp::computePotential( LevelData<FArrayBox>&        a_phi,
+                              const LevelData<FArrayBox>&  a_charge_density )
 {
    LevelData<FArrayBox> rhs;
    rhs.define(a_charge_density);
@@ -173,8 +173,8 @@ FieldSolver::computePotential( LevelData<FArrayBox>&       a_phi,
 
 
 void
-FieldSolver::solve( const LevelData<FArrayBox>& a_rhs,
-                    LevelData<FArrayBox>&       a_solution )
+EllipticOp::solve( const LevelData<FArrayBox>&  a_rhs,
+                   LevelData<FArrayBox>&        a_solution )
 {
    if ( m_method == "BiCGStab" ) {
       ((BiCGStabSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_eps = m_tol;
@@ -216,9 +216,9 @@ FieldSolver::solve( const LevelData<FArrayBox>& a_rhs,
 }
 
 void
-FieldSolver::compute3DFieldWithBCs( const LevelData<FArrayBox>& a_phi,
-                                          LevelData<FluxBox>&         a_field,
-                                          const bool                  a_homogeneousBCs ) const
+EllipticOp::compute3DFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
+                                   LevelData<FluxBox>&          a_field,
+                                   const bool                   a_homogeneousBCs ) const
 {
    CH_assert(a_field.nComp() == 3);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -232,9 +232,9 @@ FieldSolver::compute3DFieldWithBCs( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computePoloidalFieldWithBCs( const LevelData<FArrayBox>& a_phi,
-                                          LevelData<FluxBox>&         a_field,
-                                          const bool                  a_homogeneousBCs ) const
+EllipticOp::computePoloidalFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
+                                         LevelData<FluxBox>&          a_field,
+                                         const bool                   a_homogeneousBCs ) const
 {
    CH_assert(a_field.nComp() == 2);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -247,9 +247,9 @@ FieldSolver::computePoloidalFieldWithBCs( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computeMapped3DFieldWithBCs( const LevelData<FArrayBox>& a_phi,
-                                                LevelData<FluxBox>&         a_field,
-                                                const bool                  a_homogeneousBCs ) const
+EllipticOp::computeMapped3DFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
+                                         LevelData<FluxBox>&          a_field,
+                                         const bool                   a_homogeneousBCs ) const
 {
    CH_assert(a_field.nComp() == 3);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -279,9 +279,9 @@ FieldSolver::computeMapped3DFieldWithBCs( const LevelData<FArrayBox>& a_phi,
 }
 
 void
-FieldSolver::computeMappedPoloidalFieldWithBCs( const LevelData<FArrayBox>& a_phi,
-                                                LevelData<FluxBox>&         a_field,
-                                                const bool                  a_homogeneousBCs ) const
+EllipticOp::computeMappedPoloidalFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
+                                               LevelData<FluxBox>&          a_field,
+                                               const bool                   a_homogeneousBCs ) const
 {
    CH_assert(a_field.nComp() == 2);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -312,8 +312,8 @@ FieldSolver::computeMappedPoloidalFieldWithBCs( const LevelData<FArrayBox>& a_ph
 
 
 void
-FieldSolver::computePoloidalField( const LevelData<FArrayBox>& a_phi,
-                                   LevelData<FArrayBox>&       a_field ) const
+EllipticOp::computePoloidalField( const LevelData<FArrayBox>&  a_phi,
+                                  LevelData<FArrayBox>&        a_field ) const
 {
    CH_assert(a_field.nComp() == 2);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -327,8 +327,8 @@ FieldSolver::computePoloidalField( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computePoloidalField( const LevelData<FArrayBox>& a_phi,
-                                   LevelData<FluxBox>&         a_field ) const
+EllipticOp::computePoloidalField( const LevelData<FArrayBox>&  a_phi,
+                                  LevelData<FluxBox>&          a_field ) const
 {
    CH_assert(a_field.nComp() == 2);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -341,8 +341,8 @@ FieldSolver::computePoloidalField( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computeMapped3DField( const LevelData<FArrayBox>& a_phi,
-                                         LevelData<FArrayBox>&       a_field ) const
+EllipticOp::computeMapped3DField( const LevelData<FArrayBox>&  a_phi,
+                                  LevelData<FArrayBox>&        a_field ) const
 {
    CH_assert(a_field.nComp() == 3);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -388,8 +388,8 @@ FieldSolver::computeMapped3DField( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computeMappedPoloidalField( const LevelData<FArrayBox>& a_phi,
-                                         LevelData<FArrayBox>&       a_field ) const
+EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
+                                        LevelData<FArrayBox>&        a_field ) const
 {
    CH_assert(a_field.nComp() == 2);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -435,8 +435,8 @@ FieldSolver::computeMappedPoloidalField( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computeMappedPoloidalField( const LevelData<FArrayBox>& a_phi,
-                                         LevelData<FluxBox>&         a_field ) const
+EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
+                                        LevelData<FluxBox>&          a_field ) const
 {
    CH_assert(a_field.nComp() == 2);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -482,8 +482,8 @@ FieldSolver::computeMappedPoloidalField( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computeMapped3DField( const LevelData<FArrayBox>& a_phi,
-                                         LevelData<FluxBox>&         a_field ) const
+EllipticOp::computeMapped3DField( const LevelData<FArrayBox>&  a_phi,
+                                  LevelData<FluxBox>&          a_field ) const
 {
    CH_assert(a_field.nComp() == 3);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -528,8 +528,8 @@ FieldSolver::computeMapped3DField( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computeField( const LevelData<FArrayBox>& a_phi,
-                           LevelData<FArrayBox>&       a_field ) const
+EllipticOp::computeField( const LevelData<FArrayBox>&  a_phi,
+                          LevelData<FArrayBox>&        a_field ) const
 {
    CH_assert(a_field.nComp() == 3);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -543,8 +543,8 @@ FieldSolver::computeField( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computeField( const LevelData<FArrayBox>& a_phi,
-                           LevelData<FluxBox>&         a_field ) const
+EllipticOp::computeField( const LevelData<FArrayBox>&  a_phi,
+                          LevelData<FluxBox>&          a_field ) const
 {
    CH_assert(a_field.nComp() == 3);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -558,8 +558,8 @@ FieldSolver::computeField( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computeMappedField( const LevelData<FArrayBox>& a_phi,
-                                 LevelData<FArrayBox>&       a_field ) const
+EllipticOp::computeMappedField( const LevelData<FArrayBox>&  a_phi,
+                                LevelData<FArrayBox>&        a_field ) const
 {
    CH_assert(a_field.nComp() == 3);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -579,8 +579,8 @@ FieldSolver::computeMappedField( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computeMappedField( const LevelData<FArrayBox>& a_phi,
-                                 LevelData<FluxBox>&         a_field ) const
+EllipticOp::computeMappedField( const LevelData<FArrayBox>&  a_phi,
+                                LevelData<FluxBox>&          a_field ) const
 {
    CH_assert(a_field.nComp() == 3);
    CH_assert(a_field.ghostVect() == IntVect::Unit);
@@ -599,10 +599,10 @@ FieldSolver::computeMappedField( const LevelData<FArrayBox>& a_phi,
 
 
 void
-FieldSolver::computeFluxDivergence( const LevelData<FArrayBox>& a_in,
-                                    LevelData<FArrayBox>&       a_out,
-                                    const bool                  a_homogeneous_bcs,
-                                    const bool                  a_extrap_to_ghosts)
+EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
+                                   LevelData<FArrayBox>&        a_out,
+                                   const bool                   a_homogeneous_bcs,
+                                   const bool                   a_extrap_to_ghosts)
 {
    const DisjointBoxLayout& grids = a_in.disjointBoxLayout();
 
@@ -625,7 +625,7 @@ FieldSolver::computeFluxDivergence( const LevelData<FArrayBox>& a_in,
       if (a_extrap_to_ghosts) computePoloidalField(phi, flux);
       else computePoloidalFieldWithBCs(phi, flux, a_homogeneous_bcs);
 
-      // Multiply the field by the unmapped, face-centered GKP coefficients
+      // Multiply the field by the unmapped, face-centered operator coefficients
       multiplyCoefficients(flux, false);
 #endif
    }
@@ -679,7 +679,7 @@ FieldSolver::computeFluxDivergence( const LevelData<FArrayBox>& a_in,
 
 
 void
-FieldSolver::computeBcDivergence( LevelData<FArrayBox>& a_out ) const
+EllipticOp::computeBcDivergence( LevelData<FArrayBox>& a_out ) const
 {
    const DisjointBoxLayout& grids = a_out.disjointBoxLayout();
    LevelData<FArrayBox> phi(grids, 1, IntVect::Zero);
@@ -746,7 +746,7 @@ FieldSolver::computeBcDivergence( LevelData<FArrayBox>& a_out ) const
 
 
 void
-FieldSolver::setBc( const PotentialBC& a_bc )
+EllipticOp::setBc( const EllipticOpBC& a_bc )
 {
    m_codim1_stencils.clear();
    m_codim2_stencils.clear();
@@ -756,7 +756,7 @@ FieldSolver::setBc( const PotentialBC& a_bc )
 
 
 void
-FieldSolver::addBcDivergence( LevelData<FArrayBox>& a_data ) const
+EllipticOp::addBcDivergence( LevelData<FArrayBox>& a_data ) const
 {
    for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
       a_data[dit] += m_bc_divergence[dit];
@@ -766,7 +766,7 @@ FieldSolver::addBcDivergence( LevelData<FArrayBox>& a_data ) const
 
 
 void
-FieldSolver::subtractBcDivergence( LevelData<FArrayBox>& a_data ) const
+EllipticOp::subtractBcDivergence( LevelData<FArrayBox>& a_data ) const
 {
    for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
       a_data[dit] -= m_bc_divergence[dit];
@@ -776,10 +776,10 @@ FieldSolver::subtractBcDivergence( LevelData<FArrayBox>& a_data ) const
 
 
 void
-FieldSolver::computeRadialFSAverage( const LevelData<FluxBox>& a_in,
-                                     double&                   a_lo_value,
-                                     double&                   a_hi_value,
-                                     LevelData<FArrayBox>&     a_out ) const
+EllipticOp::computeRadialFSAverage( const LevelData<FluxBox>&  a_in,
+                                    double&                    a_lo_value,
+                                    double&                    a_hi_value,
+                                    LevelData<FArrayBox>&      a_out ) const
 {
    CH_assert(a_in.nComp() == 1);
    CH_assert(a_in.ghostVect() == IntVect::Zero);
@@ -923,7 +923,7 @@ FieldSolver::computeRadialFSAverage( const LevelData<FluxBox>& a_in,
 
 
 void
-FieldSolver::fillInternalGhosts( LevelData<FArrayBox>& a_phi ) const
+EllipticOp::fillInternalGhosts( LevelData<FArrayBox>& a_phi ) const
 {
   if (m_mblex_potential_Ptr && !m_geometry.extrablockExchange() && !m_geometry.shearedMBGeom()) {
       m_mblex_potential_Ptr->interpGhosts(a_phi);
@@ -961,9 +961,9 @@ FieldSolver::fillInternalGhosts( LevelData<FArrayBox>& a_phi ) const
 }
 
 void
-FieldSolver::extractNormalComponent( const LevelData<FluxBox>& a_in,
-                                     const int                 a_dir,
-                                     LevelData<FluxBox>&       a_out ) const
+EllipticOp::extractNormalComponent( const LevelData<FluxBox>&  a_in,
+                                    const int                  a_dir,
+                                    LevelData<FluxBox>&        a_out ) const
 {
    CH_assert(a_out.nComp() == 1);
    CH_assert(a_in.nComp() >= a_dir);
@@ -981,8 +981,8 @@ FieldSolver::extractNormalComponent( const LevelData<FluxBox>& a_in,
 
 
 void
-FieldSolver::preCond( LevelData<FArrayBox>&       a_cor,
-                      const LevelData<FArrayBox>& a_residual )
+EllipticOp::preCond( LevelData<FArrayBox>&        a_cor,
+                     const LevelData<FArrayBox>&  a_residual )
 {
    setToZero(a_cor);
    solvePreconditioner(a_residual, a_cor);
@@ -991,9 +991,9 @@ FieldSolver::preCond( LevelData<FArrayBox>&       a_cor,
 
 
 void
-FieldSolver::applyOp( LevelData<FArrayBox>& a_out,
-                      const LevelData<FArrayBox>& a_in,
-                      bool a_homogeneous )
+EllipticOp::applyOp( LevelData<FArrayBox>&        a_out,
+                     const LevelData<FArrayBox>&  a_in,
+                     bool                         a_homogeneous )
 {
    // We've already accounted for inhomogeneous boundary values, so if
    // a_homogeneous is ever passed in as false we need to know why.
@@ -1005,10 +1005,10 @@ FieldSolver::applyOp( LevelData<FArrayBox>& a_out,
 
 
 void
-FieldSolver::residual(  LevelData<FArrayBox>&       a_lhs,
-                        const LevelData<FArrayBox>& a_phi,
-                        const LevelData<FArrayBox>& a_rhs,
-                        bool a_homogeneous)
+EllipticOp::residual(  LevelData<FArrayBox>&        a_lhs,
+                       const LevelData<FArrayBox>&  a_phi,
+                       const LevelData<FArrayBox>&  a_rhs,
+                       bool                         a_homogeneous)
 {
    // We've already accounted for inhomogeneous boundary values, so if
    // a_homogeneous is ever passed in as false we need to know why.
@@ -1025,8 +1025,8 @@ FieldSolver::residual(  LevelData<FArrayBox>&       a_lhs,
 
 
 void
-FieldSolver::create( LevelData<FArrayBox>&       a_lhs,
-                     const LevelData<FArrayBox>& a_rhs )
+EllipticOp::create( LevelData<FArrayBox>&        a_lhs,
+                    const LevelData<FArrayBox>&  a_rhs )
 {
    a_lhs.define(a_rhs.disjointBoxLayout(), a_rhs.nComp(), a_rhs.ghostVect());
 }
@@ -1034,8 +1034,8 @@ FieldSolver::create( LevelData<FArrayBox>&       a_lhs,
 
 
 void
-FieldSolver::assign( LevelData<FArrayBox>&       a_lhs,
-                     const LevelData<FArrayBox>& a_rhs )
+EllipticOp::assign( LevelData<FArrayBox>&        a_lhs,
+                    const LevelData<FArrayBox>&  a_rhs )
 {
    for (DataIterator dit(a_lhs.dataIterator()); dit.ok(); ++dit) {
       a_lhs[dit].copy(a_rhs[dit]);
@@ -1045,8 +1045,8 @@ FieldSolver::assign( LevelData<FArrayBox>&       a_lhs,
 
 
 Real
-FieldSolver::dotProduct( const LevelData<FArrayBox>& a_1,
-                         const LevelData<FArrayBox>& a_2 )
+EllipticOp::dotProduct( const LevelData<FArrayBox>&  a_1,
+                        const LevelData<FArrayBox>&  a_2 )
 {
    const DisjointBoxLayout& grids = a_1.disjointBoxLayout();
 
@@ -1068,9 +1068,9 @@ FieldSolver::dotProduct( const LevelData<FArrayBox>& a_1,
 
 
 void
-FieldSolver::incr( LevelData<FArrayBox>&       a_lhs,
-                   const LevelData<FArrayBox>& a_x,
-                   Real                        a_scale )
+EllipticOp::incr( LevelData<FArrayBox>&        a_lhs,
+                  const LevelData<FArrayBox>&  a_x,
+                  Real                         a_scale )
 {
    for (DataIterator dit(a_lhs.dataIterator()); dit.ok(); ++dit) {
       a_lhs[dit].plus(a_x[dit], a_scale);
@@ -1080,11 +1080,11 @@ FieldSolver::incr( LevelData<FArrayBox>&       a_lhs,
 
 
 void
-FieldSolver::axby( LevelData<FArrayBox>&       a_lhs,
-                   const LevelData<FArrayBox>& a_x,
-                   const LevelData<FArrayBox>& a_y,
-                   Real                        a_a,
-                   Real                        a_b )
+EllipticOp::axby( LevelData<FArrayBox>&        a_lhs,
+                  const LevelData<FArrayBox>&  a_x,
+                  const LevelData<FArrayBox>&  a_y,
+                  Real                         a_a,
+                  Real                         a_b )
 {
    for (DataIterator dit(a_lhs.dataIterator()); dit.ok(); ++dit) {
       FArrayBox& this_fab = a_lhs[dit];
@@ -1097,8 +1097,8 @@ FieldSolver::axby( LevelData<FArrayBox>&       a_lhs,
 
 
 void
-FieldSolver::scale( LevelData<FArrayBox>& a_lhs,
-                    const Real&           a_scale )
+EllipticOp::scale( LevelData<FArrayBox>&  a_lhs,
+                   const Real&            a_scale )
 {
    for (DataIterator dit(a_lhs.dataIterator()); dit.ok(); ++dit) {
       a_lhs[dit] *= a_scale;
@@ -1108,8 +1108,8 @@ FieldSolver::scale( LevelData<FArrayBox>& a_lhs,
 
 
 Real
-FieldSolver::norm( const LevelData<FArrayBox>& a_rhs,
-                   int                         a_ord )
+EllipticOp::norm( const LevelData<FArrayBox>&  a_rhs,
+                  int                          a_ord )
 {
    return CH_XD::norm(a_rhs, a_rhs.interval(), a_ord);
 }
@@ -1117,7 +1117,7 @@ FieldSolver::norm( const LevelData<FArrayBox>& a_rhs,
 
 
 void
-FieldSolver::setToZero( LevelData<FArrayBox>& a_lhs )
+EllipticOp::setToZero( LevelData<FArrayBox>& a_lhs )
 {
    for (DataIterator dit(a_lhs.dataIterator()); dit.ok(); ++dit) {
       a_lhs[dit].setVal(0.);
@@ -1130,9 +1130,9 @@ FieldSolver::setToZero( LevelData<FArrayBox>& a_lhs )
 
 
 void
-FieldSolver::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>& a_phi,
-                                                   LevelData<FArrayBox>&       a_field,
-                                                   const int                   a_order ) const
+EllipticOp::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
+                                            LevelData<FArrayBox>&        a_field,
+                                            const int                    a_order ) const
 {
    CH_assert(a_phi.ghostVect() >= 2*IntVect::Unit);
    CH_assert(a_field.nComp() == 3);
@@ -1189,9 +1189,9 @@ FieldSolver::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>& a_phi,
 }
 
 void
-FieldSolver::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>& a_phi,
-                                                   LevelData<FArrayBox>&       a_field,
-                                                   const int                   a_order ) const
+EllipticOp::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
+                                                  LevelData<FArrayBox>&        a_field,
+                                                  const int                    a_order ) const
 {
    CH_assert(a_phi.ghostVect() >= 2*IntVect::Unit);
    CH_assert(a_field.nComp() == 2);
@@ -1250,9 +1250,9 @@ FieldSolver::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>& a
 
 
 void
-FieldSolver::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>& a_phi,
-                                                   LevelData<FluxBox>&         a_field,
-                                                   const int                   a_order ) const
+EllipticOp::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
+                                            LevelData<FluxBox>&          a_field,
+                                            const int                    a_order ) const
 {
    CH_assert(a_phi.ghostVect() >= 2*IntVect::Unit);
    CH_assert(a_field.nComp() == 3);
@@ -1355,9 +1355,9 @@ FieldSolver::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>& a_phi,
 }
 
 void
-FieldSolver::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>& a_phi,
-                                                   LevelData<FluxBox>&         a_field,
-                                                   const int                   a_order ) const
+EllipticOp::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
+                                                  LevelData<FluxBox>&          a_field,
+                                                  const int                    a_order ) const
 {
    CH_assert(a_phi.ghostVect() >= 2*IntVect::Unit);
    CH_assert(a_field.nComp() == 2);
@@ -1460,10 +1460,10 @@ FieldSolver::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>& a
 
 
 void
-FieldSolver::constructBoundaryStencils( const bool                        a_fourth_order,
-                                        const PotentialBC&                a_bc,
-                                        Vector< Vector<CoDim1Stencil> >&  a_codim1_stencils,
-                                        Vector< Vector<CoDim2Stencil> >&  a_codim2_stencils ) const
+EllipticOp::constructBoundaryStencils( const bool                         a_fourth_order,
+                                       const EllipticOpBC&                a_bc,
+                                       Vector< Vector<CoDim1Stencil> >&   a_codim1_stencils,
+                                       Vector< Vector<CoDim2Stencil> >&   a_codim2_stencils ) const
 {
    CH_assert(a_codim1_stencils.size() == 0);
    CH_assert(a_codim2_stencils.size() == 0);
@@ -1565,11 +1565,11 @@ FieldSolver::constructBoundaryStencils( const bool                        a_four
 
 
 void
-FieldSolver::accumPhysicalGhosts( const Vector< Vector<CoDim1Stencil> >&  a_codim1_stencils,
-                                  const Vector< Vector<CoDim2Stencil> >&  a_codim2_stencils,
-                                  const bool                              a_extrapolate_from_interior,
-                                  const bool                              a_include_bvs,
-                                  LevelData<FArrayBox>&                   a_data ) const
+EllipticOp::accumPhysicalGhosts( const Vector< Vector<CoDim1Stencil> >&   a_codim1_stencils,
+                                 const Vector< Vector<CoDim2Stencil> >&   a_codim2_stencils,
+                                 const bool                               a_extrapolate_from_interior,
+                                 const bool                               a_include_bvs,
+                                 LevelData<FArrayBox>&                    a_data ) const
 {
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
@@ -1637,12 +1637,12 @@ FieldSolver::accumPhysicalGhosts( const Vector< Vector<CoDim1Stencil> >&  a_codi
 
 
 void
-FieldSolver::extrapBoundaryGhostsForCC(FArrayBox&                              a_data,
-                                       const Box&                              a_interiorbox,
-                                       const Box&                              a_domain_box,
-                                       const int                               a_dir,
-                                       const int                               a_order,
-                                       const Tuple<BlockBoundary, 2*SpaceDim>& a_block_boundaries) const
+EllipticOp::extrapBoundaryGhostsForCC(FArrayBox&                               a_data,
+                                      const Box&                               a_interiorbox,
+                                      const Box&                               a_domain_box,
+                                      const int                                a_dir,
+                                      const int                                a_order,
+                                      const Tuple<BlockBoundary, 2*SpaceDim>&  a_block_boundaries) const
 {
    // If a_order = 2, this function second-order extrapolates to fill two layers of a_data ghost cells
    // at physical boundaries in the direction a_dir.
@@ -1698,12 +1698,12 @@ FieldSolver::extrapBoundaryGhostsForCC(FArrayBox&                              a
 
 
 void
-FieldSolver::extrapBoundaryGhostsForFC(FArrayBox&                              a_data,
-                                       const Box&                              a_interiorbox,
-                                       const Box&                              a_domain_box,
-                                       const int                               a_dir,
-                                       const int                               a_order,
-                                       const Tuple<BlockBoundary, 2*SpaceDim>& a_block_boundaries) const
+EllipticOp::extrapBoundaryGhostsForFC(FArrayBox&                               a_data,
+                                      const Box&                               a_interiorbox,
+                                      const Box&                               a_domain_box,
+                                      const int                                a_dir,
+                                      const int                                a_order,
+                                      const Tuple<BlockBoundary, 2*SpaceDim>&  a_block_boundaries) const
 {
    // This function fourth-order extrapolates to fill two layers of a_data ghost cells
    // at physical boundaries in the direction a_dir.
@@ -1754,8 +1754,8 @@ FieldSolver::extrapBoundaryGhostsForFC(FArrayBox&                              a
 
 
 void
-FieldSolver::interpToNodes( const LevelData<FArrayBox>& a_phi,
-                            LevelData<FArrayBox>&       a_phi_node ) const
+EllipticOp::interpToNodes( const LevelData<FArrayBox>&  a_phi,
+                           LevelData<FArrayBox>&        a_phi_node ) const
 {
    CH_assert(a_phi_node.ghostVect() >= 2*IntVect::Unit);
 
@@ -1841,7 +1841,7 @@ FieldSolver::interpToNodes( const LevelData<FArrayBox>& a_phi,
 
 
 double
-FieldSolver::L2Norm( const LevelData<FArrayBox>& a_data )
+EllipticOp::L2Norm( const LevelData<FArrayBox>& a_data )
 {
    return sqrt(dotProduct(a_data, a_data));
 }
@@ -1849,7 +1849,7 @@ FieldSolver::L2Norm( const LevelData<FArrayBox>& a_data )
 
 
 double
-FieldSolver::globalMax(const double a_data) const
+EllipticOp::globalMax(const double a_data) const
 {
    double global_max;
 

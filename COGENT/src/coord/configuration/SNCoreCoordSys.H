@@ -4,7 +4,7 @@
 #include "MagCoordSys.H"
 #include "SNCoreBlockCoordSys.H"
 #include "SNCoreBlockCoordSysModel.H"
-#include "SNCorePotentialBC.H"
+#include "SNCoreEllipticOpBC.H"
 #include "SingleNullCoordSys.H"
 
 #include "NamespaceHeader.H"
@@ -48,9 +48,9 @@ public:
 
    virtual IntVect getDecomposition(int block) const;
 
-   virtual const PotentialBC& getDivergenceCleaningBC() const {return m_divergence_cleaning_bc;}
+   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return m_divergence_cleaning_bc;}
 
-   virtual void definePotentialBC( PotentialBC& a_bc ) const;
+   virtual void defineEllipticOpBC( EllipticOpBC& a_bc ) const;
 
    int blockType(int a_block) const {return ((SNCoreBlockCoordSys*)m_coordSysVect[a_block])->blockType();}
 
@@ -126,7 +126,7 @@ protected:
    RealVect m_ray[NUM_SNCORE_BLOCKS+1];
    int m_sector_block[NUM_SNCORE_BLOCKS];
 
-   SNCorePotentialBC m_divergence_cleaning_bc;
+   SNCoreEllipticOpBC m_divergence_cleaning_bc;
 };
 
 

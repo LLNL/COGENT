@@ -619,7 +619,7 @@ private:
    void computeQuasiNeutralElectronDensity(
       CFG::LevelData<CFG::FArrayBox>&       a_quasineutral_density,
       CFG::LevelData<CFG::FArrayBox>&       a_potential,
-      const CFG::PotentialBC&               a_bc, 
+      const CFG::EllipticOpBC&              a_bc, 
       const CFG::LevelData<CFG::FArrayBox>& a_ion_density) const;
    
    inline

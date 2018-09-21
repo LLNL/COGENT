@@ -60,20 +60,20 @@ public:
    ~GKPoissonBoltzmann( );
 
    void computePotentialAndElectronDensity(
-      LevelData<FArrayBox>&       phi,
-      BoltzmannElectron&          ne,
-      const LevelData<FArrayBox>& ni,
-      const PotentialBC&          bc,
-      const bool                  first_step = false);
+      LevelData<FArrayBox>&        phi,
+      BoltzmannElectron&           ne,
+      const LevelData<FArrayBox>&  ni,
+      const EllipticOpBC&          bc,
+      const bool                   first_step = false);
 
-   virtual void setOperatorCoefficients( const LevelData<FArrayBox>& ni,
-                                         const PotentialBC&          bc ); 
+   virtual void setOperatorCoefficients( const LevelData<FArrayBox>&  ni,
+                                         const EllipticOpBC&          bc ); 
 
-   virtual void setOperatorCoefficients( const LevelData<FArrayBox>& ion_mass_density,
-                                         const PotentialBC&          bc,
-                                         double&                     lo_value,
-                                         double&                     hi_value,
-                                         LevelData<FArrayBox>&       radial_gkp_divergence_average);
+   virtual void setOperatorCoefficients( const LevelData<FArrayBox>&  ion_mass_density,
+                                         const EllipticOpBC&          bc,
+                                         double&                      lo_value,
+                                         double&                      hi_value,
+                                         LevelData<FArrayBox>&        radial_gkp_divergence_average);
 
    static const char* pp_name;
 
@@ -111,12 +111,12 @@ public:
                              const LevelData<FArrayBox>& a_Zni,
                              const LevelData<FArrayBox>& a_Jpar);
 
-   void computeSheathPotentialBC( const BoltzmannElectron& a_ne,
-                                  const double * a_jpar_outer_plate, 
-                                  const double * a_jpar_inner_plate,
-                                  const double * a_bmag_outer_plate, 
-                                  const double * a_bmag_inner_plate,
-                                  const int norm_dir );
+   void computeSheathEllipticOpBC( const BoltzmannElectron&  ne,
+                                   const double *            jpar_outer_plate, 
+                                   const double *            jpar_inner_plate,
+                                   const double *            bmag_outer_plate, 
+                                   const double *            bmag_inner_plate,
+                                   const int                 norm_dir );
 
    void getPhiTilde( const LevelData<FArrayBox>& Zni,
                      const BoltzmannElectron&    ne,
@@ -130,7 +130,7 @@ protected:
     *
     * @param[in]  ne  Boltzmann electron species
     */
-   void updateLinearSystem( const BoltzmannElectron& ne, const PotentialBC& bc );
+   void updateLinearSystem( const BoltzmannElectron& ne, const EllipticOpBC& bc );
 
    /// Solve the GK Poisson system
    /** Solve the GK Poisson system
@@ -139,20 +139,20 @@ protected:
     * @param[in,out]  ne  Boltzmann electron species
     * @param[out]     phi Potential
     */
-   void solve( const LevelData<FArrayBox>& ni,
-               const PotentialBC&          bc,
-               BoltzmannElectron&          ne,
-               LevelData<FArrayBox>&       phi );
+   void solve( const LevelData<FArrayBox>&  ni,
+               const EllipticOpBC&          bc,
+               BoltzmannElectron&           ne,
+               LevelData<FArrayBox>&        phi );
 
-   void solveRadial( const LevelData<FArrayBox>& ni,
-                     const PotentialBC&          bc,
-                     BoltzmannElectron&          ne,
-                     LevelData<FArrayBox>&       phi );
+   void solveRadial( const LevelData<FArrayBox>&  ni,
+                     const EllipticOpBC&          bc,
+                     BoltzmannElectron&           ne,
+                     LevelData<FArrayBox>&        phi );
 
-   void solveSubspaceIteration( const LevelData<FArrayBox>& ni,
-                                const PotentialBC&          bc,
-                                BoltzmannElectron&          ne,
-                                LevelData<FArrayBox>&       phi );
+   void solveSubspaceIteration( const LevelData<FArrayBox>&  ni,
+                                const EllipticOpBC&          bc,
+                                BoltzmannElectron&           ne,
+                                LevelData<FArrayBox>&        phi );
 
    void solveSimpleBoltzmann( const LevelData<FArrayBox>&   ni,
                                 BoltzmannElectron&          ne,

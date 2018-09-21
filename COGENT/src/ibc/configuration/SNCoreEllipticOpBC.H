@@ -1,30 +1,30 @@
-#ifndef _SNCOREPOTENTIALBC_
-#define _SNCOREPOTENTIALBC_
+#ifndef _SNCOREELLIPTICOPBC_
+#define _SNCOREELLIPTICOPBC_
 
 #include "ParmParse.H"
 #include "RefCountedPtr.H"
-#include "PotentialBC.H"
+#include "EllipticOpBC.H"
 #include "GridFunctionLibrary.H"
-#include "SingleNullPotentialBC.H"
+#include "SingleNullEllipticOpBC.H"
 
 #include "NamespaceHeader.H"
 
 
-class SNCorePotentialBC
-   : public PotentialBC
+class SNCoreEllipticOpBC
+   : public EllipticOpBC
 {
 public:
 
-   SNCorePotentialBC();
+   SNCoreEllipticOpBC();
 
-   SNCorePotentialBC( const std::string& name,
-                          ParmParse& pp,
-                          const int& verbosity );
+   SNCoreEllipticOpBC( const std::string&  name,
+                       ParmParse&          pp,
+                       const int&          verbosity );
 
-   SNCorePotentialBC( const SingleNullPotentialBC& a_bc,
-                      const int outer_radial_bc_type );
+   SNCoreEllipticOpBC( const SingleNullEllipticOpBC&  bc,
+                       const int                      outer_radial_bc_type );
 
-   virtual ~SNCorePotentialBC() {};
+   virtual ~SNCoreEllipticOpBC() {};
 
    virtual void setBCType( const int block_number,
                            const int dir,
@@ -69,8 +69,8 @@ public:
 private:
 
    // prohibit copying
-   SNCorePotentialBC( const SNCorePotentialBC& );
-   SNCorePotentialBC& operator=( const SNCorePotentialBC& );
+   SNCoreEllipticOpBC( const SNCoreEllipticOpBC& );
+   SNCoreEllipticOpBC& operator=( const SNCoreEllipticOpBC& );
 
    void setNames();
 

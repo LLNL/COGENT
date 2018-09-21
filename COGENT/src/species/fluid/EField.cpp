@@ -55,7 +55,7 @@ void EField::computeEField( const PS::GKState&                a_state,
                             const FluidSpeciesPtrVect&        a_fluid_species,
                             const PS::ScalarPtrVect&          a_scalars,
                             LevelData<FArrayBox>&             a_phi,
-                            PotentialBC&                      a_bc,
+                            EllipticOpBC&                     a_bc,
                             const bool                        a_update_potential,
                             const bool                        a_initial_time )
 {
@@ -143,9 +143,9 @@ void EField::computeEField( const PS::GKState&                a_state,
 }
 
 
-void EField::setCoreBC( const double  a_core_inner_bv,
-                        const double  a_core_outer_bv,
-                        PotentialBC&  a_bc ) const 
+void EField::setCoreBC( const double   a_core_inner_bv,
+                        const double   a_core_outer_bv,
+                        EllipticOpBC&  a_bc ) const 
 {
    const MagGeom& mag_geom = configurationSpaceGeometry();
 
@@ -207,7 +207,7 @@ EField::clone( const bool a_copy_data ) const
 
 void EField::computeQuasiNeutralElectronDensity( LevelData<FArrayBox>&        a_quasineutral_density,
                                                  LevelData<FArrayBox>&        a_potential,
-                                                 const PotentialBC&           a_bc, 
+                                                 const EllipticOpBC&          a_bc, 
                                                  const LevelData<FArrayBox>&  a_ion_density) const
 {
    a_ion_density.copyTo( a_quasineutral_density );
@@ -337,7 +337,7 @@ void EField::updateImplicitPotential(LevelData<FArrayBox>&             a_phi,
                                      const PS::KineticSpeciesPtrVect&  a_kinetic_species,
                                      const Vector<Real>&               a_scalar_data,
                                      LevelData<FArrayBox>&             a_divJperp,
-                                     PotentialBC&                      a_bc,
+                                     EllipticOpBC&                     a_bc,
                                      const Real                        a_dt )
 {
    const MagGeom& mag_geom = configurationSpaceGeometry();

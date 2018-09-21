@@ -1,7 +1,7 @@
 #ifndef _POISSON_H_
 #define _POISSON_H_
 
-#include "FieldSolver.H"
+#include "EllipticOp.H"
 #ifdef with_petsc
 #include "MBPETScSolver.H"
 #else
@@ -21,7 +21,7 @@
  * \f]
 */
 class Poisson
-   : public FieldSolver
+   : public EllipticOp
 {
 public:
 
@@ -42,7 +42,7 @@ public:
    /**
     * Computes the operator coefficients.
     */
-   void setOperatorCoefficients( const PotentialBC& bc );
+   void setOperatorCoefficients( const EllipticOpBC& bc );
 
    void computeCoefficients( LevelData<FluxBox>& coefficients );
 

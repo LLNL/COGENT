@@ -3,7 +3,7 @@
 
 #include "MagCoordSys.H"
 #include "SingleNullBlockCoordSys.H"
-#include "SingleNullPotentialBC.H"
+#include "SingleNullEllipticOpBC.H"
 
 #include "NamespaceHeader.H"
 
@@ -43,9 +43,9 @@ public:
 
    virtual IntVect getDecomposition(int block) const;
 
-   virtual const PotentialBC& getDivergenceCleaningBC() const {return m_divergence_cleaning_bc;}
+   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return m_divergence_cleaning_bc;}
 
-   virtual void definePotentialBC( PotentialBC& bc ) const;
+   virtual void defineEllipticOpBC( EllipticOpBC& bc ) const;
 
    int blockType(int a_block) const {return ((SingleNullBlockCoordSys*)m_coordSysVect[a_block])->blockType();}
 
@@ -165,7 +165,7 @@ protected:
    RealVect m_ray[NUM_SINGLE_NULL_BLOCKS];
    int m_sector_block[NUM_SINGLE_NULL_BLOCKS];
 
-   SingleNullPotentialBC m_divergence_cleaning_bc;
+   SingleNullEllipticOpBC m_divergence_cleaning_bc;
    
    LayoutData< RefCountedPtr< IVSFAB<MBStencil> > > m_stencil_ue;
    LayoutData< IntVectSet > m_ghostCells_ue;

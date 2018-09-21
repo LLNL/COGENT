@@ -1,5 +1,5 @@
-#ifndef _FIELDSOLVER_H_
-#define _FIELDSOLVER_H_
+#ifndef _ELLIPTICOP_H_
+#define _ELLIPTICOP_H_
 
 #include "MagGeom.H"
 #include "MultiBlockLevelExchangeCenter.H"
@@ -11,7 +11,7 @@
 
 
 
-class FieldSolver
+class EllipticOp
    : public LinearOp< LevelData<FArrayBox> >
 {
 public:
@@ -20,12 +20,12 @@ public:
    /**
     *  @param[in] pp the input database.
     */
-   FieldSolver(const ParmParse& pp, const MagGeom& geom);
+   EllipticOp(const ParmParse& pp, const MagGeom& geom);
       
    /// Destructor.
    /**
     */
-   virtual ~FieldSolver();
+   virtual ~EllipticOp();
 
    /// Defines the linear solver
    /**
@@ -160,7 +160,7 @@ public:
 
    void computeBcDivergence( LevelData<FArrayBox>& out ) const;
 
-   void setBc( const PotentialBC& bc );
+   void setBc( const EllipticOpBC& bc );
 
    void addBcDivergence(LevelData<FArrayBox>& rhs) const;
 
@@ -298,7 +298,7 @@ protected:
 
 
    void constructBoundaryStencils( const bool                        fourth_order,
-                                   const PotentialBC&                bc,
+                                   const EllipticOpBC&               bc,
                                    Vector< Vector<CoDim1Stencil> >&  codim1_stencils,
                                    Vector< Vector<CoDim2Stencil> >&  codim2_stencils ) const;
 

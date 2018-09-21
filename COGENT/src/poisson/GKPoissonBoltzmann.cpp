@@ -3,8 +3,8 @@
 #include "SingleNullCoordSys.H"
 
 #include "Directions.H"
-#include "LogRectPotentialBC.H"
-#include "SNCorePotentialBC.H"
+#include "LogRectEllipticOpBC.H"
+#include "SNCoreEllipticOpBC.H"
 #include "newMappedGridIO.H"
 #include "FourthOrderUtil.H"
 
@@ -229,11 +229,11 @@ GKPoissonBoltzmann::~GKPoissonBoltzmann()
 
 void
 GKPoissonBoltzmann::computePotentialAndElectronDensity(
-   LevelData<FArrayBox>&       a_phi,
-   BoltzmannElectron&          a_ne,
-   const LevelData<FArrayBox>& a_ni,
-   const PotentialBC&          a_bc,
-   const bool                  a_first_step)
+   LevelData<FArrayBox>&        a_phi,
+   BoltzmannElectron&           a_ne,
+   const LevelData<FArrayBox>&  a_ni,
+   const EllipticOpBC&          a_bc,
+   const bool                   a_first_step)
 {
 
    if ( m_radial_solve_only ) {
@@ -255,8 +255,8 @@ GKPoissonBoltzmann::computePotentialAndElectronDensity(
 
 
 void
-GKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
-                                             const PotentialBC&          a_bc )
+GKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>&  a_ion_mass_density,
+                                             const EllipticOpBC&          a_bc )
 
 {
    setBc(a_bc);
@@ -269,11 +269,11 @@ GKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_m
 
 
 void
-GKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
-                                             const PotentialBC&          a_bc,
-                                             double&                     a_lo_value,
-                                             double&                     a_hi_value,
-                                             LevelData<FArrayBox>&       a_radial_gkp_divergence_average )
+GKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>&  a_ion_mass_density,
+                                             const EllipticOpBC&          a_bc,
+                                             double&                      a_lo_value,
+                                             double&                      a_hi_value,
+                                             LevelData<FArrayBox>&        a_radial_gkp_divergence_average )
 {
    setOperatorCoefficients(a_ion_mass_density, a_bc);
 
@@ -316,8 +316,8 @@ GKPoissonBoltzmann::computePrefactorNumerator( const LevelData<FArrayBox>& a_ion
 
 
 void
-GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron& a_ne,
-                                        const PotentialBC&       a_bc )
+GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron&  a_ne,
+                                        const EllipticOpBC&       a_bc )
 {
    const DisjointBoxLayout& grids = m_geometry.grids();
    LevelData<FArrayBox> alpha(grids, 1, IntVect::Zero);
@@ -415,15 +415,15 @@ GKPoissonBoltzmann::solveJacobian( const LevelData<FArrayBox>& a_r,
                                    LevelData<FArrayBox>&       a_z,
                                    const bool                  a_use_absolute_tolerance )
 {
-   FieldSolver::solve(a_r, a_z);
+   EllipticOp::solve(a_r, a_z);
 }
 
 
 void
-GKPoissonBoltzmann::solve( const LevelData<FArrayBox>& a_Zni,
-                           const PotentialBC&          a_bc,
-                           BoltzmannElectron&          a_ne,
-                           LevelData<FArrayBox>&       a_phi )
+GKPoissonBoltzmann::solve( const LevelData<FArrayBox>&  a_Zni,
+                           const EllipticOpBC&          a_bc,
+                           BoltzmannElectron&           a_ne,
+                           LevelData<FArrayBox>&        a_phi )
 {
    const DisjointBoxLayout& grids = m_geometry.grids();
    LevelData<FArrayBox> correction(grids, 1, IntVect::Zero);
@@ -531,10 +531,10 @@ GKPoissonBoltzmann::solve( const LevelData<FArrayBox>& a_Zni,
 
 
 void
-GKPoissonBoltzmann::solveRadial( const LevelData<FArrayBox>& a_Zni,
-                                 const PotentialBC&          a_bc,
-                                 BoltzmannElectron&          a_ne,
-                                 LevelData<FArrayBox>&       a_phi )
+GKPoissonBoltzmann::solveRadial( const LevelData<FArrayBox>&  a_Zni,
+                                 const EllipticOpBC&          a_bc,
+                                 BoltzmannElectron&           a_ne,
+                                 LevelData<FArrayBox>&        a_phi )
 {
    // Construct the matrix
    updateLinearSystem(a_ne, a_bc);
@@ -564,10 +564,10 @@ GKPoissonBoltzmann::solveRadial( const LevelData<FArrayBox>& a_Zni,
 
 
 void
-GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>& a_Zni,
-                                            const PotentialBC&          a_bc,
-                                            BoltzmannElectron&          a_ne,
-                                            LevelData<FArrayBox>&       a_phi )
+GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
+                                            const EllipticOpBC&          a_bc,
+                                            BoltzmannElectron&           a_ne,
+                                            LevelData<FArrayBox>&        a_phi )
 {
    // Subspace iteration, solving for the flux surface average first, then
    // the poloidal variation.
@@ -1468,7 +1468,7 @@ GKPoissonBoltzmann::computeBoundaryData( FArrayBox& a_inner_divertor_bvs,
   
   int norm_dir = (norm_dir_glob > 0) ? 1 : -1;
  
-  computeSheathPotentialBC(a_ne, jpar_outer_plate_glob, jpar_inner_plate_glob,
+  computeSheathEllipticOpBC(a_ne, jpar_outer_plate_glob, jpar_inner_plate_glob,
                            bmag_outer_plate_glob, bmag_inner_plate_glob, norm_dir);
 
 
@@ -1508,14 +1508,14 @@ GKPoissonBoltzmann::computeBoundaryData( FArrayBox& a_inner_divertor_bvs,
 
 
 void
-GKPoissonBoltzmann::computeSheathPotentialBC( const BoltzmannElectron& a_ne,
-                                              const double * a_jpar_outer_plate, 
-                                              const double * a_jpar_inner_plate,
-                                              const double * a_bmag_outer_plate, 
-                                              const double * a_bmag_inner_plate,
-                                              const int norm_dir )
+GKPoissonBoltzmann::computeSheathEllipticOpBC( const BoltzmannElectron& a_ne,
+                                               const double *           a_jpar_outer_plate, 
+                                               const double *           a_jpar_inner_plate,
+                                               const double *           a_bmag_outer_plate, 
+                                               const double *           a_bmag_inner_plate,
+                                               const int                a_norm_dir )
 {
-  //Convention for norm_dir. norm_dir is equal to +1 (-1) 
+  //Convention for a_norm_dir. a_norm_dir is equal to +1 (-1) 
   // if the z-component of Bpol at the outer plate is up (down) 
 
   double me = a_ne.mass();
@@ -1534,8 +1534,8 @@ GKPoissonBoltzmann::computeSheathPotentialBC( const BoltzmannElectron& a_ne,
 
   for ( int irad = 0; irad < nrad; irad++) {
 
-   double parallel_ion_loss = (-norm_dir) * a_jpar_outer_plate[irad] / a_bmag_outer_plate[irad] 
-                            + (norm_dir) * a_jpar_inner_plate[irad] / a_bmag_inner_plate[irad];
+   double parallel_ion_loss = (-a_norm_dir) * a_jpar_outer_plate[irad] / a_bmag_outer_plate[irad] 
+                            + (a_norm_dir) * a_jpar_inner_plate[irad] / a_bmag_inner_plate[irad];
   
    double fac_outer = (1/a_bmag_outer_plate[irad] + 1/a_bmag_inner_plate[irad]);
    fac_outer *=  e * v_thermal_e * m_Zni_outer_plate[irad];

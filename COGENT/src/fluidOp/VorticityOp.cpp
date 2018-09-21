@@ -1,7 +1,7 @@
 #include "VorticityOp.H"
 #include "Directions.H"
 
-#include "PotentialBCFactory.H"
+#include "EllipticOpBCFactory.H"
 #include "LogRectCoordSys.H"
 #include "SNCoreCoordSys.H"
 
@@ -30,41 +30,41 @@ VorticityOp::VorticityOp( ParmParse&      a_pp,
    const std::string name("potential");
    const std::string prefix( "BC." + name );
    ParmParse ppsp( prefix.c_str() );
-   PotentialBCFactory potential_bc_factory;
+   EllipticOpBCFactory elliptic_op_bc_factory;
    ParmParse pp("gkpoisson");
 
    m_parallel_current_divergence_op = new GKPoisson(pp, a_geometry, a_larmor, 0.);
    m_parallel_current_divergence_op->m_model = "ParallelCurrent";
    m_parallel_current_divergence_op->m_dt_implicit = 1.;
-   m_parallel_current_divergence_op_bcs = potential_bc_factory.create( name,
-                                                                       ppsp,
-                                                                       "SingleNull",
-                                                                       false );
+   m_parallel_current_divergence_op_bcs = elliptic_op_bc_factory.create( name,
+                                                                         ppsp,
+                                                                         "SingleNull",
+                                                                         false );
    setCoreBC( 0., 0., *m_parallel_current_divergence_op_bcs );
 
    m_par_cond_op = new GKPoisson(pp, a_geometry, 0., 0.);
    m_par_cond_op->m_model = "Vorticity";
    m_par_cond_op->m_dt_implicit = 1.;
-   m_par_cond_op_bcs = potential_bc_factory.create( name,
-                                                    ppsp,
-                                                    "SingleNull",
-                                                    false );
+   m_par_cond_op_bcs = elliptic_op_bc_factory.create( name,
+                                                      ppsp,
+                                                      "SingleNull",
+                                                      false );
 
    m_imex_pc_op = new GKPoisson(pp, a_geometry, a_larmor, 0.);
    m_imex_pc_op->m_model = "Vorticity";
    m_imex_pc_op->m_dt_implicit = 1.;
-   m_imex_pc_op_bcs = potential_bc_factory.create( name,
-                                                   ppsp,
-                                                   "SingleNull",
-                                                   false );
+   m_imex_pc_op_bcs = elliptic_op_bc_factory.create( name,
+                                                     ppsp,
+                                                     "SingleNull",
+                                                     false );
 
    m_gyropoisson_op = new GKPoisson(pp, a_geometry, a_larmor, 0.);
    m_gyropoisson_op->m_model = "GyroPoisson";
    m_gyropoisson_op->m_dt_implicit = 1.;
-   m_gyropoisson_op_bcs = potential_bc_factory.create( name,
-                                                       ppsp,
-                                                       "SingleNull",
-                                                       false );
+   m_gyropoisson_op_bcs = elliptic_op_bc_factory.create( name,
+                                                         ppsp,
+                                                         "SingleNull",
+                                                         false );
 
    ParmParse pp_vlasov("vorticity_vlasov");
    m_vlasov = new PS::GKVlasov(pp_vlasov, a_larmor);
@@ -357,9 +357,9 @@ void VorticityOp::computeIonChargeDensity( LevelData<FArrayBox>&               a
 }
 
 
-void VorticityOp::setCoreBC( const double  a_core_inner_bv,
-                             const double  a_core_outer_bv,
-                             PotentialBC&  a_bc ) const 
+void VorticityOp::setCoreBC( const double   a_core_inner_bv,
+                             const double   a_core_outer_bv,
+                             EllipticOpBC&  a_bc ) const 
 {
    if ( typeid(*(m_geometry.getCoordSys())) == typeid(LogRectCoordSys) ) {
       a_bc.setBCValue(0,RADIAL_DIR,0,a_core_inner_bv);

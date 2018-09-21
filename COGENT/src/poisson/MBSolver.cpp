@@ -67,7 +67,7 @@ MBSolver::~MBSolver()
 
 void
 MBSolver::constructMatrix( LevelData<FluxBox>&  a_tensor_coefficient,
-                           const PotentialBC&   a_bc )
+                           const EllipticOpBC&  a_bc )
 {
    LevelData<FArrayBox> dummy;
    constructMatrixGeneral(dummy, a_tensor_coefficient, dummy, a_bc );
@@ -78,7 +78,7 @@ MBSolver::constructMatrix( LevelData<FluxBox>&  a_tensor_coefficient,
 void
 MBSolver::constructMatrix( LevelData<FArrayBox>&  a_alpha_coefficient,
                            LevelData<FluxBox>&    a_tensor_coefficient,
-                           const PotentialBC&     a_bc )
+                           const EllipticOpBC&    a_bc )
 {
    LevelData<FArrayBox> dummy;
    constructMatrixGeneral(a_alpha_coefficient, a_tensor_coefficient, dummy, a_bc);
@@ -89,7 +89,7 @@ MBSolver::constructMatrix( LevelData<FArrayBox>&  a_alpha_coefficient,
 void
 MBSolver::constructMatrix( LevelData<FluxBox>&    a_tensor_coefficient,
                            LevelData<FArrayBox>&  a_beta_coefficient,
-                           const PotentialBC&     a_bc )
+                           const EllipticOpBC&    a_bc )
 {
    LevelData<FArrayBox> dummy;
    constructMatrixGeneral(dummy, a_tensor_coefficient, a_beta_coefficient, a_bc );
@@ -101,7 +101,7 @@ void
 MBSolver::constructMatrix( LevelData<FArrayBox>& a_alpha_coefficient,
                            LevelData<FluxBox>&   a_tensor_coefficient,
                            LevelData<FArrayBox>& a_beta_coefficient,
-                           const PotentialBC&    a_bc )
+                           const EllipticOpBC&   a_bc )
 {
    constructMatrixGeneral( a_alpha_coefficient, a_tensor_coefficient, a_beta_coefficient, a_bc );
 }
@@ -572,7 +572,7 @@ MBSolver::modifyStencilForBCs( const Vector<CoDim1Stencil>&  a_codim1_stencils,
 
 void
 MBSolver::constructBoundaryStencils( const bool                        a_fourth_order,
-                                     const PotentialBC&                a_bc,
+                                     const EllipticOpBC&               a_bc,
                                      Vector< Vector<CoDim1Stencil> >&  a_codim1_stencils,
                                      Vector< Vector<CoDim2Stencil> >&  a_codim2_stencils ) const
 {

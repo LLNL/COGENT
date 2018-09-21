@@ -1,20 +1,20 @@
-#include "LogRectPotentialBC.H"
+#include "LogRectEllipticOpBC.H"
 #include "Directions.H"
 
 #include "NamespaceHeader.H"
 
 
-LogRectPotentialBC::LogRectPotentialBC()
-   : PotentialBC(NUM_BOUNDARIES)
+LogRectEllipticOpBC::LogRectEllipticOpBC()
+   : EllipticOpBC(NUM_BOUNDARIES)
 {
    setNames();
 }
 
 
-LogRectPotentialBC::LogRectPotentialBC( const std::string& a_name,
-                                  ParmParse& a_pp,
-                                  const int& a_verbosity )
-   : PotentialBC(NUM_BOUNDARIES),
+LogRectEllipticOpBC::LogRectEllipticOpBC( const std::string&  a_name,
+                                          ParmParse&          a_pp,
+                                          const int&          a_verbosity )
+   : EllipticOpBC(NUM_BOUNDARIES),
      m_name(a_name),
      m_verbosity(a_verbosity)
 {
@@ -25,7 +25,7 @@ LogRectPotentialBC::LogRectPotentialBC( const std::string& a_name,
 
 
 void
-LogRectPotentialBC::setNames()
+LogRectEllipticOpBC::setNames()
 {
    m_bdry_name[RADIAL_LOWER] = "radial_lower";
    m_bdry_name[RADIAL_UPPER] = "radial_upper";
@@ -40,10 +40,10 @@ LogRectPotentialBC::setNames()
 
 
 void
-LogRectPotentialBC::setBCType(const int a_block_number,
-                           const int a_dir,
-                           const int a_side,
-                           const int a_type)
+LogRectEllipticOpBC::setBCType( const int  a_block_number,
+                                const int  a_dir,
+                                const int  a_side,
+                                const int  a_type )
 {
    if ( a_dir == RADIAL_DIR ) {
       if ( a_side == 0 ) {
@@ -53,7 +53,7 @@ LogRectPotentialBC::setBCType(const int a_block_number,
          m_bc_type[RADIAL_UPPER] = a_type;
       }
       else {
-         MayDay::Error("LogRectPotentialBC::setBCType(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::setBCType(): Invalid side argument");
       }
    }
    else if ( a_dir == POLOIDAL_DIR ) {
@@ -64,7 +64,7 @@ LogRectPotentialBC::setBCType(const int a_block_number,
          m_bc_type[POLOIDAL_UPPER] = a_type;
       }
       else {
-         MayDay::Error("LogRectPotentialBC::setBCType(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::setBCType(): Invalid side argument");
       }
    }
 #if CFG_DIM==3
@@ -76,21 +76,21 @@ LogRectPotentialBC::setBCType(const int a_block_number,
          m_bc_type[TOROIDAL_UPPER] = a_type;
       }
       else {
-         MayDay::Error("LogRectPotentialBC::setBCType(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::setBCType(): Invalid side argument");
       }
    }
 #endif
    else {
-      MayDay::Error("LogRectPotentialBC::setBCType(): Invalid direction argument");
+      MayDay::Error("LogRectEllipticOpBC::setBCType(): Invalid direction argument");
    }
 }
 
 
 
 int
-LogRectPotentialBC::getBCType(const int a_block_number,
-                           const int a_dir,
-                           const int a_side) const
+LogRectEllipticOpBC::getBCType( const int  a_block_number,
+                                const int  a_dir,
+                                const int  a_side ) const
 {
    int bc_type = UNDEFINED;
 
@@ -102,7 +102,7 @@ LogRectPotentialBC::getBCType(const int a_block_number,
          bc_type = m_bc_type[RADIAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::getBCType(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::getBCType(): Invalid side argument");
       }
    }
    else if ( a_dir == POLOIDAL_DIR ) {
@@ -113,7 +113,7 @@ LogRectPotentialBC::getBCType(const int a_block_number,
          bc_type = m_bc_type[POLOIDAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::getBCType(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::getBCType(): Invalid side argument");
       }
    }
 #if CFG_DIM==3
@@ -125,12 +125,12 @@ LogRectPotentialBC::getBCType(const int a_block_number,
          bc_type = m_bc_type[TOROIDAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::getBCType(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::getBCType(): Invalid side argument");
       }
    }
 #endif
    else {
-      MayDay::Error("LogRectPotentialBC::getBCType(): Invalid direction argument");
+      MayDay::Error("LogRectEllipticOpBC::getBCType(): Invalid direction argument");
    }
 
    return bc_type;
@@ -139,10 +139,10 @@ LogRectPotentialBC::getBCType(const int a_block_number,
 
 
 void
-LogRectPotentialBC::setBCValue(const int    a_block_number,
-                            const int    a_dir,
-                            const int    a_side,
-                            const double a_value)
+LogRectEllipticOpBC::setBCValue( const int     a_block_number,
+                                 const int     a_dir,
+                                 const int     a_side,
+                                 const double  a_value )
 {
    if ( a_dir == RADIAL_DIR ) {
       if ( a_side == 0 ) {
@@ -152,7 +152,7 @@ LogRectPotentialBC::setBCValue(const int    a_block_number,
          m_bc_value[RADIAL_UPPER] = a_value;
       }
       else {
-         MayDay::Error("LogRectPotentialBC::setBCValue(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::setBCValue(): Invalid side argument");
       }
    }
    else if ( a_dir == POLOIDAL_DIR ) {
@@ -163,7 +163,7 @@ LogRectPotentialBC::setBCValue(const int    a_block_number,
          m_bc_value[POLOIDAL_UPPER] = a_value;
       }
       else {
-         MayDay::Error("LogRectPotentialBC::setBCValue(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::setBCValue(): Invalid side argument");
       }
    }
 #if CFG_DIM==3
@@ -175,21 +175,21 @@ LogRectPotentialBC::setBCValue(const int    a_block_number,
          m_bc_value[TOROIDAL_UPPER] = a_value;
       }
       else {
-         MayDay::Error("LogRectPotentialBC::setBCValue(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::setBCValue(): Invalid side argument");
       }
    }
 #endif
    else {
-      MayDay::Error("LogRectPotentialBC::setBCValue(): Invalid direction argument");
+      MayDay::Error("LogRectEllipticOpBC::setBCValue(): Invalid direction argument");
    }
 }
 
 
 
 double
-LogRectPotentialBC::getBCValue(const int a_block_number,
-                            const int a_dir,
-                            const int a_side) const
+LogRectEllipticOpBC::getBCValue( const int  a_block_number,
+                                 const int  a_dir,
+                                 const int  a_side ) const
 {
    double value = BASEFAB_REAL_SETVAL;
 
@@ -201,7 +201,7 @@ LogRectPotentialBC::getBCValue(const int a_block_number,
          value = m_bc_value[RADIAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::getBCValue(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::getBCValue(): Invalid side argument");
       }
    }
    else if ( a_dir == POLOIDAL_DIR ) {
@@ -212,7 +212,7 @@ LogRectPotentialBC::getBCValue(const int a_block_number,
          value = m_bc_value[POLOIDAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::getBCValue(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::getBCValue(): Invalid side argument");
       }
    }
 #if CFG_DIM==3
@@ -224,12 +224,12 @@ LogRectPotentialBC::getBCValue(const int a_block_number,
          value = m_bc_value[TOROIDAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::getBCValue(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::getBCValue(): Invalid side argument");
       }
    }
 #endif
    else {
-      MayDay::Error("LogRectPotentialBC::getBCValue(): Invalid direction argument");
+      MayDay::Error("LogRectEllipticOpBC::getBCValue(): Invalid direction argument");
    }
 
    return value;
@@ -238,10 +238,10 @@ LogRectPotentialBC::getBCValue(const int a_block_number,
 
 
 void
-LogRectPotentialBC::setBCFunction(const int                             a_block_number,
-                               const int                          a_dir,
-                               const int                          a_side,
-                               const RefCountedPtr<GridFunction>& a_function)
+LogRectEllipticOpBC::setBCFunction( const int                           a_block_number,
+                                    const int                           a_dir,
+                                    const int                           a_side,
+                                    const RefCountedPtr<GridFunction>&  a_function )
 {
    if ( a_dir == RADIAL_DIR ) {
       if ( a_side == 0 ) {
@@ -251,7 +251,7 @@ LogRectPotentialBC::setBCFunction(const int                             a_block_
          m_bc_function[RADIAL_UPPER] = a_function;
       }
       else {
-         MayDay::Error("LogRectPotentialBC::setBCFunction(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::setBCFunction(): Invalid side argument");
       }
    }
    else if ( a_dir == POLOIDAL_DIR ) {
@@ -262,7 +262,7 @@ LogRectPotentialBC::setBCFunction(const int                             a_block_
          m_bc_function[POLOIDAL_UPPER] = a_function;
       }
       else {
-         MayDay::Error("LogRectPotentialBC::setBCFunction(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::setBCFunction(): Invalid side argument");
       }
    }
 #if CFG_DIM==3
@@ -274,21 +274,21 @@ LogRectPotentialBC::setBCFunction(const int                             a_block_
          m_bc_function[TOROIDAL_UPPER] = a_function;
       }
       else {
-         MayDay::Error("LogRectPotentialBC::setBCFunction(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::setBCFunction(): Invalid side argument");
       }
    }
 #endif
    else {
-      MayDay::Error("LogRectPotentialBC::setBCFunction(): Invalid direction argument");
+      MayDay::Error("LogRectEllipticOpBC::setBCFunction(): Invalid direction argument");
    }
 }
 
 
 
 RefCountedPtr<GridFunction>
-LogRectPotentialBC::getBCFunction( const int                          a_block_number,
-                                const int                          a_dir,
-                                const int                          a_side ) const
+LogRectEllipticOpBC::getBCFunction( const int  a_block_number,
+                                    const int  a_dir,
+                                    const int  a_side ) const
 {
    RefCountedPtr<GridFunction> function;
 
@@ -300,7 +300,7 @@ LogRectPotentialBC::getBCFunction( const int                          a_block_nu
          function = m_bc_function[RADIAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::getBCFunction(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid side argument");
       }
    }
    else if ( a_dir == POLOIDAL_DIR ) {
@@ -311,7 +311,7 @@ LogRectPotentialBC::getBCFunction( const int                          a_block_nu
          function = m_bc_function[POLOIDAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::getBCFunction(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid side argument");
       }
    }
 #if CFG_DIM==3
@@ -323,12 +323,12 @@ LogRectPotentialBC::getBCFunction( const int                          a_block_nu
          function = m_bc_function[TOROIDAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::getBCFunction(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid side argument");
       }
    }
 #endif
    else {
-      MayDay::Error("LogRectPotentialBC::getBCFunction(): Invalid direction argument");
+      MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid direction argument");
    }
 
    return function;
@@ -337,12 +337,12 @@ LogRectPotentialBC::getBCFunction( const int                          a_block_nu
 
 
 void
-LogRectPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
-                        const Box&                 a_coord_sys_box,
-                        const double&              a_time,
-                        const int                  a_dir,
-                        const int                  a_side,
-                        FArrayBox&                 a_phi ) const
+LogRectEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
+                            const Box&                  a_coord_sys_box,
+                            const double&               a_time,
+                            const int                   a_dir,
+                            const int                   a_side,
+                            FArrayBox&                  a_phi ) const
 {
    RefCountedPtr<GridFunction> func;
    double value;
@@ -357,7 +357,7 @@ LogRectPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
          value = m_bc_value[RADIAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::apply(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::apply(): Invalid side argument");
       }
    }
    else if ( a_dir == POLOIDAL_DIR ) {
@@ -370,7 +370,7 @@ LogRectPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
          value = m_bc_value[POLOIDAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::apply(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::apply(): Invalid side argument");
       }
    }
 #if CFG_DIM==3
@@ -384,12 +384,12 @@ LogRectPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
          value = m_bc_value[TOROIDAL_UPPER];
       }
       else {
-         MayDay::Error("LogRectPotentialBC::apply(): Invalid side argument");
+         MayDay::Error("LogRectEllipticOpBC::apply(): Invalid side argument");
       }
    }
 #endif
    else {
-      MayDay::Error("LogRectPotentialBC::apply(): Invalid direction argument");
+      MayDay::Error("LogRectEllipticOpBC::apply(): Invalid direction argument");
    }
 
    if ( !func.isNull() ) {
@@ -402,11 +402,11 @@ LogRectPotentialBC::apply( const MultiBlockLevelGeom& a_geom,
 
 
 
-void LogRectPotentialBC::printParameters() const
+void LogRectEllipticOpBC::printParameters() const
 {
    if (procID()==0) {
       std::cout << std::endl;
-      std::cout << "LogRectPotentialBC ================================" << std::endl;
+      std::cout << "LogRectEllipticOpBC ================================" << std::endl;
       std::cout << "- variable: "  << m_name << "-------------" << std::endl;
       for (int i(0); i<m_bc_function.size(); i++) {
          std::cout << "  " << m_bdry_name[i] << ": " << std::endl;
@@ -422,7 +422,7 @@ void LogRectPotentialBC::printParameters() const
 
 
 inline
-void LogRectPotentialBC::parseParameters( ParmParse& a_pp )
+void LogRectEllipticOpBC::parseParameters( ParmParse& a_pp )
 {
    for (int i=0; i<m_bc_type.size(); i++) {
       std::string prefix( a_pp.prefix() );
@@ -433,25 +433,25 @@ void LogRectPotentialBC::parseParameters( ParmParse& a_pp )
 
       if (bc_type.length()==0){ //make radial_inner or radial_lower compatible
         if( m_bdry_name[i].compare("radial_outer")==0 ){
-            if (procID()==0) cout<<"LogRectPotentialBC: m_bdry_name["<<i<<"] = \"radial_outer\" not found, trying \"radial_upper\""<<endl;
+            if (procID()==0) cout<<"LogRectEllipticOpBC: m_bdry_name["<<i<<"] = \"radial_outer\" not found, trying \"radial_upper\""<<endl;
             prefix.replace(prefix.end()-12,prefix.end(),"radial_upper");
             ParmParse fpp( prefix.c_str() );
             fpp.query( "type", bc_type );
         }
         else if ( m_bdry_name[i].compare("radial_upper")==0 ){
-            if (procID()==0) cout<<"LogRectPotentialBC: m_bdry_name["<<i<<"] = \"radial_upper\" not found, trying \"radial_outer\""<<endl;
+            if (procID()==0) cout<<"LogRectEllipticOpBC: m_bdry_name["<<i<<"] = \"radial_upper\" not found, trying \"radial_outer\""<<endl;
             prefix.replace(prefix.end()-12,prefix.end(),"radial_outer");
             ParmParse fpp( prefix.c_str() );
             fpp.query( "type", bc_type);
         }
         else if ( m_bdry_name[i].compare("radial_inner")==0 ){
-            if (procID()==0) cout<<"LogRectPotentialBC: m_bdry_name["<<i<<"] = \"radial_inner\" not found, trying \"radial_lower\""<<endl;
+            if (procID()==0) cout<<"LogRectEllipticOpBC: m_bdry_name["<<i<<"] = \"radial_inner\" not found, trying \"radial_lower\""<<endl;
             prefix.replace(prefix.end()-12,prefix.end(),"radial_lower");
             ParmParse fpp( prefix.c_str() );
             fpp.query( "type", bc_type);
         }
         else if ( m_bdry_name[i].compare("radial_lower")==0 ){
-            if (procID()==0) cout<<"LogRectPotentialBC: m_bdry_name["<<i<<"] = \"radial_lower\" not found, trying \"radial_inner\""<<endl;
+            if (procID()==0) cout<<"LogRectEllipticOpBC: m_bdry_name["<<i<<"] = \"radial_lower\" not found, trying \"radial_inner\""<<endl;
             prefix.replace(prefix.end()-12,prefix.end(),"radial_inner");
             ParmParse fpp( prefix.c_str() );
             fpp.query( "type", bc_type);
@@ -470,14 +470,14 @@ void LogRectPotentialBC::parseParameters( ParmParse& a_pp )
       //Default option
       else if (bc_type.length() == 0) {
          if ( procID()==0 ) {
-            std::cout << "LogRectPotentialBC: No potential BC is specified at the " << m_bdry_name[i]
+            std::cout << "LogRectEllipticOpBC: No potential BC is specified at the " << m_bdry_name[i]
             <<" boundary: a zero Dirichlet BC will be used if the direction is not periodic" << std::endl;
          }
          m_bc_type[i] = DIRICHLET;
       }
 
       else {
-         MayDay::Error("LogRectPotentialBC::parseParameter(): Illegal potential bc type");
+         MayDay::Error("LogRectEllipticOpBC::parseParameter(): Illegal potential bc type");
       }
 
       if (fpp.contains("value")) {

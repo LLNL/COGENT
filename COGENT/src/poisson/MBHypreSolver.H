@@ -2,7 +2,7 @@
 #define _MBHYPRESOLVER_H_
 
 #include "MBSolver.H"
-#include "PotentialBC.H"
+#include "EllipticOpBC.H"
 
 // Hypre headers
 #include "krylov.h"
@@ -54,7 +54,7 @@ public:
 
    static const std::string pp_name;
 
-   void extrapGhosts( const PotentialBC&    a_bc,
+   void extrapGhosts( const EllipticOpBC&   a_bc,
                       const bool            a_fourth_order,
                       LevelData<FArrayBox>& a_data ) const;
 
@@ -63,7 +63,7 @@ protected:
    virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
                                         LevelData<FluxBox>&   tensor_coefficient,
                                         LevelData<FArrayBox>& beta_coefficient,
-                                        const PotentialBC&    bc );
+                                        const EllipticOpBC&   bc );
 
    void createHypreData();
 
@@ -79,7 +79,7 @@ protected:
 
    void addUnstructuredMatrixEntries( const LevelData<FArrayBox>&               alpha_coefficient,
                                       const LevelData<FluxBox>&                 tensor_coeffcient,
-                                      const PotentialBC&                        bc,
+                                      const EllipticOpBC&                       bc,
                                       FArrayBox&                                stencil_values,
                                       const bool                                fourthOrder,
                                       const LayoutData< BaseFab<IntVectSet> >&  unstructured_coupling,
@@ -90,7 +90,7 @@ protected:
    void constructHypreMatrix( LevelData<FArrayBox>&               alpha_coefficient, 
                               LevelData<FluxBox>&                 tensor_coefficient,
                               LevelData<FArrayBox>&               beta_coefficient,
-                              const PotentialBC&                  bc,
+                              const EllipticOpBC&                 bc,
                               HYPRE_SStructGraph&                 graph,
                               FArrayBox&                          stencil_values,
                               const int                           diagonal_offset,

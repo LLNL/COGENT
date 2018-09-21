@@ -3,7 +3,7 @@
 
 #include "MultiBlockLevelGeom.H"
 #include "MultiBlockLevelExchangeCenter.H"
-#include "PotentialBC.H"
+#include "EllipticOpBC.H"
 #include "CoDim1Stencil.H"
 #include "CoDim2Stencil.H"
 
@@ -43,20 +43,20 @@ public:
    virtual void dumpMatrix(const string& file_name) const = 0;
 
    void constructMatrix( LevelData<FluxBox>&   tensor_coefficient,
-                         const PotentialBC&    bc );
+                         const EllipticOpBC&   bc );
 
    void constructMatrix( LevelData<FArrayBox>& alpha_coefficient,
                          LevelData<FluxBox>&   tensor_coefficient,
-                         const PotentialBC&    bc );
+                         const EllipticOpBC&   bc );
 
    void constructMatrix( LevelData<FluxBox>&   tensor_coefficient,
                          LevelData<FArrayBox>& beta_coefficient,
-                         const PotentialBC&    bc );
+                         const EllipticOpBC&   bc );
 
    void constructMatrix( LevelData<FArrayBox>& alpha_coefficient,
                          LevelData<FluxBox>&   tensor_coefficient,
                          LevelData<FArrayBox>& beta_coefficient,
-                         const PotentialBC&    bc );
+                         const EllipticOpBC&   bc );
 
    const LevelData<FArrayBox>& getBCRhsContrib() const {return m_rhs_from_bc;}
 
@@ -65,7 +65,7 @@ protected:
    virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
                                         LevelData<FluxBox>&   tensor_coefficient,
                                         LevelData<FArrayBox>& beta_coefficient,
-                                        const PotentialBC&    bc ) = 0;
+                                        const EllipticOpBC&   bc ) = 0;
 
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
@@ -102,7 +102,7 @@ protected:
                              const bool                    force_codim2_condense ) const;
 
    void constructBoundaryStencils( const bool                        fourth_order,
-                                   const PotentialBC&                bc,
+                                   const EllipticOpBC&               bc,
                                    Vector< Vector<CoDim1Stencil> >&  codim1_stencils,
                                    Vector< Vector<CoDim2Stencil> >&  codim2_stencils ) const;
 

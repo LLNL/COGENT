@@ -1,7 +1,7 @@
 #ifndef _DIFFUSION_H_
 #define _DIFFUSION_H_
 
-#include "FieldSolver.H"
+#include "EllipticOp.H"
 #include "MultiBlockLevelExchangeAverage.H"
 #ifdef with_petsc
 #include "MBPETScSolver.H"
@@ -25,7 +25,7 @@
  * \f]
 */
 class Diffusion
-   : public FieldSolver
+   : public EllipticOp
 {
 public:
 
@@ -42,7 +42,7 @@ public:
     */
    virtual ~Diffusion();
 
-   virtual void updateBoundaries( const PotentialBC&  bc );
+   virtual void updateBoundaries( const EllipticOpBC&  bc );
 
    /// Construct the operator coefficients
    /**
@@ -50,26 +50,36 @@ public:
     *
     */
 
-   virtual void setOperatorCoefficients( const double                       scalar_factor,
-                                         const RefCountedPtr<GridFunction>  coefficient_function,
-                                         const PotentialBC&                 bc,
-                                         const bool                         update_preconditioner );
+   virtual void setOperatorCoefficients( const double                        scalar_factor,
+                                         const RefCountedPtr<GridFunction>   coefficient_function,
+                                         const EllipticOpBC&                 bc );
 
    void computeCoefficients( const double                       scalar_factor,
                              const RefCountedPtr<GridFunction>  coefficient_function,
                              LevelData<FluxBox>&                unmapped_coefficients,
                              LevelData<FluxBox>&                mapped_coefficients );
 
-   virtual void setPreconditionerConvergenceParams( const double tol,
-                                                    const int    max_iter,
-                                                    const double precond_tol,
-                                                    const int    precond_max_iter );
+   virtual void updateImExPreconditioner( const double         mshift,
+                                          const EllipticOpBC&  bc );
 
-   virtual void solvePreconditioner( const LevelData<FArrayBox>& in,
-                                     LevelData<FArrayBox>&       out );
+   virtual void setPreconditionerConvergenceParams( const double  tol,
+                                                    const int     max_iter,
+                                                    const double  precond_tol,
+                                                    const int     precond_max_iter );
 
-   virtual void multiplyCoefficients( LevelData<FluxBox>& data,
-                                      const bool mapped_coeff ) const;
+   virtual void setImExPreconditionerConvergenceParams( const double  tol,
+                                                        const int     max_iter,
+                                                        const double  precond_tol,
+                                                        const int     precond_max_iter );
+
+   virtual void solvePreconditioner( const LevelData<FArrayBox>&  in,
+                                     LevelData<FArrayBox>&        out );
+
+   virtual void solveImExPreconditioner( const LevelData<FArrayBox>&  in,
+                                         LevelData<FArrayBox>&        out );
+
+   virtual void multiplyCoefficients( LevelData<FluxBox>&  data,
+                                      const bool           mapped_coeff ) const;
 
    /// ParmParse object name
    /**
@@ -80,15 +90,19 @@ public:
    
 protected:
 
+   bool m_coefficients_defined;
+
 #ifdef with_petsc
    MBPETScSolver* m_preconditioner;
+   MBPETScSolver* m_imex_preconditioner;
 #else
    MBHypreSolver* m_preconditioner;
+   MBHypreSolver* m_imex_preconditioner;
 #endif
 
    LevelData<FluxBox> m_mapped_coefficients;
    LevelData<FluxBox> m_unmapped_coefficients;
-   LevelData<FArrayBox> m_mapped_volume_reciprocal;
+   LevelData<FArrayBox> m_volume_reciprocal;
    
    MagFluxAlignedMBLEXCenter* m_mblx_ptr;
 };

@@ -5,7 +5,7 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "MagGeom.H"
-#include "PotentialBCFactory.H"
+#include "EllipticOpBCFactory.H"
 #include "FluidSpecies.H"
 #include "FluidSpeciesBC.H"
 #include "FluidSpeciesBCFactory.H"
@@ -39,7 +39,7 @@ GKSystemBC::GKSystemBC( ParmParse& a_pp,
    parseFluidSpecies( a_pp, coord_sys_type, a_state.dataFluid() );
 
    const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
-   mag_geom.definePotentialBC( *m_potential_bcs );
+   mag_geom.defineEllipticOpBC( *m_potential_bcs );
 }
 
 
@@ -230,11 +230,11 @@ void GKSystemBC::parsePotential( ParmParse& a_pp,
    const std::string name("potential");
    const std::string prefix( "BC." + name );
    ParmParse ppsp( prefix.c_str() );
-   CFG::PotentialBCFactory potential_bc_factory;
-   m_potential_bcs = potential_bc_factory.create( name,
-                                                  ppsp,
-                                                  a_coord_sys_type,
-                                                  m_verbosity );
+   CFG::EllipticOpBCFactory elliptic_op_bc_factory;
+   m_potential_bcs = elliptic_op_bc_factory.create( name,
+                                                    ppsp,
+                                                    a_coord_sys_type,
+                                                    m_verbosity );
 }
 
 

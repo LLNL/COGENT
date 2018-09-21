@@ -26,10 +26,10 @@ public:
     */
    virtual ~MBTridiagonalSolver() {};
 
-   virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
-                                        LevelData<FluxBox>&   tensor_coefficient,
-                                        LevelData<FArrayBox>& beta_coefficient,
-                                        const PotentialBC&    bc );
+   virtual void constructMatrixGeneral( LevelData<FArrayBox>&  alpha_coefficient,
+                                        LevelData<FluxBox>&    tensor_coefficient,
+                                        LevelData<FArrayBox>&  beta_coefficient,
+                                        const EllipticOpBC&    bc );
 
    virtual void multiplyMatrix( const LevelData<FArrayBox>& in,
                                 LevelData<FArrayBox>&       out ) const;
@@ -45,7 +45,7 @@ protected:
    void constructTridiagonalMatrix( LevelData<FArrayBox>&    alpha_coefficient, 
                                     LevelData<FluxBox>&      tensor_coefficient,
                                     LevelData<FArrayBox>&    beta_coefficient,
-                                    const PotentialBC&       bc,
+                                    const EllipticOpBC&      bc,
                                     FArrayBox&               stencil_values,
                                     LevelData<FArrayBox>&    radial,
                                     const int                diagonal_offset,
@@ -68,7 +68,7 @@ protected:
                                  double *       fs_average,
                                  const double * weights ) const;
 
-   bool isCoreRadialPeriodicOrNeumannBC( const PotentialBC& bc ) const;
+   bool isCoreRadialPeriodicOrNeumannBC( const EllipticOpBC& bc ) const;
 
    bool m_periodic_or_neumann;
 

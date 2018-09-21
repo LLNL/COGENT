@@ -15,7 +15,7 @@
 #include "CornerCopier.H"
 #include "inspect.H"
 
-#include "FieldSolverF_F.H"
+#include "EllipticOpF_F.H"
 #include "NamespaceHeader.H"
 
 #undef TEST_DIVERGENCE_CLEANING

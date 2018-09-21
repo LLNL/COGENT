@@ -9,7 +9,8 @@ const char* Diffusion::pp_name = {"diffusion"};
 
 Diffusion::Diffusion( const ParmParse&  a_pp,
                       const MagGeom&    a_geom )
-   : FieldSolver(a_pp, a_geom)
+   : EllipticOp(a_pp, a_geom),
+     m_coefficients_defined(false)
 {
    // We give the coefficients one ghost cell layer so that the
    // second-order centered difference formula can be used to compute
@@ -19,12 +20,12 @@ Diffusion::Diffusion( const ParmParse&  a_pp,
    m_mapped_coefficients.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
    m_unmapped_coefficients.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
 
-   m_mapped_volume_reciprocal.define(grids, SpaceDim*SpaceDim, IntVect::Zero);
+   m_volume_reciprocal.define(grids, 1, IntVect::Zero);
+   m_geometry.getCellVolumes(m_volume_reciprocal);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const MagBlockCoordSys& block_coord_sys = a_geom.getBlockCoordSys(grids[dit]);
-      m_mapped_volume_reciprocal[dit].setVal(1.0 / block_coord_sys.getMappedCellVolume());
+      m_volume_reciprocal[dit].invert(1.0);
    }
-
+   
    int preconditioner_order = 2;
 
    if ( a_geom.extrablockExchange() ) {
@@ -36,9 +37,11 @@ Diffusion::Diffusion( const ParmParse&  a_pp,
    }
 
 #ifdef with_petsc
-   m_preconditioner = new MBPETScSolver(a_geom, preconditioner_order, m_mblx_ptr);
+   m_preconditioner      = new MBPETScSolver(a_geom, preconditioner_order, m_mblx_ptr);
+   m_imex_preconditioner = new MBPETScSolver(a_geom, preconditioner_order, m_mblx_ptr);
 #else
-   m_preconditioner = new MBHypreSolver(a_geom, preconditioner_order, m_mblx_ptr);
+   m_preconditioner      = new MBHypreSolver(a_geom, preconditioner_order, m_mblx_ptr);
+   m_imex_preconditioner = new MBHypreSolver(a_geom, preconditioner_order, m_mblx_ptr);
 #endif
 }
       
@@ -46,15 +49,18 @@ Diffusion::Diffusion( const ParmParse&  a_pp,
 
 Diffusion::~Diffusion()
 {
+   if (m_mblx_ptr) delete m_mblx_ptr;
    if (m_preconditioner) delete m_preconditioner;
+   if (m_imex_preconditioner) delete m_imex_preconditioner;
 }
 
 
 void
-Diffusion::updateBoundaries( const PotentialBC&  a_bc )
+Diffusion::updateBoundaries( const EllipticOpBC&  a_bc )
 {
-   // N.B.: The operator coefficient must computed prior to calling this function
    CH_TIME("Diffusion::updateBoundaries");
+   CH_assert(m_coefficients_defined);
+   
    setBc(a_bc);
    
    computeBcDivergence( m_bc_divergence );
@@ -64,18 +70,13 @@ Diffusion::updateBoundaries( const PotentialBC&  a_bc )
 void
 Diffusion::setOperatorCoefficients( const double                       a_scalar_factor,
                                     const RefCountedPtr<GridFunction>  a_coefficient_function,
-                                    const PotentialBC&                 a_bc,
-                                    const bool                         a_update_preconditioner )
+                                    const EllipticOpBC&                a_bc )
 {
    CH_TIME("Diffusion::setOperatorCoefficients");
 
    computeCoefficients(a_scalar_factor, a_coefficient_function, m_unmapped_coefficients, m_mapped_coefficients);
 
    updateBoundaries(a_bc);
-
-   if ( a_update_preconditioner ) {
-      m_preconditioner->constructMatrix(m_mapped_volume_reciprocal, m_mapped_coefficients, a_bc);
-   }
 }
 
 
@@ -159,8 +160,24 @@ Diffusion::computeCoefficients( const double                       a_scalar_fact
      a_unmapped_coefficients[dit].copy(D_tensor[dit]);
      a_mapped_coefficients[dit].copy(grown_coefficients[dit]);
    }
+
+   m_coefficients_defined = true;
 }
 
+
+void
+Diffusion::updateImExPreconditioner( const double         a_mshift,
+                                     const EllipticOpBC&  a_bc )
+{
+   LevelData<FArrayBox> beta(m_geometry.grids(), 1, IntVect::Zero);
+
+   for (DataIterator dit(beta.dataIterator()); dit.ok(); ++dit ) {
+      beta[dit].setVal(a_mshift);
+   }
+
+   m_imex_preconditioner->constructMatrix(m_volume_reciprocal, m_mapped_coefficients, beta, a_bc);
+
+}
 
 void
 Diffusion::setPreconditionerConvergenceParams( const double a_tol,
@@ -171,6 +188,18 @@ Diffusion::setPreconditionerConvergenceParams( const double a_tol,
    m_preconditioner->setParams(m_precond_method, a_tol, a_max_iter, m_precond_verbose,
                                m_precond_precond_method, a_precond_tol, a_precond_max_iter,
                                m_precond_precond_verbose);
+}
+
+
+void
+Diffusion::setImExPreconditionerConvergenceParams( const double a_tol,
+                                                   const int    a_max_iter,
+                                                   const double a_precond_tol,
+                                                   const int    a_precond_max_iter )
+{
+   m_imex_preconditioner->setParams(m_precond_method, a_tol, a_max_iter, m_precond_verbose,
+                                    m_precond_precond_method, a_precond_tol, a_precond_max_iter,
+                                    m_precond_precond_verbose);
 }
 
 
@@ -185,10 +214,20 @@ Diffusion::solvePreconditioner( const LevelData<FArrayBox>& a_in,
 
 
 void
+Diffusion::solveImExPreconditioner( const LevelData<FArrayBox>& a_in,
+                                    LevelData<FArrayBox>&       a_out )
+{
+   m_imex_preconditioner->solve(a_in, a_out, true);
+}
+
+
+
+void
 Diffusion::multiplyCoefficients( LevelData<FluxBox>& a_data,
                                  const bool          a_mapped_coeff ) const
 {
    CH_assert(a_data.ghostVect() <= m_unmapped_coefficients.ghostVect());
+   CH_assert(m_coefficients_defined);
 
    for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
       FluxBox& this_data = a_data[dit];

@@ -96,7 +96,7 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
       for (int side=0; side<2; ++side) {
         if ( blockBoundaries[dir + side*SpaceDim].isDomainBoundary() && !domain.isPeriodic(dir)) {
           double bc_value = 0.;
-          int bc_type = PotentialBC::DIRICHLET;     // Homogeneous Dirichlet
+          int bc_type = EllipticOpBC::DIRICHLET;     // Homogeneous Dirichlet
           m_divergence_cleaning_bc.setBCType(block, dir, side, bc_type);
           m_divergence_cleaning_bc.setBCValue(block, dir, side, bc_value);
         }

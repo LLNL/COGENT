@@ -22,7 +22,7 @@ void EFieldSelfConsistentBC::computeEField( const PS::GKState&                a_
                                             const FluidSpeciesPtrVect&        a_fluid_species,
                                             const PS::ScalarPtrVect&          a_scalars,
                                             LevelData<FArrayBox>&             a_phi,
-                                            PotentialBC&                      a_bc,
+                                            EllipticOpBC&                     a_bc,
                                             const bool                        a_update_potential,
                                             const bool                        a_initial_time )
 {
@@ -138,7 +138,7 @@ void EFieldSelfConsistentBC::updateImplicitPotential(LevelData<FArrayBox>&      
                                                      const PS::KineticSpeciesPtrVect&  a_kinetic_species,
                                                      const Vector<Real>&               a_scalar_data,
                                                      LevelData<FArrayBox>&             a_divJperp,
-                                                     PotentialBC&                      a_bc,
+                                                     EllipticOpBC&                     a_bc,
                                                      const Real                        a_dt )
 {
    setCoreBC(a_scalar_data[0], -a_scalar_data[1], a_bc);

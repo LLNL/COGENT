@@ -38,7 +38,7 @@ public:
                                const FluidSpeciesPtrVect&        fluid_species,
                                const PS::ScalarPtrVect&          scalars,
                                LevelData<FArrayBox>&             phi,
-                               PotentialBC&                      bc,
+                               EllipticOpBC&                     bc,
                                const bool                        update_potential,
                                const bool                        initial_time );
 
@@ -46,7 +46,7 @@ public:
                                          const PS::KineticSpeciesPtrVect&  kinetic_species,
                                          const Vector<Real>&               scalar_data,
                                          LevelData<FArrayBox>&             divJperp,
-                                         PotentialBC&                      bc,
+                                         EllipticOpBC&                     bc,
                                          const Real                        dt );
 
    virtual

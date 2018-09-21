@@ -208,7 +208,7 @@ void GKOps::initializeElectricField( const GKState& a_state_phys,
                              fluid_species,
                              scalars,
                              m_phi,
-                             m_boundary_conditions->getPotentialBC(),
+                             m_boundary_conditions->getEllipticOpBC(),
                              compute_potential,
                              a_cur_step == 0 );
 
@@ -352,7 +352,7 @@ void GKOps::postTimeStep( const int       a_step,
       CFG::LevelData<CFG::FArrayBox> divJperp( mag_grids, 1, CFG::IntVect::Zero );
       m_VorticityOp->computeDivPerpIonCurrentDensity(divJperp, *m_E_field, m_kinetic_species_phys, a_time);
 
-      CFG::PotentialBC& bc = m_boundary_conditions->getPotentialBC();
+      CFG::EllipticOpBC& bc = m_boundary_conditions->getEllipticOpBC();
       m_E_field->updateImplicitPotential(m_phi, m_kinetic_species_phys, scalar_data, divJperp, bc, a_dt);
    }
 }
@@ -857,7 +857,7 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
                             fluid_species_phys,
                             a_state_comp.dataScalar(),
                             a_phi,
-                            m_boundary_conditions->getPotentialBC(),
+                            m_boundary_conditions->getEllipticOpBC(),
                             compute_potential,
                             a_step == 0 );
 
@@ -2318,7 +2318,7 @@ void GKOps::enforceQuasiNeutrality(
       CFG::LevelData<CFG::FArrayBox> quasineutral_density( grids, 1, m_cfg_nghosts );
       computeQuasiNeutralElectronDensity( quasineutral_density,
                                           a_potential,
-                                          m_boundary_conditions->getPotentialBC(),
+                                          m_boundary_conditions->getEllipticOpBC(),
                                           ion_density );
 
       KineticSpecies& electron_species( findElectronSpecies( a_species ) );
@@ -2333,7 +2333,7 @@ inline
 void GKOps::computeQuasiNeutralElectronDensity(
    CFG::LevelData<CFG::FArrayBox>&       a_quasineutral_density,
    CFG::LevelData<CFG::FArrayBox>&       a_potential,
-   const CFG::PotentialBC&               a_bc, 
+   const CFG::EllipticOpBC&              a_bc, 
    const CFG::LevelData<CFG::FArrayBox>& a_ion_density) const
 {
    m_E_field->computeQuasiNeutralElectronDensity( a_quasineutral_density,

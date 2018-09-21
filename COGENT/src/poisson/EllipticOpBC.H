@@ -1,18 +1,18 @@
-#ifndef _POTENTIALBC_
-#define _POTENTIALBC_
+#ifndef _ELLIPTICOPBC_
+#define _ELLIPTICOPBC_
 
 #include "MultiBlockLevelGeom.H"
 #include "GridFunction.H"
 
 #include "NamespaceHeader.H"
 
-class PotentialBC
+class EllipticOpBC
 {
 public:
 
-   PotentialBC(const int num_boundaries);
+   EllipticOpBC(const int num_boundaries);
 
-   virtual ~PotentialBC();
+   virtual ~EllipticOpBC();
 
    virtual void setBCType( const int block_number,
                            const int dir,

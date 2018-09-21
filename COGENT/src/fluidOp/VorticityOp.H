@@ -101,9 +101,9 @@ private:
    void computeIonChargeDensity( LevelData<FArrayBox>&            ion_charge_density,
                                 const PS::KineticSpeciesPtrVect&  species ) const;
 
-   void setCoreBC( const double  core_inner_bv,
-                   const double  core_outer_bv,
-                   PotentialBC&  bc ) const ;
+   void setCoreBC( const double   core_inner_bv,
+                   const double   core_outer_bv,
+                   EllipticOpBC&  bc ) const ;
 
    void setZero( LevelData<FArrayBox>& data ) const;
    
@@ -133,10 +133,10 @@ private:
     */
    void printParameters();
 
-   PotentialBC* m_parallel_current_divergence_op_bcs;
-   PotentialBC* m_par_cond_op_bcs;
-   PotentialBC* m_imex_pc_op_bcs;
-   PotentialBC* m_gyropoisson_op_bcs;
+   EllipticOpBC* m_parallel_current_divergence_op_bcs;
+   EllipticOpBC* m_par_cond_op_bcs;
+   EllipticOpBC* m_imex_pc_op_bcs;
+   EllipticOpBC* m_gyropoisson_op_bcs;
 
    LevelData<FArrayBox> m_negativeDivJpar;
    LevelData<FArrayBox> m_divJperp;

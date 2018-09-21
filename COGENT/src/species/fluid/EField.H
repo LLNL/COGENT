@@ -84,13 +84,13 @@ public:
                                const FluidSpeciesPtrVect&        fluid_species,
                                const PS::ScalarPtrVect&          scalars,
                                LevelData<FArrayBox>&             phi,
-                               PotentialBC&                      bc,
+                               EllipticOpBC&                     bc,
                                const bool                        update_potential,
                                const bool                        initial_time );
 
    void setCoreBC( const double  core_inner_bv,
                    const double  core_outer_bv,
-                   PotentialBC&  bc ) const;
+                   EllipticOpBC& bc ) const;
 
    void computePoloidalField( const LevelData<FArrayBox>& phi,                                                                                                                        LevelData<FluxBox>&         field ) const {m_poisson->computePoloidalField(phi, field);}
 
@@ -111,14 +111,14 @@ public:
 
    void computeQuasiNeutralElectronDensity( LevelData<FArrayBox>&        quasineutral_density,
                                             LevelData<FArrayBox>&        potential,
-                                            const PotentialBC&           bc, 
+                                            const EllipticOpBC&          bc, 
                                             const LevelData<FArrayBox>&  ion_density) const;
 
    virtual void updateImplicitPotential( LevelData<FArrayBox>&             phi,
                                          const PS::KineticSpeciesPtrVect&  kinetic_species,
                                          const Vector<Real>&               scalar_data,
                                          LevelData<FArrayBox>&             divJperp,
-                                         PotentialBC&                      bc,
+                                         EllipticOpBC&                     bc,
                                          const Real                        dt );
 
    virtual

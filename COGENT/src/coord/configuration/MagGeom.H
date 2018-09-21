@@ -5,7 +5,7 @@
 #include "MagCoordSys.H"
 #include "MultiBlockLevelExchangeAverage.H"
 #include "BlockRegister.H"
-#include "PotentialBC.H"
+#include "EllipticOpBC.H"
 
 #include "BoundaryBoxLayout.H.multidim"
 
@@ -140,7 +140,7 @@ public:
 
    void fillTransverseGhosts( LevelData<FluxBox>& data, const bool do_block_exchange ) const;
 
-   void definePotentialBC( PotentialBC& bc ) const {m_coord_sys->definePotentialBC(bc);}
+   void defineEllipticOpBC( EllipticOpBC& bc ) const {m_coord_sys->defineEllipticOpBC(bc);}
 
    const MagBlockCoordSys& getBlockCoordSys(const Box& box) const;
 

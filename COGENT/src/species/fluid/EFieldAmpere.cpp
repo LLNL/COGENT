@@ -59,7 +59,7 @@ void EFieldAmpere::computeEField( const PS::GKState&                a_state,
                                   const FluidSpeciesPtrVect&        a_fluid_species,
                                   const PS::ScalarPtrVect&          a_scalars,
                                   LevelData<FArrayBox>&             a_phi,
-                                  PotentialBC&                      a_bc,
+                                  EllipticOpBC&                     a_bc,
                                   const bool                        a_update_potential,
                                   const bool                        a_initial_time )
 {
@@ -471,7 +471,7 @@ void EFieldAmpere::updateImplicitPotential(LevelData<FArrayBox>&             a_p
                                            const PS::KineticSpeciesPtrVect&  a_kinetic_species,
                                            const Vector<Real>&               a_scalar_data,
                                            LevelData<FArrayBox>&             a_divJperp,
-                                           PotentialBC&                      a_bc,
+                                           EllipticOpBC&                     a_bc,
                                            const Real                        a_dt )
 {
    double Er_lo = a_scalar_data[0];

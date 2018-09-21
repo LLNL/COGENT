@@ -805,9 +805,9 @@ SNCoreCoordSys::findBlock(const RealVect& a_X) const
 
 
 void
-SNCoreCoordSys::definePotentialBC( PotentialBC& a_bc ) const
+SNCoreCoordSys::defineEllipticOpBC( EllipticOpBC& a_bc ) const
 {
-   SNCorePotentialBC& bc = (SNCorePotentialBC&)a_bc;
+   SNCoreEllipticOpBC& bc = (SNCoreEllipticOpBC&)a_bc;
 
    // Inner radial core boundary
    RefCountedPtr<GridFunction> radial_inner_core_function = bc.getRadialInnerFunction();
