@@ -26,10 +26,10 @@ available in the environment.
         export HDF5_DIR_SERIAL=/path/to/hdf5-serial
         export HDF5_DIR_PARALLEL=/path/to/hdf5-parallel
 
-  - LC/Quartz: running the script *scripts/lc_quartz_hdf5.sh* will do
+  - LC/Quartz: running the script *scripts/load_hdf5.sh* will do
     this. 
 
-        ./scripts/lc_quartz_hdf5.sh
+        ./scripts/load_hdf5.sh
     
     If you want to do it manually, the following commands should work
     when using GNU compilers v4.9.3 and MVAPICH2 v2.2, for example.
@@ -48,12 +48,12 @@ After this step, either run the install script (*install.sh*)
 
       cp Chombo_Makefile/Make.defs.local Chombo/lib/mk/
 
-- Step 3: Compile hypre - go to cogent/hypre-2.9.0b/ and run the following commands
+- Step 3: Compile hypre - go to COGENT/hypre-2.9.0b/ and run the following commands
 
       ./doconfig-lc-opt
       ./doinstall
 
-- Step 4: Compile COGENT - go to cogent/exec/ and run
+- Step 4: Compile COGENT - go to COGENT/exec/ and run
 
       make -j all OPT=TRUE DEBUG=FALSE
 
@@ -62,5 +62,5 @@ Quick Install on Specific Platforms
 
 - LLNL-LC-Quartz:
 
-      ./scripts/lc_quartz_hdf5.sh && ./install.sh
+      . ./scripts/load_hdf5.sh && ./install.sh
 
