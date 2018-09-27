@@ -9,20 +9,26 @@
 #define CH_SPACEDIM PDIM
 #include "PhaseGeom.H"
 #include "MomentOp.H"
+#include "GKOps.H"
+#include "FluidOpPreconditioner.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 
 #include "NamespaceHeader.H" 
 
 
-VorticityOp::VorticityOp( ParmParse&      a_pp,
-                          const MagGeom&  a_geometry,
-                          const double    a_larmor,
-                          const int       a_verbosity )
+VorticityOp::VorticityOp( const std::string&  a_pp_str,
+                          const MagGeom&      a_geometry,
+                          const double        a_larmor,
+                          const int           a_verbosity )
    : m_geometry(a_geometry),
-     m_sigma_div_e_coefs_set(false)
+     m_sigma_div_e_coefs_set(false),
+     m_opt_string(a_pp_str),
+     m_my_pc_idx_e(-1),
+     m_my_pc_idx_i(-1)
 {
-   parseParameters( a_pp );
+   ParmParse pp1(a_pp_str.c_str());
+   parseParameters( pp1 );
    if (m_verbosity>0) {
       printParameters();
    }
@@ -185,8 +191,10 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
 
 
 void VorticityOp::evalSolutionOp( FluidSpeciesPtrVect&               a_rhs,
-                                  const PS::KineticSpeciesPtrVect&   a_kinetic_species,
-                                  const FluidSpeciesPtrVect&         a_fluid_species,
+                                  const PS::KineticSpeciesPtrVect&   a_kinetic_species_comp,
+                                  const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
+                                  const FluidSpeciesPtrVect&         a_fluid_species_comp,
+                                  const FluidSpeciesPtrVect&         a_fluid_species_phys,
                                   const PS::ScalarPtrVect&           a_scalars,
                                   const int                          a_component,
                                   const Real                         a_time )
@@ -194,7 +202,7 @@ void VorticityOp::evalSolutionOp( FluidSpeciesPtrVect&               a_rhs,
    CH_TIME("VorticityOp::evalSolutionOp");
 #if 1
    LevelData<FArrayBox> ion_mass_density(m_geometry.gridsFull(), 1, IntVect::Zero);
-   computeIonMassDensity( ion_mass_density, a_kinetic_species );
+   computeIonMassDensity( ion_mass_density, a_kinetic_species_phys );
 
    if (a_scalars.size() > 0) {
       const Vector<Real>& scalar_data = a_scalars[0]->data();
@@ -208,7 +216,7 @@ void VorticityOp::evalSolutionOp( FluidSpeciesPtrVect&               a_rhs,
    m_gyropoisson_op->setOperatorCoefficients( ion_mass_density, *m_gyropoisson_op_bcs, true );
 #endif
 
-   const FluidSpecies& sol_species = static_cast<const FluidSpecies&>(*a_fluid_species[a_component]);
+   const FluidSpecies& sol_species = static_cast<const FluidSpecies&>(*a_fluid_species_phys[a_component]);
    FluidSpecies& rhs_species = static_cast<FluidSpecies&>(*a_rhs[a_component]);
 
    const LevelData<FArrayBox>& sol = sol_species.cell_data();
@@ -217,6 +225,101 @@ void VorticityOp::evalSolutionOp( FluidSpeciesPtrVect&               a_rhs,
    m_gyropoisson_op->computeFluxDivergence(sol, rhs, false, false);
 }
 
+void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
+                                  std::vector<PS::DOFList>&                                 a_dof_list,
+                                  const PS::GKVector&                                       a_soln_vec,
+                                  PS::GKOps&                                                a_gkops,
+                                  const std::string&                                        a_out_string,
+                                  const std::string&                                        a_opt_string,
+                                  bool                                                      a_im,
+                                  const FluidSpecies&                                       a_fluid_species,
+                                  const PS::GlobalDOFFluidSpecies&                          a_global_dofs,
+                                  int                                                       a_species_idx )
+{
+  
+  CH_assert(a_pc.size() == a_dof_list.size());
+
+  if (!procID()) {
+    if (a_im) {
+      std::cout << "  Fluid Species " << a_species_idx
+                << " : "
+                << " creating " << _FLUID_OP_PC_ << " preconditioner RHSOp"
+                << " (index = " << a_pc.size() << ").\n";
+    } else {
+      std::cout << "  Fluid Species " << a_species_idx
+                << " : "
+                << " creating " << _FLUID_OP_PC_ << " preconditioner for solutionOp"
+                << " (index = " << a_pc.size() << ").\n";
+    }
+  }
+
+  PS::Preconditioner<PS::GKVector, PS::GKOps> *pc;
+  pc = new PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>;
+  dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+    (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
+  dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+    (pc)->speciesIndex(a_species_idx);
+
+  PS::DOFList dof_list(0);
+
+  const LevelData<FArrayBox>& soln_data   (a_fluid_species.cell_data());
+  const DisjointBoxLayout&    grids       (soln_data.disjointBoxLayout());
+  const int                   n_comp      (soln_data.nComp());
+  const LevelData<FArrayBox>& pMapping    (a_global_dofs.data()); 
+
+  for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    const Box& grid = grids[dit];
+    const FArrayBox& pMap = pMapping[dit];
+    for (BoxIterator bit(grid); bit.ok(); ++bit) {
+      IntVect ic = bit();
+      for (int n(0); n < n_comp; n++) {
+        dof_list.push_back((int) pMap.get(ic ,n) - a_global_dofs.mpiOffset());
+      }
+    }
+  }
+
+  if (a_im)  m_my_pc_idx_i = a_pc.size();
+  else       m_my_pc_idx_e = a_pc.size();
+
+  a_pc.push_back(pc);
+  a_dof_list.push_back(dof_list);
+
+  return;
+}
+
+void VorticityOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
+                                  const PS::KineticSpeciesPtrVect&                          a_kin_species_phys,
+                                  const FluidSpeciesPtrVect&                                a_fluid_species,
+                                  const Real                                                a_shift,
+                                  const bool                                                a_im,
+                                  const int                                                 a_species_idx )
+{
+  if (a_im) {
+    CH_assert(m_my_pc_idx_i >= 0);
+    CH_assert(a_pc.size() > m_my_pc_idx_i);
+  } else {
+    CH_assert(m_my_pc_idx_e >= 0);
+    CH_assert(a_pc.size() > m_my_pc_idx_e);
+  }
+
+  if (!procID()) {
+    std::cout << "    ==> Updating " << _FLUID_OP_PC_ << " preconditioner " 
+              << " for VorticityOp " << (a_im ? "RHS " : "LHS ")
+              << "of fluid species " << a_species_idx << ".\n";
+  }
+
+  PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps> *pc 
+    = dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+      (a_pc[(a_im ? m_my_pc_idx_i : m_my_pc_idx_e)]);
+//  if (pc == NULL) {
+//    std::cout << "PC idx: " << m_my_pc_idx << ", a_im: " << a_im 
+//              << "\n";
+//  }
+  CH_assert(pc != NULL);
+  pc->update(a_kin_species_phys, a_fluid_species, a_shift, a_im, a_species_idx);
+
+  return;
+}
 
 void VorticityOp::solveSolutionPC( FluidSpeciesPtrVect&              a_fluid_species_solution,
                                    const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,

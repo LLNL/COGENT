@@ -60,7 +60,6 @@ class ImplicitStagePC: public IMEXStagePCFunction<T,Ops>
     {
        m_shift = a_shift;
        m_Pmat.zeroEntries();
-       m_Mmat.zeroEntries();
        m_ops->assemblePCImEx(true, (void*)&m_Pmat, a_X, a_shift);
        m_Pmat.scaleEntries(-1.0);
        m_Pmat.shift(a_shift);
@@ -72,6 +71,7 @@ class ImplicitStagePC: public IMEXStagePCFunction<T,Ops>
     }
 
     inline const BandedMatrix& getBandedMatrixForm() const { return m_Pmat; }
+    inline BandedMatrix& getBandedMatrixForm() { return m_Pmat; }
 
   private:
   
@@ -80,7 +80,7 @@ class ImplicitStagePC: public IMEXStagePCFunction<T,Ops>
     T    m_Z, m_Y0, m_F0, m_F, m_M0, m_M;
 
     Ops *m_ops;
-    BandedMatrix m_Pmat, m_Mmat;
+    BandedMatrix m_Pmat;
    
     void parseParameters( ParmParse& );
 };
@@ -107,7 +107,6 @@ void ImplicitStagePC<T,Ops>::define(  const T&            a_state,
   parseParameters( pp_IPreCond );
 
   m_ops->preallocatePCMatrixImEx((void*)&m_Pmat, a_state);
-  m_ops->preallocateSolPCMatrix((void*)&m_Mmat, a_state);
   m_is_Defined = true;
   return;
 }

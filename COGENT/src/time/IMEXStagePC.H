@@ -27,6 +27,9 @@ class IMEXStagePCFunction : public LinearFunction<T,Ops>
     virtual void setJFNKEps(Real) = 0;
     virtual void setIsLinear(bool) = 0;
 
+    virtual const BandedMatrix& getBandedMatrixForm() const = 0;
+    virtual BandedMatrix& getBandedMatrixForm() = 0;
+
   protected:
 
   private:

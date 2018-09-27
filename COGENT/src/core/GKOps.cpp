@@ -44,7 +44,6 @@ void GKOps::define( const GKState& a_state,
     * Implicit: Collisions, Transport
    */
    m_vlasov_imex_implicit     = false;
-   m_collisions_imex_implicit = true;
    m_transport_imex_implicit  = false;
    m_neutrals_imex_implicit   = false;
 
@@ -94,7 +93,7 @@ void GKOps::define( const GKState& a_state,
    m_trivial_solution_op = m_fluidOp->trivialSolutionOp(fluid_species);
 
    if ( m_old_vorticity_model ) {
-      m_VorticityOp = new CFG::VorticityOp(ppgksys, m_phase_geometry->magGeom(), larmor, false);
+      m_VorticityOp = new CFG::VorticityOp("gksystem", m_phase_geometry->magGeom(), larmor, false);
    }
    else {
       m_VorticityOp = NULL;
@@ -428,31 +427,39 @@ void GKOps::solutionOp( GKRHSData&      a_rhs,
    CFG::FluidSpeciesPtrVect fluid_species_phys;
    createPhysicalSpeciesVector( fluid_species_phys, a_state.dataFluid(), a_time );
 
-   applyFluidSpeciesSolutionOperator( a_rhs.dataFluid(), m_kinetic_species_phys, fluid_species_phys, a_state.dataScalar(), a_time );
+   applyFluidSpeciesSolutionOperator( a_rhs.dataFluid(), 
+                                      a_state.dataKinetic(),
+                                      m_kinetic_species_phys, 
+                                      a_state.dataFluid(), 
+                                      fluid_species_phys, 
+                                      a_state.dataScalar(), 
+                                      a_time );
 
    applyScalarSolutionOperator( a_rhs.dataScalar(), a_state.dataScalar(), a_time );
 }
 
-void GKOps::solveSolutionPC( GKVector&       a_z,
-                             const GKVector& a_r )
+void GKOps::solveSolutionPC( GKVector&        a_z,
+                             const GKVector&  a_r,
+                             int              a_idx )
 {
    CH_TIME("GKOps::solveSolutionPC");
 
    m_Y.copyFrom(a_r.data());
    m_rhs.copyFrom(a_r.data());
-   m_fluidOp->solveSolutionPC(m_rhs.dataFluid(), m_Y.dataKinetic(), m_Y.dataFluid());
+   m_fluidOp->solveSolutionPC(m_rhs.dataFluid(), m_Y.dataKinetic(), m_Y.dataFluid(), a_idx );
    m_rhs.copyTo(a_z.data());
 }
 
 void GKOps::solvePCImEx( GKVector&       a_z,
-                         const GKVector& a_r )
+                         const GKVector& a_r,
+                         int             a_idx )
 {
    CH_TIME("GKOps::solvePCImEx");
 
    m_Y.copyFrom(a_r.data());
    m_rhs.copyFrom(a_r.data());
    m_rhs.scale(1./m_saved_mshift);
-   m_fluidOp->solvePCImEx(m_rhs.dataFluid(), m_Y.dataKinetic(), m_Y.dataFluid());
+   m_fluidOp->solvePCImEx(m_rhs.dataFluid(), m_Y.dataKinetic(), m_Y.dataFluid(), a_idx );
    m_rhs.copyTo(a_z.data());
 }
 
@@ -474,7 +481,7 @@ void GKOps::explicitOp( GKRHSData&      a_rhs,
       applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
    }
 
-   applyCollisionOperator( a_rhs.dataKinetic(), a_state_comp.dataKinetic(), a_time );
+   applyCollisionOperator( a_rhs.dataKinetic(), a_state_comp.dataKinetic(), unsplit, a_time );
    
    CFG::FluidSpeciesPtrVect fluid_species_phys;
    createPhysicalSpeciesVector( fluid_species_phys, a_state_comp.dataFluid(), a_time );
@@ -502,9 +509,7 @@ void GKOps::explicitOpImEx( GKRHSData&      a_rhs,
       applyTransportOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
    }
 
-   if (!m_collisions_imex_implicit) {
-     applyCollisionOperator( a_rhs.dataKinetic(), a_state_comp.dataKinetic(), a_time );
-   }
+   applyCollisionOperator( a_rhs.dataKinetic(), a_state_comp.dataKinetic(), imex_exp, a_time );
 
    if (m_neutrals_model_on && (!m_neutrals_imex_implicit) ) {
       applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
@@ -541,9 +546,7 @@ void GKOps::implicitOpImEx( GKRHSData&      a_rhs,
       applyTransportOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
    }
 
-   if (m_collisions_imex_implicit) {
-     applyCollisionOperator( a_rhs.dataKinetic(), a_state_comp.dataKinetic(), a_time );
-   }
+   applyCollisionOperator( a_rhs.dataKinetic(), a_state_comp.dataKinetic(), imex_imp, a_time );
 
    if (m_neutrals_model_on && (m_neutrals_imex_implicit) ) {
       applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
@@ -578,7 +581,13 @@ void GKOps::solutionPC( GKRHSData&     a_rhs,
    CFG::FluidSpeciesPtrVect fluid_species_phys;
    createPhysicalSpeciesVector( fluid_species_phys, a_state.dataFluid(), a_time );
 
-   applyFluidSpeciesSolutionOperator( a_rhs.dataFluid(), m_kinetic_species_phys, fluid_species_phys, a_state.dataScalar(), a_time );
+   applyFluidSpeciesSolutionOperator( a_rhs.dataFluid(), 
+                                      a_state.dataKinetic(),
+                                      m_kinetic_species_phys, 
+                                      a_state.dataFluid(),
+                                      fluid_species_phys, 
+                                      a_state.dataScalar(), 
+                                      a_time );
 
    applyScalarSolutionOperator( a_rhs.dataScalar(), a_state.dataScalar(), a_time );
 }
@@ -607,7 +616,7 @@ void GKOps::explicitPC( GKRHSData&     a_rhs,
       applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
    }
 
-   applyCollisionOperator( a_rhs.dataKinetic(), a_state.dataKinetic(), a_time );
+   applyCollisionOperator( a_rhs.dataKinetic(), a_state.dataKinetic(), unsplit, a_time );
    
    CFG::FluidSpeciesPtrVect fluid_species_phys;
    createPhysicalSpeciesVector( fluid_species_phys, a_state.dataFluid(), a_time );
@@ -624,31 +633,7 @@ void GKOps::implicitPCImEx( GKRHSData&     a_rhs,
                             const GKState& a_state_comp )
 {
    CH_TIME("GKOps::implicitPCImEx");
-
-   /* This function is the same as implicitOpImEx, but it is called by
-    * the preconditioner, not the actual time integrator or Newton solver
-    * or linear solver. Thus, inaccuracies in the result of this function
-    * does not affect the overall solution.
-   */
-
-
-   a_rhs.zero();
-
-   //if (m_vlasov_imex_implicit) {
-   //  applyVlasovOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, m_injected_E_field, a_time );
-   //}
-
-   //if (m_transport_model_on && (m_transport_imex_implicit) ) {
-   //   applyTransportOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
-   //}
-
-   if (m_collisions_imex_implicit) {
-     applyCollisionOperatorForPreconditioner( a_rhs.dataKinetic(), a_state_comp.dataKinetic(), a_time );
-   }
-
-   //if (m_neutrals_model_on && (m_neutrals_imex_implicit) ) {
-   //   applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
-   //}
+   implicitOpImEx(a_rhs, a_time, a_state_comp);
 }
 
 static inline bool preallocateSolutionPrecondMatrix( void              *a_P, 
@@ -667,11 +652,11 @@ static inline bool preallocateSolutionPrecondMatrix( void              *a_P,
 
   /* define the matrix */
   if (!procID()) {
-    cout << "Setting up banded matrix with " << n_total << " rows ";
+    cout << "    Setting up banded matrix with " << n_total << " rows ";
     cout << "and " << nbands_max << " bands for the preconditioner.\n";
   }
   BandedMatrix *P = (BandedMatrix*) a_P;
-  P->define(a_N,nbands_max,a_global_dof->mpi_offset());
+  P->define(a_N,nbands_max,a_global_dof->mpiOffset());
   return(P->isDefined());
 }
 
@@ -690,15 +675,12 @@ bool GKOps::preallocateSolPCMatrix( void *           a_P,
 static inline bool preallocatePrecondMatrixImEx(void*             a_P, 
                                                 int               a_N,
                                                 const GlobalDOF*  a_global_dof,
-                                                GKCollisions*     a_collisions,
-                                                bool              a_collisions_imex_implicit )
+                                                GKCollisions*     a_collisions )
 {
    CH_TIME("preallocatePrecondMatrixImEx");
 
-   int nbands_max = 1;
-  if (a_collisions_imex_implicit) {
-    nbands_max = std::max(nbands_max,a_collisions->precondMatrixBands());
-  }
+  int nbands_max = 1;
+  nbands_max = std::max(nbands_max,a_collisions->precondMatrixBands());
   int n_total = a_N;
 #ifdef CH_MPI
   MPI_Allreduce(&a_N,&n_total,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
@@ -706,12 +688,12 @@ static inline bool preallocatePrecondMatrixImEx(void*             a_P,
 
   /* define the matrix */
   if (!procID()) {
-    cout << "Setting up banded matrix with " << n_total << " rows ";
+    cout << "    Setting up banded matrix with " << n_total << " rows ";
     cout << "and " << nbands_max << " bands for the preconditioner.\n";
   }
 
   BandedMatrix *P = (BandedMatrix*) a_P;
-  P->define(a_N,nbands_max,a_global_dof->mpi_offset());
+  P->define(a_N,nbands_max,a_global_dof->mpiOffset());
   return(P->isDefined());
 }
 
@@ -723,9 +705,63 @@ bool GKOps::preallocatePCMatrixImEx( void*            a_P,
    success = preallocatePrecondMatrixImEx( a_P, 
                                            a_state.getVectorSize(), 
                                            a_state.getGlobalDOF(),
-                                           m_collisions, 
-                                           m_collisions_imex_implicit );
+                                           m_collisions );
    return success;
+}
+
+void GKOps::defineMultiPhysicsPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
+                                  std::vector<DOFList>&                         a_dof_list,
+                                  const GKVector&                               a_state,
+                                  const std::string&                            a_out_string,
+                                  const std::string&                            a_opt_string,
+                                  bool                                          a_im )
+{
+  a_pc.clear();
+  m_Y.copyFrom(a_state.data());
+  const GlobalDOF* global_dof(a_state.getGlobalDOF());
+
+  m_collisions->defineMultiPhysicsPC( a_pc, 
+                                      a_dof_list,
+                                      m_Y.dataKinetic(),
+                                      global_dof->dataKinetic(),
+                                      a_state, 
+                                      *this, 
+                                      a_out_string, 
+                                      a_opt_string, 
+                                      a_im );
+
+  m_fluidOp->defineMultiPhysicsPC(  a_pc,
+                                    a_dof_list,
+                                    m_Y.dataFluid(),
+                                    global_dof->dataFluid(),
+                                    a_state,
+                                    *this,
+                                    a_out_string,
+                                    a_opt_string,
+                                    a_im );
+
+  return;
+}
+
+void GKOps::updateMultiPhysicsPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
+                                  const GKVector&                               a_state,
+                                  const Real                                    a_shift,
+                                  const bool                                    a_im )
+{
+  m_Y.copyFrom(a_state.data());
+  const GlobalDOF* global_dof(a_state.getGlobalDOF());
+  m_saved_mshift = a_shift;
+
+  m_collisions->updateMultiPhysicsPC( a_pc, 
+                                      m_Y.dataKinetic(), 
+                                      global_dof->dataKinetic(), 
+                                      a_shift, a_im);
+
+  m_fluidOp->updateMultiPhysicsPC(  a_pc,
+                                    m_kinetic_species_phys,
+                                    m_Y.dataFluid(),
+                                    a_shift, a_im );
+  return;
 }
 
 static inline void assembleSolutionPrecondMatrix( void                            *a_P,
@@ -765,8 +801,7 @@ static inline void assemblePrecondMatrixImEx( void                            *a
                                               const KineticSpeciesPtrVect&    a_kinetic_species,
                                               const CFG::FluidSpeciesPtrVect& a_fluid_species,
                                               const GlobalDOF*                a_global_dof,
-                                              GKCollisions                    *a_collisions,
-                                              bool                            a_collisions_imex_implicit
+                                              GKCollisions                    *a_collisions
                                               /* CFG::GKFluidOp                  *a_fluid_op  */
                                             )
 {
@@ -774,9 +809,7 @@ static inline void assemblePrecondMatrixImEx( void                            *a
 
    BandedMatrix *Pmat = (BandedMatrix*) a_P;
    Pmat->zeroEntries();
-   if (a_collisions_imex_implicit) {
-      a_collisions->assemblePrecondMatrix(Pmat,a_kinetic_species,a_global_dof->dataKinetic());
-   }
+   a_collisions->assemblePrecondMatrix(Pmat,a_kinetic_species,a_global_dof->dataKinetic());
    Pmat->finalAssembly();
 }
 
@@ -794,7 +827,7 @@ void GKOps::assemblePCImEx( const bool       a_banded_solver,
                                 m_Y.dataKinetic(),
                                 m_Y.dataFluid(),
                                 a_state.getGlobalDOF(),
-                                m_collisions, m_collisions_imex_implicit
+                                m_collisions
                                 /* m_fluidOp */
                                 );
    }
@@ -934,12 +967,20 @@ void GKOps::applyKineticSpeciesSolutionOperator( KineticSpeciesPtrVect&        a
 
 inline
 void GKOps::applyFluidSpeciesSolutionOperator( CFG::FluidSpeciesPtrVect&        a_rhs,
+                                               const KineticSpeciesPtrVect&     a_kinetic_species_comp,
                                                const KineticSpeciesPtrVect&     a_kinetic_species_phys,
-                                               const CFG::FluidSpeciesPtrVect&  a_fluid_species,
+                                               const CFG::FluidSpeciesPtrVect&  a_fluid_species_comp,
+                                               const CFG::FluidSpeciesPtrVect&  a_fluid_species_phys,
                                                const ScalarPtrVect&             a_scalars,
                                                const Real&                      a_time )
 {
-   m_fluidOp->evalSolutionOp(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_time );
+   m_fluidOp->evalSolutionOp( a_rhs, 
+                              a_kinetic_species_comp, 
+                              a_kinetic_species_phys, 
+                              a_fluid_species_comp, 
+                              a_fluid_species_phys, 
+                              a_scalars, 
+                              a_time );
 }
 
 inline
@@ -961,20 +1002,21 @@ void GKOps::applyScalarSolutionOperator( ScalarPtrVect&        a_rhs,
 inline
 void GKOps::applyCollisionOperator( KineticSpeciesPtrVect&       a_rhs,
                                     const KineticSpeciesPtrVect& a_soln,
+                                    const opType                 a_op_type,
                                     const Real&                  a_time )
 {
    m_count_collision++;
-   m_collisions->accumulateRHS( a_rhs, a_soln, a_time );
+   if (a_op_type == imex_exp) {
+     m_collisions->accumulateRHS( a_rhs, a_soln, false, a_time );
+   } else if (a_op_type == imex_imp) {
+     m_collisions->accumulateRHS( a_rhs, a_soln, true, a_time );
+   } else if (a_op_type == unsplit) {
+     m_collisions->accumulateRHS( a_rhs, a_soln, false, a_time );
+     m_collisions->accumulateRHS( a_rhs, a_soln, true, a_time );
+   } else {
+     MayDay::Error("Unknown a_op_type!");
+   }
 }
-
-inline
-void GKOps::applyCollisionOperatorForPreconditioner(KineticSpeciesPtrVect&       a_rhs,
-                                                    const KineticSpeciesPtrVect& a_soln,
-                                                    const Real&                  a_time )
-{
-   m_collisions->accumulateApproxRHS( a_rhs, a_soln, a_time );
-}
-
 
 inline
 void GKOps::applyTransportOperator( KineticSpeciesPtrVect&       a_rhs,
@@ -1200,7 +1242,6 @@ void GKOps::parseParameters( ParmParse& a_ppgksys )
    }
 
    a_ppgksys.query( "imex_vlasov_implicit", m_vlasov_imex_implicit );
-   a_ppgksys.query( "imex_collisions_implicit", m_collisions_imex_implicit );
    a_ppgksys.query( "imex_transport_implicit", m_transport_imex_implicit );
    a_ppgksys.query( "imex_neutrals_implicit", m_neutrals_imex_implicit );
 

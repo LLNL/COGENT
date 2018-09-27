@@ -400,7 +400,7 @@ const Real& getVal(
   } else {
 
     /* a_idx is local, so add MPI offset */
-    int gidx = a_idx + a_global_dof->mpi_offset();
+    int gidx = a_idx + a_global_dof->mpiOffset();
 
     int i_kinetic_species = a_global_dof->isIndexKineticSpecies (gidx,a_kinetic_species);
     int i_fluid_species   = a_global_dof->isIndexFluidSpecies   (gidx,a_fluid_species  );
@@ -491,7 +491,7 @@ Real& getVal(
   } else {
 
     /* a_idx is local, so add MPI offset */
-    int gidx = a_idx + a_global_dof->mpi_offset();
+    int gidx = a_idx + a_global_dof->mpiOffset();
 
     int i_kinetic_species = a_global_dof->isIndexKineticSpecies (gidx,a_kinetic_species);
     int i_fluid_species   = a_global_dof->isIndexFluidSpecies   (gidx,a_fluid_species  );

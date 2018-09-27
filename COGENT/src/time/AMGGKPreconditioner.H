@@ -51,6 +51,8 @@ class AMGGKPreconditioner : public Preconditioner<T,Ops>
       return;
     }
 
+    inline const std::string typeName() { return _AMG_GK_PC_; }
+
   protected:
 
   private:

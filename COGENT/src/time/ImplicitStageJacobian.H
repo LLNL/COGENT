@@ -123,7 +123,7 @@ void ImplicitStageJacobian<T,Ops>::define(  const T&    a_state,
   /* default values */
   m_epsJFNK = 1e-6;
   m_usePreCond = true;
-  m_pc_type = _BASIC_GK_PC_; //_MULTIPHYSICS_PC_;
+  m_pc_type = _MULTIPHYSICS_PC_;
 
   m_outPrefix = a_outPrefix;
   m_optPrefix = a_optPrefix;
@@ -142,8 +142,10 @@ void ImplicitStageJacobian<T,Ops>::define(  const T&    a_state,
 
     if (m_pc_type == _BASIC_GK_PC_) {
       m_preCond = new BasicGKPreconditioner<T,Ops>;
-    }else if (m_pc_type == _AMG_GK_PC_) {
+    } else if (m_pc_type == _AMG_GK_PC_) {
       m_preCond = new AMGGKPreconditioner<T,Ops>;
+    } else if (m_pc_type == _MULTIPHYSICS_PC_) {
+      m_preCond = new MultiPhysicsPreconditioner<T,Ops>;
     } else {
       std::cout << "Error in ImplicitStageJacobian::define() - "
                 << m_pc_type << " "

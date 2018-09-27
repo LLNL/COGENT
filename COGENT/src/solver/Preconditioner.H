@@ -1,6 +1,8 @@
 #ifndef _Preconditioner_H_
 #define _Preconditioner_H_
 
+#include<string>
+
 #include "NamespaceHeader.H"
 
 template <class T, class Ops = void>
@@ -26,6 +28,8 @@ class Preconditioner
     virtual void setBaseRHS(const T& a_M) {}
     virtual void setJFNKEps(Real a_e) {}
     virtual void setIsLinear(bool a_b) {}
+
+    virtual const std::string typeName() { return "BaseClass"; }
 
   protected:
 

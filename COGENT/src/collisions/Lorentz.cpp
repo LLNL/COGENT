@@ -12,14 +12,16 @@
 
 
 
-Lorentz::Lorentz( ParmParse& a_ppcls, const int a_verbosity )
+Lorentz::Lorentz( const std::string& a_ppcls_str, const int a_verbosity )
     : m_verbosity(a_verbosity),
+      m_time_implicit(true),
       m_cls_freq(-1.0),
       m_constant_freq(false),
       m_conserve_momentum(true),
       m_first_step(true)
 {
-   parseParameters( a_ppcls );
+   ParmParse ppcls(a_ppcls_str.c_str());
+   parseParameters( ppcls );
    if (m_verbosity>0) {
       printParameters();
    }
@@ -579,6 +581,7 @@ double Lorentz::nu_D(double x) const
 inline
 void Lorentz::parseParameters( ParmParse& a_ppcls )
 {
+   a_ppcls.query("time_implicit", m_time_implicit);
    a_ppcls.query("cls_freq",m_cls_freq);
    a_ppcls.query("const_freq",m_constant_freq);
    a_ppcls.query("conserve_momentum",m_conserve_momentum);

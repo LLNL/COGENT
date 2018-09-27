@@ -1,0 +1,205 @@
+#TEST np=32, timelimit=00:10:00
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 10
+gksystem.verbosity   = 10
+gksystem.hdf_fluids = true
+
+gksystem.ti_class = "ark"
+#gksystem.ti_method = "2e"
+gksystem.ti_method = "2c"
+
+ark_jacobian.with_pc = true
+ark_pc.type = "multiphysicsPC"
+
+#ark_newton.atol = 1e-4
+#ark_newton.rtol = 1e-2
+
+#ark_gmres.atol = 1e-10
+#ark_gmres.rtol = 1e-16
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 20
+simulation.max_time            = 4.0
+#simulation.max_dt_grow         = 1.1
+#simulation.initial_dt_fraction = 1.0
+#simulation.cfl_number          = 0.9
+simulation.fixed_dt           = 0.1
+simulation.checkpoint_interval = 1000
+simulation.checkpoint_prefix   = "chk"
+#simulation.restart_file = "chk1000.4d.hdf5"
+simulation.plot_interval       = 1
+simulation.plot_prefix         = "plt"
+
+
+#####################################################
+# Grid and Data Layout Definitions
+#####################################################
+singlenull.numcells.core         =  22 32
+singlenull.numcells.pf_radial    =  8
+singlenull.numcells.lpf_poloidal =  4
+singlenull.numcells.rpf_poloidal =  4
+singlenull.numcells.sol_radial   =  10
+
+
+singlenull.decomp.core.configuration =  2  4
+singlenull.decomp.core.phase         =  2  4  1  1   48
+
+singlenull.decomp.lpf.configuration  =  1  1
+singlenull.decomp.lpf.phase          =  1  1  1  1   12
+
+singlenull.decomp.rpf.configuration  =  1  1
+singlenull.decomp.rpf.phase          =  1  1  1  1   12
+
+singlenull.decomp.csol.configuration  =  1  4 
+singlenull.decomp.csol.phase          =  1  4  1  1  48
+
+singlenull.decomp.lsol.configuration  =  1  1
+singlenull.decomp.lsol.phase          =  1  1  1  1  12
+
+singlenull.decomp.rsol.configuration  =  1  1
+singlenull.decomp.rsol.phase          =  1  1  1  1  12
+
+gksystem.num_velocity_cells =  4 4
+gksystem.velocity_decomp    =  1 1
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "SingleNull"
+gksystem.magnetic_geometry_mapping.singlenull.geometry_file = "COGENT_mapping"
+gksystem.magnetic_geometry_mapping.singlenull.field_coefficients_file = "DCT_coefficients.txt"
+gksystem.magnetic_geometry_mapping.singlenull.verbose  = true
+gksystem.magnetic_geometry_mapping.singlenull.Btor_scale  = -3.5
+
+gksystem.magnetic_geometry_mapping.singlenull.field_aligned = true
+gksystem.magnetic_geometry_mapping.singlenull.subgrid_geometry = true
+gksystem.magnetic_geometry_mapping.singlenull.subgrid_refinement = 2 2
+gksystem.magnetic_geometry_mapping.correct_field = false
+gksystem.magnetic_geometry_mapping.extrablock_exchange = true
+gksystem.magnetic_geometry_mapping.singlenull.axisymmetric = true
+
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 1.0
+phase_space_mapping.mu_max = 2.0
+#phase_space_mapping.second_order = true
+phase_space_mapping.velocity_type = "gyrokinetic"
+
+#####################################################
+# Vlasov Operator Definitions
+#####################################################
+gkvlasov.verbose = true
+#gkvlasov.face_avg_type = uw1
+gkvlasov.face_avg_type = uw3
+#gkvlasov.face_avg_type = uw5
+#gkvlasov.face_avg_type = weno5
+#gkvlasov.face_avg_type = bweno
+#gkvlasov.time_step_diagnostics = true
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gksystem.fixed_efield = true
+gkpoisson.verbose = true
+gkpoisson.second_order = true
+
+#####################################################
+# Species Definitions
+#####################################################
+fluid_species.1.name   = "neutrals"
+fluid_species.1.mass   = 1.0
+fluid_species.1.charge = 0.0
+fluid_species.1.operator_type = "OneFieldOp"
+
+fluid_model.neutrals.D_perp = "Dshape"
+fluid_model.neutrals.D_par = "Dshape"
+
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.potential.function = "zero_grid_func"
+IC.neutrals.function = "neutrals_IC"
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.potential.poloidal_inner_div.type = "dirichlet"
+BC.potential.poloidal_inner_div.value = 0.0
+BC.potential.poloidal_outer_div.type = "dirichlet"
+BC.potential.poloidal_outer_div.value = 0.0
+BC.potential.radial_core.type = "dirichlet"
+BC.potential.radial_core.value = 0.0
+BC.potential.radial_sol.type = "dirichlet"
+BC.potential.radial_sol.value = 0.
+BC.potential.radial_pf.type = "dirichlet"
+BC.potential.radial_pf.value = 0.0
+
+BC.neutrals_diffusion.second_order = true
+BC.neutrals_diffusion.poloidal_inner_div.type = "dirichlet"
+BC.neutrals_diffusion.poloidal_inner_div.value = 0.0
+BC.neutrals_diffusion.poloidal_outer_div.type = "dirichlet"
+BC.neutrals_diffusion.poloidal_outer_div.value = 0.0
+BC.neutrals_diffusion.radial_core.type = "dirichlet"
+BC.neutrals_diffusion.radial_core.value = 1.0
+BC.neutrals_diffusion.radial_sol.type = "dirichlet"
+BC.neutrals_diffusion.radial_sol.value = 0.1
+BC.neutrals_diffusion.radial_pf.type = "dirichlet"
+BC.neutrals_diffusion.radial_pf.value = 0.0
+
+BC.neutrals.radial_core.function = "neutrals_IC"
+BC.neutrals.radial_sol.function = "neutrals_IC"
+BC.neutrals.radial_pf.function = "neutrals_IC"
+BC.neutrals.poloidal_inner_div.function ="neutrals_IC"
+BC.neutrals.poloidal_outer_div.function ="neutrals_IC"
+BC.neutrals.radial_core.type = "dirichlet"
+BC.neutrals.radial_sol.type = "dirichlet"
+BC.neutrals.radial_pf.type = "dirichlet"
+BC.neutrals.poloidal_inner_div.type = "dirichlet"
+BC.neutrals.poloidal_inner_div.type = "dirichlet"
+
+#####################################################
+# Collisions Definitions
+#####################################################
+
+
+#####################################################
+# Kinetic Function Definitions
+#####################################################
+
+#####################################################
+# Grid Function Definitions
+#####################################################
+grid_function_library.number = 4
+grid_function_library.verbosity = 1
+grid_function_library.list = "zero_grid_func" "neutrals_IC" "Dshape" "source"
+
+grid_function_library.zero_grid_func.type = "zero" 
+
+#computational coordinate X runs 0 to 2pi. physical coordinate runs 0 to L.
+#For exponentially decreasing density, one should use exp(-(x-pi)/(2*pi*delta/L)) 
+
+grid_function_library.neutrals_IC.type = "localized"
+grid_function_library.neutrals_IC.amplitude = 1.0
+grid_function_library.neutrals_IC.location = 2.25 0.0
+grid_function_library.neutrals_IC.width = 0.01 0.01
+grid_function_library.neutrals_IC.floor = 0.0
+
+grid_function_library.Dshape.type = "arbitrary"
+grid_function_library.Dshape.function = "1.0" #"(1.0+sin(x/2.0)*sin(x/2.0))*(1+0.001*cos(2*y))"
+
+grid_function_library.source.type = "arbitrary"
+grid_function_library.source.function = "0.0" #"(1.0+sin(x/2.0)*sin(x/2.0))*(1+0.001*cos(2*y))"
+
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 5.0e19
+units.temperature    = 300.0
+units.length         = 1.0
+units.mass           = 1.0
+units.magnetic_field = 1.0 

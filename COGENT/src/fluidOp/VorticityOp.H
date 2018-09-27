@@ -8,8 +8,11 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 #include "GKVlasov.H"
+#include "FluidOpPreconditioner.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
+
+#include <string>
 
 #include "NamespaceHeader.H"
 
@@ -25,10 +28,10 @@ public:
   /**
    *  @param[in] pp the input database.
    */
-  VorticityOp( ParmParse&      a_pp,
-               const MagGeom&  a_geometry,
-               const double    a_larmor,
-               const int       a_verbosity );
+  VorticityOp( const std::string& a_pp_str,
+               const MagGeom&     a_geometry,
+               const double       a_larmor,
+               const int          a_verbosity );
 
   /// Destructor.
   /**
@@ -64,9 +67,29 @@ public:
                                        const bool                         recompute_kinetic_terms,
                                        const Real                         time );
 
+   virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+                               std::vector<PS::DOFList>&,
+                               const PS::GKVector&,
+                               PS::GKOps&,
+                               const std::string&,
+                               const std::string&,
+                               bool,
+                               const FluidSpecies&,
+                               const PS::GlobalDOFFluidSpecies&,
+                               int );
+
+   virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+                                const PS::KineticSpeciesPtrVect&,
+                                const FluidSpeciesPtrVect&,
+                                const Real,
+                                const bool,
+                                const int );
+
    virtual void evalSolutionOp( FluidSpeciesPtrVect&               rhs,
-                                const PS::KineticSpeciesPtrVect&   kinetic_species,
-                                const FluidSpeciesPtrVect&         fluid_species,
+                                const PS::KineticSpeciesPtrVect&   kinetic_species_comp,
+                                const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
+                                const FluidSpeciesPtrVect&         fluid_species_comp,
+                                const FluidSpeciesPtrVect&         fluid_species_phys,
                                 const PS::ScalarPtrVect&           scalars,
                                 const int                          component,
                                 const Real                         time );
@@ -117,6 +140,9 @@ private:
    GKPoisson*    m_gyropoisson_op;
 
    PS::GKVlasov*  m_vlasov;
+
+   std::string m_opt_string;
+   int m_my_pc_idx_e, m_my_pc_idx_i;
 
    /// Parse parameters.
    /**

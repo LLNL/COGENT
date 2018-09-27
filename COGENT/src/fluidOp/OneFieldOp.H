@@ -18,9 +18,9 @@ public:
   /**
    *  @param[in] pp the input database.
    */
-  OneFieldOp( ParmParse&      pp,
-              const MagGeom&  geometry,
-              const int       verbosity );
+  OneFieldOp( const std::string& a_pp_str,
+              const MagGeom&     geometry,
+              const int          verbosity );
 
   /// Destructor.
   /**
@@ -56,6 +56,24 @@ public:
                                       const bool                         recompute_kinetic_terms,
                                       const Real                         time);
    
+   virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+                               std::vector<PS::DOFList>&,
+                               const PS::GKVector&,
+                               PS::GKOps&,
+                               const std::string&,
+                               const std::string&,
+                               bool,
+                               const FluidSpecies&,
+                               const PS::GlobalDOFFluidSpecies&,
+                               int );
+
+   virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+                                const PS::KineticSpeciesPtrVect&,
+                                const FluidSpeciesPtrVect&,
+                                const Real,
+                                const bool,
+                                const int );
+
    virtual void updatePCImEx( const PS::KineticSpeciesPtrVect&  kinetic_species,
                               const double                      mshift );
 
@@ -79,6 +97,9 @@ private:
    int m_verbosity;
    const MagGeom& m_geometry;
    int m_is_time_implicit;
+
+   std::string m_opt_string;
+   int m_my_pc_idx;
    
    /// Parse parameters.
    /**
@@ -98,8 +119,10 @@ private:
    Diffusion* m_diffusion_op;
    EllipticOpBC* m_bc;
    
-   double m_D;
-   RefCountedPtr<GridFunction> m_D_shape;
+   
+   RefCountedPtr<GridFunction> m_D_rad;
+   RefCountedPtr<GridFunction> m_D_par;
+   RefCountedPtr<GridFunction> m_D_perp;
    RefCountedPtr<GridFunction> m_source;
 
    virtual void accumulateRHS(FluidSpeciesPtrVect&               rhs,
@@ -109,6 +132,11 @@ private:
                               const EField&                      E_field,
                               const int                          component,
                               const Real                         time);
+   
+   void computeDiffusionCoefficients(LevelData<FluxBox>& D_tensor,
+                                     LevelData<FluxBox>& D_tensor_mapped,
+                                     const Real          time) const;
+
 };
 
 

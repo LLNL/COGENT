@@ -10,10 +10,15 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 #include "Scalar.H"
+#include "GlobalDOF.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 
+#include <string>
+#include <vector>
+
 #include "NamespaceHeader.H"
+namespace PS = PS_NAMESPACE; 
 
 /**
  * Gyrokinetic fluid operator class.
@@ -56,22 +61,43 @@ class GKFluidOp
                                       const IntVect&              ghosts ) const;
 
       virtual void evalSolutionOp( FluidSpeciesPtrVect&               a_rhs,
-                                   const PS::KineticSpeciesPtrVect&   a_kinetic_species,
-                                   const FluidSpeciesPtrVect&         a_fluid_species,
+                                   const PS::KineticSpeciesPtrVect&   a_kinetic_species_comp,
+                                   const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
+                                   const FluidSpeciesPtrVect&         a_fluid_species_comp,
+                                   const FluidSpeciesPtrVect&         a_fluid_species_phys,
                                    const PS::ScalarPtrVect&           a_scalars,
                                    const Real                         a_time );
 
+      void defineMultiPhysicsPC(std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+                                std::vector<PS::DOFList>&,
+                                const FluidSpeciesPtrVect&,
+                                const PS::GlobalDOFFluidSpeciesPtrVect&,
+                                const PS::GKVector&,
+                                PS::GKOps&,
+                                const std::string&,
+                                const std::string&,
+                                bool);
+
+      void updateMultiPhysicsPC(std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+                                const PS::KineticSpeciesPtrVect&,
+                                const FluidSpeciesPtrVect&,
+                                const Real,
+                                const bool );
+
       virtual void solveSolutionPC( FluidSpeciesPtrVect&              a_fluid_species_solution,
                                     const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
-                                    const FluidSpeciesPtrVect&        a_fluid_species_rhs );
+                                    const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                                    int                               a_idx = -1 );
 
       void updatePC( const PS::KineticSpeciesPtrVect&  kinetic_species,
                      const FluidSpeciesPtrVect&        fluid_species,
-                     const double                      mshift );
+                     const double                      mshift,
+                     int                               a_idx = -1 );
 
       virtual void solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species_solution,
                                 const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
-                                const FluidSpeciesPtrVect&        a_fluid_species_rhs );
+                                const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                                int                               a_idx = -1 );
 
       bool trivialSolutionOp( const FluidSpeciesPtrVect& fluid_species );
 

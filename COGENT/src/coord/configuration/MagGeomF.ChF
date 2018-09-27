@@ -569,3 +569,45 @@ c        Premultiply by the NTranspose matrix
       return
       end
 
+      subroutine compute_radial_elliptic_op_coeff(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_FRA[rad_coef],
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k]
+
+c        Coefficients in cylindrical coordinate frame;
+c        Defines physical flux projection onto the radial dir (i.e., normal to magnetic flux) 
+c        Note that in 3D physical components are R,Phi,Z 
+
+         fac = one/(bunit(CHF_IX[i;j;k],0)**2 + bunit(CHF_IX[i;j;k],2)**2)
+
+#if CH_SPACEDIM==3
+         rad_coef(CHF_IX[i;j;k],0) = fac * bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2)
+         rad_coef(CHF_IX[i;j;k],1) = zero
+         rad_coef(CHF_IX[i;j;k],2) =-fac * bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],0)
+         rad_coef(CHF_IX[i;j;k],3) = zero
+         rad_coef(CHF_IX[i;j;k],4) = zero
+         rad_coef(CHF_IX[i;j;k],5) = zero
+         rad_coef(CHF_IX[i;j;k],6) = -fac * bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],0)
+         rad_coef(CHF_IX[i;j;k],7) = zero
+         rad_coef(CHF_IX[i;j;k],8) = fac * bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0)
+#else
+         rad_coef(CHF_IX[i;j;k],0) = fac * bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2)
+         rad_coef(CHF_IX[i;j;k],1) =-fac * bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],0)
+         rad_coef(CHF_IX[i;j;k],2) =-fac * bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],2)
+         rad_coef(CHF_IX[i;j;k],3) = fac * bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0)
+
+#endif
+
+         
+      CHF_ENDDO
+
+      return
+      end
+

@@ -30,9 +30,15 @@ FluxSurface::FluxSurface( const MagGeom& a_geom,
    m_volume.define(m_magnetic_geometry->grids(), 1, 2*IntVect::Unit);
    m_magnetic_geometry->getCellVolumes(m_volume);
 
+#if CFG_DIM == 2
    adjCellLo(m_grids, m_magnetic_geometry->grids(), POLOIDAL_DIR, -1);
-   m_areas.define(m_grids, 1, IntVect::Zero);
+#else
+   adjCellLo(m_grids2D, m_magnetic_geometry->grids(), POLOIDAL_DIR, -1);
+   adjCellLo(m_grids, m_grids2D, TOROIDAL_DIR, -1);
+#endif
 
+   m_areas.define(m_grids, 1, IntVect::Zero);
+   
    const MagCoordSys& sn_coord_sys( *(m_magnetic_geometry->getCoordSys()) );
    m_single_null = ( typeid(sn_coord_sys) == typeid(SingleNullCoordSys) );
 
@@ -82,16 +88,9 @@ FluxSurface::sum( const LevelData<FArrayBox>& a_src,
 {
    CH_assert(a_src.nComp() == a_dst.nComp());
 
-   int poloidal_dir = POLOIDAL_DIR;
    const DisjointBoxLayout& dst_grids = a_dst.getBoxes();
    const DisjointBoxLayout& src_grids = a_src.getBoxes();
    const ProblemDomain& problem_domain = src_grids.physDomain();
-
-   // Define ReductionCopier to compute intersections (sum in the y-direction)
-   ReductionCopier reduceCopier(src_grids, dst_grids, problem_domain, poloidal_dir);
-
-   SumOp op(poloidal_dir);
-   op.scale = 1.0;
 
    // Initialize the destination, since SumOp does not do that for us.
    DataIterator dit = a_dst.dataIterator();
@@ -99,9 +98,46 @@ FluxSurface::sum( const LevelData<FArrayBox>& a_src,
       a_dst[dit].setVal(0.);
    }
 
+#if CFG_DIM == 2
+
+   int poloidal_dir = POLOIDAL_DIR;
+   // Define ReductionCopier to compute intersections (sum in the y-direction)
+   ReductionCopier reduceCopier(src_grids, dst_grids, problem_domain, poloidal_dir);
+
+   SumOp op(poloidal_dir);
+   op.scale = 1.0;
+
    // Do the summing operation -- sums data in src along the poloidal direction
    // and places the result in dst
    a_src.copyTo(a_src.interval(), a_dst, a_dst.interval(), reduceCopier, op);
+
+#else
+
+   // Initialize the destination, since SumOp does not do that for us.
+   LevelData<FArrayBox> tmp_2d(m_grids2D, 1, IntVect::Zero);
+   for (DataIterator dit(m_grids2D); dit.ok(); ++dit) {
+      tmp_2d[dit].setVal(0.);
+   }
+   
+   // Define ReductionCopier to compute intersections (sum in the poloidal direction)
+   ReductionCopier reduceCopier2D(src_grids, m_grids2D, problem_domain, POLOIDAL_DIR);
+   
+   SumOp op2D(POLOIDAL_DIR);
+   op2D.scale = 1.0;
+
+   // Do the summing operation -- sums data in src along the poloidal direction
+   a_src.copyTo(a_src.interval(), tmp_2d, tmp_2d.interval(), reduceCopier2D, op2D);
+
+   // Define ReductionCopier to compute intersections (sum in the toroidal  direction)
+   ReductionCopier reduceCopier3D(m_grids2D, dst_grids, problem_domain, TOROIDAL_DIR);
+   
+   SumOp op3D(TOROIDAL_DIR);
+   op3D.scale = 1.0;
+
+   // Do the summing operation -- sums data in src along the toroidal direction
+   tmp_2d.copyTo(tmp_2d.interval(), a_dst, a_dst.interval(), reduceCopier3D, op3D);
+   
+#endif
 }
 
 
@@ -112,11 +148,13 @@ FluxSurface::spread( const LevelData<FArrayBox>& a_src,
 {
    CH_assert(a_src.nComp() == a_dst.nComp());
 
-   int poloidal_dir = POLOIDAL_DIR;
    const DisjointBoxLayout& dst_grids = a_dst.getBoxes();
    const DisjointBoxLayout& src_grids = a_src.getBoxes();
    const ProblemDomain& problem_domain = dst_grids.physDomain();
 
+#if CFG_DIM == 2
+
+   int poloidal_dir = POLOIDAL_DIR;
    // Define SpreadingCopier to spread in the poloidal direction
    SpreadingCopier spreadCopier(src_grids, dst_grids, problem_domain, poloidal_dir);
 
@@ -124,6 +162,28 @@ FluxSurface::spread( const LevelData<FArrayBox>& a_src,
 
    // Do the spreading
    a_src.copyTo(a_src.interval(), a_dst, a_dst.interval(), spreadCopier, spreadOp);
+
+#else
+   
+   LevelData<FArrayBox> tmp_2d(m_grids2D, 1, IntVect::Zero);
+   
+   // Define SpreadingCopier to spread in the poloidal direction
+   SpreadingCopier spreadCopier2D(src_grids, m_grids2D, problem_domain, TOROIDAL_DIR);
+   
+   const SpreadingOp spreadOp2D(TOROIDAL_DIR);
+   
+   // Do the spreading in the poloidal direction
+   a_src.copyTo(a_src.interval(), tmp_2d, tmp_2d.interval(), spreadCopier2D, spreadOp2D);
+   
+   // Define SpreadingCopier to spread in the toroidal  direction
+   SpreadingCopier spreadCopier3D(m_grids2D, dst_grids, problem_domain, POLOIDAL_DIR);
+   
+   const SpreadingOp spreadOp3D(POLOIDAL_DIR);
+   
+   // Do the remaining spreading in the toroidal direction
+   tmp_2d.copyTo(tmp_2d.interval(), a_dst, a_dst.interval(), spreadCopier3D, spreadOp3D);
+
+#endif
 }
 
 

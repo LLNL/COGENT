@@ -16,6 +16,30 @@ class GKVector
       m_data = NULL;
     }
 
+    GKVector(const GKVector& a_vec)
+    {
+      m_is_defined = false;
+      m_size = 0;
+      m_data = NULL;
+      define(a_vec);
+    }
+
+    GKVector(const GKState& a_state)
+    {
+      m_is_defined = false;
+      m_size = 0;
+      m_data = NULL;
+      define(a_state);
+    }
+
+    GKVector(int a_size)
+    {
+      m_is_defined = false;
+      m_size = 0;
+      m_data = NULL;
+      define(a_size);
+    }
+
     ~GKVector()
     {
       if (m_data) delete[] m_data;
@@ -79,6 +103,16 @@ class GKVector
       CH_assert(a_vec.getVectorSize() == m_size);
       const Real *data = a_vec.data();
       for (int i=0; i<m_size; i++) m_data[i] = data[i];
+    }
+
+    inline
+    void copy(const GKVector& a_vec, std::vector<int> a_idx_list)
+    {
+      CH_assert(a_vec.getVectorSize() == m_size);
+      const Real *data = a_vec.data();
+      for (int i=0; i<a_idx_list.size(); i++) {
+        m_data[a_idx_list[i]] = data[a_idx_list[i]];
+      }
     }
 
     inline 
@@ -164,9 +198,9 @@ class GKVector
 
   private:
 
-    bool      m_is_defined;
-    int       m_size;
-    Real      *m_data;
+    bool            m_is_defined;
+    int             m_size;
+    Real            *m_data;
     const GKState   *m_state;
 };
 

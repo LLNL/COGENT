@@ -47,17 +47,15 @@ public:
    /// Construct the operator coefficients
    /**
     * Computes the operator coefficients.
+    *  @param[in] pointwise face-centered unmapped_coefficients.
+    *  @param[in] pointwise face-centered mapped_coefficients.
+    *  @param[in] boundary conditions
     *
     */
 
-   virtual void setOperatorCoefficients( const double                        scalar_factor,
-                                         const RefCountedPtr<GridFunction>   coefficient_function,
+   virtual void setOperatorCoefficients( const LevelData<FluxBox>&           unmapped_coefficients_fc,
+                                         const LevelData<FluxBox>&           mapped_coefficients_fc,
                                          const EllipticOpBC&                 bc );
-
-   void computeCoefficients( const double                       scalar_factor,
-                             const RefCountedPtr<GridFunction>  coefficient_function,
-                             LevelData<FluxBox>&                unmapped_coefficients,
-                             LevelData<FluxBox>&                mapped_coefficients );
 
    virtual void updateImExPreconditioner( const double         mshift,
                                           const EllipticOpBC&  bc );
@@ -100,8 +98,8 @@ protected:
    MBHypreSolver* m_imex_preconditioner;
 #endif
 
-   LevelData<FluxBox> m_mapped_coefficients;
-   LevelData<FluxBox> m_unmapped_coefficients;
+   LevelData<FluxBox> m_mapped_coefficients; //face-averaged
+   LevelData<FluxBox> m_unmapped_coefficients; //face-centered
    LevelData<FArrayBox> m_volume_reciprocal;
    
    MagFluxAlignedMBLEXCenter* m_mblx_ptr;

@@ -73,6 +73,10 @@ class BasicGKPreconditioner : public Preconditioner<T,Ops>
     inline void setJFNKEps(Real a_eps) { m_pc_object->setJFNKEps(a_eps); }
     inline void setIsLinear(bool a_b) { m_pc_object->setIsLinear(a_b); }
 
+    inline const std::string typeName() { return _BASIC_GK_PC_; }
+
+    inline void* getBandedMatrix() { return((void*)(&(m_pc_object->getBandedMatrixForm()) ) ); }
+
   protected:
 
   private:

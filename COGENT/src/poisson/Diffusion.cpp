@@ -68,100 +68,35 @@ Diffusion::updateBoundaries( const EllipticOpBC&  a_bc )
 
 
 void
-Diffusion::setOperatorCoefficients( const double                       a_scalar_factor,
-                                    const RefCountedPtr<GridFunction>  a_coefficient_function,
-                                    const EllipticOpBC&                a_bc )
+Diffusion::setOperatorCoefficients( const LevelData<FluxBox>&           a_unmapped_coefficients,
+                                    const LevelData<FluxBox>&           a_mapped_coefficients,
+                                    const EllipticOpBC&                 a_bc )
 {
    CH_TIME("Diffusion::setOperatorCoefficients");
-
-   computeCoefficients(a_scalar_factor, a_coefficient_function, m_unmapped_coefficients, m_mapped_coefficients);
-
-   updateBoundaries(a_bc);
-}
-
-
-void
-Diffusion::computeCoefficients( const double                       a_scalar_factor,
-                                const RefCountedPtr<GridFunction>  a_coefficient_function,
-                                LevelData<FluxBox>&                a_unmapped_coefficients,
-                                LevelData<FluxBox>&                a_mapped_coefficients )
-{
+   
    const DisjointBoxLayout & grids = m_geometry.grids();
-
-   const IntVect grown_ghosts = a_mapped_coefficients.ghostVect() + IntVect::Unit;
+   
+   const IntVect grown_ghosts = m_mapped_coefficients.ghostVect() + IntVect::Unit;
    CH_assert(grown_ghosts == 2*IntVect::Unit);
+   CH_assert(a_mapped_coefficients.ghostVect() >= 2*IntVect::Unit);
 
-   // Compute the coefficients at the face centers of a grown (by one ghost cell)
-   // LevelData so that they can then be face averaged
-   LevelData<FluxBox> grown_coefficients(grids, SpaceDim*SpaceDim, grown_ghosts);
-
-   LevelData<FluxBox> N(grids, SpaceDim*SpaceDim, grown_ghosts);
-   m_geometry.getPointwiseN(N);
-
-   LevelData<FluxBox> NJinverse(grids, SpaceDim*SpaceDim, grown_ghosts);
-   m_geometry.getPointwiseNJinverse(NJinverse);
-
-   LevelData<FArrayBox> D_cell( grids, 1, grown_ghosts + IntVect::Unit );
-   if ( !a_coefficient_function.isNull() ) {
-      a_coefficient_function->assign( D_cell, m_geometry, 0.0);
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         D_cell[dit] *= a_scalar_factor;
-      }
+   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      m_unmapped_coefficients[dit].copy(a_unmapped_coefficients[dit]);
+      m_mapped_coefficients[dit].copy(a_mapped_coefficients[dit]);
    }
-   else {
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         D_cell[dit].setVal(a_scalar_factor);
-      }
-   }
-
-   m_geometry.fillInternalGhosts( D_cell );
-
-   LevelData<FluxBox> D_face( grids, 1, grown_ghosts );
-   fourthOrderCellToFaceCenters(D_face, D_cell);
-
-   LevelData<FluxBox> D_tensor(grids, SpaceDim*SpaceDim, grown_ghosts);
-
-   // Tensor is diagonal for now
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         FArrayBox& this_D =        D_face[dit][dir];
-         FArrayBox& this_D_tensor = D_tensor[dit][dir];
-         this_D_tensor.setVal(0.);
-         for (int n=0; n<SpaceDim; ++n) {
-            this_D_tensor.copy(this_D,0,n*(SpaceDim+1),1);
-         }
-      }
-   }      
-
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-     FluxBox& this_coef = grown_coefficients[dit];
-
-     for (int dir=0; dir<SpaceDim; ++dir) {
-       FArrayBox& this_coef_dir = this_coef[dir];
-       const Box& box_dir = this_coef_dir.box();
-
-       FORT_COMPUTE_MAPPED_DIFFUSION_COEFFICIENTS(CHF_BOX(box_dir),
-                                                  CHF_CONST_FRA(N[dit][dir]),
-                                                  CHF_CONST_FRA(D_tensor[dit][dir]),
-                                                  CHF_CONST_FRA(NJinverse[dit][dir]),
-                                                  CHF_FRA(this_coef_dir));
-     }
-   }
-
+   
    // The mapped coefficients must now be converted to face averages, which
    // requires a layer of transverse ghost faces that we don't have at the
-   // physical boundary, so we need to extrapolate them.
-   m_geometry.fillTransverseGhosts(grown_coefficients, false);
+   // physical boundary, so we need to extrapolate them. DO WE NEED THIS?
+   m_geometry.fillTransverseGhosts(m_mapped_coefficients, false);
+   m_geometry.fillTransverseGhosts(m_unmapped_coefficients, false);
 
    // Convert the mapped coefficients from face-centered to face-averaged
-   fourthOrderAverage(grown_coefficients);
-
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-     a_unmapped_coefficients[dit].copy(D_tensor[dit]);
-     a_mapped_coefficients[dit].copy(grown_coefficients[dit]);
-   }
-
+   if (!m_second_order) fourthOrderAverage(m_mapped_coefficients);
+   
    m_coefficients_defined = true;
+
+   updateBoundaries(a_bc);
 }
 
 

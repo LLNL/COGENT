@@ -28,25 +28,24 @@ GKCollisions::GKCollisions( const int a_verbose )
          if (ppspecies.contains( "cls" )) {
             ppspecies.get( "cls", cls_type );
             const std::string prefix( "CLS." + species_name );
-            ParmParse ppcls( prefix.c_str() );
             
             if (cls_type == _CLS_KROOK_) {
-               cls = new Krook( ppcls, m_verbose );
+               cls = new Krook( prefix, m_verbose );
             }
             else if (cls_type == _CLS_MYKROOK_) {
-               cls = new MyKrook( ppcls, m_verbose );
+               cls = new MyKrook( prefix, m_verbose );
             }
             else if (cls_type == _CLS_LORENTZ_) {
-               cls = new Lorentz( ppcls, m_verbose );
+               cls = new Lorentz( prefix, m_verbose );
             }
             else if (cls_type == _CLS_LINEARIZED_) {
-               cls = new Linearized( ppcls, m_verbose );
+               cls = new Linearized( prefix, m_verbose );
             }
             else if (cls_type == _CLS_FOKKERPLANCK_) {
-               cls = new FokkerPlanck( ppcls, m_verbose );
+               cls = new FokkerPlanck( prefix, m_verbose );
             }
             else if (cls_type == _CLS_CONSDRAGDIFF_) {
-               cls = new ConsDragDiff( species_name, ppcls, m_verbose );
+               cls = new ConsDragDiff( species_name, prefix, m_verbose );
             }
             else if (cls_type == _CLS_NONE_) {
                cls = new NullCLS();
@@ -116,28 +115,20 @@ std::string GKCollisions::collisionModelName( const std::string& a_name )
 
 void GKCollisions::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
                                   const KineticSpeciesPtrVect& a_soln,
+                                  const bool                   a_implicit,
                                   const Real                   a_time )
 {
    for (int species(0); species<a_rhs.size(); species++) {
       KineticSpecies& rhs_species( *(a_rhs[species]) );
       const std::string species_name( rhs_species.name() );
       CLSInterface& CLS( collisionModel( species_name ) );
-      CLS.evalClsRHS( a_rhs, a_soln, species, a_time );
+      if (a_implicit) {
+        CLS.evalClsRHSImplicit( a_rhs, a_soln, species, a_time );
+      } else {
+        CLS.evalClsRHSExplicit( a_rhs, a_soln, species, a_time );
+      }
    }
 }
-
-void GKCollisions::accumulateApproxRHS( KineticSpeciesPtrVect&       a_rhs,
-                                        const KineticSpeciesPtrVect& a_soln,
-                                        const Real                   a_time )
-{
-   for (int species(0); species<a_rhs.size(); species++) {
-      KineticSpecies& rhs_species( *(a_rhs[species]) );
-      const std::string species_name( rhs_species.name() );
-      CLSInterface& CLS( collisionModel( species_name ) );
-      CLS.evalClsApproxRHS( a_rhs, a_soln, species, a_time );
-   }
-}
-
 
 Real GKCollisions::computeDt( const KineticSpeciesPtrVect& soln )
 {
@@ -198,6 +189,43 @@ void GKCollisions::assemblePrecondMatrix( void *a_P,
     CLSInterface&             CLS(collisionModel(species_name));
 
     CLS.assemblePrecondMatrix(a_P,soln_species,gdofs_species);
+  }
+}
+
+void GKCollisions::defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
+                                        std::vector<DOFList>&                         a_dof_list,
+                                        const KineticSpeciesPtrVect&                  a_soln,
+                                        const GlobalDOFKineticSpeciesPtrVect&         a_gdofs,
+                                        const GKVector&                               a_x,
+                                        GKOps&                                        a_ops,
+                                        const std::string&                            a_out_string,
+                                        const std::string&                            a_opt_string,
+                                        bool                                          a_im )
+{
+  for (int species(0); species<a_soln.size(); species++) {
+    const KineticSpecies&           soln_species(*(a_soln[species]));
+    const GlobalDOFKineticSpecies&  gdofs_species(*(a_gdofs[species]));
+    const std::string               species_name(soln_species.name());
+    CLSInterface&                   CLS(collisionModel(species_name));
+
+    CLS.defineBlockPC(a_pc, a_dof_list, a_x, a_ops, a_out_string, a_opt_string, a_im, 
+                      soln_species, gdofs_species, species);
+  }
+}
+
+void GKCollisions::updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
+                                        const KineticSpeciesPtrVect&                  a_soln,
+                                        const GlobalDOFKineticSpeciesPtrVect&         a_gdofs,
+                                        const Real                                    a_shift,
+                                        const bool                                    a_im )
+{
+  for (int species(0); species<a_soln.size(); species++) {
+    const KineticSpecies&           soln_species(*(a_soln[species]));
+    const GlobalDOFKineticSpecies&  gdofs_species(*(a_gdofs[species]));
+    const std::string               species_name(soln_species.name());
+    CLSInterface&                   CLS(collisionModel(species_name));
+
+    CLS.updateBlockPC(a_pc, soln_species, gdofs_species, a_shift, a_im, species);
   }
 }
 

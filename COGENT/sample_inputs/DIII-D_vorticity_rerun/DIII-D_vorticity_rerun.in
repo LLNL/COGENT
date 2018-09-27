@@ -51,8 +51,6 @@ ark_newton.rtol = 1.e-6
 ark_jacobian.with_pc = true
 ark_pc.type = "amgGKPC"
 
-gksystem.imex_collisions_implicit = false
-
 #####################################################
 # Grid and Data Layout Definitions
 #####################################################
@@ -236,6 +234,7 @@ CLS.hydrogen.ref_function = "maxwellian_const"
 CLS.hydrogen.ref_temperature = "T0"
 CLS.hydrogen.ref_density = "N0"
 CLS.hydrogen.rosenbluth_skip_stage = true
+CLS.hydrogen.time_implicit = false
 
 #####################################################
 # Transport Definitions

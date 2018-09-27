@@ -15,14 +15,16 @@
 #include "NamespaceHeader.H" 
 
 
-Krook::Krook( ParmParse& a_ppcls, const int a_verbosity )
+Krook::Krook( const std::string& a_ppcls_str, const int a_verbosity )
    : m_verbosity(a_verbosity),
+     m_time_implicit(true),
      m_cls_freq(-1.0),
      m_conserve_particle(false),
      m_conserve_momentum(false),
      m_first_step(true)
 {
-   parseParameters( a_ppcls );
+   ParmParse ppcls( a_ppcls_str.c_str() );
+   parseParameters( ppcls );
    if (m_verbosity>0) {
       printParameters();
    }
@@ -424,6 +426,7 @@ void Krook::computeSelfConsistFreq(LevelData<FArrayBox>& a_cls_freq,
 inline
 void Krook::parseParameters( ParmParse& a_ppcls )
 {
+   a_ppcls.query( "time_implicit", m_time_implicit);
    a_ppcls.query( "cls_freq", m_cls_freq );
    a_ppcls.query( "conserve_particle", m_conserve_particle );
    a_ppcls.query( "conserve_momentum", m_conserve_momentum );
@@ -453,7 +456,9 @@ void Krook::printParameters()
       std::cout << "Krook collisions parameters:" << std::endl;
       std::cout << "  cls_freq  =  " << m_cls_freq
                 << ", conserve_particle = " << m_conserve_particle
-                << ", conserve_momentum = " << m_conserve_momentum << std::endl;
+                << ", conserve_momentum = " << m_conserve_momentum 
+                << ", implicit in time = " << m_time_implicit
+                << std::endl;
       std::cout << "  Reference Function:" << std::endl;
       m_ref_func->printParameters();
       std::cout << "  Reference Temperature:" << std::endl;

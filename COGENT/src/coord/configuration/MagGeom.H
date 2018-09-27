@@ -106,6 +106,10 @@ public:
    const LevelData<FluxBox>& getEllipticOpParCoeff() const {return m_par_coeff;}
    
    const LevelData<FluxBox>& getEllipticOpParCoeffMapped() const {return m_par_coeff_mapped;}
+   
+   void getEllipticOpRadCoeff(LevelData<FluxBox>& rad_coeff) const;
+   
+   void getEllipticOpRadCoeffMapped(LevelData<FluxBox>& rad_coeff_mapped) const;
 
    void plotMagneticFieldData(const double& time) const;
    
@@ -323,6 +327,9 @@ private:
    LevelData<FluxBox> m_par_coeff;
    LevelData<FluxBox> m_perp_coeff_mapped;
    LevelData<FluxBox> m_par_coeff_mapped;
+   
+   mutable LevelData<FluxBox> m_rad_coeff;
+   mutable LevelData<FluxBox> m_rad_coeff_mapped;
     
    mutable LevelData<FArrayBox> m_cell_volume;
 

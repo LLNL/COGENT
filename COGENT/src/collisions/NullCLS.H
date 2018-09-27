@@ -39,6 +39,19 @@ class NullCLS
                                const KineticSpeciesPtrVect& soln,
                                const int                    species,
                                const Real                   time ) {}
+
+      inline
+      virtual void evalClsRHSExplicit( KineticSpeciesPtrVect&        a_rhs,
+                                       const KineticSpeciesPtrVect&  a_soln,
+                                       const int                     a_species,
+                                       const Real                    a_time ) {}
+    
+      inline
+      virtual void evalClsRHSImplicit( KineticSpeciesPtrVect&        a_rhs,
+                                       const KineticSpeciesPtrVect&  a_soln,
+                                       const int                     a_species,
+                                       const Real                    a_time ) {}
+
 };
 
 

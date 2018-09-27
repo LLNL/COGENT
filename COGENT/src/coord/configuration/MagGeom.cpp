@@ -3124,6 +3124,91 @@ MagGeom::computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& a_
 }
 
 void
+MagGeom::getEllipticOpRadCoeff(LevelData<FluxBox>& a_rad_coeff) const
+{
+
+   DataIterator dit = a_rad_coeff.dataIterator();
+   
+   if ( !m_rad_coeff.isDefined() || !(a_rad_coeff.ghostVect() <= m_rad_coeff.ghostVect()) ) {
+      
+      m_rad_coeff.define(a_rad_coeff);
+      
+      const DisjointBoxLayout& grids = a_rad_coeff.disjointBoxLayout();
+   
+      for (dit.begin(); dit.ok(); ++dit) {
+         const FluxBox& this_bunit = m_BFieldDir_fc[dit];
+         FluxBox& this_rad_coeff = m_rad_coeff[dit];
+      
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            const Box& box_dir = this_rad_coeff[dir].box();
+         
+            FORT_COMPUTE_RADIAL_ELLIPTIC_OP_COEFF(CHF_BOX(box_dir),
+                                                  CHF_CONST_FRA(this_bunit[dir]),
+                                                  CHF_FRA(this_rad_coeff[dir])
+                                                  );
+         
+         }
+      }
+   }
+   
+   for (dit.begin(); dit.ok(); ++dit) {
+      a_rad_coeff[dit].copy(m_rad_coeff[dit]);
+   }
+}
+
+void
+MagGeom::getEllipticOpRadCoeffMapped(LevelData<FluxBox>& a_rad_coeff) const
+{
+   
+   DataIterator dit = a_rad_coeff.dataIterator();
+   
+   if ( !m_rad_coeff_mapped.isDefined() || !(a_rad_coeff.ghostVect() <= m_rad_coeff_mapped.ghostVect()) ) {
+      
+      m_rad_coeff_mapped.define(a_rad_coeff);
+      
+      const DisjointBoxLayout& grids = a_rad_coeff.disjointBoxLayout();
+      
+      const IntVect ghosts( a_rad_coeff.ghostVect());
+      CH_assert(m_BFieldDir_fc.ghostVect()>=ghosts);
+      
+      LevelData<FluxBox> N(grids, SpaceDim*SpaceDim, ghosts);
+      getPointwiseN(N);
+      
+      LevelData<FluxBox> NJinverse(grids, SpaceDim*SpaceDim, ghosts);
+      getPointwiseNJinverse(NJinverse);
+      
+      
+      for (dit.begin(); dit.ok(); ++dit) {
+         const FluxBox& this_bunit = m_BFieldDir_fc[dit];
+         FluxBox& this_N = N[dit];
+         FluxBox& this_NJinverse = NJinverse[dit];
+         FluxBox& this_rad_coeff = m_rad_coeff_mapped[dit];
+         
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            const Box& box_dir = this_rad_coeff[dir].box();
+            
+            FORT_COMPUTE_RADIAL_ELLIPTIC_OP_COEFF(CHF_BOX(box_dir),
+                                                  CHF_CONST_FRA(this_bunit[dir]),
+                                                  CHF_FRA(this_rad_coeff[dir])
+                                                  );
+            
+            FORT_COMPUTE_ELLIPTIC_OP_COEFF_MAPPED(CHF_BOX(box_dir),
+                                                  CHF_CONST_FRA(this_N[dir]),
+                                                  CHF_CONST_FRA(this_NJinverse[dir]),
+                                                  CHF_FRA(this_rad_coeff[dir])
+                                                  );
+            
+         }
+      }
+   }
+   
+   for (dit.begin(); dit.ok(); ++dit) {
+      a_rad_coeff[dit].copy(m_rad_coeff_mapped[dit]);
+   }
+}
+
+
+void
 MagGeom::computeEllipticOpCoefficients(LevelData<FluxBox>& a_perp_coeff,
                                        LevelData<FluxBox>& a_par_coeff ) const
 {

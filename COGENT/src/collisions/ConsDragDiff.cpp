@@ -11,15 +11,16 @@
 #include "NamespaceHeader.H" //Should be the last one
 
 
-ConsDragDiff::ConsDragDiff( const string& a_species_name, ParmParse& a_ppcls, const int a_verbosity )
+ConsDragDiff::ConsDragDiff( const string& a_species_name, const string& a_ppcls_str, const int a_verbosity )
     : cls_freq(0),
       cls_only(false),
       moment_op( MomentOp::instance() ),
       m_first_step(true),
+      m_time_implicit(true),
       verbosity(0)
 {
    verbosity = a_verbosity;
-   ppcls = a_ppcls;
+   ppcls = ParmParse(a_ppcls_str.c_str());
    species_name = a_species_name;
 }
 
@@ -175,6 +176,7 @@ void ConsDragDiff::ParseParameters( ){
    CH_assert(cls_freq >=0 );
    ppcls.query("cls_only",cls_only);
    ppcls.query("verbosity",verbosity);
+   ppcls.query("time_implicit", m_time_implicit);
    CH_assert( verbosity == 0 || verbosity == 1);
 
 }
@@ -326,6 +328,7 @@ inline void ConsDragDiff::printParameters( const KineticSpeciesPtrVect&  soln )
      cout << "Stable time step = " << dt_stable << endl;
      cout << "Peclet_vp = " << Peclet_vp << endl;
      cout << "Peclet_mu = " << Peclet_mu << endl;
+     cout << "Implicit in time = " << m_time_implicit << endl;
      cout << "--------------------------------------------------------------------- " << endl;
    }
 }

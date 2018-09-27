@@ -15,12 +15,14 @@
 #include "NamespaceHeader.H" 
 
 
-MyKrook::MyKrook( ParmParse& a_ppcls, const int a_verbosity )
+MyKrook::MyKrook( const std::string& a_ppcls_str, const int a_verbosity )
    : m_verbosity(a_verbosity),
+     m_time_implicit(true),
      m_first_step(true),
      m_cls_freq(-1.0)
 {
-   parseParameters( a_ppcls );
+   ParmParse ppcls(a_ppcls_str.c_str());
+   parseParameters( ppcls );
    if (m_verbosity>0) {
       printParameters();
    }
@@ -101,6 +103,7 @@ void MyKrook::evalClsRHS( KineticSpeciesPtrVect&       a_rhs,
 inline
 void MyKrook::parseParameters( ParmParse& a_ppcls )
 {
+   a_ppcls.query( "time_implicit", m_time_implicit);
    a_ppcls.query( "cls_freq", m_cls_freq );
 
    KineticFunctionLibrary* library = KineticFunctionLibrary::getInstance();
@@ -116,6 +119,7 @@ void MyKrook::printParameters()
    if (procID()==0) {
       std::cout << "MyKrook collisions parameters:" << std::endl;
       std::cout << "  cls_freq  =  " << m_cls_freq << std::endl;
+      std::cout << "  implicit in time  =  " << m_time_implicit << std::endl;
       std::cout << "  Reference Function:" << std::endl;
       m_ref_func->printParameters();
    }

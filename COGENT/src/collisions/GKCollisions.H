@@ -15,6 +15,7 @@
 #include "ConsDragDiff.H"
 #include "NullCLS.H"
 
+#include <string>
 #include <map>
 
 #include "NamespaceHeader.H"
@@ -26,6 +27,9 @@
 #define _CLS_FOKKERPLANCK_  "FokkerPlanck"
 #define _CLS_CONSDRAGDIFF_  "ConsDragDiff"
 #define _CLS_NONE_          "None"
+
+class GKVector;
+class GKOps;
 
 /**
  * Gyrokinetic collisions operator class.
@@ -53,11 +57,8 @@ class GKCollisions
        */
       virtual void accumulateRHS( KineticSpeciesPtrVect&       rhs,
                                   const KineticSpeciesPtrVect& soln,
+                                  const bool                   implicit,
                                   const Real                   time );
-
-      virtual void accumulateApproxRHS( KineticSpeciesPtrVect&       rhs,
-                                        const KineticSpeciesPtrVect& soln,
-                                        const Real                   time );
 
       /// Compute a stable time step.
       /**
@@ -72,6 +73,22 @@ class GKCollisions
       Real computeTimeScale( const KineticSpeciesPtrVect& soln );
 
       int precondMatrixBands();
+
+      void defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>&,
+                                std::vector<DOFList>&,
+                                const KineticSpeciesPtrVect&,
+                                const GlobalDOFKineticSpeciesPtrVect&,
+                                const GKVector&,
+                                GKOps&,
+                                const std::string&,
+                                const std::string&,
+                                bool);
+
+      void updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>&,
+                                const KineticSpeciesPtrVect&,
+                                const GlobalDOFKineticSpeciesPtrVect&,
+                                const Real, const bool);
+
 
       void assemblePrecondMatrix( void*,
                                   const KineticSpeciesPtrVect&,

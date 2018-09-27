@@ -34,8 +34,8 @@ public:
   /**
    *  @param[in] pp the input database.
    */
-  Krook( ParmParse&  a_ppcls,
-        const int a_verbosity );
+  Krook(const std::string&  a_ppcls,
+        const int           a_verbosity );
 
   /// Destructor.
   /**
@@ -53,6 +53,24 @@ public:
                            const KineticSpeciesPtrVect& soln,
                            const int                    species,
                            const Real                   time );
+
+  inline
+  virtual void evalClsRHSExplicit( KineticSpeciesPtrVect&        a_rhs,
+                                   const KineticSpeciesPtrVect&  a_soln,
+                                   const int                     a_species,
+                                   const Real                    a_time )
+  {
+    if (!m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+  }
+
+  inline
+  virtual void evalClsRHSImplicit( KineticSpeciesPtrVect&        a_rhs,
+                                   const KineticSpeciesPtrVect&  a_soln,
+                                   const int                     a_species,
+                                   const Real                    a_time )
+  {
+    if (m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+  }
 
   /// Compute a stable time step.
   /**
@@ -81,6 +99,7 @@ public:
 private:
 
    int m_verbosity;
+   bool m_time_implicit;
 
    Real m_cls_freq;
    bool m_conserve_particle;

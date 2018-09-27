@@ -13,7 +13,7 @@ c     local variables
          CHF_AUTOMULTIDO[gridbox;i]
 #if CH_SPACEDIM == 3
             data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
-     &           + radial(i0,CHF_LBOUND[radial;1],0)
+     &           + radial(i0,CHF_LBOUND[radial;1],CHF_LBOUND[radial;2])
 #else
             data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
      &           + radial(i0,CHF_LBOUND[radial;1])
@@ -39,7 +39,7 @@ c     local variables
          CHF_AUTOMULTIDO[gridbox;i]
 #if CH_SPACEDIM == 3
             data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
-     &           - radial(i0,CHF_LBOUND[radial;1],0)
+     &           - radial(i0,CHF_LBOUND[radial;1],CHF_LBOUND[radial;2])
 #else
             data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
      &           - radial(i0,CHF_LBOUND[radial;1])
@@ -65,7 +65,7 @@ c     local variables
          CHF_AUTOMULTIDO[gridbox;i]
 #if CH_SPACEDIM == 3
             data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
-     &           * radial(i0,CHF_LBOUND[radial;1],0)
+     &           * radial(i0,CHF_LBOUND[radial;1],CHF_LBOUND[radial;2])
 #else
             data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
      &           * radial(i0,CHF_LBOUND[radial;1])
@@ -91,7 +91,7 @@ c     local variables
          CHF_AUTOMULTIDO[gridbox;i]
 #if CH_SPACEDIM == 3
             data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
-     &           / radial(i0,CHF_LBOUND[radial;1],0)
+     &           / radial(i0,CHF_LBOUND[radial;1],CHF_LBOUND[radial;2])
 #else
             data(CHF_AUTOIX[i],m) = data(CHF_AUTOIX[i],m)
      &           / radial(i0,CHF_LBOUND[radial;1])

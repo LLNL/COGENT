@@ -23,9 +23,7 @@ ark_gmres.atol = 1e-4
 ark_gmres.rtol = 1e-4
 
 ark_jacobian.with_pc = true
-ark_pc.type = "basicGKPC"
-ark_pc_basicGKPC.solver_type = "gauss_seidel"
-ark_pc_basicGKPC_gauss_seidel.its = 80
+ark_pc.type = "multiphysicsPC"
 
 #####################################################
 # Time Stepping Definitions
@@ -140,6 +138,9 @@ CLS.hydrogen.multipole_number = 4
 CLS.hydrogen.rosenbluth_skip_stage = false
 CLS.hydrogen.compute_maxwellian = true
 CLS.hydrogen.verbose = false
+
+CLS.hydrogen_basicGKPC.solver_type = "gauss_seidel"
+CLS.hydrogen_basicGKPC_gauss_seidel.its = 80
 
 #####################################################
 # Kinetic Function Definitions

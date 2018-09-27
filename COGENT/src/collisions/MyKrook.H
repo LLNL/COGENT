@@ -34,7 +34,7 @@ public:
   /**
    *  @param[in] pp the input database.
    */
-  MyKrook( ParmParse&  a_ppcls,
+  MyKrook(const std::string&  a_ppcls_str,
          const int a_verbosity );
 
   /// Destructor.
@@ -54,6 +54,24 @@ public:
                            const int                    species,
                            const Real                   time );
 
+  inline
+  virtual void evalClsRHSExplicit( KineticSpeciesPtrVect&        a_rhs,
+                                   const KineticSpeciesPtrVect&  a_soln,
+                                   const int                     a_species,
+                                   const Real                    a_time )
+  {
+    if (!m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+  }
+
+  inline
+  virtual void evalClsRHSImplicit( KineticSpeciesPtrVect&        a_rhs,
+                                   const KineticSpeciesPtrVect&  a_soln,
+                                   const int                     a_species,
+                                   const Real                    a_time )
+  {
+    if (m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+  }
+
   /// Compute a stable time step.
   /**
    * Computes and returns an estimate of the maximum stable time step.
@@ -69,6 +87,8 @@ public:
 private:
 
    int m_verbosity;
+
+   bool m_time_implicit;
 
    bool m_first_step;
    

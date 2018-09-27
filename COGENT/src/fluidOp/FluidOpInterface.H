@@ -8,6 +8,17 @@
 #define CH_SPACEDIM PDIM
 #include "KineticSpecies.H"
 #include "Scalar.H"
+#include "GlobalDOF.H"
+#include "MultiPhysicsPreconditioner.H"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM CFG_DIM
+
+#undef CH_SPACEDIM
+#define CH_SPACEDIM PDIM
+#include "NamespaceHeader.H"
+class GKVector;
+class GKOps;
+#include "NamespaceFooter.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 
@@ -57,15 +68,35 @@ class FluidOpInterface
                                           const bool                         recompute_kinetic_terms,
                                           const Real                         time) = 0;
 
+      virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+                                  std::vector<PS::DOFList>&,
+                                  const PS::GKVector&,
+                                  PS::GKOps&,
+                                  const std::string&,
+                                  const std::string&,
+                                  bool,
+                                  const FluidSpecies&,
+                                  const PS::GlobalDOFFluidSpecies&,
+                                  int ) { }
+
+      virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+                                   const PS::KineticSpeciesPtrVect&,
+                                   const FluidSpeciesPtrVect&,
+                                   const Real,
+                                   const bool,
+                                   const int ) { }
+
       virtual void evalSolutionOp( FluidSpeciesPtrVect&               rhs,
-                                   const PS::KineticSpeciesPtrVect&   kinetic_species,
-                                   const FluidSpeciesPtrVect&         fluid_species,
+                                   const PS::KineticSpeciesPtrVect&   kinetic_species_comp,
+                                   const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
+                                   const FluidSpeciesPtrVect&         fluid_species_comp,
+                                   const FluidSpeciesPtrVect&         fluid_species_phys,
                                    const PS::ScalarPtrVect&           scalars,
                                    const int                          component,
                                    const Real                         time )
       {
-         rhs[component]->copy(*(fluid_species[component]));
-         MayDay::Error("FluidOpInterface::evalSolutionOp() Error: this default implementation seems to be incorrect since GKOps will pass the *physical* fluid species while rhs needs to be set to the *computational* fluid species. This line will be removed once this issue has been sorted.\n");
+         // The default solution operator is just the identity
+         rhs[component]->copy(*(fluid_species_comp[component]));
       }
 
       virtual void updatePCImEx( const PS::KineticSpeciesPtrVect& kinetic_species,

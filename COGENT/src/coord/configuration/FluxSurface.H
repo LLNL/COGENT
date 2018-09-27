@@ -155,6 +155,10 @@ protected:
 
    DisjointBoxLayout m_grids;
 
+#if CFG_DIM == 3
+   DisjointBoxLayout m_grids2D;
+#endif
+   
    LevelData<FArrayBox> m_areas;
    LevelData<FArrayBox> m_areas_core;
    LevelData<FArrayBox> m_areas_pf;

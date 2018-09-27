@@ -25,7 +25,7 @@ public:
    *  @param[in] pp the input database.
    */
   ConsDragDiff( const string&  a_species_name,
-                ParmParse&     a_ppcls,
+                const string&  a_ppcls_str,
                 const int      a_verbosity );
 
   /// Destructor.
@@ -40,17 +40,34 @@ public:
    * @param[in] species index of species to which collision is applied.
    * @param[in] time current time.
    */
-  virtual void evalClsRHS( KineticSpeciesPtrVect&        rhs,
-                           const KineticSpeciesPtrVect&  soln,
-                           const int                     species,
-                           const Real                    time );
-
   /// Compute a stable time step.
   /**
    * Computes and returns an estimate of the maximum stable time step.
    */
   Real computeDt( const KineticSpeciesPtrVect&  soln);
 
+  virtual void evalClsRHS( KineticSpeciesPtrVect&        rhs,
+                           const KineticSpeciesPtrVect&  soln,
+                           const int                     species,
+                           const Real                    time );
+
+  inline
+  virtual void evalClsRHSExplicit( KineticSpeciesPtrVect&        a_rhs,
+                                   const KineticSpeciesPtrVect&  a_soln,
+                                   const int                     a_species,
+                                   const Real                    a_time )
+  {
+    if (!m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+  }
+
+  inline
+  virtual void evalClsRHSImplicit( KineticSpeciesPtrVect&        a_rhs,
+                                   const KineticSpeciesPtrVect&  a_soln,
+                                   const int                     a_species,
+                                   const Real                    a_time )
+  {
+    if (m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+  }
 
 private:
 
@@ -59,6 +76,7 @@ private:
   string species_name;
   MomentOp& moment_op;
   bool m_first_step;
+  bool m_time_implicit;
 
   int verbosity;
   ParmParse ppcls;

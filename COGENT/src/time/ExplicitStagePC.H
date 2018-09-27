@@ -61,6 +61,7 @@ class ExplicitStagePC: public IMEXStagePCFunction<T,Ops>
     }
 
     inline const BandedMatrix& getBandedMatrixForm() const { return m_P; }
+    inline BandedMatrix& getBandedMatrixForm() { return m_P; }
 
   private:
   

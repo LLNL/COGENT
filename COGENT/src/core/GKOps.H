@@ -1,6 +1,8 @@
 #ifndef  _GKOPS_H_
 #define  _GKOPS_H_
 
+#include <vector>
+
 #include "GKVlasov.H"
 #include "GKCollisions.H"
 #include "GKNeutrals.H"
@@ -327,14 +329,26 @@ public:
       m_rhs.copyTo(a_rhs.data());
    }
 
+   void defineMultiPhysicsPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+                              std::vector<DOFList>&,
+                              const GKVector&,
+                              const std::string&,
+                              const std::string&,
+                              bool);
+
+   void updateMultiPhysicsPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+                              const GKVector&,
+                              const Real,
+                              const bool );
+
    bool preallocatePCMatrixImEx (void*,const GKVector&);
    void assemblePCImEx( const bool, void*, const GKVector&, const double );
 
    bool preallocateSolPCMatrix (void*,const GKVector&);
    void assembleSolPC( const bool, void*,const GKVector& );
    
-   void solveSolutionPC( GKVector&, const GKVector&);
-   void solvePCImEx( GKVector&, const GKVector&);
+   void solveSolutionPC( GKVector&, const GKVector&, int a_idx=-1);
+   void solvePCImEx( GKVector&, const GKVector&, int a_idx=-1);
 
    void divideJ( const KineticSpeciesPtrVect& soln_mapped,
                  KineticSpeciesPtrVect&       soln_physical ) const;
@@ -555,8 +569,10 @@ private:
                                              const Real&                  time );
 
    void applyFluidSpeciesSolutionOperator( CFG::FluidSpeciesPtrVect&        rhs,
-                                           const KineticSpeciesPtrVect&     kinetic_species,
-                                           const CFG::FluidSpeciesPtrVect&  fluid_species,
+                                           const KineticSpeciesPtrVect&     kinetic_species_comp,
+                                           const KineticSpeciesPtrVect&     kinetic_species_phys,
+                                           const CFG::FluidSpeciesPtrVect&  fluid_species_comp,
+                                           const CFG::FluidSpeciesPtrVect&  fluid_species_phys,
                                            const ScalarPtrVect&             scalars,
                                            const Real&                      time );
 
@@ -566,6 +582,7 @@ private:
 
    void applyCollisionOperator( KineticSpeciesPtrVect&       rhs,
                                 const KineticSpeciesPtrVect& soln,
+                                const opType                 op_type,
                                 const Real&                  time );
 
    void applyNeutralsOperator(   KineticSpeciesPtrVect&      rhs,
@@ -595,10 +612,6 @@ private:
                              const bool                           recompute_kinetic_terms,
                              const Real&                          time);
    
-   void applyCollisionOperatorForPreconditioner( KineticSpeciesPtrVect&       rhs,
-                                                 const KineticSpeciesPtrVect& soln,
-                                                 const Real&                  time );
-
    /// Compute the signed charge densities
    /**
     * Compute the signed charge densities
@@ -672,7 +685,6 @@ private:
    
    /* The following 4 flags are relevant only for IMEX time integration */
    bool                           m_vlasov_imex_implicit;
-   bool                           m_collisions_imex_implicit;
    bool                           m_transport_imex_implicit;
    bool                           m_neutrals_imex_implicit;
 

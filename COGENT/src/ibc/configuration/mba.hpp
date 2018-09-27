@@ -87,7 +87,7 @@ class cloud {
         cloud(
                 const point &cmin, const point &cmax,
                 const std::vector<point> &coo, std::vector<double> val,
-                std::array<size_t, NDIM> grid, size_t levels = 8, double tol = 1e-8
+                std::array<size_t, NDIM> grid, size_t levels = 8, double tol = 1e-14
              )
         {
 #ifndef NDEBUG

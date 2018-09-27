@@ -13,14 +13,16 @@
 
 
 
-Linearized::Linearized( ParmParse& a_ppcls, const int a_verbosity )
+Linearized::Linearized( const std::string& a_ppcls_str, const int a_verbosity )
     : m_verbosity(a_verbosity),
+      m_time_implicit(true),
       m_cls_freq(-1.0),
       m_conserve_momentum(true),
       m_conserve_energy(true),
       m_first_step(true)
 {
-   parseParameters( a_ppcls );
+   ParmParse ppcls(a_ppcls_str.c_str());
+   parseParameters( ppcls );
    if (m_verbosity>0) {
       printParameters();
    }
@@ -734,6 +736,7 @@ void Linearized::convertToCellFaces(LevelData<FluxBox>& a_faceData,
 inline
 void Linearized::parseParameters( ParmParse& a_ppcls )
 {
+   a_ppcls.query("time_implicit", m_time_implicit);
    a_ppcls.query("cls_freq",m_cls_freq);
    a_ppcls.query("conserve_momentum",m_conserve_momentum);
    a_ppcls.query("conserve_energy",m_conserve_energy);
@@ -760,7 +763,9 @@ void Linearized::printParameters()
       std::cout << "Linearized collisions parameters:" << std::endl;
       std::cout << "  cls_freq  =  " << m_cls_freq
                 << ", conserve_momentum = " << m_conserve_momentum 
-                << ", conserve_energy = " << m_conserve_energy << std::endl;
+                << ", conserve_energy = " << m_conserve_energy 
+                << ", implicit in time = " << m_time_implicit 
+                << std::endl;
       std::cout << "  Reference Function:" << std::endl;
       m_ref_func->printParameters();
       std::cout << "  Reference Temperature:" << std::endl;

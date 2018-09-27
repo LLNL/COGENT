@@ -14,7 +14,11 @@
 #include "GlobalDOF.H"
 #include "CLSInterface.H"
 #include "ParmParse.H"
+#include "BasicGKPreconditioner.H"
+
 #include <sstream>
+#include <iostream>
+#include <string>
 
 #include "NamespaceHeader.H"
 
@@ -46,8 +50,8 @@ public:
   /**
    *  @param[in] pp the input database.
    */
-  FokkerPlanck( ParmParse&  a_ppcls,
-                const int   a_verbosity );
+  FokkerPlanck( const std::string&  a_ppcls_str,
+                const int           a_verbosity );
 
   /// Destructor.
   /**
@@ -66,10 +70,23 @@ public:
                            const int                    species,
                            const Real                   time );
 
-  virtual void evalClsApproxRHS(KineticSpeciesPtrVect&       rhs,
-                                const KineticSpeciesPtrVect& soln,
-                                const int                    species,
-                                const Real                   time );
+  inline
+  virtual void evalClsRHSExplicit( KineticSpeciesPtrVect&        a_rhs,
+                                   const KineticSpeciesPtrVect&  a_soln,
+                                   const int                     a_species,
+                                   const Real                    a_time )
+  {
+    if (!m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+  }
+
+  inline
+  virtual void evalClsRHSImplicit( KineticSpeciesPtrVect&        a_rhs,
+                                   const KineticSpeciesPtrVect&  a_soln,
+                                   const int                     a_species,
+                                   const Real                    a_time )
+  {
+    if (m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+  }
 
   /// Compute a stable time step.
   /**
@@ -84,7 +101,29 @@ public:
    */
   inline bool isLinear() { return m_rosenbluth_skip_stage; }
 
-  inline int precondMatrixBands() { return(m_nbands); }
+  inline int precondMatrixBands() 
+  { 
+    if (m_time_implicit)  return(m_nbands); 
+    else                  return(0);
+  }
+
+  void defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+                      std::vector<DOFList>&,
+                      const GKVector&,
+                      GKOps&,
+                      const std::string&,
+                      const std::string&,
+                      bool,
+                      const KineticSpecies&,
+                      const GlobalDOFKineticSpecies&,
+                      int );
+
+  virtual void updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+                              const KineticSpecies&,
+                              const GlobalDOFKineticSpecies&,
+                              const Real,
+                              const bool,
+                              const int );
 
   void assemblePrecondMatrix( void*,
                               const KineticSpecies&,
@@ -106,6 +145,7 @@ public:
 private:
 
    bool m_verbosity;
+   bool m_time_implicit;
    bool m_limiters;
    ParmParse m_ppcls;
 
@@ -124,6 +164,7 @@ private:
    FokkerPlanckCoeffs m_coeffs;
 
    int m_nbands;
+   int m_my_pc_idx;
 
    bool m_rosenbluth_skip_stage;
 
@@ -140,6 +181,8 @@ private:
 
    CFG::LevelData<CFG::FArrayBox> m_fp_kinetic_energy;
    CFG::LevelData<CFG::FArrayBox> m_energy_cons;
+
+   std::string m_opt_string;
 
    /// Computes the Rosenbluth potentials
    void evalRosenbluthPotentials( LevelData<FArrayBox>& phi,

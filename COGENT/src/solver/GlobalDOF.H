@@ -62,9 +62,9 @@ class GlobalDOFKineticSpecies
 {
   public:
 
-    GlobalDOFKineticSpecies() { m_is_defined = false; }
+    GlobalDOFKineticSpecies() { m_is_defined = false; m_mpi_offset = -1; }
 
-    void define(const int, const KineticSpecies&);
+    void define(const int, const int, const KineticSpecies&);
 
     inline
     const LevelData<FArrayBox>& data() const
@@ -80,9 +80,12 @@ class GlobalDOFKineticSpecies
 
     ~GlobalDOFKineticSpecies() {}
 
+    inline int mpiOffset() const { return m_mpi_offset; }
+
   private:
    
     bool m_is_defined;
+    int  m_mpi_offset;
     LevelData<FArrayBox> m_gdofs;
 };
 typedef RefCountedPtr<GlobalDOFKineticSpecies> GlobalDOFKineticSpeciesPtr;
@@ -92,9 +95,9 @@ class GlobalDOFFluidSpecies
 {
   public:
 
-    GlobalDOFFluidSpecies() { m_is_defined = false; }
+    GlobalDOFFluidSpecies() { m_is_defined = false; m_mpi_offset = -1; }
 
-    void define(const int, const CFG::FluidSpecies&);
+    void define(const int, const int, const CFG::FluidSpecies&);
 
     inline
     const CFG::LevelData<CFG::FArrayBox>& data() const
@@ -110,9 +113,12 @@ class GlobalDOFFluidSpecies
 
     ~GlobalDOFFluidSpecies() {}
 
+    inline int mpiOffset() const { return m_mpi_offset; }
+
   private:
    
     bool m_is_defined;
+    int  m_mpi_offset;
     CFG::LevelData<CFG::FArrayBox> m_gdofs;
 };
 typedef RefCountedPtr<GlobalDOFFluidSpecies> GlobalDOFFluidSpeciesPtr;
@@ -122,9 +128,9 @@ class GlobalDOFScalar
 {
   public:
 
-    GlobalDOFScalar() { m_is_defined = false; }
+    GlobalDOFScalar() { m_is_defined = false; m_mpi_offset = -1; }
 
-    void define(const int, const Scalar&);
+    void define(const int, const int, const Scalar&);
 
     inline
     const Vector<Real>& data() const
@@ -141,9 +147,12 @@ class GlobalDOFScalar
 
     ~GlobalDOFScalar() {}
 
+    inline int mpiOffset() const { return m_mpi_offset; }
+
   private:
    
     bool m_is_defined;
+    int  m_mpi_offset;
     Vector<Real> m_gdofs;
 };
 typedef RefCountedPtr<GlobalDOFScalar> GlobalDOFScalarPtr;
@@ -196,7 +205,7 @@ class GlobalDOF
     }
 
     inline
-    int mpi_offset() const { return m_mpi_offset; }
+    int mpiOffset() const { return m_mpi_offset; }
 
     inline
     int isIndexKineticSpecies(int i, const KineticSpeciesPtrVect& a_kinetic_species) const

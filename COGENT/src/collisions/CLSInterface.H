@@ -1,12 +1,18 @@
 #ifndef  _CLSINTERFACE_H_
 #define  _CLSINTERFACE_H_
 
+#include <string>
+
 #include "REAL.H"
 #include "ParmParse.H"
 #include "KineticSpecies.H"
 #include "GlobalDOF.H"
+#include "MultiPhysicsPreconditioner.H"
 
 #include "NamespaceHeader.H"
+
+class GKVector;
+class GKOps;
 
 /**
  * Collision interface class.
@@ -38,14 +44,15 @@ class CLSInterface
                                const int                    species,
                                const Real                   time ) = 0;
 
-      virtual void evalClsApproxRHS(  KineticSpeciesPtrVect&       rhs,
-                                      const KineticSpeciesPtrVect& soln,
-                                      const int                    species,
-                                      const Real                   time )
-      {
-        /* default implementation */
-        evalClsRHS(rhs, soln, species, time);
-      }
+      virtual void evalClsRHSImplicit( KineticSpeciesPtrVect&       rhs,
+                                       const KineticSpeciesPtrVect& soln,
+                                       const int                    species,
+                                       const Real                   time ) = 0;
+
+      virtual void evalClsRHSExplicit( KineticSpeciesPtrVect&       rhs,
+                                       const KineticSpeciesPtrVect& soln,
+                                       const int                    species,
+                                       const Real                   time ) = 0;
 
       virtual inline bool isLinear() { return false; }
       
@@ -57,6 +64,24 @@ class CLSInterface
       virtual void assemblePrecondMatrix( void*,
                                           const KineticSpecies&,
                                           const GlobalDOFKineticSpecies& ) { }
+
+      virtual void defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+                                  std::vector<DOFList>&,
+                                  const GKVector&,
+                                  GKOps&,
+                                  const std::string&,
+                                  const std::string&,
+                                  bool,
+                                  const KineticSpecies&,
+                                  const GlobalDOFKineticSpecies&,
+                                  int ) { }
+
+      virtual void updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+                                  const KineticSpecies&,
+                                  const GlobalDOFKineticSpecies&,
+                                  const Real,
+                                  const bool,
+                                  const int ) { }
 
       virtual void preTimeStep  (const KineticSpeciesPtrVect&,
                                  const int, const Real,

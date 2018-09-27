@@ -4,6 +4,7 @@
 
 void GlobalDOFKineticSpecies::define(
                                       const int             a_offset,
+                                      const int             a_mpi_offset,
                                       const KineticSpecies& a_species
                                     )
 {
@@ -33,6 +34,7 @@ void GlobalDOFKineticSpecies::define(
   }
   m_gdofs.exchange();
 
+  m_mpi_offset = a_mpi_offset;
   m_is_defined = true;
   return;
 }
@@ -129,6 +131,7 @@ Real& GlobalDOFKineticSpecies::getVal(
 
 void GlobalDOFFluidSpecies::define(
                                     const int                 a_offset,
+                                    const int                 a_mpi_offset,
                                     const CFG::FluidSpecies&  a_fluid
                                   )
 {
@@ -159,6 +162,7 @@ void GlobalDOFFluidSpecies::define(
   }
   m_gdofs.exchange();
 
+  m_mpi_offset = a_mpi_offset;
   m_is_defined = true;
   return;
 }
@@ -254,19 +258,21 @@ Real& GlobalDOFFluidSpecies::getVal(
 }
 
 void GlobalDOFScalar::define(
-                             const int      a_offset,
-                             const Scalar&  a_scalar
+                              const int      a_offset,
+                              const int      a_mpi_offset,
+                              const Scalar&  a_scalar
                              )
 {
-   m_gdofs.resize(a_scalar.size());
-
-   int dof = a_offset;
-   for (int i=0; i<m_gdofs.size(); ++i) {
-      m_gdofs[i] = dof++;
-   }
-
-   m_is_defined = true;
-   return;
+  m_gdofs.resize(a_scalar.size());
+  
+  int dof = a_offset;
+  for (int i=0; i<m_gdofs.size(); ++i) {
+     m_gdofs[i] = dof++;
+  }
+  
+  m_mpi_offset = a_mpi_offset;
+  m_is_defined = true;
+  return;
 }
 
 const Real& GlobalDOFScalar::getVal(
@@ -411,18 +417,17 @@ void GlobalDOF::define(
   m_gdofs_kinetic_species.resize(a_kinetic_species.size());
   for (int s(0); s < a_kinetic_species.size(); s++) {
     m_gdofs_kinetic_species[s] = GlobalDOFKineticSpeciesPtr(new GlobalDOFKineticSpecies);
-    m_gdofs_kinetic_species[s]->define( m_minidx_kinetic_species[s], (*(a_kinetic_species[s])) );
+    m_gdofs_kinetic_species[s]->define( m_minidx_kinetic_species[s], m_mpi_offset, (*(a_kinetic_species[s])) );
   }
   m_gdofs_fluid_species.resize(a_fluid_species.size());
   for (int s(0); s < a_fluid_species.size(); s++) {
     m_gdofs_fluid_species[s] = GlobalDOFFluidSpeciesPtr(new GlobalDOFFluidSpecies);
-    //    m_gdofs_fluid_species[s]->define( m_minidx_fluid_species[s], (*(a_fluid_species[s])) );
-    m_gdofs_fluid_species[s]->define( m_minidx_fluid_species[s], static_cast<const CFG::FluidSpecies&>(*(a_fluid_species[s])) );
+    m_gdofs_fluid_species[s]->define( m_minidx_fluid_species[s], m_mpi_offset, static_cast<const CFG::FluidSpecies&>(*(a_fluid_species[s])) );
   }
   m_gdofs_scalars.resize(a_scalars.size());
   for (int s(0); s < a_scalars.size(); s++) {
     m_gdofs_scalars[s] = GlobalDOFScalarPtr(new GlobalDOFScalar);
-    m_gdofs_scalars[s]->define( m_minidx_scalars[s], (*(a_scalars[s])) );
+    m_gdofs_scalars[s]->define( m_minidx_scalars[s], m_mpi_offset, (*(a_scalars[s])) );
   }
 
   m_isDefined = true;
