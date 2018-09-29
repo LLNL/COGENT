@@ -1,7 +1,4 @@
-COGENT is a tokamak edge plasma gyro-kinetic simulation code. 
-This repository contains the COGENT code (COGENT/) as well as
-Chombo (Chombo/), the mapped, multiblock PDE library from 
-Berkeley Lab on which COGENT is built.
+COGENT is a continuum (Eulerian) plasma simulation code.  It is primarily focused on tokamak edge plasma geometries, but includes options for, and is extensible to, other configurations. This repository contains the COGENT code (COGENT/) as well as Chombo (Chombo/), the adaptive mesh refinement application framework from Lawrence Berkeley National Laboratory upon which COGENT is built.
 
 - The copy of Chombo in this repository is only for easily
   installing COGENT. It is developed and maintained by 
