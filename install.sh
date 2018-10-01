@@ -66,11 +66,7 @@ if [[ $HOSTNAME == "quartz"* ]]; then
 else
   if [[ $HOSTNAME == "cori"* || $HOSTNAME == "edison"* ]]; then
     echo "Loading HDF5 for Cori/Edison (NERSC)"
-    module load cray-hdf5-parallel
-    H5DIFF_PATH=$(which h5diff)
-    echo "h5diff is $H5DIFF_PATH"
-    HDF5_DIR=${H5DIFF_PATH%$H5DIFF_SUFFIX}
-    export HDF5_DIR="${HDF5_DIR}/GNU/5.1"
+    export HDF5_DIR="/opt/cray/pe/hdf5-parallel/1.10.0.3/GNU/5.1"
     echo "HDF5: $HDF5_DIR"
   fi
 fi
