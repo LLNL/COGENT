@@ -31,11 +31,10 @@ XTRALDFLAGS += -Wl,-zmuldefs
 ldoptflags = -dynamic
 
 USE_HDF=TRUE
-HDF5_DIR = /opt/cray/pe/hdf5-parallel/1.10.0.3/GNU/5.1
-##HDF5_DIR = $(CRAY_HDF5_DIR)/INTEL/130
 
 HDFLIBFLAGS=   -L$(HDF5_DIR)/lib       -lhdf5 -lz -dynamic
 HDFMPILIBFLAGS=-L$(HDF5_DIR)/lib       -lhdf5 -lz -dynamic
 HDFINCFLAGS=   -I$(HDF5_DIR)/include  
 HDFMPIINCFLAGS=-I$(HDF5_DIR)/include   -dynamic
+XTRALIBFLAGS+=-Wl,-rpath,$(HDF5_DIR)/lib
 
