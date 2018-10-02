@@ -9,7 +9,7 @@ COGENT is a continuum (Eulerian) plasma simulation code.  It is primarily focuse
 Quick Install on Specific Platforms
 -----------------------------------
 
-- On the following machines, just run the provided instal script:
+- On the following machines, just run the provided install script:
   - LLNL-LC-Quartz 
   - NERSC-Cori
   - NERSC-Edison
