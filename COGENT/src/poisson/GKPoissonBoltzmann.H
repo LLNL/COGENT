@@ -149,6 +149,11 @@ protected:
                      BoltzmannElectron&           ne,
                      LevelData<FArrayBox>&        phi );
 
+   void solveLinear( const LevelData<FArrayBox>&  ni,
+                     const EllipticOpBC&          bc,
+                     BoltzmannElectron&           ne,
+                     LevelData<FArrayBox>&        phi );
+
    void solveSubspaceIteration( const LevelData<FArrayBox>&  ni,
                                 const EllipticOpBC&          bc,
                                 BoltzmannElectron&           ne,
@@ -253,11 +258,16 @@ protected:
 
    int getConsequtiveRadialIndex( const int a_mapped_index,
                                   const int a_block_number ) const;
+   
+   void initializeElectronTemperature(LevelData<FArrayBox>&    Te,
+                                      const BoltzmannElectron& ne);
 
    LevelData<FArrayBox> m_M;
    LevelData<FArrayBox> m_boltzmann_prefactor;
    LevelData<FArrayBox> m_boltzmann_prefactor_saved_numerator;
+   LevelData<FArrayBox> m_initial_ion_charge_density;
    LevelData<FArrayBox> m_D;
+   LevelData<FArrayBox> m_Te;
 
    double m_nonlinear_relative_tolerance;
    double m_nonlinear_change_tolerance;
@@ -280,7 +290,9 @@ protected:
    bool m_radial_solve_only;
    bool m_subspace_iteration_solve;
    bool m_simple_boltzmann;
-   bool m_simple_linear;
+   bool m_linear_response;
+   bool m_linear_solve;
+   bool m_zero_initial_solution;
 
    int m_max_subspace_iterations;
    double m_subspace_iteration_tol;

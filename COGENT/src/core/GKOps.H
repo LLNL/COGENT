@@ -77,8 +77,8 @@ public:
    inline
    void initializeState( GKState& a_state, const Real a_time )
    {
-// JAFH: need to generalize ICs to all of state
       m_initial_conditions->initializeSystem( a_state, m_phi, a_time );
+      m_fluidOp->initialize( a_state.dataFluid(), a_time );
       enforceQuasiNeutrality( a_state.dataKinetic(), m_phi );
    }
 
@@ -247,9 +247,6 @@ public:
 
    inline bool trivialSolutionOp() const { return m_trivial_solution_op; }
 
-   void plotFluidData( const string& name,
-                       GKVector&     data );
-
    void preOpEval( const GKState&, const Real);
    inline void preOpEval(const GKVector&  a_state,
                          const Real       a_time )
@@ -412,9 +409,10 @@ public:
                                   const KineticSpecies& soln_species,
                                   const double&         time ) const;
 
-   void plotFluids( const std::string&       filename,
-                    const CFG::FluidSpecies& fluid_species,
-                    const double&            time ) const;
+   void plotFluid( const std::string&       filename,
+                   const CFG::FluidSpecies& fluid_species,
+                   const string&            var_name,
+                   const double&            time ) const;
 
    void plotDeltaF( const std::string&    filename,
                     const KineticSpecies& soln_species,

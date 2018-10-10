@@ -58,7 +58,7 @@ public:
                                          const Real                        dt );
 
    virtual
-   RefCountedPtr<CFGVar> clone( const bool copy_data = true ) const;
+   RefCountedPtr<CFGVars> clone( const bool copy_data = true ) const;
 
    void setErAverage( const LevelData<FArrayBox>& Er_average ) {m_Er_average_cell.define(Er_average);}
 

@@ -132,7 +132,8 @@ void GKVlasov::accumulateRHS( GKRHSData&                    a_rhs,
       if ( phase_geom.divFreeVelocity() ) {
          bool fourth_order_Efield = !a_E_field.secondOrder();
          int velocity_option = 0;
-         evalRHS( rhs_species, soln_species, a_E_field.cell_data(), a_E_field.getPhiNode(), fourth_order_Efield, velocity_option, a_time );
+         evalRHS( rhs_species, soln_species, a_E_field.getCellCenteredField(), a_E_field.getPhiNode(),
+                  fourth_order_Efield, velocity_option, a_time );
       }
       else {
          evalRHS( rhs_species, soln_species, a_E_field, a_time );
@@ -157,8 +158,8 @@ GKVlasov::evalRHS( KineticSpecies&        a_rhs_species,
    const PhaseGeom& geometry( a_rhs_species.phaseSpaceGeometry() );
 
    LevelData<FluxBox> injected_E_field;
-   geometry.injectConfigurationToPhase( a_E_field.face_data(),
-                                        a_E_field.cell_data(),
+   geometry.injectConfigurationToPhase( a_E_field.getFaceCenteredField(),
+                                        a_E_field.getCellCenteredField(),
                                         injected_E_field );
 
    LevelData<FluxBox> velocity( dbl, SpaceDim, IntVect::Unit );
@@ -491,7 +492,7 @@ GKVlasov::computeDt( const CFG::EField&            a_E_field,
 
    if ( a_E_field.supportsDivFreePhaseVel() ) {
 
-      const CFG::LevelData<CFG::FArrayBox>& Efield_cell = a_E_field.cell_data();
+      const CFG::LevelData<CFG::FArrayBox>& Efield_cell = a_E_field.getCellCenteredField();
       const CFG::LevelData<CFG::FArrayBox>& phi_node = a_E_field.getPhiNode();
 
       for (int s(0); s<a_species_vect.size(); s++) {
@@ -521,8 +522,8 @@ GKVlasov::computeDt( const CFG::EField&            a_E_field,
          const PhaseGeom& geometry( species.phaseSpaceGeometry() );
 
          if ( !injected_E_field.isDefined() ) {
-            geometry.injectConfigurationToPhase( a_E_field.face_data(),
-                                                 a_E_field.cell_data(),
+            geometry.injectConfigurationToPhase( a_E_field.getFaceCenteredField(),
+                                                 a_E_field.getCellCenteredField(),
                                                  injected_E_field );
          }
 
@@ -549,7 +550,7 @@ GKVlasov::computeTimeScale( const CFG::EField&           a_E_field,
 
    if ( a_E_field.supportsDivFreePhaseVel() ) {
 
-      const CFG::LevelData<CFG::FArrayBox>& Efield_cell = a_E_field.cell_data();
+      const CFG::LevelData<CFG::FArrayBox>& Efield_cell = a_E_field.getCellCenteredField();
       const CFG::LevelData<CFG::FArrayBox>& phi_node = a_E_field.getPhiNode();
 
       for (int s(0); s<a_species_vect.size(); s++) {
@@ -579,8 +580,8 @@ GKVlasov::computeTimeScale( const CFG::EField&           a_E_field,
          const PhaseGeom& geometry( species.phaseSpaceGeometry() );
 
          if ( !injected_E_field.isDefined() ) {
-            geometry.injectConfigurationToPhase( a_E_field.face_data(),
-                                                 a_E_field.cell_data(),
+            geometry.injectConfigurationToPhase( a_E_field.getFaceCenteredField(),
+                                                 a_E_field.getCellCenteredField(),
                                                  injected_E_field );
          }
 

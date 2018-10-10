@@ -1,7 +1,7 @@
 #ifndef _FLUID_SPECIES_H_
 #define _FLUID_SPECIES_H_
 
-#include "CFGVar.H"
+#include "CFGVars.H"
 
 #include "NamespaceHeader.H"
 
@@ -11,17 +11,17 @@
  * Fluid species interface
  */
 class FluidSpecies 
-   : public CFGVar
+   : public CFGVars
 {
    public:
 
       /// Constructor.
       /**
        */
-      FluidSpecies( const string&      pp_prefix,
-                    const std::string& name,
-                    const MagGeom&     geometry,
-                    const IntVect&     ghost_vect );
+      FluidSpecies( const string&       pp_prefix,
+                    const std::string&  name,
+                    const MagGeom&      geometry,
+                    const IntVect&      ghost_vect );
 
       /// Copy Constructor.
       /**
@@ -67,10 +67,8 @@ class FluidSpecies
       /// Returns species velocity.
       /**
        */
-   //      virtual LevelData<FluxBox>& velocity() {return face_data();}
       virtual LevelData<FluxBox>& velocity() {return m_velocity;}
 
-   //      virtual const LevelData<FluxBox>& velocity() const {return face_data();}
       virtual const LevelData<FluxBox>& velocity() const {return m_velocity;}
 
       /// Returns species pressure.
@@ -89,7 +87,7 @@ class FluidSpecies
       virtual bool isSpecies( const string& name ) const;
 
       virtual
-      RefCountedPtr<CFGVar> convertToPhysical( const IntVect& a_ghost_vect ) const;
+      RefCountedPtr<CFGVars> convertToPhysical( const IntVect& a_ghost_vect ) const;
 
       virtual void convertFromPhysical();
 
@@ -104,8 +102,8 @@ class FluidSpecies
        *                                ghost cells in comparison.
        */
       virtual
-      RefCountedPtr<CFGVar> clone( const IntVect& ghost_vect = IntVect::Zero,
-                                   const bool copy_soln_data = true ) const;
+      RefCountedPtr<CFGVars> clone( const IntVect& ghost_vect = IntVect::Zero,
+                                    const bool copy_soln_data = true ) const;
 
       /// Copy
       /**
@@ -119,10 +117,12 @@ class FluidSpecies
        */
       const FluidSpecies& operator=( const FluidSpecies& rhs );
 
+   //      int cell_component(const string& variable_name) const;
+
       Real maxValue() const;
       Real minValue() const;
 
-   private:
+private:
 
       LevelData<FluxBox> m_velocity;
    

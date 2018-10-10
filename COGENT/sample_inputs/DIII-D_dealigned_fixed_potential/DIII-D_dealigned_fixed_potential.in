@@ -27,7 +27,6 @@ simulation.plot_prefix         = "plt"
 simulation.histories           = false
 #simulation.restart_file = "chk0750.4d.hdf5"
 
-
 #####################################################
 # Grid and Data Layout Definitions
 #####################################################
@@ -58,7 +57,6 @@ singlenull.decomp.rsol.phase          =  1  1  4  4  16
 gksystem.num_velocity_cells =  32 24
 gksystem.velocity_decomp    =  4  4
 
-
 #####################################################
 # Magnetic Geometry Definitions
 #####################################################
@@ -77,6 +75,7 @@ gksystem.enforce_positivity_type = "step"
 gksystem.fixed_efield = true
 #gksystem.neutrals_model_on = true
 gksystem.transport_model_on = true
+
 #####################################################
 # Phase Space Geometry Definitions
 #####################################################
@@ -92,6 +91,7 @@ gkvlasov.verbose = false
 gkvlasov.time_step_diagnostics = false
 gkvlasov.limiter = true
 gkvlasov.face_avg_type = "uw3"
+
 #####################################################
 # Species Definitions
 #####################################################
@@ -107,6 +107,7 @@ kinetic_species.1.tpm    = "Anomalous"
 #####################################################
 IC.potential.function = "zero"
 IC.hydrogen.function  = "maxwellian_const"
+
 #####################################################
 # Boundary Condition Definitions
 #####################################################
@@ -119,8 +120,6 @@ BC.hydrogen.vpar_lower.function = "zero"
 BC.hydrogen.vpar_upper.function = "zero"
 BC.hydrogen.mu_lower.function = "maxwellian_const"
 BC.hydrogen.mu_upper.function = "zero"
-
-
 
 BC.hydrogen.radial_core.type = "dirichlet"
 BC.hydrogen.radial_sol.type = "dirichlet"
@@ -138,7 +137,7 @@ BC.potential.poloidal_outer_div.type = "neumann"
 BC.potential.poloidal_outer_div.value = 0.
 
 #####################################################
-# Trsndport Definitions
+# Transport Definitions
 #####################################################
 TPM.hydrogen.model_only = false
 TPM.hydrogen.simple_diffusion = true
@@ -161,6 +160,7 @@ CLS.hydrogen.ref_function = "maxwellian_const"
 CLS.hydrogen.ref_temperature = "T0"
 CLS.hydrogen.ref_density = "N0"
 CLS.hydrogen.rosenbluth_skip_stage = true
+
 #####################################################
 # Kinetic Function Definitions
 #####################################################

@@ -4,6 +4,7 @@
 #include "FluidOpInterface.H"
 #include "GKFluidOp.H"
 #include "GKPoisson.H"
+#include "CellVar.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -109,10 +110,23 @@ public:
 
    virtual bool trivialSolutionOp() const {return false;}
 
+   virtual CFGVars* createStateVariable( const string&       a_pp_prefix,
+                                         const std::string&  a_name,
+                                         const MagGeom&      a_geometry,
+                                         const IntVect&      a_ghost_vect ) const
+   {
+      return new CellVar(a_pp_prefix, a_name, a_geometry, 1, a_ghost_vect);
+   }
+
+   virtual void fillGhostCells( FluidSpecies&  species_phys,
+                                const double   time );
+
    void computeDivPerpIonCurrentDensity( LevelData<FArrayBox>&             div_Jperp,
                                          const EField&                     E_field,
                                          const PS::KineticSpeciesPtrVect&  species,
                                          const Real&                       time ) const;
+
+   static const char* pp_name;
 
 private:
 
@@ -143,21 +157,6 @@ private:
 
    std::string m_opt_string;
    int m_my_pc_idx_e, m_my_pc_idx_i;
-
-   /// Parse parameters.
-   /**
-    * Private method to obtain control parameters from "field_model.field_name" section
-    * of ParmParse database, where "field_name" is replaced by the field name (e.g., field_model.VectPotential)
-    *
-    * \param[in] ppcls field_model.field input database.
-    */
-   void parseParameters( ParmParse& pp );
-   
-   /// Print parameters.
-   /**
-    * Private method to print parameters.
-    */
-   void printParameters();
 
    EllipticOpBC* m_parallel_current_divergence_op_bcs;
    EllipticOpBC* m_par_cond_op_bcs;

@@ -185,7 +185,7 @@ CLS.hydrogen.ref_density = "N0"
 CLS.hydrogen.rosenbluth_skip_stage = true
 
 #####################################################
-# Trsndport Definitions
+# Transport Definitions
 #####################################################
 TPM.hydrogen.model_only = false
 TPM.hydrogen.simple_diffusion = true

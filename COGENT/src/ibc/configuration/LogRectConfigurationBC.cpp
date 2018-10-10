@@ -45,8 +45,8 @@ GridFunction& LogRectConfigurationBC::toroidalInflowFunc( const Side::LoHiSide& 
 
 
 inline
-GridFunction& LogRectConfigurationBC::inflowFunc( const int& a_dir,
-                                           const Side::LoHiSide& a_side )
+GridFunction& LogRectConfigurationBC::inflowFunc( const int&            a_dir,
+                                                  const Side::LoHiSide& a_side )
 {
    GridFunction* inflow_func;
    if (a_dir==RADIAL_DIR) {
@@ -97,8 +97,8 @@ std::string LogRectConfigurationBC::toroidalBcType( const Side::LoHiSide& a_side
 #endif
 
 inline
-std::string LogRectConfigurationBC::getBcType( const int& a_dir,
-                                       const Side::LoHiSide& a_side )
+std::string LogRectConfigurationBC::getBcType( const int&             a_dir,
+                                               const Side::LoHiSide&  a_side )
 {
    std::string bc_type;
    if (a_dir==RADIAL_DIR) {
@@ -121,10 +121,11 @@ std::string LogRectConfigurationBC::getBcType( const int& a_dir,
 /////// END INLINE METHODS /////////////////////////////////////////////////////
 
 
-LogRectConfigurationBC::LogRectConfigurationBC( const std::string& a_name,
-                              ParmParse& a_pp,
-                              const int& a_verbosity )
-   : m_name(a_name),
+LogRectConfigurationBC::LogRectConfigurationBC( const std::string&  a_species_name,
+                                                const std::string&  a_variable_name,
+                                                const int&          a_verbosity )
+   : m_species_name(a_species_name),
+     m_variable_name(a_variable_name),
      m_verbosity(a_verbosity)
 {
    m_inflow_function.resize( NUM_INFLOW );
@@ -140,8 +141,7 @@ LogRectConfigurationBC::LogRectConfigurationBC( const std::string& a_name,
    m_bdry_name[TOROIDAL_UPPER] = "toroidal_upper";
 #endif
 
-
-   parseParameters( a_pp );
+   parseParameters();
 }
 
 
@@ -151,10 +151,10 @@ LogRectConfigurationBC::~LogRectConfigurationBC()
 
 
 inline
-void LogRectConfigurationBC::fillInflowData( FluidSpeciesPtrVect& a_bdry_data,
-                                    Vector<std::string>& a_bc_type,
-                                    const BoundaryBoxLayoutPtrVect& a_bdry_layout,
-                                    const Real& a_time )
+void LogRectConfigurationBC::fillInflowData( FluidSpeciesPtrVect&             a_bdry_data,
+                                             Vector<std::string>&             a_bc_type,
+                                             const BoundaryBoxLayoutPtrVect&  a_bdry_layout,
+                                             const Real&                      a_time )
 {
    a_bc_type.resize(a_bdry_layout.size());
    for (int i(0); i<a_bdry_layout.size(); i++) {
@@ -164,19 +164,19 @@ void LogRectConfigurationBC::fillInflowData( FluidSpeciesPtrVect& a_bdry_data,
       FluidSpecies& bdry_data( static_cast<FluidSpecies&>(*(a_bdry_data[i])) );
       const MagGeom& geometry( bdry_data.configurationSpaceGeometry() );
       GridFunction& inflow_func( inflowFunc( dir, side ) );
-      inflow_func.assign( bdry_data.cell_data(), geometry, bdry_layout, a_time );
+      inflow_func.assign( bdry_data.cell_var(0), geometry, bdry_layout, a_time );
       a_bc_type[i] = getBcType(dir, side);
    }
 }
 
-void LogRectConfigurationBC::apply( FluidSpecies& a_species_comp,
-                            const Real& a_time )
+void LogRectConfigurationBC::apply( FluidSpecies&  a_species_comp,
+                                    const Real&    a_time )
 {
    const MagGeom& geometry( a_species_comp.configurationSpaceGeometry() );
    const LogRectCoordSys& coord_sys(
       dynamic_cast<const LogRectCoordSys&>( *geometry.getCoordSys()) );
 
-   LevelData<FArrayBox>& u( a_species_comp.cell_data() );
+   LevelData<FArrayBox>& u( a_species_comp.cell_var(a_species_comp.cell_var_component(m_variable_name)) );
    const DisjointBoxLayout& grids( u.disjointBoxLayout() );
    const IntVect& ghost_vect( u.ghostVect() );
 
@@ -208,13 +208,12 @@ void LogRectConfigurationBC::apply( FluidSpecies& a_species_comp,
 }
 
 
-
 void LogRectConfigurationBC::printParameters() const
 {
    if (procID()==0) {
       std::cout << std::endl;
       std::cout << "LogRectConfigurationBC =============================" << std::endl;
-      std::cout << "- variable: "  << m_name << "-------------" << std::endl;
+      std::cout << "- variable: "  << m_variable_name << "-------------" << std::endl;
       for (int i(0); i<m_inflow_function.size(); i++) {
          std::cout << "  " << m_bdry_name[i] << ": " << std::endl;
          if ( m_inflow_function[i] ) m_inflow_function[i]->printParameters();
@@ -226,11 +225,14 @@ void LogRectConfigurationBC::printParameters() const
 
 
 inline
-void LogRectConfigurationBC::parseParameters( ParmParse& a_pp )
+void LogRectConfigurationBC::parseParameters()
 {
+   string prefix = "BC." + m_species_name + "." + m_variable_name;
+   ParmParse pp(prefix.c_str());
+
    GridFunctionLibrary* library = GridFunctionLibrary::getInstance();
    for (int i(0); i<m_inflow_function.size(); i++) {
-      std::string prefix( a_pp.prefix() );
+      std::string prefix( pp.prefix() );
       prefix += "." + m_bdry_name[i];
       ParmParse fpp( prefix.c_str() );
       std::string function_name;

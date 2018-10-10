@@ -65,7 +65,7 @@ private:
 
    int m_verbosity;
 
-   bool m_include_chx, m_chx_model_friction;
+   bool m_include_chx, m_chx_model_friction, m_first_call;
    bool m_SI_input, m_fixed_source_dfn;
 
    double m_ionization_norm;

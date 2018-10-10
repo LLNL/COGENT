@@ -17,6 +17,7 @@ gksystem.hdf_PoloidalMomentum = false
 
 gksystem.ampere_law =       true
 gksystem.ampere_cold_electrons = false
+gksystem.ampere_post_step_update = true
 
 #####################################################
 # Time Stepping Definitions

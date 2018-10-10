@@ -1,14 +1,10 @@
 #include "GKSystemIC.H"
 
 #include "Box.H"
-//#include "FourthOrderUtil.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
-//#include "FourthOrderUtil.H"
 #include "GridFunction.H"
 #include "GridFunctionLibrary.H"
-//#include "FluidFunction.H"
-//#include "FluidFunctionLibrary.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -26,7 +22,6 @@ GKSystemIC::GKSystemIC( ParmParse& a_pp,
 
    parsePotential( a_pp );
    parseKineticSpecies( a_pp, a_state.dataKinetic() );
-   parseFluidSpecies( a_pp, a_state.dataFluid() );
 }
 
 
@@ -41,7 +36,6 @@ void GKSystemIC::initializeSystem( GKState& a_state,
 {
    initializePotentialField( a_potential, a_time );
    initializeKineticSpecies( a_state.dataKinetic(), a_time );
-   initializeFluidSpecies( a_state.dataFluid(), a_time );
    initializeScalars( a_state.dataScalar(), a_time );
 }
 
@@ -55,19 +49,6 @@ void GKSystemIC::initializeKineticSpecies( KineticSpeciesPtrVect& a_species,
       ksic.assign( soln_species, a_time );
    }
 }
-
-inline
-void GKSystemIC::initializeFluidSpecies( CFG::FluidSpeciesPtrVect& a_species,
-                                         const Real& a_time ) const
-{
-   for (int species(0); species<a_species.size(); species++) {
-      CFG::FluidSpecies& soln_species( static_cast<CFG::FluidSpecies&>(*(a_species[species])) );
-      const CFG::GridFunction& fsic( fluidSpeciesIC( soln_species.name() ) );
-      fsic.assign( soln_species.cell_data(), soln_species.configurationSpaceGeometry(), a_time );
-      soln_species.convertFromPhysical();
-   }
-}
-
 
 inline
 void GKSystemIC::initializeScalars( ScalarPtrVect&      a_scalars,
@@ -131,7 +112,6 @@ const KineticFunction& GKSystemIC::kineticSpeciesIC( const std::string& a_name )
 }
 
 
-//const CFG::FluidFunction& GKSystemIC::fluidSpeciesIC( const std::string& a_name ) const
 const CFG::GridFunction& GKSystemIC::fluidSpeciesIC( const std::string& a_name ) const
 {
    FluidSpeciesICMap::const_iterator it = m_fluid_ics.find( a_name );
@@ -167,24 +147,6 @@ void GKSystemIC::parseKineticSpecies( ParmParse& a_pp,
          ppsp.query( "function", function_name );
          RefCountedPtr<KineticFunction> ic( library->find( function_name ) );
          m_kinetic_ics.insert( KineticSpeciesICMap::value_type( species_name, ic ) );
-      }
-   }
-}
-
-
-void GKSystemIC::parseFluidSpecies( ParmParse&                      a_pp,
-                                    const CFG::FluidSpeciesPtrVect& a_species )
-{
-   if ( a_species.size() > 0 ) {
-      CFG::GridFunctionLibrary* library = CFG::GridFunctionLibrary::getInstance();
-      for (int s(0); s<a_species.size(); s++) {
-         const std::string& species_name( a_species[s]->name() );
-         const std::string prefix( "IC." + species_name );
-         ParmParse ppfsp( prefix.c_str() );
-         std::string function_name;
-         ppfsp.query( "function", function_name );
-         RefCountedPtr<CFG::GridFunction> ic( library->find( function_name ) );
-         m_fluid_ics.insert( FluidSpeciesICMap::value_type( species_name, ic ) );
       }
    }
 }

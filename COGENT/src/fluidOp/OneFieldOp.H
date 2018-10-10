@@ -2,6 +2,7 @@
 #define  _ONEFIELDOP_H_
 
 #include "FluidOpInterface.H"
+#include "FluidVarBC.H"
 #include "Diffusion.H"
 
 #include "NamespaceHeader.H"
@@ -18,9 +19,10 @@ public:
   /**
    *  @param[in] pp the input database.
    */
-  OneFieldOp( const std::string& a_pp_str,
-              const MagGeom&     geometry,
-              const int          verbosity );
+  OneFieldOp( const string&   pp_str,
+              const string&   species_name,
+              const MagGeom&  geometry,
+              const int       verbosity );
 
   /// Destructor.
   /**
@@ -84,16 +86,27 @@ public:
 
    virtual bool trivialSolutionOp() const {return true;}
 
+   virtual CFGVars* createStateVariable( const string&       a_pp_prefix,
+                                         const std::string&  a_name,
+                                         const MagGeom&      a_geometry,
+                                         const IntVect&      a_ghost_vect ) const
+   {
+      return new FluidSpecies(a_pp_prefix, a_name, a_geometry, a_ghost_vect);
+   }
+
+   virtual void fillGhostCells( FluidSpecies&  species_phys,
+                                const double   time );
+
    /// Compute a stable time step.
    /**
     * Computes and returns an estimate of the maximum stable time step.
     */
    Real computeDt( const FluidSpeciesPtrVect&  fluid_species );
    
+   static const char* pp_name;
 
 private:
 
-  
    int m_verbosity;
    const MagGeom& m_geometry;
    int m_is_time_implicit;
@@ -116,10 +129,10 @@ private:
     */
    void printParameters();
    
-   Diffusion* m_diffusion_op;
-   EllipticOpBC* m_bc;
-   
-   
+   Diffusion*        m_diffusion_op;
+   EllipticOpBC*     m_bc;
+   FluidVarBC*       m_fluid_variable_bc;
+  
    RefCountedPtr<GridFunction> m_D_rad;
    RefCountedPtr<GridFunction> m_D_par;
    RefCountedPtr<GridFunction> m_D_perp;

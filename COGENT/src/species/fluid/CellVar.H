@@ -1,7 +1,7 @@
 #ifndef _CELLVAR_H_
 #define _CELLVAR_H_
 
-#include "CFGVar.H"
+#include "CFGVars.H"
 
 #include "NamespaceHeader.H"
 
@@ -11,7 +11,7 @@
  * Cell-averaged or cell-centered variable
  */
 class CellVar
-   : public CFGVar
+   : public CFGVars
 {
    public:
    
@@ -23,9 +23,9 @@ class CellVar
                const MagGeom&      geometry,
                const int           depth,
                const IntVect       ghosts )
-         : CFGVar(pp_prefix, name, geometry)
+         : CFGVars(pp_prefix, name, geometry)
       {
-         cell_data().define(geometry.gridsFull(), depth, ghosts);
+         addCellVar(name, depth, ghosts);
       }
 };
 

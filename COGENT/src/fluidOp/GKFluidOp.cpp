@@ -2,6 +2,7 @@
 #include "OneFieldOp.H"
 #include "NullFluidOp.H"
 #include "VorticityOp.H"
+#include "AmpereErAverageOp.H"
 
 #include <float.h>
 #include <sstream>
@@ -40,12 +41,10 @@ GKFluidOp::GKFluidOp( const MagGeom&  a_geometry,
                model = new VorticityOp( prefix, a_geometry, a_larmor, m_verbose );
             }
             else if (op_type == "AmpereErAverageOp") {
-               // We don't need a fluid operator in this case because the
-               // Vlasov operator is doing all the work
-               model = new NullFluidOp();
+               model = new AmpereErAverageOp();
             }
             else if (op_type == "OneFieldOp") {
-               model = new OneFieldOp( prefix, a_geometry, m_verbose );
+               model = new OneFieldOp( prefix, species_name, a_geometry, m_verbose );
             }
             else {
                MayDay::Error("Unknown fluid operator type specified for a fluid species");
@@ -278,6 +277,33 @@ bool GKFluidOp::trivialSolutionOp( const FluidSpeciesPtrVect& a_fluid_species )
    }
 
    return trivial;
+}
+
+
+
+void GKFluidOp::initialize( FluidSpeciesPtrVect&  a_fluid_species,
+                            Real                  a_time )
+{
+   for (int species(0); species<a_fluid_species.size(); species++) {
+      //      FluidSpecies& fluid_species( static_cast<FluidSpecies&>(*(a_fluid_species[species])) );
+      CFGVars& fluid_species = *(a_fluid_species[species]);
+      const std::string species_name( fluid_species.name() );
+      FluidOpInterface& fluidOp( fluidModel( species_name ) );
+      fluidOp.initialize(fluid_species, a_time);
+   }
+}
+
+
+
+void GKFluidOp::fillGhostCells( FluidSpeciesPtrVect&  a_fluid_species,
+                                const double          a_time )
+{
+   for (int species(0); species<a_fluid_species.size(); species++) {
+      FluidSpecies& fluid_species( static_cast<FluidSpecies&>(*(a_fluid_species[species])) );
+      const std::string species_name( fluid_species.name() );
+      FluidOpInterface& fluidOp( fluidModel( species_name ) );
+      fluidOp.fillGhostCells(fluid_species, a_time);
+   }
 }
 
 

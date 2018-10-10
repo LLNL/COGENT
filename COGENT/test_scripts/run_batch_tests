@@ -39,8 +39,8 @@
 
 # The number of processors per node on the test platform and the batch bank
 # need to be set here:
-ppn=16
-bank=comp
+ppn=36
+bank=asccasc
 ########################################################################################
 
 : ${COGENT_TEST_COGENT_DIR:?"Please set COGENT_TEST_COGENT_DIR in your environment or manually above"}
@@ -81,7 +81,7 @@ for prob_dir in $1; do
    rm -rf plt* chk* stdout report
    input_file=$prob_dir.in
    np=`grep TEST $input_file | sed -e 's/.*\(np=\)/\1/' -e 's/\(,\).*//' -e 's/np=//'`
-   num_nodes=$(($np/$ppn))
+   num_nodes=$((($np+$ppn-1)/$ppn))
    tlimit=`grep TEST $input_file | sed -e "s/.*\(timelimit=\)/\1/" -e "s/\(,\).*//" -e "s/timelimit=//"`
 
    # Construct the batch script

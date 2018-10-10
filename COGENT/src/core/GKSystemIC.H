@@ -18,7 +18,7 @@
 #include "GKPoisson.H"
 #include "GridFunction.H"
 #include "FluidSpecies.H"
-#include "FluidSpeciesBC.H"
+#include "FluidVarBC.H"
 //#include "FluidFunction.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -64,20 +64,13 @@ class GKSystemIC
       void parseKineticSpecies( ParmParse& a_pp,
                                 const KineticSpeciesPtrVect& a_species );
 
-      void parseFluidSpecies( ParmParse& a_pp,
-                              const CFG::FluidSpeciesPtrVect& a_species );
-   
       inline
       void initializeKineticSpecies( KineticSpeciesPtrVect& a_species,
                                      const Real& a_time ) const;
 
       inline
-      void initializeFluidSpecies( CFG::FluidSpeciesPtrVect& a_species,
-                                   const Real& a_time ) const;
-
-     inline
-     void  initializeScalars( ScalarPtrVect& a_scalars,
-                              const Real&    a_time ) const;
+      void  initializeScalars( ScalarPtrVect& a_scalars,
+                               const Real&    a_time ) const;
 
       const PhaseGeom&                m_phase_geometry;
       const CFG::MultiBlockLevelGeom& m_mag_geometry;

@@ -8,7 +8,7 @@
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
-#include "FluidSpeciesBC.H"
+#include "FluidVarBC.H"
 #include "GridFunction.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -54,7 +54,7 @@ class GKSystemBC
 
       KineticSpeciesBC& kineticSpeciesBC( const std::string& name ) const;
 
-      CFG::FluidSpeciesBC& fluidSpeciesBC( const std::string& a_name ) const;
+      CFG::FluidVarBC& fluidVarBC( const std::string& a_name ) const;
 
       CFG::GridFunction& fieldBC( const std::string& a_name ) const;
 
@@ -63,9 +63,6 @@ class GKSystemBC
 
       inline
       void executeInternalExchanges( CFG::FluidSpecies& a_fluid ) const;
-
-      inline
-      void executeInternalExchanges( CFG::CFGVar& a_var ) const;
 
       inline
       void fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&                 species,
@@ -92,7 +89,7 @@ class GKSystemBC
       int                                 m_verbosity;
       const PhaseGeom&                    m_phase_geometry;
       std::vector<KineticSpeciesBC*>      m_kinetic_bcs;
-      std::vector<CFG::FluidSpeciesBC*>   m_fluid_bcs;
+      std::vector<CFG::FluidVarBC*>       m_fluid_bcs;
       CFG::EllipticOpBC*                  m_potential_bcs;
 
       typedef std::map<std::string,RefCountedPtr<CFG::GridFunction> > FieldBCMap;

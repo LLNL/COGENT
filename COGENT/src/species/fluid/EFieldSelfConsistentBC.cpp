@@ -26,9 +26,9 @@ void EFieldSelfConsistentBC::computeEField( const PS::GKState&                a_
                                             const bool                        a_update_potential,
                                             const bool                        a_initial_time )
 {
-   LevelData<FArrayBox>& E_field_cell = cell_data();
+   LevelData<FArrayBox>& E_field_cell = cell_var(0);
    CH_assert(E_field_cell.ghostVect() == IntVect::Unit);
-   LevelData<FluxBox>& E_field_face = face_data();
+   LevelData<FluxBox>& E_field_face = face_var(0);
    CH_assert(E_field_face.ghostVect() == IntVect::Unit);
 
    if (m_poisson) {
@@ -147,20 +147,20 @@ void EFieldSelfConsistentBC::updateImplicitPotential(LevelData<FArrayBox>&      
 }
 
 
-RefCountedPtr<CFGVar>
+RefCountedPtr<CFGVars>
 EFieldSelfConsistentBC::clone( const bool a_copy_data ) const
 {
    EFieldSelfConsistentBC* efield = new EFieldSelfConsistentBC( pp_prefix(), name(), configurationSpaceGeometry(), IntVect::Unit );
 
    if (a_copy_data) {
-      LevelData<FArrayBox>& dst_cell_data = efield->cell_data();
-      const LevelData<FArrayBox>& src_cell_data = cell_data();
+      LevelData<FArrayBox>& dst_cell_data = efield->cell_var(0);
+      const LevelData<FArrayBox>& src_cell_data = cell_var(0);
       for (DataIterator dit( src_cell_data.dataIterator() ); dit.ok(); ++dit) {
          dst_cell_data[dit].copy( src_cell_data[dit] );
       }
 
-      LevelData<FluxBox>& dst_face_data = efield->face_data();
-      const LevelData<FluxBox>& src_face_data = face_data();
+      LevelData<FluxBox>& dst_face_data = efield->face_var(0);
+      const LevelData<FluxBox>& src_face_data = face_var(0);
 
       for (DataIterator dit( src_face_data.dataIterator() ); dit.ok(); ++dit) {
          for (int dir=0; dir<SpaceDim; ++dir) {
@@ -190,7 +190,7 @@ EFieldSelfConsistentBC::clone( const bool a_copy_data ) const
    efield->m_radial_gkp_divergence_average_hi = m_radial_gkp_divergence_average_hi;
    efield->m_defined = true;
 
-   return RefCountedPtr<CFGVar>(efield);
+   return RefCountedPtr<CFGVars>(efield);
 }
 
 

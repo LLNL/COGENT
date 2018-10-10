@@ -1,14 +1,17 @@
-#ifndef  _NULLFLUIDOP_H_
-#define  _NULLFLUIDOP_H_
+#ifndef  _AMPEREERAVERAGEOP_H_
+#define  _AMPEREERAVERAGEOP_H_
 
 #include "FluidOpInterface.H"
 
 #include "NamespaceHeader.H"
 
 /**
- * NullFluidOp fluid operator class.
+ * AmpereErAverageOp fluid operator class.  This is essentially a dummy clase that is only needed
+ * for its parseInitialConditions() and createStateVariable() members.  Everything else normally
+ * provided by a FluidOp is actually performed by the VlasovAmpereOp, for which this special class
+ * is a companion
 */
-class NullFluidOp
+class AmpereErAverageOp
    : public FluidOpInterface
 {
    public:
@@ -17,12 +20,13 @@ class NullFluidOp
       /**
        *  @param[in] pp the input database.
        */
-      NullFluidOp() {;}
+      AmpereErAverageOp()
+      {parseInitialConditions("", "Er_flux_surfaces");}
       
       /// Destructor.
       /**
        */
-      virtual ~NullFluidOp() {;}
+      virtual ~AmpereErAverageOp() {;}
   
       /// Evaluates the RHS.
       /**
@@ -55,15 +59,16 @@ class NullFluidOp
 
       virtual bool trivialSolutionOp() const {return true;};
 
-      virtual CFGVars* createStateVariable( const string&       pp_prefix,
-                                            const std::string&  name,
-                                            const MagGeom&      geometry,
-                                            const IntVect&      ghost_vect ) const {return NULL;}
+      virtual CFGVars* createStateVariable( const string&       a_pp_prefix,
+                                            const std::string&  a_name,
+                                            const MagGeom&      a_geometry,
+                                            const IntVect&      a_ghost_vect ) const
+      {
+         return new CellVar(a_pp_prefix, a_name, a_geometry, 1, a_ghost_vect);
+      }
 
       virtual void fillGhostCells( FluidSpecies&  species_phys,
                                    const double   time ) {;}
-
-      const char* pp_name = {"null_op"};
 };
 
 

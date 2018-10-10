@@ -85,6 +85,7 @@ gkvlasov.face_avg_type = "bweno"
 #####################################################
 gksystem.fixed_efield = false
 gksystem.consistent_potential_bcs = true
+gksystem.ampere_post_step_update = true
 
 gkpoissonboltzmann.prefactor = fs_neutrality_initial_fs_ni
 gkpoissonboltzmann.verbose = true

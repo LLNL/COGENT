@@ -114,7 +114,7 @@ FluxSurface::sum( const LevelData<FArrayBox>& a_src,
 #else
 
    // Initialize the destination, since SumOp does not do that for us.
-   LevelData<FArrayBox> tmp_2d(m_grids2D, 1, IntVect::Zero);
+   LevelData<FArrayBox> tmp_2d(m_grids2D, a_src.nComp(), IntVect::Zero);
    for (DataIterator dit(m_grids2D); dit.ok(); ++dit) {
       tmp_2d[dit].setVal(0.);
    }
@@ -165,7 +165,7 @@ FluxSurface::spread( const LevelData<FArrayBox>& a_src,
 
 #else
    
-   LevelData<FArrayBox> tmp_2d(m_grids2D, 1, IntVect::Zero);
+   LevelData<FArrayBox> tmp_2d(m_grids2D, a_src.nComp(), IntVect::Zero);
    
    // Define SpreadingCopier to spread in the poloidal direction
    SpreadingCopier spreadCopier2D(src_grids, m_grids2D, problem_domain, TOROIDAL_DIR);

@@ -3,7 +3,6 @@
 
 #include "REAL.H"
 #include "FluidOpInterface.H"
-#include "CFGVar.H"
 #include "FluidSpecies.H"
 #include "ParmParse.H"
 
@@ -101,7 +100,13 @@ class GKFluidOp
 
       bool trivialSolutionOp( const FluidSpeciesPtrVect& fluid_species );
 
-   /// Compute a stable time step.
+      void initialize( FluidSpeciesPtrVect&  fluid_species,
+                       Real                  time );
+
+      void fillGhostCells( FluidSpeciesPtrVect&  fluid_species,
+                           const double          time );
+
+      /// Compute a stable time step.
       /**
        * Computes and returns an estimate of the maximum stable time step.
        */

@@ -50,7 +50,7 @@ public:
                                          const Real                        dt );
 
    virtual
-   RefCountedPtr<CFGVar> clone( const bool copy_data = true ) const;
+   RefCountedPtr<CFGVars> clone( const bool copy_data = true ) const;
 
    double getRadialGKPDivergenceAverageLo() const {return m_radial_gkp_divergence_average_lo;}
 

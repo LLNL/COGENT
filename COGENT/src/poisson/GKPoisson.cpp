@@ -7,7 +7,7 @@
 #include "inspect.H"
 
 #include "NamespaceHeader.H"
-
+ 
 const char* GKPoisson::pp_name = {"gkpoisson"};
 
 
@@ -25,6 +25,13 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
      m_charge_exchange_coeff(NULL),
      m_parallel_conductivity(NULL)
 {
+
+   parseParameters( a_pp );
+
+   if (m_verbosity>0) {
+      printParameters();
+   }
+
    // We give the coefficients one ghost cell layer so that the
    // second-order centered difference formula can be used to compute
    // the transverse gradients needed for the fourth-order formulas even
@@ -223,7 +230,14 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
    const LevelData<FluxBox>& par_coeff = m_geometry.getEllipticOpParCoeff();
    const LevelData<FluxBox>& perp_coeff_mapped = m_geometry.getEllipticOpPerpCoeffMapped();
    const LevelData<FluxBox>& par_coeff_mapped  = m_geometry.getEllipticOpParCoeffMapped();
-   
+
+   LevelData<FluxBox> radial_coeff( grids, SpaceDim*SpaceDim, 2*IntVect::Unit );
+   LevelData<FluxBox> radial_coeff_mapped( grids, SpaceDim*SpaceDim, 2*IntVect::Unit );
+   if (m_model == "RadialGyroPoisson") {
+      m_geometry.getEllipticOpRadCoeff(radial_coeff);
+      m_geometry.getEllipticOpRadCoeffMapped(radial_coeff_mapped);
+   }
+  
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
 
       const Box& box = a_unmapped_coefficients[dit].box();
@@ -268,6 +282,27 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
 
          grown_mapped_coefficients[dit].copy(isotropic_coeff_mapped);
          grown_mapped_coefficients[dit] += tmp_perp_mapped;
+      }
+
+      else if (m_model == "PerpGyroPoisson") {
+         
+         for (int n=0; n<SpaceDim*SpaceDim; ++n) {
+            tmp_perp.mult(polarization_fac, box, 0, n);
+            tmp_perp_mapped.mult(polarization_fac, box, 0, n);
+         }
+         grown_unmapped_coefficients[dit].copy(tmp_perp);
+         grown_mapped_coefficients[dit].copy(tmp_perp_mapped);
+
+      }
+
+      else if (m_model == "RadialGyroPoisson") {
+
+         for (int n=0; n<SpaceDim*SpaceDim; ++n) {
+            radial_coeff[dit].mult(polarization_fac, box, 0, n);
+            radial_coeff_mapped[dit].mult(polarization_fac, box, 0, n);
+         }
+         grown_unmapped_coefficients[dit].copy(radial_coeff[dit]);
+         grown_mapped_coefficients[dit].copy(radial_coeff_mapped[dit]);
       }
       
       else if (m_model == "Vorticity") {
@@ -510,6 +545,23 @@ GKPoisson::computeParallelConductivity(const LevelData<FluxBox>& a_Te,
                                   CHF_CONST_REAL(sigma_max));
       
       }
+   }
+}
+
+void
+GKPoisson::parseParameters( const ParmParse&   a_ppntr )
+{
+   if (a_ppntr.contains("model")) {
+      a_ppntr.get( "model", m_model );
+   }
+}
+
+
+void
+GKPoisson::printParameters()
+{
+   if (procID()==0) {
+      std::cout << "GKPoisson model: " << m_model << std::endl;
    }
 }
 

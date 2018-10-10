@@ -123,6 +123,30 @@ class FluidOpInterface
          fluid_species_solution[component]->copy(*(fluid_species_rhs[component]));
       }
 
+      virtual CFGVars* createStateVariable( const string&       pp_prefix,
+                                            const std::string&  name,
+                                            const MagGeom&      geometry,
+                                            const IntVect&      ghost_vect ) const = 0;
+
+      virtual void initialize( CFGVars&       a_species,
+                               Real           a_time )
+      {
+         for (int n=0; n<a_species.num_cell_vars(); ++n) {
+            const GridFunction& fsic( fluidSpeciesIC( a_species.cell_var_name(n) ) );
+            fsic.assign( a_species.cell_var(n), a_species.configurationSpaceGeometry(), a_time );
+         }
+         for (int n=0; n<a_species.num_face_vars(); ++n) {
+            const GridFunction& fsic( fluidSpeciesIC( a_species.face_var_name(n) ) );
+            fsic.assign( a_species.face_var(n), a_species.configurationSpaceGeometry(), a_time );
+         }
+         if ( typeid(a_species) == typeid(FluidSpecies&) ) {
+            (static_cast<FluidSpecies&>(a_species)).convertFromPhysical();
+         }
+      }
+
+      virtual void fillGhostCells( FluidSpecies&  a_species_phys,
+                                   const double   a_time ) = 0;
+
       virtual Real computeDt(const FluidSpeciesPtrVect& fluids)
       {
          return DBL_MAX;
@@ -134,6 +158,39 @@ class FluidOpInterface
       }
 
       virtual bool trivialSolutionOp() const = 0;
+
+      void parseInitialConditions( const string&  a_species_name,
+                                   const string&  a_variable_name )
+      {
+         GridFunctionLibrary* library = GridFunctionLibrary::getInstance();
+
+         std::string ic_prefix;
+         if ( a_species_name.length() == 0 ) {
+            ic_prefix = "IC." + a_variable_name;
+         }
+         else {
+            ic_prefix = "IC." + a_species_name + "." + a_variable_name;
+         }
+   
+         ParmParse ppic( ic_prefix.c_str() );
+         std::string function_name;
+         ppic.query( "function", function_name );
+         RefCountedPtr<GridFunction> ic( library->find( function_name ) );
+         m_fluid_ics.insert( FluidSpeciesICMap::value_type( a_variable_name, ic ) );
+      }
+
+      const GridFunction& fluidSpeciesIC( const std::string& a_name ) const
+      {
+         FluidSpeciesICMap::const_iterator it = m_fluid_ics.find( a_name );
+         if ( it == m_fluid_ics.end() ) {
+            const std::string msg( "GKSystemIC: Initial condition " + a_name + " not found!" );
+            MayDay::Error( msg.c_str() );
+         }
+         return *(it->second);
+      }
+
+      typedef std::map<std::string,RefCountedPtr<GridFunction> > FluidSpeciesICMap;
+      FluidSpeciesICMap   m_fluid_ics;
 };
 
 #include "NamespaceFooter.H"

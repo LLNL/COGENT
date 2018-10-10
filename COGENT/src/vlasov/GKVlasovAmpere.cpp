@@ -81,8 +81,8 @@ void GKVlasovAmpere::accumulateRHS( GKRHSData&                    a_rhs,
       if ( phase_geom.divFreeVelocity() ) {
          bool fourth_order_Efield = !a_E_field.secondOrder();
          int velocity_option = 0;
-         evalRHS( rhs_species, lo_value, hi_value, species_radial_flux_divergence_average,
-                  soln_species, a_E_field.cell_data(), a_E_field.getPhiNode(), fourth_order_Efield, velocity_option, a_time );
+         evalRHS( rhs_species, lo_value, hi_value, species_radial_flux_divergence_average, soln_species,
+                  a_E_field.getCellCenteredField(), a_E_field.getPhiNode(), fourth_order_Efield, velocity_option, a_time );
       }
       else {
          evalRHS( rhs_species, lo_value, hi_value, species_radial_flux_divergence_average,
@@ -113,7 +113,7 @@ void GKVlasovAmpere::accumulateRHS( GKRHSData&                    a_rhs,
    else {
 
       CFG::FluidSpeciesPtrVect& rhs_fluid = a_rhs.dataFluid();
-      CFG::LevelData<CFG::FArrayBox>& Er = rhs_fluid[a_rhs.getFluidComponent("Er_flux_surfaces")]->cell_data();
+      CFG::LevelData<CFG::FArrayBox>& Er = rhs_fluid[a_rhs.getFluidComponent("Er_flux_surfaces")]->cell_var(0);
 
       for (CFG::DataIterator dit(mag_grids); dit.ok(); ++dit) {
          Er[dit].copy(total_radial_flux_divergence_average[dit]);
@@ -155,8 +155,8 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                  a_rhs_species,
    const PhaseGeom& geometry( a_rhs_species.phaseSpaceGeometry() );
 
    LevelData<FluxBox> injected_E_field;
-   geometry.injectConfigurationToPhase( a_E_field.face_data(),
-                                        a_E_field.cell_data(),
+   geometry.injectConfigurationToPhase( a_E_field.getFaceCenteredField(),
+                                        a_E_field.getCellCenteredField(),
                                         injected_E_field );
     
    LevelData<FluxBox> velocity( dbl, SpaceDim, IntVect::Unit );

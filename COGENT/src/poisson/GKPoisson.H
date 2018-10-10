@@ -100,6 +100,18 @@ public:
    virtual void multiplyCoefficients( LevelData<FluxBox>& data,
                                       const bool mapped_coeff ) const;
 
+   /// parseParameters function
+   /**
+    * parseParameters function
+    */
+   void parseParameters( const ParmParse&   a_ppntr );
+
+   /// printParameters function
+   /**
+    * printParameters function
+    */
+   void printParameters();
+
    /// ParmParse object name
    /**
     * ParmParse object name.  Used to locate input file parameters of interest to
@@ -141,6 +153,9 @@ protected:
    RefCountedPtr<GridFunction> m_parallel_conductivity;
 
    MagFluxAlignedMBLEXCenter* m_mblx_ptr;
+
+private:
+   int m_verbosity;
 };
 
 

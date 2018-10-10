@@ -16,6 +16,7 @@
 
 #include "NamespaceHeader.H" 
 
+const char* VorticityOp::pp_name = {"vorticity_op"};
 
 VorticityOp::VorticityOp( const std::string&  a_pp_str,
                           const MagGeom&      a_geometry,
@@ -27,12 +28,6 @@ VorticityOp::VorticityOp( const std::string&  a_pp_str,
      m_my_pc_idx_e(-1),
      m_my_pc_idx_i(-1)
 {
-   ParmParse pp1(a_pp_str.c_str());
-   parseParameters( pp1 );
-   if (m_verbosity>0) {
-      printParameters();
-   }
-
    const std::string name("potential");
    const std::string prefix( "BC." + name );
    ParmParse ppsp( prefix.c_str() );
@@ -78,6 +73,9 @@ VorticityOp::VorticityOp( const std::string&  a_pp_str,
    const DisjointBoxLayout& grids = m_geometry.gridsFull();
    m_negativeDivJpar.define(grids, 1, IntVect::Zero);
    m_divJperp.define(grids, 1, IntVect::Zero);
+
+   // Input the initial conditions
+   parseInitialConditions("", "potential");
 }
 
 
@@ -121,11 +119,11 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
    CH_TIMER("div_jpar",t_div_jpar);
    CH_TIMER("div_jperp",t_div_jperp);
 
-   CFGVar& rhs_fluid_species = *(a_rhs[a_fluid_vec_comp]);
-   LevelData<FArrayBox>& rhs_data = rhs_fluid_species.cell_data();
+   CFGVars& rhs_fluid_species = *(a_rhs[a_fluid_vec_comp]);
+   LevelData<FArrayBox>& rhs_data = rhs_fluid_species.cell_var(0);
 
-   const CFGVar& sol_fluid_species = *(a_fluid_species[a_fluid_vec_comp]);
-   const LevelData<FArrayBox>& sol_data = sol_fluid_species.cell_data();
+   const CFGVars& sol_fluid_species = *(a_fluid_species[a_fluid_vec_comp]);
+   const LevelData<FArrayBox>& sol_data = sol_fluid_species.cell_var(0);
 
    const DisjointBoxLayout& grids = m_geometry.gridsFull();
 
@@ -219,8 +217,8 @@ void VorticityOp::evalSolutionOp( FluidSpeciesPtrVect&               a_rhs,
    const FluidSpecies& sol_species = static_cast<const FluidSpecies&>(*a_fluid_species_phys[a_component]);
    FluidSpecies& rhs_species = static_cast<FluidSpecies&>(*a_rhs[a_component]);
 
-   const LevelData<FArrayBox>& sol = sol_species.cell_data();
-   LevelData<FArrayBox>& rhs = rhs_species.cell_data();
+   const LevelData<FArrayBox>& sol = sol_species.cell_var(0);
+   LevelData<FArrayBox>& rhs = rhs_species.cell_var(0);
 
    m_gyropoisson_op->computeFluxDivergence(sol, rhs, false, false);
 }
@@ -262,20 +260,23 @@ void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS
 
   PS::DOFList dof_list(0);
 
-  const LevelData<FArrayBox>& soln_data   (a_fluid_species.cell_data());
-  const DisjointBoxLayout&    grids       (soln_data.disjointBoxLayout());
-  const int                   n_comp      (soln_data.nComp());
-  const LevelData<FArrayBox>& pMapping    (a_global_dofs.data()); 
+  for (int var=0; var<a_fluid_species.num_cell_vars(); ++var) {
 
-  for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-    const Box& grid = grids[dit];
-    const FArrayBox& pMap = pMapping[dit];
-    for (BoxIterator bit(grid); bit.ok(); ++bit) {
-      IntVect ic = bit();
-      for (int n(0); n < n_comp; n++) {
-        dof_list.push_back((int) pMap.get(ic ,n) - a_global_dofs.mpiOffset());
-      }
-    }
+     const LevelData<FArrayBox>& soln_data   (a_fluid_species.cell_var(var));
+     const DisjointBoxLayout&    grids       (soln_data.disjointBoxLayout());
+     const int                   n_comp      (soln_data.nComp());
+     const LevelData<FArrayBox>& pMapping    (a_global_dofs.data(var)); 
+
+     for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+        const Box& grid = grids[dit];
+        const FArrayBox& pMap = pMapping[dit];
+        for (BoxIterator bit(grid); bit.ok(); ++bit) {
+           IntVect ic = bit();
+           for (int n(0); n < n_comp; n++) {
+              dof_list.push_back((int) pMap.get(ic ,n) - a_global_dofs.mpiOffset());
+           }
+        }
+     }
   }
 
   if (a_im)  m_my_pc_idx_i = a_pc.size();
@@ -330,8 +331,8 @@ void VorticityOp::solveSolutionPC( FluidSpeciesPtrVect&              a_fluid_spe
    FluidSpecies& sol_species = static_cast<FluidSpecies&>(*a_fluid_species_solution[a_component]);
    const FluidSpecies& rhs_species = static_cast<const FluidSpecies&>(*a_fluid_species_rhs[a_component]);
 
-   const LevelData<FArrayBox>& r = rhs_species.cell_data();
-   LevelData<FArrayBox>& z = sol_species.cell_data();
+   const LevelData<FArrayBox>& r = rhs_species.cell_var(0);
+   LevelData<FArrayBox>& z = sol_species.cell_var(0);
 
    setZero(z);
    m_gyropoisson_op->setPreconditionerConvergenceParams(0., 1, 0., 1);
@@ -357,14 +358,20 @@ void VorticityOp::solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species
 {
    CH_TIME("VorticityOp::solvePCImEx");
    const FluidSpecies& rhs_species = static_cast<const FluidSpecies&>(*a_fluid_species_rhs[a_component]);
-   const LevelData<FArrayBox>& r = rhs_species.cell_data();
+   const LevelData<FArrayBox>& r = rhs_species.cell_var(0);
 
    FluidSpecies& sol_species = static_cast<FluidSpecies&>(*a_fluid_species_solution[a_component]);
-   LevelData<FArrayBox>& z = sol_species.cell_data();
+   LevelData<FArrayBox>& z = sol_species.cell_var(0);
 
    setZero(z);
    m_imex_pc_op->setPreconditionerConvergenceParams(0., 1, 0., 1);
    m_imex_pc_op->solvePreconditioner(r, z);
+}
+
+
+void VorticityOp::fillGhostCells( FluidSpecies&  a_species_phys,
+                                  const double   a_time )
+{
 }
 
 
@@ -392,7 +399,8 @@ void VorticityOp::computeDivPerpIonCurrentDensity( LevelData<FArrayBox>&        
       // Compute the divergence of -Jperp for this species
       bool fourth_order = !m_parallel_current_divergence_op->secondOrder();
       int velocity_option = 1; // Drift terms only
-      m_vlasov->evalRHS(tmp_rhs_species, this_species, a_E_field.cell_data(), a_E_field.getPhiNode(), fourth_order, velocity_option, a_time);
+      m_vlasov->evalRHS(tmp_rhs_species, this_species, a_E_field.getCellCenteredField(), a_E_field.getPhiNode(),
+                        fourth_order, velocity_option, a_time);
 
       // Divide by J to get physical cell averages
       phase_geometry.divideJonValid( rhs_dfn );
@@ -489,20 +497,6 @@ void VorticityOp::setZero( LevelData<FArrayBox>& a_data ) const
    }
 }
 
-
-inline
-void VorticityOp::parseParameters( ParmParse& a_pp )
-{
-}
-
-
-inline
-void VorticityOp::printParameters()
-{
-   if (procID()==0) {
-      std::cout << "VorticityOp parameters:" << std::endl;
-   }
-}
 
 
 #include "NamespaceFooter.H"

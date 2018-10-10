@@ -86,11 +86,11 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
       m_simple_boltzmann = false;
    }
 
-   if ( a_pp.contains("simple_linear") ) {
-      a_pp.get("simple_linear", m_simple_linear);
+   if ( a_pp.contains("linear_response") ) {
+      a_pp.get("linear_response", m_linear_response);
    }
    else {
-      m_simple_linear = false;
+      m_linear_response = false;
    }
 
    if (a_pp.contains("nonlinear_relative_tolerance")) {
@@ -146,6 +146,20 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
       m_radial_solve_only = false;
    }
 
+   if ( a_pp.contains("linear_solve") ) {
+      a_pp.get("linear_solve", m_linear_solve);
+      if (m_linear_solve) CH_assert(m_linear_response);
+      if ( a_pp.contains("zero_initial_solution") ) {
+         a_pp.get("zero_intial_solution", m_zero_initial_solution);
+      }
+      else {
+         m_zero_initial_solution = false;
+      }
+   }
+   else {
+      m_linear_solve = false;
+   }
+   
    if ( a_pp.contains("subspace_iteration_solve") ) {
       a_pp.get("subspace_iteration_solve", m_subspace_iteration_solve);
 
@@ -173,7 +187,7 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
    // A tridiagonal solver is needed by all of the solver options
    m_precond_Psolver = new MBTridiagonalSolver(a_geom, 2);
 
-   if ( !m_radial_solve_only && !m_subspace_iteration_solve ) {
+   if ( !m_radial_solve_only && (!m_subspace_iteration_solve || m_linear_response) ) {
 #ifdef with_petsc
       m_precond_Qsolver = new MBPETScSolver(a_geom, 2);
 #else
@@ -209,10 +223,16 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
 
       m_initial_ion_charge_density_average = averageMapped(a_initial_ion_charge_density);
    }
-
+   
+   if (m_linear_response) {
+      computePrefactorNumerator( a_initial_ion_charge_density );
+      m_initial_ion_charge_density.define(a_initial_ion_charge_density);
+   }
+   
    const DisjointBoxLayout& grids = m_geometry.grids();
    m_M.define(grids, 1, IntVect::Zero);
    m_D.define(grids, 1, IntVect::Zero);
+   m_Te.define(grids, 1, IntVect::Zero);
 }
 
 
@@ -226,6 +246,19 @@ GKPoissonBoltzmann::~GKPoissonBoltzmann()
 }
 
 
+void
+GKPoissonBoltzmann::initializeElectronTemperature(LevelData<FArrayBox>&    a_Te,
+                                                  const BoltzmannElectron& a_ne)
+{
+   /*
+      This function is used to initialize m_Te object
+      needed for applyOp() function
+    */
+   const LevelData<FArrayBox>& Te = a_ne.temperature();
+   for (DataIterator dit( a_Te.dataIterator() ); dit.ok(); ++dit) {
+      a_Te[dit].copy(Te[dit]);
+   }
+}
 
 void
 GKPoissonBoltzmann::computePotentialAndElectronDensity(
@@ -236,11 +269,16 @@ GKPoissonBoltzmann::computePotentialAndElectronDensity(
    const bool                   a_first_step)
 {
 
+   initializeElectronTemperature(m_Te, a_ne);
+   
    if ( m_radial_solve_only ) {
       solveRadial( a_ni, a_bc, a_ne, a_phi );
    }
    else if ( m_subspace_iteration_solve ) {
       solveSubspaceIteration( a_ni, a_bc, a_ne, a_phi );
+   }
+   else if ( m_linear_solve ) {
+      solveLinear( a_ni, a_bc, a_ne, a_phi );
    }
    else if ( m_simple_boltzmann ) {
       solveSimpleBoltzmann( a_ni, a_ne, a_phi );
@@ -323,7 +361,7 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron&  a_ne,
    LevelData<FArrayBox> alpha(grids, 1, IntVect::Zero);
    LevelData<FArrayBox> beta(grids, 1, IntVect::Zero);
 
-   if ( m_radial_solve_only || m_subspace_iteration_solve ) {
+   if ( m_radial_solve_only || m_subspace_iteration_solve || m_linear_response) {
 
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          alpha[dit].copy(m_volume_reciprocal[dit]);
@@ -331,8 +369,18 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron&  a_ne,
       }
 
       m_precond_Psolver->constructMatrix(alpha, m_mapped_coefficients, beta, a_bc);
-
+      
+      if (m_linear_response) {
+         const LevelData<FArrayBox>& Te = a_ne.temperature();
+         for (DataIterator dit(beta.dataIterator()); dit.ok(); ++dit) {
+            beta[dit].setVal(1.0);
+            beta[dit].divide(Te[dit]);
+         }
+         m_flux_surface.multiply(m_boltzmann_prefactor_saved_numerator, beta);
+         m_precond_Qsolver->constructMatrix(alpha, m_mapped_coefficients, beta, a_bc);
+      }
    }
+
    else {
 
       // Calculate the Boltzmann derivative factor
@@ -562,6 +610,41 @@ GKPoissonBoltzmann::solveRadial( const LevelData<FArrayBox>&  a_Zni,
    computeElectronDensity(a_phi, a_Zni, a_ne);
 }
 
+void
+GKPoissonBoltzmann::solveLinear( const LevelData<FArrayBox>&  a_Zni,
+                                 const EllipticOpBC&          a_bc,
+                                 BoltzmannElectron&           a_ne,
+                                 LevelData<FArrayBox>&        a_phi )
+{
+   updateLinearSystem(a_ne, a_bc);
+   
+   LevelData<FArrayBox> rhs;
+   rhs.define(a_Zni);
+   
+   
+   if (m_zero_initial_solution) {
+      for (DataIterator dit(rhs.dataIterator()); dit.ok(); ++dit) {
+         rhs[dit] -= m_initial_ion_charge_density[dit];
+      }
+   }
+   
+   else {
+      LevelData<FArrayBox> n0_fs_aver;
+      n0_fs_aver.define(a_Zni);
+      m_flux_surface.averageAndSpread(m_initial_ion_charge_density, n0_fs_aver);
+      for (DataIterator dit(rhs.dataIterator()); dit.ok(); ++dit) {
+         rhs[dit] -= n0_fs_aver[dit];
+      }
+   }
+   
+   // Add inhomogeneous boundary values to the right-hand side
+   // For subspace iteration solve, this solves for phi_tilde,
+   // for which we currently assume homogeneous BCs
+   if (!m_subspace_iteration_solve) subtractBcDivergence(rhs);
+   
+   EllipticOp::solve(rhs, a_phi);
+   
+}
 
 void
 GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
@@ -579,7 +662,7 @@ GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
    LevelData<FArrayBox> temp_fs(fs_grids, 1, IntVect::Zero);
 
    double charge_correction = 0.;
-#if 1
+
    if (m_preserve_initial_ni_average) {
       LevelData<FArrayBox> tmp_Zni;
       tmp_Zni.define(a_Zni);
@@ -589,7 +672,6 @@ GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
 
       if (m_gkp_verbose && (procID()==0)) cout << "charge correction = " << charge_correction/m_initial_ion_charge_density_average << endl;
    }
-#endif
 
    int iter = 0;
    bool converged = false;
@@ -618,27 +700,50 @@ GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
 
       // Solve for the poloidal variation phi_tilde
 
-      computeFluxDivergence(a_phi, temp, true);  // Homogeneous bcs
-      addBcDivergence(temp);  // Add bcs
+      if (!m_linear_response) {
+         computeFluxDivergence(a_phi, temp, true);  // Homogeneous bcs
+         addBcDivergence(temp);  // Add bcs
+      }
+      else {
+         //Currently, assume that BCs are homogeneous for phi_tilde
+         //Use extrapolation for phi_bar BCs
+         computeFluxDivergence(phi_bar, temp, false, true);
+      }
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          temp[dit].negate();
          temp[dit] += a_Zni[dit];
          temp[dit] -= charge_correction;
       }
 
-      getPhiTilde(temp, a_ne, phi_tilde); 
-
+      if (!m_linear_response) getPhiTilde(temp, a_ne, phi_tilde);
+      else solveLinear( temp, a_bc, a_ne, phi_tilde );
+      
       // Update phi_bar (the flux surface average) given the current
       // estimate of phi_tilde
 
-      computeElectronDensity(phi_tilde, a_Zni, a_ne);
+      LevelData<FArrayBox> ne_fs;
 
+      if (!m_linear_response) {
+	computeElectronDensity(phi_tilde, a_Zni, a_ne);
+      }
+      else {
+	ne_fs.define(m_initial_ion_charge_density);
+	if (!m_zero_initial_solution) {
+	  m_flux_surface.averageAndSpread(m_initial_ion_charge_density, ne_fs);
+	}
+      }
+      
       computeFluxDivergence(phi_tilde, temp, true);  // Homogeneous bcs
       addBcDivergence(temp);  // Add bcs
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          temp[dit].negate();
          temp[dit] += a_Zni[dit];
-         temp[dit] -= ne[dit];
+         if (!m_linear_response) {
+	   temp[dit] -= ne[dit];
+	 }
+	 else {
+	   temp[dit] -= ne_fs[dit];
+	 }
          temp[dit] -= charge_correction;
       }
 
@@ -677,23 +782,23 @@ GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
 
 void
 GKPoissonBoltzmann::solveSimpleBoltzmann( const LevelData<FArrayBox>& a_Zni,
-                                 BoltzmannElectron&          a_ne,
-                                 LevelData<FArrayBox>&       a_phi )
+                                          BoltzmannElectron&          a_ne,
+                                          LevelData<FArrayBox>&       a_phi )
 {
    LevelData<FArrayBox>& Te = a_ne.temperature();  
 
    const DisjointBoxLayout& grids = m_geometry.grids();
 
-   if (m_simple_linear) {
-// Sets phi = Zni * Te / (e0 * n0)
+   if (m_linear_response) {
+      // Sets phi = Zni * Te / (e0 * n0)
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          a_phi[dit].copy(a_Zni[dit]);
          a_phi[dit].mult(Te[dit]); 
       }
    } 
    else {
-// Sets phi = log(Zni/n0) * Te / e0
-// should be written in fortran to make this faster
+      // Sets phi = log(Zni/n0) * Te / e0
+      // should be written in fortran to make this faster
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          for (BoxIterator bit( grids[dit] ); bit.ok(); ++bit) {
              IntVect iv( bit() );
@@ -744,7 +849,7 @@ GKPoissonBoltzmann::computeResidual( const LevelData<FArrayBox>& a_Zni,
          a_residual[dit] += total_charge;
       }
 
-      //      if (procID()==0) cout << "charge correction = " << total_charge/m_initial_ion_charge_density_average << endl;
+      // if (procID()==0) cout << "charge correction = " << total_charge/m_initial_ion_charge_density_average << endl;
    }
 
    // Return the residual L2 norm
@@ -929,7 +1034,6 @@ GKPoissonBoltzmann::computeBoltzmannDerivative( const BoltzmannElectron& a_ne,
 
    m_boltzmann_relation.phiDerivative(a_ne, a_boltz_deriv);
 }
-
 
 
 void
@@ -1150,61 +1254,71 @@ void
 GKPoissonBoltzmann::preCond( LevelData<FArrayBox>&       a_z,
                              const LevelData<FArrayBox>& a_r)
 {
+   //Linear electron model
+   if (m_linear_response) {
+      setToZero(a_z);
+      m_precond_Qsolver->solve(a_r, a_z, true);
+   }
+   
+   //Nonlinear electron model
+   else {
+   
 #ifndef DIVIDE_M
-   // Flux surface average the residual
-   const DisjointBoxLayout& fs_grids = m_flux_surface.grids();
-   LevelData<FArrayBox> Prz(fs_grids, 1, IntVect::Zero);
-   m_flux_surface.average(a_r, Prz);
+      // Flux surface average the residual
+      const DisjointBoxLayout& fs_grids = m_flux_surface.grids();
+      LevelData<FArrayBox> Prz(fs_grids, 1, IntVect::Zero);
+      m_flux_surface.average(a_r, Prz);
 
-   // Compute the complement of the residual flux surface average
-   LevelData<FArrayBox> Qr;
-   Qr.define(a_r);
-   m_flux_surface.subtract(Prz, Qr);
+      // Compute the complement of the residual flux surface average
+      LevelData<FArrayBox> Qr;
+      Qr.define(a_r);
+      m_flux_surface.subtract(Prz, Qr);
 
-   // Solve for the flux surface average
-   m_precond_Psolver->solve(Prz, Prz);
+      // Solve for the flux surface average
+      m_precond_Psolver->solve(Prz, Prz);
 
-   // Solve for the complement of the flux surface average
-   setToZero(a_z);
-   m_precond_Qsolver->solve(Qr, a_z);
+      // Solve for the complement of the flux surface average
+      setToZero(a_z);
+      m_precond_Qsolver->solve(Qr, a_z);
 
-   // Combine components
-   m_flux_surface.add(Prz, a_z);
+      // Combine components
+      m_flux_surface.add(Prz, a_z);
 #else
 
-   LevelData<FArrayBox> Minverser;
-   Minverser.define(a_r);
-   divideM(Minverser);
+      LevelData<FArrayBox> Minverser;
+      Minverser.define(a_r);
+      divideM(Minverser);
 
-   // Compute Q M^-1 r
-   LevelData<FArrayBox> temp;
-   temp.define(Minverser);
-   applyQ(temp);
+      // Compute Q M^-1 r
+      LevelData<FArrayBox> temp;
+      temp.define(Minverser);
+      applyQ(temp);
 
-   // Solve for Qz
-   setToZero(a_z);
-   m_precond_Qsolver->solve(temp, a_z, true);
+      // Solve for Qz
+      setToZero(a_z);
+      m_precond_Qsolver->solve(temp, a_z, true);
 
-   // Compute M^-1 r + DQz
-   for (DataIterator dit(temp.dataIterator()); dit.ok(); ++dit) {
-      temp[dit].copy(a_z[dit]);
-   }
-   multiplyD(temp);
-   for (DataIterator dit(temp.dataIterator()); dit.ok(); ++dit) {
-      temp[dit] += Minverser[dit];
-   }
+      // Compute M^-1 r + DQz
+      for (DataIterator dit(temp.dataIterator()); dit.ok(); ++dit) {
+         temp[dit].copy(a_z[dit]);
+      }
+      multiplyD(temp);
+      for (DataIterator dit(temp.dataIterator()); dit.ok(); ++dit) {
+         temp[dit] += Minverser[dit];
+      }
 
-   // Compute P(M^-1 r + DQz)
-   LevelData<FArrayBox> Prz(m_flux_surface.grids(), 1, IntVect::Zero);
-   m_flux_surface.average(temp, Prz);
+      // Compute P(M^-1 r + DQz)
+      LevelData<FArrayBox> Prz(m_flux_surface.grids(), 1, IntVect::Zero);
+      m_flux_surface.average(temp, Prz);
 
-   // Solve for the flux surface average
-   m_precond_Psolver->solve(Prz, Prz, false);
+      // Solve for the flux surface average
+      m_precond_Psolver->solve(Prz, Prz, false);
 
-   // Combine components
-   m_flux_surface.add(Prz, a_z);
+      // Combine components
+      m_flux_surface.add(Prz, a_z);
 
 #endif
+   }
 }
 
 
@@ -1266,27 +1380,58 @@ GKPoissonBoltzmann::applyOp( LevelData<FArrayBox>&       a_out,
                              bool                        a_homogeneous )
 {
    /*
+     Nonlinear electron response
      Computes a_out = (G + M(I - PD)) * a_in
    */
 
-   // Multiply by G + M
-   m_precond_Qsolver->multiplyMatrix(a_in, a_out);
+   if (!m_linear_response) {
+      // Multiply by G + M
+      m_precond_Qsolver->multiplyMatrix(a_in, a_out);
 #ifdef DIVIDE_M
-   multiplyM(a_out);
+      multiplyM(a_out);
 #endif
 
-   LevelData<FArrayBox> temp(a_out.disjointBoxLayout(), 1, IntVect::Zero);
-   for (DataIterator dit(a_in.dataIterator()); dit.ok(); ++dit) {
-      temp[dit].copy(a_in[dit]);
+      LevelData<FArrayBox> temp(a_out.disjointBoxLayout(), 1, IntVect::Zero);
+      for (DataIterator dit(a_in.dataIterator()); dit.ok(); ++dit) {
+         temp[dit].copy(a_in[dit]);
+      }
+
+      // Multiply by MPD
+      multiplyD(temp);
+      applyP(temp);
+      multiplyM(temp);
+
+      for (DataIterator dit(a_out.dataIterator()); dit.ok(); ++dit) {
+         a_out[dit].minus(temp[dit]);
+      }
    }
 
-   // Multiply by MPD
-   multiplyD(temp);
-   applyP(temp);
-   multiplyM(temp);
+   
+   /* 
+      Linear electron response
+      Computes a_out = G * a_in + I * (ni0/Te)a_in - C * (ni0/Te)*<a_in>
+      C=1 for full linear solve, and C=0 for subspace_interation solve
+    */
 
-   for (DataIterator dit(a_out.dataIterator()); dit.ok(); ++dit) {
-      a_out[dit].minus(temp[dit]);
+   else {
+      computeFluxDivergence(a_in, a_out, true);  // Homogeneous bcs
+      LevelData<FArrayBox> temp;
+      temp.define(a_in);
+      m_flux_surface.multiply(m_boltzmann_prefactor_saved_numerator, temp);
+      for (DataIterator dit(a_in.dataIterator()); dit.ok(); ++dit) {
+         temp[dit].divide(m_Te[dit]);
+         a_out[dit].plus(temp[dit]);
+      }
+      
+      //subtract averaged phi part (zonal flows)
+      if (m_linear_solve) {
+         m_flux_surface.averageAndSpread(a_in, temp);
+         m_flux_surface.multiply(m_boltzmann_prefactor_saved_numerator, temp);
+         for (DataIterator dit(a_in.dataIterator()); dit.ok(); ++dit) {
+            temp[dit].divide(m_Te[dit]);
+            a_out[dit].minus(temp[dit]);
+         }
+      }
    }
 }
 

@@ -49,7 +49,7 @@ ark_newton.atol = 1.e-10
 ark_newton.rtol = 1.e-6
 
 ark_jacobian.with_pc = true
-ark_pc.type = "amgGKPC"
+ark_pc.type = "multiphysicsPC"
 
 #####################################################
 # Grid and Data Layout Definitions

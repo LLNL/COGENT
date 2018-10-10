@@ -57,10 +57,14 @@ void copyToArray( Real* a_dst,
          a_kinetic_species[s]->distributionFunction() );
    }
    for (int s(0); s<a_fluid_species.size(); s++) {
-      //      offset += CFG::GKUtils::copyFromLevelData( a_dst + offset,
-      //                                                 a_fluid_species[s]->data() );
-      offset += CFG::GKUtils::copyFromLevelData( a_dst + offset,
-                                                 a_fluid_species[s]->cell_data() );
+      for (int n=0; n<a_fluid_species[s]->num_cell_vars(); ++n) {
+         offset += CFG::GKUtils::copyFromLevelData( a_dst + offset,
+                                                    a_fluid_species[s]->cell_var(n) );
+      }
+      for (int n=0; n<a_fluid_species[s]->num_face_vars(); ++n) {
+         offset += CFG::GKUtils::copyFromLevelData( a_dst + offset,
+                                                    a_fluid_species[s]->face_var(n) );
+      }
    }
    for (int s(0); s<a_scalars.size(); s++) {
       Vector<Real>& data = a_scalars[s]->data();
@@ -97,10 +101,14 @@ void copyFromArray( KineticSpeciesPtrVect&     a_kinetic_species,
          a_src + offset );
    }
    for (int s(0); s<a_fluid_species.size(); s++) {
-      //      offset += CFG::GKUtils::copyToLevelData( a_fluid_species[s]->data(),
-      //                                               a_src + offset );
-      offset += CFG::GKUtils::copyToLevelData( a_fluid_species[s]->cell_data(),
-                                               a_src + offset );
+      for (int n=0; n<a_fluid_species[s]->num_cell_vars(); ++n) {
+         offset += CFG::GKUtils::copyToLevelData( a_fluid_species[s]->cell_var(n),
+                                                  a_src + offset );
+      }
+      for (int n=0; n<a_fluid_species[s]->num_face_vars(); ++n) {
+         offset += CFG::GKUtils::copyToLevelData( a_fluid_species[s]->face_var(n),
+                                                  a_src + offset );
+      }
    }
    for (int s(0); s<a_scalars.size(); s++) {
       Vector<Real>& data = a_scalars[s]->data();
@@ -139,12 +147,16 @@ void addFromArray( KineticSpeciesPtrVect&     a_kinetic_species,
          a_factor );
    }
    for (int s(0); s<a_fluid_species.size(); s++) {
-      //      offset += CFG::GKUtils::addToLevelData( a_fluid_species[s]->data(),
-      //                                              a_src + offset,
-      //                                              a_factor );
-      offset += CFG::GKUtils::addToLevelData( a_fluid_species[s]->cell_data(),
-                                              a_src + offset,
-                                              a_factor );
+      for (int n=0; n<a_fluid_species[s]->num_cell_vars(); ++n) {
+         offset += CFG::GKUtils::addToLevelData( a_fluid_species[s]->cell_var(n),
+                                                 a_src + offset,
+                                                 a_factor );
+      }
+      for (int n=0; n<a_fluid_species[s]->num_face_vars(); ++n) {
+         offset += CFG::GKUtils::addToLevelData( a_fluid_species[s]->face_var(n),
+                                                 a_src + offset,
+                                                 a_factor );
+      }
    }
    for (int s(0); s<a_scalars.size(); s++) {
       Vector<Real>& data = a_scalars[s]->data();
@@ -172,8 +184,12 @@ void scaleData( KineticSpeciesPtrVect&     a_kinetic_species,
       GKUtils::scaleLevelData( a_kinetic_species[s]->distributionFunction(), a_factor );
    }
    for (int s(0); s<a_fluid_species.size(); s++) {
-      //      CFG::GKUtils::scaleLevelData( a_fluid_species[s]->data(), a_factor );
-      CFG::GKUtils::scaleLevelData( a_fluid_species[s]->cell_data(), a_factor );
+      for (int n=0; n<a_fluid_species[s]->num_cell_vars(); ++n) {
+         CFG::GKUtils::scaleLevelData( a_fluid_species[s]->cell_var(n), a_factor );
+      }
+      for (int n=0; n<a_fluid_species[s]->num_face_vars(); ++n) {
+         CFG::GKUtils::scaleLevelData( a_fluid_species[s]->face_var(n), a_factor );
+      }
    }
    for (int s(0); s<a_scalars.size(); s++) {
       Vector<Real>& data = a_scalars[s]->data();
@@ -292,11 +308,14 @@ Real GKRHSData::dotProduct( const GKRHSData& a_vector )
    const  CFG::FluidSpeciesPtrVect& b_fluid_species( a_vector.dataFluid() );
    CH_assert( m_fluid_species.size()==b_fluid_species.size() );
    for (int s(0); s<m_fluid_species.size(); s++) {
-      sum_local += CFG::GKUtils::innerProductLevelData(
-                                                       //         m_fluid_species[s]->data(),
-                                                       //         b_fluid_species[s]->data() );
-         m_fluid_species[s]->cell_data(),
-         b_fluid_species[s]->cell_data() );
+      for (int n=0; n<m_fluid_species[s]->num_cell_vars(); ++n) {
+         sum_local += CFG::GKUtils::innerProductLevelData(m_fluid_species[s]->cell_var(n),
+                                                          b_fluid_species[s]->cell_var(n) );
+      }
+      for (int n=0; n<m_fluid_species[s]->num_face_vars(); ++n) {
+         sum_local += CFG::GKUtils::innerProductLevelData(m_fluid_species[s]->face_var(n),
+                                                          b_fluid_species[s]->face_var(n) );
+      }
    }
    
    const ScalarPtrVect& b_scalars( a_vector.dataScalar() );
@@ -332,8 +351,12 @@ Real normLp( const KineticSpeciesPtrVect&      a_kinetic_species,
       accum += GKUtils::accumulateLevelData( a_kinetic_species[s]->distributionFunction(), a_p );
    }
    for (int s(0); s<a_fluid_species.size(); s++) {
-      //      accum += CFG::GKUtils::accumulateLevelData( a_fluid_species[s]->data(), a_p );
-      accum += CFG::GKUtils::accumulateLevelData( a_fluid_species[s]->cell_data(), a_p );
+      for (int n=0; n<a_fluid_species[s]->num_cell_vars(); ++n) {
+         accum += CFG::GKUtils::accumulateLevelData( a_fluid_species[s]->cell_var(n), a_p );
+      }
+      for (int n=0; n<a_fluid_species[s]->num_face_vars(); ++n) {
+         accum += CFG::GKUtils::accumulateLevelData( a_fluid_species[s]->face_var(n), a_p );
+      }
    }
    for (int s(0); s<a_scalars.size(); s++) {
       const Vector<Real>& data = a_scalars[s]->data();
@@ -389,8 +412,8 @@ const Real& getVal(
 
       int i_fluid_species = address.number();
       const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
-      ///      return( gdof[i_fluid_species]->getVal(*a_fluid_species[i_fluid_species], address) );
-      return( gdof[i_fluid_species]->getVal(static_cast<const CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]), address) );
+      MayDay::Error("GKTimeIntegration getVal() called for fluid species");
+      //      return( gdof[i_fluid_species]->getVal(static_cast<const CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]), address) );
     } else {
       std::cout << "Error in GKState/GKRHSData::operator[]: Invalid value for "
                 << "\"family\" in saved address.\n";
@@ -427,12 +450,11 @@ const Real& getVal(
       new_address.number(i_fluid_species);
 
       const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
-      //      const Real& val = gdof[i_fluid_species]->getVal(  gidx, *a_fluid_species[i_fluid_species],
+      MayDay::Error("GKTimeIntegration getVal() called for fluid species");
+      //      const Real& val = gdof[i_fluid_species]->getVal(  gidx, static_cast<const CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]),
       //                                                        new_address );
-      const Real& val = gdof[i_fluid_species]->getVal(  gidx, static_cast<const CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]),
-                                                        new_address );
-      a_global_dof->setAddress(a_idx, new_address);
-      return(val);
+      //      a_global_dof->setAddress(a_idx, new_address);
+      //      return(val);
     } else {
 
       /* something went wrong! */
@@ -480,8 +502,8 @@ Real& getVal(
 
       int i_fluid_species = address.number();
       const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
-      //      return( gdof[i_fluid_species]->getVal(*a_fluid_species[i_fluid_species], address) );
-      return( gdof[i_fluid_species]->getVal(static_cast<CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]), address) );
+      MayDay::Error("GKTimeIntegration getVal() called for fluid species");
+      //      return( gdof[i_fluid_species]->getVal(static_cast<CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]), address) );
     } else {
       std::cout << "Error in GKState/GKRHSData::operator[]: Invalid value for "
                 << "\"family\" in saved address.\n";
@@ -518,12 +540,11 @@ Real& getVal(
       new_address.number(i_fluid_species);
 
       const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
-      //      Real& val = gdof[i_fluid_species]->getVal(  gidx, *a_fluid_species[i_fluid_species],
+      MayDay::Error("GKTimeIntegration getVal() called for fluid species");
+      //      Real& val = gdof[i_fluid_species]->getVal(  gidx, static_cast<CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]),
       //                                                  new_address );
-      Real& val = gdof[i_fluid_species]->getVal(  gidx, static_cast<CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]),
-                                                  new_address );
-      a_global_dof->setAddress(a_idx, new_address);
-      return(val);
+      //      a_global_dof->setAddress(a_idx, new_address);
+      //      return(val);
     } else {
 
       /* something went wrong! */

@@ -135,38 +135,44 @@ void GlobalDOFFluidSpecies::define(
                                     const CFG::FluidSpecies&  a_fluid
                                   )
 {
-   //  const CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.data();
-  const CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.cell_data();
-  const CFG::DisjointBoxLayout&         grids = data.disjointBoxLayout();
-  const int                             ncomp = data.nComp();
+   for (int n=0; n<a_fluid.num_cell_vars(); ++n) {
+      const CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.cell_var(n);
+      const CFG::DisjointBoxLayout&         grids = data.disjointBoxLayout();
+      const int                             ncomp = data.nComp();
 
-  m_gdofs.define(grids,ncomp,data.ghostVect());
-  long box_offset(0);
-  for (CFG::DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-    m_gdofs[dit].setVal(-1);
+      CFG::LevelData<CFG::FArrayBox>* var_gdofs_ptr 
+         = new CFG::LevelData<CFG::FArrayBox>(grids,ncomp,data.ghostVect());
+      CFG::LevelData<CFG::FArrayBox>& var_gdofs = *var_gdofs_ptr;
+      long box_offset(0);
+      for (CFG::DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+         var_gdofs[dit].setVal(-1);
     
-    const CFG::Box& box   = grids[dit];
-    CFG::IntVect bigEnd   = box.bigEnd(),
-                 smallEnd = box.smallEnd();
-    CFG::IntVect gridSize(bigEnd); gridSize -= smallEnd; gridSize += 1;
-
-    CFG::BoxIterator bit(box);
-    for (bit.begin(); bit.ok(); ++bit) {
-      CFG::IntVect index = bit();
-      int p; _BoxIndexDOF_(p,(index-smallEnd),gridSize,CFG_DIM);
-      for (int n(0); n < ncomp; n++) {
-        m_gdofs[dit].set(index,n,((ncomp*p+n)+a_offset+box_offset));
+         const CFG::Box& box   = grids[dit];
+         CFG::IntVect bigEnd   = box.bigEnd(),
+            smallEnd = box.smallEnd();
+         CFG::IntVect gridSize(bigEnd); gridSize -= smallEnd; gridSize += 1;
+         
+         CFG::BoxIterator bit(box);
+         for (bit.begin(); bit.ok(); ++bit) {
+            CFG::IntVect index = bit();
+            int p; _BoxIndexDOF_(p,(index-smallEnd),gridSize,CFG_DIM);
+            for (int n(0); n < ncomp; n++) {
+               var_gdofs[dit].set(index,n,((ncomp*p+n)+a_offset+box_offset));
+            }
+         }
+         box_offset += box.numPts()*ncomp;
       }
-    }
-    box_offset += box.numPts()*ncomp;
-  }
-  m_gdofs.exchange();
+      var_gdofs.exchange();
+
+      m_gdofs.push_back(RefCountedPtr<CFG::LevelData<CFG::FArrayBox> >(var_gdofs_ptr));
+   }
 
   m_mpi_offset = a_mpi_offset;
   m_is_defined = true;
   return;
 }
 
+#if 0
 const Real& GlobalDOFFluidSpecies::getVal(
                                             int                       a_idx,
                                             const CFG::FluidSpecies&  a_fluid,
@@ -174,7 +180,7 @@ const Real& GlobalDOFFluidSpecies::getVal(
                                          )  const
 {
   CH_assert(m_is_defined == true);
-  const CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.cell_data();
+  const CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.cell_var(0);           // FIX!!!!
   const CFG::DisjointBoxLayout&         grids = data.disjointBoxLayout();
   const int                             ncomp = data.nComp();
 
@@ -183,7 +189,8 @@ const Real& GlobalDOFFluidSpecies::getVal(
     for (bit.begin(); bit.ok(); ++bit) {
       CFG::IntVect index = bit();
       for (int n(0); n < ncomp; n++) {
-        int p = (int) m_gdofs[dit].get(index,n);
+        MayDay::Error("GlobalDOFFluidSpecies::getVal() called");
+        int p = (int)(*(m_gdofs[0]))[dit].get(index,n);           // FIX!!!!
         if (p == a_idx) {
           a_address.dit2D(dit);
           a_address.index2D(index);
@@ -207,7 +214,7 @@ Real& GlobalDOFFluidSpecies::getVal(
                                    )  const
 {
   CH_assert(m_is_defined == true);
-  CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.cell_data();
+  CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.cell_var(0);           // FIX!!!!
   const CFG::DisjointBoxLayout&   grids = data.disjointBoxLayout();
   const int                       ncomp = data.nComp();
 
@@ -216,7 +223,8 @@ Real& GlobalDOFFluidSpecies::getVal(
     for (bit.begin(); bit.ok(); ++bit) {
       CFG::IntVect index = bit();
       for (int n(0); n < ncomp; n++) {
-        int p = (int) m_gdofs[dit].get(index,n);
+        MayDay::Error("GlobalDOFFluidSpecies::getVal() called");
+        int p = (int)(*(m_gdofs[0]))[dit].get(index,n);   // FIX!!!!
         if (p == a_idx) {
           a_address.dit2D(dit);
           a_address.index2D(index);
@@ -238,7 +246,8 @@ const Real& GlobalDOFFluidSpecies::getVal(
                                             const GKAddress&          a_address
                                          )  const
 {
-  const CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.cell_data();
+  MayDay::Error("GlobalDOFFluidSpecies::getVal() called");
+  const CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.cell_var(0);           // FIX!!!!
   const CFG::DataIterator&              dit   = a_address.dit2D();
   const CFG::IntVect&                   index = a_address.index2D();
   int                                   n     = a_address.comp();
@@ -250,12 +259,14 @@ Real& GlobalDOFFluidSpecies::getVal(
                                      const GKAddress&    a_address
                                    ) const
 {
-  CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.cell_data();
+  MayDay::Error("GlobalDOFFluidSpecies::getVal() called");
+  CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.cell_var(0);           // FIX!!!!
   const CFG::DataIterator&        dit   = a_address.dit2D();
   const CFG::IntVect&             index = a_address.index2D();
   int                             n     = a_address.comp();
   return( data[dit](index,n) );
 }
+#endif
 
 void GlobalDOFScalar::define(
                               const int      a_offset,

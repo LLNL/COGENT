@@ -5,18 +5,14 @@
 simulation.verbosity = 1 
 gksystem.verbosity   = 1
 
-gksystem.hdf_vlasov_divergence = false
 gksystem.hdf_density = true
 gksystem.hdf_potential = true
 gksystem.hdf_temperature = true
 gksystem.hdf_efield = true
-gksystem.hdf_vparmu = false
 gksystem.hdf_dfn = false
-gksystem.hdf_deltaF = false
 gksystem.hdf_ParallelMomentum = true
 gksystem.hdf_PoloidalMomentum = false
 gksystem.hdf_ParticleFlux = false
-#gksystem.fixed_plot_indices = 9 -61 0 0 0
 
 #####################################################
 # Time Stepping Definitions
@@ -35,8 +31,6 @@ simulation.histories           = false
 
 gksystem.ti_class = "ark"
 
-# 1febe, 2a and 2e don't like self-consistent bcs
-#gksystem.ti_method = "1febe"
 #gksystem.ti_method = "2a"
 gksystem.ti_method = "2c"
 #gksystem.ti_method = "2e"
@@ -87,19 +81,10 @@ gksystem.velocity_decomp    =  6  4
 gksystem.magnetic_geometry_mapping = "SingleNull"
 gksystem.magnetic_geometry_mapping.singlenull.geometry_file = "COGENT_mapping"
 gksystem.magnetic_geometry_mapping.singlenull.field_coefficients_file = "DCT_coefficients.txt"
-#gksystem.magnetic_geometry_mapping.singlenull.psi_expansion_order = 129
-gksystem.magnetic_geometry_mapping.singlenull.model_geometry = true
 gksystem.magnetic_geometry_mapping.singlenull.verbose  = true
-gksystem.magnetic_geometry_mapping.singlenull.inner_radial_bdry = 0.1
-gksystem.magnetic_geometry_mapping.singlenull.outer_radial_bdry = 0.9
 gksystem.magnetic_geometry_mapping.singlenull.Btor_scale  = -3.5
-#gksystem.magnetic_geometry_mapping.singlenull.Bpol_scale  = 0.17
-#gksystem.magnetic_geometry_mapping.singlenull.core_width  = 0.065
-#gksystem.magnetic_geometry_mapping.singlenull.sol_width  = 0.065
-#gksystem.magnetic_geometry_mapping.singlenull.pf_width  = 0.065
 
 gksystem.magnetic_geometry_mapping.singlenull.field_aligned = true
-gksystem.magnetic_geometry_mapping.singlenull.model_geometry = false
 gksystem.magnetic_geometry_mapping.singlenull.subgrid_geometry = true
 gksystem.magnetic_geometry_mapping.singlenull.subgrid_refinement = 2 2
 gksystem.magnetic_geometry_mapping.correct_field = false
@@ -108,12 +93,6 @@ gksystem.magnetic_geometry_mapping.singlenull.axisymmetric = true
 
 gksystem.enforce_positivity = true
 gksystem.enforce_positivity_type = "step"
-#gksystem.fixed_efield = false
-#gksystem.ampere_law = true
-#gksystem.ampere_cold_electrons = true
-#gksystem.extrapolated_sol_efield = true
-#gksystem.efield_dealignment_corrections = true
-#gksystem.neutrals_model_on = true
 gksystem.transport_model_on = true
 
 #####################################################

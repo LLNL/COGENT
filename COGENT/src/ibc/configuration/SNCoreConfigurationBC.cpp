@@ -85,10 +85,11 @@ std::string SNCoreConfigurationBC::getBcType( const int& a_dir,
 /////// END INLINE METHODS /////////////////////////////////////////////////////
 
 
-SNCoreConfigurationBC::SNCoreConfigurationBC( const std::string& a_name,
-                                      ParmParse& a_pp,
-                                      const int& a_verbosity )
-   : m_name(a_name),
+SNCoreConfigurationBC::SNCoreConfigurationBC( const std::string& a_species_name,
+                                              const std::string& a_variable_name,
+                                              const int& a_verbosity )
+   : m_species_name(a_species_name),
+     m_variable_name(a_variable_name),
      m_verbosity(a_verbosity),
      m_logical_sheath(false)
 {
@@ -99,7 +100,7 @@ SNCoreConfigurationBC::SNCoreConfigurationBC( const std::string& a_name,
    m_bdry_name[RADIAL_INNER] = "radial_inner";
    m_bdry_name[RADIAL_OUTER] = "radial_outer";
 
-   parseParameters( a_pp );
+   parseParameters();
 }
 
 
@@ -131,21 +132,21 @@ void SNCoreConfigurationBC::fillInflowData( FluidSpeciesPtrVect& a_bdry_data,
             const int block( coord_sys.whichBlock( interior_box ) );
             const int block_type( coord_sys.blockType( block ) );
             GridFunction& inflow_func( radialInflowFunc( side, block_type ) );
-            inflow_func.assign( bdry_data.cell_data(), geometry, bdry_layout, a_time );
+            inflow_func.assign( bdry_data.cell_var(0), geometry, bdry_layout, a_time );
             a_bc_type[i] = radialBcType( side, block_type );
          }
       }
    }
 }
 
-void SNCoreConfigurationBC::apply( FluidSpecies& a_species_comp,
-                               const Real& a_time )
+void SNCoreConfigurationBC::apply( FluidSpecies&  a_species_comp,
+                                   const Real&    a_time )
 {
    const MagGeom& geometry( a_species_comp.configurationSpaceGeometry() );
    const SNCoreCoordSys& coord_sys(
       dynamic_cast<const SNCoreCoordSys&>( *geometry.getCoordSys()) );
 
-   LevelData<FArrayBox>& u( a_species_comp.cell_data() );
+   LevelData<FArrayBox>& u( a_species_comp.cell_var(a_species_comp.cell_var_component(m_variable_name)) );
    const DisjointBoxLayout& grids( u.disjointBoxLayout() );
    const IntVect& ghost_vect( u.ghostVect() );
 
@@ -177,13 +178,12 @@ void SNCoreConfigurationBC::apply( FluidSpecies& a_species_comp,
 }
 
 
-
 void SNCoreConfigurationBC::printParameters() const
 {
    if (procID()==0) {
       std::cout << std::endl;
       std::cout << "SNCoreConfigurationBC =============================" << std::endl;
-      std::cout << "- variable: "  << m_name << "-------------" << std::endl;
+      std::cout << "- variable: "  << m_variable_name << "-------------" << std::endl;
       for (int i(0); i<m_inflow_function.size(); i++) {
          std::cout << "  " << m_bdry_name[i] << ": " << std::endl;
          if ( m_inflow_function[i] ) m_inflow_function[i]->printParameters();
@@ -196,11 +196,14 @@ void SNCoreConfigurationBC::printParameters() const
 
 
 inline
-void SNCoreConfigurationBC::parseParameters( ParmParse& a_pp )
+void SNCoreConfigurationBC::parseParameters()
 {
+   string prefix = "BC." + m_species_name + "." + m_variable_name;
+   ParmParse pp(prefix.c_str());
+
    GridFunctionLibrary* library = GridFunctionLibrary::getInstance();
    for (int i(0); i<m_inflow_function.size(); i++) {
-      std::string prefix( a_pp.prefix() );
+      std::string prefix( pp.prefix() );
       prefix += "." + m_bdry_name[i];
       ParmParse fpp( prefix.c_str() );
       std::string function_name;
@@ -211,7 +214,7 @@ void SNCoreConfigurationBC::parseParameters( ParmParse& a_pp )
       fpp.query( "type", m_bc_type[i]);
    }
 
-   a_pp.query("logical_sheath",m_logical_sheath);
+   pp.query("logical_sheath",m_logical_sheath);
 
    if (m_verbosity) {
       printParameters();

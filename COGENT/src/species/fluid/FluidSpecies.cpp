@@ -7,7 +7,7 @@ FluidSpecies::FluidSpecies( const string&     a_pp_prefix,
                             const string&     a_name,
                             const MagGeom&    a_geometry,
                             const IntVect&    a_ghost_vect )
-   : CFGVar(a_pp_prefix, a_name, a_geometry)
+   : CFGVars(a_pp_prefix, a_name, a_geometry)
 {
    ParmParse pp(a_pp_prefix.c_str());
 
@@ -32,10 +32,8 @@ FluidSpecies::FluidSpecies( const string&     a_pp_prefix,
       MayDay::Error("FluidSpecies::FluidSpecies(): operator_type not specified");
    }
       
-   cell_data().define(a_geometry.gridsFull(), 1, a_ghost_vect);
-   //   face_data().define(a_geometry.gridsFull(), SpaceDim, a_ghost_vect);
+   addCellVar("density", 1, a_ghost_vect);
 
-   // TEMPORARY HACK
    m_velocity.define(a_geometry.gridsFull(), SpaceDim, a_ghost_vect);
    for (DataIterator dit(m_velocity.dataIterator()); dit.ok(); ++dit) {
       m_velocity[dit].setVal(0.);
@@ -44,11 +42,22 @@ FluidSpecies::FluidSpecies( const string&     a_pp_prefix,
 
 
 FluidSpecies::FluidSpecies( const FluidSpecies& a_foo )
-   : CFGVar(a_foo.pp_prefix(), a_foo.name(), a_foo.configurationSpaceGeometry()),
-     m_op_type(a_foo.m_op_type)
+   : CFGVars(a_foo.pp_prefix(), a_foo.name(), a_foo.configurationSpaceGeometry()),
+     m_op_type(a_foo.m_op_type),
+     m_mass(a_foo.m_mass),
+     m_charge(a_foo.m_charge)
 {
-   cell_data().define(a_foo.cell_data());
-   //   face_data().define(a_foo.face_data());
+   for (int n=0; n<num_cell_vars(); ++n) {
+      const LevelData<FArrayBox>& data = a_foo.cell_var(n);
+      const string& name = a_foo.cell_var_name(n);
+      addCellVar(name, data.nComp(), data.ghostVect());
+   }
+
+   for (int n=0; n<num_face_vars(); ++n) {
+      const LevelData<FluxBox>& data = a_foo.face_var(n);
+      const string& name = a_foo.face_var_name(n);
+      addFaceVar(name, data.nComp(), data.ghostVect());
+   }
 }
 
 
@@ -63,11 +72,11 @@ void FluidSpecies::numberDensity( LevelData<FArrayBox>& a_rho ) const
 
 void FluidSpecies::massDensity( LevelData<FArrayBox>& a_rho ) const
 {
-   DisjointBoxLayout dbl( cell_data().disjointBoxLayout() );
+   DisjointBoxLayout dbl( cell_var(0).disjointBoxLayout() );
    CH_assert( dbl.compatible( a_rho.disjointBoxLayout() ) );
    Interval src_interval( MASS_DENSITY, MASS_DENSITY );
    Interval dst_interval( 0 , 0 );
-   cell_data().copyTo( src_interval, a_rho, dst_interval );
+   cell_var(0).copyTo( src_interval, a_rho, dst_interval );
 }
 
 
@@ -107,12 +116,11 @@ const FluidSpecies& FluidSpecies::operator=( const FluidSpecies& a_rhs )
 {
    if (&a_rhs != this)
    {
-      CH_assert( (cell_data().disjointBoxLayout()).compatible( a_rhs.cell_data().disjointBoxLayout() ) );
+      CH_assert( (cell_var(0).disjointBoxLayout()).compatible( a_rhs.cell_var(0).disjointBoxLayout() ) );
       m_mass = a_rhs.m_mass;
       m_charge = a_rhs.m_charge;
       m_op_type = a_rhs.m_op_type;
-      cell_data().define( a_rhs.cell_data() );
-      //      face_data().define( a_rhs.face_data() );
+      cell_var(0).define( a_rhs.cell_var(0) );
    }
    return *this;
 }
@@ -121,7 +129,7 @@ const FluidSpecies& FluidSpecies::operator=( const FluidSpecies& a_rhs )
 void FluidSpecies::copy( const FluidSpecies& a_rhs )
 {
    if (&a_rhs != this) {
-      CFGVar::copy(a_rhs);
+      CFGVars::copy(a_rhs);
 
       m_op_type = a_rhs.m_op_type;
       m_mass = a_rhs.m_mass;
@@ -132,7 +140,7 @@ void FluidSpecies::copy( const FluidSpecies& a_rhs )
 
 Real FluidSpecies::maxValue() const
 {
-   const LevelData<FArrayBox>& density = cell_data();
+   const LevelData<FArrayBox>& density = cell_var(0);
 
    const DisjointBoxLayout& grids(density.getBoxes());
    Real local_maximum( -CH_BADVAL );
@@ -153,7 +161,7 @@ Real FluidSpecies::maxValue() const
 
 Real FluidSpecies::minValue() const
 {
-   const LevelData<FArrayBox>& density = cell_data();
+   const LevelData<FArrayBox>& density = cell_var(0);
 
    const DisjointBoxLayout& grids(density.getBoxes());
    Real local_minimum( CH_BADVAL );
@@ -174,12 +182,12 @@ Real FluidSpecies::minValue() const
 }
 
 
-RefCountedPtr<CFGVar>
+RefCountedPtr<CFGVars>
 FluidSpecies::convertToPhysical( const IntVect& a_ghost_vect ) const
 {
    RefCountedPtr<FluidSpecies> physical_ptr = clone(a_ghost_vect, true);
 
-   LevelData<FArrayBox>& cell_data = physical_ptr->cell_data();
+   LevelData<FArrayBox>& cell_data = physical_ptr->cell_var(0);
 
    if ( cell_data.isDefined() ) {
       configurationSpaceGeometry().divideJonValid(cell_data);
@@ -193,15 +201,35 @@ FluidSpecies::convertToPhysical( const IntVect& a_ghost_vect ) const
 void
 FluidSpecies::convertFromPhysical()
 {
-   if ( cell_data().isDefined() ) {
-      configurationSpaceGeometry().multJonValid(cell_data());
-      cell_data().exchange();
+   if ( cell_var(0).isDefined() ) {
+      configurationSpaceGeometry().multJonValid(cell_var(0));
+      cell_var(0).exchange();
    }
 }
    
+#if 0
+int
+FluidSpecies::cell_component(const string& a_variable_name) const
+{
+   int component = -1;
+
+   for (int n=0; n<num_cell_vars(); ++n) {
+      if ( a_variable_name == cell_var_name(n) ) {
+         component = n;
+         break;
+      }
+   }
+
+   if ( component == -1 ) {
+      MayDay::Error("FluidSpecies::cell_component(): variable_name not found");
+   }
+
+   return component;
+}
+#endif
 
 
-RefCountedPtr<CFGVar>
+RefCountedPtr<CFGVars>
 FluidSpecies::clone( const IntVect& a_ghost_vect,
                      const bool     a_copy_soln_data ) const
 {
@@ -210,14 +238,11 @@ FluidSpecies::clone( const IntVect& a_ghost_vect,
             new FluidSpecies( pp_prefix(), name(), configurationSpaceGeometry(), a_ghost_vect ) );
 
    if (a_copy_soln_data) {
-      const LevelData<FArrayBox>& this_density = cell_data();
-      //      const LevelData<FluxBox>& this_velocity = face_data();
-      LevelData<FArrayBox>& result_density(result->cell_data());
-      //      LevelData<FluxBox>& result_velocity(result->face_data());
+      const LevelData<FArrayBox>& this_density = cell_var(0);
+      LevelData<FArrayBox>& result_density(result->cell_var(0));
 
       for (DataIterator dit(result_density.dataIterator() ); dit.ok(); ++dit) {
          result_density[dit].copy(this_density[dit] );
-         //         result_velocity[dit].copy(this_velocity[dit]);
       }
    }
 

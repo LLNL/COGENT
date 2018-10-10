@@ -1,10 +1,9 @@
 #ifndef  _SINGLENULLCONFIGURATIONBC_H_
 #define  _SINGLENULLCONFIGURATIONBC_H_
 
-//#include "BoundaryBoxLayout.H.multidim"
-//#include "BoundaryBoxLayout.H"
+
 #include "GridFunction.H"
-#include "FluidSpeciesBC.H"
+#include "FluidVarBC.H"
 
 #include "NamespaceHeader.H"
 
@@ -13,14 +12,14 @@
  *
 */
 class SingleNullConfigurationBC
-   : public FluidSpeciesBC
+   : public FluidVarBC
 {
    public:
 
       // Constructor
-      SingleNullConfigurationBC( const std::string& name,
-                         ParmParse& pp,
-                         const int& verbosity = 0 );
+      SingleNullConfigurationBC( const std::string& species_name,
+                                 const std::string& variable_name,
+                                 const int& verbosity = 0 );
 
       /// Destructor.
       /**
@@ -34,25 +33,22 @@ class SingleNullConfigurationBC
        * coordinates.
        *
        * @param[out] species_phys Fluid species to set.
-       * @param[in] phi           Potential field.
-       * @param[in] velocity      Phase space velocity field.
        * @param[in] time          Time value at which to evaluate the function.
        */
-      virtual void apply( FluidSpecies& species_comp,
-                          //                          const LevelData<FArrayBox>& phi,
-                          const Real& time );
+      virtual void apply( FluidSpecies&  species_comp,
+                          const Real&    time );
 
       /// Check association with variable
       /**
        * Returns true if this boundary condition corresponds to the variable
-       * identified by the name parameter.  This assumes that all derived
+       * identified by the variable_name parameter.  This assumes that all derived
        * types store the name of the variable to which they apply.
        *
-       * @param[in] name String identifier of the name.
+       * @param[in] variable_name String identifier of the variable name.
        */
-      virtual bool isForVariable( const std::string& a_name ) const
+      virtual bool isForVariable( const std::string& a_variable_name ) const
       {
-         return (m_name==a_name);
+         return (m_variable_name==a_variable_name);
       }
 
       /// Print object parameters.
@@ -95,7 +91,7 @@ class SingleNullConfigurationBC
                                  const Real& a_time );
 #endif
 
-      inline void parseParameters( ParmParse& a_pp );
+      inline void parseParameters();
 
       inline GridFunction& radialInflowFunc( const Side::LoHiSide& a_side,
                                               const int& a_block_type );
@@ -115,7 +111,8 @@ class SingleNullConfigurationBC
 
 
 
-      const std::string m_name;
+      const std::string m_species_name;
+      const std::string m_variable_name;
       int m_verbosity;
       bool m_logical_sheath; 
 

@@ -99,5 +99,5 @@ done
 echo ------------------------------------------------------------------------------- >> report
 
 # Email the results
-cat report | mail -s "COGENT test results" $USER
+mail -s "COGENT test results" $USER < report
 

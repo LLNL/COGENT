@@ -12,7 +12,7 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "LoadBalance.H"
-#include "CFGVarFactory.H"
+#include "FluidOpVarFactory.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -737,7 +737,7 @@ GKSystem::createFluidSpecies( CFG::FluidSpeciesPtrVect& a_fluid_species )
    }
 
    bool more_vars(true);
-   CFG::CFGVarFactory cfg_var_factory;
+   CFG::FluidOpVarFactory var_factory;
 
    while ( more_vars ) {
 
@@ -767,7 +767,7 @@ GKSystem::createFluidSpecies( CFG::FluidSpeciesPtrVect& a_fluid_species )
       }
       
       if ( more_vars ) {
-         CFG::CFGVar* cfg_var = cfg_var_factory.create( s.str(), name, op_type, *m_mag_geom, CFG::IntVect::Zero );
+         CFG::CFGVars* cfg_var = var_factory.create( s.str(), name, op_type, *m_mag_geom, CFG::IntVect::Zero );
          a_fluid_species.push_back( CFG::FluidSpeciesPtr(cfg_var) );
       }
    }
@@ -1328,20 +1328,33 @@ void GKSystem::writePlotFile(const char    *prefix,
       m_gk_ops->plotChargeDensity( filename, kinetic_species, cur_time );
    }
 
-   //Plot fluid species profiles
-   const CFG::FluidSpeciesPtrVect& fluids( m_state_phys.dataFluid() );
-   for (int species(0); species<fluids.size(); species++) {
-      //      const CFG::FluidSpecies& fluid_species( *(fluids[species]) );
-      const CFG::FluidSpecies& fluid_species( static_cast<const CFG::FluidSpecies&>(*(fluids[species])) );
+   // Fluid species variables
+
+   if (m_hdf_fluids) {
+
+      const CFG::FluidSpeciesPtrVect& fluids( m_state_phys.dataFluid() );
+      for (int species(0); species<fluids.size(); species++) {
+         const CFG::FluidSpecies& fluid_species( static_cast<const CFG::FluidSpecies&>(*(fluids[species])) );
       
-      if (m_hdf_fluids) {
-         std::string filename( plotFileName( prefix,
-                                            "profile",
-                                            fluid_species.name(),
-                                            cur_step,
-                                            species + 1) );
+         if ( fluid_species.num_cell_vars() == 1 &&
+              fluid_species.name() == fluid_species.cell_var_name(0) ) {
+            // Don't repeat the variable name if there's only one and it's the same as the species name
+            std::string filename (plotFileName( prefix,
+                                                fluid_species.name(),
+                                                cur_step ));
+            m_gk_ops->plotFluid( filename, fluid_species, fluid_species.cell_var_name(0), cur_time );
+         }
+         else {
+            for (int n=0; n<fluid_species.num_cell_vars(); ++n) {
+               std::string filename (plotFileName( prefix,
+                                                   fluid_species.cell_var_name(n),
+                                                   fluid_species.name(),
+                                                   cur_step,
+                                                   species + 1));
          
-         m_gk_ops->plotFluids( filename, fluid_species, cur_time );
+               m_gk_ops->plotFluid( filename, fluid_species, fluid_species.cell_var_name(n), cur_time );
+            }
+         }
       }
    }
 }
@@ -1421,17 +1434,24 @@ void GKSystem::writeCheckpointFile( HDF5Handle&  a_handle,
    const CFG::FluidSpeciesPtrVect& fluid_species( m_state_comp.dataFluid() );
    for (int species(0); species<fluid_species.size(); species++) {
 
-      CFG::CFGVar& this_fluid_species( *(fluid_species[species]) );
-      CFG::LevelData<CFG::FArrayBox> & fluid_data = this_fluid_species.cell_data();
+      CFG::CFGVars& this_fluid_species( *(fluid_species[species]) );
+
       char buff[100];
-      sprintf( buff, "fluid_%d", species + 1 );
-      a_handle.setGroup( buff );
+      for (int n=0; n<this_fluid_species.num_cell_vars(); ++n) {
+      
+         CFG::LevelData<CFG::FArrayBox> & fluid_data = this_fluid_species.cell_var(n);
+         const string& var_name = this_fluid_species.cell_var_name(n);
+         sprintf( buff, "fluid_%d_%s", species + 1, var_name.c_str() );
+         a_handle.setGroup( buff );
 
-      LevelData<FArrayBox> injected_fluid_data;
-      m_phase_geom->injectConfigurationToPhase( fluid_data, injected_fluid_data);
+         LevelData<FArrayBox> injected_fluid_data;
+         m_phase_geom->injectConfigurationToPhase( fluid_data, injected_fluid_data);
 
-      write( a_handle, injected_fluid_data.boxLayout() );
-      write( a_handle, injected_fluid_data, "data", injected_fluid_data.ghostVect() );
+         write( a_handle, injected_fluid_data.boxLayout() );
+         write( a_handle, injected_fluid_data, "data", injected_fluid_data.ghostVect() );
+      }
+
+      // NEED TO ADD FACE DATA
    }
 
    MPI_Barrier(MPI_COMM_WORLD);
@@ -1513,17 +1533,24 @@ void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
    CFG::FluidSpeciesPtrVect& fluid_species( m_state_comp.dataFluid() );
    for (int species(0); species<fluid_species.size(); species++) {
 
-      CFG::CFGVar& this_fluid_species( *(fluid_species[species]) );
-      CFG::LevelData<CFG::FArrayBox>& fluid_data = this_fluid_species.cell_data();
-
-      LevelData<FArrayBox> injected_fluid_data;
-      m_phase_geom->injectConfigurationToPhase(fluid_data, injected_fluid_data);
+      CFG::CFGVars& this_fluid_species( *(fluid_species[species]) );
 
       char buff[100];
-      sprintf( buff, "fluid_%d", species + 1 );
-      a_handle.setGroup( buff );
-      read( a_handle, injected_fluid_data, "data", injected_fluid_data.disjointBoxLayout() );
-      m_phase_geom->projectPhaseToConfiguration(injected_fluid_data, fluid_data);
+      for (int n=0; n<this_fluid_species.num_cell_vars(); ++n) {
+
+         CFG::LevelData<CFG::FArrayBox>& fluid_data = this_fluid_species.cell_var(n);
+
+         LevelData<FArrayBox> injected_fluid_data;
+         m_phase_geom->injectConfigurationToPhase(fluid_data, injected_fluid_data);
+
+         const string& var_name = this_fluid_species.cell_var_name(n);
+         sprintf( buff, "fluid_%d_%s", species + 1, var_name.c_str() );
+         a_handle.setGroup( buff );
+         read( a_handle, injected_fluid_data, "data", injected_fluid_data.disjointBoxLayout() );
+         m_phase_geom->projectPhaseToConfiguration(injected_fluid_data, fluid_data);
+      }
+
+      // NEED TO ADD FACE DATA
    }
 
    m_gk_ops->readCheckpointFile( a_handle, a_cur_step );

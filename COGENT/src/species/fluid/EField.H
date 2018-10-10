@@ -1,7 +1,7 @@
 #ifndef _EFIELD_H_
 #define _EFIELD_H_
 
-#include "CFGVar.H"
+#include "CFGVars.H"
 #include "GKPoisson.H"
 #include "BoltzmannElectron.H"
 
@@ -21,7 +21,7 @@ namespace PS = PS_NAMESPACE;
  * EField variable representation.
  */
 class EField
-   : public CFGVar
+   : public CFGVars
 {
 public:
    
@@ -32,12 +32,12 @@ public:
            const std::string&  name,
            const MagGeom&      geometry,
            const IntVect&      ghost_vect )
-      : CFGVar(pp_prefix, name, geometry),
+      : CFGVars(pp_prefix, name, geometry),
         m_poisson(NULL),
         m_defined(false)
    {
-      cell_data().define(geometry.gridsFull(), 3, IntVect::Unit);
-      face_data().define(geometry.gridsFull(), 3, IntVect::Unit);
+      addCellVar(name, 3, IntVect::Unit);
+      addFaceVar(name, 3, IntVect::Unit);
    }
 
    /// Copy Constructor.
@@ -103,6 +103,14 @@ public:
         }
      }
 
+   LevelData<FArrayBox>& getCellCenteredField() {return cell_var(0);}
+
+   const LevelData<FArrayBox>& getCellCenteredField() const {return cell_var(0);}
+
+   LevelData<FluxBox>& getFaceCenteredField() {return face_var(0);}
+
+   const LevelData<FluxBox>& getFaceCenteredField() const {return face_var(0);}
+
    bool secondOrder() const {return m_poisson->secondOrder();}
 
    LevelData<FArrayBox>& getPhiNode() {return m_phi_node;}
@@ -122,7 +130,7 @@ public:
                                          const Real                        dt );
 
    virtual
-   RefCountedPtr<CFGVar> clone( const bool copy_data = true ) const;
+   RefCountedPtr<CFGVars> clone( const bool copy_data = true ) const;
 
 protected:
 

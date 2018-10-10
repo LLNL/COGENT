@@ -13,7 +13,6 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "FluidSpecies.H"
-#include "CFGVar.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -100,16 +99,19 @@ class GlobalDOFFluidSpecies
     void define(const int, const int, const CFG::FluidSpecies&);
 
     inline
-    const CFG::LevelData<CFG::FArrayBox>& data() const
+    const CFG::LevelData<CFG::FArrayBox>& data(int n) const
     {
       CH_assert(m_is_defined == true);
-      return m_gdofs;
+      CH_assert(n>=0 && n<m_gdofs.size());
+      return *(m_gdofs[n]);
     }
 
+#if 0
     const Real& getVal  (int, const CFG::FluidSpecies&, GKAddress&)  const;
     Real&       getVal  (int, CFG::FluidSpecies&, GKAddress&)        const;
     const Real& getVal  (const CFG::FluidSpecies&, const GKAddress&) const;
     Real&       getVal  (CFG::FluidSpecies&, const GKAddress&)       const;
+#endif
 
     ~GlobalDOFFluidSpecies() {}
 
@@ -118,8 +120,8 @@ class GlobalDOFFluidSpecies
   private:
    
     bool m_is_defined;
+    Vector<RefCountedPtr<CFG::LevelData<CFG::FArrayBox> > > m_gdofs;
     int  m_mpi_offset;
-    CFG::LevelData<CFG::FArrayBox> m_gdofs;
 };
 typedef RefCountedPtr<GlobalDOFFluidSpecies> GlobalDOFFluidSpeciesPtr;
 typedef Vector<RefCountedPtr<GlobalDOFFluidSpecies> > GlobalDOFFluidSpeciesPtrVect;

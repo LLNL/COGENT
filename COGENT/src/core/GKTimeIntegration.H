@@ -11,7 +11,6 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "FluidSpecies.H"
-#include "CFGVar.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 

@@ -552,7 +552,8 @@ MBTridiagonalSolver::isCoreRadialPeriodicOrNeumannBC( const EllipticOpBC& a_bc )
    bool flag = false;
 
    if ( typeid(a_bc) == typeid(LogRectEllipticOpBC) ) {
-      const ProblemDomain& domain = ((MagBlockCoordSys&)m_coord_sys_ptr[0]).domain();
+      const MagGeom& geom = (MagGeom&)m_geometry;
+      const ProblemDomain& domain = (geom.getBlockCoordSys(0)).domain();
 
       if ( domain.isPeriodic(RADIAL_DIR) ||
            (a_bc.getBCType(0, RADIAL_DIR, 0) == EllipticOpBC::NEUMANN &&

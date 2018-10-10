@@ -617,58 +617,69 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
    LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Unit);
 
    if (!m_low_pollution) {
-      
-#if CFG_DIM==3
-      compute3DFieldWithBCs(phi, flux, a_homogeneous_bcs);
-      multiplyCoefficients(flux, false);
-#else
-      if (a_extrap_to_ghosts) computePoloidalField(phi, flux);
-      else computePoloidalFieldWithBCs(phi, flux, a_homogeneous_bcs);
 
-      // Multiply the field by the unmapped, face-centered operator coefficients
-      multiplyCoefficients(flux, false);
-#endif
-   }
-   
-   else {
+     if (SpaceDim == 3) {
+       if (a_extrap_to_ghosts) computeField(phi, flux);
+       else compute3DFieldWithBCs(phi, flux, a_homogeneous_bcs);
 
-      if (a_extrap_to_ghosts) computeMappedPoloidalField(phi, flux);
-      else computeMappedPoloidalFieldWithBCs(phi, flux, a_homogeneous_bcs);
+     }
+     else {
+       if (a_extrap_to_ghosts) computePoloidalField(phi, flux);
+       else computePoloidalFieldWithBCs(phi, flux, a_homogeneous_bcs);
+     }
 
-      // Multiply the field by the mapped, face-centered GKP coefficients
-      multiplyCoefficients(flux, true);
-   }
-   
-   m_geometry.fillTransversePhysicalGhosts(flux);
+     // Multiply the field by the unmapped, face-centered GKP coefficients
+     multiplyCoefficients(flux, false);
 
-   if (!m_low_pollution) m_geometry.applyAxisymmetricCorrection(flux);
+     m_geometry.fillTransversePhysicalGhosts(flux);
 
-   // Convert to face-averaged
-   if (!m_second_order) fourthOrderAverage(flux);
+     m_geometry.applyAxisymmetricCorrection(flux);
 
-   if (!m_low_pollution) {
-      m_geometry.computeMappedGridDivergence(flux, a_out, !m_second_order);
+     // Convert to face-averaged
+     if (!m_second_order) fourthOrderAverage(flux);
+
+     m_geometry.computeMappedGridDivergence(flux, a_out, !m_second_order);
    }
 
    else {
-      
-      m_geometry.averageAtBlockBoundaries(flux);
- 
-      LevelData<FluxBox> NTF_normal(grids, 1, IntVect::Zero);
-      for (DataIterator dit(flux.dataIterator()); dit.ok(); ++dit) {
-         const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
-         RealVect dx = block_coord_sys.dx();
-         for (int dir=0; dir<SpaceDim; ++dir) {
-  	    int perp_dir = (dir + 1) % 2;
-            NTF_normal[dit][dir].copy(flux[dit][dir],dir,0,1);
-	    NTF_normal[dit][dir].mult(dx[perp_dir]);
-         }
-      }
-      RealVect fakeDx = RealVect::Unit;
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         simpleDivergence(a_out[dit], NTF_normal[dit], grids[dit], fakeDx);
-      }
-      
+
+     if (SpaceDim == 3) {
+       if (a_extrap_to_ghosts) computeMapped3DField(phi, flux);
+       else computeMapped3DFieldWithBCs(phi, flux, a_homogeneous_bcs);
+       MayDay::Error("EllipticOp::low-pollution option is not fully developed for 3D yet"); 
+    }
+
+     else  {
+       if (a_extrap_to_ghosts) computeMappedPoloidalField(phi, flux);
+       else computeMappedPoloidalFieldWithBCs(phi, flux, a_homogeneous_bcs);
+     }
+
+     // Multiply the field by the mapped, face-centered GKP coefficients
+     multiplyCoefficients(flux, true);
+
+     m_geometry.fillTransversePhysicalGhosts(flux);
+
+     // Convert to face-averaged
+     if (!m_second_order) fourthOrderAverage(flux);
+
+     m_geometry.averageAtBlockBoundaries(flux);
+
+     LevelData<FluxBox> NTF_normal(grids, 1, IntVect::Zero);
+     for (DataIterator dit(flux.dataIterator()); dit.ok(); ++dit) {
+       const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
+       RealVect dx = block_coord_sys.dx();
+       for (int dir=0; dir<SpaceDim; ++dir) {
+	 int perp_dir = (dir + 1) % 2;
+	 NTF_normal[dit][dir].copy(flux[dit][dir],dir,0,1);
+	 NTF_normal[dit][dir].mult(dx[perp_dir]);
+       }
+     }
+
+     RealVect fakeDx = RealVect::Unit;
+     for (DataIterator dit(grids); dit.ok(); ++dit) {
+       simpleDivergence(a_out[dit], NTF_normal[dit], grids[dit], fakeDx);
+     }
+
    }
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {

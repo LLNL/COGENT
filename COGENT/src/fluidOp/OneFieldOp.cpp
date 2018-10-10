@@ -1,6 +1,8 @@
 #include "OneFieldOp.H"
 #include "EllipticOpBCFactory.H"
+#include "FluidVarBCFactory.H"
 #include "FourthOrderUtil.H"
+
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -11,10 +13,13 @@
 
 #include "NamespaceHeader.H" 
 
+const char* OneFieldOp::pp_name = {"one_field_op"};
 
-OneFieldOp::OneFieldOp( const std::string&  a_pp_str,
-                        const MagGeom&      a_geometry,
-                        const int           a_verbosity )
+
+OneFieldOp::OneFieldOp( const string&   a_pp_str,
+                        const string&   a_species_name,
+                        const MagGeom&  a_geometry,
+                        const int       a_verbosity )
    : m_verbosity(a_verbosity),
      m_geometry(a_geometry),
      m_is_time_implicit(true),
@@ -42,14 +47,27 @@ OneFieldOp::OneFieldOp( const std::string&  a_pp_str,
                                          ppsp,
                                          a_geometry.getCoordSys()->type(),
                                          false );
-   
-   //m_diffusion_op->setOperatorCoefficients(m_D, m_D_shape, *m_bc);
+
+   string variable_name = "density";
+
+   // Input the initial conditions
+
+   parseInitialConditions(a_species_name, variable_name);
+
+   // Input the boundary conditions
+
+   FluidVarBCFactory fluid_var_bc_factory;
+   m_fluid_variable_bc = fluid_var_bc_factory.create(a_species_name, variable_name, a_geometry.getCoordSys()->type(), false);
 }
 
 
 OneFieldOp::~OneFieldOp()
 {
+   delete m_fluid_variable_bc;
+   delete m_bc;
+   delete m_diffusion_op;
 }
+
 
 void OneFieldOp::accumulateRHS(  FluidSpeciesPtrVect&               a_rhs,
                                  const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
@@ -61,11 +79,11 @@ void OneFieldOp::accumulateRHS(  FluidSpeciesPtrVect&               a_rhs,
 {
    // Get fluid rhs
    FluidSpecies& rhs_fluid( static_cast<FluidSpecies&>(*(a_rhs[a_fluidVecComp])) );
-   LevelData<FArrayBox>& rhs_data( rhs_fluid.cell_data() );
+   LevelData<FArrayBox>& rhs_data( rhs_fluid.cell_var(0) );
 
    // Get fluid soln
    const FluidSpecies& soln_fluid( static_cast<FluidSpecies&>(*(a_fluid_species[a_fluidVecComp])) );
-   const LevelData<FArrayBox>& soln_data( soln_fluid.cell_data() );
+   const LevelData<FArrayBox>& soln_data( soln_fluid.cell_var(0) );
 
    const DisjointBoxLayout& grids( rhs_data.getBoxes() );
    
@@ -102,6 +120,7 @@ void OneFieldOp::accumulateRHS(  FluidSpeciesPtrVect&               a_rhs,
    }
 }
 
+
 void OneFieldOp::accumulateExplicitRHS(  FluidSpeciesPtrVect&               a_rhs,
                                          const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                          const FluidSpeciesPtrVect&         a_fluid_species,
@@ -114,6 +133,7 @@ void OneFieldOp::accumulateExplicitRHS(  FluidSpeciesPtrVect&               a_rh
     accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
   }
 }
+
 
 void OneFieldOp::accumulateImplicitRHS(  FluidSpeciesPtrVect&               a_rhs,
                                          const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
@@ -128,6 +148,7 @@ void OneFieldOp::accumulateImplicitRHS(  FluidSpeciesPtrVect&               a_rh
     accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
   }
 }
+
 
 void OneFieldOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
                                  std::vector<PS::DOFList>&                                 a_dof_list,
@@ -159,30 +180,34 @@ void OneFieldOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS:
   
     PS::DOFList dof_list(0);
   
-    const LevelData<FArrayBox>& soln_data   (a_fluid_species.cell_data());
-    const DisjointBoxLayout&    grids       (soln_data.disjointBoxLayout());
-    const int                   n_comp      (soln_data.nComp());
-    const LevelData<FArrayBox>& pMapping    (a_global_dofs.data()); 
+    for (int var=0; var<a_fluid_species.num_cell_vars(); ++var) {
+
+       const LevelData<FArrayBox>& soln_data   (a_fluid_species.cell_var(var));
+       const DisjointBoxLayout&    grids       (soln_data.disjointBoxLayout());
+       const int                   n_comp      (soln_data.nComp());
+       const LevelData<FArrayBox>& pMapping    (a_global_dofs.data(var)); 
   
-    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-      const Box& grid = grids[dit];
-      const FArrayBox& pMap = pMapping[dit];
-      for (BoxIterator bit(grid); bit.ok(); ++bit) {
-        IntVect ic = bit();
-        for (int n(0); n < n_comp; n++) {
-          dof_list.push_back((int) pMap.get(ic ,n) - a_global_dofs.mpiOffset());
-        }
-      }
+       for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+          const Box& grid = grids[dit];
+          const FArrayBox& pMap = pMapping[dit];
+          for (BoxIterator bit(grid); bit.ok(); ++bit) {
+             IntVect ic = bit();
+             for (int n(0); n < n_comp; n++) {
+                dof_list.push_back((int) pMap.get(ic ,n) - a_global_dofs.mpiOffset());
+             }
+          }
+       }
     }
   
     m_my_pc_idx = a_pc.size();
-  
+
     a_pc.push_back(pc);
     a_dof_list.push_back(dof_list);
   }
 
   return;
 }
+
 
 void OneFieldOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
                                  const PS::KineticSpeciesPtrVect&                          a_kin_species_phys,
@@ -217,6 +242,7 @@ void OneFieldOp::updatePCImEx( const PS::KineticSpeciesPtrVect& a_kinetic_specie
    m_diffusion_op->updateImExPreconditioner( a_mshift, *m_bc );
 }
 
+
 void OneFieldOp::solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species_solution,
                               const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                               const FluidSpeciesPtrVect&        a_fluid_species_rhs,
@@ -228,13 +254,13 @@ void OneFieldOp::solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species_
    }
    const FluidSpecies& rhs_species = static_cast<const FluidSpecies&>(*a_fluid_species_rhs[a_component]);
    LevelData<FArrayBox> r_phys;
-   r_phys.define(rhs_species.cell_data());
+   r_phys.define(rhs_species.cell_var(0));
 
    // Convert the right-hand side to physical space
    m_geometry.divideJonValid(r_phys);
    
    FluidSpecies& sol_species = static_cast<FluidSpecies&>(*a_fluid_species_solution[a_component]);
-   LevelData<FArrayBox>& z = sol_species.cell_data();
+   LevelData<FArrayBox>& z = sol_species.cell_var(0);
 
    for (DataIterator dit(z.dataIterator()); dit.ok(); ++dit) {
       z[dit].setVal(0.);
@@ -251,6 +277,7 @@ void OneFieldOp::solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species_
    // Convert the solution to mapped space
    m_geometry.multJonValid(z);
 }
+
 
 void OneFieldOp::computeDiffusionCoefficients(LevelData<FluxBox>& a_D_tensor,
                                               LevelData<FluxBox>& a_D_tensor_mapped,
@@ -316,7 +343,6 @@ void OneFieldOp::computeDiffusionCoefficients(LevelData<FluxBox>& a_D_tensor,
       }
    }
    
-   
    //Add radial diffusion term, if any
    if (m_D_rad != NULL) {
       m_D_rad->assign( D_cell, m_geometry, a_time);
@@ -340,7 +366,12 @@ void OneFieldOp::computeDiffusionCoefficients(LevelData<FluxBox>& a_D_tensor,
 }
 
 
-inline
+void OneFieldOp::fillGhostCells( FluidSpecies&  a_species_phys,
+                                 const double   a_time )
+{
+}
+
+
 void OneFieldOp::parseParameters( ParmParse& a_pp )
 {
    a_pp.query( "time_implicit", m_is_time_implicit);
@@ -376,7 +407,6 @@ void OneFieldOp::parseParameters( ParmParse& a_pp )
 }
 
 
-inline
 void OneFieldOp::printParameters()
 {
    if (procID()==0) {

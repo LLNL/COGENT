@@ -50,12 +50,12 @@ namespace FluidBCUtils {
                                  const FluidSpecies& a_prototype_species )
 
    {
-      const LevelData<FArrayBox>& prototype_dfn( a_prototype_species.cell_data() );
+      const LevelData<FArrayBox>& prototype_dfn( a_prototype_species.cell_var(0) );
       a_bdry_data.resize( a_bdry_layout.size() );
       for (int i(0); i<a_bdry_layout.size(); i++) {
          const DisjointBoxLayout& dbl( a_bdry_layout[i]->disjointBoxLayout() );
          a_bdry_data[i] = a_prototype_species.clone( IntVect::Zero, false );
-         LevelData<FArrayBox>& dfn( a_bdry_data[i]->cell_data() );
+         LevelData<FArrayBox>& dfn( a_bdry_data[i]->cell_var(0) );
          dfn.define( dbl, prototype_dfn.nComp(), IntVect::Zero );
       }
    }
@@ -78,9 +78,9 @@ namespace FluidBCUtils {
             
             FArrayBox& this_BfJ( a_BfJ[bdry_layout.dataIndex(dit)] );
             //            const FluidSpecies& bdry_species( *(a_all_bdry_data[b]) );
-            const CFGVar& bdry_species( *(a_all_bdry_data[b]) );
+            const CFGVars& bdry_species( *(a_all_bdry_data[b]) );
             //            const LevelData<FArrayBox>& bdry_data( bdry_species.data() );
-            const LevelData<FArrayBox>& bdry_data( bdry_species.cell_data() );
+            const LevelData<FArrayBox>& bdry_data( bdry_species.cell_var(0) );
             const FArrayBox& this_inflow_data( bdry_data[dit] );
             const DataIndex& interior_dit( bdry_layout.dataIndex(dit) );
             const FluxBox& this_face_vel( a_velocity[interior_dit] );

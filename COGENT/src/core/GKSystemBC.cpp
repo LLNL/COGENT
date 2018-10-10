@@ -7,8 +7,8 @@
 #include "MagGeom.H"
 #include "EllipticOpBCFactory.H"
 #include "FluidSpecies.H"
-#include "FluidSpeciesBC.H"
-#include "FluidSpeciesBCFactory.H"
+#include "FluidVarBC.H"
+#include "FluidVarBCFactory.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -36,7 +36,7 @@ GKSystemBC::GKSystemBC( ParmParse& a_pp,
 
    parsePotential( a_pp, coord_sys_type );
    parseKineticSpecies( a_pp, coord_sys_type, a_state.dataKinetic() );
-   parseFluidSpecies( a_pp, coord_sys_type, a_state.dataFluid() );
+   //   parseFluidSpecies( a_pp, coord_sys_type, a_state.dataFluid() );
 
    const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
    mag_geom.defineEllipticOpBC( *m_potential_bcs );
@@ -64,20 +64,12 @@ void GKSystemBC::executeInternalExchanges( KineticSpecies& a_species ) const
 inline
 void GKSystemBC::executeInternalExchanges( CFG::FluidSpecies& a_fluid ) const
 {
-   CFG::LevelData<CFG::FArrayBox>& fld( a_fluid.cell_data() );
    const CFG::MagGeom& geometry( a_fluid.configurationSpaceGeometry() );
-   // Fill ghost cells except for those on physical boundaries
-   geometry.fillInternalGhosts( fld );
-}
 
-inline
-void GKSystemBC::executeInternalExchanges( CFG::CFGVar& a_var ) const
-{
-   const CFG::MagGeom& geometry( a_var.configurationSpaceGeometry() );
-   CFG::LevelData<CFG::FArrayBox>& cell_fld( a_var.cell_data() );
-   // Fill ghost cells except for those on physical boundaries
-   if ( cell_fld.isDefined() ) {
-      geometry.fillInternalGhosts( cell_fld );
+   for (int n=0; n<a_fluid.num_cell_vars(); ++n) {
+      CFG::LevelData<CFG::FArrayBox>& fld( a_fluid.cell_var(n) );
+      // Fill ghost cells except for those on physical boundaries
+      geometry.fillInternalGhosts( fld );
    }
 }
 
@@ -125,7 +117,7 @@ void GKSystemBC::fillFluidSpeciesGhostCells( CFG::FluidSpeciesPtrVect&          
       try {
          CFG::FluidSpecies& species_physical( dynamic_cast<CFG::FluidSpecies&>(*(a_species[s])) );
          executeInternalExchanges( species_physical );
-         CFG::FluidSpeciesBC& fsbc( fluidSpeciesBC( species_physical.name() ) );
+         CFG::FluidVarBC& fsbc( fluidVarBC( species_physical.name() ) );
          fsbc.apply( species_physical, a_time );
       }
       catch (std::bad_cast& bc) {}
@@ -196,7 +188,7 @@ KineticSpeciesBC& GKSystemBC::kineticSpeciesBC( const std::string& a_name ) cons
 }
 
 
-CFG::FluidSpeciesBC& GKSystemBC::fluidSpeciesBC( const std::string& a_name ) const
+CFG::FluidVarBC& GKSystemBC::fluidVarBC( const std::string& a_name ) const
 {
    int index(-1);
    for (int i(0); i<m_fluid_bcs.size(); i++ ) {
@@ -260,17 +252,19 @@ void GKSystemBC::parseFluidSpecies( ParmParse&                       a_pp,
                                     const std::string&               a_coord_sys_type,
                                     const CFG::FluidSpeciesPtrVect&  a_species )
 {
+#if 0
    for (int s(0); s<a_species.size(); s++) {
       const std::string& name( a_species[s]->name() );
       const std::string prefix( "BC." + name );
       ParmParse ppsp( prefix.c_str() );
-      CFG::FluidSpeciesBCFactory ksp_factory;
-      CFG::FluidSpeciesBC* bc( ksp_factory.create( name,
-                                                   ppsp,
-                                                   a_coord_sys_type,
-                                                   m_verbosity ) );
+      CFG::FluidVarBCFactory ksp_factory;
+      CFG::FluidVarBC* bc( ksp_factory.create( name,
+                                               ppsp,
+                                               a_coord_sys_type,
+                                               m_verbosity ) );
       m_fluid_bcs.push_back( bc );
    }
+#endif
 }
 
 

@@ -9,8 +9,9 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "FourthOrderUtil.H"
-#include "CFGVarFactory.H"
 #include "GKPoisson.H"
+#include "EFieldAmpere.H"
+#include "EFieldSelfConsistentBC.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -144,24 +145,24 @@ void GKOps::initializeElectricField( const GKState& a_state_phys,
       }
    }
 
+   // Get pointers to the primary electric field and one used internally by implicitOpImEx
    string field_type;
    if ( m_ampere_law ) {
       field_type = "EFieldAmpere";
+      m_E_field          = new CFG::EFieldAmpere("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
+      m_E_field_ImOpImEx = new CFG::EFieldAmpere("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
+
    }
    else if ( m_consistent_potential_bcs ) {
       field_type = "EFieldSelfConsistentBC";
+      m_E_field          = new CFG::EFieldSelfConsistentBC("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
+      m_E_field_ImOpImEx = new CFG::EFieldSelfConsistentBC("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
    }
    else {
       field_type = "EField";
+      m_E_field          = new CFG::EField("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
+      m_E_field_ImOpImEx = new CFG::EField("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
    }
-
-   // Get a pointer to the primary EField object
-   CFG::CFGVarFactory cfgvar_factory;
-   m_E_field = static_cast<CFG::EField*>(cfgvar_factory.create( "",
-                                                                "EField",
-                                                                field_type,
-                                                                m_phase_geometry->magGeom(),
-                                                                CFG::IntVect::Unit ));
 
    m_E_field->define( m_units->larmorNumber(),
                       m_units->debyeNumber(),
@@ -171,12 +172,6 @@ void GKOps::initializeElectricField( const GKState& a_state_phys,
                       m_phase_geometry->divFreeVelocity(),
                       a_cur_step );
 
-   // Get a pointer a second EField object used internally by implicitOpImEx
-   m_E_field_ImOpImEx = static_cast<CFG::EField*>(cfgvar_factory.create( "",
-                                                                         "EField",
-                                                                         field_type,
-                                                                         m_phase_geometry->magGeom(),
-                                                                         CFG::IntVect::Unit ));
    m_E_field_ImOpImEx->define( m_units->larmorNumber(),
                                m_units->debyeNumber(),
                                initial_kinetic_species,
@@ -217,7 +212,7 @@ void GKOps::initializeElectricField( const GKState& a_state_phys,
    const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
    const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
    if ( (typeid(coords) == typeid(CFG::SingleNullCoordSys)) && (m_dealignment_corrections)) {
-      mag_geom.interpolateErFromMagFS(m_E_field->face_data(), m_E_field->cell_data());
+      mag_geom.interpolateErFromMagFS(m_E_field->getFaceCenteredField(), m_E_field->getCellCenteredField());
    }
 }
 
@@ -323,7 +318,7 @@ void GKOps::postTimeStep( const int       a_step,
 {
    if ( m_state_contains_potential ) {
       const CFG::FluidSpeciesPtrVect& fluids( a_state.dataFluid() );
-      const CFG::LevelData<CFG::FArrayBox>& phi = fluids[a_state.getFluidComponent("potential")]->cell_data();
+      const CFG::LevelData<CFG::FArrayBox>& phi = fluids[a_state.getFluidComponent("potential")]->cell_var("potential");
          
       for (CFG::DataIterator dit(phi.dataIterator()); dit.ok(); ++dit) {
          m_phi[dit].copy(phi[dit]);
@@ -336,7 +331,7 @@ void GKOps::postTimeStep( const int       a_step,
       const Vector<Real>& scalar_data = scalars[a_state.getScalarComponent("Er_boundary")]->data();
 
       const CFG::FluidSpeciesPtrVect& fluids( a_state.dataFluid() );
-      const CFG::LevelData<CFG::FArrayBox>& Er = fluids[a_state.getFluidComponent("Er_flux_surfaces")]->cell_data();
+      const CFG::LevelData<CFG::FArrayBox>& Er = fluids[a_state.getFluidComponent("Er_flux_surfaces")]->cell_var("Er_flux_surfaces");
 
       (static_cast<CFG::EFieldAmpere*>(m_E_field))->updateAverageAndPerturbation(scalar_data, Er, m_kinetic_species_phys, a_time);
    }
@@ -378,20 +373,10 @@ void GKOps::postTimeStage( const int       a_step,
       const Vector<Real>& scalar_data = scalars[a_state_comp.getScalarComponent("Er_boundary")]->data();
 
       const CFG::FluidSpeciesPtrVect& fluids( a_state_comp.dataFluid() );
-      const CFG::LevelData<CFG::FArrayBox>& Er = fluids[a_state_comp.getFluidComponent("Er_flux_surfaces")]->cell_data();
+      const CFG::LevelData<CFG::FArrayBox>& Er = fluids[a_state_comp.getFluidComponent("Er_flux_surfaces")]->cell_var("Er_flux_surfaces");
 
       (static_cast<CFG::EFieldAmpere*>(m_E_field))->updateAverageAndPerturbation(scalar_data, Er, m_kinetic_species_phys, a_time);
    }
-}
-
-void GKOps::plotFluidData( const string&   a_name,
-                           GKVector&       a_data )
-{
-   m_Y.copyFrom(a_data.data());
-
-   CFG::CFGVar& fluid_species = *(m_Y.dataFluid()[0]);
-   CFG::LevelData<CFG::FArrayBox>& fluid_data = fluid_species.cell_data();
-   m_phase_geometry->magGeom().plotCellData(a_name, fluid_data, 0.);
 }
 
 
@@ -849,7 +834,7 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
    
    if ( m_state_contains_potential ) {
       const CFG::FluidSpeciesPtrVect& fluids( a_state_comp.dataFluid() );
-      const CFG::LevelData<CFG::FArrayBox>& phi = fluids[a_state_comp.getFluidComponent("potential")]->cell_data();
+      const CFG::LevelData<CFG::FArrayBox>& phi = fluids[a_state_comp.getFluidComponent("potential")]->cell_var("potential");
          
       for (CFG::DataIterator dit(phi.dataIterator()); dit.ok(); ++dit) {
          a_phi[dit].copy(phi[dit]);
@@ -894,8 +879,8 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
                             compute_potential,
                             a_step == 0 );
 
-   m_phase_geometry->injectConfigurationToPhase( a_E_field.face_data(),
-                                                 a_E_field.cell_data(),
+   m_phase_geometry->injectConfigurationToPhase( a_E_field.getFaceCenteredField(),
+                                                 a_E_field.getCellCenteredField(),
                                                  a_injected_E_field );
 }
 
@@ -931,9 +916,13 @@ void GKOps::createPhysicalSpeciesVector( CFG::FluidSpeciesPtrVect&        a_spec
 
    m_fluidOp->convertToPhysical(a_species_phys, a_species_comp, m_phase_geometry->config_restrict(m_ghost_vect));
 
+#if 0
    m_boundary_conditions->fillGhostCells( a_species_phys,
                                           m_injected_E_field,
                                           a_time );
+#else
+   m_fluidOp->fillGhostCells( a_species_phys, a_time );
+#endif
 }
 
 
@@ -1225,7 +1214,7 @@ void GKOps::convertToPhysical( const GKState& a_soln_mapped, GKState& a_soln_phy
    const CFG::FluidSpeciesPtrVect& soln_mapped_fluid = a_soln_mapped.dataFluid();
    const CFG::FluidSpeciesPtrVect& soln_physical_fluid = a_soln_physical.dataFluid();
    for (int s=0; s<soln_mapped_fluid.size(); ++s) {
-      RefCountedPtr<CFG::CFGVar> this_physical_fluid
+      RefCountedPtr<CFG::CFGVars> this_physical_fluid
          = soln_mapped_fluid[s]->convertToPhysical(a_soln_physical.configSpaceGhostVector());
       soln_physical_fluid[s]->copy(*this_physical_fluid);
    }
@@ -1405,7 +1394,7 @@ void GKOps::plotEField( const std::string& a_filename,
 #endif
       
    if ( m_ampere_law ) {
-      CFG::LevelData<CFG::FArrayBox>& E_field = m_E_field->cell_data();
+      CFG::LevelData<CFG::FArrayBox>& E_field = m_E_field->getCellCenteredField();
       phase_geometry.plotConfigurationData( a_filename.c_str(), E_field, a_time );
    }
    else {
@@ -1430,11 +1419,12 @@ void GKOps::plotDistributionFunction( const std::string&    a_filename,
    species_geometry.plotData( a_filename.c_str(), dfn, a_time );
 }
 
-void GKOps::plotFluids( const std::string&       a_filename,
-                        const CFG::FluidSpecies& a_fluid_species,
-                        const double&            a_time ) const
+void GKOps::plotFluid( const std::string&       a_filename,
+                       const CFG::FluidSpecies& a_fluid_species,
+                       const string&            a_var_name,
+                       const double&            a_time ) const
 {
-   m_phase_geometry->plotConfigurationData( a_filename.c_str(), a_fluid_species.cell_data(), a_time );
+   m_phase_geometry->plotConfigurationData( a_filename.c_str(), a_fluid_species.cell_var(a_var_name), a_time );
 }
 
 
@@ -1630,8 +1620,8 @@ void GKOps::plotMomentum( const std::string&    a_filename,
    const double larmor_number( m_units->larmorNumber() );
    LevelData<FluxBox> E_field_tmp;
 
-   phase_geometry.injectConfigurationToPhase( m_E_field->face_data(),
-   					      m_E_field->cell_data(),
+   phase_geometry.injectConfigurationToPhase( m_E_field->getFaceCenteredField(),
+   					      m_E_field->getCellCenteredField(),
 					      E_field_tmp );
 
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
@@ -1665,8 +1655,8 @@ void GKOps::plotPoloidalMomentum( const std::string&    a_filename,
    const double larmor_number( m_units->larmorNumber() );
    LevelData<FluxBox> E_field_tmp;
 
-   phase_geometry.injectConfigurationToPhase( m_E_field->face_data(),
-                                              m_E_field->cell_data(),
+   phase_geometry.injectConfigurationToPhase( m_E_field->getFaceCenteredField(),
+                                              m_E_field->getCellCenteredField(),
                                               E_field_tmp );
 
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
@@ -1797,8 +1787,8 @@ void GKOps::plotParticleFlux( const std::string&    a_filename,
    const PhaseGeom& phase_geometry( *m_phase_geometry );
    LevelData<FluxBox> E_field_tmp;
 
-   phase_geometry.injectConfigurationToPhase( m_E_field->face_data(),
-                                              m_E_field->cell_data(),
+   phase_geometry.injectConfigurationToPhase( m_E_field->getFaceCenteredField(),
+                                              m_E_field->getCellCenteredField(),
                                               E_field_tmp );
 
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
@@ -1819,8 +1809,8 @@ void GKOps::plotHeatFlux( const std::string&    a_filename,
    LevelData<FluxBox> E_field_tmp;
    LevelData<FArrayBox> phi_injected_tmp;
 
-   phase_geometry.injectConfigurationToPhase( m_E_field->face_data(),
-                                              m_E_field->cell_data(),
+   phase_geometry.injectConfigurationToPhase( m_E_field->getFaceCenteredField(),
+                                              m_E_field->getCellCenteredField(),
                                               E_field_tmp );
 
    phase_geometry.injectConfigurationToPhase( m_phi, phi_injected_tmp );
@@ -1848,7 +1838,7 @@ void GKOps::plotAmpereErIncrement( const std::string&                a_filename,
   const Vector<Real>& Er_boundary = a_soln_scalar[scalar_component]->data();
 
   int fluid_component = m_Y.getFluidComponent("Er_flux_surfaces");
-  const CFG::LevelData<CFG::FArrayBox>& Er = a_soln_fluid[fluid_component]->cell_data();
+  const CFG::LevelData<CFG::FArrayBox>& Er = a_soln_fluid[fluid_component]->cell_var("Er_flux_surfaces");
 
   const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
   const CFG::MagBlockCoordSys& block0_coord_sys = (const CFG::MagBlockCoordSys&)(*(coords.getCoordSys(0)));
@@ -1987,7 +1977,7 @@ void GKOps::writeFieldHistory( const int a_cur_step,
       }
       else if (hist_field_name == "Efield") {
 
-         CFG::LevelData<CFG::FArrayBox>& E_field_cell = m_E_field->cell_data();
+         CFG::LevelData<CFG::FArrayBox>& E_field_cell = m_E_field->getCellCenteredField();
          field = &E_field_cell;
          fname = "Efield_hist";
          stringstream fname_temp;
