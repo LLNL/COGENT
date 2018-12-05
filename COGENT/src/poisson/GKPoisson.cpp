@@ -3,6 +3,7 @@
 #include "FourthOrderUtil.H"
 #include "FluxSurface.H"
 #include "Directions.H"
+#include "ToroidalBlockLevelExchangeCenter.H"
 
 #include "inspect.H"
 
@@ -16,14 +17,15 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
                       const Real         a_larmor_number,
                       const Real         a_debye_number )
    : EllipticOp(a_pp, a_geom),
-     m_larmor_number2(a_larmor_number*a_larmor_number),
      m_debye_number2(a_debye_number*a_debye_number),
      m_dt_implicit(0.),
      m_alpha(1.),
      m_model("GyroPoisson"),
+     m_larmor_number2(a_larmor_number*a_larmor_number),
      m_electron_temperature(NULL),
      m_charge_exchange_coeff(NULL),
-     m_parallel_conductivity(NULL)
+     m_parallel_conductivity(NULL),
+     m_mblx_ptr(NULL)
 {
 
    parseParameters( a_pp );
@@ -47,7 +49,12 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
       m_mblx_ptr->define(&a_geom, discretization_order, discretization_order);
    }
    else {
-      m_mblx_ptr = NULL;
+      if ( a_geom.shearedMBGeom() ) {
+         m_mblx_ptr = new ToroidalBlockLevelExchangeCenter(a_geom, discretization_order, discretization_order);
+      }
+      else {
+         m_mblx_ptr = NULL;
+      }
    }
 
 #ifdef with_petsc
@@ -83,6 +90,7 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
 GKPoisson::~GKPoisson()
 {
    if (m_preconditioner) delete m_preconditioner;
+   if (m_mblx_ptr) delete m_mblx_ptr;
 }
 
 

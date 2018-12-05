@@ -27,8 +27,8 @@ std::string determineCoordSysType( const PhaseGeom& a_phase_geometry )
 GKSystemBC::GKSystemBC( ParmParse& a_pp,
                         const GKState& a_state )
    : m_verbosity(0),
-     m_phase_geometry( *(a_state.geometry()) )
-
+     m_phase_geometry( *(a_state.geometry())),
+     m_potential_bcs(NULL)
 {
    a_pp.query( "gksystem.verbosity", m_verbosity );
 
@@ -48,6 +48,8 @@ GKSystemBC::~GKSystemBC()
    for (int i(0); i<m_kinetic_bcs.size(); i++ ) {
       delete m_kinetic_bcs[i];
    }
+
+   if (m_potential_bcs) delete m_potential_bcs;
 }
 
 
@@ -90,16 +92,26 @@ void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&           
                                                const LevelData<FluxBox>&              a_E_field,
                                                const Real&                            a_time ) const
 {
+   CH_TIMERS("GKSystemBC::fillKineticSpeciesGhostCells");
+   CH_TIMER("computeMappedVelocity", t_compute_mapped_velocity);
+   CH_TIMER("executeExchanges", t_execute_exchanges);
+   CH_TIMER("apply_bc", t_apply_bc);
    for (int s(0); s<a_species.size(); s++) {
 
+      CH_START(t_execute_exchanges);
       KineticSpecies& species_physical( *(a_species[s]) );
       executeInternalExchanges( species_physical );
+      CH_STOP(t_execute_exchanges);
 
+      CH_START(t_compute_mapped_velocity);
       LevelData<FluxBox> velocity;
       species_physical.computeMappedVelocity( velocity, a_E_field );
+      CH_STOP(t_compute_mapped_velocity);
 
+      CH_START(t_apply_bc);
       KineticSpeciesBC& ksbc( kineticSpeciesBC( species_physical.name() ) );
       ksbc.apply( species_physical, a_phi, velocity, a_time );
+      CH_STOP(t_apply_bc);
    }
 }
 

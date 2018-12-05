@@ -96,8 +96,6 @@ void FokkerPlanck::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& 
 
     Preconditioner<GKVector, GKOps> *pc;
     pc = new BasicGKPreconditioner<GKVector,GKOps>;
-    pc->define(a_X, a_ops, m_opt_string, m_opt_string, a_im);
-
     DOFList dof_list(0);
 
     const LevelData<FArrayBox>& soln_dfn    (a_species.distributionFunction());
@@ -118,6 +116,8 @@ void FokkerPlanck::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& 
 
     m_my_pc_idx = a_pc.size();
 
+    dynamic_cast<BasicGKPreconditioner<GKVector,GKOps>*>
+      (pc)->define(a_X, a_ops, m_opt_string, m_opt_string, a_im, dof_list);
     a_pc.push_back(pc);
     a_dof_list.push_back(dof_list);
 
@@ -129,6 +129,7 @@ void FokkerPlanck::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& 
 void FokkerPlanck::updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
                                   const KineticSpecies&                         a_species,
                                   const GlobalDOFKineticSpecies&                a_global_dofs,
+                                  const Real                                    a_time,
                                   const Real                                    a_shift,
                                   const bool                                    a_im,
                                   const int                                     a_species_index )
@@ -147,19 +148,17 @@ void FokkerPlanck::updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& 
     CH_assert(pc != NULL);
 
     BandedMatrix *pc_mat((BandedMatrix*)pc->getBandedMatrix());
-    pc_mat->zeroEntries();
-    assemblePrecondMatrix((void*)pc_mat, a_species, a_global_dofs);
+    pc_mat->setToIdentityMatrix();
+    assemblePrecondMatrix((void*)pc_mat, a_species, a_global_dofs, a_shift);
     pc_mat->finalAssembly();
-    /* add the time integration shift */
-    pc_mat->scaleEntries(-1);
-    pc_mat->shift(a_shift);
   }
   return;
 }
 
 void FokkerPlanck::assemblePrecondMatrix( void                            *a_P,
                                           const KineticSpecies&           a_species,
-                                          const GlobalDOFKineticSpecies&  a_global_dofs )
+                                          const GlobalDOFKineticSpecies&  a_global_dofs,
+                                          const Real                      a_shift )
 {
   /*
    * To ensure that the entries of the preconditioning matrix are correct, do the 
@@ -186,12 +185,12 @@ void FokkerPlanck::assemblePrecondMatrix( void                            *a_P,
     const int                   n_comp      (soln_dfn.nComp());
     const VEL::VelCoordSys&     vel_coords  (phase_geom.velSpaceCoordSys());
     const VEL::RealVect&        vel_dx      (vel_coords.dx());
-    const VEL::ProblemDomain&   vel_domain  = vel_coords.domain();
-    const VEL::Box&             domain_box  = vel_domain.domainBox();
+    //    const VEL::ProblemDomain&   vel_domain  = vel_coords.domain();
+    //    const VEL::Box&             domain_box  = vel_domain.domainBox();
     const LevelData<FArrayBox>& pMapping    (a_global_dofs.data()); 
   
-    const int nvpar = domain_box.size(0);
-    const int nmu   = domain_box.size(1);
+    //    const int nvpar = domain_box.size(0);
+    //    const int nmu   = domain_box.size(1);
   
     Real  dv = 1.0/vel_dx[0], dmu = 1.0/vel_dx[1], dv_sq = dv*dv, dmu_sq = dmu*dmu;
   
@@ -451,55 +450,55 @@ void FokkerPlanck::assemblePrecondMatrix( void                            *a_P,
   
           /* center element */
           icols[ix] = pc; 
-          data[ix] = ac;
+          data[ix] = a_shift - ac;
           ix++;
   
           /* east element */
           if (pe >= 0) {
             icols[ix] = pe;
-            data[ix] = ae;
+            data[ix] = -ae;
             ix++;
           }
           /* west element */
           if (pw >= 0) {
             icols[ix] = pw;
-            data[ix] = aw;
+            data[ix] = -aw;
             ix++;
           }
           /* north element */
           if (pn >= 0) {
             icols[ix] = pn;
-            data[ix] = an;
+            data[ix] = -an;
             ix++;
           }
           /* south element */
           if (ps >= 0) {
             icols[ix] = ps;
-            data[ix] = as;
+            data[ix] = -as;
             ix++;
           }
           /* north east element */
           if (pne >= 0) {
             icols[ix] = pne;
-            data[ix] = ane;
+            data[ix] = -ane;
             ix++;
           }
           /* north west element */
           if (pnw >= 0) {
             icols[ix] = pnw;
-            data[ix] = anw;
+            data[ix] = -anw;
             ix++;
           }
           /* south east element */
           if (pse >= 0) {
             icols[ix] = pse;
-            data[ix] = ase;
+            data[ix] = -ase;
             ix++;
           }
           /* south west element */
           if (psw >= 0) {
             icols[ix] = psw;
-            data[ix] = asw;
+            data[ix] = -asw;
             ix++;
           }
   
@@ -549,17 +548,20 @@ void FokkerPlanck::preTimeStep( const KineticSpeciesPtrVect& a_soln_mapped,
     dfn[dit].copy(soln_dfn[dit]);
   }
   convertToCellCenters(phase_geom,dfn);
-  computePotentialsAndCoeffs( soln_species, dfn, grids, phase_geom); 
+
+  const RefCountedPtr<PhaseGeom>& phase_geom_ptr(soln_species.phaseSpaceGeometryPtr());
+
+  computePotentialsAndCoeffs( soln_species, dfn, grids, phase_geom_ptr); 
 
   m_it_counter+=1;
   first_call = false;
   return;
 }
 
-void FokkerPlanck::evalRosenbluthPotentials( LevelData<FArrayBox>&        a_phi,
-                                             const PhaseGeom&             a_phase_geom,
-                                             const LevelData<FArrayBox>&  a_dfn,
-                                             const double                 a_mass ) const 
+void FokkerPlanck::evalRosenbluthPotentials( LevelData<FArrayBox>&            a_phi,
+                                             const RefCountedPtr<PhaseGeom>&  a_phase_geom,
+                                             const LevelData<FArrayBox>&      a_dfn,
+                                             const double                     a_mass ) const 
 {
 
    const DisjointBoxLayout& grids( a_phi.getBoxes() );
@@ -855,8 +857,8 @@ void FokkerPlanck::fillGhostCellsPhi( const PhaseGeom& a_phase_geom, LevelData<F
 void FokkerPlanck::fillGhostCellsDfn( const PhaseGeom& a_phase_geom, LevelData<FArrayBox>& a_x) const
 {
   const DisjointBoxLayout& grids = a_x.disjointBoxLayout();
-  const IntVect& ghosts(a_x.ghostVect());
-  const int nvars(a_x.nComp());
+  //  const IntVect& ghosts(a_x.ghostVect());
+  //  const int nvars(a_x.nComp());
   DataIterator dit(grids.dataIterator());
 
   for (dit.begin(); dit.ok(); ++dit) {
@@ -1330,10 +1332,10 @@ void FokkerPlanck::evalCoefficients(  FokkerPlanckCoeffs&         a_coeffs,
   return;
 }
 
-void FokkerPlanck::computePotentialsAndCoeffs(const KineticSpecies&         a_species, 
-                                              const LevelData<FArrayBox>&   a_dfn,
-                                              const DisjointBoxLayout&      a_grids,
-                                              const PhaseGeom&              a_phase_geom )
+void FokkerPlanck::computePotentialsAndCoeffs(const KineticSpecies&            a_species, 
+                                              const LevelData<FArrayBox>&      a_dfn,
+                                              const DisjointBoxLayout&         a_grids,
+                                              const RefCountedPtr<PhaseGeom>&  a_phase_geom )
 {
   static bool first_call = true;
 
@@ -1411,17 +1413,17 @@ void FokkerPlanck::computePotentialsAndCoeffs(const KineticSpecies&         a_sp
           std::cout<<"  Note: Recomputing Rosenbluth potentials for reference distribution function.\n";
         }
         evalRosenbluthPotentials(m_phi_F0, a_phase_geom, m_F0, mass_tp);
-        evalCoefficients(m_coeffs_F0, m_phi_F0, a_phase_geom, mass_tp, mass_fp);
+        evalCoefficients(m_coeffs_F0, m_phi_F0, *a_phase_geom, mass_tp, mass_fp);
         m_ref_updated = false;
       }
 
       evalRosenbluthPotentials(m_phi, a_phase_geom, delta_f, mass_tp);
-      evalCoefficients(m_coeffs, m_phi, a_phase_geom, mass_tp, mass_fp);
+      evalCoefficients(m_coeffs, m_phi, *a_phase_geom, mass_tp, mass_fp);
 
     } else {
 
       evalRosenbluthPotentials(m_phi, a_phase_geom, a_dfn, mass_tp);
-      evalCoefficients(m_coeffs, m_phi, a_phase_geom, mass_tp, mass_fp);
+      evalCoefficients(m_coeffs, m_phi, *a_phase_geom, mass_tp, mass_fp);
 
     }
 
@@ -1643,11 +1645,12 @@ void FokkerPlanck::evalClsRHS(  KineticSpeciesPtrVect&        a_rhs,
                                 const int                     a_species,
                                 const Real                    a_time )
 {
-  const KineticSpecies&       soln_species(*(a_soln[a_species]));
-  const LevelData<FArrayBox>& soln_dfn(soln_species.distributionFunction());
-  const DisjointBoxLayout&    grids(soln_dfn.getBoxes());
-  const PhaseGeom&            phase_geom(soln_species.phaseSpaceGeometry());
-  const int                   n_comp(soln_dfn.nComp());
+  const KineticSpecies&           soln_species(*(a_soln[a_species]));
+  const LevelData<FArrayBox>&     soln_dfn(soln_species.distributionFunction());
+  const DisjointBoxLayout&        grids(soln_dfn.getBoxes());
+  const PhaseGeom&                phase_geom(soln_species.phaseSpaceGeometry());
+  const RefCountedPtr<PhaseGeom>& phase_geom_ptr(soln_species.phaseSpaceGeometryPtr());
+  const int                       n_comp(soln_dfn.nComp());
 
   LevelData<FArrayBox> dfn(grids,n_comp,IntVect::Zero);
   for (DataIterator dit(dfn.dataIterator()); dit.ok(); ++dit) {
@@ -1656,7 +1659,7 @@ void FokkerPlanck::evalClsRHS(  KineticSpeciesPtrVect&        a_rhs,
   convertToCellCenters(phase_geom,dfn);
 
   if (!m_rosenbluth_skip_stage) {
-    computePotentialsAndCoeffs(soln_species, dfn, grids, phase_geom);
+    computePotentialsAndCoeffs(soln_species, dfn, grids, phase_geom_ptr);
   }
 
   LevelData<FaceBox> fp_flux_vpar, fp_flux_mu;

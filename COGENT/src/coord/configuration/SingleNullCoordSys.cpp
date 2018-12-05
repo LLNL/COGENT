@@ -50,20 +50,19 @@ SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
    dx[RADIAL_DIR]   = 1./(double)radial_width;
    dx[POLOIDAL_DIR] = 1./(double)core_poloidal_width;
 
-   Vector<MagBlockCoordSys *> coord_vec;
    for ( int block_number = 0; block_number < num_blocks; ++block_number ) {
       if (!m_model_geometry) {
          MagBlockCoordSys* geom = new SingleNullBlockCoordSys( a_pp_geom, ProblemDomain(domain_boxes[block_number]), dx, block_number );
-         coord_vec.push_back(geom);
+         m_coord_vec.push_back(geom);
       }
       else {
          MagBlockCoordSys* geom = new SingleNullBlockCoordSysModel( a_pp_geom, ProblemDomain(domain_boxes[block_number]), dx, block_number );
-         coord_vec.push_back(geom);
+         m_coord_vec.push_back(geom);
       }
 
    }
 
-   defineCoordSystemsAndBoundaries(coord_vec);
+   defineCoordSystemsAndBoundaries(m_coord_vec);
 
    //if (!m_model_geometry) setXPointNeighborhood();
    setXPointNeighborhood();
@@ -94,6 +93,9 @@ SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
 
 SingleNullCoordSys::~SingleNullCoordSys()
 {
+   for (int i=0; i<m_coord_vec.size(); ++i) {
+      delete m_coord_vec[i];
+   }
 }
 
 

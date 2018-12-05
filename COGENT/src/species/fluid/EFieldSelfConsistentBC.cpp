@@ -49,6 +49,12 @@ void EFieldSelfConsistentBC::computeEField( const PS::GKState&                a_
          double Er_lo = scalar_data[0];
          double Er_hi = scalar_data[1];
 
+#if 0
+         if (procID()==0) {
+            cout << "computeEField: Er_lo = " << Er_lo << ", Er_hi = " << Er_hi << endl;
+         }
+#endif
+
          setCoreBC( Er_lo, -Er_hi, a_bc );
 
          if ( m_boltzmann_electron ) {
@@ -135,15 +141,22 @@ void EFieldSelfConsistentBC::computeEField( const PS::GKState&                a_
 
 
 void EFieldSelfConsistentBC::updateImplicitPotential(LevelData<FArrayBox>&             a_phi,
+                                                     const double                      a_larmor,
                                                      const PS::KineticSpeciesPtrVect&  a_kinetic_species,
                                                      const Vector<Real>&               a_scalar_data,
                                                      LevelData<FArrayBox>&             a_divJperp,
                                                      EllipticOpBC&                     a_bc,
                                                      const Real                        a_dt )
 {
+#if 0  
+   if (procID()==0) {
+      cout << "updateImplicitPotential: Er_lo = " << a_scalar_data[0] << ", Er_hi = " << a_scalar_data[1] << endl;
+   }
+#endif
+
    setCoreBC(a_scalar_data[0], -a_scalar_data[1], a_bc);
 
-   EField::updateImplicitPotential(a_phi, a_kinetic_species, a_scalar_data, a_divJperp, a_bc, a_dt );
+   EField::updateImplicitPotential(a_phi, a_larmor, a_kinetic_species, a_scalar_data, a_divJperp, a_bc, a_dt );
 }
 
 

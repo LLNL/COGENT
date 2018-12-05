@@ -86,9 +86,38 @@ private:
 
    void operator = (const LogRectCoordSys&){;}
    int m_mb_dir;
-  
+
+   Vector<MagBlockCoordSys *> m_coord_vec;
+   
 #if CFG_DIM ==3 
-   void applyPeriodicity(RealVect& a_x) const;  
+   //applies toroidal periodicity
+   void applyPeriodicity(RealVect& a_x) const;
+
+   //enforces cut conditions in the poloidal direction
+   //for the case of the toroidal geometry
+   void enforcePoloidalCut(const RealVect& xiSrc,
+                           double& xiNW_dst,
+                           double& xiNE_dst,
+                           double& xiSW_dst,
+                           double& xiSE_dst,
+			   double& xi0_dst) const;
+
+   void getInterpolationCoefficients(Vector<Real>&    coeff,
+				     const RealVect&  xi0_dst,
+				     const IntVect&   iv0_dst,
+				     const RealVect&  dx_dst,
+				     const int        order) const;
+
+
+   void getInterpolationCoefficients(Vector<Real>&   coeff,
+				     const Real&     xiNW_dst,
+				     const Real&     xiNE_dst,
+				     const Real&     xiSW_dst,
+				     const Real&     xiSE_dst,
+				     const IntVect&  iv0_dst,
+				     const RealVect& dx_dst) const;
+
+
 #endif
 };
 

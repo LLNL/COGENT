@@ -1,4 +1,0 @@
-#!/bin/csh -f
-# This is just a convenience script that runs the main script in the scripts directory.
-`dirname $0`/scripts/do_build.py $*
-

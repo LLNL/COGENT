@@ -55,22 +55,23 @@
 using namespace CH_MultiDim;
 
 
-PhaseGeom::PhaseGeom( ParmParse&                      a_parm_parse,
-                      const PhaseCoordSys*            a_coord_sys,
-                      const PhaseGrid&                a_grids,
-                      CFG::MagGeom&                   a_mag_geom,
-                      const VEL::VelCoordSys&         a_vel_coords,
-                      int                             a_ghosts,
-                      double                          a_larmor_number )
-   : MultiBlockLevelGeom(a_coord_sys, a_grids.disjointBoxLayout(), a_ghosts, Interval(CFG_DIM,SpaceDim-1), Vector<int>(VEL_DIM,0)),
+PhaseGeom::PhaseGeom( ParmParse&                              a_parm_parse,
+                      const RefCountedPtr<PhaseCoordSys>&     a_coord_sys,
+                      const RefCountedPtr<PhaseGrid>&         a_grids,
+                      const RefCountedPtr<CFG::MagGeom>&      a_mag_geom,
+                      const RefCountedPtr<VEL::VelCoordSys>&  a_vel_coords,
+                      int                                     a_ghosts,
+                      double                                  a_larmor_number )
+   : MultiBlockLevelGeom(a_coord_sys, a_grids->disjointBoxLayout(), a_ghosts, Interval(CFG_DIM,SpaceDim-1), Vector<int>(VEL_DIM,0)),
      m_ghostVect(4*IntVect::Unit),
      m_mag_geom(a_mag_geom),
      m_vel_coords(a_vel_coords),
-     m_phase_coords(*a_coord_sys),
+     m_phase_coords(a_coord_sys),
      m_phase_grid(a_grids),
-     m_domain(a_grids.domain()),
+     m_domain(a_grids->domain()),
      m_speciesDefined(false),
-     m_larmor_number(a_larmor_number)
+     m_larmor_number(a_larmor_number),
+     m_gyroavg_op(NULL)
 {
    ParmParse psm( "phase_space_mapping" );
    if (psm.contains("velocity_type")) {
@@ -129,17 +130,17 @@ PhaseGeom::PhaseGeom( ParmParse&                      a_parm_parse,
 
 
 
-PhaseGeom::PhaseGeom( const PhaseGeom&          a_phase_geom,
-                      const PhaseCoordSys*      a_coord_sys,
-                      const VEL::VelCoordSys&   a_vel_coords,
-                      double                    a_mass,
-                      double                    a_charge )
+PhaseGeom::PhaseGeom( const PhaseGeom&                        a_phase_geom,
+                      const RefCountedPtr<PhaseCoordSys>&     a_coord_sys,
+                      const RefCountedPtr<VEL::VelCoordSys>&  a_vel_coords,
+                      double                                  a_mass,
+                      double                                  a_charge )
 
 : MultiBlockLevelGeom(a_coord_sys,a_phase_geom.gridsFull(),a_phase_geom.ghosts(),Interval(CFG_DIM,SpaceDim-1),Vector<int>(VEL_DIM,0)),
      m_ghostVect(a_phase_geom.m_ghostVect),
      m_mag_geom(a_phase_geom.m_mag_geom),
      m_vel_coords(a_vel_coords),
-     m_phase_coords(*a_coord_sys),
+     m_phase_coords(a_coord_sys),
      m_phase_grid(a_phase_geom.m_phase_grid),
      m_domain(a_phase_geom.m_domain),
      m_configuration_metrics(a_phase_geom.m_configuration_metrics),
@@ -148,14 +149,14 @@ PhaseGeom::PhaseGeom( const PhaseGeom&          a_phase_geom,
      m_configuration_J(a_phase_geom.m_configuration_J),
      m_configuration_face_areas(a_phase_geom.m_configuration_face_areas),
      m_BCell(a_phase_geom.m_BCell),
-     m_gradBCell(a_phase_geom.m_gradBCell),
-     m_curlbCell(a_phase_geom.m_curlbCell),
-     m_BMagCell(a_phase_geom.m_BMagCell),
-     m_bdotcurlbCell(a_phase_geom.m_bdotcurlbCell),
      m_BFace(a_phase_geom.m_BFace),
+     m_gradBCell(a_phase_geom.m_gradBCell),
      m_gradBFace(a_phase_geom.m_gradBFace),
+     m_curlbCell(a_phase_geom.m_curlbCell),
      m_curlbFace(a_phase_geom.m_curlbFace),
+     m_BMagCell(a_phase_geom.m_BMagCell),
      m_BMagFace(a_phase_geom.m_BMagFace),
+     m_bdotcurlbCell(a_phase_geom.m_bdotcurlbCell),
      m_bdotcurlbFace(a_phase_geom.m_bdotcurlbFace),
      m_mblexPtr(a_phase_geom.m_mblexPtr),
      m_exchange_transverse_block_register(a_phase_geom.m_exchange_transverse_block_register),
@@ -168,7 +169,8 @@ PhaseGeom::PhaseGeom( const PhaseGeom&          a_phase_geom,
      m_second_order(a_phase_geom.m_second_order),
      m_larmor_number(a_phase_geom.m_larmor_number),
      m_sheared_remapped_index(a_phase_geom.m_sheared_remapped_index),
-     m_sheared_interp_stencil(a_phase_geom.m_sheared_interp_stencil)
+     m_sheared_interp_stencil(a_phase_geom.m_sheared_interp_stencil),
+     m_gyroavg_op(NULL)
 {
    defineSpeciesState(a_mass, a_charge);
 }
@@ -192,13 +194,13 @@ PhaseGeom::define()
     *  Get the configuration space data and inject into phase space
     */
 
-   const CFG::DisjointBoxLayout& cfg_grids = m_mag_geom.gridsFull();
+   const CFG::DisjointBoxLayout& cfg_grids = m_mag_geom->gridsFull();
 
    int cfg_NumN = CFG_DIM * CFG_DIM;
    CFG::LevelData<CFG::FluxBox> cfg_N(cfg_grids, cfg_NumN, cfg_ghostVect);
    CFG::LevelData<CFG::FluxBox> cfg_tanGradN(cfg_grids, (CFG_DIM-1)*cfg_NumN, cfg_ghostVect);
 
-   m_mag_geom.getMetricTerms(cfg_N, cfg_tanGradN);
+   m_mag_geom->getMetricTerms(cfg_N, cfg_tanGradN);
 
    m_configuration_metrics = new LevelData<FluxBox>;
    m_configuration_tangrad_metrics = new LevelData<FluxBox>;
@@ -206,7 +208,7 @@ PhaseGeom::define()
    injectConfigurationToPhase(cfg_tanGradN, *m_configuration_tangrad_metrics);
 
    CFG::LevelData<CFG::FArrayBox> cfg_volume(cfg_grids, 1, cfg_ghostVect);
-   m_mag_geom.getCellVolumes(cfg_volume);
+   m_mag_geom->getCellVolumes(cfg_volume);
    m_configuration_volumes = new LevelData<FArrayBox>;
    injectConfigurationToPhase(cfg_volume, *m_configuration_volumes);
 
@@ -214,12 +216,12 @@ PhaseGeom::define()
    // sometimes be using it with the fourth order product/quotient formula
    CFG::LevelData<CFG::FArrayBox> cfg_J(cfg_grids, 1,
                                         cfg_ghostVect + CFG::IntVect::Unit);
-   m_mag_geom.getJ(cfg_J);
+   m_mag_geom->getJ(cfg_J);
    m_configuration_J = new LevelData<FArrayBox>;
    injectConfigurationToPhase(cfg_J, *m_configuration_J);
 
    CFG::LevelData<CFG::FluxBox> cfg_face_areas(cfg_grids, 1, CFG::IntVect::Zero);
-   m_mag_geom.getFaceAreas(cfg_face_areas);
+   m_mag_geom->getFaceAreas(cfg_face_areas);
    m_configuration_face_areas = new LevelData<FluxBox>;
    injectConfigurationToPhase(cfg_face_areas, *m_configuration_face_areas);
 
@@ -227,22 +229,22 @@ PhaseGeom::define()
     *  Get the cell- and face-centered field data and inject into phase space
     */
 
-   const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldCell = m_mag_geom.getCCBField();
+   const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldCell = m_mag_geom->getCCBField();
    CH_assert(cfg_BFieldCell.ghostVect() >= cfg_ghostVect);
 
-   const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldMagCell = m_mag_geom.getCCBFieldMag();
+   const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldMagCell = m_mag_geom->getCCBFieldMag();
    CH_assert(cfg_BFieldMagCell.ghostVect() >= cfg_ghostVect);
 
-   const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldDirCell = m_mag_geom.getCCBFieldDir();
+   const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldDirCell = m_mag_geom->getCCBFieldDir();
    CH_assert(cfg_BFieldDirCell.ghostVect() >= cfg_ghostVect);
 
-   const CFG::LevelData<CFG::FArrayBox>& cfg_gradBFieldMagCell = m_mag_geom.getCCGradBFieldMag();
+   const CFG::LevelData<CFG::FArrayBox>& cfg_gradBFieldMagCell = m_mag_geom->getCCGradBFieldMag();
    CH_assert(cfg_gradBFieldMagCell.ghostVect() >= cfg_ghostVect);
 
-   const CFG::LevelData<CFG::FArrayBox>& cfg_curlBFieldDirCell = m_mag_geom.getCCCurlBFieldDir();
+   const CFG::LevelData<CFG::FArrayBox>& cfg_curlBFieldDirCell = m_mag_geom->getCCCurlBFieldDir();
    CH_assert(cfg_curlBFieldDirCell.ghostVect() >= cfg_ghostVect);
 
-   const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldDirdotcurlBFieldDirCell = m_mag_geom.getCCBFieldDirdotCurlBFieldDir();
+   const CFG::LevelData<CFG::FArrayBox>& cfg_BFieldDirdotcurlBFieldDirCell = m_mag_geom->getCCBFieldDirdotCurlBFieldDir();
    CH_assert(cfg_BFieldDirdotcurlBFieldDirCell.ghostVect() >= cfg_ghostVect);
 
    m_BCell = new LevelData<FArrayBox>;
@@ -256,22 +258,22 @@ PhaseGeom::define()
    injectConfigurationToPhase(cfg_BFieldMagCell, *m_BMagCell);
    injectConfigurationToPhase(cfg_BFieldDirdotcurlBFieldDirCell, *m_bdotcurlbCell);
 
-   const CFG::LevelData<CFG::FluxBox>& cfg_BFieldFace = m_mag_geom.getFCBField();
+   const CFG::LevelData<CFG::FluxBox>& cfg_BFieldFace = m_mag_geom->getFCBField();
    CH_assert(cfg_BFieldFace.ghostVect() >= cfg_ghostVect);
 
-   const CFG::LevelData<CFG::FluxBox>& cfg_BFieldMagFace = m_mag_geom.getFCBFieldMag();
+   const CFG::LevelData<CFG::FluxBox>& cfg_BFieldMagFace = m_mag_geom->getFCBFieldMag();
    CH_assert(cfg_BFieldMagFace.ghostVect() >= cfg_ghostVect);
 
-   const CFG::LevelData<CFG::FluxBox>& cfg_BFieldDirFace = m_mag_geom.getFCBFieldDir();
+   const CFG::LevelData<CFG::FluxBox>& cfg_BFieldDirFace = m_mag_geom->getFCBFieldDir();
    CH_assert(cfg_BFieldDirFace.ghostVect() >= cfg_ghostVect);
 
-   const CFG::LevelData<CFG::FluxBox>& cfg_gradBFieldMagFace = m_mag_geom.getFCGradBFieldMag();
+   const CFG::LevelData<CFG::FluxBox>& cfg_gradBFieldMagFace = m_mag_geom->getFCGradBFieldMag();
    CH_assert(cfg_gradBFieldMagFace.ghostVect() >= cfg_ghostVect);
 
-   const CFG::LevelData<CFG::FluxBox>& cfg_curlBFieldDirFace = m_mag_geom.getFCCurlBFieldDir();
+   const CFG::LevelData<CFG::FluxBox>& cfg_curlBFieldDirFace = m_mag_geom->getFCCurlBFieldDir();
    CH_assert(cfg_curlBFieldDirFace.ghostVect() >= cfg_ghostVect);
 
-   const CFG::LevelData<CFG::FluxBox>& cfg_BFieldDirdotcurlBFieldDirFace = m_mag_geom.getFCBFieldDirdotCurlBFieldDir();
+   const CFG::LevelData<CFG::FluxBox>& cfg_BFieldDirdotcurlBFieldDirFace = m_mag_geom->getFCBFieldDirdotCurlBFieldDir();
    CH_assert(cfg_BFieldDirdotcurlBFieldDirFace.ghostVect() >= cfg_ghostVect);
    
    m_BFace = new LevelData<FluxBox>;
@@ -285,8 +287,7 @@ PhaseGeom::define()
    injectConfigurationToPhase(cfg_BFieldMagFace, cfg_BFieldMagCell, *m_BMagFace);
    injectConfigurationToPhase(cfg_BFieldDirdotcurlBFieldDirFace, cfg_BFieldDirdotcurlBFieldDirCell, *m_bdotcurlbFace);
 
-
-   if ( (m_coordSysPtr->numBlocks() > 1) && !m_mag_geom.extrablockExchange() && !m_mag_geom.shearedMBGeom()) {
+   if ( (m_coordSysPtr->numBlocks() > 1) && !m_mag_geom->extrablockExchange() && !m_mag_geom->shearedMBGeom()) {
 
       m_mblexPtr = new MultiBlockLevelExchangeAverage();
 
@@ -298,10 +299,7 @@ PhaseGeom::define()
       int spaceOrder(4);
       m_mblexPtr->define( this, numGhost, spaceOrder );
 
-      RefCountedPtr<MultiBlockCoordSys> coordSysRCP((MultiBlockCoordSys*)m_coordSysPtr);
-      coordSysRCP.neverDelete();  // Works around some problem with RefCountedPtr
-
-      m_exchange_transverse_block_register = new BlockRegister(coordSysRCP, m_gridsFull, 1);
+      m_exchange_transverse_block_register = new BlockRegister(m_coordSysPtr, m_gridsFull, 1);
    }
    else {
       m_mblexPtr = NULL;
@@ -322,12 +320,12 @@ PhaseGeom::defineSpeciesState( double a_mass,
     *  Get the velocity space data and inject into phase space
     */
    VEL::IntVect vel_ghostVect(vel_restrict(m_ghostVect));
-   const VEL::DisjointBoxLayout& vel_grids = m_vel_coords.grids();
+   const VEL::DisjointBoxLayout& vel_grids = m_vel_coords->grids();
    int vel_NumN = VEL_DIM * VEL_DIM;
    
    VEL::LevelData<VEL::FluxBox> vel_N(vel_grids, vel_NumN, vel_ghostVect);
    VEL::LevelData<VEL::FluxBox> vel_tanGradN(vel_grids, vel_NumN, vel_ghostVect);
-   m_vel_coords.getMetricTerms(vel_N, vel_tanGradN);
+   m_vel_coords->getMetricTerms(vel_N, vel_tanGradN);
    
    m_velocity_metrics = new LevelData<FluxBox>;
    m_velocity_tangrad_metrics = new LevelData<FluxBox>;
@@ -335,7 +333,7 @@ PhaseGeom::defineSpeciesState( double a_mass,
    injectVelocityToPhase(vel_tanGradN, *m_velocity_tangrad_metrics);
    
    VEL::LevelData<VEL::FArrayBox> vel_volume(vel_grids, 1, vel_ghostVect);
-   m_vel_coords.getCellVolumes(vel_volume);
+   m_vel_coords->getCellVolumes(vel_volume);
    
    m_velocity_volumes = new LevelData<FArrayBox>;
    injectVelocityToPhase(vel_volume, *m_velocity_volumes);
@@ -344,12 +342,12 @@ PhaseGeom::defineSpeciesState( double a_mass,
    // sometimes be using it with the fourth order product/quotient formula
    VEL::LevelData<VEL::FArrayBox> vel_J(vel_grids, 1,
                                         vel_ghostVect + VEL::IntVect::Unit);
-   m_vel_coords.getJ(vel_J);
+   m_vel_coords->getJ(vel_J);
    m_velocity_J = new LevelData<FArrayBox>;
    injectVelocityToPhase(vel_J, *m_velocity_J);
    
    VEL::LevelData<VEL::FluxBox> vel_face_areas(vel_grids, 1, VEL::IntVect::Zero);
-   m_vel_coords.getFaceAreas(vel_face_areas);
+   m_vel_coords->getFaceAreas(vel_face_areas);
    m_velocity_face_areas = new LevelData<FluxBox>;
    injectVelocityToPhase(vel_face_areas, *m_velocity_face_areas);
    
@@ -376,14 +374,17 @@ PhaseGeom::defineSpeciesState( double a_mass,
 
    m_speciesDefined = true;
 
+   m_sheared_remapped_index = NULL;
+   m_sheared_interp_stencil = NULL;
+
 #if CFG_DIM ==3
-   if (m_mag_geom.shearedMBGeom()) {
+   if (m_mag_geom->shearedMBGeom()) {
       m_sheared_remapped_index = new LevelData<FArrayBox>;
-      const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedRemappedIndex = m_mag_geom.getShearedRemappedIndex();
+      const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedRemappedIndex = m_mag_geom->getShearedRemappedIndex();
       injectConfigurationToPhase(cfg_ShearedRemappedIndex, *m_sheared_remapped_index);
 
       m_sheared_interp_stencil = new LevelData<FArrayBox>;
-      const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedInterpStencil = m_mag_geom.getShearedInterpStencil();
+      const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedInterpStencil = m_mag_geom->getShearedInterpStencil();
       injectConfigurationToPhase(cfg_ShearedInterpStencil, *m_sheared_interp_stencil);
 
       getShearedGhostBoxLayout();
@@ -396,32 +397,39 @@ PhaseGeom::defineSpeciesState( double a_mass,
 PhaseGeom::~PhaseGeom()
 {
    if (m_speciesDefined) {
-      delete m_bdotcurlbFace;
-      delete m_BMagFace;
-      delete m_curlbFace;
-      delete m_gradBFace;
-      delete m_BFace;
-      delete m_bdotcurlbCell;
-      delete m_BMagCell;
-      delete m_curlbCell;
-      delete m_gradBCell;
-      delete m_BCell;
       delete m_velocity_J;
       delete m_velocity_volumes;
+      delete m_velocity_face_areas;
       delete m_velocity_tangrad_metrics;
       delete m_velocity_metrics;
+
+      if (m_sheared_remapped_index) delete m_sheared_remapped_index;
+      if (m_sheared_interp_stencil) delete m_sheared_interp_stencil;
+
+      m_speciesDefined = false;
+   }
+   else {
+
+      delete m_BCell;
+      delete m_gradBCell;
+      delete m_curlbCell;
+      delete m_BMagCell;
+      delete m_bdotcurlbCell;
+      delete m_BFace;
+      delete m_gradBFace;
+      delete m_curlbFace;
+      delete m_BMagFace;
+      delete m_bdotcurlbFace;
+
+      delete m_configuration_face_areas;
       delete m_configuration_J;
       delete m_configuration_volumes;
       delete m_configuration_tangrad_metrics;
       delete m_configuration_metrics;
 
-      if (m_sheared_remapped_index) delete m_sheared_remapped_index;
-      if (m_sheared_interp_stencil) delete m_sheared_interp_stencil;
+      if (m_exchange_transverse_block_register) delete m_exchange_transverse_block_register;
+      if (m_mblexPtr) delete m_mblexPtr;
    }
-
-   if (m_exchange_transverse_block_register) delete m_exchange_transverse_block_register;
-   if (m_mblexPtr) delete m_mblexPtr;
-
 }
 
 
@@ -429,6 +437,7 @@ PhaseGeom::~PhaseGeom()
 void
 PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
                              LevelData<FluxBox>&       a_velocity,
+                             const int                 a_option,
                              const bool                a_apply_axisymmetric_correction ) const
 {
    // This function expects a_Efield to contain the face-centered field including
@@ -438,7 +447,7 @@ PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
    CH_assert(vel_restrict(a_Efield.ghostVect()) == VEL::IntVect::Zero);
 
    if (m_velocity_type == "gyrokinetic" || m_velocity_type == "ExB") {
-      computeGKVelocities(a_Efield, a_velocity);
+      computeGKVelocities(a_Efield, a_velocity, a_option);
    }
    else {
       computeTestVelocities(a_velocity);
@@ -466,7 +475,7 @@ PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
 void
 PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
                                 LevelData<FluxBox>&       a_velocity,
-                                bool                      a_magnetic_dirfts_only) const
+                                const int                 a_option ) const
 {
    const CFG::IntVect& velocity_cfg_ghosts = config_restrict(a_velocity.ghostVect());
    CH_assert(config_restrict(a_Efield.ghostVect()) >= velocity_cfg_ghosts);
@@ -474,15 +483,25 @@ PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
    CH_assert(config_restrict(m_gradBFace->ghostVect()) >= velocity_cfg_ghosts);
    CH_assert(config_restrict(m_curlbFace->ghostVect()) >= velocity_cfg_ghosts);
 
-   // Set options to turn certain terms on or off
-   const int include_drifts = m_no_drifts? 0: 1;
-   const int include_gradb = (m_velocity_type == "ExB")? 0: 1;
-   const int mag_drifts_only = a_magnetic_dirfts_only? 1: 0;
-   const int include_par_streaming = (m_no_parallel_streaming || m_velocity_type == "ExB" || a_magnetic_dirfts_only)? 0: 1;
+   // TODO: We need to remove the member flags now that the velocity option is being passed in
+   // Also, the NO_ZERO_ORDER_PARALLEL_VELOCITY option is not implemented
+   CH_assert(a_option != NO_ZERO_ORDER_PARALLEL_VELOCITY);
+   
+   const int include_drifts = (m_no_drifts 
+                               || (a_option==EXB_DRIFT_VELOCITY)
+                               || (a_option==PARALLEL_STREAMING_VELOCITY))? 0: 1;
+   const int include_gradb = ((m_velocity_type=="ExB") || (a_option==EXB_DRIFT_VELOCITY))? 0: 1;
+   const int mag_drifts_only = (a_option == MAGNETIC_DRIFT_VELOCITY)? 1: 0;
+   const int include_par_streaming = (m_no_parallel_streaming 
+                                   || m_velocity_type == "ExB"
+                                   || (a_option==DRIFT_VELOCITY)
+                                   || (a_option==MAGNETIC_DRIFT_VELOCITY)
+                                   || (a_option==EXB_DRIFT_VELOCITY)
+                                   || (a_option==NO_ZERO_ORDER_PARALLEL_VELOCITY))? 0: 1;
    
    const DisjointBoxLayout& grids = a_velocity.disjointBoxLayout();
 
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
       RealVect dx = block_coord_sys.dx();
       
@@ -715,7 +734,7 @@ PhaseGeom::updateMappedVelocities( const LevelData<FluxBox>& a_Efield,
 {
    // N.B.: this is only second-order
 
-   updateVelocities(a_Efield, a_velocity, false);
+   updateVelocities(a_Efield, a_velocity, FULL_VELOCITY, false);
 
    multNTransposePointwise( a_velocity );
 }
@@ -732,11 +751,6 @@ PhaseGeom::updateVelocityNormals( const CFG::LevelData<CFG::FArrayBox>& a_Efield
    // Computes the cell face integral of the normal component of the mapped velocity
    // using equation (24).
    
-   //Velocity options correspond to
-   //0 --  full GK velocity
-   //1 --  drifts only (includes both gradB/curlb and ExB)
-   //2 --  no zero-order parallel terms (that cancel each other for an FS-averaged Maxwellian)
-
    LevelData<FluxBox> XStarOmega(m_gridsFull, 4, IntVect::Unit);
    LevelData<FluxBox> UhatNormal(m_gridsFull, 1, IntVect::Unit);
    computeXStarOmega(a_Efield_cell, a_phi_node, a_fourth_order_Efield, XStarOmega, UhatNormal, a_velocity_option);
@@ -760,6 +774,7 @@ PhaseGeom::updateVelocityNormals( const CFG::LevelData<CFG::FArrayBox>& a_Efield
                      this_XStarOmega_tdir.copy(this_XStarOmega_dir, comp, 0, 1);
                      this_XStarOmega_tdir *= -sign(side);   // Notes: -1 to the power beta
                      this_vel_dir += this_XStarOmega_tdir;
+
                      comp++;
                   }
                }
@@ -769,9 +784,13 @@ PhaseGeom::updateVelocityNormals( const CFG::LevelData<CFG::FArrayBox>& a_Efield
                this_vel_dir.negate();
             }
             else if (dir == VPARALLEL_DIR) {
-               this_vel_dir.negate();
-               this_vel_dir += UhatNormal[dit][dir];
-               if (a_velocity_option == 1) this_vel_dir.setVal(0.);
+               if (a_velocity_option == DRIFT_VELOCITY) {
+                  this_vel_dir.setVal(0.);
+               }
+               else {
+                  this_vel_dir.negate();
+                  this_vel_dir += UhatNormal[dit][dir];
+               }
             }
          }
       }
@@ -789,12 +808,12 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
                               const int                             a_velocity_option ) const
 {
    const DisjointBoxLayout& grids = m_gridsFull;
-   const CFG::DisjointBoxLayout& cfg_grids = m_mag_geom.gridsFull();
+   const CFG::DisjointBoxLayout& cfg_grids = m_mag_geom->gridsFull();
 
    CFG::LevelData<CFG::FArrayBox> cfg_nodal_integrals(cfg_grids, 2, 2*CFG::IntVect::Unit);
    CFG::LevelData<CFG::FluxBox>   cfg_face_integrals(cfg_grids, 2, CFG::IntVect::Unit);
    CFG::LevelData<CFG::FArrayBox> cfg_volume_integrals(cfg_grids, 2, CFG::IntVect::Unit);
-   m_mag_geom.getIntegralsForVelocity(a_Efield_cell, a_phi_node, a_fourth_order_Efield,
+   m_mag_geom->getIntegralsForVelocity(a_Efield_cell, a_phi_node, a_fourth_order_Efield,
                                       cfg_nodal_integrals, cfg_face_integrals, cfg_volume_integrals);
 
    LevelData<FArrayBox> injected_nodal_integrals;
@@ -806,6 +825,15 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
    LevelData<FArrayBox> injected_volume_integrals;
    injectConfigurationToPhase(cfg_volume_integrals, injected_volume_integrals);
 
+   int no_parallel_streaming = (   (a_velocity_option == DRIFT_VELOCITY) 
+                                || (a_velocity_option == EXB_DRIFT_VELOCITY)
+                                || (a_velocity_option == MAGNETIC_DRIFT_VELOCITY)
+                                || (a_velocity_option == NO_ZERO_ORDER_PARALLEL_VELOCITY))? 1: 0;
+   int include_ExB_drift      = (a_velocity_option == MAGNETIC_DRIFT_VELOCITY)? 0: 1;
+   int include_magnetic_drift = ( (a_velocity_option == EXB_DRIFT_VELOCITY)
+                               || (a_velocity_option == PARALLEL_STREAMING_VELOCITY) )? 0: 1;
+   int no_zero_order_parallel = (a_velocity_option == NO_ZERO_ORDER_PARALLEL_VELOCITY)? 1: 0;
+   
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
       RealVect dx = block_coord_sys.dx();
@@ -833,7 +861,8 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
                              CHF_CONST_REAL(m_mass),
                              CHF_CONST_REAL(m_charge_state),
                              CHF_CONST_REAL(m_larmor_number),
-                             CHF_CONST_INT(a_velocity_option),
+                             CHF_CONST_INT(no_parallel_streaming),
+                             CHF_CONST_INT(include_magnetic_drift),
                              CHF_CONST_FRA1(this_XStarOmega_dir,comp));
 
             this_XStarOmega_dir.negate(comp,1);
@@ -852,6 +881,8 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
                              CHF_CONST_REALVECT(dx),
                              CHF_CONST_REAL(m_charge_state),
                              CHF_CONST_REAL(m_larmor_number),
+                             CHF_CONST_INT(include_ExB_drift),
+                             CHF_CONST_INT(include_magnetic_drift),
                              CHF_CONST_FRA1(tmp,0));
                   
             tmp.shiftHalf(VPARALLEL_DIR, -sign(side));
@@ -883,6 +914,8 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
                                 CHF_CONST_REALVECT(dx),
                                 CHF_CONST_REAL(m_charge_state),
                                 CHF_CONST_REAL(m_larmor_number),
+                                CHF_CONST_INT(include_ExB_drift),
+                                CHF_CONST_INT(include_magnetic_drift),
                                 CHF_CONST_FRA1(tmp,0));
 
                tmp.shiftHalf(tdir, -sign(side));
@@ -902,7 +935,7 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
                               CHF_CONST_REALVECT(dx),
                               CHF_CONST_REAL(m_mass),
                               CHF_CONST_REAL(m_charge_state),
-                              CHF_CONST_INT(a_velocity_option),
+                              CHF_CONST_INT(no_zero_order_parallel),
                               CHF_CONST_FRA1(this_uhat_dir,0));
          }
          else {
@@ -1120,7 +1153,7 @@ PhaseGeom::computeMetricTermProductAverage( LevelData<FluxBox>&       a_Product,
                ncomp = CFG_DIM;
             }
             else {
-               metricStartComp = m_vel_coords.getNcomponent(0,rel_dir);
+               metricStartComp = m_vel_coords->getNcomponent(0,rel_dir);
                ncomp = VEL_DIM;
             }
          }
@@ -1189,7 +1222,7 @@ PhaseGeom::computeMetricTermProductAverage( LevelData<FluxBox>&       a_Product,
                                                    CHF_BOX(thisDotGradDir.box()) );
             }
             else {
-               int nGradStartComp = m_vel_coords.tanGradComp(rel_dir, nGradDir, metricStartComp);
+               int nGradStartComp = m_vel_coords->tanGradComp(rel_dir, nGradDir, metricStartComp);
                int nGradComp = ncomp*(VEL_DIM-1);
 
                FORT_PSCSPOINTWISEREDUCEDDOTPRODVEL(CHF_FRA1(thisDotGradDir, 0),
@@ -1274,7 +1307,7 @@ PhaseGeom::computeTangentialGradSpecial( LevelData<FluxBox>&       a_gradPhi,
                      gradComp = mag_block_coord_sys.tanGradComp(faceDir, gradDir, n);
                   }
                   else {
-                     gradComp = m_vel_coords.tanGradComp(faceDir-CFG_DIM, gradDir-CFG_DIM, n);
+                     gradComp = m_vel_coords->tanGradComp(faceDir-CFG_DIM, gradDir-CFG_DIM, n);
                   }
 
                   Box gradBox(thisPhiDir.box());
@@ -1412,12 +1445,12 @@ PhaseGeom::fillTransverseGhosts( LevelData<FluxBox>& a_data,
                                  const bool          a_do_block_exchange ) const
 {
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_phase_coords.boundaries();
+   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_phase_coords->boundaries();
 
    for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
       const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
       const ProblemDomain& block_domain = block_coord_sys.domain();
-      const int block_number = m_phase_coords.whichBlock(grids[dit]);
+      const int block_number = m_phase_coords->whichBlock(grids[dit]);
       const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
 
       for (int dir=0; dir<SpaceDim; ++dir) {
@@ -1459,14 +1492,11 @@ PhaseGeom::fillTransverseGhosts( LevelData<FluxBox>& a_data,
 void
 PhaseGeom::averageAtBlockBoundaries(LevelData<FluxBox>& a_data) const
 {
-   if ( m_coordSysPtr->numBlocks() > 1 && !m_mag_geom.shearedMBGeom()) {
+   if ( m_coordSysPtr->numBlocks() > 1 && !m_mag_geom->shearedMBGeom()) {
 
       const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
-      RefCountedPtr<MultiBlockCoordSys> coordSysRCP((MultiBlockCoordSys*)m_coordSysPtr);
-      coordSysRCP.neverDelete();
-
-      BlockRegister blockRegister(coordSysRCP, grids, 0);
+      BlockRegister blockRegister(m_coordSysPtr, grids, 0);
 
       DataIterator dit = grids.dataIterator();
       for (dit.begin(); dit.ok(); ++dit) {
@@ -1911,12 +1941,12 @@ void PhaseGeom::zeroBoundaryFlux( const int           a_dir,
                                   LevelData<FluxBox>& a_flux ) const
 {
    const DisjointBoxLayout grids = a_flux.disjointBoxLayout();
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_phase_coords.boundaries();
+   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_phase_coords->boundaries();
 
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
       const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
       const Box& domainBox = block_coord_sys.domain().domainBox();
-      const int block_number = m_phase_coords.whichBlock(grids[dit]);
+      const int block_number = m_phase_coords->whichBlock(grids[dit]);
       const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
 
       FArrayBox& this_flux = a_flux[dit][a_dir];
@@ -1950,7 +1980,7 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
 
    a_data.exchange();
 
-   if (m_mblexPtr && !(m_mag_geom.extrablockExchange()) && !m_mag_geom.shearedMBGeom()) {
+   if (m_mblexPtr && !(m_mag_geom->extrablockExchange()) && !m_mag_geom->shearedMBGeom()) {
       if (nghost < m_ghostVect) {
          // interpGhosts() can't seem to handle a smaller number of ghost cells than
          // where specified when creating the MBLevelExchange object.
@@ -1971,7 +2001,7 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
       CornerCopier corner_copier(grids, grids, grids.physDomain(), nghost, true);
       a_data.exchange(corner_copier);
    }
-   else if (m_mag_geom.extrablockExchange()) {
+   else if (m_mag_geom->extrablockExchange()) {
       exchangeExtraBlockGhosts(a_data);
       a_data.exchange();
 
@@ -1981,7 +2011,7 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
    }
 
 #if CFG_DIM == 3
-   else if (m_mag_geom.shearedMBGeom()) {
+   else if (m_mag_geom->shearedMBGeom()) {
      if (a_data.ghostVect()[TOROIDAL_DIR] > 0) {
        interpolateFromShearedGhosts(a_data);
      }
@@ -2015,14 +2045,11 @@ PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
 
    if ( m_coordSysPtr->numBlocks() > 1 && max_ghost > 0) {
       
-      RefCountedPtr<MultiBlockCoordSys> coordSysRCP((MultiBlockCoordSys*)m_coordSysPtr);
-      coordSysRCP.neverDelete();
-      
       const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
       
       int ncomp = a_data.nComp();
       
-      BlockRegister blockRegister(coordSysRCP, grids, max_ghost);
+      BlockRegister blockRegister(m_phase_coords, grids, max_ghost);
       
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          for (int dir = 0; dir < SpaceDim; dir++) {
@@ -2078,12 +2105,12 @@ void
 PhaseGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
 {
    
-   int sheared_interp_order = m_mag_geom.shearedInterpOrder();
+   int sheared_interp_order = m_mag_geom->shearedInterpOrder();
    
    int nComp = a_data.nComp();
 
-   int ghost_mb_dir = (a_data.ghostVect()[TOROIDAL_DIR] < m_mag_geom.shearedGhosts()) ?
-                       a_data.ghostVect()[TOROIDAL_DIR] : m_mag_geom.shearedGhosts();
+   int ghost_mb_dir = (a_data.ghostVect()[TOROIDAL_DIR] < m_mag_geom->shearedGhosts()) ?
+                       a_data.ghostVect()[TOROIDAL_DIR] : m_mag_geom->shearedGhosts();
    
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
    
@@ -2109,13 +2136,12 @@ PhaseGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
          const ProblemDomain& domain = block_coords.domain();
          const Box& domain_box = domain.domainBox();
          
-         const CFG::MagBlockCoordSys& mag_block_coord_sys = getMagBlockCoordSys(grids[dit]);
-         int mb_dir = m_mag_geom.getMultiblockDir();
+         int mb_dir = m_mag_geom->getMultiblockDir();
          
          const Box& base_box = grids[dit];
          
-         if (   side == Side::LoHiSide::Lo && base_box.smallEnd(mb_dir) == domain_box.smallEnd(mb_dir)
-             || side == Side::LoHiSide::Hi && base_box.bigEnd(mb_dir) == domain_box.bigEnd(mb_dir) ) {
+         if (   (side == Side::LoHiSide::Lo && base_box.smallEnd(mb_dir) == domain_box.smallEnd(mb_dir))
+             || (side == Side::LoHiSide::Hi && base_box.bigEnd(mb_dir) == domain_box.bigEnd(mb_dir)) ) {
             
             Box bndryBox = adjCellBox(base_box, mb_dir, side, ghost_mb_dir);
             
@@ -2157,7 +2183,7 @@ PhaseGeom::getShearedGhostBoxLayout()
 {
    const DisjointBoxLayout& grids = m_gridsFull;
    
-   const int sheared_interp_order = m_mag_geom.shearedInterpOrder();
+   const int sheared_interp_order = m_mag_geom->shearedInterpOrder();
    
    m_shearedGhostBLHiEnd.deepCopy(grids);
    m_shearedGhostBLLoEnd.deepCopy(grids);
@@ -2171,16 +2197,15 @@ PhaseGeom::getShearedGhostBoxLayout()
       const ProblemDomain& domain = block_coords.domain();
       const Box& domain_box = domain.domainBox();
       
-      const CFG::MagBlockCoordSys& mag_block_coord_sys = getMagBlockCoordSys(base_box);
-      int mb_dir = m_mag_geom.getMultiblockDir();
+      int mb_dir = m_mag_geom->getMultiblockDir();
       
       for (SideIterator sit; sit.ok(); ++sit) {
          Side::LoHiSide side = sit();
          
-         if (   side == Side::LoHiSide::Lo && base_box.smallEnd(mb_dir) == domain_box.smallEnd(mb_dir)
-             || side == Side::LoHiSide::Hi && base_box.bigEnd(mb_dir) == domain_box.bigEnd(mb_dir) ) {
+         if (   (side == Side::LoHiSide::Lo && base_box.smallEnd(mb_dir) == domain_box.smallEnd(mb_dir))
+             || (side == Side::LoHiSide::Hi && base_box.bigEnd(mb_dir) == domain_box.bigEnd(mb_dir)) ) {
             
-            Box bndryBox = adjCellBox(base_box, mb_dir, side, m_mag_geom.shearedGhosts());
+            Box bndryBox = adjCellBox(base_box, mb_dir, side, m_mag_geom->shearedGhosts());
             
             IntVect hiEnd = bndryBox.bigEnd();
             IntVect loEnd = bndryBox.smallEnd();
@@ -3197,7 +3222,7 @@ PhaseGeom::plotAtVelocityIndex( const string               a_file_name,
 
    CFG::Box domain_box = configurationDomainBox(grids);
    domain_box.grow(4);
-   const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom.coordSysPtr();
+   const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom->coordSysPtr();
    WriteMappedUGHDF5(a_file_name, grids, data_at_vpt, *mag_coord_sys, domain_box, a_time);
 }
 
@@ -3219,7 +3244,7 @@ PhaseGeom::plotAtVelocityIndex( const string                 a_file_name,
 
    CFG::Box domain_box = configurationDomainBox(grids);
    domain_box.grow(4);
-   const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom.coordSysPtr();
+   const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom->coordSysPtr();
    WriteMappedUGHDF5(a_file_name, grids, data_at_vpt, *mag_coord_sys, domain_box, a_time);
 }
 
@@ -3264,7 +3289,7 @@ PhaseGeom::plotAtConfigurationIndex( const string               a_file_name,
    }
 
    VEL::Box domain_box = velocityDomainBox(grids);
-   WriteMappedUGHDF5(a_file_name, grids, data_at_cpt, m_vel_coords, domain_box, a_time);
+   WriteMappedUGHDF5(a_file_name, grids, data_at_cpt, *m_vel_coords, domain_box, a_time);
 }
 
 
@@ -3284,7 +3309,7 @@ PhaseGeom::plotAtConfigurationIndex( const string                 a_file_name,
    const VEL::DisjointBoxLayout& grids = data_at_cpt.disjointBoxLayout();
 
    VEL::Box domain_box = velocityDomainBox(grids);
-   WriteMappedUGHDF5(a_file_name, grids, data_at_cpt, m_vel_coords, domain_box, a_time);
+   WriteMappedUGHDF5(a_file_name, grids, data_at_cpt, *m_vel_coords, domain_box, a_time);
 }
 
 
@@ -3297,7 +3322,7 @@ PhaseGeom::plotConfigurationData( const string                           a_file_
    const CFG::DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
    CFG::Box domain_box = configurationDomainBox(grids);
-   const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom.coordSysPtr();
+   const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom->coordSysPtr();
    WriteMappedUGHDF5(a_file_name, grids, a_data, *mag_coord_sys, domain_box, a_time);
 }
 
@@ -3441,7 +3466,7 @@ PhaseGeom::plotConfigurationData( const string                         a_file_na
    }
 
    CFG::Box domain_box = configurationDomainBox(grids);
-   const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom.coordSysPtr();
+   const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom->coordSysPtr();
    WriteMappedUGHDF5(a_file_name, grids, data_cell, *mag_coord_sys, domain_box, a_time);
 }
 
@@ -3454,7 +3479,7 @@ PhaseGeom::plotVelocityData( const string                           a_file_name,
    const VEL::DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
    VEL::Box domain_box = velocityDomainBox(grids);
-   WriteMappedUGHDF5(a_file_name, grids, a_data, m_vel_coords, domain_box, a_time);
+   WriteMappedUGHDF5(a_file_name, grids, a_data, *m_vel_coords, domain_box, a_time);
 }
 
 
@@ -3579,7 +3604,7 @@ PhaseGeom::plotData( const string&                a_file_name,
                      const LevelData<FArrayBox>&  a_data,
                      const double&                a_time ) const
 {
-   WriteMappedUGHDF5(a_file_name, m_gridsFull, a_data, m_phase_coords, m_domain.domainBox(), a_time);
+   WriteMappedUGHDF5(a_file_name, m_gridsFull, a_data, *m_phase_coords, m_domain.domainBox(), a_time);
 }
 
 
@@ -3617,7 +3642,7 @@ PhaseGeom::velocityDomainBox(const VEL::DisjointBoxLayout& grids) const
 bool
 PhaseGeom::validConfigurationIndex(const CFG::IntVect& index) const
 {
-   const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom.coordSysPtr();
+   const CFG::MultiBlockCoordSys* mag_coord_sys = m_mag_geom->coordSysPtr();
    return mag_coord_sys->whichBlock(index) != -1;
 }
 
@@ -3626,7 +3651,7 @@ PhaseGeom::validConfigurationIndex(const CFG::IntVect& index) const
 bool
 PhaseGeom::validVelocityIndex(const VEL::IntVect& index) const
 {
-   return m_vel_coords.domain().domainBox().contains(index);
+   return m_vel_coords->domain().domainBox().contains(index);
 }
 
 
@@ -3677,7 +3702,7 @@ const CFG::MagBlockCoordSys&
 PhaseGeom::getMagBlockCoordSys(const Box& a_box) const
 {
   int block_number = m_coordSysPtr->whichBlock(a_box);
-  const CFG::MagCoordSys* mag_coord_sys = (const CFG::MagCoordSys*)m_mag_geom.coordSysPtr();
+  const CFG::MagCoordSys* mag_coord_sys = (const CFG::MagCoordSys*)m_mag_geom->coordSysPtr();
   return *mag_coord_sys->getCoordSys(block_number);
 }
 
@@ -3703,7 +3728,7 @@ PhaseGeom::computeRadialProjection( LevelData<FArrayBox>& a_radComp,
 {
    CH_assert(a_vector.nComp() == CFG_DIM);
    
-   const CFG::LevelData<CFG::FArrayBox>& unit_b_cfg = m_mag_geom.getCCBFieldDir();
+   const CFG::LevelData<CFG::FArrayBox>& unit_b_cfg = m_mag_geom->getCCBFieldDir();
 
    LevelData<FArrayBox> unit_b;
    injectConfigurationToPhase(unit_b_cfg, unit_b);
@@ -3724,7 +3749,7 @@ PhaseGeom::computePoloidalProjection( LevelData<FArrayBox>& a_polComp,
 {
    CH_assert(a_vector.nComp() == CFG_DIM);
    
-   const CFG::LevelData<CFG::FArrayBox>& unit_b_cfg = m_mag_geom.getCCBFieldDir();
+   const CFG::LevelData<CFG::FArrayBox>& unit_b_cfg = m_mag_geom->getCCBFieldDir();
    
    LevelData<FArrayBox> unit_b;
    injectConfigurationToPhase(unit_b_cfg, unit_b);

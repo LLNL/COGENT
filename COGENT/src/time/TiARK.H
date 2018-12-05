@@ -162,6 +162,7 @@ class TiARK : public TimeIntegrator<Vector,Ops>
     Real          m_epsJFNK;
     int           m_cur_step,
                   m_count;
+    bool          m_step_const_coef;
 
     ExplicitStageFunction<Vector,Ops>       *m_Efunction;
     ExplicitStageJacobian<Vector,Ops>       *m_EJacobian;
@@ -184,6 +185,7 @@ void TiARK<Vector,Ops>::define(ParmParse& a_pp, std::string a_name, Vector& a_Y,
   m_dt = a_dt;
   m_stagePredictor = false;
   m_epsJFNK = 1e-6;
+  m_step_const_coef = false;
 
   /* set Butcher coefficients */
   if (a_name == "1bee") {
@@ -590,7 +592,9 @@ TiARK<Vector, Ops>::~TiARK()
 template <class Vector, class Ops>
 void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
 {
-  //CH_TIMERS("TiARK::advance");
+  CH_TIMERS("TiARK::advance");
+  CH_TIMER("implicitStageSolver",t_implicit_stage_solver);
+  CH_TIMER("explicitStageSolver",t_explicit_stage_solver);
   CH_assert(isDefined());
   CH_assert(m_time == a_time);
   m_Z.copy(a_Y);
@@ -600,6 +604,9 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
   */
   CH_assert(m_Ai[0] == 0.0);
 
+  bool IJacobian_precond_updated = false;
+  bool EJacobian_precond_updated = false;
+
   /* Stage calculations */
   int i, j;
   for (i = 0; i < m_nstages; i++) {
@@ -607,10 +614,24 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
     Real stage_time = m_time+m_ce[i]*m_dt;
 
     if (m_Operators.trivialSolutionOp()) {
+       if ( m_step_const_coef && i==0 ) {
+          // Initialize the coefficients for the right-hand side operators,
+          // which are assumed to be constant over the step
+          m_Operators.preOpEval(a_Y,m_time);
+       }
        m_YStage.copy(a_Y);
     }
     else {
-       m_Operators.preOpEval(a_Y,m_time);
+       if ( m_step_const_coef ) {
+          if ( i==0 ) {
+             // Initialize the coefficients for both the solution and right-hand side
+             // operators, which are assumed to be constant over the step
+             m_Operators.preOpEval(a_Y,m_time);
+          }
+       }
+       else {
+          m_Operators.preSolutionOpEval(a_Y,m_time);
+       }
        m_Operators.solutionOp(m_YStage,m_time,a_Y);
     }
 
@@ -631,7 +652,10 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
       /* Build precond matrix from m_Z, which is
        * first stage - a_Y
        * subsequent stages - m_YStage from previous stage */
-      m_IJacobian->updatePreCondMat(m_Z);
+      if ( !m_step_const_coef || !IJacobian_precond_updated ) {
+         m_IJacobian->updatePreCondMat(m_Z);
+         IJacobian_precond_updated = true;
+      }
 
       /* right-hand side */
       m_R.copy(m_YStage);  
@@ -644,7 +668,9 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
 
       m_Z = m_YStage;
 
-      m_ImplicitStageSolver.solve(m_Z,m_R);
+      CH_START(t_implicit_stage_solver);
+      m_ImplicitStageSolver.solve(m_Z,m_R,!m_step_const_coef);
+      CH_STOP(t_implicit_stage_solver);
       m_YStage.copy(m_Z);
 
     } else if (!m_Operators.trivialSolutionOp()) {
@@ -656,18 +682,23 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
       /* Build precond matrix from m_Z, which is
        * first stage - a_Y
        * subsequent stages - m_YStage from previous stage */
-      m_EJacobian->updatePreCondMat(m_Z);
+      if ( !m_step_const_coef || !EJacobian_precond_updated ) {
+         m_EJacobian->updatePreCondMat(m_Z);
+         EJacobian_precond_updated = true;
+      }
 
       /* right-hand side */
       m_R.copy(m_YStage);  
 
-      m_ExplicitStageSolver.solve(m_Z, m_R);
+      CH_START(t_explicit_stage_solver);
+      m_ExplicitStageSolver.solve(m_Z, m_R,!m_step_const_coef);
+      CH_STOP(t_explicit_stage_solver);
       m_YStage.copy(m_Z);
 
     }
 
     m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage,i);
-    m_Operators.preOpEval(m_YStage,stage_time);
+    if ( !m_step_const_coef ) m_Operators.preOpEval(m_YStage,stage_time);
     m_Operators.explicitOpImEx(m_rhsStage_exp[i],stage_time,m_YStage);
     m_Operators.implicitOpImEx(m_rhsStage_imp[i],stage_time,m_YStage);
   }
@@ -692,19 +723,22 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
   } else {
 
     m_Efunction->setStageTime(m_time+m_dt);
-
     m_EJacobian->setStageTime(m_time+m_dt);
+    if ( !m_step_const_coef || !EJacobian_precond_updated ) {
+       m_EJacobian->updatePreCondMat(a_Y);
+       EJacobian_precond_updated = true;
+    }
 
-    m_EJacobian->updatePreCondMat(a_Y);
-
-    m_Operators.preOpEval(a_Y,(m_time+m_dt));
+    if ( !m_step_const_coef ) m_Operators.preSolutionOpEval(a_Y,(m_time+m_dt));
     m_Operators.solutionOp(m_R,(m_time+m_dt),a_Y);
     for (i = 0; i < m_nstages; i++) {
       m_R.increment(m_rhsStage_exp[i],(m_dt*m_be[i]));
       m_R.increment(m_rhsStage_imp[i],(m_dt*m_bi[i]));
     }
 
-    m_ExplicitStageSolver.solve(a_Y,m_R);
+    CH_START(t_explicit_stage_solver);
+    m_ExplicitStageSolver.solve(a_Y,m_R,!m_step_const_coef);
+    CH_STOP(t_explicit_stage_solver);
   }
 
   /* update current time and step number */
@@ -753,6 +787,7 @@ void TiARK<Vector,Ops>::parseParameters( ParmParse& a_pp)
   /* use stage predictor based on dense output */
   a_pp.query("stage_predictor", m_stagePredictor); 
   a_pp.query("jfnk_epsilon", m_epsJFNK); 
+  a_pp.query("step_const_coef", m_step_const_coef); 
 }
 
 #include "NamespaceFooter.H"

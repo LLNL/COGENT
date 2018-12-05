@@ -738,10 +738,9 @@ MBHypreSolver::constructHypreMatrix( LevelData<FArrayBox>&               a_alpha
 {
    const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys_ptr->boundaries();
 
-   if (a_matrix == NULL) {
-      HYPRE_SStructMatrixCreate(MPI_COMM_WORLD, a_graph, &a_matrix);
-      HYPRE_SStructMatrixSetObjectType(a_matrix, m_hypre_object_type);
-   }
+   HYPRE_SStructMatrixDestroy(a_matrix);
+   HYPRE_SStructMatrixCreate(MPI_COMM_WORLD, a_graph, &a_matrix);
+   HYPRE_SStructMatrixSetObjectType(a_matrix, m_hypre_object_type);
 
    HYPRE_SStructMatrixInitialize(a_matrix);
 

@@ -31,7 +31,7 @@ public:
    /// Destructor.
    /**
     */
-   ~EFieldAmpere() {;}
+   virtual ~EFieldAmpere() {;}
 
    virtual void define( const double                      larmor,
                         const double                      debye,
@@ -51,6 +51,7 @@ public:
                                const bool                        initial_time );
 
    virtual void updateImplicitPotential( LevelData<FArrayBox>&             phi,
+                                         const double                      larmor,
                                          const PS::KineticSpeciesPtrVect&  kinetic_species,
                                          const Vector<Real>&               scalar_data,
                                          LevelData<FArrayBox>&             divJperp,

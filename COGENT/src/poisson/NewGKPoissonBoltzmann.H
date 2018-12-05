@@ -86,7 +86,7 @@ protected:
    double*  m_phi_outer_plate;
    double*  m_phi_inner_plate;
 
-   SNCoreCoordSys* m_core_coord_sys;
+   RefCountedPtr<MagCoordSys> m_core_coord_sys;
    MagGeom* m_core_geometry;
 
    SNCoreEllipticOpBC* m_bc_core;

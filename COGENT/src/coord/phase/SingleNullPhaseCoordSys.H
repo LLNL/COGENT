@@ -26,10 +26,10 @@ public:
     */
    SingleNullPhaseCoordSys();
 
-   SingleNullPhaseCoordSys( ParmParse&                     pp,
-                            const CFG::SingleNullCoordSys& mag_coords,
-                            const VEL::VelCoordSys&        vel_coords,
-                            const Vector<ProblemDomain>&   domains );
+   SingleNullPhaseCoordSys( ParmParse&                                     pp,
+                            const RefCountedPtr<CFG::SingleNullCoordSys>&  mag_coords,
+                            const RefCountedPtr<VEL::VelCoordSys>&         vel_coords,
+                            const Vector<ProblemDomain>&                   domains );
 
    ///
    /** Destructor.
@@ -61,7 +61,7 @@ public:
 
    virtual void defineBoundaries();
 
-   int blockType(int block) const {return ((CFG::SingleNullBlockCoordSys*)m_config_coords.getCoordSys(block))->blockType();}
+   int blockType(int block) const {return ((CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block))->blockType();}
 
    virtual std::string type() const { return "SingleNull"; }
 
@@ -77,8 +77,6 @@ private:
    void defineBoundaries10();
 
    void getDecompositionParams( ParmParse& pp );
-
-   const CFG::SingleNullCoordSys& m_config_coords;
 
    IntVect m_decomp_mcore;
    IntVect m_decomp_lcore;

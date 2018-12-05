@@ -31,7 +31,7 @@ class Scalar
       /// Destructor.
       /**
        */
-      ~Scalar() {;}
+      virtual ~Scalar() {;}
 
       /// Returns species name.
       /**

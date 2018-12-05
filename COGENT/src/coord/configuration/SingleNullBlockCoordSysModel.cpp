@@ -420,7 +420,7 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
       if (length < 0) length = - length;
       
       RealVect refPolPlaneInters = arcLengthInverse(length);
-      double thetaVal = theta(refPolPlaneInters);
+      //      double thetaVal = theta(refPolPlaneInters);
       
       if (length < epsilon) {
          if (a_xi_tmp[RADIAL_DIR] >= lowerMappedCoordinate(RADIAL_DIR) - epsilon) {
@@ -1021,8 +1021,11 @@ SingleNullBlockCoordSysModel::arcLengthInverse(const double length) const
    bool residual_tolerance_satisfied = false;
    
    double half_r, tmp_lo_r, tmp_hi_r, f_lo_r, f_hi_r, f_half_r, x_lo, x_hi, half_x, z_lo, z_hi, half_z;
-   double phi;
    
+#if CH_SPACEDIM == 3
+   double phi;
+#endif
+
    if ( length > (PI/2.0 - epsilon) && length < (PI/2.0 + epsilon) ) {
       x[0] = acos(m_pol_ref_psi - m_b * sin(z_polar_axis) + m_c * z_polar_axis)/m_a + m_R0;
       x[1] = z_polar_axis;
@@ -1114,13 +1117,13 @@ double SingleNullBlockCoordSysModel::psi(const RealVect& a_x) const
    
    if (z<m_Zx) z = 2.0 * m_Zx - z;
    
-   double psiMin = m_b * sin(m_Zc) - m_c * m_Zc;
+   //   double psiMin = m_b * sin(m_Zc) - m_c * m_Zc;
    double psi = cos(m_a * x) + m_b * sin(z) - m_c * z;
    
    //Bacause psi is periodic (though periodicity is seen only far outside the domain)
    //we flatten it out here, baising to a constant after the "first period boundary".
    //This is the extra cautionary measure for various Newton solvers.
-   double psiTruncated = (psi < psiMin) ? psiMin : psi;
+   //   double psiTruncated = (psi < psiMin) ? psiMin : psi;
    return psi; //psiTruncated;
 }
 
@@ -1156,13 +1159,14 @@ double SingleNullBlockCoordSysModel::theta(const RealVect& a_x) const
    double fac_core = exp(-pow(x/Xw,2)) * (1-exp(-pow(r/Rw,2))) * 0.5*(1.0+tanh((psi-psiSep)/0.01)) * (1.0-tanh((z-m_Zx)*(z-m_Zx)/1.0));
    double theta_new_core =  (1-fac_core) * theta_orig + fac_core * theta_lin_core;
    
-   
+#if 0   
    double Zw = 0.2;
    double x_lin = (z - m_Zx)*pow((m_b*m_b - m_c*m_c),(1.0/4.0))/m_a;
    double Fx_lin = -log(tan((m_a * abs(x_lin))/2.0))/pow(m_a,2);
    double fac_sol = exp(-pow((z-m_Zx)/Zw,2))*(1-exp(-pow(r/Rw,2)));
    double theta_lin_sol = Fx_lin - Fy;
    double theta_new_sol =  (1-fac_sol) * theta_orig + fac_sol * theta_lin_sol;
+#endif
    
    double theta_new;
    if (psi > psiSep) {

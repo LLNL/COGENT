@@ -87,7 +87,7 @@ PhaseGrid::PhaseGrid(const Vector<ProblemDomain>&      a_domains,
    ProblemDomain prob_domain;
 
    if (   a_mag_geom_type == "miller" || a_mag_geom_type == "slab"
-       || a_mag_geom_type == "cylindrical" ) {
+       || a_mag_geom_type == "cylindrical" || a_mag_geom_type == "toroidal") {
 
       Box bounding_box;
       for (int n=0; n<phase_boxes.size(); n++) {

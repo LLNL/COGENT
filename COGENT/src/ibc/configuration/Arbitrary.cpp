@@ -12,6 +12,7 @@
 #include "FourthOrderUtil.H"
 #include "LevelData.H"
 #include "MayDay.H"
+#include "ToroidalBlockCoordSys.H"
 #include "SNCoreBlockCoordSys.H"
 #include "SingleNullBlockCoordSys.H"
 #include "SNCoreBlockCoordSysModel.H"
@@ -38,11 +39,11 @@ const MagBlockCoordSys& getCoordSys( const MultiBlockLevelGeom& a_geometry,
 
 Arbitrary::Arbitrary( ParmParse& a_pp,
                     const int& a_verbosity )
-   : m_verbosity(a_verbosity),
+   : m_pscore2(NULL),
+     m_verbosity(a_verbosity),
      m_function("UNDEFINED"),
-     m_coord_type("mapped"),
-     m_pscore2(NULL),
-     m_function2("UNDEFINED")
+     m_function2("UNDEFINED"),
+     m_coord_type("mapped")
 {
    parseParameters( a_pp );
 
@@ -76,7 +77,7 @@ void Arbitrary::assign( LevelData<FArrayBox>& a_data,
 
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       const int block_number( coord_sys.whichBlock( grids[dit] ) );
-      if (a_cell_averages) {
+      if (a_cell_averages && !((MagGeom&)a_geometry).secondOrder()) {
  	 setCellAverages( a_data[dit], getCoordSys( a_geometry, grids[dit] ), block_number );
       }
       else {
@@ -99,7 +100,7 @@ void Arbitrary::assign( LevelData<FluxBox>& a_data,
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       const int block_number( coord_sys.whichBlock( grids[dit] ) );
       for (int dir=0; dir<SpaceDim; ++dir) {
-         if (a_cell_averages) {
+ 	 if (a_cell_averages && !((MagGeom&)a_geometry).secondOrder()) {
             setCellAverages( a_data[dit][dir], getCoordSys( a_geometry, grids[dit] ), block_number );
          }
          else {
@@ -170,11 +171,14 @@ void Arbitrary::assign( LevelData<FArrayBox>& a_data,
       const int block_number( coords.whichBlock( grids[dit] ) );
       setPointwise( data_tmp[dit], coord_sys, block_number );
    }
-   for (DataIterator dit( grids ); dit.ok(); ++dit) {
-      Box domain_box( data_tmp[dit].box() );
-      domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
-      ProblemDomain domain( domain_box );
-      fourthOrderAverageCell( data_tmp[dit], domain, grids[dit] );
+
+   if (!((MagGeom&)a_geometry).secondOrder()) {
+     for (DataIterator dit( grids ); dit.ok(); ++dit) {
+       Box domain_box( data_tmp[dit].box() );
+       domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
+       ProblemDomain domain( domain_box );
+       fourthOrderAverageCell( data_tmp[dit], domain, grids[dit] );
+     }
    }
    data_tmp.copyTo( a_data );
    a_data.exchange();
@@ -248,10 +252,15 @@ void Arbitrary::setPointwise( FArrayBox&              a_data,
       
       for (int dir=0; dir<SpaceDim; dir++) {
          phys_coordinate[dir] = cc_phys_coords(iv, dir);
-         if (m_coord_type == "physical")  loc[dir] = cc_phys_coords(iv, dir);
+         if (m_coord_type == "physical" || m_coord_type ==  "toroidal")  loc[dir] = cc_phys_coords(iv, dir);
          if (m_coord_type == "mapped" || m_coord_type == "flux" || m_coord_type == "outer_midplane")  loc[dir] = cc_mapped_coords(iv, dir);
       }
-      
+#if CFG_DIM == 3      
+      if (m_coord_type == "toroidal") {
+	CH_assert(typeid(a_coord_sys) == typeid(ToroidalBlockCoordSys)) ;
+	((const ToroidalBlockCoordSys&)a_coord_sys).convertCartesianToToroidal(loc);
+      }
+#endif
       if (m_coord_type == "flux") {
          if (typeid(a_coord_sys) == typeid(SNCoreBlockCoordSys))  loc[0] = ((const SNCoreBlockCoordSys&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
          if (typeid(a_coord_sys) == typeid(SingleNullBlockCoordSys))  loc[0] = ((const SingleNullBlockCoordSys&)a_coord_sys).getNormMagneticFlux(phys_coordinate);

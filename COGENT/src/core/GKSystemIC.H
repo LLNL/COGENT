@@ -41,6 +41,9 @@ class GKSystemIC
                              CFG::LevelData<CFG::FArrayBox>& a_potential,
                              const Real& a_time ) const;
 
+      void initializeSystem( GKState& a_state,
+                             const Real& a_time ) const;
+
 /// deprecated ////////////////////
       void initializeSystem( KineticSpeciesPtrVect& a_species,
                              CFG::LevelData<CFG::FArrayBox>& a_potential,

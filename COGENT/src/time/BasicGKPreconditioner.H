@@ -20,6 +20,7 @@ class BasicGKPreconditioner : public Preconditioner<T,Ops>
 
     BasicGKPreconditioner<T,Ops>()
     {
+      m_dof_list = DOFList(0);
       m_is_defined = false;
       return;
     }
@@ -32,23 +33,38 @@ class BasicGKPreconditioner : public Preconditioner<T,Ops>
 
     inline bool isDefined() const { return m_is_defined; }
 
-    void define(const T&, Ops&, const std::string&, const std::string&, bool);
+    inline void define( const T&            a_X, 
+                        Ops&                a_ops, 
+                        const std::string&  a_out_str, 
+                        const std::string&  a_opt_str, 
+                        bool                a_im )
+    {
+      DOFList tmp = DOFList(0);
+      define(a_X,a_ops,a_out_str,a_opt_str,a_im,tmp);
+    }
+    void define(const T&, Ops&, const std::string&, const std::string&, bool, const DOFList&);
 
-    inline void update(const T& a_X, const Real a_shift = 0.0)
+    inline void update(const T& a_X, const Real a_time, const Real a_shift = 0.0)
     {
       CH_assert(isDefined());
       if (!procID()) {
         std::cout << "    ==> (" 
                   << m_out_string << ") Updating preconditioning matrix.\n";
       }
-      m_pc_object->update(a_X, a_shift);
+      m_pc_object->update(a_X, a_time, a_shift);
       return;
     }
 
     inline void apply(T& a_Y, const T& a_X)
     {
       CH_assert(isDefined());
-      m_pc_solver->solve(a_Y, a_X);
+      if (m_dof_list.size() == 0) {
+        m_pc_solver->solve(a_Y, a_X);
+      } else {
+        m_Z = a_Y;
+        m_pc_solver->solve(m_Z,a_X);
+        a_Y.copy(m_Z, m_dof_list);
+      }
       return;
     }
 
@@ -83,8 +99,9 @@ class BasicGKPreconditioner : public Preconditioner<T,Ops>
     
     bool m_is_defined;
     std::string m_pc_type;
-
     std::string m_out_string, m_opt_string;
+    DOFList m_dof_list;
+    T m_Z;
 
     IMEXStagePCFunction<T,Ops>  *m_pc_object;
     LinearFunctionSolver<T,Ops> *m_pc_solver;
@@ -95,7 +112,8 @@ void BasicGKPreconditioner<T,Ops>::define(const T&            a_x,
                                           Ops&                a_ops,
                                           const std::string&  a_out_string,
                                           const std::string&  a_opt_string,
-                                          bool                a_im )
+                                          bool                a_im,
+                                          const DOFList&      a_dof_list)
 {
   CH_assert(!isDefined());
   /* default values */
@@ -124,7 +142,9 @@ void BasicGKPreconditioner<T,Ops>::define(const T&            a_x,
   }
   CH_assert(m_pc_solver != NULL);
   m_pc_solver->define(m_pc_object, m_out_string, m_opt_string, a_x);
-
+  
+  m_Z.define(a_x);
+  m_dof_list = a_dof_list;
   m_is_defined = true;
   return;
 }

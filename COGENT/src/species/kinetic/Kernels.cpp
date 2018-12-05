@@ -65,7 +65,7 @@ MomentumDensityKernel::eval( LevelData<FArrayBox>& a_result,
 
   //Compute cell-centered velocity configurational components                                                                                                                                                     
   LevelData<FArrayBox> cellVelCFG(grids, CFG_DIM, IntVect::Unit);
-  computeCellVelCfgComp( cellVelCFG, phase_geom, m_field);
+  computeCellVelCfgComp( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY);
 
   DataIterator dit = dfn.dataIterator();
   for (dit.begin(); dit.ok(); ++dit) {
@@ -353,7 +353,7 @@ ParticleFluxKernel::eval( LevelData<FArrayBox>& a_result,
 
    //Compute cell-centered velocity configuration components
    LevelData<FArrayBox> cellVelCFG(grids, CFG_DIM, IntVect::Zero);
-   computeCellVelCfgComp( cellVelCFG, phase_geom, m_field );
+   computeCellVelCfgComp( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
 
    //Compute radial velocity
    LevelData<FArrayBox> cellVel_r(grids, 1, IntVect::Zero);
@@ -393,7 +393,7 @@ HeatFluxKernel::eval( LevelData<FArrayBox>& a_result,
 
    //Compute cell-centered velocity configuration components
    LevelData<FArrayBox> cellVelCFG(grids, CFG_DIM, IntVect::Zero);
-   computeCellVelCfgComp( cellVelCFG, phase_geom, m_field );
+   computeCellVelCfgComp( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
    
    //Compute radial velocity
    LevelData<FArrayBox> cellVel_r(grids, 1, IntVect::Zero);
@@ -484,7 +484,7 @@ GuidingCenterPoloidalMomKernel::eval( LevelData<FArrayBox>& a_result,
    
    //Compute cell-centered velocity configuration components
    LevelData<FArrayBox> cellVelCFG(grids, CFG_DIM, IntVect::Zero);
-   computeCellVelCfgComp( cellVelCFG, phase_geom, m_field );
+   computeCellVelCfgComp( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
    
    //Compute poloidal velocity
    LevelData<FArrayBox> cellVel_theta(grids, 1, IntVect::Zero);
@@ -680,8 +680,8 @@ MaxwellianKernel::eval( LevelData<FArrayBox>& a_result,
    //Compute Maxwellian distribution with the 3 first moments
    const LevelData<FArrayBox>& B_injected = phase_geom.getBFieldMagnitude();
    double mass = a_kinetic_species.mass();
-   double pi = Constants::PI;
-   double factor = sqrt(pi * pow((2.0/mass),3));
+   //   double pi = Constants::PI;
+   //   double factor = sqrt(pi * pow((2.0/mass),3));
 
 
    LevelData<FArrayBox> n_inj;
@@ -702,9 +702,9 @@ MaxwellianKernel::eval( LevelData<FArrayBox>& a_result,
       const FArrayBox& this_T = T_inj[dit]; 
       const FArrayBox& this_vparshift = vpar_inj[dit]; 
  
-      const Box& Bbox = this_B.box();
-      int vpB = Bbox.smallEnd(VPARALLEL_DIR);
-      int muB = Bbox.smallEnd(MU_DIR);
+      //      const Box& Bbox = this_B.box();
+      //      int vpB = Bbox.smallEnd(VPARALLEL_DIR);
+      //      int muB = Bbox.smallEnd(MU_DIR);
 
       // Get the physical velocity coordinates for this part of phase space
       FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
@@ -750,14 +750,14 @@ MaxwellianKernel::eval( LevelData<FArrayBox>& a_result,
 
 
 void
-Kernel::computeCellVelCfgComp(LevelData<FArrayBox>& a_velCellCfgComp,
-                              const PhaseGeom& a_phase_geom,
-                              const LevelData<FluxBox>& a_field,
-                              const bool a_mag_drifts_only     ) const
+Kernel::computeCellVelCfgComp(LevelData<FArrayBox>&      a_velCellCfgComp,
+                              const PhaseGeom&           a_phase_geom,
+                              const LevelData<FluxBox>&  a_field,
+                              const int                  a_option     ) const
 {
    const DisjointBoxLayout & grids = a_velCellCfgComp.getBoxes();
    LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
-   a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, a_mag_drifts_only);
+   a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, a_option);
 
    for (DataIterator dit(a_velCellCfgComp.dataIterator()); dit.ok(); ++dit) {
      a_velCellCfgComp[dit].setVal(0.);

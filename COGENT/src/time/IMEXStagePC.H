@@ -10,11 +10,9 @@ class IMEXStagePCFunction : public LinearFunction<T,Ops>
 {
   public:
 
-    virtual void update(const T&, const Real a_a = 0.0) = 0;
-    virtual void setStageTime(Real) = 0;
+    virtual void update(const T&, const Real, const Real a_a = 0.0) = 0;
     virtual void setBaseSolution(const T&) = 0;
 
-    virtual void setShift(Real) {}
     virtual void setBaseRHS(const T&, const T&)
     {
       MayDay::Error("IMEXStagePCFunction::setBaseRHS() called on base class!\n");

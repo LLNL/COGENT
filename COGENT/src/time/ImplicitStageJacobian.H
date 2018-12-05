@@ -38,7 +38,7 @@ class ImplicitStageJacobian: public LinearFunction<T,Ops>
 
     inline void updatePreCondMat(const T& a_X)
     {
-      if (m_usePreCond) m_preCond->update(a_X, m_shift);
+      if (m_usePreCond) m_preCond->update(a_X, m_stage_time, m_shift);
       return;
     }
 
@@ -50,17 +50,8 @@ class ImplicitStageJacobian: public LinearFunction<T,Ops>
     inline Real dotProduct(T& a_X, const T& a_Y)              { return(a_X.dotProduct(a_Y)); }
     inline Real norm      (T& a_Y, int a_ord)                 { return(a_Y.computeNorm(a_ord)); }
 
-    inline void setShift (Real a_shift )       
-    { 
-      m_shift = a_shift; 
-      if (m_usePreCond) m_preCond->setShift(a_shift); 
-    }
-
-    inline void setStageTime (Real a_time  )
-    { 
-      m_StageTime = a_time; 
-      if (m_usePreCond) m_preCond->setTime(a_time);
-    }
+    inline void setShift (Real a_shift) { m_shift = a_shift; }
+    inline void setStageTime (Real a_time) { m_stage_time = a_time; }
 
     inline bool isDefined() const { return m_is_Defined;  }
 
@@ -95,7 +86,7 @@ class ImplicitStageJacobian: public LinearFunction<T,Ops>
   private:
   
     bool m_is_Defined, m_isLinear, m_usePreCond;
-    Real m_shift, m_StageTime, m_epsJFNK, m_normY0;
+    Real m_shift, m_stage_time, m_epsJFNK, m_normY0;
     T    m_Z, m_Y0, m_F0, m_F, m_M0, m_M;
 
     Preconditioner<T,Ops> *m_preCond;
@@ -208,11 +199,11 @@ void ImplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y)
     }
 
     m_Z.copy(m_Y0); m_Z.increment(a_y,eps);
-    m_ops->implicitOpImEx(m_F,m_StageTime,m_Z);
+    m_ops->implicitOpImEx(m_F,m_stage_time,m_Z);
     if (m_ops->trivialSolutionOp()) {
       m_M.copy(m_Z);
     } else {
-      m_ops->solutionOp(m_M,m_StageTime,m_Z);
+      m_ops->solutionOp(m_M,m_stage_time,m_Z);
     }
 
     m_Z.copy(m_F); 

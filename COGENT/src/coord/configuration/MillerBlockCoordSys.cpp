@@ -516,7 +516,7 @@ MillerBlockCoordSys::computeBField(const RealVect& a_X) const
    double R_shift = a_X[0] - m_origin[0];
    double Z_shift = a_X[1] - m_origin[1];
    
-   double r = sqrt( pow(R_shift,2) + pow(Z_shift,2) );
+   //   double r = sqrt( pow(R_shift,2) + pow(Z_shift,2) );
    double theta = atan2(Z_shift, R_shift);
    if (theta < 0.) theta += 2. * Pi;
    double st = sin(theta);

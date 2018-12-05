@@ -141,7 +141,6 @@ void OneFieldOp::accumulateImplicitRHS(  FluidSpeciesPtrVect&               a_rh
                                          const PS::ScalarPtrVect&           a_scalars,
                                          const EField&                      a_E_field,
                                          const int                          a_fluidVecComp,
-                                         const bool,
                                          const Real                         a_time)
 {
   if (m_is_time_implicit) {
@@ -212,6 +211,7 @@ void OneFieldOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS:
 void OneFieldOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
                                  const PS::KineticSpeciesPtrVect&                          a_kin_species_phys,
                                  const FluidSpeciesPtrVect&                                a_fluid_species,
+                                 const Real                                                a_time,
                                  const Real                                                a_shift,
                                  const bool                                                a_im,
                                  const int                                                 a_species_idx )
@@ -228,18 +228,19 @@ void OneFieldOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS:
     PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps> *pc 
       = dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>(a_pc[m_my_pc_idx]);
     CH_assert(pc != NULL);
-    pc->update(a_kin_species_phys, a_fluid_species, a_shift, a_im, a_species_idx);
+    pc->update(a_kin_species_phys, a_fluid_species, a_time, a_shift, a_im, a_species_idx);
   }
   return;
 }
 
 
 void OneFieldOp::updatePCImEx( const PS::KineticSpeciesPtrVect& a_kinetic_species,
-                               const double                     a_mshift )
+                               const double                     a_time,
+                               const double                     a_shift )
 {
    CH_TIME("OneFieldOp::updatePCImEx");
 
-   m_diffusion_op->updateImExPreconditioner( a_mshift, *m_bc );
+   m_diffusion_op->updateImExPreconditioner( a_shift, *m_bc );
 }
 
 

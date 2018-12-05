@@ -12,12 +12,11 @@
 
 
 
-SingleNullPhaseCoordSys::SingleNullPhaseCoordSys( ParmParse&                     a_pp,
-                                                  const CFG::SingleNullCoordSys& a_mag_coords,
-                                                  const VEL::VelCoordSys&        a_vel_coords,
-                                                  const Vector<ProblemDomain>&   a_domains)
-   : PhaseCoordSys(a_mag_coords, a_vel_coords, a_domains),
-     m_config_coords( a_mag_coords )
+SingleNullPhaseCoordSys::SingleNullPhaseCoordSys( ParmParse&                                     a_pp,
+                                                  const RefCountedPtr<CFG::SingleNullCoordSys>&  a_mag_coords,
+                                                  const RefCountedPtr<VEL::VelCoordSys>&         a_vel_coords,
+                                                  const Vector<ProblemDomain>&                   a_domains)
+   : PhaseCoordSys(a_mag_coords, a_vel_coords, a_domains)
 {
   defineBoundaries();
 
@@ -55,7 +54,7 @@ SingleNullPhaseCoordSys::defineBoundaries8()
       IntVect shift;
       Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block];
       const CFG::SingleNullBlockCoordSys* mag_block_coord_sys
-         = (const CFG::SingleNullBlockCoordSys*)m_config_coords.getCoordSys(block);
+         = (const CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block);
       int block_type = mag_block_coord_sys->blockType();
 
       if( block_type == LCORE ) {
@@ -230,7 +229,7 @@ SingleNullPhaseCoordSys::defineBoundaries10()
       IntVect shift;
       Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block];
       const CFG::SingleNullBlockCoordSys* mag_block_coord_sys
-         = (const CFG::SingleNullBlockCoordSys*)m_config_coords.getCoordSys(block);
+         = (const CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block);
       int block_type = mag_block_coord_sys->blockType();
 
       if( block_type == MCORE ) {
@@ -418,7 +417,7 @@ SingleNullPhaseCoordSys::blockRemapping(RealVect&       a_xi_valid,
 
    CFG::RealVect xi_valid_config;
    int n_valid_config;
-   m_config_coords.blockRemapping(xi_valid_config, n_valid_config, xiSrc_config, a_nSrc);
+   m_mag_coords->blockRemapping(xi_valid_config, n_valid_config, xiSrc_config, a_nSrc);
 
    a_n_valid = -1;
 
@@ -460,7 +459,7 @@ SingleNullPhaseCoordSys::blockRemappingGeneral(int a_nDst,
       xiSrc_config[dir] = a_xiSrc[dir];
    }
 
-   CFG::RealVect xiDst_config = m_config_coords.blockRemappingGeneral(a_nDst, xiSrc_config, a_nSrc);
+   CFG::RealVect xiDst_config = m_mag_coords->blockRemappingGeneral(a_nDst, xiSrc_config, a_nSrc);
 
    RealVect xiDst;
    for (int dir=0; dir<CFG_DIM; ++dir) {

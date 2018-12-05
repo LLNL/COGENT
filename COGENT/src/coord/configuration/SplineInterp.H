@@ -15,7 +15,7 @@ class SplineInterp
                   const FArrayBox& coords,
                   const FArrayBox& data );
 
-    ~SplineInterp();
+    virtual ~SplineInterp();
 
     virtual double interpolate(const int       component,
                                const int       mode,

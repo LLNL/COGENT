@@ -31,7 +31,7 @@ public:
    /// Destructor.
    /**
     */
-   ~EFieldSelfConsistentBC() {;}
+   virtual ~EFieldSelfConsistentBC() {;}
 
    virtual void computeEField( const PS::GKState&                state,
                                const PS::KineticSpeciesPtrVect&  kinetic_species,
@@ -43,6 +43,7 @@ public:
                                const bool                        initial_time );
 
    virtual void updateImplicitPotential( LevelData<FArrayBox>&             phi,
+                                         const double                      larmor,
                                          const PS::KineticSpeciesPtrVect&  kinetic_species,
                                          const Vector<Real>&               scalar_data,
                                          LevelData<FArrayBox>&             divJperp,

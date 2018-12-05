@@ -49,7 +49,10 @@ public:
    /// Destructor.
    /**
     */
-   ~EField() {;}
+   virtual ~EField()
+   {
+      if (m_poisson) delete m_poisson;
+   }
 
    virtual void define( const double                      larmor,
                         const double                      debye,
@@ -123,6 +126,7 @@ public:
                                             const LevelData<FArrayBox>&  ion_density) const;
 
    virtual void updateImplicitPotential( LevelData<FArrayBox>&             phi,
+                                         const double                      larmor,
                                          const PS::KineticSpeciesPtrVect&  kinetic_species,
                                          const Vector<Real>&               scalar_data,
                                          LevelData<FArrayBox>&             divJperp,

@@ -63,7 +63,8 @@ class CLSInterface
 
       virtual void assemblePrecondMatrix( void*,
                                           const KineticSpecies&,
-                                          const GlobalDOFKineticSpecies& ) { }
+                                          const GlobalDOFKineticSpecies&,
+                                          const Real ) { }
 
       virtual void defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
                                   std::vector<DOFList>&,
@@ -79,6 +80,7 @@ class CLSInterface
       virtual void updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
                                   const KineticSpecies&,
                                   const GlobalDOFKineticSpecies&,
+                                  const Real,
                                   const Real,
                                   const bool,
                                   const int ) { }

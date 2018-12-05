@@ -23,15 +23,15 @@ public:
 
    /// Constructor with initialization.
 
-   RosenbluthPotentials( LevelData<FArrayBox>&      phi_one,
-                         LevelData<FArrayBox>&       phi_two,
-                         const LevelData<FArrayBox>& rhs,
-                         const PhaseGeom&            phase_geom,
-                         const Real                  mass,
-                         const Real                  pcg_tol,
-                         const Real                  pcg_maxiter,
-                         const int                   mult_num,   
-                         const bool                  verbosity );
+   RosenbluthPotentials( LevelData<FArrayBox>&            phi_one,
+                         LevelData<FArrayBox>&            phi_two,
+                         const LevelData<FArrayBox>&      rhs,
+                         const RefCountedPtr<PhaseGeom>&  phase_geom,
+                         const Real                       mass,
+                         const Real                       pcg_tol,
+                         const Real                       pcg_maxiter,
+                         const int                        mult_num,   
+                         const bool                       verbosity );
 
    /// Destructor.
    /**
@@ -96,7 +96,7 @@ private:
    bool m_verbosity;
    ParmParse m_ppcls;
 
-   const PhaseGeom& m_phase_geom;
+   const RefCountedPtr<PhaseGeom>& m_phase_geom;
    Real m_mass;
    Real m_pcg_tol;
    Real m_pcg_maxiter;

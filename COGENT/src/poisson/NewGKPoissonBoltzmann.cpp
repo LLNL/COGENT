@@ -37,17 +37,16 @@ NewGKPoissonBoltzmann::NewGKPoissonBoltzmann( ParmParse&                  a_pp,
 
    // Create a new geometry incorporating only the core and build a GKPoissonBoltzmann solver on it
 
-   const SingleNullCoordSys& coord_sys = (SingleNullCoordSys&)( *(a_geom.getCoordSys()) );
-   
    const string pp_geom_prefix = a_geom.getParmParsePrefix();
    const string pp_sn_geom_prefix = pp_geom_prefix + ".singlenull";
    ParmParse pp_sn_geom( pp_sn_geom_prefix.c_str() );
 
    DisjointBoxLayout dbl_core;
-   m_core_coord_sys = new SNCoreCoordSys( pp_sn_geom,
-                                          (SingleNullCoordSys&)coord_sys,
-                                          a_geom.grids(),
-                                          dbl_core );
+   MagCoordSys* const mag_coord_ptr = (a_geom.getCoordSys()).getRefToThePointer();
+   m_core_coord_sys = RefCountedPtr<MagCoordSys>(new SNCoreCoordSys( pp_sn_geom,
+                                                                     (SingleNullCoordSys&)(*mag_coord_ptr),
+                                                                     a_geom.grids(),
+                                                                     dbl_core ));
 
    ParmParse pp_geom( pp_geom_prefix.c_str() );
    m_core_geometry = new MagGeom(pp_geom, m_core_coord_sys, dbl_core, a_geom.ghosts());
@@ -67,7 +66,6 @@ NewGKPoissonBoltzmann::~NewGKPoissonBoltzmann()
    delete m_gkpb_solver;
 
    if (m_core_geometry) delete m_core_geometry;
-   if (m_core_coord_sys) delete m_core_coord_sys;
    if (m_Zni_outer_plate) delete [] m_Zni_outer_plate;
    if (m_Zni_inner_plate) delete [] m_Zni_inner_plate;
    if (m_phi_outer_plate) delete [] m_phi_outer_plate;

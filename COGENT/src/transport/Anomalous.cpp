@@ -26,10 +26,10 @@ Anomalous::Anomalous( const string& a_species_name, ParmParse& a_pptpm, const in
       DN0(0),
       model_only(false),
       const_coeff(true),
-      m_simple_diffusion(false),
       moment_op( MomentOp::instance() ),
       m_first_step(true),
       m_arbitrary_grid(true),
+      m_simple_diffusion(false),
       verbosity(0)
 {
 
@@ -135,7 +135,7 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
    
       //get NJinverse and B-field data for dealigned grid calculations
       CFG::LevelData<CFG::FluxBox> pointwiseNJinv_cfg(mag_geom.grids(), CFG_DIM*CFG_DIM, cfg_ghostVect);
-      mag_geom.getPointwiseNJinverse(pointwiseNJinv_cfg);
+      mag_geom.getPointwiseNJInverse(pointwiseNJinv_cfg);
       LevelData<FluxBox> inj_pointwiseNJinv;
       phase_geom.injectConfigurationToPhase(pointwiseNJinv_cfg, inj_pointwiseNJinv);
       const CFG::LevelData<CFG::FluxBox>& bunit_cfg = mag_geom.getFCBFieldDir();
@@ -317,7 +317,7 @@ void Anomalous::getFaceCenteredLameCoefficients( LevelData<FluxBox>&       a_lam
 
    // get face centered N and dX/dq components on this patch
    const CFG::MagBlockCoordSys& mag_block_coord_sys = a_phase_geom.getMagBlockCoordSys(a_dbl[dit]);
-   const CFG::RealVect& real_dx = mag_block_coord_sys.dx();
+   //   const CFG::RealVect& real_dx = mag_block_coord_sys.dx();
    Box phase_box(a_dbl[dit]);
    CFG::Box box_config;
    a_phase_geom.projectPhaseToConfiguration(phase_box, box_config);
@@ -349,7 +349,7 @@ void Anomalous::getCellCenteredLameCoefficients( FArrayBox&        a_lame_cells,
 {
    // get cell centered N and dX/dq components
    const CFG::MagBlockCoordSys& mag_block_coord_sys = a_phase_geom.getMagBlockCoordSys(a_dbl);
-   const CFG::RealVect& real_dx = mag_block_coord_sys.dx();
+   //   const CFG::RealVect& real_dx = mag_block_coord_sys.dx();
    Box phase_box(a_dbl);
    CFG::Box box_config;
    a_phase_geom.projectPhaseToConfiguration(phase_box, box_config);
@@ -503,7 +503,7 @@ void Anomalous::computePrecondCoefficient( CFG::LevelData<CFG::FluxBox>&        
 {
    
    CFG::LevelData<CFG::FluxBox> NJinverse(a_mag_geom.grids(), CFG_DIM*CFG_DIM, CFG::IntVect::Unit);
-   a_mag_geom.getPointwiseNJinverse(NJinverse);
+   a_mag_geom.getPointwiseNJInverse(NJinverse);
    
    CFG::LevelData<CFG::FluxBox> N(a_mag_geom.grids(), CFG_DIM*CFG_DIM, CFG::IntVect::Unit);
    a_mag_geom.getPointwiseN(N);

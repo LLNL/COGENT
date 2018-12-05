@@ -63,3 +63,84 @@ c
 
       return
       end
+
+      subroutine set_canonical_maxwell(
+     &     CHF_FRA[f],
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[coords],
+     &     CHF_CONST_FRA[toroidal_coords],
+     &     CHF_CONST_FRA1[B_inj],
+     &     CHF_CONST_FRA1[psi_inj],
+     &     CHF_CONST_REAL[RBtor],
+     &     CHF_CONST_REAL[psi_p],
+     &     CHF_CONST_REAL[dpsidr_p],
+     &     CHF_CONST_REAL[n_val],
+     &     CHF_CONST_REAL[n_kappa],
+     &     CHF_CONST_REAL[n_width],
+     &     CHF_CONST_REAL[T_val],
+     &     CHF_CONST_REAL[T_kappa],
+     &     CHF_CONST_REAL[T_width],
+     &     CHF_CONST_REALVECT[mode_coeff],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_REAL[charge],
+     &     CHF_CONST_REAL[larmor]
+     &     )
+c     Sets distribution function for 5D canonical Maxwellian
+c     with (m,n) [poloilda, toridal] perturbations
+
+      integer CHF_DDECL[i;j;k;l;m],n
+      integer ivp,imu
+      REAL_T den, temp, B, psi
+      REAL_T psi_inv, vpar, mu, phi, theta
+      REAL_T eparnorm, munorm
+      REAL_T factor, norm, val, arg, pi
+
+      pi = four*datan(one)
+
+      norm      = larmor * mass / charge
+      factor    = dsqrt(PI*(two/mass)**3)
+
+      ivp = CHF_NCOMP[coords]-2
+      imu = CHF_NCOMP[coords]-1
+
+      do n=0,CHF_NCOMP[f]-1
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+         B      = B_inj(i,j,CHF_LBOUND[B_inj;2],CHF_LBOUND[B_inj;3])
+         psi    = psi_inj(i,j,CHF_LBOUND[psi_inj;2],CHF_LBOUND[psi_inj;3])
+#else
+         B      = B_inj(i,j,k,CHF_LBOUND[B_inj;3],CHF_LBOUND[B_inj;4])
+         psi    = psi_inj(i,j,k,CHF_LBOUND[psi_inj;3],CHF_LBOUND[psi_inj;4])
+
+         phi    = toroidal_coords(i,j,k,CHF_LBOUND[toroidal_coords;3],CHF_LBOUND[toroidal_coords;4],1)
+         theta  = toroidal_coords(i,j,k,CHF_LBOUND[toroidal_coords;3],CHF_LBOUND[toroidal_coords;4],2)
+#endif
+
+         vpar     = coords(CHF_IX[i;j;k;l;m],ivp)
+         mu       = coords(CHF_IX[i;j;k;l;m],imu)
+
+         psi_inv = psi + norm*RBtor/B*vpar  
+          
+         den   = n_val * dexp(-n_kappa * n_width * dtanh((psi_inv-psi_p)/n_width))  
+         temp  = T_val * dexp(-T_kappa * T_width * dtanh((psi_inv-psi_p)/T_width))  
+
+         eparnorm = half * mass * vpar**2 / temp
+         munorm   = half * B * mu / temp
+         val      = dexp( -( eparnorm + munorm ) )
+
+         val      = val * den / ( factor * dsqrt( temp) * temp )
+
+c        Add perturbations
+         
+         arg      = mode_coeff(1)*phi + mode_coeff(2)*theta
+         val      = val * (one + mode_coeff(0)*cos(arg))
+
+         f(CHF_IX[i;j;k;l;m],n) = val
+
+      CHF_ENDDO
+      enddo
+
+      return
+      end
+

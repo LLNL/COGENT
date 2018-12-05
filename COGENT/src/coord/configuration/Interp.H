@@ -13,7 +13,7 @@ class Interp
     Interp( const FArrayBox& coords,
             const FArrayBox& data );
 
-    ~Interp();
+    virtual ~Interp();
 
     virtual double interpolate(const int       component,
                                const int       mode,

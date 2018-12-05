@@ -53,6 +53,10 @@ MBSolver::MBSolver( const MultiBlockLevelGeom&      a_geom,
       int spaceOrder = m_discretization_order;
 
       m_mblex_potential_Ptr->define(&a_geom, num_ghosts_filled, spaceOrder);
+      m_mblex_defined_locally = true;
+   }
+   else {
+      m_mblex_defined_locally = false;
    }
 }
       
@@ -60,7 +64,7 @@ MBSolver::MBSolver( const MultiBlockLevelGeom&      a_geom,
 
 MBSolver::~MBSolver()
 {
-   if (m_mblex_potential_Ptr) delete m_mblex_potential_Ptr;
+   if (m_mblex_defined_locally) delete m_mblex_potential_Ptr;
 }
 
 
@@ -384,10 +388,18 @@ MBSolver::getUnstructuredCouplings( int                                 a_radius
 
          for (IVSIterator it(dst_ivs); it.ok(); ++it) {
             IntVect iv = it();
+            
             Box stencil_box = stencil_offsets + iv;
             Box stencil_box_valid = stencil_box & domain_box;
 
             this_unstructured_coupling(iv) = getUnstructuredCouplingsForCell( this_coupling, stencil_box_valid, iv );
+         }
+      }
+
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         Vector< BaseFab<IntVectSet>* >& this_coupling = all_couplings[dit];
+         for (int i=0; i<this_coupling.size(); ++i) {
+            delete this_coupling[i];
          }
       }
    }

@@ -78,21 +78,21 @@ protected:
     * <...> denotes the shell-average
     */
 
-   void computeRadialFluxDivergence(const PhaseGeom&                geometry,
-                                    LevelData<FluxBox>&             flux,
-                                    double                          mass,
-                                    double                          charge,
-                                    double&                         lo_value,
-                                    double&                         hi_value,
-                                    CFG::LevelData<CFG::FArrayBox>& radial_flux_divergence_average) const;
+   void computeRadialFluxDivergence(const RefCountedPtr<PhaseGeom>&  geometry,
+                                    LevelData<FluxBox>&              flux,
+                                    double                           mass,
+                                    double                           charge,
+                                    double&                          lo_value,
+                                    double&                          hi_value,
+                                    CFG::LevelData<CFG::FArrayBox>&  radial_flux_divergence_average) const;
 
-   void computeRadialNormalFluxDivergence(const PhaseGeom&                geometry,
-                                          LevelData<FluxBox>&             flux,
-                                          double                          mass,
-                                          double                          charge,
-                                          double&                         lo_value,
-                                          double&                         hi_value,
-                                          CFG::LevelData<CFG::FArrayBox>& radial_flux_divergence_average) const;
+   void computeRadialNormalFluxDivergence(const RefCountedPtr<PhaseGeom>&  geometry,
+                                          LevelData<FluxBox>&              flux,
+                                          double                           mass,
+                                          double                           charge,
+                                          double&                          lo_value,
+                                          double&                          hi_value,
+                                          CFG::LevelData<CFG::FArrayBox>&  radial_flux_divergence_average) const;
 
    bool m_self_consistent_bcs_only;
 

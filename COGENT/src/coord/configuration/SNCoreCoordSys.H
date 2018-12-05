@@ -127,6 +127,8 @@ protected:
    int m_sector_block[NUM_SNCORE_BLOCKS];
 
    SNCoreEllipticOpBC m_divergence_cleaning_bc;
+
+   Vector<MagBlockCoordSys *> m_coord_vec;
 };
 
 

@@ -15,7 +15,7 @@ class BicubicInterp
                    const FArrayBox& coords,
                    const FArrayBox& data );
 
-    ~BicubicInterp();
+    virtual ~BicubicInterp();
 
     virtual double interpolate(const int       component,
                                const int       mode,

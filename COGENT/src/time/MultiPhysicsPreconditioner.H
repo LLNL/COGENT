@@ -10,8 +10,6 @@
 
 #include "NamespaceHeader.H"
 
-typedef std::vector<int> DOFList;
-
 template <class T, class Ops = void>
 class MultiPhysicsPreconditioner : public Preconditioner<T,Ops>
 {
@@ -22,6 +20,7 @@ class MultiPhysicsPreconditioner : public Preconditioner<T,Ops>
       m_is_defined = false; 
       m_im = false;
       m_ops = NULL;
+      m_shift = -DBL_MAX;
       m_dof_list.clear();
       m_block_pc.clear(); 
     }
@@ -33,23 +32,9 @@ class MultiPhysicsPreconditioner : public Preconditioner<T,Ops>
                         const std::string&,
                         bool );
 
-    virtual void update(const T&, const Real a_a = 0.0);
+    virtual void update(const T&, const Real, const Real a_a = 0.0);
     virtual void apply(T&, const T&);
     virtual bool isDefined() const { return m_is_defined; }
-
-    inline virtual void setShift(Real a_a) 
-    {
-      for (int i=0; i<m_block_pc.size(); i++) {
-        m_block_pc[i]->setShift(a_a);
-      }
-    }
-
-    inline virtual void setTime(Real a_a)
-    {
-      for (int i=0; i<m_block_pc.size(); i++) {
-        m_block_pc[i]->setTime(a_a);
-      }
-    }
 
     inline virtual void setBaseSolution(const T& a_x)
     {
@@ -92,6 +77,8 @@ class MultiPhysicsPreconditioner : public Preconditioner<T,Ops>
 
     bool m_is_defined;
     bool m_im;
+    Real m_shift;
+    Real m_time;
 
     std::vector<DOFList> m_dof_list;
     std::vector<Preconditioner<T,Ops>*> m_block_pc;
@@ -159,11 +146,16 @@ void MultiPhysicsPreconditioner<T,Ops>::define( const T&            a_x,
 
 template <class T, class Ops>
 void MultiPhysicsPreconditioner<T,Ops>::update( const T&    a_x,
+                                                const Real  a_t,
                                                 const Real  a_a )
 {
   CH_assert(isDefined());
+  if (m_im) CH_assert(a_a > 0);
 
-  m_ops->updateMultiPhysicsPC(m_block_pc, a_x, a_a, m_im);
+  m_time = a_t;
+  m_shift = a_a;
+
+  m_ops->updateMultiPhysicsPC(m_block_pc, a_x, a_t, a_a, m_im);
 
   return;
 }
@@ -174,18 +166,62 @@ void MultiPhysicsPreconditioner<T,Ops>::apply(T&        a_x,
 {
   CH_assert(isDefined());
 
-  a_x = a_b; /* default: identity matrix as preconditioner */
+  /* default: identity matrix as preconditioner */
+  a_x = a_b; 
 
-  T z(a_x); /* work vector */
-  for (int i=0; i<m_block_pc.size(); i++) {
+  if (m_im) {
 
-    Preconditioner<T,Ops> *pc(m_block_pc[i]);
-    const DOFList& dof_list(m_dof_list[i]);
+    CH_assert(m_shift > 0);
 
-    z.zero();
-    pc->apply(z, a_b);
+    /* On the RHS, apply the block preconditioners
+     * in a general way (no assumptions of overlap)*/
 
-    a_x.copy(z, dof_list);
+    T z(a_x); /* work vector */
+    for (int i=0; i<m_block_pc.size(); i++) {
+  
+      Preconditioner<T,Ops> *pc(m_block_pc[i]);
+      //      const DOFList& dof_list(m_dof_list[i]);
+  
+      if (i == 0) {
+
+        a_x = a_b;
+        a_x.scale(1.0/m_shift);
+
+        z = a_b;
+        z.scale(1.0/m_shift);
+        m_ops->solveSolutionPC(a_x, z);
+
+        pc->apply(a_x, a_b);
+
+      } else {
+
+        z = a_x;
+        m_ops->solutionPC(z, m_time, a_x);
+        z.scale(m_shift);
+
+        pc->apply(a_x, z);
+
+      }
+  
+    }
+
+  } else {
+
+    /* On the LHS, assume nontrivial solution 
+     * operators are nonoverlapping */
+
+    T z(a_x);
+    for (int i=0; i<m_block_pc.size(); i++) {
+      
+      Preconditioner<T,Ops> *pc(m_block_pc[i]);
+      const DOFList& dof_list(m_dof_list[i]);
+      
+      z = a_b;
+      pc->apply(z, a_b);
+      
+      a_x.copy(z, dof_list);
+    }
+
   }
 
   return;

@@ -77,7 +77,7 @@ Poisson::computeCoefficients(LevelData<FluxBox>& a_coefficients)
    m_geometry.getPointwiseN(N);
 
    LevelData<FluxBox> NJinverse(grids, SpaceDim*SpaceDim, grown_ghosts);
-   m_geometry.getPointwiseNJinverse(NJinverse);
+   m_geometry.getPointwiseNJInverse(NJinverse);
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
      FluxBox& this_coef = grown_coefficients[dit];

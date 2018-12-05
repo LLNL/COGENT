@@ -16,7 +16,6 @@ SlabBlockCoordSys::SlabBlockCoordSys( ParmParse&               a_parm_parse,
                                       const int                a_num_blocks,
                                       const int                a_block_separation)
    : MagBlockCoordSys(a_parm_parse),
-     m_is_field_aligned(false),
      m_block(a_block),
      m_num_blocks(a_num_blocks)
 {
@@ -27,7 +26,8 @@ SlabBlockCoordSys::SlabBlockCoordSys( ParmParse&               a_parm_parse,
    // Compute the mesh size in computational coordinates
    // for slab geometry all computational coordinates run from 0 to 2 pi
    // however, for num_blocks>1 the block-normal mapped coordinate goes
-   // from 2pi/num_blocks * m_block to 2pi/num_blocks * (m_block + 1)
+   // from a_block*a_block_seprattion + 2pi/num_blocks * m_block
+   // to a_block*a_block_seprattion + 2pi/num_blocks * (m_block + 1)
    
 #if CFG_DIM == 3
    m_mb_dir = TOROIDAL_DIR;
@@ -86,7 +86,7 @@ RealVect SlabBlockCoordSys::realCoord( const RealVect& a_xi ) const
    x /= m_mapped_block_size;
  
 #if CFG_DIM ==3
-   if (m_is_field_aligned) {
+   if (m_field_aligned) {
       double pitch = getPitch(x);
       x[POLOIDAL_DIR] += (x[m_mb_dir] - m_mb_center) * pitch;
    }
@@ -108,7 +108,7 @@ RealVect SlabBlockCoordSys::mappedCoord( const RealVect& a_x ) const
    xi[m_mb_dir] += m_separation * m_block;
 
 #if CFG_DIM ==3
-   if (m_is_field_aligned) {
+   if (m_field_aligned) {
       //Because pitch is constant along the field-line
       double pitch = getPitch(a_x);
       double shift_phys = (a_x[m_mb_dir] - m_mb_center) * pitch;
@@ -135,7 +135,7 @@ Real SlabBlockCoordSys::dXdXi( const RealVect& a_Xi,
   }
 
 #if CFG_DIM ==3
-   if (m_is_field_aligned) {
+   if (m_field_aligned) {
 
       RealVect X = realCoord(a_Xi);
 
@@ -341,9 +341,6 @@ void SlabBlockCoordSys::parseParameters(ParmParse& a_parm_parse)
    a_parm_parse.query("Bz_inner", m_BzInner);
    a_parm_parse.query("Bz_outer", m_BzOuter);
    
-   //Is the coordinate system field aligned
-   a_parm_parse.query("field_aligned", m_is_field_aligned);
-   
 }
 void SlabBlockCoordSys::printParameters()
 {
@@ -362,7 +359,6 @@ void SlabBlockCoordSys::printParameters()
       cout << "By_inner = " << m_ByInner << ", By_outer = " << m_ByOuter << endl;
       cout << "Bz_inner = " << m_BzInner << ", Bz_outer = " << m_BzOuter << endl;
 
-      cout << "Field aligned = "<< m_is_field_aligned << endl;
    }
 }
 

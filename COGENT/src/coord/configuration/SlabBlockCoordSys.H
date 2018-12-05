@@ -5,7 +5,7 @@
 
 #include "NamespaceHeader.H"
 
-/// Slab et al. magnetic geometry class
+/// Slab magnetic geometry class
 /**
  * Implements an analytic slab model, rectangular mesh, field in y and z directions
  * with optional gradient in x
@@ -172,7 +172,6 @@ class SlabBlockCoordSys
       double m_BzInner;
       double m_BzOuter;
 
-      bool m_is_field_aligned;
       int m_block;
       int m_num_blocks;
       int m_mb_dir;

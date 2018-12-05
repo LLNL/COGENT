@@ -183,7 +183,7 @@ class EvalOpMatrix
         std::cout << "  Assembling preconditioning matrix for implicit part of RHS (IMEX) (NDOF = " 
                   << m_precon_matrix_imex.nRows() << ").\n";
       }
-      m_ops->assemblePCImEx(true, (void*)&m_precon_matrix_imex, a_X, 0.);
+      m_ops->assemblePCImEx(true, (void*)&m_precon_matrix_imex, a_X, a_t, 0.);
       m_precon_matrix_imex.writeToFile(m_fname_pc_imex, op_flag);
     }
 

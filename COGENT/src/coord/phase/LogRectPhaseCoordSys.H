@@ -26,10 +26,10 @@ public:
     */
    LogRectPhaseCoordSys();
 
-   LogRectPhaseCoordSys( ParmParse&                   pp,
-                        const CFG::LogRectCoordSys&   mag_coords,
-                        const VEL::VelCoordSys&       vel_coords,
-                        const Vector<ProblemDomain>&  domains );
+   LogRectPhaseCoordSys( ParmParse&                                  pp,
+                         const RefCountedPtr<CFG::LogRectCoordSys>&  mag_coords,
+                         const RefCountedPtr<VEL::VelCoordSys>&      vel_coords,
+                         const Vector<ProblemDomain>&                domains );
 
    ///
    /** Destructor.
@@ -61,8 +61,6 @@ public:
 
 private:
   
-   const CFG::LogRectCoordSys& m_config_coords;
-
    void getDecompositionParams( ParmParse& pp );
 
    IntVect m_decomposition;

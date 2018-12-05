@@ -114,6 +114,7 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
       m_integrator->define( a_pp, m_ti_method, m_serialized_vector, BASE_DT );
       m_gk_ops = &( m_integrator->getOperators() );
    }
+   giveSpeciesTheirGyroaverageOps();
    
    if ( m_using_electrons && m_gk_ops->usingBoltzmannElectrons() ) {
       MayDay::Error( "GKSystem::createSpecies():  Electrons input as both kinetic and Boltzmann" );
@@ -139,12 +140,13 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
 
 
 void
-GKSystem::initialize( const int a_cur_step )
+GKSystem::initialize( const int     a_cur_step,
+                      const double  a_cur_time )
 {
    if ( a_cur_step == 0 ) {
       // If this is the first step, then set the initial conditions for the
       // full system
-      m_gk_ops->initializeState( m_state_comp, 0.0 );
+      m_gk_ops->initializeState( m_state_comp, a_cur_step, a_cur_time );
    }
    else if ( m_gk_ops->fixedEField() ) {
       // If this is a restart and the fixed_efield option is true, just
@@ -152,7 +154,7 @@ GKSystem::initialize( const int a_cur_step )
       // option is false, the potential will be set in the below call
       // to m_gk_ops->initialize(), which will compute both the potential
       // and associated field.
-      m_gk_ops->initializePotential( 0.0 );
+      m_gk_ops->initializePotential( a_cur_time );
    }
 
    // Initialize the physical state variables
@@ -164,21 +166,17 @@ GKSystem::initialize( const int a_cur_step )
    //     or (if restarting) m_gk_ops->initializePotential().
    // b.  If the fixed_efield option is false, then both the potential and
    //     associated field are computed.
-   m_gk_ops->initializeElectricField( m_state_phys, a_cur_step );
+   m_gk_ops->initializeElectricField( m_state_phys, a_cur_step, a_cur_time );
 }
 
 
 
 GKSystem::~GKSystem()
 {
-   delete m_phase_geom;
-   delete m_phase_grid;
-   delete m_phase_coords;
-   delete m_velocity_coords;
-   delete m_mag_geom;
-   delete m_mag_geom_coords;
-   delete m_units;
    delete m_integrator;
+
+   delete m_units;
+
 #ifdef with_petsc
    if (!m_use_native_time_integrator) {
       delete m_gk_ops;
@@ -243,7 +241,7 @@ void GKSystem::createConfigurationSpace()
        + string(CFG::SingleNullCoordSys::pp_name);
     ParmParse pp_geom( prefix.c_str() );
 
-    m_mag_geom_coords = new CFG::SingleNullCoordSys(pp_grid, pp_geom);
+    m_mag_geom_coords = RefCountedPtr<CFG::MagCoordSys>(new CFG::SingleNullCoordSys(pp_grid, pp_geom));
   }
   else if ( m_mag_geom_type == "SNCore"  ) {
 
@@ -253,22 +251,22 @@ void GKSystem::createConfigurationSpace()
        + string(CFG::SNCoreCoordSys::pp_name);
     ParmParse pp_geom( prefix.c_str() );
 
-    m_mag_geom_coords = new CFG::SNCoreCoordSys(pp_grid, pp_geom);
+    m_mag_geom_coords = RefCountedPtr<CFG::MagCoordSys>(new CFG::SNCoreCoordSys(pp_grid, pp_geom));
   }
   else if (   m_mag_geom_type == "miller"
            || m_mag_geom_type == "slab"
-           || m_mag_geom_type == "cylindrical" ) {
+           || m_mag_geom_type == "cylindrical"
+           || m_mag_geom_type == "toroidal")   {
      
     string prefix = mag_geom_prefix + string(".") + m_mag_geom_type;
      
     ParmParse pp( prefix.c_str() );
 
-    m_mag_geom_coords
-      = new CFG::LogRectCoordSys(pp,
-                                 m_mag_geom_type,
-                                 m_num_cells,
-                                 m_is_periodic,
-                                 m_configuration_decomposition);
+    m_mag_geom_coords = RefCountedPtr<CFG::MagCoordSys>(new CFG::LogRectCoordSys(pp,
+                                                                                 m_mag_geom_type,
+                                                                                 m_num_cells,
+                                                                                 m_is_periodic,
+                                                                                 m_configuration_decomposition));
   }
  
   // Construct the phase space DisjointBoxLayout
@@ -288,7 +286,7 @@ void GKSystem::createConfigurationSpace()
     if (m_ghostVect[n] > ghosts) ghosts = m_ghostVect[n];
   }
 
-  m_mag_geom = new CFG::MagGeom(pp_mag_geom, m_mag_geom_coords, grids, ghosts);
+  m_mag_geom = RefCountedPtr<CFG::MagGeom>(new CFG::MagGeom(pp_mag_geom, m_mag_geom_coords, grids, ghosts));
 
   if (procID()==0) cout << "Done constructing magnetic geometry" << endl;
 
@@ -308,7 +306,7 @@ GKSystem::getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids 
   for (int block=0; block<m_mag_geom_coords->numBlocks(); ++block) {
 
     const CFG::MagBlockCoordSys* mag_block_coords
-      = (CFG::MagBlockCoordSys *)m_mag_geom_coords->getCoordSys(block);
+       = (CFG::MagBlockCoordSys *)(m_mag_geom_coords->getCoordSys(block));
 
     const CFG::ProblemDomain& domain = mag_block_coords->domain();
     const CFG::Box& domain_box = domain.domainBox();
@@ -367,7 +365,7 @@ GKSystem::getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids 
   CFG::ProblemDomain prob_domain;
 
   if (   m_mag_geom_type == "miller" || m_mag_geom_type == "slab"
-      || m_mag_geom_type == "cylindrical" ) {
+      || m_mag_geom_type == "cylindrical" || m_mag_geom_type == "toroidal") {
  
      CFG::Box bounding_box;
      for (int n=0; n<boxes.size(); n++) {
@@ -437,8 +435,8 @@ GKSystem::createVelocitySpace()
 
    string prefix = string("gksystem.") + string(VEL::VelCoordSys::pp_name);
    ParmParse pp_vel(prefix.c_str());
-
-   m_velocity_coords = new VEL::VelCoordSys(pp_vel, grids, domain, dv);
+   
+   m_velocity_coords = RefCountedPtr<VEL::VelCoordSys>(new VEL::VelCoordSys(pp_vel, grids, domain, dv));
 }
 
 
@@ -522,7 +520,7 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
     // Construct the phase space block domain from the configuration and velocity domains
 
     const CFG::MagBlockCoordSys* mag_block_coords
-      = (CFG::MagBlockCoordSys *)m_mag_geom_coords->getCoordSys(block);
+       = (CFG::MagBlockCoordSys *)(m_mag_geom_coords->getCoordSys(block));
 
     const CFG::ProblemDomain& cfg_domain = mag_block_coords->domain();
     const CFG::Box& cfg_box = cfg_domain.domainBox();
@@ -550,26 +548,26 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
   // Construct the multiblock phase space coordinate system
 
   if (   m_mag_geom_type == "miller" || m_mag_geom_type == "slab"
-      || m_mag_geom_type == "cylindrical" ) {
+      || m_mag_geom_type == "cylindrical" || m_mag_geom_type == "toroidal" ) {
      
-    m_phase_coords = new LogRectPhaseCoordSys(a_ppgksys,
-                                              *(CFG::LogRectCoordSys*)m_mag_geom_coords,
-                                              *m_velocity_coords,
-                                              m_domains );
+     m_phase_coords = RefCountedPtr<PhaseCoordSys>(new LogRectPhaseCoordSys(a_ppgksys,
+                                                                            m_mag_geom_coords,
+                                                                            m_velocity_coords,
+                                                                            m_domains ));
   }
   else if ( m_mag_geom_type == "SingleNull" ) {
     ParmParse pp("singlenull.decomp");
-    m_phase_coords = new SingleNullPhaseCoordSys( pp,
-                                                  *(CFG::SingleNullCoordSys*)m_mag_geom_coords,
-                                                  *m_velocity_coords,
-                                                  m_domains );
+    m_phase_coords = RefCountedPtr<PhaseCoordSys>(new SingleNullPhaseCoordSys( pp,
+                                                                               m_mag_geom_coords,
+                                                                               m_velocity_coords,
+                                                                               m_domains ));
   }
   else if ( m_mag_geom_type == "SNCore" ) {
     ParmParse pp("sncore.decomp");
-    m_phase_coords = new SNCorePhaseCoordSys( pp,
-                                              *(CFG::SNCoreCoordSys*)m_mag_geom_coords,
-                                              *m_velocity_coords,
-                                              m_domains );
+    m_phase_coords = RefCountedPtr<PhaseCoordSys>(new SNCorePhaseCoordSys( pp,
+                                                                           m_mag_geom_coords,
+                                                                           m_velocity_coords,
+                                                                           m_domains ));
   }
   else {
     MayDay::Error("Invalid magnetic geometry type");
@@ -582,7 +580,7 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
 
   // Construct the phase space grid
 
-  m_phase_grid = new PhaseGrid(m_domains, decomps, m_mag_geom_type);
+  m_phase_grid = RefCountedPtr<PhaseGrid>(new PhaseGrid(m_domains, decomps, m_mag_geom_type));
 
   if (m_verbosity>0) {
      m_phase_grid->print(m_ghostVect);
@@ -597,13 +595,11 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
   m_phase_geom =
      RefCountedPtr<PhaseGeom>( new PhaseGeom( a_ppgksys,
                                               m_phase_coords,
-                                              *m_phase_grid,
-                                              *m_mag_geom,
-                                              *m_velocity_coords,
+                                              m_phase_grid,
+                                              m_mag_geom,
+                                              m_velocity_coords,
                                               ghosts,
                                               m_units->larmorNumber() ) );
-
-  m_phase_geom.neverDelete();  // workaround for some problem with RefCountedPtr
 }
 
 inline
@@ -900,42 +896,40 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
          VEL::RealVect dv(m_dv);
          if (include_velocity_renormalization) dv[0] = m_dv[0] / sqrt(mass);
 
-         VEL::VelCoordSys* velocity_coords = new VEL::VelCoordSys(pp_vel, grids, domain, dv);
-
-        
+         RefCountedPtr<VEL::VelCoordSys> velocity_coords = RefCountedPtr<VEL::VelCoordSys>(new VEL::VelCoordSys(pp_vel, grids, domain, dv));
          
          // Construct the multiblock species-dependent phase space coordinate system
          
-         PhaseCoordSys* phase_coords;
+         RefCountedPtr<PhaseCoordSys> phase_coords;
          if (   m_mag_geom_type == "miller" || m_mag_geom_type == "slab"
-             || m_mag_geom_type == "cylindrical" ) {
+             || m_mag_geom_type == "cylindrical" || m_mag_geom_type == "toroidal") {
             ParmParse pp("gksystem");
-            phase_coords = new LogRectPhaseCoordSys(pp,
-                                                    *(CFG::LogRectCoordSys*)m_mag_geom_coords,
-                                                    *velocity_coords,
-                                                    m_domains );
+            phase_coords = RefCountedPtr<PhaseCoordSys>(new LogRectPhaseCoordSys(pp,
+                                                                                 m_mag_geom_coords,
+                                                                                 velocity_coords,
+                                                                                 m_domains ));
          }
          else if ( m_mag_geom_type == "SingleNull" ) {
             ParmParse pp("singlenull.decomp");
-            phase_coords = new SingleNullPhaseCoordSys(pp,
-                                                       *(CFG::SingleNullCoordSys*)m_mag_geom_coords,
-                                                       *velocity_coords,
-                                                       m_domains );
+            phase_coords = RefCountedPtr<PhaseCoordSys>(new SingleNullPhaseCoordSys(pp,
+                                                                                    m_mag_geom_coords,
+                                                                                    velocity_coords,
+                                                                                    m_domains ));
          }
          else if ( m_mag_geom_type == "SNCore" ) {
             ParmParse pp("sncore.decomp");
-            phase_coords = new SNCorePhaseCoordSys(pp,
-                                                   *(CFG::SNCoreCoordSys*)m_mag_geom_coords,
-                                                   *velocity_coords,
-                                                   m_domains );
-      
+            phase_coords = RefCountedPtr<PhaseCoordSys>(new SNCorePhaseCoordSys(pp,
+                                                                                m_mag_geom_coords,
+                                                                                velocity_coords,
+                                                                                m_domains ));
          }
          
          // Get the species geometry
-         PhaseGeom* species_geom = new PhaseGeom(*m_phase_geom, phase_coords, *velocity_coords, mass, charge);
+         RefCountedPtr<PhaseGeom> species_geom 
+            = RefCountedPtr<PhaseGeom>(new PhaseGeom(*m_phase_geom, phase_coords, velocity_coords, mass, charge));
 
          // Create the species object
-         KineticSpecies* kin_spec = new KineticSpecies( name, mass, charge, *species_geom );
+         KineticSpecies* kin_spec = new KineticSpecies( name, mass, charge, species_geom );
          kin_spec->distributionFunction().define(m_phase_grid->disjointBoxLayout(), 1, IntVect::Zero);
 
          // Add the new species to the solution vector
@@ -1410,7 +1404,7 @@ void GKSystem::writeCheckpointFile( HDF5Handle&  a_handle,
       write(a_handle,E_tilde_face_injected,"data",E_tilde_face_injected.ghostVect());
    }
    
-   if ( m_gk_ops->stateContainsPotential() ) {
+   if ( m_old_vorticity_model ) {
       LevelData<FArrayBox> phi_injected;
       m_phase_geom->injectConfigurationToPhase( m_gk_ops->getPhi(), phi_injected);
       a_handle.setGroup( "potential" );
@@ -1509,7 +1503,7 @@ void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
       m_gk_ops->setETilde( E_tilde_face_injected );
    }
    
-   if ( m_gk_ops->stateContainsPotential() ) {
+   if ( m_old_vorticity_model ) {
       a_handle.setGroup("potential");
       CFG::LevelData<CFG::FArrayBox> phi(m_mag_geom->grids(), 1, CFG::IntVect::Zero);
       LevelData<FArrayBox> phi_injected;
@@ -1618,6 +1612,7 @@ void printTimeStep( const Real& a_dt,
 
 void GKSystem::postTimeStep(int a_cur_step, Real a_dt, Real a_cur_time)
 {
+  CH_TIME("postTimeStep");
   m_gk_ops->postTimeStep( a_cur_step, a_dt, a_cur_time, m_state_comp );
   m_gk_ops->convertToPhysical( m_state_comp, m_state_phys );
   if (procID() == 0) {
@@ -1886,6 +1881,12 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
       m_positivity_post_processor.define( halo, n_iter, verbose );
    }
 
+   if (a_ppgksys.contains("old_vorticity_model")) {
+      a_ppgksys.get("old_vorticity_model", m_old_vorticity_model);
+   }
+   else {
+      m_old_vorticity_model = false;
+   }
 }
 
 
@@ -1895,6 +1896,25 @@ void GKSystem::postStageAdvance( KineticSpeciesPtrVect& a_soln )
    if (m_enforce_stage_positivity) {
       enforcePositivity( a_soln );
    }
+}
+
+void GKSystem::giveSpeciesTheirGyroaverageOps()
+{
+  std::map<std::string,GyroaverageOperator*>& 
+                gyroavg_ops = m_gk_ops->getGyroaverageOps();
+
+  KineticSpeciesPtrVect& species_comp(m_state_comp.dataKinetic());
+  KineticSpeciesPtrVect& species_phys(m_state_phys.dataKinetic());
+
+  for (int s(0); s < species_comp.size(); s++) {
+    KineticSpecies& sp_comp = *(species_comp[s]);
+    KineticSpecies& sp_phys = *(species_phys[s]);
+
+    sp_comp.gyroaverageOp(gyroavg_ops[sp_comp.name()]);
+    sp_phys.gyroaverageOp(gyroavg_ops[sp_phys.name()]);
+  }
+
+  return;
 }
 
 #include "NamespaceFooter.H"

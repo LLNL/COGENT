@@ -3,9 +3,11 @@
 #include "NamespaceHeader.H"
 
 
-PhaseCoordSys::PhaseCoordSys( const CFG::MagCoordSys&      a_mag_coords,
-                              const VEL::VelCoordSys&      a_vel_coords,
-                              const Vector<ProblemDomain>& a_domains )
+PhaseCoordSys::PhaseCoordSys( const RefCountedPtr<CFG::MagCoordSys>&  a_mag_coords,
+                              const RefCountedPtr<VEL::VelCoordSys>&  a_vel_coords,
+                              const Vector<ProblemDomain>&            a_domains )
+   : m_mag_coords(a_mag_coords),
+     m_vel_coords(a_vel_coords)
 {
   int num_blocks = a_domains.size();
 
@@ -14,9 +16,9 @@ PhaseCoordSys::PhaseCoordSys( const CFG::MagCoordSys&      a_mag_coords,
 
   for (int block=0; block<num_blocks; ++block) {
     const CFG::MagBlockCoordSys* mag_block_coords
-      = (CFG::MagBlockCoordSys *)a_mag_coords.getCoordSys(block);
+      = (CFG::MagBlockCoordSys *)a_mag_coords->getCoordSys(block);
     PhaseBlockCoordSys * phase_block_coords
-      = new PhaseBlockCoordSys( *mag_block_coords, a_vel_coords, a_domains[block]);
+      = new PhaseBlockCoordSys( *mag_block_coords, *m_vel_coords, a_domains[block]);
 
     m_coordSysVect[block] = (NewCoordSys *)phase_block_coords;
     m_mappingBlocks[block] = a_domains[block].domainBox();

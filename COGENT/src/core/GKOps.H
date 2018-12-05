@@ -2,6 +2,8 @@
 #define  _GKOPS_H_
 
 #include <vector>
+#include <map>
+#include <string>
 
 #include "GKVlasov.H"
 #include "GKCollisions.H"
@@ -13,6 +15,7 @@
 #include "CH_HDF5.H"
 #include "GKVector.H"
 #include "GKScalarOp.H"
+#include "GyroaverageOperatorFactory.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -72,12 +75,18 @@ public:
     *  @param[in] pp the input database.
     */
 
-   void initializeElectricField( const GKState& state, const int cur_step );
+   void initializeElectricField( const GKState& state, const int cur_step, const double cur_time );
 
    inline
-   void initializeState( GKState& a_state, const Real a_time )
+   void initializeState( GKState& a_state, const int a_cur_step, const Real a_time )
    {
-      m_initial_conditions->initializeSystem( a_state, m_phi, a_time );
+      if ( a_cur_step > 0 && m_old_vorticity_model ) {
+         // If restarting the old vorticity model, then the potential has already been set
+         m_initial_conditions->initializeSystem( a_state, a_time );
+      }
+      else {
+         m_initial_conditions->initializeSystem( a_state, m_phi, a_time );
+      }
       m_fluidOp->initialize( a_state.dataFluid(), a_time );
       enforceQuasiNeutrality( a_state.dataKinetic(), m_phi );
    }
@@ -255,6 +264,14 @@ public:
       preOpEval(m_Y,a_time);
    }
 
+   void preSolutionOpEval( const GKState&, const Real);
+   inline void preSolutionOpEval(const GKVector&  a_state,
+                                 const Real       a_time )
+   {
+      m_Y.copyFrom(a_state.data());
+      preSolutionOpEval(m_Y,a_time);
+   }
+
    void explicitOp( GKRHSData&, const Real, const GKState&);
    inline void explicitOp(GKVector&       a_rhs, 
                           const Real      a_time, 
@@ -336,13 +353,14 @@ public:
    void updateMultiPhysicsPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
                               const GKVector&,
                               const Real,
+                              const Real,
                               const bool );
 
    bool preallocatePCMatrixImEx (void*,const GKVector&);
-   void assemblePCImEx( const bool, void*, const GKVector&, const double );
+   void assemblePCImEx( const bool, void*, const GKVector&, const Real, const Real );
 
    bool preallocateSolPCMatrix (void*,const GKVector&);
-   void assembleSolPC( const bool, void*,const GKVector& );
+   void assembleSolPC( const bool, void*, const GKVector&, const Real );
    
    void solveSolutionPC( GKVector&, const GKVector&, int a_idx=-1);
    void solvePCImEx( GKVector&, const GKVector&, int a_idx=-1);
@@ -362,8 +380,6 @@ public:
    bool fixedEField() const { return m_fixed_efield; };
 
    inline bool usingAmpereLaw() const { return m_ampere_law; }
-
-   inline bool stateContainsPotential() const { return m_state_contains_potential; }
 
    double getLoRadialField(const GKState& state) const;
    void setLoRadialField(GKState& state, const double Er_lo) const;
@@ -523,6 +539,8 @@ public:
        */
    void readCheckpointFile( HDF5Handle& handle, const int& cur_step  );
 
+   bool stateIncludesPotential( const GKState& a_state ) const;
+
    //   inline bool isLinear() { return(m_collisions->isLinear()); }
    inline bool isLinear() { return false; }
 
@@ -537,6 +555,27 @@ public:
       cout << "    Scalars    : " << m_count_scalars    << "\n";
       cout << "    Neutrals   : " << m_count_neutrals   << "\n";
     }
+   }
+
+   inline void gyroaverage(CFG::LevelData<CFG::FArrayBox>& a_phi_bar,
+                           const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                           const std::string& a_species_name)
+   {
+     std::map<std::string, GyroaverageOperator*>::iterator it;
+     it = m_gyroavg_ops.find(a_species_name);
+     if ((it == m_gyroavg_ops.end()) || (it->second == NULL)) {
+       MayDay::Error("Error in GKOps::gyroaverage() - cannot find gyroaveraging operator specified species name.");
+     }
+     m_gyroavg_ops[a_species_name]->applyOp(a_phi_bar, a_phi);
+   }
+
+   inline const std::map<std::string,GyroaverageOperator*>& getGyroaverageOps() const
+   {
+     return m_gyroavg_ops;
+   }
+   inline std::map<std::string,GyroaverageOperator*>& getGyroaverageOps()
+   {
+     return m_gyroavg_ops;
    }
 
 private:
@@ -598,7 +637,6 @@ private:
                             const ScalarPtrVect&                 scalars,
                             const CFG::EField&                   E_field,
                             const opType                         op_type,
-                            const bool                           recompute_kinetic_terms,
                             const Real&                          time);
    
    void applyScalarOperator( GKRHSData&                           rhs,
@@ -664,7 +702,6 @@ private:
    Real m_dt;
    Real m_dt_scale;
    bool m_is_defined;
-   double m_saved_mshift;
    
    IntVect                        m_ghost_vect;
    const CFG::IntVect             m_cfg_nghosts;
@@ -689,7 +726,7 @@ private:
    GKState                        m_Y;
    GKRHSData                      m_rhs;
 
-   bool m_state_contains_potential;
+   bool m_state_includes_potential;
    bool m_trivial_solution_op;
 
    bool m_history;   // whether to write out histories
@@ -737,6 +774,9 @@ private:
    int m_count_neutrals;
 
    int m_verbosity;
+
+   /* gyroaverage operators */
+   std::map<std::string,GyroaverageOperator*> m_gyroavg_ops;
 };
 
 #include "NamespaceFooter.H"

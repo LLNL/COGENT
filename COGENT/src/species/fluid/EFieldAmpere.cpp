@@ -468,6 +468,7 @@ void EFieldAmpere::computePhiTilde( const PS::KineticSpeciesPtrVect&  a_kinetic_
 
 
 void EFieldAmpere::updateImplicitPotential(LevelData<FArrayBox>&             a_phi,
+                                           const double                      a_larmor,
                                            const PS::KineticSpeciesPtrVect&  a_kinetic_species,
                                            const Vector<Real>&               a_scalar_data,
                                            LevelData<FArrayBox>&             a_divJperp,
@@ -479,7 +480,7 @@ void EFieldAmpere::updateImplicitPotential(LevelData<FArrayBox>&             a_p
 
    setCoreBC( Er_lo, -Er_hi, a_bc );
 
-   EField::updateImplicitPotential(a_phi, a_kinetic_species, a_scalar_data, a_divJperp, a_bc, a_dt );
+   EField::updateImplicitPotential(a_phi, a_larmor, a_kinetic_species, a_scalar_data, a_divJperp, a_bc, a_dt );
 }
 
 

@@ -26,10 +26,10 @@ public:
     */
    SNCorePhaseCoordSys();
 
-   SNCorePhaseCoordSys( ParmParse&                   pp,
-                        const CFG::SNCoreCoordSys&   mag_coords,
-                        const VEL::VelCoordSys&      vel_coords,
-                        const Vector<ProblemDomain>& domains );
+   SNCorePhaseCoordSys( ParmParse&                                 pp,
+                        const RefCountedPtr<CFG::SNCoreCoordSys>&  mag_coords,
+                        const RefCountedPtr<VEL::VelCoordSys>&     vel_coords,
+                        const Vector<ProblemDomain>&               domains );
 
    ///
    /** Destructor.
@@ -63,7 +63,7 @@ public:
    void defineBoundaries2();
    void defineBoundaries3();
 
-   int blockType(int block) const {return ((CFG::SNCoreBlockCoordSys*)m_config_coords.getCoordSys(block))->blockType();}
+   int blockType(int block) const {return ((CFG::SNCoreBlockCoordSys*)m_mag_coords->getCoordSys(block))->blockType();}
 
    virtual std::string type() const { return "SNCore"; }
 
@@ -75,8 +75,6 @@ public:
 private:
 
    void getDecompositionParams( ParmParse& pp );
-
-   const CFG::SNCoreCoordSys& m_config_coords;
 
    IntVect m_decomp_mcore;
    IntVect m_decomp_lcore;

@@ -227,6 +227,8 @@ MBTridiagonalSolver::constructTridiagonalMatrix( LevelData<FArrayBox>&          
    for (DataIterator dit(grids); dit.ok(); ++dit) {
      const Box & box = grids[dit];
 
+     a_radial[dit].setVal(0.);
+
      double * radial_ldiag = a_radial[dit].dataPtr(0);
      double * radial_diag  = a_radial[dit].dataPtr(1);
      double * radial_udiag = a_radial[dit].dataPtr(2);
@@ -241,9 +243,11 @@ MBTridiagonalSolver::constructTridiagonalMatrix( LevelData<FArrayBox>&          
           stencil_values[jj] = structured_values[dit](iv,jj);
        }
 
-       radial_ldiag[diagonal_index] = stencil_values[0] + stencil_values[3] + stencil_values[6];
-       radial_diag[diagonal_index]  = stencil_values[1] + stencil_values[4] + stencil_values[7];
-       radial_udiag[diagonal_index] = stencil_values[2] + stencil_values[5] + stencil_values[8];
+       for (int i=0; i<=6*(3*SpaceDim-5); i+=3) {
+          radial_ldiag[diagonal_index] += stencil_values[i];
+          radial_diag[diagonal_index]  += stencil_values[i+1];
+          radial_udiag[diagonal_index] += stencil_values[i+2];
+       }
 
        diagonal_index++;
 
@@ -273,12 +277,13 @@ MBTridiagonalSolver::solveFluxSurfaceAverage( LevelData<FArrayBox>& a_data ) con
    const bool radially_periodic = domain.isPeriodic(RADIAL_DIR);
    const int n = domain_box.size(RADIAL_DIR);
 
-   int radial_dir = RADIAL_DIR;
-   int radial_lo = domain_box.smallEnd(radial_dir);
+   int radial_lo = domain_box.smallEnd(RADIAL_DIR);
 
-   int poloidal_dir = POLOIDAL_DIR;
-   int poloidal_lo = domain_box.smallEnd(poloidal_dir);
-
+   Box domain_box_fs_intersection = adjCellLo(domain_box, POLOIDAL_DIR, -1);
+#if CFG_DIM==3
+   domain_box_fs_intersection = adjCellLo(domain_box_fs_intersection, TOROIDAL_DIR, -1);   
+#endif   
+   
    const DisjointBoxLayout& fs_grids = m_flux_surface.grids();
    LevelData<FArrayBox> Pr(fs_grids, 3, IntVect::Zero);
    m_flux_surface.average(m_A_radial, Pr);
@@ -299,12 +304,12 @@ MBTridiagonalSolver::solveFluxSurfaceAverage( LevelData<FArrayBox>& a_data ) con
       for (int i=0; i<n; ++i) send_buffer[i] = 0.;
 
       for (dit.begin(); dit.ok(); ++dit) {
-         FArrayBox& this_fab = Pr[dit];
-         BoxIterator bit(fs_grids[dit]);
-         for (bit.begin(); bit.ok(); ++bit) {
-            IntVect iv = bit();
-            if (iv[poloidal_dir] == poloidal_lo) {
-               send_buffer[iv[radial_dir]-radial_lo] = this_fab(iv,comp);
+         Box overlap = fs_grids[dit] & domain_box_fs_intersection;
+         if ( overlap.ok() ) {
+            FArrayBox& this_fab = Pr[dit];
+            for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+               IntVect iv = bit();
+               send_buffer[iv[RADIAL_DIR]-radial_lo] = this_fab(iv,comp);
             }
          }
       }
@@ -321,12 +326,12 @@ MBTridiagonalSolver::solveFluxSurfaceAverage( LevelData<FArrayBox>& a_data ) con
    for (int i=0; i<n; ++i) send_buffer[i] = 0.;
 
    for (dit.begin(); dit.ok(); ++dit) {
-      FArrayBox& this_fab = a_data[dit];
-      BoxIterator bit(fs_grids[dit]);
-      for (bit.begin(); bit.ok(); ++bit) {
-         IntVect iv = bit();
-         if (iv[poloidal_dir] == poloidal_lo) {
-            send_buffer[iv[radial_dir]-radial_lo] = this_fab(iv);
+      Box overlap = fs_grids[dit] & domain_box_fs_intersection;
+      if ( overlap.ok() ) {
+         FArrayBox& this_fab = a_data[dit];
+         for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+            IntVect iv = bit();
+            send_buffer[iv[RADIAL_DIR]-radial_lo] = this_fab(iv);
          }
       }
    }
@@ -341,7 +346,7 @@ MBTridiagonalSolver::solveFluxSurfaceAverage( LevelData<FArrayBox>& a_data ) con
 
    if ( m_periodic_or_neumann ) {
 
-      // With Neumann radial boundary conditions, the resulting tridiagonal
+      // With periodic or Neumann radial boundary conditions, the resulting tridiagonal
       // matrix is singular, which is problematic for the direct solver.  We
       // therefore solve the system as a quadratic minimization problem
       // with a linear constraint, using a Lagrange multiplier.  The constraint
@@ -351,12 +356,12 @@ MBTridiagonalSolver::solveFluxSurfaceAverage( LevelData<FArrayBox>& a_data ) con
       const LevelData<FArrayBox>& fs_areas = m_flux_surface.areas();
 
       for (dit.begin(); dit.ok(); ++dit) {
-         const FArrayBox& this_fab = fs_areas[dit];
-         BoxIterator bit(fs_grids[dit]);
-         for (bit.begin(); bit.ok(); ++bit) {
-            IntVect iv = bit();
-            if (iv[poloidal_dir] == poloidal_lo) {
-               send_buffer[iv[radial_dir]-radial_lo] = this_fab(iv);
+         Box overlap = fs_grids[dit] & domain_box_fs_intersection;
+         if ( overlap.ok() ) {
+            const FArrayBox& this_fab = fs_areas[dit];
+            for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+               IntVect iv = bit();
+               send_buffer[iv[RADIAL_DIR]-radial_lo] = this_fab(iv);
             }
          }
       }
@@ -388,7 +393,7 @@ MBTridiagonalSolver::solveFluxSurfaceAverage( LevelData<FArrayBox>& a_data ) con
       BoxIterator bit(fs_grids[dit]);
       for (bit.begin(); bit.ok(); ++bit) {
          IntVect iv = bit();
-         this_fab(iv) = bx[iv[radial_dir]-radial_lo];
+         this_fab(iv) = bx[iv[RADIAL_DIR]-radial_lo];
       }
    }
 

@@ -39,6 +39,13 @@ void GKSystemIC::initializeSystem( GKState& a_state,
    initializeScalars( a_state.dataScalar(), a_time );
 }
 
+void GKSystemIC::initializeSystem( GKState& a_state,
+                                   const Real& a_time ) const
+{
+   initializeKineticSpecies( a_state.dataKinetic(), a_time );
+   initializeScalars( a_state.dataScalar(), a_time );
+}
+
 inline
 void GKSystemIC::initializeKineticSpecies( KineticSpeciesPtrVect& a_species,
                                            const Real& a_time ) const

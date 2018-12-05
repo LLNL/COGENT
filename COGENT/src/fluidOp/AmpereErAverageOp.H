@@ -54,7 +54,6 @@ class AmpereErAverageOp
                                           const PS::ScalarPtrVect&           scalars,
                                           const EField&                      E_field,
                                           const int                          component,
-                                          const bool                         recompute_kinetic_terms,
                                           const Real                         time) {;}
 
       virtual bool trivialSolutionOp() const {return true;};

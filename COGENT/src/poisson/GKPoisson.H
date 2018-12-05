@@ -119,10 +119,10 @@ public:
     */
    static const char* pp_name;
    
-   Real m_alpha;
-   Real m_dt_implicit;
-   std::string m_model;
    Real m_debye_number2;
+   Real m_dt_implicit;
+   Real m_alpha;
+   std::string m_model;
    
 protected:
 
@@ -152,7 +152,7 @@ protected:
    RefCountedPtr<GridFunction> m_charge_exchange_coeff;
    RefCountedPtr<GridFunction> m_parallel_conductivity;
 
-   MagFluxAlignedMBLEXCenter* m_mblx_ptr;
+   MultiBlockLevelExchangeCenter* m_mblx_ptr;
 
 private:
    int m_verbosity;

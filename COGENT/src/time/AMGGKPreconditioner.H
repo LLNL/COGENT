@@ -35,11 +35,11 @@ class AMGGKPreconditioner : public Preconditioner<T,Ops>
 
     void define(const T&, Ops&, const std::string&, const std::string&, bool);
 
-    inline void update(const T& a_X, const Real a_shift = 0.0)
+    inline void update(const T& a_X, const Real a_time, const Real a_shift = 0.0)
     {
       CH_assert(isDefined());
-      if (m_im) m_ops->assemblePCImEx(false,NULL,a_X,a_shift);
-      else      m_ops->assembleSolPC(false,NULL,a_X);
+      if (m_im) m_ops->assemblePCImEx(false, NULL, a_X, a_time, a_shift);
+      else      m_ops->assembleSolPC(false, NULL, a_X, a_time);
       return;
     }
 

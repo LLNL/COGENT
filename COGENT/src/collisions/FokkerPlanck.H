@@ -122,12 +122,14 @@ public:
                               const KineticSpecies&,
                               const GlobalDOFKineticSpecies&,
                               const Real,
+                              const Real,
                               const bool,
                               const int );
 
   void assemblePrecondMatrix( void*,
                               const KineticSpecies&,
-                              const GlobalDOFKineticSpecies& );
+                              const GlobalDOFKineticSpecies&,
+                              const Real );
 
   inline void preTimeStep  ( const KineticSpeciesPtrVect& a_soln_mapped, 
                              const int a_species, 
@@ -186,7 +188,7 @@ private:
 
    /// Computes the Rosenbluth potentials
    void evalRosenbluthPotentials( LevelData<FArrayBox>& phi,
-                                  const PhaseGeom& phase_geom,
+                                  const RefCountedPtr<PhaseGeom>& phase_geom,
                                   const LevelData<FArrayBox>& dfn,
                                   const double mass ) const;
 
@@ -242,7 +244,7 @@ private:
    void computePotentialsAndCoeffs( const KineticSpecies&,
                                     const LevelData<FArrayBox>&, 
                                     const DisjointBoxLayout&,
-                                    const PhaseGeom& );
+                                    const RefCountedPtr<PhaseGeom>& );
 
    void computeFokkerPlanckFlux( LevelData<FaceBox>&,
                                  LevelData<FaceBox>&,

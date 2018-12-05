@@ -227,7 +227,17 @@ void
 
       Vector<Real> getPointwiseNT(const RealVect& Xi) const;
    
-  
+      /**
+       * Fill argument with the metric quantity, which corresponds to
+       N*FaceArea in Chombo component indexing notation and to 
+       NT*FaceArea in COGENT component indexing notation. NB: for the case
+       of axisymmetry = true, the (1/R) metric modifications are not included,
+       which is in contrast to the result of Chombo's getN with locally modified
+       computeTransverseFaceMetric and incrementFaceMetricWithEdgeTerm functions.
+       See more details in .cpp file
+       */
+      void getPointwiseMetrics( FluxBox& N ) const;
+
       /**
        * Fill argument with 2 pi times the minor radius times the major radius
        *

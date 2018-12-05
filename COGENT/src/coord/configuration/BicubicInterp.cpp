@@ -3,6 +3,7 @@
 
 #include "NamespaceHeader.H"
 
+#if CFG_DIM == 2
 
 static double cubic( double f[4],
                      bool   derivative,
@@ -43,6 +44,7 @@ static double cubic( double f[4],
 
    return value;
 }
+#endif
 
 
 BicubicInterp::BicubicInterp( const ParmParse& a_parm_parse,

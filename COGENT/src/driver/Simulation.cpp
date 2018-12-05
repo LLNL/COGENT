@@ -161,7 +161,7 @@ Simulation<SYSTEM>::Simulation( ParmParse& a_pp )
    if ( ppsim.contains( "restart_file" ) ) {
       loadRestartFile( ppsim );
    }
-   m_system->initialize(m_cur_step);
+   m_system->initialize(m_cur_step, m_cur_time);
    m_system->printDiagnostics();
 
    if ( m_plot_interval>=0 ) {

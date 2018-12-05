@@ -21,12 +21,6 @@ simulation.checkpoint_prefix   = "chk"
 #simulation.restart_file = "chk3200.4d.hdf5"
 simulation.plot_interval       = 10
 simulation.plot_prefix         = "plt"
-<<<<<<< .mine
-simulation.histories = false
-simulation.1.history_field = "potential"
-simulation.1.history_indices = 4 4
-=======
->>>>>>> .r1441
 
 gksystem.ti_class = "rk"
 gksystem.ti_method = "4"
@@ -116,7 +110,6 @@ BC.neutrals_diffusion.radial_upper.type = "dirichlet"
 BC.neutrals_diffusion.poloidal_lower.type = "neumann"
 BC.neutrals_diffusion.poloidal_upper.type = "neumann"
 
-<<<<<<< .mine
 BC.neutrals.density.radial_lower.function = "neutrals_IC"
 BC.neutrals.density.radial_upper.function = "neutrals_IC"
 BC.neutrals.density.poloidal_lower.function = "neutrals_IC"
@@ -134,17 +127,6 @@ CLS.electron.conserve_momentum  = false
 CLS.electron.conserve_particle = true
 CLS.electron.ref_function = "maxwellian_electron_phase_func"
 CLS.electron.ref_temperature = "T0_grid_func"
-=======
-#BC.neutrals_diffusion.second_order = true
-BC.neutrals_diffusion.radial_lower.type = "dirichlet"
-BC.neutrals_diffusion.radial_lower.value = 0.0
-BC.neutrals_diffusion.radial_upper.type = "dirichlet"
-BC.neutrals_diffusion.radial_upper.value = 0.0
-BC.neutrals_diffusion.poloidal_lower.type = "dirichlet"
-BC.neutrals_diffusion.poloidal_lower.value = 0.0
-BC.neutrals_diffusion.poloidal_upper.type = "dirichlet"
-BC.neutrals_diffusion.poloidal_upper.value = 0.0
->>>>>>> .r1441
 
 #####################################################
 # Grid Function Definitions
@@ -155,21 +137,6 @@ grid_function_library.list = "zero_grid_func" "neutrals_IC" "Dshape"
 
 grid_function_library.zero_grid_func.type = "zero" 
 
-<<<<<<< .mine
-grid_function_library.T0_grid_func.type = "cosine"
-grid_function_library.T0_grid_func.constant = 1.0
-grid_function_library.T0_grid_func.amplitude = 0.
-grid_function_library.T0_grid_func.mode = 1 0
-grid_function_library.T0_grid_func.phase = 0 0
-
-grid_function_library.eT0_grid_func.type = "cosine"
-grid_function_library.eT0_grid_func.constant = 1.0
-grid_function_library.eT0_grid_func.amplitude = 0.
-grid_function_library.eT0_grid_func.mode = 1 0
-grid_function_library.eT0_grid_func.phase = 0 0
-
-=======
->>>>>>> .r1441
 #computational coordinate X runs 0 to 2pi. physical coordinate runs 0 to L.
 #For exponentially decreasing density, one should use exp(-(x-pi)/(2*pi*delta/L)) 
 
@@ -178,10 +145,6 @@ grid_function_library.neutrals_IC.amplitude = 1.0
 grid_function_library.neutrals_IC.location = 0.5 0.5
 grid_function_library.neutrals_IC.width = 0.15 0.15
 grid_function_library.neutrals_IC.floor = 0.05
-<<<<<<< .mine
-=======
 
 grid_function_library.Dshape.type = "arbitrary"
 grid_function_library.Dshape.function = "0.1" #"(1.0+sin(x/2.0)*sin(x/2.0))*(1+0.001*cos(2*y))"
-
->>>>>>> .r1441

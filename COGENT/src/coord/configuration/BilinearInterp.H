@@ -15,7 +15,7 @@ class BilinearInterp
                   const FArrayBox& coords,
                   const FArrayBox& data );
 
-    ~BilinearInterp();
+    virtual ~BilinearInterp();
 
     virtual double interpolate(const int       component,
                                const int       mode,

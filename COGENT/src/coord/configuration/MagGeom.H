@@ -20,10 +20,10 @@ public:
   */
   /*@{*/
 
-   MagGeom(ParmParse&                 pp,
-           const MagCoordSys*         coordSysPtr,
-           const DisjointBoxLayout&   grids,
-           int                        ghosts);
+   MagGeom(ParmParse&                         pp,
+           const RefCountedPtr<MagCoordSys>&  coord_sys,
+           const DisjointBoxLayout&           grids,
+           int                                ghosts);
 
   ///
   /** Destructor.
@@ -35,13 +35,17 @@ public:
    void getMetricTerms( LevelData<FluxBox>& N,
                         LevelData<FluxBox>& tanGradN ) const;
 
+   void getMetricTerms( LevelData<FluxBox>& N) const;
+   
    void getCellVolumes( LevelData<FArrayBox>& volume ) const;
 
    void getJ( LevelData<FArrayBox>& J ) const;
 
    void getPointwiseN( LevelData<FluxBox>& N ) const;
 
-   void getPointwiseNJinverse( LevelData<FluxBox>& NJinverse ) const;
+   void getPointwiseNJInverse( LevelData<FluxBox>& NJinverse ) const;
+   
+   void getPointwiseNJInverse( LevelData<FArrayBox>& NJinverse ) const;
 
    void multJonValid( LevelData<FArrayBox>& dfn ) const;
 
@@ -132,7 +136,7 @@ public:
     
    bool extrablockExchange() const {return m_extrablock_exchange;}
 
-   const MagCoordSys* getCoordSys() const {return m_coord_sys;}
+   const RefCountedPtr<MagCoordSys>& getCoordSys() const {return m_coord_sys;}
 
    void fillInternalGhosts( LevelData<FArrayBox>& data ) const;
    
@@ -160,7 +164,6 @@ public:
                                  LevelData<FArrayBox>&       volume_integrals ) const;
 
    void computeBxEIntegrals( const LevelData<FArrayBox>& phi_node,
-                             const LevelData<FluxBox>&   Binverse_integral,
                              bool                        fourth_order,
                              LevelData<FluxBox>&         Exb_integral ) const;
 
@@ -237,6 +240,8 @@ public:
                                                 const int                    order ) const;
 
   bool shearedMBGeom() const {return m_sheared_mb_geom;}
+
+  bool secondOrder() const {return m_second_order;}
 
 #if CFG_DIM == 3
 
@@ -335,10 +340,12 @@ private:
 
    mutable LevelData<FArrayBox> m_J;
 
+   mutable LevelData<FluxBox> m_metrics;
    mutable LevelData<FluxBox> m_N_face_centered;
    mutable LevelData<FluxBox> m_NJinverse_face_centered;
+   mutable LevelData<FArrayBox> m_NJinverse_cell_centered;
 
-   const MagCoordSys* m_coord_sys;
+   const RefCountedPtr<MagCoordSys> m_coord_sys;
 
    mutable LevelData<FluxBox> m_BFieldCorrection;
 
@@ -373,6 +380,7 @@ private:
    bool m_sheared_mb_geom;
    bool m_dealignment_corrections;
    bool m_model_flux_function; 
+   bool m_second_order;
 
    const string m_pp_prefix;
   

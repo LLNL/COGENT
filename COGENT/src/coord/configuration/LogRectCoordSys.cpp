@@ -2,6 +2,7 @@
 #include "MagBlockCoordSys.H"
 #include "MillerBlockCoordSys.H"
 #include "SlabBlockCoordSys.H"
+#include "ToroidalBlockCoordSys.H"
 #include "CylindricalBlockCoordSys.H"
 #include "FourthOrderUtil.H"
 #include "BlockBoundary.H"
@@ -64,25 +65,32 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
     is_periodic[dir] = a_is_periodic[dir];
   }
 
-  Vector<MagBlockCoordSys *> coord_vec;
   for ( int block_number = 0; block_number < num_blocks; ++block_number ) {
 
      if (m_mag_geom_type == "miller") {
         MillerBlockCoordSys* block_coords = new MillerBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic));
-        coord_vec.push_back(block_coords);
+        m_coord_vec.push_back(block_coords);
         m_spread_radially = block_coords->getConstMinorrad() != 0;
      }
      else if (m_mag_geom_type == "slab") {
-        SlabBlockCoordSys* block_coords = new SlabBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic), block_number, num_blocks, block_separation);
-        coord_vec.push_back(block_coords);
+        SlabBlockCoordSys* block_coords = new SlabBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic),
+                                                                 block_number, num_blocks, block_separation);
+        m_coord_vec.push_back(block_coords);
      }
+#if CFG_DIM==3
+     else if (m_mag_geom_type == "toroidal") {
+       ToroidalBlockCoordSys* block_coords = new ToroidalBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic),
+                                                                    block_number, num_blocks, block_separation);
+       m_coord_vec.push_back(block_coords);
+     }
+#endif
      else if (m_mag_geom_type == "cylindrical") {
         CylindricalBlockCoordSys* block_coords = new CylindricalBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic));
-        coord_vec.push_back(block_coords);
+        m_coord_vec.push_back(block_coords);
      }
   }
 
-  defineCoordSystemsAndBoundaries(coord_vec);
+  defineCoordSystemsAndBoundaries(m_coord_vec);
 
 #if 1
   // Define the boundary conditions for divergence cleaning (whether or not they're used)
@@ -110,6 +118,9 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
 
 LogRectCoordSys::~LogRectCoordSys()
 {
+   for (int i=0; i<m_coord_vec.size(); ++i) {
+      delete m_coord_vec[i];
+   }
 }
 
 
@@ -358,7 +369,7 @@ LogRectCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
                                         const int a_nSrc,
                                         const Side::LoHiSide& a_side) const
 {
-   
+
    //Getting the destination block number (nDst)
    int nDst;
    if (a_side == Side::LoHiSide::Lo) nDst = a_nSrc - 1;
@@ -374,22 +385,22 @@ LogRectCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
    }
    
    const MagBlockCoordSys* src_coord_sys = (MagBlockCoordSys*)getCoordSys(a_nSrc);
-   const RealVect& m_dx_src = src_coord_sys->getMappedCellSize();
+   const RealVect& dx_src = src_coord_sys->getMappedCellSize();
    
    const MagBlockCoordSys* dst_coord_sys = (MagBlockCoordSys*)getCoordSys(nDst);
-   const RealVect& m_dx_dst = dst_coord_sys->getMappedCellSize();
+   const RealVect& dx_dst = dst_coord_sys->getMappedCellSize();
    
-   CH_assert(m_dx_src==m_dx_dst);
+   CH_assert(dx_src==dx_dst);
    
-   //Get mapped face-center coord in dst block
+   //Get mapped cell-centered coord in dst block
    RealVect x_src = src_coord_sys->realCoord(a_xiSrc);
    applyPeriodicity(x_src);
    RealVect xi0_dst = dst_coord_sys->mappedCoord(x_src);
    
    //Get mapped lower-left coord in dst block
    RealVect xiSW_src(a_xiSrc);
-   xiSW_src[RADIAL_DIR] += -0.5 * m_dx_src[RADIAL_DIR];
-   xiSW_src[POLOIDAL_DIR] += -0.5 * m_dx_src[POLOIDAL_DIR];
+   xiSW_src[RADIAL_DIR] += -0.5 * dx_src[RADIAL_DIR];
+   xiSW_src[POLOIDAL_DIR] += -0.5 * dx_src[POLOIDAL_DIR];
 
    RealVect xSW_src = src_coord_sys->realCoord(xiSW_src);
    applyPeriodicity(xSW_src);
@@ -397,8 +408,8 @@ LogRectCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
    
    //Get mapped upper-left coord in dst block
    RealVect xiNW_src(a_xiSrc);
-   xiNW_src[RADIAL_DIR] += -0.5 * m_dx_src[RADIAL_DIR];
-   xiNW_src[POLOIDAL_DIR] += 0.5 * m_dx_src[POLOIDAL_DIR];
+   xiNW_src[RADIAL_DIR] += -0.5 * dx_src[RADIAL_DIR];
+   xiNW_src[POLOIDAL_DIR] += 0.5 * dx_src[POLOIDAL_DIR];
 
    RealVect xNW_src = src_coord_sys->realCoord(xiNW_src);
    applyPeriodicity(xNW_src);
@@ -406,8 +417,8 @@ LogRectCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
    
    //Get mapped upper-right coord in dst block
    RealVect xiNE_src(a_xiSrc);
-   xiNE_src[RADIAL_DIR] += 0.5 * m_dx_src[RADIAL_DIR];
-   xiNE_src[POLOIDAL_DIR] += 0.5 * m_dx_src[POLOIDAL_DIR];
+   xiNE_src[RADIAL_DIR] += 0.5 * dx_src[RADIAL_DIR];
+   xiNE_src[POLOIDAL_DIR] += 0.5 * dx_src[POLOIDAL_DIR];
 
    RealVect xNE_src = src_coord_sys->realCoord(xiNE_src);
    applyPeriodicity(xNE_src);
@@ -415,61 +426,235 @@ LogRectCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
    
    //Get mapped lower-right coord in dst block
    RealVect xiSE_src(a_xiSrc);
-   xiSE_src[RADIAL_DIR] += 0.5 * m_dx_src[RADIAL_DIR];
-   xiSE_src[POLOIDAL_DIR] += -0.5 * m_dx_src[POLOIDAL_DIR];
+   xiSE_src[RADIAL_DIR] += 0.5 * dx_src[RADIAL_DIR];
+   xiSE_src[POLOIDAL_DIR] += -0.5 * dx_src[POLOIDAL_DIR];
    
    RealVect xSE_src = src_coord_sys->realCoord(xiSE_src);
    applyPeriodicity(xSE_src);
    double xiSE_dst = (dst_coord_sys->mappedCoord(xSE_src))[POLOIDAL_DIR];
-   
+  
+  
+   if (m_mag_geom_type == "toroidal") {
+     enforcePoloidalCut(a_xiSrc, xiNW_dst, xiNE_dst, xiSW_dst, xiSE_dst, xi0_dst[POLOIDAL_DIR]);
+   }
+  
    //Check the remapping properties
-   if (   (xiNE_dst - xiSE_dst) > 3.0 * m_dx_dst[POLOIDAL_DIR]
-       || (xiNW_dst - xiSW_dst) > 3.0 * m_dx_dst[POLOIDAL_DIR]
+   if (   (xiNE_dst - xiSE_dst) > 3.0 * dx_dst[POLOIDAL_DIR]
+       || (xiNW_dst - xiSW_dst) > 3.0 * dx_dst[POLOIDAL_DIR]
        || (xiNE_dst - xiSE_dst) < 0.0
        || (xiNW_dst - xiSW_dst) < 0.0 )
    {
-      
       MayDay::Error("LogRectCoordSys::toroidalBlockRemapping(): remapping failure; try decreasing radial and/or toroidal cell cize");
    }
    
    //Get the global index of the dst cell center
    IntVect iv0_dst;
    for (int dir=0; dir<SpaceDim; ++dir) {
-      iv0_dst[dir] = floor(xi0_dst[dir]/m_dx_dst[dir]);
+      iv0_dst[dir] = floor(xi0_dst[dir]/dx_dst[dir]);
    }
+
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      a_ivDst[dir] = iv0_dst[dir];
+   }
+   
+   //Get interpolation coefficients
+   int order = 3;
+   getInterpolationCoefficients(a_interpStecil, xi0_dst, iv0_dst, dx_dst, order);
+
+}
+
+void
+LogRectCoordSys::applyPeriodicity(RealVect& a_x) const                              
+{
+
+  const MagBlockCoordSys* src_coord_0 = (MagBlockCoordSys*)getCoordSys(0);
+  const MagBlockCoordSys* src_coord_N = (MagBlockCoordSys*)getCoordSys(numBlocks()-1);
+
+  if (m_mag_geom_type == "slab") {
+    RealVect lowerMappedCoord;
+    RealVect upperMappedCoord;
+
+    for (int dir=0; dir<SpaceDim; ++dir) {
+        lowerMappedCoord[dir] = src_coord_0->lowerMappedCoordinate(dir);
+        upperMappedCoord[dir] = src_coord_N->upperMappedCoordinate(dir);
+    }
+  
+    RealVect lowerCoord = src_coord_0->realCoord(lowerMappedCoord);
+    RealVect upperCoord = src_coord_N->realCoord(upperMappedCoord);
+
+    if (a_x[TOROIDAL_DIR]<lowerCoord[TOROIDAL_DIR]) {
+      double shift = lowerCoord[TOROIDAL_DIR] - a_x[TOROIDAL_DIR];
+      a_x[TOROIDAL_DIR] = upperCoord[TOROIDAL_DIR] - shift;
+    }
+
+    if (a_x[TOROIDAL_DIR]>upperCoord[TOROIDAL_DIR]) {
+      double shift = a_x[TOROIDAL_DIR] - upperCoord[TOROIDAL_DIR];
+      a_x[TOROIDAL_DIR] =	lowerCoord[TOROIDAL_DIR] + shift;
+    }
+  }
+  
+  else if (m_mag_geom_type == "toroidal") {
+    double phi_max = ((const ToroidalBlockCoordSys*)src_coord_0)->getToroidalWedgeFraction();
+    phi_max *= 2. * Pi;
+    double phi = atan2(a_x[1], a_x[0]);
+    double r = sqrt(pow(a_x[0],2) + pow(a_x[1],2));
+    
+    if (phi < 0.0) {
+      double phi_reflected = phi + phi_max;
+      a_x[0] = r * cos(phi_reflected);
+      a_x[1] = r * sin(phi_reflected);
+    }
+
+    if (phi > phi_max) {
+      double phi_reflected = phi - phi_max;
+      a_x[0] = r * cos(phi_reflected);
+      a_x[1] = r * sin(phi_reflected);
+    }
+  }
+  
+  else {
+    MayDay::Error("LogRectCoordSys::toroidalBlockRemapping(): remapping is not implemented for this geometry");
+  }
+  
+}
+
+
+void
+LogRectCoordSys::enforcePoloidalCut(const RealVect& a_xiSrc,
+                                    double& a_xiNW_dst,
+                                    double& a_xiNE_dst,
+                                    double& a_xiSW_dst,
+                                    double& a_xiSE_dst,
+                                    double& a_xi0_dst) const
+{
+   
+   Vector<double> poloidalNodes(5,0);
+   poloidalNodes[0] = a_xiNW_dst;
+   poloidalNodes[1] = a_xiNE_dst;
+   poloidalNodes[2] = a_xiSW_dst;
+   poloidalNodes[3] = a_xiSE_dst;
+   poloidalNodes[4] = a_xi0_dst;
+
+   
+   for (int n=0; n<5; ++n) {
+      if (fabs(a_xiSrc[POLOIDAL_DIR] - poloidalNodes[n]) > Pi) {
+         int sign = (a_xiSrc[POLOIDAL_DIR] - Pi > 0.) ? 1 : -1;
+         poloidalNodes[n] += sign * 2.0 * Pi;
+      }
+   }
+   
+   a_xiNW_dst = poloidalNodes[0];
+   a_xiNE_dst = poloidalNodes[1];
+   a_xiSW_dst = poloidalNodes[2];
+   a_xiSE_dst = poloidalNodes[3];
+   a_xi0_dst = poloidalNodes[4];
+}
+
+
+void
+LogRectCoordSys::getInterpolationCoefficients(Vector<Real>&    a_coeff,
+                                              const RealVect&  a_xi0_dst,
+                                              const IntVect&   a_iv0_dst,
+					      const RealVect&  a_dx_dst,
+                                              const int        a_order) const
+
+{
+   Real h = a_dx_dst[POLOIDAL_DIR];
+   
+   Real cent = (a_iv0_dst[POLOIDAL_DIR] + 0.5) * a_dx_dst[POLOIDAL_DIR];
+   Real lo = cent - h;
+   Real hi = cent + h;
+
+   Real coeffLo(0.0);
+   Real coeffCent(1.0);
+   Real coeffHi(0.0);
+   
+   Real point = a_xi0_dst[POLOIDAL_DIR];
+
+   if (a_order == 3) {
+      if (abs(cent - point) > 1.0e-10) {
+
+         Real d0 = lo - point;
+         Real d1 = cent - point;
+         Real d2 = hi - point;
+   
+         coeffLo = d1*d2/(d0-d1)/(d0-d2);
+         coeffCent = d2*d0/(d1-d2)/(d1-d0);
+         coeffHi = d0*d1/(d2-d0)/(d2-d1);
+      }
+   }
+   
+   else if (a_order == 2) {
+      if (point > cent) {
+         coeffLo = 0.0;
+         coeffCent = 1.0 - (point - cent)/h;
+         coeffHi = (point - cent)/h;
+      }
+      else {
+         coeffLo = (cent - point)/h;
+         coeffCent =  1.0 - (cent - point)/h;
+         coeffHi = 0.0;
+      }
+   }
+   
+   else {
+      MayDay::Error("getInterpolationCoefficients:: only order = 2 or 3 is currently supported");
+   }
+   
+   a_coeff[0] = coeffLo;
+   a_coeff[1] = coeffCent;
+   a_coeff[2] = coeffHi;
+
+   
+}
+
+/*
+ This is an experimental implementation (presently not used). It seems to be 
+ only first order in the poloidal dir, but includes some radial variations
+ in the remapping coefficeints (by taking advantage of the nodal values).
+ */
+void
+LogRectCoordSys::getInterpolationCoefficients(Vector<Real>&   a_coeff,
+                                              const Real&     a_xiNW_dst,
+                                              const Real&     a_xiNE_dst,
+                                              const Real&     a_xiSW_dst,
+                                              const Real&     a_xiSE_dst,
+                                              const IntVect&  a_iv0_dst,
+					      const RealVect& a_dx_dst) const
+{
    //High and low poloida_dir ends of the central dst cell
-   double hi_end = (iv0_dst[POLOIDAL_DIR] + 1) * m_dx_dst[POLOIDAL_DIR];
-   double lo_end = (iv0_dst[POLOIDAL_DIR]) * m_dx_dst[POLOIDAL_DIR];
+   double hi_end = (a_iv0_dst[POLOIDAL_DIR] + 1) * a_dx_dst[POLOIDAL_DIR];
+   double lo_end = (a_iv0_dst[POLOIDAL_DIR]) * a_dx_dst[POLOIDAL_DIR];
    
    //second-order interpolation stencil
    double interpCoeffHi(0.0);
-   double interpCoeffCent(m_dx_dst[POLOIDAL_DIR]);
+   double interpCoeffCent(a_dx_dst[POLOIDAL_DIR]);
    double interpCoeffLo(0.0);
    
    //Handle hi and cent cells
-   if (((xiNW_dst - hi_end) >= 0) && ((xiNE_dst - hi_end) > 0)) {
+   if (((a_xiNW_dst - hi_end) >= 0) && ((a_xiNE_dst - hi_end) > 0)) {
       
-      double area1 = (xiNW_dst - hi_end);
-      double area2 = (xiNE_dst - hi_end);
+      double area1 = (a_xiNW_dst - hi_end);
+      double area2 = (a_xiNE_dst - hi_end);
       
       interpCoeffHi += (area2 + area1)/2.0 ;
       
    }
    
-   else if (((xiNW_dst - hi_end) <= 0) && ((xiNE_dst - hi_end) < 0)) {
+   else if (((a_xiNW_dst - hi_end) <= 0) && ((a_xiNE_dst - hi_end) < 0)) {
       
-      double area1 = (hi_end - xiNW_dst);
-      double area2 = (hi_end - xiNE_dst);
+      double area1 = (hi_end - a_xiNW_dst);
+      double area2 = (hi_end - a_xiNE_dst);
       
       interpCoeffCent -= (area2 + area1)/2.0 ;
    }
    
    else {
       
-      double rad_inters_frac = abs(xiNE_dst - hi_end)/abs(xiNW_dst-hi_end);
+      double rad_inters_frac = abs(a_xiNE_dst - hi_end)/abs(a_xiNW_dst-hi_end);
       double rad_inters_dist = 1.0 / (1.0 + rad_inters_frac);
       
-      double area1 = (xiNW_dst - hi_end) * rad_inters_dist;
+      double area1 = 0.5 * (a_xiNW_dst - hi_end) * rad_inters_dist;
       if (area1 < 0) {
          interpCoeffCent += area1;
       }
@@ -477,7 +662,7 @@ LogRectCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
          interpCoeffHi += area1;
       }
       
-      double area2 = (xiNE_dst - hi_end) * (1.0 - rad_inters_dist);
+      double area2 = 0.5 * (a_xiNE_dst - hi_end) * (1.0 - rad_inters_dist);
       if (area2 < 0) {
          interpCoeffCent += area2;
       }
@@ -488,29 +673,29 @@ LogRectCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
    }
    
    //Handle lo and cent cells
-   if (((xiSW_dst - lo_end) <= 0) && ((xiSE_dst - lo_end) < 0)) {
+   if (((a_xiSW_dst - lo_end) <= 0) && ((a_xiSE_dst - lo_end) < 0)) {
       
-      double area1 = (lo_end - xiSW_dst);
-      double area2 = (lo_end - xiSE_dst);
+      double area1 = (lo_end - a_xiSW_dst);
+      double area2 = (lo_end - a_xiSE_dst);
       
       interpCoeffLo += (area2 + area1)/2.0 ;
       
    }
    
-   else if (((xiSW_dst - lo_end) >= 0) && ((xiSE_dst - lo_end) > 0)) {
+   else if (((a_xiSW_dst - lo_end) >= 0) && ((a_xiSE_dst - lo_end) > 0)) {
       
-      double area1 = (xiSW_dst - lo_end);
-      double area2 = (xiSE_dst - lo_end);
+      double area1 = (a_xiSW_dst - lo_end);
+      double area2 = (a_xiSE_dst - lo_end);
       
       interpCoeffCent -= (area2 + area1)/2.0 ;
    }
    
    else {
       
-      double rad_inters_frac = abs(xiSE_dst - lo_end)/abs(xiSW_dst-lo_end);
+      double rad_inters_frac = abs(a_xiSE_dst - lo_end)/abs(a_xiSW_dst-lo_end);
       double rad_inters_dist = 1.0 / (1.0 + rad_inters_frac);
       
-      double area1 = (lo_end - xiSW_dst) * rad_inters_dist;
+      double area1 = 0.5 * (lo_end - a_xiSW_dst) * rad_inters_dist;
       if (area1 < 0) {
          interpCoeffCent += area1;
       }
@@ -518,7 +703,7 @@ LogRectCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
          interpCoeffLo += area1;
       }
       
-      double area2 = (lo_end - xiSE_dst) * (1.0 - rad_inters_dist);
+      double area2 = 0.5 * (lo_end - a_xiSE_dst) * (1.0 - rad_inters_dist);
       if (area2 < 0) {
          interpCoeffCent += area2;
       }
@@ -530,56 +715,20 @@ LogRectCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
    
    //Use this overwrite for the case where the ghost cell is
    //conformal to the destination cell (e.g., By = 0 case)
-   if ((abs(xiSW_dst - lo_end) < 1.0e-10) && (abs(xiSE_dst - lo_end) < 1.0e-10)
-    && (abs(xiNW_dst - hi_end) < 1.0e-10) && (abs(xiNW_dst - hi_end) < 1.0e-10)) {
-
-     interpCoeffLo = 0.0;
-     interpCoeffHi = 0.0;
-     interpCoeffCent = 1.0;
+   if ((abs(a_xiSW_dst - lo_end) < 1.0e-10) && (abs(a_xiSE_dst - lo_end) < 1.0e-10)
+       && (abs(a_xiNW_dst - hi_end) < 1.0e-10) && (abs(a_xiNE_dst - hi_end) < 1.0e-10)) {
+      
+      interpCoeffLo = 0.0;
+      interpCoeffHi = 0.0;
+      interpCoeffCent = 1.0;
    }
-   
+
    double interpSum = interpCoeffLo + interpCoeffCent + interpCoeffHi;
-   
-   a_interpStecil[0] = interpCoeffLo/interpSum;
-   a_interpStecil[1] = interpCoeffCent/interpSum;
-   a_interpStecil[2] = interpCoeffHi/interpSum;
-   
-   for (int dir=0; dir<SpaceDim; ++dir) {
-      a_ivDst[dir] = iv0_dst[dir];
-   }
-   
+
+   a_coeff[0] = interpCoeffLo/interpSum;
+   a_coeff[1] = interpCoeffCent/interpSum;
+   a_coeff[2] = interpCoeffHi/interpSum;
 }
-
-void
-LogRectCoordSys::applyPeriodicity(RealVect& a_x) const                              
-{
-
-  const MagBlockCoordSys* src_coord_0 = (MagBlockCoordSys*)getCoordSys(0);
-  const MagBlockCoordSys* src_coord_N = (MagBlockCoordSys*)getCoordSys(numBlocks()-1);
-
-  RealVect lowerMappedCoord;
-  RealVect upperMappedCoord;
-
-  for (int dir=0; dir<SpaceDim; ++dir) {
-      lowerMappedCoord[dir] = src_coord_0->lowerMappedCoordinate(dir);
-      upperMappedCoord[dir] = src_coord_N->upperMappedCoordinate(dir);
-   }
-  
-  RealVect lowerCoord = src_coord_0->realCoord(lowerMappedCoord);
-  RealVect upperCoord = src_coord_N->realCoord(upperMappedCoord);
-
-  if (a_x[TOROIDAL_DIR]<lowerCoord[TOROIDAL_DIR]) {
-    double shift = lowerCoord[TOROIDAL_DIR] - a_x[TOROIDAL_DIR];
-    a_x[TOROIDAL_DIR] = upperCoord[TOROIDAL_DIR] - shift;
-  }
-
-  if (a_x[TOROIDAL_DIR]>upperCoord[TOROIDAL_DIR]) {
-    double shift = a_x[TOROIDAL_DIR] - upperCoord[TOROIDAL_DIR];
-    a_x[TOROIDAL_DIR] =	lowerCoord[TOROIDAL_DIR] + shift;
-  }
-
-}
-
 
 #endif
 

@@ -109,7 +109,6 @@ void GKFluidOp::accumulateRHS( FluidSpeciesPtrVect&               a_rhs,
                                const PS::ScalarPtrVect&           a_scalars,
                                const EField&                      a_E_field,
                                const bool                         a_implicit,
-                               const bool                         a_recompute_kinetic_terms,
                                const Real                         a_time)
                               
 {
@@ -118,11 +117,41 @@ void GKFluidOp::accumulateRHS( FluidSpeciesPtrVect&               a_rhs,
       const std::string species_name( rhs_species.name() );
       FluidOpInterface& fluidOp( fluidModel( species_name ) );
       if ( a_implicit ) {
-         fluidOp.accumulateImplicitRHS( a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, species, a_recompute_kinetic_terms, a_time );
+         fluidOp.accumulateImplicitRHS( a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, species, a_time );
       }
       else {
          fluidOp.accumulateExplicitRHS( a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, species, a_time );
       }
+   }
+}
+
+
+void GKFluidOp::preSolutionOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
+                                   const FluidSpeciesPtrVect&         a_fluid_species,
+                                   const PS::ScalarPtrVect&           a_scalars,
+                                   const EField&                      a_E_field,
+                                   const double                       a_time )
+{
+   for (int species(0); species<a_fluid_species.size(); species++) {
+      FluidSpecies& rhs_species( static_cast<FluidSpecies&>(*(a_fluid_species[species])) );
+      const std::string species_name( rhs_species.name() );
+      FluidOpInterface& fluidOp( fluidModel( species_name ) );
+      fluidOp.preSolutionOpEval( a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_time );
+   }
+}
+
+
+void GKFluidOp::preOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
+                           const FluidSpeciesPtrVect&         a_fluid_species,
+                           const PS::ScalarPtrVect&           a_scalars,
+                           const EField&                      a_E_field,
+                           const double                       a_time )
+{
+   for (int species(0); species<a_fluid_species.size(); species++) {
+      FluidSpecies& rhs_species( static_cast<FluidSpecies&>(*(a_fluid_species[species])) );
+      const std::string species_name( rhs_species.name() );
+      FluidOpInterface& fluidOp( fluidModel( species_name ) );
+      fluidOp.preOpEval( a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_time );
    }
 }
 
@@ -188,7 +217,8 @@ void GKFluidOp::solveSolutionPC( FluidSpeciesPtrVect&              a_fluid_speci
 
 void GKFluidOp::updatePC( const PS::KineticSpeciesPtrVect&  a_kinetic_species,
                           const FluidSpeciesPtrVect&        a_fluid_species,
-                          const double                      a_mshift,
+                          const double                      a_time,
+                          const double                      a_shift,
                           int                               a_idx )
 {
    if (a_idx < 0) {
@@ -196,13 +226,13 @@ void GKFluidOp::updatePC( const PS::KineticSpeciesPtrVect&  a_kinetic_species,
          FluidSpecies& fluid_species( static_cast<FluidSpecies&>(*(a_fluid_species[species])) );
          const std::string species_name( fluid_species.name() );
          FluidOpInterface& fluidOp( fluidModel( species_name ) );
-         fluidOp.updatePCImEx( a_kinetic_species, a_mshift );
+         fluidOp.updatePCImEx( a_kinetic_species, a_time, a_shift );
       }
    } else {
       FluidSpecies& fluid_species( static_cast<FluidSpecies&>(*(a_fluid_species[a_idx])) );
       const std::string species_name( fluid_species.name() );
       FluidOpInterface& fluidOp( fluidModel( species_name ) );
-      fluidOp.updatePCImEx( a_kinetic_species, a_mshift );
+      fluidOp.updatePCImEx( a_kinetic_species, a_time, a_shift );
    }
 }
 
@@ -252,6 +282,7 @@ void GKFluidOp::defineMultiPhysicsPC( std::vector<PS::Preconditioner<PS::GKVecto
 void GKFluidOp::updateMultiPhysicsPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
                                       const PS::KineticSpeciesPtrVect&                          a_kin_species_phys,
                                       const FluidSpeciesPtrVect&                                a_fluid_species,
+                                      const Real                                                a_time,
                                       const Real                                                a_shift,
                                       const bool                                                a_im )
 {
@@ -260,7 +291,7 @@ void GKFluidOp::updateMultiPhysicsPC( std::vector<PS::Preconditioner<PS::GKVecto
       const std::string species_name( fluid_species.name() );
       FluidOpInterface& fluidOp( fluidModel( species_name ) );
 
-      fluidOp.updateBlockPC(a_pc, a_kin_species_phys, a_fluid_species, a_shift, a_im, species );
+      fluidOp.updateBlockPC(a_pc, a_kin_species_phys, a_fluid_species, a_time, a_shift, a_im, species );
    }
    return;
 }

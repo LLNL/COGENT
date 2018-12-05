@@ -334,6 +334,7 @@ void EField::computeIonParallelCurrentDensity( LevelData<FArrayBox>&            
 }
 
 void EField::updateImplicitPotential(LevelData<FArrayBox>&             a_phi,
+                                     const double                      a_larmor,
                                      const PS::KineticSpeciesPtrVect&  a_kinetic_species,
                                      const Vector<Real>&               a_scalar_data,
                                      LevelData<FArrayBox>&             a_divJperp,
@@ -341,44 +342,65 @@ void EField::updateImplicitPotential(LevelData<FArrayBox>&             a_phi,
                                      const Real                        a_dt )
 {
    const MagGeom& mag_geom = configurationSpaceGeometry();
-   const DisjointBoxLayout& mag_grids = mag_geom.gridsFull();
+   const DisjointBoxLayout& grids = mag_geom.gridsFull();
       
-   //Compute polarization term (at the old time)
-   LevelData<FArrayBox> gkPoissonRHS( mag_grids, 1, IntVect::Zero );
-   m_poisson->m_debye_number2 = 0.0; //setting vaccum term to zero
-   m_poisson->computeFluxDivergence(a_phi, gkPoissonRHS, false);
-      
-   m_poisson->m_dt_implicit = a_dt;
-
-   //Compute parallel current
-   m_poisson->m_model = "ParallelCurrent";
-   LevelData<FArrayBox> ion_charge_density( mag_grids, 1, IntVect::Zero );
+   LevelData<FArrayBox> ion_charge_density( grids, 1, IntVect::Zero);
    computeIonChargeDensity( ion_charge_density, a_kinetic_species );
-   m_poisson->setOperatorCoefficients( ion_charge_density, a_bc, true );
-   LevelData<FArrayBox> negativeDivJpar( mag_grids, 1, IntVect::Zero );
-   m_poisson->computeFluxDivergence(ion_charge_density, negativeDivJpar, false, true);
+
+   GKPoisson* solver;
+
+   double debye_number = 0.;
+
+   if ( m_boltzmann_electron ) {
+
+      ParmParse pp( GKPoissonBoltzmann::pp_name );
+      if ( typeid(*(mag_geom.getCoordSys())) == typeid(SingleNullCoordSys) ) {
+         solver = new NewGKPoissonBoltzmann( pp, mag_geom, a_larmor, debye_number, ion_charge_density );
+      }
+      else {
+         solver = new GKPoissonBoltzmann( pp, mag_geom, a_larmor, debye_number, ion_charge_density );
+      }
+   }
+   else {
+      ParmParse pp( GKPoisson::pp_name );
+      solver = new GKPoisson( pp, mag_geom, a_larmor, debye_number );
+   }
+
+   LevelData<FArrayBox> ion_mass_density( grids, 1, IntVect::Zero );
+   computeIonMassDensity( ion_mass_density, a_kinetic_species );
+
+   //Compute polarization term (at the old time)
+   solver->m_model = "GyroPoisson";
+   solver->setOperatorCoefficients( ion_mass_density, a_bc, true );
+
+   LevelData<FArrayBox> gkPoissonRHS( grids, 1, IntVect::Zero );
+   solver->computeFluxDivergence(a_phi, gkPoissonRHS, false);
+      
+   //Compute parallel current
+   solver->m_dt_implicit = a_dt;
+   solver->m_model = "ParallelCurrent";
+   solver->setOperatorCoefficients( ion_charge_density, a_bc, true );
+   LevelData<FArrayBox> negativeDivJpar( grids, 1, IntVect::Zero );
+   solver->computeFluxDivergence(ion_charge_density, negativeDivJpar, false, true);
       
    //Get RHS for the implicit vorticity solve
-   for (DataIterator dit(gkPoissonRHS.dataIterator()); dit.ok(); ++dit) {
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       gkPoissonRHS[dit].plus(negativeDivJpar[dit]);
       a_divJperp[dit].mult(a_dt);
       gkPoissonRHS[dit].minus(a_divJperp[dit]);
    }
       
    //Do implicit vorticity solve
-   m_poisson->m_model = "Vorticity";
-   LevelData<FArrayBox> ion_mass_density( mag_grids, 1, IntVect::Zero );
-   computeIonMassDensity( ion_mass_density, a_kinetic_species );
-   m_poisson->setOperatorCoefficients( ion_mass_density, a_bc, true );
+   solver->m_model = "Vorticity";
+   solver->setOperatorCoefficients( ion_mass_density, a_bc, true );
 
-   m_poisson->computePotential( a_phi, gkPoissonRHS );
-   m_poisson->fillInternalGhosts( a_phi );
-
-   //Reset the GKpoisson model back to the usual case; the GKPoisson coefficients will be recomupted in computeEField function
-   m_poisson->m_model = "GyroPoisson";
+   solver->computePotential( a_phi, gkPoissonRHS );
+   solver->fillInternalGhosts( a_phi );
 
    // Update nodal phi if supporting the calculation of a divergence-free phase velocity
    interpToNodes(a_phi);
+
+   delete solver;
 }
 
 

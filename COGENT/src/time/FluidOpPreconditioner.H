@@ -51,16 +51,17 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
 
     void define(const T&, Ops&, CFG::FluidOpInterface&, const std::string&, const std::string&, bool);
 
-    inline void update(const T& a_X, const Real a_shift = 0.0)
+    inline void update(const T& a_X, const Real a_time, const Real a_shift = 0.0)
     {
       CH_assert(isDefined());
-      if (m_im) m_ops->assemblePCImEx(false,NULL,a_X,a_shift);
-      else      m_ops->assembleSolPC(false,NULL,a_X);
+      if (m_im) m_ops->assemblePCImEx(false, NULL, a_X, a_time, a_shift);
+      else      m_ops->assembleSolPC(false, NULL, a_X, a_time);
       return;
     }
 
     inline void update( const KineticSpeciesPtrVect&    a_kin_species_phys,
                         const CFG::FluidSpeciesPtrVect& a_fluid_species,
+                        const Real                      a_time,
                         const Real                      a_shift,
                         const bool                      a_im,
                         const int                       a_idx )
@@ -69,7 +70,7 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
       CH_assert(a_im == m_im);
 
       if (m_im) {
-        m_fluid_ops->updatePCImEx(a_kin_species_phys, a_shift);
+        m_fluid_ops->updatePCImEx(a_kin_species_phys, a_time, a_shift);
       }
       return;
     }

@@ -24,9 +24,9 @@ public:
     *  @param[in] mblex_ptr level exchange object pointer (leave NULL
     *                       unless you know why you don't want to)
     */
-   MBSolver( const MultiBlockLevelGeom&            geom,
-             const int                             discretization_order,
-             MultiBlockLevelExchangeCenter*        mblex_ptr = NULL );
+   MBSolver( const MultiBlockLevelGeom&      geom,
+             const int                       discretization_order,
+             MultiBlockLevelExchangeCenter*  mblex_ptr = NULL);
       
    /// Destructor.
    /**
@@ -147,6 +147,8 @@ protected:
    LevelData<FArrayBox> m_rhs_from_bc;
 
    int m_discretization_order;
+
+   bool m_mblex_defined_locally;
 };
 
 

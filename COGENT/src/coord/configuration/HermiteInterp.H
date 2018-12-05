@@ -15,7 +15,7 @@ class HermiteInterp
                    const FArrayBox& coords,
                    const FArrayBox& data );
 
-    ~HermiteInterp();
+    virtual ~HermiteInterp();
 
     virtual double interpolate(const int       component,
                                const int       mode,

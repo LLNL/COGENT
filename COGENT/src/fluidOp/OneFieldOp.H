@@ -55,7 +55,6 @@ public:
                                       const PS::ScalarPtrVect&           scalars,
                                       const EField&                      E_field,
                                       const int                          component,
-                                      const bool                         recompute_kinetic_terms,
                                       const Real                         time);
    
    virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
@@ -73,11 +72,13 @@ public:
                                 const PS::KineticSpeciesPtrVect&,
                                 const FluidSpeciesPtrVect&,
                                 const Real,
+                                const Real,
                                 const bool,
                                 const int );
 
    virtual void updatePCImEx( const PS::KineticSpeciesPtrVect&  kinetic_species,
-                              const double                      mshift );
+                              const double                      time,
+                              const double                      shift );
 
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,

@@ -23,6 +23,8 @@ class KineticSpeciesBC
 {
    public:
 
+      virtual ~KineticSpeciesBC() {;}
+
       virtual void apply( KineticSpecies& a_species_phys,
                           const CFG::LevelData<CFG::FArrayBox>& a_phi,
                           const LevelData<FluxBox>& a_velocity,

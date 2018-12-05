@@ -26,7 +26,8 @@ SNCoreBlockCoordSys::SNCoreBlockCoordSys( ParmParse&               a_parm_parse,
                                           const RealVect&          a_dx,
                                           const int                a_block_type )
    : MagBlockCoordSys(a_parm_parse),
-     m_block_type(a_block_type)
+     m_block_type(a_block_type),
+     m_RZ_interp(NULL)
 {
    if (SpaceDim != 2) {
       MayDay::Error("SNCoreBlockCoordSys is only two-dimensional");
@@ -101,6 +102,7 @@ SNCoreBlockCoordSys::~SNCoreBlockCoordSys()
       fclose(m_ipt_file[block]);
    }
 #endif
+   if (m_RZ_interp) delete m_RZ_interp;
 }
 
 
@@ -679,8 +681,6 @@ SNCoreBlockCoordSys::dXdXi( const RealVect& a_Xi,
 
     RealVect x_hi = realCoord(Xi_hi);
     RealVect x_lo = realCoord(Xi_lo);
-
-    double metric_factor;
 
     RealVect metrics;
     for (int dir(0); dir<SpaceDim; ++dir) {

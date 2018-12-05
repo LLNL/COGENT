@@ -6,6 +6,12 @@
 #include "evalOpMatrix.H"
 #include "PositivityPostProcessor.H"
 
+#undef CH_SPACEDIM
+#define CH_SPACEDIM CFG_DIM
+#include "MagGeom.H"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM PDIM
+
 #include "NamespaceHeader.H"
 
 typedef Vector<RefCountedPtr<LevelData<FArrayBox> > > VelocityPtrVect;
@@ -65,7 +71,7 @@ class GKSystem
        */
       virtual ~GKSystem();
 
-      virtual void initialize( const int cur_step );
+      virtual void initialize( const int cur_step, const double cur_time );
    
       /// Compute a stable time step.
       /**
@@ -242,6 +248,8 @@ class GKSystem
        */
       void parseParameters( ParmParse& ppgksys );
 
+      void giveSpeciesTheirGyroaverageOps();
+
       bool m_using_electrons; // true for either boltzmann or kinetic
       bool m_enforce_stage_positivity;
       bool m_enforce_step_positivity;
@@ -264,16 +272,16 @@ class GKSystem
       std::string m_ti_method;
 
       GKUnits*                 m_units;
-      CFG::MagGeom*            m_mag_geom;
-      CFG::MagCoordSys*        m_mag_geom_coords;
-      VEL::VelCoordSys*        m_velocity_coords;
+      RefCountedPtr<CFG::MagGeom>     m_mag_geom;
+      RefCountedPtr<CFG::MagCoordSys> m_mag_geom_coords;
+      RefCountedPtr<VEL::VelCoordSys> m_velocity_coords;
    
       VEL::RealVect            m_dv;
 
       RefCountedPtr<PhaseGeom> m_phase_geom;
-      PhaseCoordSys*           m_phase_coords;
+      RefCountedPtr<PhaseCoordSys> m_phase_coords;
 
-      PhaseGrid*               m_phase_grid;
+      RefCountedPtr<PhaseGrid>  m_phase_grid;
       VelocityPtrVect          m_velocity;
 
       GKOps* m_gk_ops;
@@ -315,6 +323,8 @@ class GKSystem
       std::vector<int> m_fixed_plotindices;
 
       PositivityPostProcessor m_positivity_post_processor;
+
+      bool m_old_vorticity_model;
 
       int m_verbosity;
       bool m_use_native_time_integrator;

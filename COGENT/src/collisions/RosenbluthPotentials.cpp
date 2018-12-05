@@ -21,15 +21,15 @@
 #include "NamespaceHeader.H" 
 
 
-RosenbluthPotentials::RosenbluthPotentials( LevelData<FArrayBox>&       a_phi_one,
-                                            LevelData<FArrayBox>&       a_phi_two,
-                                            const LevelData<FArrayBox>& a_rho,
-                                            const PhaseGeom&            a_phase_geom,
-                                            const Real                  a_mass,
-                                            const Real                  a_pcg_tol,
-                                            const Real                  a_pcg_maxiter,
-                                            const int                   a_mult_num,
-                                            const bool                  a_verbosity ) 
+RosenbluthPotentials::RosenbluthPotentials( LevelData<FArrayBox>&            a_phi_one,
+                                            LevelData<FArrayBox>&            a_phi_two,
+                                            const LevelData<FArrayBox>&      a_rho,
+                                            const RefCountedPtr<PhaseGeom>&  a_phase_geom,
+                                            const Real                       a_mass,
+                                            const Real                       a_pcg_tol,
+                                            const Real                       a_pcg_maxiter,
+                                            const int                        a_mult_num,
+                                            const bool                       a_verbosity ) 
    : m_verbosity(a_verbosity),
      m_phase_geom(a_phase_geom),
      m_mass(a_mass),
@@ -61,31 +61,31 @@ void RosenbluthPotentials::imposeBC1( LevelData<FArrayBox>&       a_rhsBC,
 
 {
    //Compute multipole coefficients 
-   const CFG::MagGeom& mag_geom( m_phase_geom.magGeom() );
+   const CFG::MagGeom& mag_geom( m_phase_geom->magGeom() );
    CFG::LevelData<CFG::FArrayBox> multipole_coeff( mag_geom.grids(), m_mult_num, CFG::IntVect::Zero );
    computeMultipoleCoeff(multipole_coeff, a_rho); 
    LevelData<FArrayBox> injected_mult_coeff;
-   m_phase_geom.injectConfigurationToPhase( multipole_coeff, injected_mult_coeff);
+   m_phase_geom->injectConfigurationToPhase( multipole_coeff, injected_mult_coeff);
 
    // Get velocity coordinate system parameters
-   const VEL::VelCoordSys& vel_coords = m_phase_geom.velSpaceCoordSys();
+   const VEL::VelCoordSys& vel_coords = m_phase_geom->velSpaceCoordSys();
    const VEL::ProblemDomain& vel_domain = vel_coords.domain();
    const VEL::Box& domain_box = vel_domain.domainBox();
    const VEL::RealVect& vel_dx = vel_coords.dx();
    const int num_vpar_cells = domain_box.size(0);
    const int num_mu_cells = domain_box.size(1);
 
-   const LevelData<FArrayBox>& injected_B = m_phase_geom.getBFieldMagnitude();
+   const LevelData<FArrayBox>& injected_B = m_phase_geom->getBFieldMagnitude();
 
    //Impose multipole boundary conditions to the rhs (i.e., b vector) of Ax=b 
    for (DataIterator dit( a_rhsBC.dataIterator() ); dit.ok(); ++dit) {
       a_rhsBC[dit].copy( a_rho[dit] );
+      // FIX_FOR_5D
+#if CFG_DIM==2
       FArrayBox& this_rhsBC = a_rhsBC[dit];
       FArrayBox& this_mult_coeff = injected_mult_coeff[dit];
       const FArrayBox& this_b = injected_B[dit];
 
-      // FIX_FOR_5D
-#if CFG_DIM==2
       FORT_IMPOSE_MULTIPOLE_BC1(CHF_FRA1(this_rhsBC,0),
                                CHF_CONST_FRA(this_mult_coeff),
                                CHF_CONST_FRA1(this_b,0),
@@ -106,25 +106,25 @@ void RosenbluthPotentials::imposeBC2( LevelData<FArrayBox>&       a_rhsBC,
 
 {
    // Get velocity coordinate system parameters and Bfield
-   const VEL::VelCoordSys& vel_coords = m_phase_geom.velSpaceCoordSys();
+   const VEL::VelCoordSys& vel_coords = m_phase_geom->velSpaceCoordSys();
    const VEL::ProblemDomain& vel_domain = vel_coords.domain();
    const VEL::Box& domain_box = vel_domain.domainBox();
    const VEL::RealVect& vel_dx = vel_coords.dx();
    const int num_vpar_cells = domain_box.size(0);
    const int num_mu_cells = domain_box.size(1);
-   const LevelData<FArrayBox>& injected_B = m_phase_geom.getBFieldMagnitude();
+   const LevelData<FArrayBox>& injected_B = m_phase_geom->getBFieldMagnitude();
 
    //Separate phi_one into inner (depends on a_rho profile, 
    //and is confined inside Vr_domain_min) and outer parts (analytic)
    LevelData<FArrayBox> phi_inner( a_phi_one.getBoxes(), 1, IntVect::Zero );
 
    for (DataIterator dit( a_rhsBC.dataIterator() ); dit.ok(); ++dit) {
+      // FIX_FOR_5D
+#if CFG_DIM==2
       FArrayBox& this_phi_inner = phi_inner[dit];
       const FArrayBox& this_phi = a_phi_one[dit];
       const FArrayBox& this_b = injected_B[dit];
 
-      // FIX_FOR_5D
-#if CFG_DIM==2
       FORT_SEPARATE_PHI1_INNER(CHF_FRA1(this_phi_inner,0),
                               CHF_CONST_FRA1(this_phi,0),
                               CHF_CONST_FRA1(this_b,0),
@@ -137,28 +137,28 @@ void RosenbluthPotentials::imposeBC2( LevelData<FArrayBox>&       a_rhsBC,
    }
 
    //Calculate multipole coefficients for the inner part of phi_one
-   const CFG::MagGeom& mag_geom( m_phase_geom.magGeom() );
+   const CFG::MagGeom& mag_geom( m_phase_geom->magGeom() );
    CFG::LevelData<CFG::FArrayBox> mult_coeff_phi1( mag_geom.grids(), m_mult_num, CFG::IntVect::Zero );
    computeMultipoleCoeff(mult_coeff_phi1, phi_inner); 
    LevelData<FArrayBox> inj_mcoeff_phi1;
-   m_phase_geom.injectConfigurationToPhase( mult_coeff_phi1, inj_mcoeff_phi1);
+   m_phase_geom->injectConfigurationToPhase( mult_coeff_phi1, inj_mcoeff_phi1);
 
    //Compute multipole coefficients for rho (used for analytic expression for BC driven by phi_one_outer)
    CFG::LevelData<CFG::FArrayBox> mult_coeff_rho( mag_geom.grids(), m_mult_num, CFG::IntVect::Zero );
    computeMultipoleCoeff(mult_coeff_rho, a_rho); 
    LevelData<FArrayBox> inj_mcoeff_rho; 
-   m_phase_geom.injectConfigurationToPhase( mult_coeff_rho, inj_mcoeff_rho);
+   m_phase_geom->injectConfigurationToPhase( mult_coeff_rho, inj_mcoeff_rho);
 
    //Impose multipole boundary conditions to the rhs (i.e., b vector) of Ax=b 
    for (DataIterator dit( a_rhsBC.dataIterator() ); dit.ok(); ++dit) {
       a_rhsBC[dit].copy( a_phi_one[dit] );
+      // FIX_FOR_5D
+#if CFG_DIM==2
       FArrayBox& this_rhsBC = a_rhsBC[dit];
       FArrayBox& this_mcoeff_rho = inj_mcoeff_rho[dit];
       FArrayBox& this_mcoeff_phi1 = inj_mcoeff_phi1[dit];
       const FArrayBox& this_b = injected_B[dit];
 
-      // FIX_FOR_5D
-#if CFG_DIM==2
       FORT_IMPOSE_MULTIPOLE_BC2(CHF_FRA1(this_rhsBC,0),
                                CHF_CONST_FRA(this_mcoeff_rho),
                                CHF_CONST_FRA(this_mcoeff_phi1),
@@ -190,18 +190,18 @@ void RosenbluthPotentials::computeMultipoleCoeff( CFG::LevelData<CFG::FArrayBox>
 
 
    // Get velocity coordinate system parameters and magnetic field
-   const VEL::VelCoordSys& vel_coords = m_phase_geom.velSpaceCoordSys();
+   const VEL::VelCoordSys& vel_coords = m_phase_geom->velSpaceCoordSys();
    const VEL::RealVect& vel_dx = vel_coords.dx();
-   const LevelData<FArrayBox>& injected_B = m_phase_geom.getBFieldMagnitude();
+   const LevelData<FArrayBox>& injected_B = m_phase_geom->getBFieldMagnitude();
 
    //Compute kernels for multipole calculations
    for (DataIterator dit( mult_kernels.dataIterator() ); dit.ok(); ++dit) {
       FArrayBox& this_kernel = mult_kernels[dit];
+      // FIX_FOR_5D
+#if CFG_DIM==2
       const FArrayBox& this_rho = a_rho[dit];
       const FArrayBox& this_b = injected_B[dit];
 
-      // FIX_FOR_5D
-#if CFG_DIM==2
       FORT_COMPUTE_MULT_KERNELS(CHF_FRA(this_kernel),
                                CHF_CONST_FRA1(this_rho,0),
                                CHF_CONST_FRA1(this_b,0),
@@ -220,12 +220,12 @@ void RosenbluthPotentials::solve( LevelData<FArrayBox>&       a_solution,
                                   const LevelData<FArrayBox>& a_rhs ) const
 {
    // Get coordinate system parameters 
-   const PhaseGrid& phase_grid = m_phase_geom.phaseGrid();
+   const PhaseGrid& phase_grid = m_phase_geom->phaseGrid();
    const DisjointBoxLayout& dbl = phase_grid.disjointBoxLayout();
 
-   const VEL::VelCoordSys& vel_geom = m_phase_geom.velSpaceCoordSys();
+   const VEL::VelCoordSys& vel_geom = m_phase_geom->velSpaceCoordSys();
    
-   const LevelData<FArrayBox>& injected_B = m_phase_geom.getBFieldMagnitude();
+   const LevelData<FArrayBox>& injected_B = m_phase_geom->getBFieldMagnitude();
 
    int num_config_boxes = phase_grid.numConfigBoxes();
    
@@ -314,8 +314,8 @@ void RosenbluthPotentials::solve( LevelData<FArrayBox>&       a_solution,
                   this_data.copy(a_rhs[dit], overlap);
                   this_data.negate();  // To account for the fact that the operator is the negative Laplacian
 
-                  VEL::IntVect vlo = m_phase_geom.vel_restrict(overlap.smallEnd());
-                  VEL::IntVect vhi = m_phase_geom.vel_restrict(overlap.bigEnd());
+                  VEL::IntVect vlo = m_phase_geom->vel_restrict(overlap.smallEnd());
+                  VEL::IntVect vhi = m_phase_geom->vel_restrict(overlap.bigEnd());
                   HYPRE_StructVectorSetBoxValues(b, vlo.dataPtr(), vhi.dataPtr(), this_data.dataPtr());
 
                   this_data.copy(a_solution[dit], overlap);
@@ -353,8 +353,8 @@ void RosenbluthPotentials::solve( LevelData<FArrayBox>&       a_solution,
 
                if (overlap.ok()) {
                   FArrayBox this_data(overlap,1);
-                  VEL::IntVect vlo = m_phase_geom.vel_restrict(overlap.smallEnd());
-                  VEL::IntVect vhi = m_phase_geom.vel_restrict(overlap.bigEnd());
+                  VEL::IntVect vlo = m_phase_geom->vel_restrict(overlap.smallEnd());
+                  VEL::IntVect vhi = m_phase_geom->vel_restrict(overlap.bigEnd());
                   HYPRE_StructVectorGetBoxValues(x, vlo.dataPtr(), vhi.dataPtr(), this_data.dataPtr());
 
                   a_solution[dit].copy(this_data, overlap);

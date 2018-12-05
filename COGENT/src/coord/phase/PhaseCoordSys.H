@@ -28,9 +28,9 @@ public:
     */
    PhaseCoordSys();
 
-   PhaseCoordSys( const CFG::MagCoordSys&      mag_coords,
-                  const VEL::VelCoordSys&      vel_coords,
-                  const Vector<ProblemDomain>& domains );
+   PhaseCoordSys( const RefCountedPtr<CFG::MagCoordSys>&  mag_coords,
+                  const RefCountedPtr<VEL::VelCoordSys>&  vel_coords,
+                  const Vector<ProblemDomain>&            domains );
 
    ///
    /** Destructor.
@@ -58,6 +58,11 @@ public:
    virtual std::string type() const = 0;
 
    virtual bool isType( const std::string& name ) const = 0;
+
+protected:
+
+   const RefCountedPtr<CFG::MagCoordSys> m_mag_coords;
+   const RefCountedPtr<VEL::VelCoordSys> m_vel_coords;
 
 };
 

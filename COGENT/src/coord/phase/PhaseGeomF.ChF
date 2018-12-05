@@ -874,6 +874,8 @@ c     local variables
      &     CHF_CONST_REALVECT[dx],
      &     CHF_CONST_REAL[charge],
      &     CHF_CONST_REAL[larmor],
+     &     CHF_CONST_INT[include_ExB_drift],
+     &     CHF_CONST_INT[include_magnetic_drift],
      &     CHF_FRA1[Q])
 
 c     local variables
@@ -897,8 +899,17 @@ c     local variables
          mu_integral1 = half * (mu_hi**2 - mu_lo**2)
 #endif
 
-         eta(0) = mu_integral0
-         eta(1) = half * mu_integral1 / charge
+         if (include_ExB_drift .ne. 0) then
+            eta(0) = mu_integral0
+         else
+            eta(0) = zero
+         endif            
+
+         if (include_magnetic_drift .ne. 0) then
+            eta(1) = half * mu_integral1 / charge
+         else
+            eta(1) = zero
+         endif
 
          sum = zero
          do comp = 0, 1
@@ -921,7 +932,8 @@ c     local variables
      &     CHF_CONST_REAL[mass],
      &     CHF_CONST_REAL[charge],
      &     CHF_CONST_REAL[larmor],
-     &     CHF_CONST_INT[velocity_option],
+     &     CHF_CONST_INT[no_par_stream],
+     &     CHF_CONST_INT[include_magnetic_drift],
      &     CHF_FRA1[Q])
 
 c     local variables
@@ -951,13 +963,19 @@ c     local variables
          vpar_hi = vpar_lo + dx(2)
 #endif
 
-         eta(0) = half * (vpar_hi**2 - vpar_lo**2)
-         eta(1) = third * (vpar_hi**3 - vpar_lo**3) * mass * larmor / charge
 
-         if (velocity_option .ne. 0) then
-            eta(0) = 0.0
+         if (no_par_stream .ne. 0) then
+            eta(0) = zero
+         else
+            eta(0) = half * (vpar_hi**2 - vpar_lo**2)
          endif
 
+         if (include_magnetic_drift .ne. 0) then
+            eta(1) = third * (vpar_hi**3 - vpar_lo**3) * mass * larmor / charge
+         else
+            eta(1) = zero
+         endif
+         
          if (side .eq. 0) then
             sum = zero
             do comp = 0, 1
@@ -987,7 +1005,7 @@ c     local variables
      &     CHF_CONST_REALVECT[dx],
      &     CHF_CONST_REAL[mass],
      &     CHF_CONST_REAL[charge],
-     &     CHF_CONST_INT[velocity_option],
+     &     CHF_CONST_INT[no_zero_order_par],
      &     CHF_FRA1[uhat])
 
 c     local variables
@@ -1007,7 +1025,7 @@ c     local variables
          mu_integral0 = dx(3)
 #endif
 
-         if (velocity_option .eq. 2) then
+         if (no_zero_order_par .ne. 0) then
            mu_integral1 = 0.0
          else 
            mu_integral1 = half * (mu_hi**2 - mu_lo**2)

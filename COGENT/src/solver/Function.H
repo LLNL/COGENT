@@ -7,7 +7,8 @@ template <class T, class Ops = void>
 class Function
 {
   public:
-    virtual void evalFunction(T&, const T&, const T&, int) = 0;
+    virtual ~Function() {;}
+    virtual void evalFunction(T&, const T&, const T&, bool) = 0;
     virtual void define(const T&, Ops&) = 0;
 };
 

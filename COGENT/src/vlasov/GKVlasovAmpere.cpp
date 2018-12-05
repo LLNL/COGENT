@@ -80,9 +80,8 @@ void GKVlasovAmpere::accumulateRHS( GKRHSData&                    a_rhs,
       double lo_value, hi_value;
       if ( phase_geom.divFreeVelocity() ) {
          bool fourth_order_Efield = !a_E_field.secondOrder();
-         int velocity_option = 0;
          evalRHS( rhs_species, lo_value, hi_value, species_radial_flux_divergence_average, soln_species,
-                  a_E_field.getCellCenteredField(), a_E_field.getPhiNode(), fourth_order_Efield, velocity_option, a_time );
+                  a_E_field.getCellCenteredField(), a_E_field.getPhiNode(), fourth_order_Efield, PhaseGeom::FULL_VELOCITY, a_time );
       }
       else {
          evalRHS( rhs_species, lo_value, hi_value, species_radial_flux_divergence_average,
@@ -174,7 +173,9 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                  a_rhs_species,
    geometry.mappedGridDivergence( velocity_divergence, velocity, OMIT_NT );
 #endif
 
-   computeRadialFluxDivergence(geometry, flux, a_soln_species.mass(),
+   const RefCountedPtr<PhaseGeom>& geometry_ptr( a_rhs_species.phaseSpaceGeometryPtr() );
+
+   computeRadialFluxDivergence(geometry_ptr, flux, a_soln_species.mass(),
                                a_soln_species.charge(), a_lo_value, a_hi_value,
                                a_radial_flux_divergence_average );
 
@@ -241,8 +242,7 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                  a_rhs_species,
       a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, a_velocity_option );
       computeFluxNormal( delta_dfn, velocity_normal, flux_tmp, geometry );
       
-      int omit_zero_order_velocity_option = 2;
-      a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, omit_zero_order_velocity_option );
+      a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, PhaseGeom::NO_ZERO_ORDER_PARALLEL_VELOCITY );
       computeFluxNormal( maxwellian_dfn, velocity_normal, flux_normal, geometry);
       
       for (DataIterator dit(dbl); dit.ok(); ++dit) {
@@ -265,7 +265,9 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                  a_rhs_species,
 
 #endif
 
-   computeRadialNormalFluxDivergence(geometry, flux_normal, a_soln_species.mass(),
+   const RefCountedPtr<PhaseGeom>& geometry_ptr( a_rhs_species.phaseSpaceGeometryPtr() );
+
+   computeRadialNormalFluxDivergence(geometry_ptr, flux_normal, a_soln_species.mass(),
                                      a_soln_species.charge(), a_lo_value, a_hi_value,
                                      a_radial_flux_divergence_average );
 
@@ -290,16 +292,16 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                  a_rhs_species,
 
 
 void
-GKVlasovAmpere::computeRadialFluxDivergence(const PhaseGeom&                a_geometry,
-                                            LevelData<FluxBox>&             a_flux,
-                                            double                          a_mass,
-                                            double                          a_charge,
-                                            double&                         a_lo_value,
-                                            double&                         a_hi_value,
-                                            CFG::LevelData<CFG::FArrayBox>& a_radial_flux_divergence_average) const
+GKVlasovAmpere::computeRadialFluxDivergence(const RefCountedPtr<PhaseGeom>&  a_geometry,
+                                            LevelData<FluxBox>&              a_flux,
+                                            double                           a_mass,
+                                            double                           a_charge,
+                                            double&                          a_lo_value,
+                                            double&                          a_hi_value,
+                                            CFG::LevelData<CFG::FArrayBox>&  a_radial_flux_divergence_average) const
 {
    const DisjointBoxLayout& grids( a_flux.getBoxes() );
-   const MultiBlockCoordSys* coords = a_geometry.coordSysPtr();
+   const MultiBlockCoordSys* coords = a_geometry->coordSysPtr();
     
    LevelData<FluxBox> flux_even(grids, SpaceDim, IntVect::Unit);
    LevelData<FluxBox> flux_odd(grids, SpaceDim, IntVect::Unit);
@@ -355,11 +357,11 @@ GKVlasovAmpere::computeRadialFluxDivergence(const PhaseGeom&                a_ge
    LevelData<FArrayBox>& phase_divergence_odd = temp_odd.distributionFunction();
    phase_divergence_odd.define(grids, 1, IntVect::Zero);
     
-   a_geometry.mappedGridDivergence( phase_divergence_even, flux_even, false );
-   a_geometry.mappedGridDivergence( phase_divergence_odd, flux_odd, false );
+   a_geometry->mappedGridDivergence( phase_divergence_even, flux_even, false );
+   a_geometry->mappedGridDivergence( phase_divergence_odd, flux_odd, false );
     
    LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
-   a_geometry.getCellVolumes(volume);
+   a_geometry->getCellVolumes(volume);
     
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       phase_divergence_even[dit] /= volume[dit];
@@ -368,13 +370,13 @@ GKVlasovAmpere::computeRadialFluxDivergence(const PhaseGeom&                a_ge
 
    MomentOp& moment_op = MomentOp::instance();
 
-   CFG::LevelData<CFG::FArrayBox> config_divergence_even( a_geometry.magGeom().grids(), 1, CFG::IntVect::Zero);
+   CFG::LevelData<CFG::FArrayBox> config_divergence_even( a_geometry->magGeom().grids(), 1, CFG::IntVect::Zero);
    moment_op.compute( config_divergence_even, temp_even, ChargeDensityKernel() );
 
-   CFG::LevelData<CFG::FArrayBox> config_divergence_odd( a_geometry.magGeom().grids(), 1, CFG::IntVect::Zero);
+   CFG::LevelData<CFG::FArrayBox> config_divergence_odd( a_geometry->magGeom().grids(), 1, CFG::IntVect::Zero);
    moment_op.compute( config_divergence_odd, temp_odd, ChargeDensityKernel() );
 
-   const CFG::MagGeom& config_geom = a_geometry.magGeom();
+   const CFG::MagGeom& config_geom = a_geometry->magGeom();
    const CFG::MagCoordSys* config_coord_sys = config_geom.getCoordSys();
    const CFG::DisjointBoxLayout& config_grids = config_geom.grids();
 
@@ -444,16 +446,16 @@ GKVlasovAmpere::computeRadialFluxDivergence(const PhaseGeom&                a_ge
 
 
 void
-GKVlasovAmpere::computeRadialNormalFluxDivergence(const PhaseGeom&                a_geometry,
-                                                  LevelData<FluxBox>&             a_flux,
-                                                  double                          a_mass,
-                                                  double                          a_charge,
-                                                  double&                         a_lo_value,
-                                                  double&                         a_hi_value,
-                                                  CFG::LevelData<CFG::FArrayBox>& a_radial_flux_divergence_average) const
+GKVlasovAmpere::computeRadialNormalFluxDivergence(const RefCountedPtr<PhaseGeom>&  a_geometry,
+                                                  LevelData<FluxBox>&              a_flux,
+                                                  double                           a_mass,
+                                                  double                           a_charge,
+                                                  double&                          a_lo_value,
+                                                  double&                          a_hi_value,
+                                                  CFG::LevelData<CFG::FArrayBox>&  a_radial_flux_divergence_average) const
 {
    const DisjointBoxLayout& grids( a_flux.getBoxes() );
-   const MultiBlockCoordSys* coords = a_geometry.coordSysPtr();
+   const MultiBlockCoordSys* coords = a_geometry->coordSysPtr();
     
    LevelData<FluxBox> flux_even(grids, 1, IntVect::Unit);
    LevelData<FluxBox> flux_odd(grids, 1, IntVect::Unit);
@@ -508,14 +510,14 @@ GKVlasovAmpere::computeRadialNormalFluxDivergence(const PhaseGeom&              
    phase_divergence_odd.define(grids, 1, IntVect::Zero);
     
    // Enforce conservation
-   a_geometry.averageAtBlockBoundaries(flux_even);
-   a_geometry.averageAtBlockBoundaries(flux_odd);
+   a_geometry->averageAtBlockBoundaries(flux_even);
+   a_geometry->averageAtBlockBoundaries(flux_odd);
 
-   a_geometry.mappedGridDivergenceFromIntegratedFluxNormals( phase_divergence_even, flux_even );
-   a_geometry.mappedGridDivergenceFromIntegratedFluxNormals( phase_divergence_odd, flux_odd );
+   a_geometry->mappedGridDivergenceFromIntegratedFluxNormals( phase_divergence_even, flux_even );
+   a_geometry->mappedGridDivergenceFromIntegratedFluxNormals( phase_divergence_odd, flux_odd );
     
    LevelData<FArrayBox> volume(grids, 1, IntVect::Zero);
-   a_geometry.getCellVolumes(volume);
+   a_geometry->getCellVolumes(volume);
     
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       phase_divergence_even[dit] /= volume[dit];
@@ -524,13 +526,13 @@ GKVlasovAmpere::computeRadialNormalFluxDivergence(const PhaseGeom&              
 
    MomentOp& moment_op = MomentOp::instance();
 
-   CFG::LevelData<CFG::FArrayBox> config_divergence_even( a_geometry.magGeom().grids(), 1, CFG::IntVect::Zero);
+   CFG::LevelData<CFG::FArrayBox> config_divergence_even( a_geometry->magGeom().grids(), 1, CFG::IntVect::Zero);
    moment_op.compute( config_divergence_even, temp_even, ChargeDensityKernel() );
 
-   CFG::LevelData<CFG::FArrayBox> config_divergence_odd( a_geometry.magGeom().grids(), 1, CFG::IntVect::Zero);
+   CFG::LevelData<CFG::FArrayBox> config_divergence_odd( a_geometry->magGeom().grids(), 1, CFG::IntVect::Zero);
    moment_op.compute( config_divergence_odd, temp_odd, ChargeDensityKernel() );
 
-   const CFG::MagGeom& config_geom = a_geometry.magGeom();
+   const CFG::MagGeom& config_geom = a_geometry->magGeom();
    const CFG::MagCoordSys* config_coord_sys = config_geom.getCoordSys();
    const CFG::DisjointBoxLayout& config_grids = config_geom.grids();
 

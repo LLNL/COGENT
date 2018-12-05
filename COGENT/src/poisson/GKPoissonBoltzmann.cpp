@@ -7,6 +7,7 @@
 #include "SNCoreEllipticOpBC.H"
 #include "newMappedGridIO.H"
 #include "FourthOrderUtil.H"
+#include "ToroidalBlockLevelExchangeCenter.H"
 
 // Experimental preconditioner option.  Matches the design document when defined.
 #define DIVIDE_M
@@ -27,7 +28,10 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
      m_Zni_outer_plate(NULL),
      m_Zni_inner_plate(NULL),
      m_phi_outer_plate(NULL),
-     m_phi_inner_plate(NULL)
+     m_phi_inner_plate(NULL),
+     m_precond_Psolver(NULL),
+     m_precond_Qsolver(NULL),
+     m_mblex_ptr(NULL)
 {
    // Read input
 
@@ -149,12 +153,6 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
    if ( a_pp.contains("linear_solve") ) {
       a_pp.get("linear_solve", m_linear_solve);
       if (m_linear_solve) CH_assert(m_linear_response);
-      if ( a_pp.contains("zero_initial_solution") ) {
-         a_pp.get("zero_intial_solution", m_zero_initial_solution);
-      }
-      else {
-         m_zero_initial_solution = false;
-      }
    }
    else {
       m_linear_solve = false;
@@ -184,14 +182,31 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
       MayDay::Error("Specify either radial or subspace iteration solve, but not both");
    }
 
+   if ( a_pp.contains("zero_initial_solution") ) {
+     a_pp.get("zero_initial_solution", m_zero_initial_solution);
+   }
+   else {
+     m_zero_initial_solution = false;
+   }
+
+   int precond_order = 2;
+
    // A tridiagonal solver is needed by all of the solver options
-   m_precond_Psolver = new MBTridiagonalSolver(a_geom, 2);
+   m_precond_Psolver = new MBTridiagonalSolver(a_geom, precond_order);
 
    if ( !m_radial_solve_only && (!m_subspace_iteration_solve || m_linear_response) ) {
+
+      if ( a_geom.shearedMBGeom() ) {
+         m_mblex_ptr = new ToroidalBlockLevelExchangeCenter(a_geom, precond_order, precond_order);
+      }
+      else {
+         m_mblex_ptr = NULL;
+      }
+
 #ifdef with_petsc
-      m_precond_Qsolver = new MBPETScSolver(a_geom, 2);
+      m_precond_Qsolver = new MBPETScSolver(a_geom, precond_order, m_mblex_ptr);
 #else
-      m_precond_Qsolver = new MBHypreSolver(a_geom, 2);
+      m_precond_Qsolver = new MBHypreSolver(a_geom, precond_order, m_mblex_ptr);
 #endif
 
       // Defaults; overridden if present in ParmParse object
@@ -239,10 +254,13 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
 
 GKPoissonBoltzmann::~GKPoissonBoltzmann()
 {
-  if (m_Zni_outer_plate) delete [] m_Zni_outer_plate;
-  if (m_Zni_inner_plate) delete [] m_Zni_inner_plate;
-  if (m_phi_outer_plate) delete [] m_phi_outer_plate;
-  if (m_phi_inner_plate) delete [] m_phi_inner_plate;
+   if (m_precond_Psolver) delete m_precond_Psolver;
+   if (m_precond_Qsolver) delete m_precond_Qsolver;
+   if (m_mblex_ptr) delete m_mblex_ptr;
+   if (m_Zni_outer_plate) delete [] m_Zni_outer_plate;
+   if (m_Zni_inner_plate) delete [] m_Zni_inner_plate;
+   if (m_phi_outer_plate) delete [] m_phi_outer_plate;
+   if (m_phi_inner_plate) delete [] m_phi_inner_plate;
 }
 
 
@@ -716,8 +734,15 @@ GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
       }
 
       if (!m_linear_response) getPhiTilde(temp, a_ne, phi_tilde);
-      else solveLinear( temp, a_bc, a_ne, phi_tilde );
-      
+      else {
+	solveLinear( temp, a_bc, a_ne, phi_tilde );
+	//subtract average part
+        m_flux_surface.averageAndSpread(phi_tilde, temp);
+        for (DataIterator dit(grids); dit.ok(); ++dit) {
+          phi_tilde[dit].minus(temp[dit]);
+        }
+      }
+
       // Update phi_bar (the flux surface average) given the current
       // estimate of phi_tilde
 

@@ -8,6 +8,8 @@
 #include "Vector.H"
 #include "RefCountedPtr.H"
 
+#include "GyroaverageOperator.H"
+
 #include "NamespaceHeader.H"
 namespace CFG = CFG_NAMESPACE;
 namespace VEL = VEL_NAMESPACE;
@@ -28,10 +30,10 @@ class KineticSpecies
       /**
        */
       KineticSpecies(
-         const string&    name,
-         const Real       mass,
-         const Real       charge,
-         const PhaseGeom& geometry );
+         const string&                   name,
+         const Real                      mass,
+         const Real                      charge,
+         const RefCountedPtr<PhaseGeom>& geometry );
 
       /// Copy Constructor.
       /**
@@ -42,7 +44,7 @@ class KineticSpecies
       /// Destructor.
       /**
        */
-      ~KineticSpecies() {;}
+      virtual ~KineticSpecies() {;}
 
       /// Returns species name.
       /**
@@ -223,7 +225,9 @@ class KineticSpecies
       /// Provides a const reference to the phase space geometry object.
       /**
        */
-      const PhaseGeom& phaseSpaceGeometry() const { return m_geometry; }
+      const PhaseGeom& phaseSpaceGeometry() const { return *m_geometry; }
+
+      const RefCountedPtr<PhaseGeom>& phaseSpaceGeometryPtr() const { return m_geometry; }
 
       Real maxValue() const;
       Real minValue() const;
@@ -235,7 +239,7 @@ class KineticSpecies
                                          const CFG::LevelData<CFG::FArrayBox>& a_E_field_cell,
                                          const CFG::LevelData<CFG::FArrayBox>& a_phi_node,
                                          const bool fourth_order_Efield,
-                                         const int  velocity_option = 0 ) const;
+                                         const int  velocity_option ) const;
 
       void computeMappedVelocity( LevelData<FluxBox>& a_velocity,
                                   const LevelData<FluxBox>& a_E_field ) const;
@@ -252,15 +256,37 @@ class KineticSpecies
          return size;
       }
 
+      inline void gyroaverageOp(const GyroaverageOperator* const a_op)
+      {
+        m_gyroavg_op = a_op;
+        (*m_geometry).gyroaverageOp(a_op);
+      }
+
+      inline const GyroaverageOperator* const gyroaverageOp() const
+      {
+        return m_gyroavg_op;
+      }
+
+      inline void gyroaverage(CFG::LevelData<CFG::FArrayBox>& a_phi_bar,
+                              const CFG::LevelData<CFG::FArrayBox>& a_phi) const
+      {
+        if (m_gyroavg_op == NULL) {
+          MayDay::Error("Error in KineticSpecies::gyroaverage() - m_gyroavg_op is NULL.");
+        }
+        m_gyroavg_op->applyOp(a_phi_bar, a_phi);
+      }
+
    private:
 
-      const PhaseGeom& m_geometry;
+      const RefCountedPtr<PhaseGeom> m_geometry;
       string m_name;
       Real m_mass;
       Real m_charge;
       LevelData<FArrayBox> m_dist_func;
       MomentOp& m_moment_op;
       mutable DisjointBoxLayout m_ghost_dbl;
+
+      GyroaverageOperator const *m_gyroavg_op;
 };
 
 typedef Vector<RefCountedPtr<KineticSpecies> > KineticSpeciesPtrVect;

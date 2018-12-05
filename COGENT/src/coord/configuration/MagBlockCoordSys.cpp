@@ -36,10 +36,10 @@ inline Real computeMatrixDeterminant( const Vector<Real>& Jmtrx )
 
 MagBlockCoordSys::MagBlockCoordSys( ParmParse& a_parm_parse )
    : m_axisymmetric(true),
-     m_verbose(false),
-     m_subgrid_geometry(false),
      m_field_aligned(false),
-     m_pointwise_metrics(false)
+     m_pointwise_metrics(false),
+     m_verbose(false),
+     m_subgrid_geometry(false)
 {
    if (a_parm_parse.contains("verbose")) {
       a_parm_parse.get("verbose", m_verbose);
@@ -261,7 +261,7 @@ MagBlockCoordSys::cellVol( FArrayBox&     a_vol,
                            const Box&     a_box ) const
 {
    
-   if (!m_subgrid_geometry) {
+   if (!m_subgrid_geometry && !m_pointwise_metrics) {
       /*
        This code routine was borrowed from NewFourthOrderCoordSys::cellVol(),
        modified to incorporate the axisymmetric option.
@@ -313,13 +313,26 @@ MagBlockCoordSys::cellVol( FArrayBox&     a_vol,
       a_vol /= CFG_DIM;
    }
    
-   else if (m_subgrid_geometry) {
+   if (m_pointwise_metrics) {
 
+      FArrayBox J(a_box,1);
       FArrayBox Xi(a_box,SpaceDim);
       getCellCenteredMappedCoords(Xi);
+      pointwiseJ(J, Xi, a_box);
+      J *= getMappedCellVolume();
+      a_vol.copy(J);
+   }
    
+   if (m_subgrid_geometry) {
+
+      /*this will overwrite the pointwise calculation
+       if both flags (pointwise_metric and subgrid are ON)
+       because the latter is more accurate and does
+       not access data outside of the given cell
+       */
+      FArrayBox Xi(a_box,SpaceDim);
+      getCellCenteredMappedCoords(Xi);
       cellVolSubGrid(a_vol, Xi);
-      
    }
 }
 
@@ -558,6 +571,83 @@ void MagBlockCoordSys::getPointwiseN( FluxBox& a_N ) const
 }
 
 
+void MagBlockCoordSys::getPointwiseMetrics( FluxBox& a_N ) const
+{
+   /* This function is supposed to be used instead of Chombo's NewFourthOrderCoordSys::getN()
+    for the case where pointwise metrics is set to true. Becasue the indexing
+    of the entries in matrices computed by Chombo, i.e., the result
+    of Chombo's NewFourthOrderCoordSys::getN(), is different from how the pointwise metrics
+    data in indexed in the COGENT classes, we need to transpose the result.
+    In other words, the result of this function corresponds to 
+    NT*faceArea in the COGENT indexing convention, but to N*faceArea
+    in Chombo indexing convetion. Recall: div_X(Flux) = div_Xi(faceArea*NT*F)
+    NB: If axisymetry is ON the result of NewFourthOrderCoordSys::getN() will contain
+    extra 1/R factor in some of compenets (since computeTransverseFaceMetric 
+    and incrementFaceMetricWithEdgeTerm are overwritten in this class). This function does
+    not have those extra multipliers, thus applyAxisymmetryCorrections should do nothing 
+    if pointwise metrics is set to true and this function is used.
+    */
+   
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      FArrayBox& this_N = a_N[dir];
+      const Box& box = this_N.box();
+      
+      FArrayBox xi(box,SpaceDim);
+      getFaceCenteredMappedCoords(dir, xi);
+      
+      FArrayBox tmp(box,SpaceDim*SpaceDim);
+      compute_dXdXiCofac( tmp, xi, box );
+    
+      //perform transpose
+      if (SpaceDim == 2) {
+      
+         this_N.copy(tmp,0,0,1);
+         this_N.copy(tmp,2,1,1);
+         this_N.copy(tmp,1,2,1);
+         this_N.copy(tmp,2,2,1);
+         
+         if ( m_axisymmetric ) {
+            BoxIterator bit(box);
+            for (bit.begin();bit.ok();++bit) {
+               const IntVect& iv = bit();
+            
+               RealVect this_xi;
+               this_xi[RADIAL_DIR] = xi(iv,RADIAL_DIR);
+               this_xi[POLOIDAL_DIR] = xi(iv,POLOIDAL_DIR);
+            
+               double TwoPiRmaj = 2. * Pi * majorRadius(this_xi);
+            
+               for (int comp=0; comp<(SpaceDim*SpaceDim); ++comp) {
+                  this_N(iv,comp) *= TwoPiRmaj;
+               }
+            }
+         }
+      }
+      
+      //perform transpose
+      if (SpaceDim == 3) {
+         this_N.copy(tmp,0,0,1);
+         this_N.copy(tmp,3,1,1);
+         this_N.copy(tmp,6,2,1);
+         this_N.copy(tmp,1,3,1);
+         this_N.copy(tmp,4,4,1);
+         this_N.copy(tmp,7,5,1);
+         this_N.copy(tmp,2,6,1);
+         this_N.copy(tmp,5,7,1);
+         this_N.copy(tmp,8,8,1);
+      }
+   }
+
+   
+   RealVect faceArea = getMappedFaceArea();
+   for (int dir=0; dir<SpaceDim; dir++)
+   {
+      FArrayBox& this_N = a_N[dir];
+      this_N.mult(faceArea[dir]);
+   }
+
+}
+
 Vector<Real>
 MagBlockCoordSys::getPointwiseNT(const RealVect& a_Xi) const
 {
@@ -569,6 +659,12 @@ MagBlockCoordSys::getPointwiseNT(const RealVect& a_Xi) const
    if (SpaceDim == 2) {
       result[1] = tmp[2];
       result[2] = tmp[1];
+
+      if ( m_axisymmetric ) {
+         for (int nComp=0; nComp<SpaceDim*SpaceDim; ++nComp) {
+            result[nComp] = result[nComp] * 2. * Pi * majorRadius(a_Xi);
+         }
+      }
    }
 
    //perform transpose
@@ -581,12 +677,6 @@ MagBlockCoordSys::getPointwiseNT(const RealVect& a_Xi) const
       result[7] = tmp[5];
    }
 
-   if ( m_axisymmetric ) {
-      for (int nComp=0; nComp<SpaceDim*SpaceDim; ++nComp) {
-         result[nComp] = result[nComp] * 2. * Pi * majorRadius(a_Xi);
-      }
-   }
-   
    return result;
 }
 
@@ -991,6 +1081,14 @@ MagBlockCoordSys::computePsiThetaProjections( FluxBox& a_data ) const
    }
 }
 
+
+/*In order to preserve axisymmetry, the Chombo functions
+ computeTransverseFaceMetric() and incrementFaceMetricWithEdgeTerm()
+ (used in the calculation of Chombo getN) are overriden here with
+ some metric terms being multiplied by 1/R. To compensate for that
+ we need to call applyAxisymmetricCorrection() [which multiples the
+ radial component of an input vector by R] before calling mappedGridDivergence().
+ */
 #if 1
 void
 MagBlockCoordSys::incrementFaceMetricWithEdgeTerm(FArrayBox& a_N,
@@ -1237,81 +1335,5 @@ MagBlockCoordSys::computeTransverseFaceMetric(FArrayBox& a_faceMetrics,
 }
 
 #endif
-
-
-#if 0
-//For second-order calcualtions we can override (Chombo) getN() and cellVol() using the pointwise functions below. 
-//This should be used for the case of a field-aligned SN geometry, when non-divV=0-preserving (a.k.a. old)
-//calculation of the gyrokinetic velocity is used. Note that if getN is overriden, then the override for cellVol (see below)
-//should be used too. 
-//
-//NB:In order to preserve axisymmetry, the Chombo functions computeTransverseFaceMetric() and 
-//incrementFaceMetricWithEdgeTerm() (used in the calculation of Chombo getN) are overriden with some metric terms
-//being multiplied by 1/R. To compensate for that, we need to call applyAxisymmetricCorrection() [which multiples 
-//the radial component of an input vector by R] before calling mappedGridDivergence().  
-
-
-void
-MagBlockCoordSys::cellVol(FArrayBox&     a_vol,
-                          const FluxBox& a_N,
-                          const Box&     a_box ) const
-{
- 
-  FArrayBox J(a_box,1);
-  FArrayBox Xi(a_box,2);
-  getCellCenteredMappedCoords(Xi);
-  pointwiseJ(J, Xi, a_box);
-  J*=getMappedCellVolume();
-  a_vol.copy(J);
-    
-    
-}
-
-//This function computes NT*face_area (used in mappedGridDivergence() calculation), which corresponds to Chombo getN().
-//NB: Becasue, the indexing of the entries of the (face-averaged) N matrices computed by Chombo is different
-//than the pointwise values computed in the COGENT classes, we need to transpose the result. 
-void MagBlockCoordSys::getN(FluxBox& a_N, const Box& a_box) const
-{
-   for (int dir=0; dir<SpaceDim; ++dir) {
-      FArrayBox& this_N = a_N[dir];
-      const Box& box = this_N.box();
-      
-      FArrayBox xi(box,SpaceDim);
-      getFaceCenteredMappedCoords(dir, xi);
-      
-      dXdXi(this_N, xi, 0, 1, 1, box);
-      dXdXi(this_N, xi, 1, 0, 1, box);
-      dXdXi(this_N, xi, 2, 1, 0, box);
-      dXdXi(this_N, xi, 3, 0, 0, box);
-      this_N.negate(1,2);
-      
-      if ( isAxisymmetric() ) {
-         BoxIterator bit(box);
-         for (bit.begin();bit.ok();++bit) {
-            const IntVect& iv = bit();
-            
-            RealVect this_xi;
-            this_xi[RADIAL_DIR] = xi(iv,RADIAL_DIR);
-            this_xi[POLOIDAL_DIR] = xi(iv,POLOIDAL_DIR);
-            
-            double TwoPiRmaj = 2. * Pi * majorRadius(this_xi);
-            
-            for (int comp=0; comp<4; ++comp) {
-               this_N(iv,comp) *= TwoPiRmaj;
-            }
-         }
-      }
-   }
-   
-   RealVect faceArea = getMappedFaceArea();
-   for (int dir=0; dir<SpaceDim; dir++)
-   {
-      FArrayBox& this_N = a_N[dir];
-      this_N.mult(faceArea[dir]);
-   }
-   
-}
-#endif
-
 
 #include "NamespaceFooter.H"

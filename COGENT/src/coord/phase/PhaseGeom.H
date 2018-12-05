@@ -19,6 +19,7 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
+#include "GyroaverageOperator.H"
 
 #include "NamespaceHeader.H"
 namespace CFG = CFG_NAMESPACE;
@@ -32,20 +33,20 @@ public:
    /**
       Constructors, destructor and defines
    */
-   PhaseGeom( ParmParse& parm_parse,
-              const PhaseCoordSys*     coord_sys,
-              const PhaseGrid&         grids,
-              CFG::MagGeom&            mag_geom,
-              const VEL::VelCoordSys&  vel_coords,
-              int ghosts,
-              double larmor_number );
+   PhaseGeom( ParmParse&                              parm_parse,
+              const RefCountedPtr<PhaseCoordSys>&     coord_sys,
+              const RefCountedPtr<PhaseGrid>&         grids,
+              const RefCountedPtr<CFG::MagGeom>&      mag_geom,
+              const RefCountedPtr<VEL::VelCoordSys>&  vel_coords,
+              int                                     ghosts,
+              double                                  larmor_number );
 
    // Species-specific constructor
-   PhaseGeom( const PhaseGeom&          phase_geom,
-              const PhaseCoordSys*      coord_sys,
-              const VEL::VelCoordSys&   vel_coords,
-              double                    mass,
-              double                    charge );
+   PhaseGeom( const PhaseGeom&                        phase_geom,
+              const RefCountedPtr<PhaseCoordSys>&     coord_sys,
+              const RefCountedPtr<VEL::VelCoordSys>&  vel_coords,
+              double                                  mass,
+              double                                  charge );
    /**
       Destructor.
     */
@@ -78,11 +79,12 @@ public:
     */
    void updateVelocities( const LevelData<FluxBox>& Efield,
                           LevelData<FluxBox>&       velocity,
+                          const int                 option,
                           const bool                apply_axisymmetric_correction = false) const;
 
    void computeGKVelocities( const LevelData<FluxBox>& Efield,
                              LevelData<FluxBox>&       velocity_grown,
-                             const bool                magnetic_drifts_only = false) const;
+                             const int                 option ) const;
 
    void computeTestVelocities( LevelData<FluxBox>& velocity ) const;
 
@@ -223,14 +225,18 @@ public:
 
    const LevelData<FArrayBox>& getBFieldMagnitude() const {return *m_BMagCell;}
 
-   const CFG::MagGeom& magGeom() const {return m_mag_geom;}
+   const CFG::MagGeom& magGeom() const {return *m_mag_geom;}
 
    /// Returns \f$v_{\parallel}-\mu\f$ space mapping.
    /**
     */
-   const PhaseCoordSys& phaseCoordSys() const {return m_phase_coords;}
+   const RefCountedPtr<PhaseCoordSys>& phaseCoordSysPtr() const {return m_phase_coords;}
 
-   const VEL::VelCoordSys& velSpaceCoordSys() const { return m_vel_coords; }
+   const PhaseCoordSys& phaseCoordSys() const {return *m_phase_coords;}
+
+   const RefCountedPtr<VEL::VelCoordSys>& velSpaceCoordSysPtr() const { return m_vel_coords; }
+
+   const VEL::VelCoordSys& velSpaceCoordSys() const { return *m_vel_coords; }
 
    const PhaseBlockCoordSys& getBlockCoordSys(const Box& box) const;
 
@@ -435,7 +441,7 @@ public:
 
    const ProblemDomain& domain() const {return m_domain;}
 
-   const PhaseGrid& phaseGrid() const {return m_phase_grid;}
+   const PhaseGrid& phaseGrid() const {return *m_phase_grid;}
 
    //Extract configuraion component of a 4D vector (e.g., GKVelocity)
    void getConfigurationComponents( LevelData<FArrayBox>& configComp,
@@ -449,6 +455,32 @@ public:
    void computePoloidalProjection( LevelData<FArrayBox>& poloidalComp,
                                    const LevelData<FArrayBox>& vector) const;
 
+   enum velocity_option {FULL_VELOCITY, PARALLEL_STREAMING_VELOCITY, DRIFT_VELOCITY, EXB_DRIFT_VELOCITY,
+                         MAGNETIC_DRIFT_VELOCITY, NO_ZERO_ORDER_PARALLEL_VELOCITY};
+   
+   double getLarmorNumber() const {return m_larmor_number;}
+
+   inline Real larmorNumber() const { return m_larmor_number; }
+
+   inline void gyroaverageOp(const GyroaverageOperator* const a_op) const
+   {
+     m_gyroavg_op = a_op;
+   }
+
+   inline const GyroaverageOperator* const gyroaverageOp() const
+   {
+     return m_gyroavg_op;
+   }
+
+   inline void gyroaverage(CFG::LevelData<CFG::FArrayBox>& a_phi_bar,
+                           const CFG::LevelData<CFG::FArrayBox>& a_phi) const
+   {
+     if (m_gyroavg_op == NULL) {
+       MayDay::Error("Error in PhaseGeom::gyroaverage() - m_gyroavg_op is NULL.");
+     }
+     m_gyroavg_op->applyOp(a_phi_bar, a_phi);
+   }
+
 protected:
 
    Box configurationFlatten( const Box& disjointBox,
@@ -459,14 +491,14 @@ protected:
 
    IntVect m_ghostVect;
 
-   const CFG::MagGeom&     m_mag_geom;
-   const VEL::VelCoordSys& m_vel_coords;
+   const RefCountedPtr<CFG::MagGeom>     m_mag_geom;
+   const RefCountedPtr<VEL::VelCoordSys> m_vel_coords;
 
 private:
 
-   const PhaseCoordSys& m_phase_coords;
+   const RefCountedPtr<PhaseCoordSys> m_phase_coords;
 
-   const PhaseGrid& m_phase_grid;
+   const RefCountedPtr<PhaseGrid> m_phase_grid;
 
    ProblemDomain m_domain;
 
@@ -483,15 +515,14 @@ private:
    LevelData<FluxBox> *   m_velocity_face_areas;
 
    LevelData<FArrayBox> * m_BCell;
-   LevelData<FArrayBox> * m_gradBCell;
-   LevelData<FArrayBox> * m_curlbCell;
-   LevelData<FArrayBox> * m_BMagCell;
-   LevelData<FArrayBox> * m_bdotcurlbCell;
-
    LevelData<FluxBox> * m_BFace;
+   LevelData<FArrayBox> * m_gradBCell;
    LevelData<FluxBox> * m_gradBFace;
+   LevelData<FArrayBox> * m_curlbCell;
    LevelData<FluxBox> * m_curlbFace;
+   LevelData<FArrayBox> * m_BMagCell;
    LevelData<FluxBox> * m_BMagFace;
+   LevelData<FArrayBox> * m_bdotcurlbCell;
    LevelData<FluxBox> * m_bdotcurlbFace;
 
    LevelData<FArrayBox> m_BStar;
@@ -526,6 +557,7 @@ private:
    LevelData<FArrayBox> * m_sheared_remapped_index;
    LevelData<FArrayBox> * m_sheared_interp_stencil;
    
+   mutable GyroaverageOperator const *m_gyroavg_op;
 };
 
 typedef Vector<RefCountedPtr<PhaseGeom> > PhaseGeomPtrVect;

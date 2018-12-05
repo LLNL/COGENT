@@ -6,13 +6,11 @@
 
 
 
-LogRectPhaseCoordSys::LogRectPhaseCoordSys(ParmParse&                    a_pp,
-                                           const CFG::LogRectCoordSys&   a_mag_coords,
-                                           const VEL::VelCoordSys&       a_vel_coords,
-                                           const Vector<ProblemDomain>&  a_domains )
-  : PhaseCoordSys(a_mag_coords, a_vel_coords, a_domains),
-    m_config_coords( a_mag_coords )
-
+LogRectPhaseCoordSys::LogRectPhaseCoordSys(ParmParse&                                  a_pp,
+                                           const RefCountedPtr<CFG::LogRectCoordSys>&  a_mag_coords,
+                                           const RefCountedPtr<VEL::VelCoordSys>&      a_vel_coords,
+                                           const Vector<ProblemDomain>&                a_domains )
+  : PhaseCoordSys(a_mag_coords, a_vel_coords, a_domains)
 {
 
 #if CFG_DIM == 3
@@ -40,7 +38,7 @@ LogRectPhaseCoordSys::defineBoundaries()
   for (int block(0); block<numBlocks(); block++) {
 
     const CFG::MagBlockCoordSys* mag_block_coord_sys
-    = (const CFG::MagBlockCoordSys*)m_config_coords.getCoordSys(block);
+    = (const CFG::MagBlockCoordSys*)m_mag_coords->getCoordSys(block);
     
     const CFG::ProblemDomain& domain( mag_block_coord_sys->domain() );
     

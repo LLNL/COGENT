@@ -131,9 +131,8 @@ void GKVlasov::accumulateRHS( GKRHSData&                    a_rhs,
       const PhaseGeom& phase_geom = rhs_species.phaseSpaceGeometry();
       if ( phase_geom.divFreeVelocity() ) {
          bool fourth_order_Efield = !a_E_field.secondOrder();
-         int velocity_option = 0;
          evalRHS( rhs_species, soln_species, a_E_field.getCellCenteredField(), a_E_field.getPhiNode(),
-                  fourth_order_Efield, velocity_option, a_time );
+                  fourth_order_Efield, PhaseGeom::FULL_VELOCITY, a_time );
       }
       else {
          evalRHS( rhs_species, soln_species, a_E_field, a_time );
@@ -221,7 +220,6 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
       dfn_no_bstar[dit].copy(soln_dfn[dit]);
    }
    geometry.divideBStarParallel(dfn_no_bstar);
-  
 
    LevelData<FluxBox> flux_normal( dbl, 1, IntVect::Unit );
    LevelData<FluxBox> velocity_normal( dbl, 1, IntVect::Unit );
@@ -241,8 +239,8 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
       a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, a_velocity_option );
       computeFluxNormal( delta_dfn, velocity_normal, flux_tmp, geometry );
  
-      int omit_zero_order_velocity_option = 2;
-      a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, omit_zero_order_velocity_option );
+      a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield,
+                                                   PhaseGeom::NO_ZERO_ORDER_PARALLEL_VELOCITY );
 
       if (!m_update_maxwellian) {
 	computeFluxNormal( m_F0, velocity_normal, flux_normal, geometry);
@@ -501,7 +499,7 @@ GKVlasov::computeDt( const CFG::EField&            a_E_field,
          const LevelData<FArrayBox>& dfn( species.distributionFunction() );
 
          LevelData<FluxBox> velocity_normals( dfn.getBoxes(), 1, IntVect::Unit );
-         species.computeMappedVelocityNormals( velocity_normals, Efield_cell, phi_node, false );
+         species.computeMappedVelocityNormals( velocity_normals, Efield_cell, phi_node, false, PhaseGeom::FULL_VELOCITY );
 
          const Real UNIT_CFL(1.0);
          const PhaseGeom& geometry( species.phaseSpaceGeometry() );
@@ -559,7 +557,8 @@ GKVlasov::computeTimeScale( const CFG::EField&           a_E_field,
          const LevelData<FArrayBox>& dfn( species.distributionFunction() );
 
          LevelData<FluxBox> velocity_normals( dfn.getBoxes(), 1, IntVect::Unit );
-         species.computeMappedVelocityNormals( velocity_normals, Efield_cell, phi_node, false );
+         species.computeMappedVelocityNormals( velocity_normals, Efield_cell, phi_node, false,
+                                               PhaseGeom::FULL_VELOCITY);
 
          //      const Real UNIT_CFL(1.0);
          const PhaseGeom& geometry( species.phaseSpaceGeometry() );

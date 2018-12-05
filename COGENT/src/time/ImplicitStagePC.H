@@ -37,9 +37,7 @@ class ImplicitStagePC: public IMEXStagePCFunction<T,Ops>
 
     inline bool isDefined() const { return m_is_Defined;  }
 
-    inline void setShift        (Real a_shift )       { m_shift = a_shift; }
-    inline void setStageTime    (Real a_time  )       { m_StageTime = a_time; }
-    inline void setJFNKEps      (Real a_eps)          { m_epsJFNK = a_eps; }
+    inline void setJFNKEps(Real a_eps) { m_epsJFNK = a_eps; }
 
     inline void setBaseSolution (const T& a_Y)              
     { 
@@ -56,13 +54,11 @@ class ImplicitStagePC: public IMEXStagePCFunction<T,Ops>
     void define(const T&, Ops&, const std::string&, const std::string&);
     inline void setIsLinear(bool a_isLinear) { m_isLinear = a_isLinear; }
 
-    inline void update(const T& a_X, const Real a_shift = 0.0) 
+    inline void update(const T& a_X, const Real a_time, const Real a_shift) 
     {
        m_shift = a_shift;
-       m_Pmat.zeroEntries();
-       m_ops->assemblePCImEx(true, (void*)&m_Pmat, a_X, a_shift);
-       m_Pmat.scaleEntries(-1.0);
-       m_Pmat.shift(a_shift);
+       m_stage_time = a_time;
+       m_ops->assemblePCImEx(true, (void*)&m_Pmat, a_X, a_time, a_shift);
     }
 
     inline void getDiagonal(std::vector<Real>& a_D) const
@@ -76,7 +72,7 @@ class ImplicitStagePC: public IMEXStagePCFunction<T,Ops>
   private:
   
     bool m_is_Defined, m_isLinear;
-    Real m_shift, m_StageTime, m_epsJFNK, m_normY0;
+    Real m_shift, m_stage_time, m_epsJFNK, m_normY0;
     T    m_Z, m_Y0, m_F0, m_F, m_M0, m_M;
 
     Ops *m_ops;
@@ -142,11 +138,11 @@ void ImplicitStagePC<T,Ops>::applyOp(T& a_F, const T& a_y)
     }
 
     m_Z.copy(m_Y0); m_Z.increment(a_y,eps);
-    m_ops->implicitPCImEx(m_F,m_StageTime,m_Z);
+    m_ops->implicitPCImEx(m_F,m_stage_time,m_Z);
     if (m_ops->trivialSolutionOp()) {
       m_M.copy(m_Z);
     } else {
-      m_ops->solutionPC(m_M,m_StageTime,m_Z);
+      m_ops->solutionPC(m_M,m_stage_time,m_Z);
     }
 
     m_Z.copy(m_F); 

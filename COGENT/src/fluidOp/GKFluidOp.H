@@ -52,8 +52,19 @@ class GKFluidOp
                                   const PS::ScalarPtrVect&           scalars,
                                   const EField&                      E_field,
                                   const bool                         implicit,
-                                  const bool                         recompute_kinetic_terms,
                                   const Real                         time);
+
+      void preSolutionOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
+                              const FluidSpeciesPtrVect&         fluid_species,
+                              const PS::ScalarPtrVect&           scalars,
+                              const EField&                      E_field,
+                              const double                       time );
+
+      void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
+                      const FluidSpeciesPtrVect&         fluid_species,
+                      const PS::ScalarPtrVect&           scalars,
+                      const EField&                      E_field,
+                      const double                       time );
 
       virtual void convertToPhysical( FluidSpeciesPtrVect&        fluid_species_phys,
                                       const FluidSpeciesPtrVect&  fluid_species_comp,
@@ -81,6 +92,7 @@ class GKFluidOp
                                 const PS::KineticSpeciesPtrVect&,
                                 const FluidSpeciesPtrVect&,
                                 const Real,
+                                const Real,
                                 const bool );
 
       virtual void solveSolutionPC( FluidSpeciesPtrVect&              a_fluid_species_solution,
@@ -90,7 +102,8 @@ class GKFluidOp
 
       void updatePC( const PS::KineticSpeciesPtrVect&  kinetic_species,
                      const FluidSpeciesPtrVect&        fluid_species,
-                     const double                      mshift,
+                     const double                      time,
+                     const double                      shift,
                      int                               a_idx = -1 );
 
       virtual void solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species_solution,

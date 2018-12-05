@@ -4,6 +4,8 @@
 #include "EllipticOpBCFactory.H"
 #include "LogRectCoordSys.H"
 #include "SNCoreCoordSys.H"
+#include "FourthOrderUtil.H"
+#include "SimpleDivergence.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -14,6 +16,8 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 
+#undef OLD_DIVJPERP
+
 #include "NamespaceHeader.H" 
 
 const char* VorticityOp::pp_name = {"vorticity_op"};
@@ -23,18 +27,19 @@ VorticityOp::VorticityOp( const std::string&  a_pp_str,
                           const double        a_larmor,
                           const int           a_verbosity )
    : m_geometry(a_geometry),
-     m_sigma_div_e_coefs_set(false),
+     m_larmor(a_larmor),
      m_opt_string(a_pp_str),
      m_my_pc_idx_e(-1),
-     m_my_pc_idx_i(-1)
+     m_my_pc_idx_i(-1),
+     m_sigma_div_e_coefs_set(false)
 {
    const std::string name("potential");
    const std::string prefix( "BC." + name );
    ParmParse ppsp( prefix.c_str() );
    EllipticOpBCFactory elliptic_op_bc_factory;
-   ParmParse pp("gkpoisson");
+   ParmParse pp_vorticity_op("gkpoisson");
 
-   m_parallel_current_divergence_op = new GKPoisson(pp, a_geometry, a_larmor, 0.);
+   m_parallel_current_divergence_op = new GKPoisson(pp_vorticity_op, a_geometry, a_larmor, 0.);
    m_parallel_current_divergence_op->m_model = "ParallelCurrent";
    m_parallel_current_divergence_op->m_dt_implicit = 1.;
    m_parallel_current_divergence_op_bcs = elliptic_op_bc_factory.create( name,
@@ -43,7 +48,7 @@ VorticityOp::VorticityOp( const std::string&  a_pp_str,
                                                                          false );
    setCoreBC( 0., 0., *m_parallel_current_divergence_op_bcs );
 
-   m_par_cond_op = new GKPoisson(pp, a_geometry, 0., 0.);
+   m_par_cond_op = new GKPoisson(pp_vorticity_op, a_geometry, 0., 0.);
    m_par_cond_op->m_model = "Vorticity";
    m_par_cond_op->m_dt_implicit = 1.;
    m_par_cond_op_bcs = elliptic_op_bc_factory.create( name,
@@ -51,7 +56,7 @@ VorticityOp::VorticityOp( const std::string&  a_pp_str,
                                                       "SingleNull",
                                                       false );
 
-   m_imex_pc_op = new GKPoisson(pp, a_geometry, a_larmor, 0.);
+   m_imex_pc_op = new GKPoisson(pp_vorticity_op, a_geometry, a_larmor, 0.);
    m_imex_pc_op->m_model = "Vorticity";
    m_imex_pc_op->m_dt_implicit = 1.;
    m_imex_pc_op_bcs = elliptic_op_bc_factory.create( name,
@@ -59,7 +64,7 @@ VorticityOp::VorticityOp( const std::string&  a_pp_str,
                                                      "SingleNull",
                                                      false );
 
-   m_gyropoisson_op = new GKPoisson(pp, a_geometry, a_larmor, 0.);
+   m_gyropoisson_op = new GKPoisson(pp_vorticity_op, a_geometry, a_larmor, 0.);
    m_gyropoisson_op->m_model = "GyroPoisson";
    m_gyropoisson_op->m_dt_implicit = 1.;
    m_gyropoisson_op_bcs = elliptic_op_bc_factory.create( name,
@@ -73,6 +78,14 @@ VorticityOp::VorticityOp( const std::string&  a_pp_str,
    const DisjointBoxLayout& grids = m_geometry.gridsFull();
    m_negativeDivJpar.define(grids, 1, IntVect::Zero);
    m_divJperp.define(grids, 1, IntVect::Zero);
+
+   m_ion_charge_density.define(grids, 1, 2*IntVect::Unit);
+   m_ion_mass_density.define(grids, 1, IntVect::Zero);
+
+   m_volume.define(grids, 1, IntVect::Zero);
+   m_geometry.getCellVolumes(m_volume);
+
+   m_divJperp_mag.define(grids, 1, IntVect::Zero);
 
    // Input the initial conditions
    parseInitialConditions("", "potential");
@@ -101,7 +114,6 @@ void VorticityOp::accumulateExplicitRHS( FluidSpeciesPtrVect&               a_rh
                                          const int                          a_fluid_vec_comp,
                                          const Real                         a_time )
 {
-   CH_TIMERS("VorticityOp::accumulateExplicitRHS");
 }
 
 
@@ -111,7 +123,6 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
                                          const PS::ScalarPtrVect&           a_scalars,
                                          const EField&                      a_E_field,
                                          const int                          a_fluid_vec_comp,
-                                         const bool                         a_recompute_kinetic_terms,
                                          const Real                         a_time )
 {
    CH_TIMERS("VorticityOp::accumulateImplicitRHS");
@@ -157,34 +168,65 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
       rhs_data[dit] -= sigma_E_div_par[dit];
    }
 
-   // Since the evaluation of terms involving the kinetic species is somewhat expensive,
-   // the following conditional provides the opportunity to cache them between calls
+   CH_START(t_div_jpar);
 
-   if ( a_recompute_kinetic_terms ) {
-   
-      CH_START(t_div_jpar);
-
-      // Compute the divergence of the parallel ion current
-      LevelData<FArrayBox> ion_charge_density( grids, 1, IntVect::Zero );
-      computeIonChargeDensity( ion_charge_density, a_kinetic_species_phys );
-
-      m_parallel_current_divergence_op->setOperatorCoefficients( ion_charge_density, *m_parallel_current_divergence_op_bcs, false );
-      m_parallel_current_divergence_op->computeFluxDivergence(ion_charge_density, m_negativeDivJpar, false, true);
+   m_parallel_current_divergence_op->computeFluxDivergence(m_ion_charge_density, m_negativeDivJpar, false, true);
       
-      CH_STOP(t_div_jpar);
+   CH_STOP(t_div_jpar);
 
-      CH_START(t_div_jperp);
+   CH_START(t_div_jperp);
 
-      // Compute the divergence of the perpendicular ion current
-      computeDivPerpIonCurrentDensity(m_divJperp, a_E_field, a_kinetic_species_phys, a_time);
+   // Compute the divergence of the perpendicular ion current
+   computeDivPerpIonCurrentDensity(m_divJperp, a_E_field, a_kinetic_species_phys, m_ion_charge_density, a_time, false);
 
-      CH_STOP(t_div_jperp);
-   }
+   CH_STOP(t_div_jperp);
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       rhs_data[dit] += m_negativeDivJpar[dit];
       rhs_data[dit] -= m_divJperp[dit];
    }
+}
+
+
+void VorticityOp::preSolutionOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_species,
+                                     const FluidSpeciesPtrVect&         a_fluid_species,
+                                     const PS::ScalarPtrVect&           a_scalars,
+                                     const EField&                      a_E_field,
+                                     const double                       a_time )
+{
+   CH_TIME("VorticityOp::preSolutionOpEval");
+
+   computeIonMassDensity( m_ion_mass_density, a_kinetic_species );
+
+   m_gyropoisson_op->setOperatorCoefficients( m_ion_mass_density, *m_gyropoisson_op_bcs, true );
+}
+
+
+void VorticityOp::preOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_species,
+                             const FluidSpeciesPtrVect&         a_fluid_species,
+                             const PS::ScalarPtrVect&           a_scalars,
+                             const EField&                      a_E_field,
+                             const double                       a_time )
+{
+   CH_TIME("VorticityOp::preOpEval");
+
+   preSolutionOpEval(a_kinetic_species, a_fluid_species, a_scalars, a_E_field, a_time);
+
+   // Make sure there are enough ghost cells to compute the charge density in the ghost cells
+   // of m_ion_charge_density
+   for (int species(0); species<a_kinetic_species.size(); species++) {
+      PS::LevelData<PS::FArrayBox>& dfn = a_kinetic_species[species]->distributionFunction();
+      const PS::PhaseGeom& phase_geom = a_kinetic_species[species]->phaseSpaceGeometry();
+      CH_assert(phase_geom.config_restrict(dfn.ghostVect()) >= m_ion_charge_density.ghostVect());
+   }
+
+   computeIonChargeDensity( m_ion_charge_density, a_kinetic_species );
+
+   m_parallel_current_divergence_op->setOperatorCoefficients( m_ion_charge_density,
+                                                              *m_parallel_current_divergence_op_bcs,
+                                                              false );
+
+   computeDivPerpIonMagCurrentDensity(m_divJperp_mag, a_E_field, a_kinetic_species, a_time);
 }
 
 
@@ -198,9 +240,6 @@ void VorticityOp::evalSolutionOp( FluidSpeciesPtrVect&               a_rhs,
                                   const Real                         a_time )
 {
    CH_TIME("VorticityOp::evalSolutionOp");
-#if 1
-   LevelData<FArrayBox> ion_mass_density(m_geometry.gridsFull(), 1, IntVect::Zero);
-   computeIonMassDensity( ion_mass_density, a_kinetic_species_phys );
 
    if (a_scalars.size() > 0) {
       const Vector<Real>& scalar_data = a_scalars[0]->data();
@@ -211,8 +250,7 @@ void VorticityOp::evalSolutionOp( FluidSpeciesPtrVect&               a_rhs,
       setCoreBC( 0., 0., *m_gyropoisson_op_bcs );
    }
 
-   m_gyropoisson_op->setOperatorCoefficients( ion_mass_density, *m_gyropoisson_op_bcs, true );
-#endif
+   m_gyropoisson_op->updateBoundaries(*m_gyropoisson_op_bcs);
 
    const FluidSpecies& sol_species = static_cast<const FluidSpecies&>(*a_fluid_species_phys[a_component]);
    FluidSpecies& rhs_species = static_cast<FluidSpecies&>(*a_rhs[a_component]);
@@ -291,6 +329,7 @@ void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS
 void VorticityOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
                                   const PS::KineticSpeciesPtrVect&                          a_kin_species_phys,
                                   const FluidSpeciesPtrVect&                                a_fluid_species,
+                                  const Real                                                a_time,
                                   const Real                                                a_shift,
                                   const bool                                                a_im,
                                   const int                                                 a_species_idx )
@@ -312,12 +351,8 @@ void VorticityOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS
   PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps> *pc 
     = dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
       (a_pc[(a_im ? m_my_pc_idx_i : m_my_pc_idx_e)]);
-//  if (pc == NULL) {
-//    std::cout << "PC idx: " << m_my_pc_idx << ", a_im: " << a_im 
-//              << "\n";
-//  }
   CH_assert(pc != NULL);
-  pc->update(a_kin_species_phys, a_fluid_species, a_shift, a_im, a_species_idx);
+  pc->update(a_kin_species_phys, a_fluid_species, a_time, a_shift, a_im, a_species_idx);
 
   return;
 }
@@ -340,14 +375,13 @@ void VorticityOp::solveSolutionPC( FluidSpeciesPtrVect&              a_fluid_spe
 }
 
 void VorticityOp::updatePCImEx( const PS::KineticSpeciesPtrVect& a_kinetic_species,
-                                const double                     a_mshift )
+                                const double                     a_time,
+                                const double                     a_shift )
 {
    CH_TIME("VorticityOp::updatePCImEx");
-   LevelData<FArrayBox> ion_mass_density(m_geometry.gridsFull(), 1, IntVect::Zero);
-   computeIonMassDensity( ion_mass_density, a_kinetic_species );
 
-   m_imex_pc_op->m_alpha = a_mshift;
-   m_imex_pc_op->setOperatorCoefficients( ion_mass_density, *m_imex_pc_op_bcs, true );
+   m_imex_pc_op->m_alpha = a_shift;
+   m_imex_pc_op->setOperatorCoefficients( m_ion_mass_density, *m_imex_pc_op_bcs, true );
 }
 
 
@@ -357,6 +391,7 @@ void VorticityOp::solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species
                                const int                         a_component )
 {
    CH_TIME("VorticityOp::solvePCImEx");
+
    const FluidSpecies& rhs_species = static_cast<const FluidSpecies&>(*a_fluid_species_rhs[a_component]);
    const LevelData<FArrayBox>& r = rhs_species.cell_var(0);
 
@@ -375,14 +410,104 @@ void VorticityOp::fillGhostCells( FluidSpecies&  a_species_phys,
 }
 
 
+void VorticityOp::computeDivPerpIonMagCurrentDensity( LevelData<FArrayBox>&             a_divJperp_mag,
+                                                      const EField&                     a_E_field,
+                                                      const PS::KineticSpeciesPtrVect&  a_species_phys,
+                                                      const Real&                       a_time )
+{
+   CH_TIME("VorticityOp::computeDivPerpIonMagCurrentDensity");
+
+   PS::MomentOp& moment_op = PS::MomentOp::instance();
+
+   const DisjointBoxLayout& grids = m_geometry.gridsFull();
+   LevelData<FArrayBox> species_div_Jperp(grids, 1, IntVect::Zero);
+
+   setZero(a_divJperp_mag);
+      
+   for (int species(0); species<a_species_phys.size(); species++) {
+      
+      const PS::KineticSpecies& this_species( *(a_species_phys[species]) );
+      if ( this_species.charge() < 0.0 ) continue;
+      
+      const RefCountedPtr<PS::PhaseGeom>& phase_geometry( this_species.phaseSpaceGeometryPtr() );
+      PS::KineticSpecies tmp_rhs_species("tmp_rhs", this_species.mass(), this_species.charge(), phase_geometry);
+      PS::LevelData<PS::FArrayBox>& rhs_dfn = tmp_rhs_species.distributionFunction();
+      rhs_dfn.define( this_species.distributionFunction().getBoxes(), 1, PS::IntVect::Zero);
+      
+      // Compute the divergence of -Jperp due to magnetic drifts for this species
+      bool fourth_order = !m_parallel_current_divergence_op->secondOrder();
+      m_vlasov->evalRHS(tmp_rhs_species, this_species, a_E_field.getCellCenteredField(), a_E_field.getPhiNode(),
+                        fourth_order, PS::PhaseGeom::MAGNETIC_DRIFT_VELOCITY, a_time);
+
+      // Divide by J to get physical cell averages
+      phase_geometry->divideJonValid( rhs_dfn );
+      
+      moment_op.compute( species_div_Jperp, tmp_rhs_species, PS::ChargeDensityKernel() );
+      
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         a_divJperp_mag[dit] -= species_div_Jperp[dit];
+      }
+   }
+}
+
 void VorticityOp::computeDivPerpIonCurrentDensity( LevelData<FArrayBox>&             a_div_Jperp,
                                                    const EField&                     a_E_field,
                                                    const PS::KineticSpeciesPtrVect&  a_species_phys,
-                                                   const Real&                       a_time ) const
+                                                   const LevelData<FArrayBox>&       a_ion_charge_density,
+                                                   const Real&                       a_time,
+                                                   const bool                        a_compute_mag_contrib )
 {
    CH_TIME("VorticityOp::computeDivPerpIonCurrentDensity");
-   LevelData<FArrayBox> species_div_Jperp(a_div_Jperp.disjointBoxLayout(), 1, IntVect::Zero);
+
+   const DisjointBoxLayout& grids = m_geometry.gridsFull();
+
+   if ( a_compute_mag_contrib ) {
+      // Compute the ion perpendicular ion current divergence due solely to magnetic drifts
+      computeDivPerpIonMagCurrentDensity(m_divJperp_mag, a_E_field, a_species_phys, a_time);
+   }
+
+   // Compute the J_ExB divergence
+
+#ifndef OLD_DIVJPERP
+   
+   // Make sure there are enough ghost cells to compute the face average density below
+   for (int species(0); species<a_species_phys.size(); species++) {
+      PS::LevelData<PS::FArrayBox>& dfn = a_species_phys[species]->distributionFunction();
+      CH_assert(dfn.ghostVect() >= 2*PS::IntVect::Unit);
+   }
+
+   // Compute the current due to ExB drifts
+
+   LevelData<FluxBox> J_ExB(grids, 1, IntVect::Unit);
+   m_geometry.computeBxEIntegrals(a_E_field.getPhiNode(), true, J_ExB);
+
+   //   LevelData<FArrayBox> charge_density(grids, 1, 2*IntVect::Unit);
+   //   computeIonChargeDensity(charge_density, a_species_phys);
+
+   LevelData<FluxBox> charge_density_face(grids, 1, IntVect::Zero);
+   fourthOrderCellToFace(charge_density_face, a_ion_charge_density);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for (int dir=0, sign=-1; dir<SpaceDim; ++dir, sign*=-1) {
+         J_ExB[dit][dir] *= sign * m_larmor;
+         J_ExB[dit][dir] *= charge_density_face[dit][dir];
+      }
+   }
+
+   RealVect fakeDx = RealVect::Unit;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      simpleDivergence(a_div_Jperp[dit], J_ExB[dit], grids[dit], fakeDx);
+   }
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      a_div_Jperp[dit] /= m_volume[dit];      
+   }
+
+#else
+      
    PS::MomentOp& moment_op = PS::MomentOp::instance();
+
+   LevelData<FArrayBox> species_div_Jperp(grids, 1, IntVect::Zero);
 
    setZero(a_div_Jperp);
       
@@ -391,26 +516,32 @@ void VorticityOp::computeDivPerpIonCurrentDensity( LevelData<FArrayBox>&        
       const PS::KineticSpecies& this_species( *(a_species_phys[species]) );
       if ( this_species.charge() < 0.0 ) continue;
       
-      const PS::PhaseGeom& phase_geometry( this_species.phaseSpaceGeometry() );
+      const RefCountedPtr<PS::PhaseGeom>& phase_geometry( this_species.phaseSpaceGeometry() );
       PS::KineticSpecies tmp_rhs_species("tmp_rhs", this_species.mass(), this_species.charge(), phase_geometry);
       PS::LevelData<PS::FArrayBox>& rhs_dfn = tmp_rhs_species.distributionFunction();
       rhs_dfn.define( this_species.distributionFunction().getBoxes(), 1, PS::IntVect::Zero);
       
-      // Compute the divergence of -Jperp for this species
+      // Compute the divergence of -Jperp due to ExB drifts for this species
       bool fourth_order = !m_parallel_current_divergence_op->secondOrder();
-      int velocity_option = 1; // Drift terms only
       m_vlasov->evalRHS(tmp_rhs_species, this_species, a_E_field.getCellCenteredField(), a_E_field.getPhiNode(),
-                        fourth_order, velocity_option, a_time);
+                        fourth_order, PS::PhaseGeom::EXB_DRIFT_VELOCITY, a_time);
 
       // Divide by J to get physical cell averages
-      phase_geometry.divideJonValid( rhs_dfn );
+
+      phase_geometry->divideJonValid( rhs_dfn );
       
       moment_op.compute( species_div_Jperp, tmp_rhs_species, PS::ChargeDensityKernel() );
-      
-      DataIterator dit( a_div_Jperp.dataIterator() );
-      for (dit.begin(); dit.ok(); ++dit) {
-         a_div_Jperp[dit].minus( species_div_Jperp[dit] );
+
+      for (DataIterator dit(a_div_Jperp.dataIterator()); dit.ok(); ++dit) {
+         a_div_Jperp[dit] -= species_div_Jperp[dit];
       }
+   }
+
+#endif
+
+   // Add the pre-computed divJperp due solely to magnetic drifts
+   for (DataIterator dit(a_div_Jperp.dataIterator()); dit.ok(); ++dit) {
+      a_div_Jperp[dit] += m_divJperp_mag[dit];
    }
 }
 

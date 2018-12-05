@@ -122,7 +122,7 @@ fluid_model.neutrals.D_par = "Dshape"
 # Initial Condition Definitions
 #####################################################
 IC.potential.function = "zero_grid_func"
-IC.neutrals.function = "neutrals_IC"
+IC.neutrals.density.function = "neutrals_IC"
 
 #####################################################
 # Boundary Condition Definitions

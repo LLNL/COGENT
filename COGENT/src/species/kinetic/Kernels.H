@@ -63,10 +63,10 @@ class Kernel
     
       ///Computes cell-centered psi and theta velocity projections
 
-      virtual void computeCellVelCfgComp(LevelData<FArrayBox>& velCell,
-                                         const PhaseGeom& phase_geom,
+      virtual void computeCellVelCfgComp(LevelData<FArrayBox>&     velCell,
+                                         const PhaseGeom&          phase_geom,
                                          const LevelData<FluxBox>& field,
-                                         const bool mag_drifts_only = false) const;
+                                         const int                 option) const;
 };
 
 /// Density kernel.

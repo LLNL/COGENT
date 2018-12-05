@@ -300,6 +300,11 @@ protected:
    bool m_compute_core_prefactor;
    LevelData<FArrayBox> m_core_prefactor_numerator;
 
+   double*  m_Zni_outer_plate;
+   double*  m_Zni_inner_plate;
+   double*  m_phi_outer_plate;
+   double*  m_phi_inner_plate;
+
    MBTridiagonalSolver* m_precond_Psolver;
 #ifdef with_petsc
    MBPETScSolver* m_precond_Qsolver;
@@ -307,10 +312,7 @@ protected:
    MBHypreSolver* m_precond_Qsolver;
 #endif
 
-   double*  m_Zni_outer_plate;
-   double*  m_Zni_inner_plate;
-   double*  m_phi_outer_plate;
-   double*  m_phi_inner_plate;
+   MultiBlockLevelExchangeCenter* m_mblex_ptr;
 
    // If true, preserves the initial ion density average
    // in the Newton residual calculation to enable solvability

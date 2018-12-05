@@ -16,16 +16,17 @@
 #include "NamespaceHeader.H"
 
 KineticSpecies::KineticSpecies(
-         const string&              a_name,
-         const Real                 a_mass,
-         const Real                 a_charge,
-         const PhaseGeom&           a_geometry
+         const string&                   a_name,
+         const Real                      a_mass,
+         const Real                      a_charge,
+         const RefCountedPtr<PhaseGeom>& a_geometry
    )
   : m_geometry( a_geometry ),
     m_name( a_name ),
     m_mass( a_mass ),
     m_charge( a_charge ),
-    m_moment_op( MomentOp::instance() )
+    m_moment_op( MomentOp::instance() ),
+    m_gyroavg_op(NULL) 
 {
 }
 
@@ -36,7 +37,9 @@ KineticSpecies::KineticSpecies( const KineticSpecies& a_foo )
     m_mass( a_foo.m_mass ),
     m_charge( a_foo.m_charge ),
     m_moment_op( MomentOp::instance() )
+    
 {
+   gyroaverageOp(a_foo.gyroaverageOp());
    m_dist_func.define( a_foo.m_dist_func );
 }
 
@@ -62,7 +65,7 @@ void KineticSpecies::momentumDensity( CFG::LevelData<CFG::FArrayBox>& a_momentum
 				      const LevelData<FluxBox>& a_field,
 				      const double larmor  ) const
 {
-   const CFG::MagGeom& mag_geom = m_geometry.magGeom();
+   const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
 
    CFG::LevelData<CFG::FArrayBox> guidingCenterMom;
@@ -146,7 +149,7 @@ void KineticSpecies::PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& a_Poloida
 {
 
 
-   const CFG::MagGeom& mag_geom = m_geometry.magGeom();
+   const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
 
    CFG::LevelData<CFG::FArrayBox> guidingCenterPoloidalMom;
@@ -216,7 +219,7 @@ void KineticSpecies::ParticleFlux( CFG::LevelData<CFG::FArrayBox>& a_ParticleFlu
    m_moment_op.compute( a_ParticleFlux, *this, ParticleFluxKernel(field) );
 
    //Calculate flux average
-   const CFG::MagGeom& mag_geom = m_geometry.magGeom();
+   const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    CFG::FluxSurface m_flux_surface(mag_geom, false);
    CFG::LevelData<CFG::FArrayBox> FluxAver_tmp;
    FluxAver_tmp.define(a_ParticleFlux);
@@ -233,7 +236,7 @@ void KineticSpecies::HeatFlux( CFG::LevelData<CFG::FArrayBox>& a_HeatFlux,
    m_moment_op.compute( a_HeatFlux, *this, HeatFluxKernel(field, phi) );
 
    //Calculate flux average
-   const CFG::MagGeom& mag_geom = m_geometry.magGeom();
+   const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    CFG::FluxSurface m_flux_surface(mag_geom, false);
    CFG::LevelData<CFG::FArrayBox> FluxAver_tmp;
    FluxAver_tmp.define(a_HeatFlux);
@@ -283,7 +286,7 @@ KineticSpecies::computeFSavgMaxwellian( LevelData<FArrayBox>&  a_F0 ) const
 {
    
    /* Computes Vpar-unshifted FS averaged maxwellian fit. No B_star_par or J factors are included */
-   const CFG::MagGeom& mag_geom( m_geometry.magGeom() );
+   const CFG::MagGeom& mag_geom( m_geometry->magGeom() );
 
    IntVect ghost_vect = a_F0.ghostVect();
    CFG::IntVect ghost_cfg;
@@ -331,14 +334,14 @@ KineticSpecies::computeFSavgMaxwellian( LevelData<FArrayBox>&  a_F0 ) const
    }
 
    for (DataIterator dit(a_F0.dataIterator()); dit.ok(); ++dit) {
-      const PhaseBlockCoordSys& coord_sys = m_geometry.getBlockCoordSys(dbl[dit]);
+      const PhaseBlockCoordSys& coord_sys = m_geometry->getBlockCoordSys(dbl[dit]);
       const ProblemDomain& domain = coord_sys.domain();
       fourthOrderCellExtrapAtDomainBdry(a_F0[dit], domain, dbl[dit]);
    }
-   m_geometry.fillInternalGhosts(a_F0);
+   m_geometry->fillInternalGhosts(a_F0);
    //NB: divideBstarParallel also includes fillInternalGhosts, 
    //but we included one above, just for the clarity of the code
-   m_geometry.divideBStarParallel( a_F0 );
+   m_geometry->divideBStarParallel( a_F0 );
 
 }
 
@@ -462,7 +465,7 @@ const DisjointBoxLayout& KineticSpecies::getGhostDBL() const
 
       m_ghost_dbl.deepCopy(grids);
 
-      const PhaseCoordSys& coord_sys = m_geometry.phaseCoordSys();
+      const PhaseCoordSys& coord_sys = m_geometry->phaseCoordSys();
 
       for (int block=0; block<coord_sys.numBlocks(); ++block) {
          const PhaseBlockCoordSys& block_coord_sys = (const PhaseBlockCoordSys&)(*coord_sys.getCoordSys(block));
@@ -541,7 +544,7 @@ void KineticSpecies::computeVelocity(LevelData<FluxBox>& a_velocity,
 {
    const DisjointBoxLayout& dbl( m_dist_func.getBoxes() );
    a_velocity.define( dbl, SpaceDim, IntVect::Unit );
-   m_geometry.updateVelocities( a_E_field, a_velocity, true );
+   m_geometry->updateVelocities( a_E_field, a_velocity, PhaseGeom::FULL_VELOCITY, true );
 }
 
 
@@ -553,7 +556,7 @@ void KineticSpecies::computeMappedVelocityNormals(LevelData<FluxBox>& a_velocity
 {
    const DisjointBoxLayout& dbl( m_dist_func.getBoxes() );
    a_velocity_normal.define( dbl, 1, IntVect::Unit );
-   m_geometry.updateVelocityNormals( a_E_field_cell, a_phi_node, a_fourth_order_Efield, a_velocity_normal, a_velocity_option);
+   m_geometry->updateVelocityNormals( a_E_field_cell, a_phi_node, a_fourth_order_Efield, a_velocity_normal, a_velocity_option);
 }
 
 
@@ -562,7 +565,7 @@ void KineticSpecies::computeMappedVelocity(LevelData<FluxBox>& a_velocity,
 {
    const DisjointBoxLayout& dbl( m_dist_func.getBoxes() );
    a_velocity.define( dbl, SpaceDim, IntVect::Unit );
-   m_geometry.updateMappedVelocities( a_E_field, a_velocity );
+   m_geometry->updateMappedVelocities( a_E_field, a_velocity );
 }
 
 

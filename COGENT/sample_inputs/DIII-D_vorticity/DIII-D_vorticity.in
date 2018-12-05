@@ -22,7 +22,7 @@ simulation.max_time            = 20000
 simulation.max_dt_grow         = 1.1
 simulation.initial_dt_fraction = 1.0
 simulation.cfl_number          = 1.0
-simulation.checkpoint_interval = 200
+simulation.checkpoint_interval = 2
 simulation.checkpoint_prefix   = "chk"
 simulation.plot_interval       = 20
 simulation.plot_prefix         = "plt"
@@ -101,7 +101,6 @@ gksystem.transport_model_on = true
 phase_space_mapping.velocity_type = gyrokinetic
 phase_space_mapping.v_parallel_max = 4.0
 phase_space_mapping.mu_max = 9.0
-#phase_space_mapping.no_drifts = false
 phase_space_mapping.second_order = true
 phase_space_mapping.divfree_velocity = true
 
@@ -138,12 +137,6 @@ gkpoisson.electron_temperature = "electr_temp"
 gkpoisson.parallel_conductivity = "CondShape"
 gkpoisson.charge_exchange_coefficient = "ViscShape"
 
-poisson.max_iter = 50
-poisson.tol = 1.e-13
-poisson.amg_max_iter = 2
-poisson.amg_tol = 0.
-poisson.verbose = true
-
 #####################################################
 # Species Definitions
 #####################################################
@@ -152,7 +145,6 @@ kinetic_species.1.mass   = 2.0
 kinetic_species.1.charge = 1.0
 #kinetic_species.1.cls    = "Krook"
 kinetic_species.1.cls    = "FokkerPlanck"
-#kinetic_species.1.ntr    = "FixedBckgr"
 kinetic_species.1.tpm    = "Anomalous"
 
 scalar.1.name = "Er_boundary"
@@ -192,7 +184,6 @@ BC.potential.poloidal_inner_div.type = "dirichlet"
 BC.potential.poloidal_inner_div.value = 0.0
 BC.potential.poloidal_outer_div.type = "dirichlet"
 BC.potential.poloidal_outer_div.value = 0.0
-
 BC.potential.radial_core.type = "neumann"
 BC.potential.radial_core.value = 0.
 BC.potential.radial_sol.type = "neumann"
@@ -203,9 +194,6 @@ BC.potential.radial_pf.value = 0.0
 #####################################################
 # Collisions Definitions
 #####################################################
-#CLS.hydrogen.cls_freq = 0.4
-#CLS.hydrogen.conserve_particle  = true
-#CLS.hydrogen.conserve_momentum = false
 CLS.hydrogen.max_interation_number = 100000
 CLS.hydrogen.convergence_tolerance = 1.e-6
 CLS.hydrogen.multipole_number = 3
@@ -229,9 +217,9 @@ TPM.hydrogen.arbitrary_grid = true
 #####################################################
 # Kinetic Function Definitions
 #####################################################
-kinetic_function_library.number = 3
+kinetic_function_library.number = 2
 kinetic_function_library.verbosity = 1
-kinetic_function_library.list = "zero" "maxwellian_const" "maxwellian_ntr"
+kinetic_function_library.list = "zero" "maxwellian_const"
 
 kinetic_function_library.zero.type = "zero"
 
@@ -240,17 +228,12 @@ kinetic_function_library.maxwellian_const.v_parallel_shift = 0.0
 kinetic_function_library.maxwellian_const.density.function = "N0"
 kinetic_function_library.maxwellian_const.temperature.function = "T0"
 
-kinetic_function_library.maxwellian_ntr.type = "maxwellian"
-kinetic_function_library.maxwellian_ntr.v_parallel_shift = 0.0
-kinetic_function_library.maxwellian_ntr.density.function = "Nntr"
-kinetic_function_library.maxwellian_ntr.temperature.function = "T0"
-
 #####################################################
 # Grid Function Definitions
 #####################################################
-grid_function_library.number = 13
+grid_function_library.number = 8
 grid_function_library.verbosity = 1
-grid_function_library.list = "zero" "Dshape" "N0" "T0" "Neq" "Teq" "Nntr" "phi0" "inner_divertor_flux" "outer_divertor_flux" "ViscShape" "CondShape" "electr_temp"
+grid_function_library.list = "zero" "Dshape" "N0" "T0" "phi0" "ViscShape" "CondShape" "electr_temp"
 
 grid_function_library.zero.type = "zero" 
 
@@ -284,21 +267,6 @@ grid_function_library.T0.second_function="(0.3*(tanh((0.95 - x)/0.03))+1.0) * (0
 grid_function_library.phi0.type="arbitrary"
 grid_function_library.phi0.coordinate_type="flux"
 grid_function_library.phi0.function="-ln(0.5*(tanh((0.96 - x)/0.03))+0.7)"
-
-grid_function_library.Nntr.type = "constant"
-grid_function_library.Nntr.value = 0.1
-
-grid_function_library.Neq.type = "localized"
-grid_function_library.Neq.amplitude = 0.4
-grid_function_library.Neq.location = 1.6 -0.15
-grid_function_library.Neq.width = 5 0.2
-grid_function_library.Neq.floor = 1.0e-7
-
-grid_function_library.Teq.type = "constant"
-grid_function_library.Teq.value = 1.5
-
-grid_function_library.inner_divertor_flux.type = "data_array"
-grid_function_library.outer_divertor_flux.type = "data_array"
 
 #####################################################
 # Units Definitions

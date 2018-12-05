@@ -87,12 +87,13 @@ class GKCollisions
       void updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>&,
                                 const KineticSpeciesPtrVect&,
                                 const GlobalDOFKineticSpeciesPtrVect&,
-                                const Real, const bool);
+                                const Real, const Real, const bool);
 
 
       void assemblePrecondMatrix( void*,
                                   const KineticSpeciesPtrVect&,
-                                  const GlobalDOFKineticSpeciesPtrVect&);
+                                  const GlobalDOFKineticSpeciesPtrVect&,
+                                  const Real );
 
       /// returns the collision model associated with the input name
       /**

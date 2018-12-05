@@ -30,7 +30,6 @@ class ExplicitStagePC: public IMEXStagePCFunction<T,Ops>
     inline Real dotProduct(T& a_X, const T& a_Y)              { return(a_X.dotProduct(a_Y)); }
     inline Real norm      (T& a_Y, int a_ord)                 { return(a_Y.computeNorm(a_ord)); }
 
-    inline void setStageTime    (Real a_time  )       { m_StageTime = a_time; }
     inline bool isDefined       ()              const { return m_is_Defined;  }
 
     inline void setBaseSolution (const T& a_Y)
@@ -49,10 +48,11 @@ class ExplicitStagePC: public IMEXStagePCFunction<T,Ops>
     void define(const T&, Ops&, const std::string&, const std::string&);
     inline void setIsLinear(bool a_isLinear) { m_isLinear = a_isLinear; }
 
-    inline void update(const T& a_X, const Real a_a = 0.0) 
+    inline void update(const T& a_X, const Real a_time, const Real a_a = 0.0) 
     {
+      m_stage_time = a_time;
       m_P.zeroEntries();
-      m_ops->assembleSolPC(true, (void*)&m_P, a_X);
+      m_ops->assembleSolPC(true, (void*)&m_P, a_X, a_time);
     }
 
     inline void getDiagonal(std::vector<Real>& a_D) const
@@ -66,7 +66,7 @@ class ExplicitStagePC: public IMEXStagePCFunction<T,Ops>
   private:
   
     bool m_is_Defined, m_isLinear;
-    Real m_StageTime, m_epsJFNK, m_normY0;
+    Real m_stage_time, m_epsJFNK, m_normY0;
     T    m_Z, m_Y0, m_M0, m_M;
 
     Ops *m_ops;
@@ -128,7 +128,7 @@ void ExplicitStagePC<T,Ops>::applyOp(T& a_F, const T& a_y)
     }
 
     m_Z.copy(m_Y0); m_Z.increment(a_y,eps);
-    m_ops->solutionPC(m_M,m_StageTime,m_Z);
+    m_ops->solutionPC(m_M,m_stage_time,m_Z);
 
     a_F.copy(m_M); 
     a_F.increment(m_M0,-1);

@@ -9,6 +9,8 @@ class FluidVarBC
 {
    public:
 
+      virtual ~FluidVarBC() {;}
+
       virtual void apply( FluidSpecies&  a_species_phys,
                           const Real&    a_time ) = 0;
 

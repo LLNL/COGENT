@@ -169,7 +169,8 @@ protected:
    
    LayoutData< RefCountedPtr< IVSFAB<MBStencil> > > m_stencil_ue;
    LayoutData< IntVectSet > m_ghostCells_ue;
-   
+
+   Vector<MagBlockCoordSys *> m_coord_vec;
 };
 
 

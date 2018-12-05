@@ -646,7 +646,6 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
      if (SpaceDim == 3) {
        if (a_extrap_to_ghosts) computeMapped3DField(phi, flux);
        else computeMapped3DFieldWithBCs(phi, flux, a_homogeneous_bcs);
-       MayDay::Error("EllipticOp::low-pollution option is not fully developed for 3D yet"); 
     }
 
      else  {
@@ -667,11 +666,10 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
      LevelData<FluxBox> NTF_normal(grids, 1, IntVect::Zero);
      for (DataIterator dit(flux.dataIterator()); dit.ok(); ++dit) {
        const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
-       RealVect dx = block_coord_sys.dx();
+       RealVect faceArea = block_coord_sys.getMappedFaceArea();
        for (int dir=0; dir<SpaceDim; ++dir) {
-	 int perp_dir = (dir + 1) % 2;
 	 NTF_normal[dit][dir].copy(flux[dit][dir],dir,0,1);
-	 NTF_normal[dit][dir].mult(dx[perp_dir]);
+	 NTF_normal[dit][dir].mult(faceArea[dir]);
        }
      }
 

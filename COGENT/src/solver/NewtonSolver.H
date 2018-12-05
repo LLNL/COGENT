@@ -57,7 +57,7 @@ class NewtonSolver
      * @param[in] a_Y initial guess; contains the solution at exit
      * @param[in] a_b right-hand side
      */
-    void solve(T& a_Y, T& a_b);
+    void solve(T& a_Y, T& a_b, bool a_call_preop);
 
     /// Get converged reason
     /**
@@ -151,7 +151,7 @@ void NewtonSolver<T,Ops>::define(ParmParse& a_pp, T& a_state, std::string a_outP
 }
 
 template <class T, class Ops>
-void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
+void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b, bool a_call_preop)
 {
   CH_assert(isDefined());
   CH_assert(m_Function);
@@ -159,7 +159,7 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
   m_its = 0;
   if (m_isLinear) m_maxits = 0; /* Take only 1 Newton iteration */
   while(1) {
-    m_Function->evalFunction(m_F,a_Y,a_b,m_its); /* F = F(Y) - b */
+    m_Function->evalFunction(m_F,a_Y,a_b, (m_its == 0 && a_call_preop) ); /* F = F(Y) - b */
 
     /* compute norm of m_F */
     m_norm = m_F.computeNorm(2);

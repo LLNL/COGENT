@@ -53,6 +53,7 @@ ifeq ($(MAXDIM),4)
 4dsrc_dirs += ../src/advectUtil ../src/species/kinetic
 4dsrc_dirs += ../src/ibc
 4dsrc_dirs += ../src/bandedMatrix
+4dsrc_dirs += ../src/gyroavg
 4dsrc_dirs += ../src/solver
 4dsrc_dirs += ../src/time
 4dsrc_dirs += ../src/scalarOp ../src/species/scalar
@@ -70,6 +71,7 @@ else
 5dsrc_dirs += ../src/coord/phase   
 5dsrc_dirs += ../src/ibc ../src/ibc/phase  
 5dsrc_dirs += ../src/bandedMatrix
+5dsrc_dirs += ../src/gyroavg
 5dsrc_dirs += ../src/transport ../src/neutrals
 5dsrc_dirs += ../src/collisions   
 5dsrc_dirs += ../src/util  

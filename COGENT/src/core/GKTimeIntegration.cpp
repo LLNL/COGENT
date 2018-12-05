@@ -410,9 +410,9 @@ const Real& getVal(
 
     } else if (address.family() == "fluid" ) {
 
-      int i_fluid_species = address.number();
-      const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
-      MayDay::Error("GKTimeIntegration getVal() called for fluid species");
+       //      int i_fluid_species = address.number();
+       //      const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
+       MayDay::Error("GKTimeIntegration getVal() called for fluid species");
       //      return( gdof[i_fluid_species]->getVal(static_cast<const CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]), address) );
     } else {
       std::cout << "Error in GKState/GKRHSData::operator[]: Invalid value for "
@@ -449,7 +449,7 @@ const Real& getVal(
       new_address.family("fluid");
       new_address.number(i_fluid_species);
 
-      const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
+      //      const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
       MayDay::Error("GKTimeIntegration getVal() called for fluid species");
       //      const Real& val = gdof[i_fluid_species]->getVal(  gidx, static_cast<const CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]),
       //                                                        new_address );
@@ -500,9 +500,9 @@ Real& getVal(
 
     } else if (address.family() == "fluid" ) {
 
-      int i_fluid_species = address.number();
-      const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
-      MayDay::Error("GKTimeIntegration getVal() called for fluid species");
+       //      int i_fluid_species = address.number();
+       //      const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
+       MayDay::Error("GKTimeIntegration getVal() called for fluid species");
       //      return( gdof[i_fluid_species]->getVal(static_cast<CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]), address) );
     } else {
       std::cout << "Error in GKState/GKRHSData::operator[]: Invalid value for "
@@ -539,7 +539,7 @@ Real& getVal(
       new_address.family("fluid");
       new_address.number(i_fluid_species);
 
-      const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
+      //      const GlobalDOFFluidSpeciesPtrVect& gdof = a_global_dof->dataFluid();
       MayDay::Error("GKTimeIntegration getVal() called for fluid species");
       //      Real& val = gdof[i_fluid_species]->getVal(  gidx, static_cast<CFG::FluidSpecies&>(*a_fluid_species[i_fluid_species]),
       //                                                  new_address );

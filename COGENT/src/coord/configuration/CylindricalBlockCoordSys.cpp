@@ -159,7 +159,7 @@ CylindricalBlockCoordSys::computeFieldData(const int  a_dir,
       IntVect iv = bit();
       
       double R = RZ(iv,0);
-      double Z = RZ(iv,1);
+      //      double Z = RZ(iv,1);
       
       a_BField(iv,0) = 0.0;
       a_BField(iv,1) = m_Btor_scale / R;
@@ -220,8 +220,6 @@ void CylindricalBlockCoordSys::getNodalFieldData(FArrayBox& points,
                                                  FArrayBox& b,
                                                  FArrayBox& Bmag) const
 {
-   const Box& points_box = points.box();
-
    for (BoxIterator bit(points.box()); bit.ok(); ++bit) {
       IntVect iv = bit();
 

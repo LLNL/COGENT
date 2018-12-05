@@ -15,6 +15,7 @@
 
 #include <string>
 
+
 #include "NamespaceHeader.H"
 
 /**
@@ -65,8 +66,19 @@ public:
                                        const PS::ScalarPtrVect&           scalars,
                                        const EField&                      E_field,
                                        const int                          fluid_vec_comp,
-                                       const bool                         recompute_kinetic_terms,
                                        const Real                         time );
+
+   virtual void preSolutionOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
+                                   const FluidSpeciesPtrVect&         fluid_species,
+                                   const PS::ScalarPtrVect&           scalars,
+                                   const EField&                      E_field,
+                                   const double                       time );
+
+   virtual void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
+                           const FluidSpeciesPtrVect&         fluid_species,
+                           const PS::ScalarPtrVect&           scalars,
+                           const EField&                      E_field,
+                           const double                       time );
 
    virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
                                std::vector<PS::DOFList>&,
@@ -82,6 +94,7 @@ public:
    virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
                                 const PS::KineticSpeciesPtrVect&,
                                 const FluidSpeciesPtrVect&,
+                                const Real,
                                 const Real,
                                 const bool,
                                 const int );
@@ -101,7 +114,8 @@ public:
                                  const int                         a_component );
 
    virtual void updatePCImEx( const PS::KineticSpeciesPtrVect& kinetic_species,
-                              double                           mshift );
+                              double                           time,
+                              double                           shift );
 
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
@@ -121,10 +135,18 @@ public:
    virtual void fillGhostCells( FluidSpecies&  species_phys,
                                 const double   time );
 
+   // Compute the divergence of the perpedicular ion current due solely to magnetic drifts
+   void computeDivPerpIonMagCurrentDensity( LevelData<FArrayBox>&             div_Jperp_mag,
+                                            const EField&                     E_field,
+                                            const PS::KineticSpeciesPtrVect&  species,
+                                            const Real&                       time );
+
    void computeDivPerpIonCurrentDensity( LevelData<FArrayBox>&             div_Jperp,
                                          const EField&                     E_field,
                                          const PS::KineticSpeciesPtrVect&  species,
-                                         const Real&                       time ) const;
+                                         const LevelData<FArrayBox>&       ion_charge_density,
+                                         const Real&                       time,
+                                         const bool                        compute_mag_contrib = true );
 
    static const char* pp_name;
 
@@ -146,6 +168,7 @@ private:
    
    int m_verbosity;
    const MagGeom& m_geometry;
+   double m_larmor;
    bool m_par_cond_op_coefs_defined;
 
    GKPoisson*    m_parallel_current_divergence_op;
@@ -163,8 +186,13 @@ private:
    EllipticOpBC* m_imex_pc_op_bcs;
    EllipticOpBC* m_gyropoisson_op_bcs;
 
+   LevelData<FArrayBox> m_volume;
    LevelData<FArrayBox> m_negativeDivJpar;
    LevelData<FArrayBox> m_divJperp;
+   LevelData<FArrayBox> m_divJperp_mag;
+   LevelData<FluxBox> m_face_bXE_integrals;
+   LevelData<FArrayBox> m_ion_charge_density;
+   LevelData<FArrayBox> m_ion_mass_density;
 
    bool m_sigma_div_e_coefs_set;
 };

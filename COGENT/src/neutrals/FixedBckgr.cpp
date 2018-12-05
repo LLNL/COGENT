@@ -16,9 +16,9 @@
 
 FixedBckgr::FixedBckgr( ParmParse& a_ppntr, const int a_verbosity )
    : m_verbosity(a_verbosity),
+     m_fixed_source_dfn(false),
      m_neutr_vel(NULL),
-     m_neutr_temp(NULL),
-     m_fixed_source_dfn(false)
+     m_neutr_temp(NULL)
 {
    parseParameters( a_ppntr );
 

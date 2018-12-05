@@ -65,8 +65,19 @@ class FluidOpInterface
                                           const PS::ScalarPtrVect&           scalars,
                                           const EField&                      E_field,
                                           const int                          component,
-                                          const bool                         recompute_kinetic_terms,
                                           const Real                         time) = 0;
+
+      virtual void preSolutionOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
+                                      const FluidSpeciesPtrVect&         fluid_species,
+                                      const PS::ScalarPtrVect&           scalars,
+                                      const EField&                      E_field,
+                                      const double                       time ) {;}
+
+      virtual void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
+                              const FluidSpeciesPtrVect&         fluid_species,
+                              const PS::ScalarPtrVect&           scalars,
+                              const EField&                      E_field,
+                              const double                       time ) {;}
 
       virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
                                   std::vector<PS::DOFList>&,
@@ -82,6 +93,7 @@ class FluidOpInterface
       virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
                                    const PS::KineticSpeciesPtrVect&,
                                    const FluidSpeciesPtrVect&,
+                                   const Real,
                                    const Real,
                                    const bool,
                                    const int ) { }
@@ -100,7 +112,8 @@ class FluidOpInterface
       }
 
       virtual void updatePCImEx( const PS::KineticSpeciesPtrVect& kinetic_species,
-                                 const double                     mshift ) {};
+                                 const double                     time,
+                                 const double                     shift ) {}
 
       virtual void solveSolutionPC( FluidSpeciesPtrVect&              fluid_species_solution,
                                     const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,

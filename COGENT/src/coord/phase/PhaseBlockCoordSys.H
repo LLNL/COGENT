@@ -205,7 +205,7 @@ class PhaseBlockCoordSys : public NewFourthOrderCoordSys
       ProblemDomain m_domain;
 
       const CFG::MagBlockCoordSys& m_configuration_coords;
-      const VEL::VelCoordSys&      m_velocity_coords;
+      const VEL::VelCoordSys& m_velocity_coords;
 
       double   m_mapped_cell_volume;
       RealVect m_mapped_face_area;
