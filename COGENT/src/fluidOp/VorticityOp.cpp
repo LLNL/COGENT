@@ -629,5 +629,66 @@ void VorticityOp::setZero( LevelData<FArrayBox>& a_data ) const
 }
 
 
+void VorticityOp::initializeOldModel( const PS::KineticSpeciesPtrVect&  a_kinetic_species,
+                                      const Vector<Real>&               a_scalar_data )
+{
+   computeIonMassDensity(m_ion_mass_density, a_kinetic_species);
+
+   setCoreBC( a_scalar_data[0], -a_scalar_data[1], *m_gyropoisson_op_bcs );
+
+   m_gyropoisson_op->setOperatorCoefficients(m_ion_mass_density, *m_gyropoisson_op_bcs, false);
+}
+
+
+void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_phi,
+                                           EField&                           a_E_field,
+                                           const PS::KineticSpeciesPtrVect&  a_kinetic_species,
+                                           const Vector<Real>&               a_scalar_data,
+                                           const Real                        a_dt,
+                                           const Real                        a_time )
+{
+   const DisjointBoxLayout& grids = m_geometry.gridsFull();
+      
+   // Compute the polarization density term (at the old time) using the operator and boundary
+   // conditions set in the previous call of this function or initializeOldModel().
+   LevelData<FArrayBox> gkPoissonRHS(grids, 1, IntVect::Zero);
+   m_gyropoisson_op->computeFluxDivergence(a_phi, gkPoissonRHS, false);
+      
+   // Compute the parallel current divergence
+   computeIonChargeDensity(m_ion_charge_density, a_kinetic_species);
+   m_parallel_current_divergence_op->m_dt_implicit = a_dt;
+   m_parallel_current_divergence_op->setOperatorCoefficients(m_ion_charge_density, *m_parallel_current_divergence_op_bcs, true);
+   m_parallel_current_divergence_op->computeFluxDivergence(m_ion_charge_density, m_negativeDivJpar, false, true);
+      
+   // Compute the perpendicular current divergence
+   computeDivPerpIonCurrentDensity(m_divJperp, a_E_field, a_kinetic_species, m_ion_charge_density, a_time);
+
+   // Get the RHS for the implicit vorticity solve
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      gkPoissonRHS[dit] += m_negativeDivJpar[dit];
+      m_divJperp[dit] *= a_dt;
+      gkPoissonRHS[dit] -= m_divJperp[dit];
+   }
+      
+   double Er_lo = a_scalar_data[0];
+   double Er_hi = a_scalar_data[1];
+
+   // Do the implicit vorticity solve
+   computeIonMassDensity(m_ion_mass_density, a_kinetic_species);
+   m_imex_pc_op->m_dt_implicit = a_dt;
+   setCoreBC( Er_lo, -Er_hi, *m_imex_pc_op_bcs );
+   m_imex_pc_op->setOperatorCoefficients(m_ion_mass_density, *m_imex_pc_op_bcs, true);
+
+   m_imex_pc_op->computePotential( a_phi, gkPoissonRHS );
+   m_imex_pc_op->fillInternalGhosts( a_phi );
+
+   // Update nodal phi if supporting the calculation of a divergence-free phase velocity
+   a_E_field.interpToNodes(a_phi);
+
+   // Set up the polarization density operator for the next step
+   setCoreBC( Er_lo, -Er_hi, *m_gyropoisson_op_bcs );
+   m_gyropoisson_op->setOperatorCoefficients(m_ion_mass_density, *m_gyropoisson_op_bcs, false);
+}
+
 
 #include "NamespaceFooter.H"

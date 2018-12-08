@@ -33,7 +33,8 @@ class KineticSpecies
          const string&                   name,
          const Real                      mass,
          const Real                      charge,
-         const RefCountedPtr<PhaseGeom>& geometry );
+         const RefCountedPtr<PhaseGeom>& geometry,
+         const bool                      is_gyrokinetic = false );
 
       /// Copy Constructor.
       /**
@@ -258,22 +259,36 @@ class KineticSpecies
 
       inline void gyroaverageOp(const GyroaverageOperator* const a_op)
       {
+        if (!m_is_gyrokinetic) {
+          MayDay::Error("KineticSpecies::gyroaverageOp() called for non-gyrokinetic species!");
+        }
         m_gyroavg_op = a_op;
         (*m_geometry).gyroaverageOp(a_op);
       }
 
       inline const GyroaverageOperator* const gyroaverageOp() const
       {
+        if (!m_is_gyrokinetic) {
+          MayDay::Error("KineticSpecies::gyroaverageOp() called for non-gyrokinetic species!");
+        }
         return m_gyroavg_op;
       }
 
       inline void gyroaverage(CFG::LevelData<CFG::FArrayBox>& a_phi_bar,
                               const CFG::LevelData<CFG::FArrayBox>& a_phi) const
       {
+        if (!m_is_gyrokinetic) {
+          MayDay::Error("KineticSpecies::gyroaverage() called for non-gyrokinetic species!");
+        }
         if (m_gyroavg_op == NULL) {
           MayDay::Error("Error in KineticSpecies::gyroaverage() - m_gyroavg_op is NULL.");
         }
         m_gyroavg_op->applyOp(a_phi_bar, a_phi);
+      }
+
+      inline bool isGyrokinetic() const
+      {
+        return m_is_gyrokinetic;
       }
 
    private:
@@ -287,6 +302,7 @@ class KineticSpecies
       mutable DisjointBoxLayout m_ghost_dbl;
 
       GyroaverageOperator const *m_gyroavg_op;
+      bool m_is_gyrokinetic;
 };
 
 typedef Vector<RefCountedPtr<KineticSpecies> > KineticSpeciesPtrVect;

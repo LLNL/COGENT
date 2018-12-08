@@ -256,20 +256,22 @@ public:
 
    inline bool trivialSolutionOp() const { return m_trivial_solution_op; }
 
-   void preOpEval( const GKState&, const Real);
+   void preOpEval( const GKState&, const Real, const bool);
    inline void preOpEval(const GKVector&  a_state,
-                         const Real       a_time )
+                         const Real       a_time,
+                         const bool       a_update_fluid_ops)
    {
       m_Y.copyFrom(a_state.data());
-      preOpEval(m_Y,a_time);
+      preOpEval(m_Y,a_time,a_update_fluid_ops);
    }
 
-   void preSolutionOpEval( const GKState&, const Real);
+   void preSolutionOpEval( const GKState&, const Real, const bool);
    inline void preSolutionOpEval(const GKVector&  a_state,
-                                 const Real       a_time )
+                                 const Real       a_time,
+                                 const bool       a_update_fluid_ops)
    {
       m_Y.copyFrom(a_state.data());
-      preSolutionOpEval(m_Y,a_time);
+      preSolutionOpEval(m_Y,a_time,a_update_fluid_ops);
    }
 
    void explicitOp( GKRHSData&, const Real, const GKState&);

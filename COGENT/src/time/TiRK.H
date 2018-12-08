@@ -357,7 +357,7 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
       if ( m_step_const_coef && i==0 ) {
          // Initialize the coefficients for the right-hand side operators,
          // which are assumed to be constant over the step
-         m_Operators.preOpEval(a_Y,m_time);
+         m_Operators.preOpEval(a_Y,m_time,true);
       }
       m_YStage.copy(a_Y);
       for (j=0; j<i; j++) m_YStage.increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
@@ -375,11 +375,11 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
          if ( i==0 ) {
             // Initialize the coefficients for both the solution and right-hand side
             // operators, which are assumed to be constant over the step
-            m_Operators.preOpEval(a_Y,stage_time);
+            m_Operators.preOpEval(a_Y,stage_time,true);
          }
       }
       else {
-         m_Operators.preSolutionOpEval(a_Y,stage_time);
+         m_Operators.preSolutionOpEval(a_Y,stage_time,true);
       }
       m_Operators.solutionOp(m_R,stage_time,a_Y);
       for (j=0; j<i; j++) m_R.increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
@@ -389,7 +389,7 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
     }
 
     m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage,i);
-    if ( !m_step_const_coef ) m_Operators.preOpEval(m_YStage,stage_time);
+    m_Operators.preOpEval(m_YStage,stage_time,!m_step_const_coef);
     m_Operators.explicitOp(m_rhsStage[i],stage_time,m_YStage);
   }
 
@@ -407,7 +407,7 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
     m_EJacobian->setStageTime(m_time+m_dt);
     m_EJacobian->updatePreCondMat(a_Y);
 
-    if ( !m_step_const_coef ) m_Operators.preSolutionOpEval(a_Y,(m_time+m_dt));
+    m_Operators.preSolutionOpEval(a_Y,(m_time+m_dt),!m_step_const_coef);
     m_Operators.solutionOp(m_R,(m_time+m_dt),a_Y);
     for (i = 0; i < m_nstages; i++) {
       m_R.increment(m_rhsStage[i],(m_dt*m_b[i]));

@@ -2013,18 +2013,6 @@ MagGeom::getIntegralsForVelocity( const LevelData<FArrayBox>& a_Efield_cell,
 
    LevelData<FArrayBox> exb_divergence(grids, 1, IntVect::Zero);
 
-   LevelData<FluxBox> tmp_bXE_integrals(grids, 1, IntVect::Unit);
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      tmp_bXE_integrals[dit].copy(face_bXE_integrals[dit]);
-      tmp_bXE_integrals[dit][1].negate();
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         tmp_bXE_integrals[dit][dir] *= 0.00176972;
-         //         tmp_bXE_integrals[dit][dir] *= (8./36.) * (9./24.);
-         tmp_bXE_integrals[dit][dir] *= 8. * 9.;
-         tmp_bXE_integrals[dit][dir] /= 2.;
-      }
-   }
-   
    const IntVect ghosts( a_volume_integrals.ghostVect());
    LevelData<FArrayBox> NJInverse(grids, SpaceDim*SpaceDim, ghosts);
    getPointwiseNJInverse(NJInverse);

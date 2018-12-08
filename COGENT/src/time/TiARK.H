@@ -617,7 +617,7 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
        if ( m_step_const_coef && i==0 ) {
           // Initialize the coefficients for the right-hand side operators,
           // which are assumed to be constant over the step
-          m_Operators.preOpEval(a_Y,m_time);
+          m_Operators.preOpEval(a_Y,m_time,true);
        }
        m_YStage.copy(a_Y);
     }
@@ -626,11 +626,11 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
           if ( i==0 ) {
              // Initialize the coefficients for both the solution and right-hand side
              // operators, which are assumed to be constant over the step
-             m_Operators.preOpEval(a_Y,m_time);
+             m_Operators.preOpEval(a_Y,m_time,true);
           }
        }
        else {
-          m_Operators.preSolutionOpEval(a_Y,m_time);
+          m_Operators.preSolutionOpEval(a_Y,m_time,true);
        }
        m_Operators.solutionOp(m_YStage,m_time,a_Y);
     }
@@ -698,7 +698,7 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
     }
 
     m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage,i);
-    if ( !m_step_const_coef ) m_Operators.preOpEval(m_YStage,stage_time);
+    m_Operators.preOpEval(m_YStage,stage_time,!m_step_const_coef);
     m_Operators.explicitOpImEx(m_rhsStage_exp[i],stage_time,m_YStage);
     m_Operators.implicitOpImEx(m_rhsStage_imp[i],stage_time,m_YStage);
   }
@@ -729,7 +729,7 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
        EJacobian_precond_updated = true;
     }
 
-    if ( !m_step_const_coef ) m_Operators.preSolutionOpEval(a_Y,(m_time+m_dt));
+    m_Operators.preSolutionOpEval(a_Y,(m_time+m_dt),!m_step_const_coef);
     m_Operators.solutionOp(m_R,(m_time+m_dt),a_Y);
     for (i = 0; i < m_nstages; i++) {
       m_R.increment(m_rhsStage_exp[i],(m_dt*m_be[i]));

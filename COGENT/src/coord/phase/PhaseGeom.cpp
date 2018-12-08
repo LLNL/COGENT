@@ -134,7 +134,8 @@ PhaseGeom::PhaseGeom( const PhaseGeom&                        a_phase_geom,
                       const RefCountedPtr<PhaseCoordSys>&     a_coord_sys,
                       const RefCountedPtr<VEL::VelCoordSys>&  a_vel_coords,
                       double                                  a_mass,
-                      double                                  a_charge )
+                      double                                  a_charge,
+                      bool                                    a_is_gyrokinetic )
 
 : MultiBlockLevelGeom(a_coord_sys,a_phase_geom.gridsFull(),a_phase_geom.ghosts(),Interval(CFG_DIM,SpaceDim-1),Vector<int>(VEL_DIM,0)),
      m_ghostVect(a_phase_geom.m_ghostVect),
@@ -170,7 +171,8 @@ PhaseGeom::PhaseGeom( const PhaseGeom&                        a_phase_geom,
      m_larmor_number(a_phase_geom.m_larmor_number),
      m_sheared_remapped_index(a_phase_geom.m_sheared_remapped_index),
      m_sheared_interp_stencil(a_phase_geom.m_sheared_interp_stencil),
-     m_gyroavg_op(NULL)
+     m_gyroavg_op(NULL),
+     m_is_gyrokinetic(a_is_gyrokinetic)
 {
    defineSpeciesState(a_mass, a_charge);
 }

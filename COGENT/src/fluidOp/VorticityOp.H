@@ -148,7 +148,17 @@ public:
                                          const Real&                       time,
                                          const bool                        compute_mag_contrib = true );
 
-   static const char* pp_name;
+   void initializeOldModel( const PS::KineticSpeciesPtrVect&  kinetic_species,
+                            const Vector<Real>&               scalar_data );
+
+   void updatePotentialOldModel( LevelData<FArrayBox>&             phi,
+                                 EField&                           E_field,
+                                 const PS::KineticSpeciesPtrVect&  kinetic_species,
+                                 const Vector<Real>&               scalar_data,
+                                 const Real                        dt,
+                                 const Real                        time );
+
+static const char* pp_name;
 
 private:
 

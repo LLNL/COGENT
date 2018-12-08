@@ -1,0 +1,20 @@
+#!/bin/bash
+export COGENT_TEST_COGENT_DIR=/usr/workspace/wsa/dorr/ESL/current/COGENT
+export COGENT_TEST_CHOMBO_DIR=/usr/workspace/wsa/dorr/ESL/current/Chombo
+export COGENT_TEST_RESULTS_DIR=/p/lustre1/dorr/regression_tests/test_results
+export COGENT_TEST_TOLERANCE=1.e-15
+
+# 4d tests
+export COGENT_TEST_DIM=4
+export COGENT_TEST_BASELINES_DIR=/usr/gapps/cogent/baselines/4d_pdebug
+./checkout_and_build
+./run_tests "`ls $COGENT_TEST_BASELINES_DIR`"
+
+# 5d tests
+export COGENT_TEST_DIM=5
+export COGENT_TEST_BASELINES_DIR=/usr/gapps/cogent/baselines/5d
+./checkout_and_build
+./run_tests "`ls $COGENT_TEST_BASELINES_DIR`"
+
+
+

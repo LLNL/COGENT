@@ -878,9 +878,13 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
 	ppspecies.get("velocity_renormalization", include_velocity_renormalization);
       }
 
+      bool is_gyrokinetic(false);
+      ppspecies.query("is_gyrokinetic", is_gyrokinetic);
+
       if ( species_is_complete ) {
          if ( procID() == 0 && m_verbosity ) {
-            cout << "   " << name << ": kinetic species with mass = " << mass << ", charge = "
+            cout << "   " << (is_gyrokinetic ? "Gyrokinetic" : "Drift-kinetic") << " species "
+                 << name << ": mass = " << mass << ", charge = "
                  << charge << ", velocity renormalization = " << include_velocity_renormalization <<endl;
          }
 
@@ -926,10 +930,10 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
          
          // Get the species geometry
          RefCountedPtr<PhaseGeom> species_geom 
-            = RefCountedPtr<PhaseGeom>(new PhaseGeom(*m_phase_geom, phase_coords, velocity_coords, mass, charge));
+            = RefCountedPtr<PhaseGeom>(new PhaseGeom(*m_phase_geom, phase_coords, velocity_coords, mass, charge, is_gyrokinetic));
 
          // Create the species object
-         KineticSpecies* kin_spec = new KineticSpecies( name, mass, charge, species_geom );
+         KineticSpecies* kin_spec = new KineticSpecies( name, mass, charge, species_geom, is_gyrokinetic );
          kin_spec->distributionFunction().define(m_phase_grid->disjointBoxLayout(), 1, IntVect::Zero);
 
          // Add the new species to the solution vector
@@ -1910,8 +1914,8 @@ void GKSystem::giveSpeciesTheirGyroaverageOps()
     KineticSpecies& sp_comp = *(species_comp[s]);
     KineticSpecies& sp_phys = *(species_phys[s]);
 
-    sp_comp.gyroaverageOp(gyroavg_ops[sp_comp.name()]);
-    sp_phys.gyroaverageOp(gyroavg_ops[sp_phys.name()]);
+    if (sp_comp.isGyrokinetic()) sp_comp.gyroaverageOp(gyroavg_ops[sp_comp.name()]);
+    if (sp_phys.isGyrokinetic()) sp_phys.gyroaverageOp(gyroavg_ops[sp_phys.name()]);
   }
 
   return;

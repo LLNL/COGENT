@@ -212,6 +212,11 @@ void GKOps::initializeElectricField( const GKState& a_state_phys,
    if ( (typeid(coords) == typeid(CFG::SingleNullCoordSys)) && (m_dealignment_corrections)) {
       mag_geom.interpolateErFromMagFS(m_E_field->getFaceCenteredField(), m_E_field->getCellCenteredField());
    }
+
+   if ( m_old_vorticity_model ) {
+      const Vector<Real>& scalar_data = a_state_phys.dataScalar()[m_Y.getScalarComponent("Er_boundary")]->data();
+      m_VorticityOp->initializeOldModel(a_state_phys.dataKinetic(), scalar_data);
+   }
 }
 
 GKOps::~GKOps()
@@ -365,21 +370,12 @@ void GKOps::postTimeStep( const int       a_step,
 
    if ( m_old_vorticity_model ) {
 
+      KineticSpeciesPtrVect kinetic_species_phys;
+      createPhysicalSpeciesVector(kinetic_species_phys, a_state.dataKinetic(), a_time);
+
       const Vector<Real>& scalar_data = a_state.dataScalar()[m_Y.getScalarComponent("Er_boundary")]->data();
 
-      const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-      const CFG::DisjointBoxLayout& mag_grids = mag_geom.gridsFull();
-
-      CFG::LevelData<CFG::FArrayBox> ion_charge_density( mag_grids, 1, 2*CFG::IntVect::Unit );
-      CFG::LevelData<CFG::FArrayBox> electron_charge_density( mag_grids, 1, 2*CFG::IntVect::Unit );
-      computeSignedChargeDensities(ion_charge_density, electron_charge_density, m_kinetic_species_phys);
-
-      CFG::LevelData<CFG::FArrayBox> divJperp( mag_grids, 1, CFG::IntVect::Zero );
-      m_VorticityOp->computeDivPerpIonCurrentDensity(divJperp, *m_E_field, m_kinetic_species_phys,
-                                                     ion_charge_density, a_time);
-
-      CFG::EllipticOpBC& bc = m_boundary_conditions->getEllipticOpBC();
-      m_E_field->updateImplicitPotential(m_phi, m_units->larmorNumber(), m_kinetic_species_phys, scalar_data, divJperp, bc, a_dt);
+      m_VorticityOp->updatePotentialOldModel(m_phi, *m_E_field, kinetic_species_phys, scalar_data, a_dt, a_time);
    }
 }
 
@@ -413,7 +409,8 @@ void GKOps::postTimeStage( const int       a_step,
 
 
 void GKOps::preSolutionOpEval( const GKState&  a_state,
-                               const Real      a_time )
+                               const Real      a_time,
+                               const bool      a_update_fluid_ops )
 {
    CH_TIMERS("GKOps::preSolutionOpEval");
    CH_TIMER("createPhysicalSpeciesVector",t_create_phys_vector);
@@ -432,14 +429,17 @@ void GKOps::preSolutionOpEval( const GKState&  a_state,
    createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
    CH_STOP(t_create_phys_vector);
 
-   CH_START(t_fluid_preop_eval);
-   m_fluidOp->preSolutionOpEval(m_kinetic_species_phys, a_state.dataFluid(), a_state.dataScalar(), *m_E_field, a_time);
-   CH_STOP(t_fluid_preop_eval);
+   if ( a_update_fluid_ops ) {
+      CH_START(t_fluid_preop_eval);
+      m_fluidOp->preSolutionOpEval(m_kinetic_species_phys, a_state.dataFluid(), a_state.dataScalar(), *m_E_field, a_time);
+      CH_STOP(t_fluid_preop_eval);
+   }
 }
 
 
 void GKOps::preOpEval( const GKState&  a_state,
-                       const Real      a_time )
+                       const Real      a_time,
+                       const bool      a_update_fluid_ops )
 {
    CH_TIMERS("GKOps::preOpEval");
    CH_TIMER("createPhysicalSpeciesVector",t_create_phys_vector);
@@ -460,9 +460,11 @@ void GKOps::preOpEval( const GKState&  a_state,
    createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
    CH_STOP(t_create_phys_vector);
 
-   CH_START(t_fluid_preop_eval);
-   m_fluidOp->preOpEval(m_kinetic_species_phys, a_state.dataFluid(), a_state.dataScalar(), *m_E_field, a_time);
-   CH_STOP(t_fluid_preop_eval);
+   if ( a_update_fluid_ops ) {
+      CH_START(t_fluid_preop_eval);
+      m_fluidOp->preOpEval(m_kinetic_species_phys, a_state.dataFluid(), a_state.dataScalar(), *m_E_field, a_time);
+      CH_STOP(t_fluid_preop_eval);
+   }
 }
 
 

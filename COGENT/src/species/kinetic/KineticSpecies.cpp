@@ -19,14 +19,16 @@ KineticSpecies::KineticSpecies(
          const string&                   a_name,
          const Real                      a_mass,
          const Real                      a_charge,
-         const RefCountedPtr<PhaseGeom>& a_geometry
+         const RefCountedPtr<PhaseGeom>& a_geometry,
+         const bool                      a_is_gyrokinetic
    )
   : m_geometry( a_geometry ),
     m_name( a_name ),
     m_mass( a_mass ),
     m_charge( a_charge ),
     m_moment_op( MomentOp::instance() ),
-    m_gyroavg_op(NULL) 
+    m_gyroavg_op(NULL),
+    m_is_gyrokinetic(a_is_gyrokinetic)
 {
 }
 
@@ -36,7 +38,8 @@ KineticSpecies::KineticSpecies( const KineticSpecies& a_foo )
     m_name( a_foo.m_name ),
     m_mass( a_foo.m_mass ),
     m_charge( a_foo.m_charge ),
-    m_moment_op( MomentOp::instance() )
+    m_moment_op( MomentOp::instance() ),
+    m_is_gyrokinetic( a_foo.m_is_gyrokinetic )
     
 {
    gyroaverageOp(a_foo.gyroaverageOp());
@@ -437,7 +440,7 @@ KineticSpecies::clone( const IntVect ghostVect,
 {
    RefCountedPtr<KineticSpecies> result
       = RefCountedPtr<KineticSpecies>(
-              new KineticSpecies( m_name, m_mass, m_charge, m_geometry ) );
+              new KineticSpecies( m_name, m_mass, m_charge, m_geometry, m_is_gyrokinetic ) );
 
    result->m_dist_func.define( m_dist_func.disjointBoxLayout(),
                                m_dist_func.nComp(),

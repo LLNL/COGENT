@@ -14,19 +14,22 @@ void GyroaverageOperatorFactory::createOps(std::map<std::string, GyroaverageOper
   for (int i=0; i<nspecies; i++) {
     const KineticSpecies& species = *(a_species_vec[i]);
 
-    /* get species characteristics */
-    const std::string&  name = species.name();
-    const Real          mass = species.mass(),
-                        charge = species.charge();
+    if (species.isGyrokinetic()) {
 
-    /* create the gyroaveraging operator for this species
-     * if it doesn't already exist */
-    std::map<std::string, GyroaverageOperator*>::iterator it;
-    it = a_ops.find(name);
-    if (it == a_ops.end()) {
-      GyroaverageOperator* op = new GyroaverageOperator();
-      op->define(species.phaseSpaceGeometry(), name, mass, charge);
-      a_ops[name] = op;
+      /* get species characteristics */
+      const std::string&  name = species.name();
+      const Real          mass = species.mass(),
+                          charge = species.charge();
+  
+      /* create the gyroaveraging operator for this species
+       * if it doesn't already exist */
+      std::map<std::string, GyroaverageOperator*>::iterator it;
+      it = a_ops.find(name);
+      if (it == a_ops.end()) {
+        GyroaverageOperator* op = new GyroaverageOperator();
+        op->define(species.phaseSpaceGeometry(), name, mass, charge);
+        a_ops[name] = op;
+      }
     }
   }
 

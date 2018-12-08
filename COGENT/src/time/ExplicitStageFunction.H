@@ -13,7 +13,7 @@ class ExplicitStageFunction: public Function<T,Ops>
     ExplicitStageFunction<T,Ops>() {m_is_Defined = false; m_shift = 0; }
     ~ExplicitStageFunction<T,Ops>() {}
 
-    void evalFunction(T& a_F, const T& a_Y, const T& a_b, bool a_call_preop);
+    void evalFunction(T& a_F, const T& a_Y, const T& a_b, int a_its, bool a_update_fluid_ops);
     void define(const T& a_state, Ops& a_ops);
 
     inline void setShift        (Real a_shift )       { m_shift = a_shift;    }
@@ -47,11 +47,11 @@ void ExplicitStageFunction<T,Ops>::define(const T& a_state, Ops& a_ops)
  *  R    is the right-hand-side
 */
 template <class T, class Ops>
-void ExplicitStageFunction<T,Ops>::evalFunction(T& a_F, const T& a_Y, const T& a_b, bool a_call_preop)
+void ExplicitStageFunction<T,Ops>::evalFunction(T& a_F, const T& a_Y, const T& a_b, int a_its, bool a_update_fluid_ops)
 {
   CH_assert(isDefined());
 
-  if ( a_call_preop ) m_ops->preOpEval(a_Y,m_StageTime);
+  if ( a_its==0 ) m_ops->preOpEval(a_Y,m_StageTime,a_update_fluid_ops);
   m_ops->solutionOp(m_W,m_StageTime,a_Y);
 
   /* set base Y and G(Y) for Jacobian */

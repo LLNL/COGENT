@@ -170,13 +170,11 @@ void GyroaverageOperator::define( const PhaseGeom&          a_phase_geom,
       CFG::RealVect xi;
       for (int d=0; d<CFG_DIM; d++) xi[d] = mcoords(iv, d);
 
+#if CFG_DIM == 2
       /* magnetic field and its magnitude at this grid point */
       Real b_magn = b_field_magn_fab.get(iv, 0);
-      Real bx = b_field_fab.get(iv,0);
       Real by = b_field_fab.get(iv,1);
-      Real bz = b_field_fab.get(iv,2);
 
-#if CFG_DIM == 2
       const CFG::IntVect i(iv);
       for (int l=0; l<m_n_mu; l++) {
 
@@ -363,8 +361,6 @@ void GyroaverageOperator::applyOp(CFG::LevelData<CFG::FArrayBox>&               
   for (CFG::DataIterator dit(phi_grids); dit.ok(); ++dit) {
 
     CFG::Box bx_int(phi_grids[dit]);
-    const CFG::Box& bx_phi(phi_wghosts[dit].box());
-
     for (int dir=0; dir<CFG_DIM; dir++) {
       fillGhostCells(phi_wghosts[dit], bx_int, dir);
     }
@@ -403,6 +399,8 @@ void GyroaverageOperator::getInterpStencil( Stencil&              a_stencil,
                                             const CFG::RealVect&  a_x )
 {
   a_stencil.clear();
+
+#if CFG_DIM==2
 
   /* 
    * Bilinear interpolation using 4 arbitrary points in 2D space 
@@ -452,6 +450,10 @@ void GyroaverageOperator::getInterpStencil( Stencil&              a_stencil,
   a_stencil.push_back(StencilPoint(i1,c1));
   a_stencil.push_back(StencilPoint(i2,c2));
   a_stencil.push_back(StencilPoint(i3,c3));
+
+#else
+  MayDay::Error("Gyroaveraging operator not yet implemented for CFG_DIM=3.");
+#endif
 
   /* done */
   return;

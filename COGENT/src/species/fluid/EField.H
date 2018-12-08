@@ -125,14 +125,6 @@ public:
                                             const EllipticOpBC&          bc, 
                                             const LevelData<FArrayBox>&  ion_density) const;
 
-   virtual void updateImplicitPotential( LevelData<FArrayBox>&             phi,
-                                         const double                      larmor,
-                                         const PS::KineticSpeciesPtrVect&  kinetic_species,
-                                         const Vector<Real>&               scalar_data,
-                                         LevelData<FArrayBox>&             divJperp,
-                                         EllipticOpBC&                     bc,
-                                         const Real                        dt );
-
    virtual
    RefCountedPtr<CFGVars> clone( const bool copy_data = true ) const;
 
