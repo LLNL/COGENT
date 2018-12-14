@@ -40,10 +40,10 @@ class GyroaverageOperator
     void define(const PhaseGeom&, const std::string&, Real, Real);
     void define(const GyroaverageOperator&);
 
-    void applyOp(CFG::LevelData<CFG::FArrayBox>&, 
+    void applyOp(LevelData<FArrayBox>&, 
                  const CFG::LevelData<CFG::FArrayBox>& ) const;
 
-    inline const CFG::LevelData< CFG::BaseFab<Stencil> >& op() const
+    inline const LevelData< BaseFab<Stencil> >& op() const
     {
       return m_gyroavg_op;
     }
@@ -57,7 +57,6 @@ class GyroaverageOperator
     bool  m_is_defined;
     int   m_npts_interp;
     int   m_gpt;
-    int   m_n_mu;
 
     std::string m_name;
     Real        m_mass;
@@ -65,7 +64,9 @@ class GyroaverageOperator
 
     const PhaseGeom* m_phase_geom;
 
-    CFG::LevelData< CFG::BaseFab<Stencil> > m_gyroavg_op;
+    DisjointBoxLayout m_grids;
+
+    LevelData< BaseFab<Stencil> > m_gyroavg_op;
 
     void parseParams(const ParmParse&);
     void printParams() const;
@@ -73,9 +74,9 @@ class GyroaverageOperator
     void getInterpStencil(Stencil&, const CFG::FArrayBox&, 
                           const CFG::IntVect&, const CFG::RealVect&);
 
-    void applyOp( CFG::FArrayBox&, 
-                  const CFG::FArrayBox&, 
-                  const CFG::BaseFab<Stencil>&) const;
+    void applyOp( FArrayBox&, 
+                  const FArrayBox&, 
+                  const BaseFab<Stencil>&) const;
 
     inline Real computeGyroradius(Real a_La,      // Larmor number
                                   Real a_mass,    // species mass
@@ -100,6 +101,7 @@ class GyroaverageOperator
       }
       return;
     }
+
 };
 
 #include "NamespaceFooter.H"

@@ -191,9 +191,9 @@ void GKOps::initializeElectricField( const GKState& a_state_phys,
    
    CH_assert( m_phase_geometry != NULL );
 
-   // If the potential is a state variable or the old vorticity model is being used,
-   // then something else is updating the potential, so don't recompute it here.
-   bool compute_potential = !(m_state_includes_potential || m_old_vorticity_model);
+   // If the potential is a state variable or the old vorticity model is being used or the efield
+   // is fixed, then something else is controlling the potential, so don't recompute it here.
+   bool compute_potential = !(m_state_includes_potential || m_old_vorticity_model || m_fixed_efield);
 
    m_E_field->computeEField( m_Y,
                              kinetic_species,
@@ -202,7 +202,7 @@ void GKOps::initializeElectricField( const GKState& a_state_phys,
                              m_phi,
                              m_boundary_conditions->getEllipticOpBC(),
                              compute_potential,
-                             a_cur_step == 0 );
+                             true );
 
    //Improve Er field calculation to take into accout the dealigment between the grid and magnetic surfaces
    //Should not be used with poloidal variations: FIX LATER!!!
@@ -908,9 +908,9 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
       fluid_species_phys[species] = a_fluid_species[species]->convertToPhysical(ghost_vect_cfg);
    }
    
-   // If the potential is a state variable or the old vorticity model is being used,
-   // then something else is updating the potential, so don't recompute it here.
-   bool compute_potential = !(m_state_includes_potential || m_old_vorticity_model);
+   // If the potential is a state variable or the old vorticity model is being used or the
+   // efield is fixed, then something else is controlling the potential, so don't recompute it here.
+   bool compute_potential = !(m_state_includes_potential || m_old_vorticity_model || m_fixed_efield);
 
    a_E_field.computeEField( m_Y,
                             kinetic_species_phys,
@@ -919,7 +919,7 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
                             a_phi,
                             m_boundary_conditions->getEllipticOpBC(),
                             compute_potential,
-                            a_step == 0 );
+                            false );
 
    m_phase_geometry->injectConfigurationToPhase( a_E_field.getFaceCenteredField(),
                                                  a_E_field.getCellCenteredField(),

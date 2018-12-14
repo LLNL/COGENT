@@ -251,6 +251,8 @@ public:
    // also contain a 2piR factor for axisymmetric problems)
    void multFaceAreas( LevelData<FluxBox>& data ) const;
 
+   void getConfigurationPlusMuGrids( DisjointBoxLayout&, int ) const;
+
    void injectConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& src,
                                     LevelData<FArrayBox>&                 dst ) const;
 
@@ -282,6 +284,9 @@ public:
    void projectPhaseToConfiguration( const FArrayBox&     a_src,
                                      CFG::FArrayBox&      a_dst ) const;
 
+   void projectPhaseToConfigurationLocal( const FArrayBox&     a_src,
+                                          CFG::FArrayBox&      a_dst ) const;
+
    void projectPhaseToConfiguration( const Box& src,
                                      CFG::Box&  dst ) const;
 
@@ -291,6 +296,10 @@ public:
    CFG::IntVect config_restrict( const IntVect& x ) const;
 
    IntVect config_inject( const CFG::IntVect& v ) const;
+
+   CFG::RealVect config_restrict( const RealVect& x ) const;
+
+   RealVect config_inject( const CFG::RealVect& v ) const;
 
    VEL::IntVect vel_restrict( const IntVect& x ) const;
 
@@ -479,7 +488,7 @@ public:
      return m_gyroavg_op;
    }
 
-   inline void gyroaverage(CFG::LevelData<CFG::FArrayBox>& a_phi_bar,
+   inline void gyroaverage(LevelData<FArrayBox>& a_phi_bar,
                            const CFG::LevelData<CFG::FArrayBox>& a_phi) const
    {
      if (!m_is_gyrokinetic) {

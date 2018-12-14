@@ -274,7 +274,7 @@ class KineticSpecies
         return m_gyroavg_op;
       }
 
-      inline void gyroaverage(CFG::LevelData<CFG::FArrayBox>& a_phi_bar,
+      inline void gyroaverage(LevelData<FArrayBox>& a_phi_bar,
                               const CFG::LevelData<CFG::FArrayBox>& a_phi) const
       {
         if (!m_is_gyrokinetic) {

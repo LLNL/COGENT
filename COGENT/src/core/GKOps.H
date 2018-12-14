@@ -559,9 +559,9 @@ public:
     }
    }
 
-   inline void gyroaverage(CFG::LevelData<CFG::FArrayBox>& a_phi_bar,
-                           const CFG::LevelData<CFG::FArrayBox>& a_phi,
-                           const std::string& a_species_name)
+   inline void gyroaverage(LevelData<FArrayBox>&                  a_phi_bar,
+                           const CFG::LevelData<CFG::FArrayBox>&  a_phi,
+                           const std::string&                     a_species_name )
    {
      std::map<std::string, GyroaverageOperator*>::iterator it;
      it = m_gyroavg_ops.find(a_species_name);

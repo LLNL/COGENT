@@ -2288,6 +2288,13 @@ PhaseGeom::getShearedGhostBoxLayout()
   Transdimensional utilities
 */
 
+void
+PhaseGeom::getConfigurationPlusMuGrids( DisjointBoxLayout& a_grids,
+                                        int                a_width ) const
+{
+   adjCellLo(a_grids, m_gridsFull, VPARALLEL_DIR, a_width);
+}
+
 
 void
 PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& a_src,
@@ -2899,6 +2906,28 @@ PhaseGeom::projectPhaseToConfiguration( const FArrayBox& a_src,
 
 
 void
+PhaseGeom::projectPhaseToConfigurationLocal(  const FArrayBox& a_src,
+                                              CFG::FArrayBox&  a_dst ) const
+{
+   const Box& src_box = a_src.box();
+
+   // Slice in the mu direction at the low mu coordinate
+
+   SliceSpec slice_mu(MU_DIR,src_box.smallEnd(MU_DIR));
+   CP1::FArrayBox temp1;
+   sliceBaseFab((CP1::BaseFab<Real>&)temp1, (BaseFab<Real>&)a_src, slice_mu);
+
+   // Slice in the v_parallel direction at the low v_parallel coordinate
+
+   CP1::SliceSpec slice_vp(VPARALLEL_DIR,src_box.smallEnd(VPARALLEL_DIR));
+   CFG::FArrayBox temp2;
+   sliceBaseFab((CFG::BaseFab<Real>&)temp2, (CP1::BaseFab<Real>&)temp1, slice_vp);
+
+   a_dst.copy(temp2);
+}
+
+
+void
 PhaseGeom::projectPhaseToConfiguration( const Box& a_src,
                                         CFG::Box&  a_dst ) const
 {
@@ -2938,6 +2967,37 @@ IntVect
 PhaseGeom::config_inject( const CFG::IntVect& a_v ) const
 {
    IntVect injected_v;
+
+   for (int dir=0; dir<CFG_DIM; dir++) {
+      injected_v[dir] = a_v[dir];
+   }
+   for (int dir=CFG_DIM; dir<SpaceDim; dir++) {
+      injected_v[dir] = 0;
+   }
+
+   return injected_v;
+}
+
+
+
+CFG::RealVect
+PhaseGeom::config_restrict( const RealVect& a_x ) const
+{
+   CFG::RealVect restrict_x;
+
+   for (int i=0; i<CFG_DIM; i++) {
+      restrict_x[i] = a_x[i];
+   }
+
+   return restrict_x;
+}
+
+
+
+RealVect
+PhaseGeom::config_inject( const CFG::RealVect& a_v ) const
+{
+   RealVect injected_v;
 
    for (int dir=0; dir<CFG_DIM; dir++) {
       injected_v[dir] = a_v[dir];
