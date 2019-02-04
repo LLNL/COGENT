@@ -149,9 +149,11 @@ class CanonicalMaxwellianKineticFunction : public KineticFunction
 
       int m_verbosity;
    
-      Real m_density_val, m_density_kappa, m_density_width;
-      Real m_temperature_val, m_temperature_kappa, m_temperature_width;
-      CFG::RealVect m_mode;
+      int m_profile_option;
+   
+      Vector<Real> m_density_parm;
+      Vector<Real> m_temperature_parm;
+      Vector<Real> m_perturbation_parm;
 };
 
 #include "NamespaceFooter.H"

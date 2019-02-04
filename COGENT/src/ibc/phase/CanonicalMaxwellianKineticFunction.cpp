@@ -35,12 +35,7 @@
 CanonicalMaxwellianKineticFunction::CanonicalMaxwellianKineticFunction( ParmParse& a_pp,
                                                       const int& a_verbosity )
    : m_verbosity(a_verbosity),
-     m_density_val(1.0),
-     m_density_kappa(0.0),
-     m_density_width(0.0),
-     m_temperature_val(1.0),
-     m_temperature_kappa(0.0),
-     m_temperature_width(0.0)
+     m_profile_option(1)
 {
    parseParameters( a_pp );
 }
@@ -204,31 +199,31 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
    Real r_p = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getAvMinorRad();
    Real psi_p = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getMagneticFlux(r_p);
    Real dpsidr_p = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).dpsidr(r_p);
+   Real q_p = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getSafetyFactor(r_p/R0);
 
-   //For convenience the input for kappa is in 1/R0 units, 
-   //thus need to renormalize to be consitent with 1/psi units
-   Real n_kappa_psi = m_density_kappa/(dpsidr_p * R0);
-   Real T_kappa_psi = m_temperature_kappa/(dpsidr_p * R0);
+   //NB:For convenience the input for kappa is always in 1/R0 units,
+   //thus need to renormalize to be consitent the paticular coordinate choice
+   //which is done inside Fortran
    
-   FORT_SET_CANONICAL_MAXWELL(CHF_FRA(a_dfn),
+   FORT_SET_CANONICAL_MAXWELL(CHF_FRA1(a_dfn,0),
                               CHF_BOX(a_box),
                               CHF_CONST_FRA(cc_phase_coords),
-			      CHF_CONST_FRA(toroidal_coords_inj),
+                              CHF_CONST_FRA(toroidal_coords_inj),
                               CHF_CONST_FRA1(a_B,0),
                               CHF_CONST_FRA1(magnetic_flux_inj,0),
                               CHF_CONST_REAL(RBtor),
-                              CHF_CONST_REAL(psi_p),
+                              CHF_CONST_REAL(R0),
                               CHF_CONST_REAL(dpsidr_p),
-                              CHF_CONST_REAL(m_density_val),
-                              CHF_CONST_REAL(n_kappa_psi),
-                              CHF_CONST_REAL(m_density_width),
-                              CHF_CONST_REAL(m_temperature_val),
-                              CHF_CONST_REAL(T_kappa_psi),
-                              CHF_CONST_REAL(m_temperature_width),
-      			      CHF_CONST_REALVECT(m_mode),
+                              CHF_CONST_REAL(psi_p),
+                              CHF_CONST_REAL(r_p),
+                              CHF_CONST_REAL(q_p),
+                              CHF_CONST_VR(m_density_parm),
+                              CHF_CONST_VR(m_temperature_parm),
+                              CHF_CONST_VR(m_perturbation_parm),
                               CHF_CONST_REAL(a_mass),
                               CHF_CONST_REAL(a_charge),
-                              CHF_CONST_REAL(a_larmor_number));
+                              CHF_CONST_REAL(a_larmor_number),
+                              CHF_CONST_INT(m_profile_option));
 #endif
 }
 
@@ -241,7 +236,7 @@ void CanonicalMaxwellianKineticFunction::checkGeometryValidity( const PhaseGeom&
    unknown_geom &= (typeid(coord_sys) != typeid(SNCorePhaseCoordSys));
    
    if ( unknown_geom ) {
-      const std::string msg( "CanonicalMaxwellianKineticFunction: Attempt to use unknown geometry. ");
+      const std::string msg( "attempt to use unknown geometry. ");
       MayDay::Error( msg.c_str() );
    }
 }
@@ -249,23 +244,47 @@ void CanonicalMaxwellianKineticFunction::checkGeometryValidity( const PhaseGeom&
 inline
 void CanonicalMaxwellianKineticFunction::parseParameters( ParmParse& a_pp )
 {
-   a_pp.get( "density_midpoint_value", m_density_val );
-   a_pp.get( "density_radial_width",   m_density_width );
-   a_pp.get( "density_kappa",          m_density_kappa );
 
-   CH_assert( m_density_width>=0 );
+   a_pp.query( "functional_option", m_profile_option);
    
-   a_pp.get( "temperature_midpoint_value", m_temperature_val );
-   a_pp.get( "temperature_radial_width",   m_temperature_width );
-   a_pp.get( "temperature_kappa",          m_temperature_kappa );
+   int num_parm;
+   if (m_profile_option == 1) {
+      num_parm = 4;
+   }
+   else if (m_profile_option == 2) {
+      num_parm = 3;
+   }
+   else {
+      const std::string msg( "only profile option 1 or 2 are supported ");
+      MayDay::Error( msg.c_str() );
+   }
 
-   CH_assert( m_temperature_width>=0 );
+   m_temperature_parm.resize(num_parm);
+   m_density_parm.resize(num_parm);
+
+   a_pp.get( "density_midpoint_value", m_density_parm[0] );
+   a_pp.get( "density_kappa",          m_density_parm[1] );
+   a_pp.get( "density_radial_width",   m_density_parm[2] );
    
-   Vector<Real> temp( CFG_DIM );
-   temp.assign( 0.0 );
-   a_pp.getarr( "mode", temp, 0, CFG_DIM );
-   m_mode = CFG::RealVect( temp );
+   CH_assert( m_density_parm[2]>=0 );
+   
+   a_pp.get( "temperature_midpoint_value", m_temperature_parm[0] );
+   a_pp.get( "temperature_kappa",          m_temperature_parm[1] );
+   a_pp.get( "temperature_radial_width",   m_temperature_parm[2] );
+   
+   CH_assert( m_temperature_parm[2]>=0 );
 
+   if (m_profile_option == 1) {
+      a_pp.get( "density_flattop_fac",     m_density_parm[3] );
+      a_pp.get( "temperature_flattop_fac", m_temperature_parm[3] );
+   }
+   
+   m_perturbation_parm.resize(4);
+   m_perturbation_parm.assign( 0.0 );
+   a_pp.getarr( "perturbation", m_perturbation_parm, 0, 4 );
+   
+   CH_assert( m_perturbation_parm[1]>=0 );
+   
    if (m_verbosity) {
       printParameters();
    }
@@ -276,13 +295,20 @@ void CanonicalMaxwellianKineticFunction::printParameters() const
 {
    if (procID()==0) {
       std::cout << "Canonical Maxwellian kinetic function parameters:" << std::endl;
-      std::cout << "  density_midpoint_value: "       << m_density_val           << std::endl;
-      std::cout << "  density_radial_width: "         << m_density_width         << std::endl;
-      std::cout << "  density_kappa: "                << m_density_kappa         << std::endl;
-      std::cout << "  temperature_midpoint_value: "   << m_temperature_val       << std::endl;
-      std::cout << "  temperature_radial_width: "     << m_temperature_width     << std::endl;
-      std::cout << "  temperature_kappa: "            << m_temperature_kappa     << std::endl;
-      std::cout << "  mode_coefficients: "            << m_mode                  << std::endl;
+      std::cout << "  density_midpoint_value: "       << m_density_parm[0]       << std::endl;
+      std::cout << "  density_kappa: "                << m_density_parm[1]       << std::endl;
+      std::cout << "  density_radial_width: "         << m_density_parm[2]       << std::endl;
+      if (m_profile_option == 1) {
+         std::cout << "  density_flattop_fac: "       << m_density_parm[3]       << std::endl;
+      }
+      std::cout << "  temperature_midpoint_value: "   << m_temperature_parm[0]   << std::endl;
+      std::cout << "  temperature_kappa: "            << m_temperature_parm[1]   << std::endl;
+      std::cout << "  temperature_radial_width: "     << m_temperature_parm[2]   << std::endl;
+      if (m_profile_option == 1) {
+         std::cout << "  temeprature_flattop_fac: "   << m_temperature_parm[3]   << std::endl;
+      }
+     
+      std::cout << "  perturbation_parameters: "      << m_perturbation_parm     << std::endl;
       std::cout << std::endl;
    }
 }

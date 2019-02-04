@@ -144,11 +144,21 @@ class ToroidalBlockCoordSys
        */
       Real getAvMinorRad () const { return 0.5*(m_rmax + m_rmin); }
 
-      //Returns magnetic safety factor as a function of r/R0
-      double getSafetyFactor( const Real r ) const;
+      //Returns magnetic safety factor
+      /**
+       * Returns magnetic safety factor as a function of rnorm=r/R0
+       *
+       * @param[in] rnorm = r / R0 normalized radius.
+       */
+      Real getSafetyFactor( const Real rnorm ) const;
 
-      //Returns safety factor derivative as a function of r/R0
-      double getSafetyFactorDerivative( const Real r ) const;
+      //Returns safety factor derivative
+      /**
+       * Returns safety factor derivative dq(r_norm)/dr_norm
+       *
+       * @param[in] rnorm = r / R0 normalized radius.
+       */
+      Real getSafetyFactorDerivative( const Real rnorm ) const;
    
       // Object ParmParse name.
       static const std::string pp_name;
@@ -177,7 +187,13 @@ class ToroidalBlockCoordSys
       /**
       * Public method to compute the radial derivative of the flux function.
       */
-      double dpsidr(const Real r) const;
+      Real dpsidr(const Real r) const;
+
+      /// Compute the second radial derivative (d2psi/dr^2) of the flux function
+      /**
+       * Public method to compute the second radial derivative of the flux function.
+       */
+      Real d2psidr2(const Real r) const;
 
 
     private:
@@ -228,16 +244,23 @@ class ToroidalBlockCoordSys
                                    double phi,
                                    double xi2) const;
 
+      /// Compute vector object to store magnetic flux data at face and cell centers
+      void initializeMagneticFluxFunction(const Real& rmin,
+					  const Real& rmax) const;
+
+  
       double m_rmin, m_rmax, m_phi_frac;
       double m_R0, m_a;
   
       double m_Btor_scale;
       Vector<Real> m_q;
-
+      mutable Vector<Real> m_magnetic_flux_interp;
+   
       int m_block;
       int m_num_blocks;
       double m_separation;
       double m_eps;
+      mutable bool m_is_flux_defined;
   
       RealVect m_mapped_block_size;
 

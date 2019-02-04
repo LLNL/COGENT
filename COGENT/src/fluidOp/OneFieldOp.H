@@ -111,6 +111,7 @@ private:
    int m_verbosity;
    const MagGeom& m_geometry;
    int m_is_time_implicit;
+   bool m_prescribed_ionization;
 
    std::string m_opt_string;
    int m_my_pc_idx;
@@ -137,7 +138,9 @@ private:
    RefCountedPtr<GridFunction> m_D_rad;
    RefCountedPtr<GridFunction> m_D_par;
    RefCountedPtr<GridFunction> m_D_perp;
-   RefCountedPtr<GridFunction> m_source;
+   RefCountedPtr<GridFunction> m_fixed_source;
+   RefCountedPtr<GridFunction> m_electron_dens;
+   RefCountedPtr<GridFunction> m_electron_temp;
 
    virtual void accumulateRHS(FluidSpeciesPtrVect&               rhs,
                               const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
@@ -151,6 +154,9 @@ private:
                                      LevelData<FluxBox>& D_tensor_mapped,
                                      const Real          time) const;
 
+   
+   void computeIonizationRate(LevelData<FArrayBox>& ionization_rate,
+                              const Real            time) const;
 };
 
 

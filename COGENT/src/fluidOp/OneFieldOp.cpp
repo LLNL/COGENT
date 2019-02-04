@@ -107,10 +107,29 @@ void OneFieldOp::accumulateRHS(  FluidSpeciesPtrVect&               a_rhs,
       rhs_data[dit] -= flux_div[dit];
    }
 
-   //add source term
-   if (m_source != NULL) {
+   //add prescribed ionization
+   if (m_prescribed_ionization) {
+      
+      LevelData<FArrayBox> ionization_rate(grids, 1, IntVect::Zero);
+      computeIonizationRate(ionization_rate, a_time);
+      
+      LevelData<FArrayBox> ionization_term(grids, 1, IntVect::Zero);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         ionization_term[dit].copy(ionization_rate[dit]);
+         ionization_term[dit].mult(soln_data[dit]);
+      }
+
+      m_geometry.multJonValid(ionization_term);
+      
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         rhs_data[dit].minus(ionization_term[dit]);
+      }
+   }
+   
+   //add fixed source
+   if (m_fixed_source != NULL) {
      LevelData<FArrayBox> source_dst(grids, 1, IntVect::Zero);
-     m_source->assign( source_dst, m_geometry, a_time);
+     m_fixed_source->assign( source_dst, m_geometry, a_time);
 
      m_geometry.multJonValid(source_dst);
 
@@ -239,8 +258,23 @@ void OneFieldOp::updatePCImEx( const PS::KineticSpeciesPtrVect& a_kinetic_specie
                                const double                     a_shift )
 {
    CH_TIME("OneFieldOp::updatePCImEx");
+   
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   LevelData<FArrayBox> shift(grids, 1, IntVect::Zero);
+   for (DataIterator dit(shift.dataIterator()); dit.ok(); ++dit) {
+      shift[dit].setVal(a_shift);
+   }
 
-   m_diffusion_op->updateImExPreconditioner( a_shift, *m_bc );
+   if (m_prescribed_ionization) {
+      LevelData<FArrayBox> ionization_rate(grids, 1, IntVect::Zero);
+      computeIonizationRate(ionization_rate, a_time);
+
+      for (DataIterator dit(shift.dataIterator()); dit.ok(); ++dit) {
+         shift[dit].plus(ionization_rate[dit]);
+      }
+   }
+   
+   m_diffusion_op->updateImExPreconditioner( shift, *m_bc );
 }
 
 
@@ -366,6 +400,59 @@ void OneFieldOp::computeDiffusionCoefficients(LevelData<FluxBox>& a_D_tensor,
    }
 }
 
+void OneFieldOp::computeIonizationRate(LevelData<FArrayBox>&   a_ionization_rate,
+                                       const Real              a_time) const
+{
+   
+   //Universal constants (in CGS)
+   double mp = 1.6726e-24;
+   
+   //Get normalization parameters (units)
+   double N, T, L;
+   ParmParse ppunits( "units" );
+   ppunits.get("number_density",N);  //[m^{-3}]
+   ppunits.get("temperature",T);     //[eV]
+   ppunits.get("length",L);          //[m]
+   
+   double Tcgs = 1.602e-12 * T; //[erg]
+   double Lcgs  = 1.0e2 * L;   //[cm]
+   
+   double time_norm = Lcgs / sqrt(Tcgs/mp); //[s]
+
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+
+   LevelData<FArrayBox> ne(grids, 1, IntVect::Zero);
+   m_electron_dens->assign( ne, m_geometry, a_time);
+
+   LevelData<FArrayBox> Te(grids, 1, IntVect::Zero);
+   m_electron_temp->assign( Te, m_geometry, a_time);
+
+   LevelData<FArrayBox> a2(grids, 1, IntVect::Zero);
+   double fac = pow(T/10.0,2);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      a2[dit].copy(Te[dit]);
+      a2[dit].mult(Te[dit]);
+      a2[dit].mult(fac);
+   }
+   
+   //Get <sigmaV> in m^3/s
+   LevelData<FArrayBox> sigmaV(grids, 1, IntVect::Zero);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      sigmaV[dit].copy(a2[dit]);
+      sigmaV[dit].plus(3.0);
+      sigmaV[dit].divide(a2[dit]);
+      sigmaV[dit].invert(1.0);
+      sigmaV[dit].mult(3.0e-14);
+   }
+   
+   //Compute ionization frequency in COGENT time units
+   double norm = time_norm * N;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      a_ionization_rate[dit].copy(sigmaV[dit]);
+      a_ionization_rate[dit].mult(ne[dit]);
+      a_ionization_rate[dit].mult(norm);
+   }
+}
 
 void OneFieldOp::fillGhostCells( FluidSpecies&  a_species_phys,
                                  const double   a_time )
@@ -377,34 +464,54 @@ void OneFieldOp::parseParameters( ParmParse& a_pp )
 {
    a_pp.query( "time_implicit", m_is_time_implicit);
 
+   GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
+   std::string grid_function_name;
+   
    if (a_pp.contains("D_rad")) {
-     GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-     std::string grid_function_name;
      a_pp.get("D_rad", grid_function_name );
      m_D_rad = grid_library->find( grid_function_name );
    }
 
    if (a_pp.contains("D_perp")) {
-      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-      std::string grid_function_name;
       a_pp.get("D_perp", grid_function_name );
       m_D_perp = grid_library->find( grid_function_name );
    }
 
    if (a_pp.contains("D_par")) {
-      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-      std::string grid_function_name;
       a_pp.get("D_par", grid_function_name );
       m_D_par = grid_library->find( grid_function_name );
    }
 
-   if (a_pp.contains("source")) {
-     GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-     std::string grid_function_name;
-     a_pp.get("source", grid_function_name );
-     m_source = grid_library->find( grid_function_name );
+   if (a_pp.contains("fixed_source")) {
+     a_pp.get("fixed_source", grid_function_name );
+     m_fixed_source = grid_library->find( grid_function_name );
    }
 
+   if (a_pp.contains("prescribed_ionization")) {
+      a_pp.get("prescribed_ionization", m_prescribed_ionization );
+   }
+   else {
+      m_prescribed_ionization = false;
+   }
+   
+   if (m_prescribed_ionization) {
+      
+      if (a_pp.contains("electron_density")) {
+         a_pp.get( "electron_density", grid_function_name );
+         m_electron_dens = grid_library->find( grid_function_name );
+      }
+      else{
+         MayDay::Error("Electron density must be specified for prescribed ionization");
+      }
+      
+      if (a_pp.contains("electron_temperature")) {
+         a_pp.get( "electron_temperature", grid_function_name );
+         m_electron_temp = grid_library->find( grid_function_name );
+      }
+      else{
+         MayDay::Error("Electron temperature must be specified for prescribed ionization");
+      }
+   }
 }
 
 
@@ -413,6 +520,7 @@ void OneFieldOp::printParameters()
    if (procID()==0) {
       std::cout << "OneFieldOp parameters:" << std::endl;
       std::cout << "  time_implicit  =  " << m_is_time_implicit << std::endl;
+      std::cout << "  prescribed_ionziation  =  " << m_prescribed_ionization << std::endl;
    }
 }
 

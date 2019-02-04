@@ -19,6 +19,7 @@ ToroidalBlockCoordSys::ToroidalBlockCoordSys( ParmParse&               a_parm_pa
    : MagBlockCoordSys(a_parm_parse),
      m_block(a_block),
      m_num_blocks(a_num_blocks),
+     m_is_flux_defined(false),
      m_eps(1.0e-10)
 {
    if (SpaceDim != 3){
@@ -278,11 +279,11 @@ ToroidalBlockCoordSys::computeFieldData(const int  a_dir,
     RB(iv,0) = -dpsidr(r) * st;  // R*B_R = -dpsi_dZ
     RB(iv,1) =  dpsidr(r) * ct;  // R*B_Z =  dpsi_dR
     
-    dRBdZ(iv,0) = -dpsidr(r) * ct *ct / r;  // d(R*B_R)/dZ = -d2psi_dZ2
-    dRBdR(iv,1) =  dpsidr(r) * st *st / r;  // d(R*B_Z)/dR =  d2psi_dR2
+    dRBdZ(iv,0) = -dpsidr(r) * ct *ct / r - d2psidr2(r) * st * st;   // d(R*B_R)/dZ = -d2psi_dZ2
+    dRBdR(iv,1) =  dpsidr(r) * st *st / r + d2psidr2(r) * ct * ct;   // d(R*B_Z)/dR =  d2psi_dR2
     
-    dRBdR(iv,0) = dpsidr(r) * st * ct / r;  // d(R*B_R)/dR = -d2psi_dRdZ
-    dRBdZ(iv,1) = -dRBdR(iv,0);            // d(R*B_Z)/dZ =  d2psi_dRdZ
+    dRBdR(iv,0) = dpsidr(r) * st * ct / r - d2psidr2(r) * st * ct;   // d(R*B_R)/dR = -d2psi_dRdZ
+    dRBdZ(iv,1) = -dRBdR(iv,0);                                      // d(R*B_Z)/dZ =  d2psi_dRdZ
   }
   
   double RBtor = getRBtoroidal();
@@ -386,12 +387,44 @@ Real
 ToroidalBlockCoordSys::getMagneticFlux( const Real a_r) const
 {
    
-   if (m_q[2] > 1.0 + m_eps || m_q[2] < 1.0 -m_eps) {
-       MayDay::Error("ToroidalBlockCoordSys:: magneticFluxFunction is currently only defined for q[2] = 1");
+   //Set the region where magnetic flux will be defined
+   Real r_in = m_rmin - 4.0 * m_dx[RADIAL_DIR];
+   Real r_out = m_rmax + 4.0 * m_dx[RADIAL_DIR];
+
+   if (!m_is_flux_defined) {
+      initializeMagneticFluxFunction(r_in, r_out);
+      m_is_flux_defined = true;
    }
    
-   Real psi = (m_q[1]*a_r/m_a + m_q[0]*log(m_q[0]/(m_q[0] + m_q[1]*a_r/m_a)))/pow(m_q[1],2);
-   psi *= pow(m_a,2) * m_Btor_scale / m_R0;
+   Real psi;
+   
+   // use analytic expression if q2=0
+   if (m_q[2] < 1.0 + m_eps && m_q[2] > 1.0 - m_eps) {
+      psi = (m_q[1]*a_r/m_a + m_q[0]*log(m_q[0]/(m_q[0] + m_q[1]*a_r/m_a)))/pow(m_q[1],2);
+      psi *= pow(m_a,2) * m_Btor_scale / m_R0;
+
+   }
+   
+   else {
+
+      //m_magnetic_flux_inter vector contains data at
+      //cell centeres and face centeres, so in priciple,
+      //we don't need to add any interpolation function, since
+      //we don't expect other locations in the code. However,
+      //just in case we use here first-order interpolation
+      //(to deal with possible round-off errors)
+      
+      Real dr = m_dx[RADIAL_DIR] / 2.0;
+      Real r_lo_bnd = r_in + dr;
+      int n = (a_r > r_lo_bnd) ?  floor((a_r - r_lo_bnd)/dr) : 0;
+      
+      Real r_lo = r_lo_bnd + n * dr;
+      Real coeff_lo = 1.0 - (a_r - r_lo)/dr;
+      Real coeff_hi = (a_r - r_lo)/dr;
+      
+      psi = coeff_lo * m_magnetic_flux_interp[n] + coeff_hi * m_magnetic_flux_interp[n+1];
+   }
+   
  
    return psi;
 }
@@ -459,23 +492,37 @@ ToroidalBlockCoordSys::getNodalFieldData(FArrayBox& a_points,
 }
 
 
-double ToroidalBlockCoordSys::getSafetyFactor( const Real a_r ) const
+Real ToroidalBlockCoordSys::getSafetyFactor( const Real a_rnorm ) const
 {
-  double q = m_q[0] + m_q[1]*exp(m_q[2]*log(a_r * m_R0/m_a));
+  Real q = m_q[0] + m_q[1]*exp(m_q[2]*log(a_rnorm * m_R0/m_a));
   return q;
 }
 
 
-double ToroidalBlockCoordSys::getSafetyFactorDerivative( const Real a_r ) const
+Real ToroidalBlockCoordSys::getSafetyFactorDerivative( const Real a_rnorm ) const
 {
-  double dqdr = m_q[1] * exp(m_q[2]*log(a_r * m_R0/m_a)) * m_q[2] / a_r;
+  Real dqdr = m_q[1] * exp(m_q[2]*log(a_rnorm * m_R0/m_a)) * m_q[2] / a_rnorm;
   return dqdr;
 }
 
-double ToroidalBlockCoordSys::dpsidr( const Real a_r ) const
+Real ToroidalBlockCoordSys::dpsidr( const Real a_r ) const
 {
-  double rnorm = a_r / m_R0;
+  Real rnorm = a_r / m_R0;
   return m_Btor_scale * rnorm / getSafetyFactor(rnorm);
+}
+
+Real ToroidalBlockCoordSys::d2psidr2( const Real a_r ) const
+{
+   Real rnorm = a_r / m_R0;
+   Real q = getSafetyFactor(rnorm);
+   
+   Real result = 1.0/q;
+   
+   result -= rnorm*getSafetyFactorDerivative(rnorm)/pow(q,2);
+   
+   result *= m_Btor_scale / m_R0;
+   
+   return result;
 }
 
 double ToroidalBlockCoordSys::computePhi( const Real a_x,
@@ -587,6 +634,47 @@ RealVect ToroidalBlockCoordSys::getThetaDerivatives(double a_r,
   
   return result;
   
+}
+
+void ToroidalBlockCoordSys::initializeMagneticFluxFunction(const Real& a_rmin,
+                                                           const Real& a_rmax) const
+{
+   //normalization factor
+   Real fac = m_Btor_scale / m_R0;
+   
+   // refine factor to define a step
+   // used in numerical integration
+   // must be one over a power of two
+   int refine_factor = 4;
+   
+   //compute psi at the inner boundary
+   Real dr = a_rmin / round(a_rmin / m_dx[RADIAL_DIR]);
+   dr /= double(refine_factor);
+   Real r = 0.5*dr;
+   Real psi_shift = 0.0;
+   while ( r < a_rmin ) {
+      Real r_norm = r / m_R0;
+      psi_shift += fac * r / getSafetyFactor(r_norm) * dr;
+      r += dr;
+   }
+   
+   //create magnetic flux object to hold data
+   int Npts = int(round((a_rmax - a_rmin) / m_dx[RADIAL_DIR]));
+   Npts *= 2;
+   m_magnetic_flux_interp.resize(Npts);
+
+   //define step for numerical integration
+   dr = m_dx[RADIAL_DIR]/double(refine_factor);
+   r = a_rmin + 0.5*dr;
+   Real psi = psi_shift;
+   for (int n=0; n<Npts; ++n) {
+      for (int k=0; k<refine_factor/2; ++k) {
+         Real r_norm = r / m_R0;
+         psi += fac * r / getSafetyFactor(r_norm) * dr;
+         r += dr;
+      }
+      m_magnetic_flux_interp[n] = psi;
+   }
 }
 
 void ToroidalBlockCoordSys::convertCartesianToToroidal(RealVect& a_vect,

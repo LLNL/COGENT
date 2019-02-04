@@ -387,7 +387,7 @@ c     local variables
       double precision v_par_avg, dv_parallel
 
       kk = CHF_LBOUND[B;2]
-      dv_parallel = h(2)
+      dv_parallel = h(CH_SPACEDIM-2)
 
       CHF_AUTOMULTIDO[gridbox;i]
          indvpar = i2

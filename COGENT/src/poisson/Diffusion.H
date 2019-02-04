@@ -57,8 +57,8 @@ public:
                                          const LevelData<FluxBox>&           mapped_coefficients_fc,
                                          const EllipticOpBC&                 bc );
 
-   virtual void updateImExPreconditioner( const double         mshift,
-                                          const EllipticOpBC&  bc );
+   virtual void updateImExPreconditioner( const LevelData<FArrayBox>&      mshift,
+                                          const EllipticOpBC&              bc );
 
    virtual void setPreconditionerConvergenceParams( const double  tol,
                                                     const int     max_iter,

@@ -101,13 +101,13 @@ Diffusion::setOperatorCoefficients( const LevelData<FluxBox>&           a_unmapp
 
 
 void
-Diffusion::updateImExPreconditioner( const double         a_mshift,
-                                     const EllipticOpBC&  a_bc )
+Diffusion::updateImExPreconditioner( const LevelData<FArrayBox>&  a_mshift,
+                                     const EllipticOpBC&          a_bc )
 {
    LevelData<FArrayBox> beta(m_geometry.grids(), 1, IntVect::Zero);
 
    for (DataIterator dit(beta.dataIterator()); dit.ok(); ++dit ) {
-      beta[dit].setVal(a_mshift);
+      beta[dit].copy(a_mshift[dit]);
    }
 
    m_imex_preconditioner->constructMatrix(m_volume_reciprocal, m_mapped_coefficients, beta, a_bc);

@@ -604,7 +604,7 @@ void MagBlockCoordSys::getPointwiseMetrics( FluxBox& a_N ) const
          this_N.copy(tmp,0,0,1);
          this_N.copy(tmp,2,1,1);
          this_N.copy(tmp,1,2,1);
-         this_N.copy(tmp,2,2,1);
+         this_N.copy(tmp,3,3,1);
          
          if ( m_axisymmetric ) {
             BoxIterator bit(box);

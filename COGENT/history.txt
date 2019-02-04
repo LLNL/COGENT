@@ -1,4 +1,34 @@
 ------------------------------------------------------------------------
+r1507 | mdorf | 2019-01-29 11:05:55 -0800 (Tue, 29 Jan 2019) | 1 line
+
+Fixed a bug in implementation of magnetic flux function for arbitrary q2
+------------------------------------------------------------------------
+r1506 | mdorf | 2019-01-28 18:17:43 -0800 (Mon, 28 Jan 2019) | 1 line
+
+Added new option for canonical Maxwellian profiles
+------------------------------------------------------------------------
+r1505 | mdorf | 2019-01-28 18:04:37 -0800 (Mon, 28 Jan 2019) | 1 line
+
+Added magnetic flux function calculation for arbitrary q2 in ToroidalBlockCoordSys geometry class
+------------------------------------------------------------------------
+r1504 | mdorf | 2019-01-28 12:29:44 -0800 (Mon, 28 Jan 2019) | 1 line
+
+Added ionization term to fluid diffusion model
+------------------------------------------------------------------------
+r1503 | mdorf | 2019-01-22 15:58:01 -0800 (Tue, 22 Jan 2019) | 1 line
+
+Fixed indexing in 2D pointwise calculation of metric factors
+------------------------------------------------------------------------
+r1502 | mdorf | 2019-01-22 10:15:00 -0800 (Tue, 22 Jan 2019) | 1 line
+
+Fxied a bug in the calculation of magnetic field data for toroidal geometry class
+------------------------------------------------------------------------
+r1501 | mdorr | 2019-01-17 10:10:34 -0800 (Thu, 17 Jan 2019) | 3 lines
+
+Fixing vparallel index in compute_bstar_parallel.
+
+
+------------------------------------------------------------------------
 r1500 | debo | 2018-12-13 18:29:43 -0800 (Thu, 13 Dec 2018) | 1 line
 
 Gyroaverage operator and the gyroaveraged variables are now phase-space (collapsed along vpar) data.
