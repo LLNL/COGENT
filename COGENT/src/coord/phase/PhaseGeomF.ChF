@@ -17,7 +17,8 @@ c  NOTE in this file CH_SPACEDIM is total phase space dimension
      &     CHF_CONST_FRA[Bvec],
      &     CHF_CONST_FRA[gradB],
      &     CHF_CONST_FRA[curlb],
-     &     CHF_FRA[velocity]
+     &     CHF_FRA[velocity],
+     &     CHF_CONST_INT[is_gyrokinetic]
      &     )
 
 c     local variables
@@ -54,13 +55,21 @@ c     local variables
             this_Bvec(n)  =  Bvec(i0,i1,CHF_LBOUND[Bvec;2] ,CHF_LBOUND[Bvec;3] ,n)
             this_curlb(n) = curlb(i0,i1,CHF_LBOUND[curlb;2],CHF_LBOUND[curlb;3],n)
             this_gradB(n) = gradB(i0,i1,CHF_LBOUND[gradB;2],CHF_LBOUND[gradB;3],n)
-            this_E(n)     =     E(i0,i1,CHF_LBOUND[E;2]    ,CHF_LBOUND[E;3]    ,n)
+            if (is_gyrokinetic .EQ. 0) then
+              this_E(n) = E(i0,i1,CHF_LBOUND[E;2],CHF_LBOUND[E;3],n)
+            else
+              this_E(n) = E(i0,i1,CHF_LBOUND[E;2],i3,n)
+            endif
 #endif
 #if CH_SPACEDIM==5
             this_Bvec(n)  =  Bvec(i0,i1,i2,CHF_LBOUND[Bvec;3] ,CHF_LBOUND[Bvec;4] ,n)
             this_curlb(n) = curlb(i0,i1,i2,CHF_LBOUND[curlb;3],CHF_LBOUND[curlb;4],n)
             this_gradB(n) = gradB(i0,i1,i2,CHF_LBOUND[gradB;3],CHF_LBOUND[gradB;4],n)
-            this_E(n)     =     E(i0,i1,i2,CHF_LBOUND[E;3]    ,CHF_LBOUND[E;4]    ,n)
+            if (is_gyrokinetic .EQ. 0) then
+              this_E(n) = E(i0,i1,i2,CHF_LBOUND[E;3],CHF_LBOUND[E;4],n)
+            else
+              this_E(n) = E(i0,i1,i2,CHF_LBOUND[E;3],i4,n)
+            endif
 #endif
             Bmag = Bmag + this_Bvec(n)**2
          enddo
@@ -1111,6 +1120,51 @@ c     local variables
 
 #endif
    
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine mult_njinverse(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[grad_var_mapped],
+     &     CHF_CONST_FRA[njinverse],
+     &     CHF_FRA[grad_var],
+     &     CHF_CONST_INT[cfg_dim],
+     &     CHF_CONST_INT[max_dim]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      integer p, row, col
+      double precision sum
+
+      CHF_AUTOMULTIDO[box;i]
+
+         p = 0
+         do row = 0, cfg_dim-1
+            sum = zero
+            do col = 0, cfg_dim-1
+#if CH_SPACEDIM==4
+               sum = sum 
+     &                + njinverse(i0,i1,CHF_LBOUND[njinverse;2],CHF_LBOUND[njinverse;3],p) 
+     &                * grad_var_mapped(CHF_AUTOIX[i],col)
+#else
+               sum = sum 
+     &                + njinverse(i0,i1,i2,CHF_LBOUND[njinverse;3],CHF_LBOUND[njinverse;4],p) 
+     &                * grad_var_mapped(CHF_AUTOIX[i],col)
+#endif
+               p = p + 1
+            enddo
+            grad_var(CHF_AUTOIX[i],row) = sum
+         enddo
+
+         if (max_dim .EQ. CH_SPACEDIM) then
+           do row = cfg_dim, CH_SPACEDIM-1
+              grad_var(CHF_AUTOIX[i],row) = grad_var_mapped(CHF_AUTOIX[i],row)
+           enddo
+         endif
+
       CHF_ENDDO
 
       return

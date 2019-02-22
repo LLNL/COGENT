@@ -14,5 +14,6 @@ void inspect(const FArrayBox& data);
 void inspect(const FluxBox& data);
 void inspect(const LevelData<FArrayBox>& data);
 void inspect(const LevelData<FluxBox>& data);
+void inspect(const BoxLayoutData<FArrayBox>& data);
 
 #include "NamespaceFooter.H"

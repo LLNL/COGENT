@@ -15,7 +15,6 @@
 #include "CornerCopier.H"
 #include "inspect.H"
 
-#include "EllipticOpF_F.H"
 #include "NamespaceHeader.H"
 
 #undef TEST_DIVERGENCE_CLEANING
@@ -3102,12 +3101,12 @@ MagGeom::computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& a_
       a_field[dit].setVal(1./0.);
          
       for (int dir=0; dir<2; dir++) {
-         FORT_CELL_CENTERED_GRAD_COMPONENT(CHF_BOX(box),
-                                           CHF_CONST_INT(dir),
-                                           CHF_CONST_FRA1(a_phi[dit],0),
-                                           CHF_CONST_REALVECT(dx),
-                                           CHF_CONST_INT(tmp_order),
-                                           CHF_FRA1(a_field[dit],dir));
+         SpaceUtils::cellCenteredGradientComponent( box,
+                                                    dir,
+                                                    a_phi[dit],
+                                                    dx,
+                                                    tmp_order,
+                                                    a_field[dit] );
       }
    }
       
@@ -3122,12 +3121,12 @@ MagGeom::computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& a_
          RealVect dx = block_coord_sys.dx();
             
          for (int dir=0; dir<2; ++dir) {
-            FORT_CELL_CENTERED_GRAD_COMPONENT(CHF_BOX(grids[dit]),
-                                              CHF_CONST_INT(dir),
-                                              CHF_CONST_FRA1(a_phi[dit],0),
-                                              CHF_CONST_REALVECT(dx),
-                                              CHF_CONST_INT(a_order),
-                                              CHF_FRA1(a_field[dit],dir));
+            SpaceUtils::cellCenteredGradientComponent(  grids[dit],
+                                                        dir,
+                                                        a_phi[dit],
+                                                        dx,
+                                                        a_order,
+                                                        a_field[dit] );
          }
       }
    }
@@ -3155,11 +3154,11 @@ MagGeom::computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& a_
          grow_vect[dir] = 0;
          Box box = grow(grids[dit],grow_vect);
          
-         FORT_FACE_INTERPOLATE(CHF_CONST_INT(dir),
-                               CHF_BOX(surroundingNodes(box,dir)),
-                               CHF_CONST_INT(a_order),
-                               CHF_CONST_FRA1(a_phi[dit],0),
-                               CHF_FRA1(phi_face[dit][dir],0));
+         SpaceUtils::faceInterpolate( dir,
+                                      surroundingNodes(box,dir),
+                                      a_order,
+                                      a_phi[dit],
+                                      phi_face[dit][dir] );
       }
    }
    phi_face.exchange();
@@ -3178,21 +3177,21 @@ MagGeom::computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& a_
       
       for (int dir=0; dir<2; dir++) {
          Box box_dir = surroundingNodes(box,dir);
-         FORT_FACE_CENTERED_GRAD_COMPONENT(CHF_BOX(box_dir),
-                                            CHF_CONST_INT(dir),
-                                            CHF_CONST_FRA1(a_phi[dit],0),
-                                            CHF_CONST_REALVECT(dx),
-                                            CHF_CONST_INT(tmp_order),
-                                            CHF_FRA1(a_field[dit][dir],dir));
+         SpaceUtils::faceCenteredGradientComponent( box_dir,
+                                                    dir,
+                                                    a_phi[dit],
+                                                    dx,
+                                                    tmp_order,
+                                                    a_field[dit][dir] );
          
          for (int tdir=0; tdir<2; ++tdir) {
             if (tdir != dir) {
-               FORT_CELL_CENTERED_GRAD_COMPONENT(CHF_BOX(box_dir),
-                                                  CHF_CONST_INT(tdir),
-                                                  CHF_CONST_FRA1(phi_face[dit][dir],0),
-                                                  CHF_CONST_REALVECT(dx),
-                                                  CHF_CONST_INT(tmp_order),
-                                                  CHF_FRA1(a_field[dit][dir],tdir));
+               SpaceUtils::cellCenteredGradientComponent( box_dir,
+                                                          tdir,
+                                                          phi_face[dit][dir],
+                                                          dx,
+                                                          tmp_order,
+                                                          a_field[dit][dir] );
             }
          }
       }
@@ -3212,21 +3211,21 @@ MagGeom::computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& a_
          
          for (int dir=0; dir<2; dir++) {
             Box box_dir = surroundingNodes(grids[dit],dir);
-            FORT_FACE_CENTERED_GRAD_COMPONENT(CHF_BOX(box_dir),
-                                              CHF_CONST_INT(dir),
-                                              CHF_CONST_FRA1(a_phi[dit],0),
-                                              CHF_CONST_REALVECT(dx),
-                                              CHF_CONST_INT(a_order),
-                                              CHF_FRA1(a_field[dit][dir],dir));
+            SpaceUtils::faceCenteredGradientComponent( box_dir,
+                                                       dir,
+                                                       a_phi[dit],
+                                                       dx,
+                                                       a_order,
+                                                       a_field[dit][dir] );
             
             for (int tdir=0; tdir<2; ++tdir) {
                if (tdir != dir) {
-                  FORT_CELL_CENTERED_GRAD_COMPONENT(CHF_BOX(box_dir),
-                                                    CHF_CONST_INT(tdir),
-                                                    CHF_CONST_FRA1(phi_face[dit][dir],0),
-                                                    CHF_CONST_REALVECT(dx),
-                                                    CHF_CONST_INT(a_order),
-                                                    CHF_FRA1(a_field[dit][dir],tdir));
+                  SpaceUtils::cellCenteredGradientComponent(  box_dir,
+                                                              tdir,
+                                                              phi_face[dit][dir],
+                                                              dx,
+                                                              a_order,
+                                                              a_field[dit][dir] );
                }
             }
          }

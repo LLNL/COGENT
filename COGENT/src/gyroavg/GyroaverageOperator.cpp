@@ -483,4 +483,79 @@ void GyroaverageOperator::getInterpStencil( Stencil&              a_stencil,
   return;
 }
 
+void GyroaverageOperator::gyroaveragedEField( LevelData<FArrayBox>&                 a_E_field,
+                                              const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                              const int                             a_order ) const
+{
+  CH_assert(isDefined());
+  CH_assert(a_phi.nComp() == 1);
+
+  /* compute gyroaveraged potential */
+  LevelData<FArrayBox> phi_bar;
+  applyOp(phi_bar, a_phi);
+  CH_assert(phi_bar.nComp() == 1);
+
+  /* define the Efield */
+  if (a_E_field.isDefined()) a_E_field.clear();
+  IntVect gvec = IntVect::Zero;
+  for (int d=0; d<CFG_DIM; d++) gvec[d] = 1;
+  a_E_field.define(m_grids, CFG_DIM, gvec);
+
+  /* compute the gradient in configuration space */
+  m_phase_geom->computeGradientCfgSpace(phi_bar, a_E_field, a_order);
+
+  /* negate it since E-field is -grad */
+  for (DataIterator dit(a_E_field.dataIterator()); dit.ok(); ++dit) {
+    a_E_field[dit].negate();
+  }
+
+  return;
+}
+
+void GyroaverageOperator::gyroaveragedEField( LevelData<FluxBox>&                   a_E_field,
+                                              const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                              const int                             a_order ) const
+{
+  CH_assert(isDefined());
+  CH_assert(a_phi.nComp() == 1);
+
+  /* even for CFG_DIM=2, efield has 3 components.
+   * The second component (toroidal) is 0 */
+  int n_efield_comp = 3;
+
+  /* compute gyroaveraged potential */
+  LevelData<FArrayBox> phi_bar;
+  applyOp(phi_bar, a_phi);
+  CH_assert(phi_bar.nComp() == 1);
+
+  /* define the Efield */
+  if (a_E_field.isDefined()) a_E_field.clear();
+  IntVect gvec = IntVect::Zero;
+  for (int d=0; d<CFG_DIM; d++) gvec[d] = 1;
+  a_E_field.define(m_grids, n_efield_comp, gvec);
+
+  /* compute the gradient in configuration space */
+  m_phase_geom->computeGradientCfgSpace(phi_bar, a_E_field, a_order);
+
+  for (DataIterator dit(a_E_field.dataIterator()); dit.ok(); ++dit) {
+    for (int dir=0; dir<SpaceDim; dir++) {
+
+      /* negate it since E-field is -grad */
+      a_E_field[dit][dir].negate();
+
+      /* if CFG_DIM = 2, then PhaseGeom::computeGradientCfgSpace() would have
+       * populated the first two components with the radial and poloidal gradients.
+       * So, push the 2nd component to 3rd (since the 3rd component is the 
+       * poloidal one, and set 2nd component to zero */
+      if (CFG_DIM==2) {
+        a_E_field[dit][dir].copy(a_E_field[dit][dir], CFG_DIM-1, CFG_DIM);
+        a_E_field[dit][dir].setVal(0.0, CFG_DIM-1);
+      }
+    }
+  }
+
+
+  return;
+}
+
 #include "NamespaceFooter.H"

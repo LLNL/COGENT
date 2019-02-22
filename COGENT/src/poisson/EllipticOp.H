@@ -6,6 +6,7 @@
 #include "LinearSolver.H"
 #include "CoDim1Stencil.H"
 #include "CoDim2Stencil.H"
+#include "SpaceUtils.H"
 
 #include "NamespaceHeader.H"
 
@@ -307,20 +308,6 @@ protected:
                              const bool                              extrapolate_from_interior,
                              const bool                              include_bvs,
                              LevelData<FArrayBox>&                   data ) const;
-
-   void extrapBoundaryGhostsForCC(FArrayBox&                              data,
-                                  const Box&                              interiorbox,
-                                  const Box&                              domain_box,
-                                  const int                               dir,
-                                  const int                               order,
-                                  const Tuple<BlockBoundary, 2*SpaceDim>& block_boundaries) const;
-
-   void extrapBoundaryGhostsForFC(FArrayBox&                              data,
-                                  const Box&                              interiorbox,
-                                  const Box&                              domain_box,
-                                  const int                               dir,
-                                  const int                               order,
-                                  const Tuple<BlockBoundary, 2*SpaceDim>& block_boundaries) const;
 
    double globalMax(const double data) const;
 

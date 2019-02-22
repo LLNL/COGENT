@@ -99,6 +99,11 @@ void GKOps::define( const GKState& a_state,
    m_phi.define( m_phase_geometry->magGeom().gridsFull(), 1, phi_ghost_vect );
 
    GyroaverageOperatorFactory::createOps(m_gyroavg_ops, a_state.dataKinetic());
+   KineticSpeciesPtrVect& kin_species(m_Y.dataKinetic());
+   for (int s=0; s<kin_species.size(); s++) {
+     KineticSpecies& species = *(kin_species[s]);
+     if (species.isGyrokinetic()) species.gyroaverageOp(m_gyroavg_ops[species.name()]);
+   }
 
    m_is_defined = true;
 }
@@ -313,32 +318,6 @@ void GKOps::preTimeStep (const int       a_step,
       m_dt_neutrals = m_neutrals->computeDt( soln_phys );
       m_time_scale_neutrals = m_neutrals->computeTimeScale( soln_phys );
    }
-
-//   {
-//      /* Gyroaverage operator test and example */
-//      m_phase_geometry->plotConfigurationData("phi", m_phi, 0.0);
-//   
-//      /* compute and plot phi_bar from gk_ops */
-//      CFG::LevelData<CFG::FArrayBox> phi_bar1;
-//      gyroaverage(phi_bar1, m_phi, "hydrogen");
-//      m_phase_geometry->plotConfigurationData("phi_bar1", phi_bar1, 0.0);
-//   
-//      /* compute and plot phi_bar when called from a species */
-//      CFG::LevelData<CFG::FArrayBox> phi_bar2, phi_bar3;
-//      soln_comp[0]->gyroaverage(phi_bar2, m_phi);
-//      m_phase_geometry->plotConfigurationData("phi_bar2", phi_bar2, 0.0);
-//      soln_phys[0]->gyroaverage(phi_bar3, m_phi);
-//      m_phase_geometry->plotConfigurationData("phi_bar3", phi_bar3, 0.0);
-//
-//      /* compute and plot phi_bar when called from a species' phase geometry */
-//      CFG::LevelData<CFG::FArrayBox> phi_bar4, phi_bar5;
-//      const PhaseGeom& geom_comp(soln_comp[0]->phaseSpaceGeometry());
-//      geom_comp.gyroaverage(phi_bar4, m_phi);
-//      geom_comp.plotConfigurationData("phi_bar4", phi_bar4, 0.0);
-//      const PhaseGeom& geom_phys(soln_phys[0]->phaseSpaceGeometry());
-//      geom_phys.gyroaverage(phi_bar5, m_phi);
-//      geom_phys.plotConfigurationData("phi_bar5", phi_bar5, 0.0);
-//   }
 
 }
 
@@ -977,7 +956,7 @@ void GKOps::applyVlasovOperator( GKRHSData&                    a_rhs,
 
    if ( m_vlasov ) {
       m_count_vlasov++;
-      m_vlasov->accumulateRHS(a_rhs, a_kinetic_phys, *m_E_field, a_time );
+      m_vlasov->accumulateRHS(a_rhs, a_kinetic_phys, m_phi, *m_E_field, a_time );
    }
 }
 

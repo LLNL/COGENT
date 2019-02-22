@@ -52,10 +52,11 @@ GKVlasovAmpere::GKVlasovAmpere( ParmParse&  pp,
 }
 
 
-void GKVlasovAmpere::accumulateRHS( GKRHSData&                    a_rhs,
-                                    const KineticSpeciesPtrVect&  a_kinetic_phys,
-                                    const CFG::EField&            a_E_field,
-                                    const Real&                   a_time )
+void GKVlasovAmpere::accumulateRHS( GKRHSData&                            a_rhs,
+                                    const KineticSpeciesPtrVect&          a_kinetic_phys,
+                                    const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                    const CFG::EField&                    a_E_field,
+                                    const Real&                           a_time )
 {
    KineticSpeciesPtrVect& rhs_kinetic = a_rhs.dataKinetic();
 
@@ -80,12 +81,27 @@ void GKVlasovAmpere::accumulateRHS( GKRHSData&                    a_rhs,
       double lo_value, hi_value;
       if ( phase_geom.divFreeVelocity() ) {
          bool fourth_order_Efield = !a_E_field.secondOrder();
-         evalRHS( rhs_species, lo_value, hi_value, species_radial_flux_divergence_average, soln_species,
-                  a_E_field.getCellCenteredField(), a_E_field.getPhiNode(), fourth_order_Efield, PhaseGeom::FULL_VELOCITY, a_time );
+         evalRHS( rhs_species, 
+                  lo_value, 
+                  hi_value, 
+                  species_radial_flux_divergence_average, 
+                  soln_species, 
+                  a_phi,
+                  a_E_field.getCellCenteredField(), 
+                  a_E_field.getPhiNode(), 
+                  fourth_order_Efield, 
+                  PhaseGeom::FULL_VELOCITY, 
+                  a_time );
       }
       else {
-         evalRHS( rhs_species, lo_value, hi_value, species_radial_flux_divergence_average,
-                  soln_species, a_E_field, a_time );
+         evalRHS( rhs_species, 
+                  lo_value, 
+                  hi_value, 
+                  species_radial_flux_divergence_average,
+                  soln_species, 
+                  a_phi, 
+                  a_E_field, 
+                  a_time );
       }
       
       for (CFG::DataIterator dit(mag_grids); dit.ok(); ++dit) {
@@ -133,17 +149,20 @@ void GKVlasovAmpere::accumulateRHS( GKRHSData&                    a_rhs,
          }
       }
    }
+
+   return;
 }
 
 
 void
-GKVlasovAmpere::evalRHS( KineticSpecies&                  a_rhs_species,
-                         double&                          a_lo_value,
-                         double&                          a_hi_value,
-                         CFG::LevelData<CFG::FArrayBox>&  a_radial_flux_divergence_average,
-                         const KineticSpecies&            a_soln_species,
-                         const CFG::EField&               a_E_field,
-                         const Real                       a_time )
+GKVlasovAmpere::evalRHS( KineticSpecies&                        a_rhs_species,
+                         double&                                a_lo_value,
+                         double&                                a_hi_value,
+                         CFG::LevelData<CFG::FArrayBox>&        a_radial_flux_divergence_average,
+                         const KineticSpecies&                  a_soln_species,
+                         const CFG::LevelData<CFG::FArrayBox>&  a_phi,
+                         const CFG::EField&                     a_E_field,
+                         const Real                             a_time )
 {
    /*
      Evaluates the (negated) phase space divergence:
@@ -198,11 +217,12 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                  a_rhs_species,
 
 
 void
-GKVlasovAmpere::evalRHS( KineticSpecies&                  a_rhs_species,
+GKVlasovAmpere::evalRHS( KineticSpecies&                        a_rhs_species,
                          double&                                a_lo_value,
                          double&                                a_hi_value,
                          CFG::LevelData<CFG::FArrayBox>&        a_radial_flux_divergence_average,
                          const KineticSpecies&                  a_soln_species,
+                         const CFG::LevelData<CFG::FArrayBox>&  a_phi,
                          const CFG::LevelData<CFG::FArrayBox>&  a_Efield_cell,
                          const CFG::LevelData<CFG::FArrayBox>&  a_phi_node,
                          const bool                             a_fourth_order_Efield,

@@ -27,10 +27,11 @@ public:
     */
    virtual ~GKVlasovAmpere() {};
 
-   virtual void accumulateRHS( GKRHSData&                    rhs,
-                               const KineticSpeciesPtrVect&  kinetic_phys,
-                               const CFG::EField&            E_field,
-                               const Real&                   time );
+   virtual void accumulateRHS( GKRHSData&                             rhs,
+                               const KineticSpeciesPtrVect&           kinetic_phys,
+                               const CFG::LevelData<CFG::FArrayBox>&  phi,
+                               const CFG::EField&                     E_field,
+                               const Real&                            time );
 
    static const char* pp_name;
 
@@ -44,13 +45,14 @@ public:
    // Operator evaluation using a phase space velocity computed directly from
    // a phase-space injected electric field (Efield), as opposed to the
    // divergence-free method
-   void evalRHS( KineticSpecies&                  rhs_species,
-                 double&                          lo_value,
-                 double&                          hi_value,
-                 CFG::LevelData<CFG::FArrayBox>&  radial_flux_divergence_average,
-                 const KineticSpecies&            soln_species,
-                 const CFG::EField&               E_field,
-                 const Real                       time );
+   void evalRHS( KineticSpecies&                        rhs_species,
+                 double&                                lo_value,
+                 double&                                hi_value,
+                 CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
+                 const KineticSpecies&                  soln_species,
+                 const CFG::LevelData<CFG::FArrayBox>&  phi,
+                 const CFG::EField&                     E_field,
+                 const Real                             time );
 
    // Operator evaluation using a divergence-free phase space velocity computed from
    // the cell-centered field (Efield_cell) and nodal potential (phi_node)
@@ -59,6 +61,7 @@ public:
                  double&                                hi_value,
                  CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
                  const KineticSpecies&                  soln_species,
+                 const CFG::LevelData<CFG::FArrayBox>&  phi,
                  const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
                  const CFG::LevelData<CFG::FArrayBox>&  phi_node,
                  const bool                             fourth_order_Efield,

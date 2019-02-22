@@ -1,4 +1,12 @@
 ------------------------------------------------------------------------
+r1509 | debo | 2019-02-21 20:19:12 -0800 (Thu, 21 Feb 2019) | 1 line
+
+1) Implemented the computation of electric field from gyroaveraged potential, 2) updated Vlasov velocity calculation to use this gyroaveraged E-field if species is specified to be gyrokinetic (kinetic_species.<n>.is_gyrokinetic = true [default - false]), 3) added gradient calculation functions to PhaseGeom on the same lines as what was available in MagGeom and also functions that compute CFG-space-only gradients of phase space objects, and 4) Unified some multidim gradient calculation and interpolation/extrapolation functions in SpaceUtils that are called by EllipticOp, MagGeom, and PhaseGeom.
+------------------------------------------------------------------------
+r1508 | mdorf | 2019-02-20 17:44:51 -0800 (Wed, 20 Feb 2019) | 1 line
+
+Added inspect function for BoxLayoutData objects
+------------------------------------------------------------------------
 r1507 | mdorf | 2019-01-29 11:05:55 -0800 (Tue, 29 Jan 2019) | 1 line
 
 Fixed a bug in implementation of magnetic flux function for arbitrary q2

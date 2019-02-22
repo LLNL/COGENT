@@ -55,5 +55,16 @@ inspect(const LevelData<FluxBox>& data)
 }
 
 
+void
+inspect(const BoxLayoutData<FArrayBox>& data)
+{
+   DataIterator dit = data.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit)
+   {
+      const FArrayBox& this_fab = data[dit];
+      FORT_INSPECT(CHF_BOX(this_fab.box()),
+                   CHF_CONST_FRA(this_fab));
+   }
+}
 
 #include "NamespaceFooter.H"

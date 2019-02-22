@@ -757,7 +757,7 @@ Kernel::computeCellVelCfgComp(LevelData<FArrayBox>&      a_velCellCfgComp,
 {
    const DisjointBoxLayout & grids = a_velCellCfgComp.getBoxes();
    LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
-   a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, a_option);
+   a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, false, a_option);
 
    for (DataIterator dit(a_velCellCfgComp.dataIterator()); dit.ok(); ++dit) {
      a_velCellCfgComp[dit].setVal(0.);

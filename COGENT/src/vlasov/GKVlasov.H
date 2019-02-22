@@ -31,10 +31,11 @@ public:
     */
    virtual ~GKVlasov() {};
 
-   virtual void accumulateRHS( GKRHSData&                    rhs,
-                               const KineticSpeciesPtrVect&  kinetic_phys,
-                               const CFG::EField&            E_field,
-                               const Real&                   time );
+   virtual void accumulateRHS( GKRHSData&                             rhs,
+                               const KineticSpeciesPtrVect&           kinetic_phys,
+                               const CFG::LevelData<CFG::FArrayBox>&  phi,
+                               const CFG::EField&                     E_field,
+                               const Real&                            time );
 
    /// Compute a stable time step.
    /**
@@ -69,13 +70,23 @@ public:
    // Operator evaluation using a phase space velocity computed directly from
    // a phase-space injected electric field (Efield), as opposed to the
    // divergence-free method
-   void evalRHS( KineticSpecies&           rhs,
-                 const KineticSpecies&     soln,
-                 const CFG::EField&        Efield,
-                 const Real                time );
+   void evalRHS( KineticSpecies&                        rhs,
+                 const KineticSpecies&                  soln,
+                 const CFG::LevelData<CFG::FArrayBox>&  phi,
+                 const CFG::EField&                     Efield,
+                 const Real                             time );
 
    // Operator evaluation using a divergence-free phase space velocity computed from
    // the cell-centered field (Efield_cell) and nodal potential (phi_node)
+   void evalRHS( KineticSpecies&                        rhs,
+                 const KineticSpecies&                  soln,
+                 const CFG::LevelData<CFG::FArrayBox>&  phi,
+                 const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
+                 const CFG::LevelData<CFG::FArrayBox>&  phi_node,
+                 const bool                             fourth_order_Efield,
+                 const int                              velocity_option,
+                 const Real                             time );
+
    void evalRHS( KineticSpecies&                        rhs,
                  const KineticSpecies&                  soln,
                  const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,

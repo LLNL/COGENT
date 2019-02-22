@@ -43,6 +43,14 @@ class GyroaverageOperator
     void applyOp(LevelData<FArrayBox>&, 
                  const CFG::LevelData<CFG::FArrayBox>& ) const;
 
+    void gyroaveragedEField(  LevelData<FArrayBox>&,
+                              const CFG::LevelData<CFG::FArrayBox>&,
+                              const int ) const;
+
+    void gyroaveragedEField(  LevelData<FluxBox>&,
+                              const CFG::LevelData<CFG::FArrayBox>&,
+                              const int ) const;
+
     inline const LevelData< BaseFab<Stencil> >& op() const
     {
       return m_gyroavg_op;

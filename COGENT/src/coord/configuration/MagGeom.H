@@ -8,6 +8,7 @@
 #include "EllipticOpBC.H"
 
 #include "BoundaryBoxLayout.H.multidim"
+#include "SpaceUtils.H"
 
 #include "NamespaceHeader.H"
 

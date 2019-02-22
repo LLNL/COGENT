@@ -9,7 +9,7 @@
 #include "PhaseBlockCoordSys.H"
 #include "PhaseGrid.H"
 #include "BlockRegister.H"
-
+#include "SpaceUtils.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -81,10 +81,12 @@ public:
    void updateVelocities( const LevelData<FluxBox>& Efield,
                           LevelData<FluxBox>&       velocity,
                           const int                 option,
+                          const bool                gyrokinetic, 
                           const bool                apply_axisymmetric_correction = false) const;
 
    void computeGKVelocities( const LevelData<FluxBox>& Efield,
                              LevelData<FluxBox>&       velocity_grown,
+                             const bool                gyrokinetic, 
                              const int                 option ) const;
 
    void computeTestVelocities( LevelData<FluxBox>& velocity ) const;
@@ -154,6 +156,158 @@ public:
 
    void zeroBoundaryFlux( const int dir, LevelData<FluxBox>& a_flux ) const;
 
+   inline
+   void unmapGradient(  const LevelData<FArrayBox>&  a_mapped_grad, 
+                        LevelData<FArrayBox>&        a_grad ) const
+   {
+     unmapGradient(a_mapped_grad, a_grad, SpaceDim);
+   }
+
+   inline
+   void unmapGradientCfgSpace(  const LevelData<FArrayBox>&  a_mapped_grad, 
+                                LevelData<FArrayBox>&        a_grad ) const
+   {
+     unmapGradient(a_mapped_grad, a_grad, CFG_DIM);
+   }
+
+   inline
+   void unmapGradient(  const LevelData<FluxBox>& a_mapped_grad,
+                        LevelData<FluxBox>&       a_grad ) const
+   {
+     unmapGradient(a_mapped_grad, a_grad, SpaceDim);
+   }
+
+   inline
+   void unmapGradientCfgSpace(  const LevelData<FluxBox>& a_mapped_grad,
+                                LevelData<FluxBox>&       a_grad ) const
+   {
+     unmapGradient(a_mapped_grad, a_grad, CFG_DIM);
+   }
+
+   inline
+   void computeGradient( const LevelData<FArrayBox>&  a_var,
+                         LevelData<FArrayBox>&        a_grad_var,
+                         const int                    a_order ) const
+   {
+     computeGradient(a_var, a_grad_var, a_order, SpaceDim);
+   }
+
+   inline
+   void computeGradientCfgSpace(  const LevelData<FArrayBox>&  a_var,
+                                  LevelData<FArrayBox>&        a_grad_var,
+                                  const int                    a_order ) const
+   {
+     computeGradient(a_var, a_grad_var, a_order, CFG_DIM);
+   }
+
+   inline
+   void computeGradient( const LevelData<FArrayBox>&  a_var,
+                         LevelData<FluxBox>&          a_grad_var,
+                         const int                    a_order ) const
+   {
+     computeGradient(a_var, a_grad_var, a_order, SpaceDim);
+   }
+
+   inline
+   void computeGradientCfgSpace(  const LevelData<FArrayBox>&  a_var,
+                                  LevelData<FluxBox>&          a_grad_var,
+                                  const int                    a_order ) const
+   {
+     computeGradient(a_var, a_grad_var, a_order, CFG_DIM);
+   }
+
+   inline
+   void computeMappedGradient(  const LevelData<FArrayBox>& a_var,
+                                LevelData<FArrayBox>&       a_grad_var,
+                                const int                   a_order )  const
+   {
+     computeMappedGradient(a_var, a_grad_var, a_order, SpaceDim);
+   }
+
+   inline
+   void computeMappedGradientCfgSpace(  const LevelData<FArrayBox>& a_var,
+                                        LevelData<FArrayBox>&       a_grad_var,
+                                        const int                   a_order )  const
+   {
+     computeMappedGradient(a_var, a_grad_var, a_order, CFG_DIM);
+   }
+
+   inline
+   void computeMappedGradient(  const LevelData<FArrayBox>& a_var,
+                                LevelData<FluxBox>&         a_grad_var,
+                                const int                   a_order ) const
+   {
+     computeMappedGradient(a_var, a_grad_var, a_order, SpaceDim);
+   }
+
+   inline
+   void computeMappedGradientCfgSpace(  const LevelData<FArrayBox>& a_var,
+                                        LevelData<FluxBox>&         a_grad_var,
+                                        const int                   a_order ) const
+   {
+     computeMappedGradient(a_var, a_grad_var, a_order, CFG_DIM);
+   }
+
+   inline
+   void computeMappedGradientWithGhosts(  const LevelData<FArrayBox>& a_var,
+                                          LevelData<FArrayBox>&       a_grad_var,
+                                          const int                   a_order ) const
+   {
+     computeMappedGradientWithGhosts(a_var, a_grad_var, a_order, SpaceDim);
+   }
+
+   inline
+   void computeMappedGradientWithGhostsCfgSpace(  const LevelData<FArrayBox>& a_var,
+                                                  LevelData<FArrayBox>&       a_grad_var,
+                                                  const int                   a_order ) const
+   {
+     computeMappedGradientWithGhosts(a_var, a_grad_var, a_order, CFG_DIM);
+   }
+
+   inline
+   void computeMappedGradientWithGhosts(  const LevelData<FArrayBox>& a_var,
+                                          LevelData<FluxBox>&         a_grad_var,
+                                          const int                   a_order ) const
+   {
+     computeMappedGradientWithGhosts(a_var, a_grad_var, a_order, SpaceDim);
+   }
+
+   inline
+   void computeMappedGradientWithGhostsCfgSpace(  const LevelData<FArrayBox>& a_var,
+                                                  LevelData<FluxBox>&         a_grad_var,
+                                                  const int                   a_order ) const
+   {
+     computeMappedGradientWithGhosts(a_var, a_grad_var, a_order, CFG_DIM);
+   }
+
+   inline
+   void fillTransversePhysicalGhosts( LevelData<FArrayBox>& a_v ) const
+   {
+     fillTransversePhysicalGhosts( a_v, SpaceDim );
+     return;
+   }
+
+   inline
+   void fillTransversePhysicalGhostsCfgSpace( LevelData<FArrayBox>& a_v ) const
+   {
+     fillTransversePhysicalGhosts( a_v, CFG_DIM );
+     return;
+   }
+
+   inline
+   void fillTransversePhysicalGhosts( LevelData<FluxBox>& a_v) const
+   {
+     fillTransversePhysicalGhosts( a_v, SpaceDim);
+     return;
+   }
+
+   inline
+   void fillTransversePhysicalGhostsCfgSpace( LevelData<FluxBox>& a_v) const
+   {
+     fillTransversePhysicalGhosts( a_v, CFG_DIM);
+     return;
+   }
+
    /// Compute the phase space flux divergence(F) assuming that the input
    /// flux F already contains metric and Jacobian values. Difference between
    /// this function and mappgedGridDivergnceWithoutNT is 1) this function
@@ -220,7 +374,7 @@ public:
 
    void getCellVolumes( LevelData<FArrayBox>& volume ) const;
 
-   void fillInternalGhosts( LevelData<FArrayBox>& a_data ) const;
+   void fillInternalGhosts( LevelData<FArrayBox>& a_data, int a_maxdim = SpaceDim ) const;
    
    void exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const;
 
@@ -500,6 +654,32 @@ public:
      m_gyroavg_op->applyOp(a_phi_bar, a_phi);
    }
 
+   inline void gyroaveragedEField(LevelData<FArrayBox>&                 a_E,
+                                  const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                  const int                             a_order ) const
+   {
+     if (!m_is_gyrokinetic) {
+       MayDay::Error("PhaseGrom::gyroaveragedEfield() called for non-gyrokinetic species!");
+     }
+     if (m_gyroavg_op == NULL) {
+       MayDay::Error("Error in PhaseGeom::gyroaveragedEfield() - m_gyroavg_op is NULL.");
+     }
+     m_gyroavg_op->gyroaveragedEField(a_E, a_phi, a_order);
+   }
+
+   inline void gyroaveragedEField(LevelData<FluxBox>&                   a_E,
+                                  const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                  const int                             a_order ) const
+   {
+     if (!m_is_gyrokinetic) {
+       MayDay::Error("PhaseGrom::gyroaveragedEfield() called for non-gyrokinetic species!");
+     }
+     if (m_gyroavg_op == NULL) {
+       MayDay::Error("Error in PhaseGeom::gyroaveragedEfield() - m_gyroavg_op is NULL.");
+     }
+     m_gyroavg_op->gyroaveragedEField(a_E, a_phi, a_order);
+   }
+
 protected:
 
    Box configurationFlatten( const Box& disjointBox,
@@ -578,6 +758,47 @@ private:
    
    mutable GyroaverageOperator const *m_gyroavg_op;
    bool m_is_gyrokinetic;
+
+   void unmapGradient(  const LevelData<FArrayBox>&, 
+                        LevelData<FArrayBox>&,
+                        const int ) const;
+
+   void unmapGradient(  const LevelData<FluxBox>&, 
+                        LevelData<FluxBox>&,
+                        const int ) const;
+
+   void computeGradient( const LevelData<FArrayBox>&,
+                         LevelData<FArrayBox>&,
+                         const int,
+                         const int ) const;
+
+   void computeGradient( const LevelData<FArrayBox>&,
+                         LevelData<FluxBox>&,
+                         const int,
+                         const int ) const;
+
+   void computeMappedGradient(  const LevelData<FArrayBox>&,
+                                LevelData<FArrayBox>&,
+                                const int,
+                                const int ) const;
+
+   void computeMappedGradient(  const LevelData<FArrayBox>&,
+                                LevelData<FluxBox>&,
+                                const int,
+                                const int ) const;
+
+   void computeMappedGradientWithGhosts(  const LevelData<FArrayBox>&,
+                                          LevelData<FArrayBox>&,
+                                          const int,
+                                          const int ) const;
+
+   void computeMappedGradientWithGhosts(  const LevelData<FArrayBox>&,
+                                          LevelData<FluxBox>&,
+                                          const int,
+                                          const int ) const;
+
+   void fillTransversePhysicalGhosts( LevelData<FArrayBox>&, int ) const;
+   void fillTransversePhysicalGhosts( LevelData<FluxBox>&, int ) const;
 };
 
 typedef Vector<RefCountedPtr<PhaseGeom> > PhaseGeomPtrVect;

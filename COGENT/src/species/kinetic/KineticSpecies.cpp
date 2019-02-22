@@ -446,6 +446,10 @@ KineticSpecies::clone( const IntVect ghostVect,
                                m_dist_func.nComp(),
                                ghostVect );
 
+   if (m_is_gyrokinetic) {
+     result->gyroaverageOp(m_gyroavg_op);
+   }
+
    if (copy_soln_data) {
       LevelData<FArrayBox>& result_dfn = result->m_dist_func;
       DataIterator dit( result_dfn.dataIterator() );
@@ -547,7 +551,7 @@ void KineticSpecies::computeVelocity(LevelData<FluxBox>& a_velocity,
 {
    const DisjointBoxLayout& dbl( m_dist_func.getBoxes() );
    a_velocity.define( dbl, SpaceDim, IntVect::Unit );
-   m_geometry->updateVelocities( a_E_field, a_velocity, PhaseGeom::FULL_VELOCITY, true );
+   m_geometry->updateVelocities( a_E_field, a_velocity, PhaseGeom::FULL_VELOCITY, isGyrokinetic(), true );
 }
 
 

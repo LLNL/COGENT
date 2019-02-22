@@ -440,6 +440,7 @@ void
 PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
                              LevelData<FluxBox>&       a_velocity,
                              const int                 a_option,
+                             const bool                a_gyrokinetic,
                              const bool                a_apply_axisymmetric_correction ) const
 {
    // This function expects a_Efield to contain the face-centered field including
@@ -449,7 +450,7 @@ PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
    CH_assert(vel_restrict(a_Efield.ghostVect()) == VEL::IntVect::Zero);
 
    if (m_velocity_type == "gyrokinetic" || m_velocity_type == "ExB") {
-      computeGKVelocities(a_Efield, a_velocity, a_option);
+      computeGKVelocities(a_Efield, a_velocity, a_gyrokinetic, a_option);
    }
    else {
       computeTestVelocities(a_velocity);
@@ -477,6 +478,7 @@ PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
 void
 PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
                                 LevelData<FluxBox>&       a_velocity,
+                                const bool                a_gyrokinetic,
                                 const int                 a_option ) const
 {
    const CFG::IntVect& velocity_cfg_ghosts = config_restrict(a_velocity.ghostVect());
@@ -500,6 +502,8 @@ PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
                                    || (a_option==MAGNETIC_DRIFT_VELOCITY)
                                    || (a_option==EXB_DRIFT_VELOCITY)
                                    || (a_option==NO_ZERO_ORDER_PARALLEL_VELOCITY))? 0: 1;
+
+   const int is_gyrokinetic = (a_gyrokinetic ? 1 : 0 );
    
    const DisjointBoxLayout& grids = a_velocity.disjointBoxLayout();
 
@@ -536,8 +540,9 @@ PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
                                   CHF_CONST_FRA(this_B[dir]),
                                   CHF_CONST_FRA(this_gradB[dir]),
                                   CHF_CONST_FRA(this_curlb[dir]),
-                                  CHF_FRA(this_velocity_dir)
-                                  );
+                                  CHF_FRA(this_velocity_dir),
+                                  CHF_CONST_INT(is_gyrokinetic)
+                                 );
       }
    }
 }
@@ -736,7 +741,7 @@ PhaseGeom::updateMappedVelocities( const LevelData<FluxBox>& a_Efield,
 {
    // N.B.: this is only second-order
 
-   updateVelocities(a_Efield, a_velocity, FULL_VELOCITY, false);
+   updateVelocities(a_Efield, a_velocity, FULL_VELOCITY, false, false);
 
    multNTransposePointwise( a_velocity );
 }
@@ -1975,7 +1980,7 @@ void PhaseGeom::zeroBoundaryFlux( const int           a_dir,
 
 
 void
-PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
+PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, int a_maxdim ) const
 {
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
    const IntVect& nghost = a_data.ghostVect();
@@ -2025,6 +2030,7 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
 
 #endif
 
+   return;
 }
 
 void
@@ -3826,5 +3832,484 @@ PhaseGeom::computePoloidalProjection( LevelData<FArrayBox>& a_polComp,
    }
 }
 
+void
+PhaseGeom::unmapGradient( const LevelData<FArrayBox>& a_mapped_grad_var,
+                          LevelData<FArrayBox>&       a_grad_var,
+                          const int                   a_max_dim ) const
+{
+  CH_assert(a_mapped_grad_var.nComp() >= a_max_dim);
+  CH_assert(a_grad_var.nComp() >= a_max_dim);
+  CH_assert((a_max_dim == SpaceDim) || (a_max_dim == CFG_DIM));
+
+  const int cfg_dim = CFG_DIM;
+
+  IntVect ghost_vect = a_mapped_grad_var.ghostVect();
+  CFG::IntVect ghost_vect_cfg = config_restrict(ghost_vect);
+
+  const CFG::MagGeom& mag_geom = magGeom();
+  const CFG::DisjointBoxLayout& cfg_grids = mag_geom.gridsFull();
+  CFG::LevelData<CFG::FArrayBox> njinverse_cfg(cfg_grids, CFG_DIM*CFG_DIM, ghost_vect_cfg);
+  mag_geom.getPointwiseNJInverse(njinverse_cfg);
+
+  LevelData<FArrayBox> njinverse;
+  injectConfigurationToPhase(njinverse_cfg, njinverse);
+
+  for (DataIterator dit(a_mapped_grad_var.dataIterator()); dit.ok(); ++dit) {
+    FORT_MULT_NJINVERSE(CHF_BOX(a_mapped_grad_var[dit].box()),
+                        CHF_CONST_FRA(a_mapped_grad_var[dit]),
+                        CHF_CONST_FRA(njinverse[dit]),
+                        CHF_FRA(a_grad_var[dit]),
+                        CHF_CONST_INT(cfg_dim),
+                        CHF_CONST_INT(a_max_dim) );
+  }
+
+  return;
+}
+
+void
+PhaseGeom::unmapGradient( const LevelData<FluxBox>& a_mapped_grad_var,
+                          LevelData<FluxBox>&       a_grad_var,
+                          const int                 a_max_dim ) const
+{
+  CH_assert(a_mapped_grad_var.nComp() >= a_max_dim);
+  CH_assert(a_grad_var.nComp() >= a_max_dim);
+  CH_assert((a_max_dim == SpaceDim) || (a_max_dim == CFG_DIM));
+
+  const int cfg_dim = CFG_DIM;
+
+  IntVect ghost_vect = a_mapped_grad_var.ghostVect();
+  CFG::IntVect ghost_vect_cfg = config_restrict(ghost_vect);
+
+  const CFG::MagGeom& mag_geom = magGeom();
+  const CFG::DisjointBoxLayout& cfg_grids = mag_geom.gridsFull();
+  CFG::LevelData<CFG::FluxBox> njinverse_cfg(cfg_grids, CFG_DIM*CFG_DIM, ghost_vect_cfg);
+  mag_geom.getPointwiseNJInverse(njinverse_cfg);
+
+  LevelData<FluxBox> njinverse;
+  injectConfigurationToPhase(njinverse_cfg, njinverse);
+
+  for (DataIterator dit(a_mapped_grad_var.dataIterator()); dit.ok(); ++dit) {
+    for (int dir=0; dir<SpaceDim; dir++) {
+      FORT_MULT_NJINVERSE(CHF_BOX(a_mapped_grad_var[dit][dir].box()),
+                          CHF_CONST_FRA(a_mapped_grad_var[dit][dir]),
+                          CHF_CONST_FRA(njinverse[dit][dir]),
+                          CHF_FRA(a_grad_var[dit][dir]),
+                          CHF_CONST_INT(cfg_dim),
+                          CHF_CONST_INT(a_max_dim) );
+    }
+  }
+
+  return;
+}
+
+void
+PhaseGeom::computeGradient( const LevelData<FArrayBox>& a_var,
+                            LevelData<FArrayBox>&       a_grad_var,
+                            const int                   a_order,
+                            const int                   a_max_dim ) const
+{
+  LevelData<FArrayBox> mapped_grad_var( a_grad_var.disjointBoxLayout(), 
+                                        a_grad_var.nComp(), 
+                                        a_grad_var.ghostVect() );
+
+  computeMappedGradient(a_var, mapped_grad_var, a_order, a_max_dim);
+  unmapGradient(mapped_grad_var, a_grad_var, a_max_dim);
+
+  return;
+}
+
+void
+PhaseGeom::computeGradient( const LevelData<FArrayBox>& a_var,
+                            LevelData<FluxBox>&         a_grad_var,
+                            const int                   a_order,
+                            const int                   a_max_dim ) const
+{
+  LevelData<FluxBox> mapped_grad_var( a_grad_var.disjointBoxLayout(), 
+                                      a_grad_var.nComp(), 
+                                      a_grad_var.ghostVect() );
+
+  computeMappedGradient(a_var, mapped_grad_var, a_order, a_max_dim);
+  unmapGradient(mapped_grad_var, a_grad_var, a_max_dim);
+
+  return;
+}
+
+void
+PhaseGeom::computeMappedGradient( const LevelData<FArrayBox>& a_var,
+                                  LevelData<FArrayBox>&       a_grad_var,
+                                  const int                   a_order,
+                                  const int                   a_max_dim ) const
+{
+  /* Make a temporary with ghost cells and copy the potential on valid cells */
+  int nghosts = (a_order == 2 ? 2 : 3);
+
+  const DisjointBoxLayout& grids = a_var.disjointBoxLayout();
+  LevelData<FArrayBox> var_wghosts( grids, 1, nghosts*IntVect::Unit );
+  for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    var_wghosts[dit].setVal(0.0);
+    var_wghosts[dit].copy(a_var[dit], grids[dit]);
+  }
+
+  var_wghosts.exchange();
+  fillInternalGhosts(var_wghosts);
+
+  /* extrapolate at physical boundaries */
+
+  const PhaseCoordSys& phase_coord_sys = phaseCoordSys();
+  const Vector< Tuple <BlockBoundary, 2*SpaceDim> >& boundaries = phase_coord_sys.boundaries();
+
+  for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+
+    int block_number = phase_coord_sys.whichBlock(grids[dit]);
+    const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+    const ProblemDomain& domain = block_coord_sys.domain();
+
+    for (int dir = 0; dir < SpaceDim; dir++) {
+      if (!domain.isPeriodic(dir)) {
+        IntVect grow_vec = nghosts*IntVect::Unit;
+        grow_vec[dir] = 0;
+        Box interior_box = grow(grids[dit], grow_vec);
+        Box domain_box = grow(domain.domainBox(), grow_vec);
+
+        SpaceUtils::extrapBoundaryGhostsForCC(  var_wghosts[dit], 
+                                                interior_box, 
+                                                domain_box, 
+                                                dir, 
+                                                a_order, 
+                                                boundaries[block_number]  );
+      }
+    }
+  }
+
+  computeMappedGradientWithGhosts(var_wghosts, a_grad_var, a_order, a_max_dim);
+
+  return;
+}
+
+void
+PhaseGeom::computeMappedGradient( const LevelData<FArrayBox>& a_var,
+                                  LevelData<FluxBox>&         a_grad_var,
+                                  const int                   a_order,
+                                  const int                   a_max_dim ) const
+{
+  /* Make a temporary with ghost cells and copy the potential on valid cells */
+  int nghosts = 2;
+
+  const DisjointBoxLayout& grids = a_var.disjointBoxLayout();
+  LevelData<FArrayBox> var_wghosts( grids, 1, nghosts*IntVect::Unit );
+  for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    var_wghosts[dit].setVal(0.0);
+    var_wghosts[dit].copy(a_var[dit], grids[dit]);
+  }
+
+  var_wghosts.exchange();
+  fillInternalGhosts(var_wghosts);
+
+  /* extrapolate at physical boundaries */
+
+  const PhaseCoordSys& phase_coord_sys = phaseCoordSys();
+  const Vector< Tuple <BlockBoundary, 2*SpaceDim> >& boundaries = phase_coord_sys.boundaries();
+
+  for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+
+    int block_number = phase_coord_sys.whichBlock(grids[dit]);
+    const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+    const ProblemDomain& domain = block_coord_sys.domain();
+
+    for (int dir = 0; dir < SpaceDim; dir++) {
+      if (!domain.isPeriodic(dir)) {
+        IntVect grow_vec = nghosts*IntVect::Unit;
+        grow_vec[dir] = 0;
+        Box interior_box = grow(grids[dit], grow_vec);
+        Box domain_box = grow(domain.domainBox(), grow_vec);
+
+        SpaceUtils::extrapBoundaryGhostsForFC(  var_wghosts[dit], 
+                                                interior_box, 
+                                                domain_box, 
+                                                dir, 
+                                                a_order, 
+                                                boundaries[block_number]  );
+      }
+    }
+  }
+
+  computeMappedGradientWithGhosts(var_wghosts, a_grad_var, a_order, a_max_dim);
+
+  return;
+}
+
+void
+PhaseGeom::computeMappedGradientWithGhosts( const LevelData<FArrayBox>& a_var,
+                                            LevelData<FArrayBox>&       a_grad_var,
+                                            const int                   a_order,
+                                            const int                   a_max_dim ) const
+{
+  CH_assert(a_order == 2 || a_order == 4);
+  CH_assert(a_grad_var.nComp() >= a_max_dim);
+  CH_assert(a_var.nComp() == 1);
+
+  IntVect var_gvec(a_var.ghostVect()), grad_var_gvec(a_grad_var.ghostVect());
+  for (int dir=0; dir<a_max_dim; dir++) {
+    CH_assert(var_gvec[dir] >= 2);
+    CH_assert(grad_var_gvec[dir] <= 1);
+  }
+
+  const DisjointBoxLayout& grids = a_var.disjointBoxLayout();
+
+  int tmp_order = 2;
+  for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+    RealVect dx = block_coord_sys.dx();
+
+    IntVect grow_vec = IntVect::Zero;
+    for (int dir = 0; dir < a_max_dim; dir++) {
+      if (grad_var_gvec[dir] == 1) grow_vec[dir] = 1;
+    }
+    Box box = grow( grids[dit], grow_vec );
+
+    a_grad_var[dit].setVal(1./0.);
+
+    for (int dir = 0; dir < a_max_dim; dir++) {
+      SpaceUtils::cellCenteredGradientComponent(  box,
+                                                  dir,
+                                                  a_var[dit],
+                                                  dx,
+                                                  tmp_order,
+                                                  a_grad_var[dit] );
+    }
+  }
+  a_grad_var.exchange();
+
+  if (a_order == 4) {
+    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+      RealVect dx = block_coord_sys.dx();
+  
+      for (int dir = 0; dir < a_max_dim; dir++) {
+        SpaceUtils::cellCenteredGradientComponent(  grids[dit],
+                                                    dir,
+                                                    a_var[dit],
+                                                    dx,
+                                                    a_order,
+                                                    a_grad_var[dit] );
+      }
+    }
+    a_grad_var.exchange();
+  }
+
+  return;
+}
+
+void
+PhaseGeom::computeMappedGradientWithGhosts( const LevelData<FArrayBox>& a_var,
+                                            LevelData<FluxBox>&         a_grad_var,
+                                            const int                   a_order,
+                                            const int                   a_max_dim ) const
+{
+  CH_assert(a_order == 2 || a_order == 4);
+  CH_assert(a_grad_var.nComp() >= a_max_dim);
+  CH_assert(a_var.nComp() == 1);
+
+  IntVect var_gvec(a_var.ghostVect()), grad_var_gvec(a_grad_var.ghostVect());
+  for (int dir=0; dir<a_max_dim; dir++) {
+    CH_assert(var_gvec[dir] >= 2);
+    CH_assert(grad_var_gvec[dir] <= 1);
+  }
+
+  const DisjointBoxLayout& grids = a_var.disjointBoxLayout();
+  LevelData<FluxBox> var_face( grids, 1, a_var.ghostVect() );
+
+  for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    for (int dir=0; dir<SpaceDim; dir++) {
+      IntVect grow_vect = IntVect::Zero;
+      for (int dir = 0; dir < a_max_dim; dir++) grow_vect[dir] = 2;
+      grow_vect[dir] = 0;
+      Box box = grow(grids[dit], grow_vect);
+
+      SpaceUtils::faceInterpolate(dir,
+                                  surroundingNodes(box,dir),
+                                  box,
+                                  a_order,
+                                  a_var[dit],
+                                  var_face[dit][dir] );
+    }
+  }
+  var_face.exchange();
+
+  int tmp_order = 2;
+
+  for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+    const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+    RealVect dx = block_coord_sys.dx();
+
+    IntVect grow_vec = IntVect::Zero;
+    for (int dir = 0; dir < a_max_dim; dir++) {
+      if (grad_var_gvec[dir] == 1) grow_vec[dir] = 1;
+    }
+    Box box = grow(grids[dit], grow_vec);
+
+    a_grad_var[dit].setVal(1.0/0.0);
+
+    for (int dir=0; dir<a_max_dim; dir++) {
+
+      Box box_dir = surroundingNodes(box, dir);
+      SpaceUtils::faceCenteredGradientComponent(  box_dir,
+                                                  dir,
+                                                  a_var[dit],
+                                                  dx,
+                                                  tmp_order,
+                                                  a_grad_var[dit][dir] );
+
+      for (int tdir=0; tdir<a_max_dim; tdir++) {
+        if (tdir != dir) {
+          SpaceUtils::cellCenteredGradientComponent(  box_dir,
+                                                      tdir,
+                                                      var_face[dit][dir],
+                                                      dx,
+                                                      tmp_order,
+                                                      a_grad_var[dit][dir] );
+        }
+      }
+
+    }
+    
+    for (int dir=a_max_dim; dir<SpaceDim; dir++) {
+
+      Box box_dir = surroundingNodes(box, dir);
+      for (int tdir=0; tdir<a_max_dim; tdir++) {
+        SpaceUtils::cellCenteredGradientComponent(  box_dir,
+                                                    tdir,
+                                                    var_face[dit][dir],
+                                                    dx,
+                                                    tmp_order,
+                                                    a_grad_var[dit][dir] );
+      }
+
+    }
+
+  }
+  a_grad_var.exchange();
+
+  fillTransversePhysicalGhosts(a_grad_var, a_max_dim);
+
+  if (a_order == 4) {
+
+    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+      RealVect dx = block_coord_sys.dx();
+  
+      for (int dir=0; dir<a_max_dim; dir++) {
+  
+        Box box_dir = surroundingNodes(grids[dit], dir);
+        SpaceUtils::faceCenteredGradientComponent(  box_dir,
+                                                    dir,
+                                                    a_var[dit],
+                                                    dx,
+                                                    a_order,
+                                                    a_grad_var[dit][dir] );
+  
+        for (int tdir=0; tdir<a_max_dim; tdir++) {
+          if (tdir != dir) {
+            SpaceUtils::cellCenteredGradientComponent(  box_dir,
+                                                        tdir,
+                                                        var_face[dit][dir],
+                                                        dx,
+                                                        a_order,
+                                                        a_grad_var[dit][dir] );
+          }
+        }
+
+      }
+
+      for (int dir=a_max_dim; dir<SpaceDim; dir++) {
+  
+        Box box_dir = surroundingNodes(grids[dit], dir);
+        for (int tdir=0; tdir<a_max_dim; tdir++) {
+          SpaceUtils::cellCenteredGradientComponent(  box_dir,
+                                                      tdir,
+                                                      var_face[dit][dir],
+                                                      dx,
+                                                      a_order,
+                                                      a_grad_var[dit][dir] );
+        }
+
+      }
+
+    }
+
+    a_grad_var.exchange();
+  }
+
+  return;
+}
+
+void
+PhaseGeom::fillTransversePhysicalGhosts( LevelData<FArrayBox>& a_var, int a_max_dim ) const
+{
+  IntVect gvec = a_var.ghostVect();
+  for (int dir=0; dir<a_max_dim; dir++) CH_assert(gvec[dir] >= 1);
+
+  const DisjointBoxLayout& grids = a_var.disjointBoxLayout();
+  const PhaseCoordSys& phase_coord_sys = phaseCoordSys();
+  const Vector< Tuple <BlockBoundary, 2*SpaceDim> >& block_boundaries = phase_coord_sys.boundaries();
+
+  a_var.exchange();
+
+  for (DataIterator dit(a_var.dataIterator()); dit.ok(); ++dit) {
+    const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+    const ProblemDomain& block_domain = block_coord_sys.domain();
+    const int block_number = phase_coord_sys.whichBlock(grids[dit]);
+    const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
+
+    for (int dir=0; dir<a_max_dim; ++dir) {
+      IntVect grow_vect = a_var.ghostVect();
+      grow_vect[dir] = 0;
+      Box interior = grow(grids[dit], grow_vect);
+
+      if (this_block_boundaries[dir].isInterface()) interior.growLo(dir,1);
+      if (this_block_boundaries[dir+SpaceDim].isInterface()) interior.growHi(dir,1);
+
+      secondOrderTransExtrapAtDomainBdry(a_var[dit],dir,interior,block_domain);
+    }
+  }
+
+  return;
+}
+
+void
+PhaseGeom::fillTransversePhysicalGhosts( LevelData<FluxBox>& a_var, int a_max_dim ) const
+{
+  const DisjointBoxLayout& grids = a_var.disjointBoxLayout();
+  const PhaseCoordSys& phase_coord_sys = phaseCoordSys();
+  const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = phase_coord_sys.boundaries();
+
+  a_var.exchange();
+
+  IntVect ghostVect = a_var.ghostVect();
+
+  for (DataIterator dit(a_var.dataIterator()); dit.ok(); ++dit) {
+    const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+    const ProblemDomain& block_domain = block_coord_sys.domain();
+    const int block_number = phase_coord_sys.whichBlock(grids[dit]);
+    const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
+
+    for (int dir=0; dir<a_max_dim; ++dir) {
+      Box interior = surroundingNodes(grids[dit],dir);
+      interior.grow(dir,ghostVect[dir]);
+
+      for (int tdir=0; tdir<SpaceDim; ++tdir) {
+        if (tdir != dir) {
+          if (this_block_boundaries[tdir].isInterface()) interior.growLo(tdir,1);
+          if (this_block_boundaries[tdir+SpaceDim].isInterface()) interior.growHi(tdir,1);
+        }
+      }
+
+      SpaceUtils::secondOrderTransExtrapAtDomainBdry(a_var[dit][dir],dir,interior,block_domain, a_max_dim);
+    }
+
+  }
+
+  return;
+}
 
 #include "NamespaceFooter.H"

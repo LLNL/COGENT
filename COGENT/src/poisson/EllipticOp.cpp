@@ -1,5 +1,4 @@
 #include "EllipticOp.H"
-#include "EllipticOpF_F.H"
 #include "BlockRegister.H"
 #include "EdgeToCell.H"
 #include "FourthOrderUtil.H"
@@ -377,7 +376,7 @@ EllipticOp::computeMapped3DField( const LevelData<FArrayBox>&  a_phi,
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
 
-            extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
+            SpaceUtils::extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
          }
       }
    }
@@ -424,7 +423,7 @@ EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
 
-            extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
+            SpaceUtils::extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
          }
       }
    }
@@ -471,7 +470,7 @@ EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
 
-            extrapBoundaryGhostsForFC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
+            SpaceUtils::extrapBoundaryGhostsForFC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
          }
       }
    }
@@ -518,7 +517,7 @@ EllipticOp::computeMapped3DField( const LevelData<FArrayBox>&  a_phi,
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
 
-            extrapBoundaryGhostsForFC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
+            SpaceUtils::extrapBoundaryGhostsForFC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
          }
       }
    }
@@ -1164,13 +1163,14 @@ EllipticOp::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
       a_field[dit].setVal(1./0.);
 
       for (int dir=0; dir<SpaceDim; dir++) {
-         FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(box),
-                                            CHF_CONST_INT(dir),
-                                            CHF_CONST_FRA1(a_phi[dit],0),
-                                            CHF_CONST_REALVECT(dx),
-                                            CHF_CONST_INT(tmp_order),
-                                            CHF_FRA1(a_field[dit],dir)); 
+         SpaceUtils::cellCenteredGradientComponent( box,
+                                                    dir,
+                                                    a_phi[dit],
+                                                    dx,
+                                                    tmp_order,
+                                                    a_field[dit] );
       }
+      a_field[dit].negate();
 
    }
    a_field.exchange();
@@ -1184,13 +1184,14 @@ EllipticOp::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
          RealVect dx = block_coord_sys.dx();
 
          for (int dir=0; dir<SpaceDim; ++dir) {
-            FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(grids[dit]),
-                                               CHF_CONST_INT(dir),
-                                               CHF_CONST_FRA1(a_phi[dit],0),
-                                               CHF_CONST_REALVECT(dx),
-                                               CHF_CONST_INT(a_order),
-                                               CHF_FRA1(a_field[dit],dir));
+            SpaceUtils::cellCenteredGradientComponent(  grids[dit],
+                                                        dir,
+                                                        a_phi[dit],
+                                                        dx,
+                                                        a_order,
+                                                        a_field[dit] );
          }
+         a_field[dit].negate(grids[dit], 0, SpaceDim);
       }
 
       a_field.exchange();
@@ -1224,13 +1225,14 @@ EllipticOp::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>&  a
       a_field[dit].setVal(1./0.);
 
       for (int dir=0; dir<SpaceDim; dir++) {
-         FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(box),
-                                            CHF_CONST_INT(dir),
-                                            CHF_CONST_FRA1(a_phi[dit],0),
-                                            CHF_CONST_REALVECT(dx),
-                                            CHF_CONST_INT(tmp_order),
-                                            CHF_FRA1(a_field[dit],dir));
+         SpaceUtils::cellCenteredGradientComponent( box,
+                                                    dir,
+                                                    a_phi[dit],
+                                                    dx,
+                                                    tmp_order,
+                                                    a_field[dit] );
       }
+      a_field[dit].negate();
    }
 
    a_field.exchange();
@@ -1244,13 +1246,14 @@ EllipticOp::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>&  a
          RealVect dx = block_coord_sys.dx();
 
          for (int dir=0; dir<SpaceDim; ++dir) {
-            FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(grids[dit]),
-                                               CHF_CONST_INT(dir),
-                                               CHF_CONST_FRA1(a_phi[dit],0),
-                                               CHF_CONST_REALVECT(dx),
-                                               CHF_CONST_INT(a_order),
-                                               CHF_FRA1(a_field[dit],dir));
+            SpaceUtils::cellCenteredGradientComponent(  grids[dit],
+                                                        dir,
+                                                        a_phi[dit],
+                                                        dx,
+                                                        a_order,
+                                                        a_field[dit]);
          }
+         a_field[dit].negate( grids[dit], 0, SpaceDim );
       }
 
       a_field.exchange();
@@ -1280,11 +1283,11 @@ EllipticOp::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
          grow_vect[dir] = 0;
          Box box = grow(grids[dit],grow_vect);
 
-         FORT_FACE_INTERPOLATE(CHF_CONST_INT(dir),
-                               CHF_BOX(surroundingNodes(box,dir)),
-                               CHF_CONST_INT(a_order),
-                               CHF_CONST_FRA1(a_phi[dit],0),
-                               CHF_FRA1(phi_face[dit][dir],0));
+         SpaceUtils::faceInterpolate(dir,
+                                     surroundingNodes(box,dir),
+                                     a_order,
+                                     a_phi[dit],
+                                     phi_face[dit][dir] );
       }
    }
    phi_face.exchange();
@@ -1303,23 +1306,24 @@ EllipticOp::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
 
       for (int dir=0; dir<SpaceDim; dir++) {
          Box box_dir = surroundingNodes(box,dir);
-         FORT_FACE_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
-                                            CHF_CONST_INT(dir),
-                                            CHF_CONST_FRA1(a_phi[dit],0),
-                                            CHF_CONST_REALVECT(dx),
-                                            CHF_CONST_INT(tmp_order),
-                                            CHF_FRA1(a_field[dit][dir],dir));
+         SpaceUtils::faceCenteredGradientComponent( box_dir,
+                                                    dir,
+                                                    a_phi[dit],
+                                                    dx,
+                                                    tmp_order,
+                                                    a_field[dit][dir] );
 
          for (int tdir=0; tdir<SpaceDim; ++tdir) {
             if (tdir != dir) {
-               FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
-                                                  CHF_CONST_INT(tdir),
-                                                  CHF_CONST_FRA1(phi_face[dit][dir],0),
-                                                  CHF_CONST_REALVECT(dx),
-                                                  CHF_CONST_INT(tmp_order),
-                                                  CHF_FRA1(a_field[dit][dir],tdir));
+               SpaceUtils::cellCenteredGradientComponent( box_dir,
+                                                          tdir,
+                                                          phi_face[dit][dir],
+                                                          dx,
+                                                          tmp_order,
+                                                          a_field[dit][dir] );
             }
          }
+         a_field[dit][dir].negate();
       }
    }
    a_field.exchange();
@@ -1338,21 +1342,23 @@ EllipticOp::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
 
          for (int dir=0; dir<SpaceDim; dir++) {
             Box box_dir = surroundingNodes(grids[dit],dir);
-            FORT_FACE_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
-                                               CHF_CONST_INT(dir),
-                                               CHF_CONST_FRA1(a_phi[dit],0),
-                                               CHF_CONST_REALVECT(dx),
-                                               CHF_CONST_INT(a_order),
-                                               CHF_FRA1(a_field[dit][dir],dir));
+            SpaceUtils::faceCenteredGradientComponent(  box_dir,
+                                                        dir,
+                                                        a_phi[dit],
+                                                        dx,
+                                                        a_order,
+                                                        a_field[dit][dir] );
 
+            a_field[dit][dir].negate(box_dir, dir);
             for (int tdir=0; tdir<SpaceDim; ++tdir) {
                if (tdir != dir) {
-                  FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
-                                                     CHF_CONST_INT(tdir),
-                                                     CHF_CONST_FRA1(phi_face[dit][dir],0),
-                                                     CHF_CONST_REALVECT(dx),
-                                                     CHF_CONST_INT(a_order),
-                                                     CHF_FRA1(a_field[dit][dir],tdir));
+                  SpaceUtils::cellCenteredGradientComponent(  box_dir,
+                                                              tdir,
+                                                              phi_face[dit][dir],
+                                                              dx,
+                                                              a_order,
+                                                              a_field[dit][dir] );
+                  a_field[dit][dir].negate(box_dir, tdir);
                }
             }
          }
@@ -1385,11 +1391,11 @@ EllipticOp::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>&  a
          grow_vect[dir] = 0;
          Box box = grow(grids[dit],grow_vect);
 
-         FORT_FACE_INTERPOLATE(CHF_CONST_INT(dir),
-                               CHF_BOX(surroundingNodes(box,dir)),
-                               CHF_CONST_INT(a_order),
-                               CHF_CONST_FRA1(a_phi[dit],0),
-                               CHF_FRA1(phi_face[dit][dir],0));
+         SpaceUtils::faceInterpolate( dir,
+                                      surroundingNodes(box,dir),
+                                      a_order,
+                                      a_phi[dit],
+                                      phi_face[dit][dir] );
       }
    }
    phi_face.exchange();
@@ -1408,23 +1414,24 @@ EllipticOp::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>&  a
 
       for (int dir=0; dir<SpaceDim; dir++) {
          Box box_dir = surroundingNodes(box,dir);
-         FORT_FACE_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
-                                            CHF_CONST_INT(dir),
-                                            CHF_CONST_FRA1(a_phi[dit],0),
-                                            CHF_CONST_REALVECT(dx),
-                                            CHF_CONST_INT(tmp_order),
-                                            CHF_FRA1(a_field[dit][dir],dir));
+         SpaceUtils::faceCenteredGradientComponent( box_dir,
+                                                    dir,
+                                                    a_phi[dit],
+                                                    dx,
+                                                    tmp_order,
+                                                    a_field[dit][dir] );
 
          for (int tdir=0; tdir<SpaceDim; ++tdir) {
             if (tdir != dir) {
-               FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
-                                                  CHF_CONST_INT(tdir),
-                                                  CHF_CONST_FRA1(phi_face[dit][dir],0),
-                                                  CHF_CONST_REALVECT(dx),
-                                                  CHF_CONST_INT(tmp_order),
-                                                  CHF_FRA1(a_field[dit][dir],tdir));
+               SpaceUtils::cellCenteredGradientComponent( box_dir,
+                                                          tdir,
+                                                          phi_face[dit][dir],
+                                                          dx,
+                                                          tmp_order,
+                                                          a_field[dit][dir] );
             }
          }
+         a_field[dit][dir].negate();
       }
    }
    a_field.exchange();
@@ -1442,21 +1449,23 @@ EllipticOp::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>&  a
 
          for (int dir=0; dir<SpaceDim; dir++) {
             Box box_dir = surroundingNodes(grids[dit],dir);
-            FORT_FACE_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
-                                               CHF_CONST_INT(dir),
-                                               CHF_CONST_FRA1(a_phi[dit],0),
-                                               CHF_CONST_REALVECT(dx),
-                                               CHF_CONST_INT(a_order),
-                                               CHF_FRA1(a_field[dit][dir],dir));
+            SpaceUtils::faceCenteredGradientComponent(  box_dir,
+                                                        dir,
+                                                        a_phi[dit],
+                                                        dx,
+                                                        a_order,
+                                                        a_field[dit][dir] );
 
+            a_field[dit][dir].negate(box_dir, dir);
             for (int tdir=0; tdir<SpaceDim; ++tdir) {
                if (tdir != dir) {
-                  FORT_CELL_CENTERED_FIELD_COMPONENT(CHF_BOX(box_dir),
-                                                     CHF_CONST_INT(tdir),
-                                                     CHF_CONST_FRA1(phi_face[dit][dir],0),
-                                                     CHF_CONST_REALVECT(dx),
-                                                     CHF_CONST_INT(a_order),
-                                                     CHF_FRA1(a_field[dit][dir],tdir));
+                  SpaceUtils::cellCenteredGradientComponent(  box_dir,
+                                                              tdir,
+                                                              phi_face[dit][dir],
+                                                              dx,
+                                                              a_order,
+                                                              a_field[dit][dir] );
+                  a_field[dit][dir].negate(box_dir, tdir);
                }
             }
          }
@@ -1646,123 +1655,6 @@ EllipticOp::accumPhysicalGhosts( const Vector< Vector<CoDim1Stencil> >&   a_codi
 
 
 void
-EllipticOp::extrapBoundaryGhostsForCC(FArrayBox&                               a_data,
-                                      const Box&                               a_interiorbox,
-                                      const Box&                               a_domain_box,
-                                      const int                                a_dir,
-                                      const int                                a_order,
-                                      const Tuple<BlockBoundary, 2*SpaceDim>&  a_block_boundaries) const
-{
-   // If a_order = 2, this function second-order extrapolates to fill two layers of a_data ghost cells
-   // at physical boundaries in the direction a_dir.
-
-   // If a_order = 4, this function fourth-order extrapolates to fill three layers of a_data ghost cells
-   // at physical boundaries in the direction a_dir.
-
-   const Box& bx= a_data.box();
-   CH_assert(bx.contains(a_interiorbox));
-
-   int depth = (a_order==2)? 2: 3;
-
-   for (int side=-1; side<2; side+=2) {
-
-      if ( a_block_boundaries[a_dir + (side+1)*SpaceDim/2].isDomainBoundary() ) {
-
-         Box dstbox;
-         bool isbc = false;
-      
-         switch(side) 
-            {
-            case -1:
-               // Handle the low side
-               isbc = (a_interiorbox.smallEnd(a_dir) == a_domain_box.smallEnd(a_dir));
-               if (isbc) {
-                  dstbox = adjCellLo(a_interiorbox, a_dir, depth);
-               }
-               break;
-            case 1:
-               // Handle high side
-               isbc = (a_interiorbox.bigEnd(a_dir) == a_domain_box.bigEnd(a_dir));
-               if (isbc) {
-                  dstbox = adjCellHi(a_interiorbox, a_dir, depth);
-               }
-               break;
-            }
-
-         if (isbc) {
-            CH_assert( (a_order==4 && a_interiorbox.size(a_dir)>=5)
-                    || (a_order==2 && a_interiorbox.size(a_dir)>=3));
-            CH_assert(bx.contains(dstbox));
-            FORT_EXTRAP_FOR_CC_OPS(CHF_CONST_INT(a_dir),
-                                   CHF_CONST_INT(side),
-                                   CHF_CONST_INT(a_order),
-                                   CHF_BOX(dstbox),
-                                   CHF_BOX(a_interiorbox),
-                                   CHF_FRA(a_data));
-         }
-      }
-   }
-} 
-
-
-
-void
-EllipticOp::extrapBoundaryGhostsForFC(FArrayBox&                               a_data,
-                                      const Box&                               a_interiorbox,
-                                      const Box&                               a_domain_box,
-                                      const int                                a_dir,
-                                      const int                                a_order,
-                                      const Tuple<BlockBoundary, 2*SpaceDim>&  a_block_boundaries) const
-{
-   // This function fourth-order extrapolates to fill two layers of a_data ghost cells
-   // at physical boundaries in the direction a_dir.
-
-   const Box& bx= a_data.box();
-   CH_assert(bx.contains(a_interiorbox));
-
-   for (int side=-1; side<2; side+=2) {
-
-      if ( a_block_boundaries[a_dir + (side+1)*SpaceDim/2].isDomainBoundary() ) {
-
-         Box dstbox;
-         bool isbc = false;
-      
-         switch(side) 
-            {
-            case -1:
-               // Handle the low side
-               isbc = (a_interiorbox.smallEnd(a_dir) == a_domain_box.smallEnd(a_dir));
-               if (isbc) {
-                  dstbox = adjCellLo(a_interiorbox, a_dir, 2);
-               }
-               break;
-            case 1:
-               // Handle high side
-               isbc = (a_interiorbox.bigEnd(a_dir) == a_domain_box.bigEnd(a_dir));
-               if (isbc) {
-                  dstbox = adjCellHi(a_interiorbox, a_dir, 2);
-               }
-               break;
-            }
-
-         if (isbc) {
-            CH_assert( (a_order==4 && a_interiorbox.size(a_dir)>=5)
-                    || (a_order==2 && a_interiorbox.size(a_dir)>=3));
-            CH_assert(bx.contains(dstbox));
-            FORT_EXTRAP_FOR_FC_OPS(CHF_CONST_INT(a_dir),
-                                   CHF_CONST_INT(side),
-                                   CHF_CONST_INT(a_order),
-                                   CHF_BOX(dstbox),
-                                   CHF_BOX(a_interiorbox),
-                                   CHF_FRA(a_data));
-         }
-      }
-   }
-} 
-
-
-
-void
 EllipticOp::interpToNodes( const LevelData<FArrayBox>&  a_phi,
                            LevelData<FArrayBox>&        a_phi_node ) const
 {
@@ -1810,7 +1702,7 @@ EllipticOp::interpToNodes( const LevelData<FArrayBox>&  a_phi,
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
 
-            extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
+            SpaceUtils::extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
          }
       }
    }

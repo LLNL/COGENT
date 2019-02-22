@@ -1,0 +1,412 @@
+      subroutine extrap_for_cc_ops(
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[side],
+     &     CHF_CONST_INT[order],
+     &     CHF_BOX[facebox],
+     &     CHF_BOX[interiorbox],
+     &     CHF_FRA[array]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer CHF_DDECL[id;jd;kd;ld;md;nd]
+      integer CHF_DDECL[ni;nj;nk;nl;nm;nn]
+      integer p, q, comp, ncomp
+      double precision sum, coef2(0:2,2), coef4(0:4,3)
+      data coef2 /  3.d0, -3.d0, 1.d0,
+     &             6.d0, -8.d0, 3.d0 /
+      data coef4 /  5.d0,  -10.d0,  10.d0,  -5.d0,  1.d0,
+     &            15.d0,  -40.d0,  45.d0, -24.d0,  5.d0,
+     &            35.d0, -105.d0, 126.d0, -70.d0, 15.d0 /
+
+c
+c     If order = 2, this routine second-order extrapolates to at most two ghost cells
+c     If order = 4, this routine fourth-order extrapolates to at most three ghost cells
+c
+
+      ncomp = CHF_NCOMP[array]
+
+      CHF_DTERM[
+      id = CHF_ID(0,dir)*side;
+      jd = CHF_ID(1,dir)*side;
+      kd = CHF_ID(2,dir)*side;
+      ld = CHF_ID(3,dir)*side;
+      md = CHF_ID(4,dir)*side;
+      nd = CHF_ID(5,dir)*side
+      ]
+
+      CHF_MULTIDO[facebox; i; j; k; l; m; n]
+
+        if (side .eq. -1) then
+           CHF_DTERM[
+           ni = id*(i-CHF_LBOUND[interiorbox;0])
+           q = ni;
+           nj = jd*(j-CHF_LBOUND[interiorbox;1])
+           q = q + nj;
+           nk = kd*(k-CHF_LBOUND[interiorbox;2])
+           q = q + nk;
+           nl = ld*(l-CHF_LBOUND[interiorbox;3])
+           q = q + nl;
+           nm = md*(m-CHF_LBOUND[interiorbox;4])
+           q = q + nm;
+           nn = nd*(n-CHF_LBOUND[interiorbox;5])
+           q = q + nn
+           ]
+         else if (side .eq. 1) then
+            CHF_DTERM[
+            ni = id*(i-CHF_UBOUND[interiorbox;0])
+            q = ni;
+            nj = jd*(j-CHF_UBOUND[interiorbox;1])
+            q = q + nj;
+            nk = kd*(k-CHF_UBOUND[interiorbox;2])
+            q = q + nk;
+            nl = ld*(l-CHF_UBOUND[interiorbox;3])
+            q = q + nl;
+            nm = md*(m-CHF_UBOUND[interiorbox;4])
+            q = q + nm;
+            nn = nd*(n-CHF_UBOUND[interiorbox;5])
+            q = q + nn
+            ]
+          endif
+
+          do comp = 0, ncomp-1
+
+             sum = zero
+             if (order .eq. 4) then
+
+                do p = 0, 4
+                   sum = sum + coef4(p,q)*array(CHF_DDECL[i-id*(ni+p);j-jd*(nj+p);k-kd*(nk+p);l-ld*(nl+p);m-md*(nm+p);n-nd*(nn+p)],comp)
+                enddo
+                array(CHF_IX[i;j;k;l;m;n],comp) = sum
+
+             else if (order .eq. 2) then
+
+                do p = 0, 2
+                   sum = sum + coef2(p,q)*array(CHF_DDECL[i-id*(ni+p);j-jd*(nj+p);k-kd*(nk+p);l-ld*(nl+p);m-md*(nm+p);n-nd*(nn+p)],comp)
+                enddo
+                array(CHF_IX[i;j;k;l;m;n],comp) = sum
+
+             endif
+
+          enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine extrap_for_fc_ops(
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[side],
+     &     CHF_CONST_INT[order],
+     &     CHF_BOX[facebox],
+     &     CHF_BOX[interiorbox],
+     &     CHF_FRA[array]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer CHF_DDECL[id;jd;kd;ld;md;nd]
+      integer CHF_DDECL[ni;nj;nk;nl;nm;nn]
+      integer p, q, comp, ncomp
+      double precision sum, coef2(0:2,2), coef4(0:4,2)
+      data coef2 /  3.d0, -3.d0, 1.d0,
+     &             6.d0, -8.d0, 3.d0 /
+      data coef4 /  4.625d0, -8.5d0, 7.75d0, -3.5d0, 0.625d0,
+     &             11.25d0, -25.d0, 22.5d0,  -9.d0, 1.25d0 /
+
+c
+c     If order = 2, this routine second-order extrapolates to at most two ghost cells
+c     If order = 4, this routine fourth-order extrapolates to at most two ghost cells
+c
+
+      ncomp = CHF_NCOMP[array]
+
+      CHF_DTERM[
+      id = CHF_ID(0,dir)*side;
+      jd = CHF_ID(1,dir)*side;
+      kd = CHF_ID(2,dir)*side;
+      ld = CHF_ID(3,dir)*side;
+      md = CHF_ID(4,dir)*side;
+      nd = CHF_ID(5,dir)*side
+      ]
+
+      CHF_MULTIDO[facebox; i; j; k; l; m; n]
+
+        if (side .eq. -1) then
+           CHF_DTERM[
+           ni = id*(i-CHF_LBOUND[interiorbox;0])
+           q = ni;
+           nj = jd*(j-CHF_LBOUND[interiorbox;1])
+           q = q + nj;
+           nk = kd*(k-CHF_LBOUND[interiorbox;2])
+           q = q + nk;
+           nl = ld*(l-CHF_LBOUND[interiorbox;3])
+           q = q + nl;
+           nm = md*(m-CHF_LBOUND[interiorbox;4])
+           q = q + nm;
+           nn = nd*(n-CHF_LBOUND[interiorbox;5])
+           q = q + nn
+           ]
+         else if (side .eq. 1) then
+            CHF_DTERM[
+            ni = id*(i-CHF_UBOUND[interiorbox;0])
+            q = ni;
+            nj = jd*(j-CHF_UBOUND[interiorbox;1])
+            q = q + nj;
+            nk = kd*(k-CHF_UBOUND[interiorbox;2])
+            q = q + nk;
+            nl = ld*(l-CHF_UBOUND[interiorbox;3])
+            q = q + nl;
+            nm = md*(m-CHF_UBOUND[interiorbox;4])
+            q = q + nm;
+            nn = nd*(n-CHF_UBOUND[interiorbox;5])
+            q = q + nn
+            ]
+          endif
+
+          do comp = 0, ncomp-1
+
+             sum = zero
+             if (order .eq. 4) then
+
+                do p = 0, 4
+                   sum = sum + coef4(p,q)*array(CHF_DDECL[i-id*(ni+p);j-jd*(nj+p);k-kd*(nk+p);l-ld*(nl+p);m-md*(nm+p);n-nd*(nn+p)],comp)
+                enddo
+                array(CHF_IX[i;j;k;l;m;n],comp) = sum
+
+             else if (order .eq. 2) then
+
+                do p = 0, 2
+                   sum = sum + coef2(p,q)*array(CHF_DDECL[i-id*(ni+p);j-jd*(nj+p);k-kd*(nk+p);l-ld*(nl+p);m-md*(nm+p);n-nd*(nn+p)],comp)
+                enddo
+                array(CHF_IX[i;j;k;l;m;n],comp) = sum
+
+             endif
+
+          enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine face_centered_grad_component(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[var],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INT[order],
+     &     CHF_FRA1[grad]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer CHF_DDECL[ii;jj;kk;ll;mm;nn]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir);
+      ll = CHF_ID(3,dir);
+      mm = CHF_ID(4,dir);
+      nn = CHF_ID(5,dir)]
+
+      if (order .eq. 4) then
+
+         CHF_MULTIDO[box; i; j; k; l; m; n]
+
+            grad(CHF_IX[i;j;k;l;m;n]) = (
+     &        27.d0 * (var(CHF_IX[i     ;j     ;k     ;l     ;m     ;n     ])
+     &               - var(CHF_IX[i-  ii;j-  jj;k-  kk;l-  ll;m-  mm;n-  nn]))
+     &               - var(CHF_IX[i+  ii;j+  jj;k+  kk;l+  ll;m+  mm;n+  nn])
+     &               + var(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm;n-2*nn])
+     &        ) / (24.d0 * h(dir))
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box; i; j; k; l; m; n]
+
+            grad(CHF_IX[i;j;k;l;m;n]) = (
+     &        - var(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm;n-nn])
+     &        + var(CHF_IX[i   ;j   ;k   ;l   ;m   ;n   ])
+     &        ) / h(dir)
+
+         CHF_ENDDO
+
+      endif
+
+      return
+      end
+
+      subroutine cell_centered_grad_component(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA1[var],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_INT[order],
+     &     CHF_FRA1[grad]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer CHF_DDECL[ii;jj;kk;ll;mm;nn]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir);
+      ll = CHF_ID(3,dir);
+      mm = CHF_ID(4,dir);
+      nn = CHF_ID(5,dir)]
+
+      if (order .eq. 4) then
+
+         CHF_MULTIDO[box; i; j; k; l; m; n]
+      
+            grad(CHF_IX[i;j;k;l;m;n]) = (
+     &        var(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm;n-2*nn])
+     &        - eight * var(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm;n-nn])
+     &        + eight * var(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm;n+nn])
+     &        - var(CHF_IX[i+2*ii;j+2*jj;k+2*kk;l+2*ll;m+2*mm;n+2*nn])
+     &        ) / (twelve * h(dir))
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box; i; j; k; l; m; n]
+
+            grad(CHF_IX[i;j;k;l;m;n]) = (
+     &        - var(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm;n-nn])
+     &        + var(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm;n+nn])
+     &        ) / (two * h(dir))
+          
+         CHF_ENDDO
+
+      endif
+
+      return
+      end
+
+      subroutine face_interpolate(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[order],
+     &     CHF_CONST_FRA1[var],
+     &     CHF_FRA1[face_var]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer CHF_DDECL[ii;jj;kk;ll;mm;nn]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir);
+      ll = CHF_ID(3,dir);
+      mm = CHF_ID(4,dir);
+      nn = CHF_ID(5,dir)]
+
+      if (order .eq. 4) then
+
+         CHF_MULTIDO[box;i;j;k;l;m;n]
+
+            face_var(CHF_IX[i;j;k;l;m;n]) = (
+     &        9.d0 * (var(CHF_IX[i     ;j     ;k     ;l     ;m     ;n     ])
+     &              + var(CHF_IX[i-  ii;j-  jj;k-  kk;l-  ll;m-  mm;n-  nn]))
+     &             - (var(CHF_IX[i+  ii;j+  jj;k+  kk;l+  ll;m+  mm;n+  nn])
+     &              + var(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm;n-2*nn]))
+     &        ) / 16.d0
+
+         CHF_ENDDO
+
+      else if (order .eq. 2) then
+
+         CHF_MULTIDO[box;i;j;k;l;m;n]
+
+         face_var(CHF_IX[i;j;k;l;m;n]) = (
+     &            var(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm;n-nn])
+     &          + var(CHF_IX[i   ;j   ;k   ;l   ;m   ;n   ])
+     &        ) / 2.d0
+
+         CHF_ENDDO
+
+      endif
+
+      return
+      end
+
+      subroutine second_order_extrapolation(
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[side],
+     &     CHF_BOX[srcbox],
+     &     CHF_BOX[dstbox],
+     &     CHF_FRA[array]
+     &     )
+
+c     local variables
+      double precision coef(0:2), sum
+      data coef / 3.d0, -3.d0, 1.d0 /
+      integer CHF_DDECL[i,id,ni;j,jd,nj;k,kd,nk;l,ld,nl;m,md,nm;n,nd,nn], p, comp, ncomp
+
+c     to avoid  "may be uninitialized warnings"
+      CHF_DTERM[
+      ni = 0;
+      nj = 0;
+      nk = 0;
+      nl = 0;
+      nm = 0;
+      nn = 0;
+      ]
+
+      ncomp = CHF_NCOMP[array]
+
+      CHF_DTERM[
+      id = CHF_ID(0,dir)*side;
+      jd = CHF_ID(1,dir)*side;
+      kd = CHF_ID(2,dir)*side;
+      ld = CHF_ID(3,dir)*side;
+      md = CHF_ID(4,dir)*side;
+      nd = CHF_ID(5,dir)*side
+      ]
+
+      CHF_MULTIDO[dstbox; i;j;k;l;m;n]
+
+        if (side .eq. -1) then
+           CHF_DTERM[
+           ni = id*(i-CHF_LBOUND[srcbox;0]);
+           nj = jd*(j-CHF_LBOUND[srcbox;1]);
+           nk = kd*(k-CHF_LBOUND[srcbox;2]);
+           nl = ld*(l-CHF_LBOUND[srcbox;3]);
+           nm = md*(m-CHF_LBOUND[srcbox;4]);
+           nn = nd*(n-CHF_LBOUND[srcbox;5])
+           ]
+        else if (side .eq. 1) then
+           CHF_DTERM[
+           ni = id*(i-CHF_UBOUND[srcbox;0]);
+           nj = jd*(j-CHF_UBOUND[srcbox;1]);
+           nk = kd*(k-CHF_UBOUND[srcbox;2]);
+           nl = ld*(l-CHF_UBOUND[srcbox;3]);
+           nm = md*(m-CHF_UBOUND[srcbox;4]);
+           nn = nd*(n-CHF_UBOUND[srcbox;5])
+            ]
+          endif
+
+          do comp = 0, ncomp-1
+             sum = 0.d0
+             do p = 0, 2
+                sum = sum + coef(p)*
+     &               array(CHF_DDECL[i-id*(ni+p);j-jd*(nj+p);k-kd*(nk+p);l-ld*(nl+p);m-md*(nm+p);n-nd*(nn+p)],comp)
+             enddo
+             array(CHF_IX[i;j;k;l;m;n],comp) = sum
+          enddo
+
+      CHF_ENDDO
+
+      return
+      end
+

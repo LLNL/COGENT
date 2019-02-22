@@ -286,6 +286,32 @@ class KineticSpecies
         m_gyroavg_op->applyOp(a_phi_bar, a_phi);
       }
 
+      inline void gyroaveragedEField( LevelData<FArrayBox>&                 a_E,
+                                      const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                      const int                             a_order ) const
+      {
+        if (!m_is_gyrokinetic) {
+          MayDay::Error("KineticSpecies::gyroaveragedEfield() called for non-gyrokinetic species!");
+        }
+        if (m_gyroavg_op == NULL) {
+          MayDay::Error("Error in KineticSpecies::gyroaveragedEfield() - m_gyroavg_op is NULL.");
+        }
+        m_gyroavg_op->gyroaveragedEField(a_E, a_phi, a_order);
+      }
+
+      inline void gyroaveragedEField( LevelData<FluxBox>&                   a_E,
+                                      const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                      const int                             a_order ) const
+      {
+        if (!m_is_gyrokinetic) {
+          MayDay::Error("KineticSpecies::gyroaveragedEfield() called for non-gyrokinetic species!");
+        }
+        if (m_gyroavg_op == NULL) {
+          MayDay::Error("Error in KineticSpecies::gyroaveragedEfield() - m_gyroavg_op is NULL.");
+        }
+        m_gyroavg_op->gyroaveragedEField(a_E, a_phi, a_order);
+      }
+
       inline bool isGyrokinetic() const
       {
         return m_is_gyrokinetic;
