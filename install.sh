@@ -9,7 +9,7 @@ echo "---------------------------------------"
 if [[ $HOSTNAME == "quartz"* ]]; then
   echo "Loading GNU compilers for Quartz (LLNL)"
   module load gcc
-  module load mvapich2
+  module load mvapich2/2.2
   export CC=$(which gcc)
   export CXX=$(which g++)
   export CPP=$(which cpp)
@@ -50,14 +50,14 @@ echo "---------------------------------------"
 H5DIFF_SUFFIX=/bin/h5diff
 if [[ $HOSTNAME == "quartz"* ]]; then
   echo "Loading HDF5-serial for Quartz (LLNL)"
-  module load hdf5-serial
+  module load hdf5-serial/1.8.18
   H5DIFF_PATH=$(which h5diff)
   echo "h5diff is $H5DIFF_PATH"
   HDF5_DIR=${H5DIFF_PATH%$H5DIFF_SUFFIX}
   export HDF5_DIR_SERIAL="${HDF5_DIR}"
   echo "Serial HDF5: $HDF5_DIR_SERIAL"
   echo "Loading HDF5-parallel for Quartz (LLNL)"
-  module load hdf5-parallel
+  module load hdf5-parallel/1.8.18
   H5DIFF_PATH=$(which h5diff)
   echo "h5diff is $H5DIFF_PATH"
   HDF5_DIR=${H5DIFF_PATH%$H5DIFF_SUFFIX}
