@@ -494,11 +494,11 @@ bool ListBox<T>::isEnclosed(const T& a_item, const Box& a_box) const
   const RealVect& dx= m_mesh_spacing;
 
   bool is_in = D_TERM6( (x[0]>=loEnd[0]*dx[0] && x[0]<(hiEnd[0]+1)*dx[0]),
-			&& (x[1]>=loEnd[1]*dx[1] && x[1]<(hiEnd[1]+1)*dx[1]),
-			&& (x[2]>=loEnd[2]*dx[2] && x[2]<(hiEnd[2]+1)*dx[2]),
-			&& (x[3]>=loEnd[3]*dx[3] && x[3]<(hiEnd[3]+1)*dx[3]),
-			&& (x[4]>=loEnd[4]*dx[4] && x[4]<(hiEnd[4]+1)*dx[4]),
-			&& (x[5]>=loEnd[5]*dx[5] && x[5]<(hiEnd[5]+1)*dx[5]));
+                        && (x[1]>=loEnd[1]*dx[1] && x[1]<(hiEnd[1]+1)*dx[1]),
+                        && (x[2]>=loEnd[2]*dx[2] && x[2]<(hiEnd[2]+1)*dx[2]),
+                        && (x[3]>=loEnd[3]*dx[3] && x[3]<(hiEnd[3]+1)*dx[3]),
+                        && (x[4]>=loEnd[4]*dx[4] && x[4]<(hiEnd[4]+1)*dx[4]),
+                        && (x[5]>=loEnd[5]*dx[5] && x[5]<(hiEnd[5]+1)*dx[5]));
 
   return is_in;
 }

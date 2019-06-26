@@ -8,8 +8,8 @@
  */
 #endif
 
-#ifndef _OneDIntegrator_H_
-#define _OneDIntegrator_H_
+#ifndef _ONEDINTEGRATOR_H_
+#define _ONEDINTEGRATOR_H_
 
 #include "RealVect.H"
 #include "ProblemDomain.H"

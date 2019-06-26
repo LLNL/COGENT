@@ -134,9 +134,9 @@ void PetscSolverViscousTensor<LevelData<FArrayBox> >::define( LinearOp<LevelData
       
       // as a start, grab eta, lamdba, and A
       define( nwo_op->getAlpha(), nwo_op->getBeta(), 
-	      &(*nwo_op->getACoef()),
-	      &(*nwo_op->getEta()),
-	      &(*nwo_op->getLambda()));
+              &(*nwo_op->getACoef()),
+              &(*nwo_op->getEta()),
+              &(*nwo_op->getLambda()));
 
     }
   else
@@ -147,9 +147,9 @@ void PetscSolverViscousTensor<LevelData<FArrayBox> >::define( LinearOp<LevelData
       
       // as a start, grab eta, lamdba, and A
       define( op->getAlpha(), op->getBeta(), 
-	      &(*op->getACoef()),
-	      &(*op->getEta()),
-	      &(*op->getLambda()));
+              &(*op->getACoef()),
+              &(*op->getEta()),
+              &(*op->getLambda()));
 
     }
 }

@@ -501,6 +501,13 @@ writeFaceCentered(HDF5Handle& a_handle,
                   Interval interval = Interval());
 
 void
+metaDataEBFile(HDF5Handle     & a_handle,
+               int            & a_numLevels,
+               Vector<int>    & a_refRatios,
+               ProblemDomain  & a_coarseDomain,
+               IntVect        & a_ghost);
+
+void
 readCellCentered(HDF5Handle& a_handle,
                  int a_level,
                  const EBIndexSpace* eb,

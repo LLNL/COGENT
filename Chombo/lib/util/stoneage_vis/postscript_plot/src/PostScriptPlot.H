@@ -8,8 +8,8 @@
  */
 #endif
 
-#ifndef _PostScript_Plot_H_
-#define _PostScript_Plot_H_
+#ifndef _POSTSCRIPTPLOT_H_
+#define _POSTSCRIPTPLOT_H_
 
 #include "Vector.H"
 #include "Box.H"

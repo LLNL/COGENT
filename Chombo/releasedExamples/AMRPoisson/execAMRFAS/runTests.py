@@ -44,37 +44,43 @@ def writeParamsFile(location, params, ignoreList = [], doSort=True):
                 key + '=' + str(params[key])
 
 
-    with open(location, 'w') as f:
-        f.write(output_file)
+                with open(location, 'w') as f:
+                    f.write(output_file)
 
 def getRunTime(output_folder):
     timefile = os.path.join(output_folder, 'time.table.0')
 
-    if os.path.exists(timefile):
-        with open(timefile, 'r') as f:
-            filedata = f.readlines()
+   
 
-            for line in filedata:
-                match = re.findall('\[0\]main (\d+\.\d+) \d f=\d+ MFlop\/s=\d+', line)
+    if os.path.exists(timefile):
+       
+        with open(timefile, 'r') as f:
+
+            for line in f.readlines():
+                
+                match = re.findall('\[0\]main (\d+\.\d+)', line)
                 if len(match) > 0:
                     runtime = float(match[0])
                     return runtime
 
+            
+            return float('NaN')
+
     else:
-        return float('NaN')
+        print('Cannot open %s' % timefile)
 
 
 
 # Start script
 execFile = 'FASsolve2d.Linux.64.mpiCC.gfortran.OPT.MPI.ex'
-nxs = [16, 32, 64, 128, 256, 512, 1024]
+nxs = [16, 32, 64, 128, 256, 512]
 params = readInputs('./inputs')
 err = {}
- 
-print('==================================')
-print('Convergence test')
-print('----------------------------------')
-print('Nx   | Max err  | L1       | L2       | Rate  || Runtime (s)  | Rate ')
+
+output_text = '==================================\n'\
+'Convergence test\n'\
+'----------------------------------\n'\
+'Nx   | Max err  | L1       | L2       | Rate  || Runtime (s)  | Rate \n'
 
 for nx in nxs:
 
@@ -101,7 +107,7 @@ for nx in nxs:
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    writeParamsFile(output_dir + 'inputs', params)
+        writeParamsFile(output_dir + 'inputs', params)
 
     # Do run
     cmd = "cd " + output_dir + "; " + "../../" + execFile + " inputs"
@@ -130,7 +136,7 @@ for nx in nxs:
                 res.append(runTime)
                 err[str(nx)] = res
 
-            
+
 
                 # Compute rate of convergence
                 if nx > nxs[0]:
@@ -140,8 +146,9 @@ for nx in nxs:
                 else:
                     rate = 0.0
                     runTimeRate = 0.0
- 
-                print('%-4d | %.2e | %.2e | %.2e | %.3f || %7.3f      | %1.3f' % (nx, res[0], res[1], res[2], rate, runTime, runTimeRate ))
 
+                output_line = '%-4d | %.2e | %.2e | %.2e | %.3f || %7.3f      | %1.3f \n' % (nx, res[0], res[1], res[2], rate, runTime, runTimeRate )
+                output_text += output_line
 
+print(output_text)
 print('==================================')

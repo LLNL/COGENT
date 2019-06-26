@@ -346,7 +346,7 @@ writeEBHDF5(const string& a_filename,
                       currentFab(iv,indexDist) = -dist;
                     }
                 }
-	    }
+            }
           if (a_phase2 != NULL)
             {
               const LevelData<EBCellFAB>& ebcfData2 = *(*a_phase2)[ilev];
@@ -2012,6 +2012,24 @@ writeCellCentered(HDF5Handle& a_handle,
 }
 
 void
+metaDataEBFile(HDF5Handle     & a_handle,
+               int            & a_numLevels,
+               Vector<int>    & a_refRatios,
+               ProblemDomain  & a_coarseDomain,
+               IntVect        & a_ghost)
+{
+  a_handle.setGroup("/Chombo_global");
+  HDF5HeaderData header;
+  header.readFromFile(a_handle);
+  a_ghost = header.m_intvect["Ghost"];
+  a_coarseDomain = header.m_box["ProblemDomain"];
+  a_numLevels  = header.m_int["NumLevels"];
+  a_refRatios.resize(a_numLevels);
+  read(a_handle, "RefRatios", a_refRatios, H5T_NATIVE_INT);
+
+}
+
+void
 readCellCentered(HDF5Handle& a_handle,
                  int a_level,
                  const EBIndexSpace* eb,
@@ -2490,7 +2508,7 @@ writeEBHDF5(const string& a_filename,
                   //     currentFab(iv,indexDist) = -dist;
                   //   }
                 }
-	    }
+            }
           if (a_phase2 != NULL)
             {
               const LevelData<EBCellFAB>& ebcfData2 = *(*a_phase2)[ilev];
@@ -2555,11 +2573,11 @@ writeEBHDF5(const string& a_filename,
       // needed
       if (ilev < a_numLevels-1)
       {
-	  for (int i = 0; i < SpaceDim; i++)
-	  {
-	      vectDx[i] /= a_vectRatios[ilev][i];
-	  }
-	
+          for (int i = 0; i < SpaceDim; i++)
+          {
+              vectDx[i] /= a_vectRatios[ilev][i];
+          }
+        
       }
     } //end loop over levels
 

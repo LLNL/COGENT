@@ -43,7 +43,7 @@ ListBoxFactory<T>::define(const RealVect& a_meshSpacing,
 template <class T>
 ListBox<T>* 
 ListBoxFactory<T>::create(const Box& a_box, int a_numComps,
-			  const DataIndex& a_datInd) const
+                          const DataIndex& a_datInd) const
 {
   return new ListBox<T>(a_box, m_mesh_spacing, m_origin);
 }

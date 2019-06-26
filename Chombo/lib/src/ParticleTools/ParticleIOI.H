@@ -38,8 +38,8 @@ void write_vect_to_header(HDF5Handle&         a_handle,
                              H5P_DEFAULT);
 #else
   hid_t dataset  = H5Dcreate2(a_handle.groupID(), a_dataname.c_str(),
-			      H5T_type, dataspace,
-			      H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                              H5T_type, dataspace,
+                              H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 #endif  
 
   CH_assert(dataspace >= 0);
@@ -178,8 +178,8 @@ writeParticlesToHDF(HDF5Handle&            a_handle,
                              H5P_DEFAULT);
 #else
   hid_t dataset  = H5Dcreate2(a_handle.groupID(), dataname.c_str(),
-			      H5T_type, dataspace,
-			      H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                              H5T_type, dataspace,
+                              H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 #endif  
 
   if (numLocalParticles > 0)
@@ -353,7 +353,7 @@ void readParticlesFromHDF(HDF5Handle&        a_handle,
 template<class P> void
 writeParticlesToHDF(HDF5Handle&            a_handle,
                     const Vector<P>&       a_particles,
-		    const Box&             a_domain,
+                    const Box&             a_domain,
                     const std::string&     a_dataType)
 {
   // timer
@@ -406,8 +406,8 @@ writeParticlesToHDF(HDF5Handle&            a_handle,
                              H5P_DEFAULT);
 #else
   hid_t dataset  = H5Dcreate2(a_handle.groupID(), dataname.c_str(),
-			      H5T_type, dataspace,
-			      H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                              H5T_type, dataspace,
+                              H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 #endif  
 
   // allocate data buffer in which to linearize the particle data
@@ -434,7 +434,7 @@ writeParticlesToHDF(HDF5Handle&            a_handle,
 
   // write the buffer to the HDF5
   writeDataChunk(offset, dataspace, dataset, H5T_type,
-		 bufferSize / sizeof(Real), buffer);
+                 bufferSize / sizeof(Real), buffer);
   
   // free buffer
   delete[] buffer; 

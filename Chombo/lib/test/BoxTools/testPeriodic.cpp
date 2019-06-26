@@ -40,7 +40,7 @@
 #include "FABView.H"
 
 #ifdef CH_MPI
-#include <mpi.h>
+#include "mpi.h"
 #endif
 
 #include "UsingNamespace.H"
@@ -147,20 +147,31 @@ main(int argc ,char *argv[] )
     if (verbose) pout() <<  "Single box test -- " << endl;
 
     Vector<Box> levelBoxes(1, baseDomBox);
-    Vector<Box> crseLevelBoxes(1, crseBaseDomBox);    
+    Vector<Box> crseLevelBoxes(1, crseBaseDomBox);
+    // also test scenario where the valid region is shifted enough
+    // to need multiple wrapping
+    Box multiShiftBox(crseBaseDomBox);
+    IntVect shiftVect = (3*crseBaseDomBox.size(0)*IntVect::Unit);
+    multiShiftBox.shift(shiftVect);
+    Vector<Box> crseLevelShiftedBoxes(1, multiShiftBox);
+    
     Vector<int> procAssign(1, 0);
     DisjointBoxLayout levelGrids(levelBoxes,procAssign, baseDomain);
     DisjointBoxLayout crseLevelGrids(crseLevelBoxes,procAssign, crseBaseDomain);    
-
+    DisjointBoxLayout crseLevelShiftGrids(crseLevelShiftedBoxes, procAssign, crseBaseDomain);
+    
     LevelData<FArrayBox> tester(levelGrids, 1, ghostVect);
-    LevelData<FArrayBox> crseTester(crseLevelGrids, 1, crseGhostVect);    
-
+    LevelData<FArrayBox> crseTester(crseLevelGrids, 1, crseGhostVect);
+    LevelData<FArrayBox> crseShiftTester(crseLevelShiftGrids, 1, IntVect::Zero);
+    
     Real dx = 1.0/baseDomainSize;
     Real crseDx = 1.0/crseBaseDomainSize;
 
     initData(tester, dx);
     initData(crseTester, crseDx);
-
+    // don't want to init data for this one, since we're testing the copyTo
+    //initData(crseShiftTester, crseDx);
+    
     // test exchange in this case -- should fill ghost cells with
     // periodically copied data
     if (verbose) pout() << "    begin exchange..." << endl;
@@ -246,12 +257,12 @@ main(int argc ,char *argv[] )
               {
                 const IntVect iv = loBit();
                 IntVect validLoc = iv;
-		// note that we're not checking corners here, or else
-		// this while loop would be an infinite loop...
-		while (!crseBaseDomBox.contains(validLoc))
-		  {
-		    validLoc.shift(dir, crseBaseDomBox.size(dir));
-		  }
+                // note that we're not checking corners here, or else
+                // this while loop would be an infinite loop...
+                while (!crseBaseDomBox.contains(validLoc))
+                  {
+                    validLoc.shift(dir, crseBaseDomBox.size(dir));
+                  }
                 for (int comp=0; comp<tester.nComp(); comp++)
                   {
                     Real validVal = dataVal(validLoc, comp);
@@ -274,10 +285,10 @@ main(int argc ,char *argv[] )
               {
                 const IntVect iv = hiBit();
                 IntVect validLoc = iv;
-		while (!crseBaseDomBox.contains(validLoc))
-		  {
-		    validLoc.shift(dir, -crseBaseDomBox.size(dir));
-		  }
+                while (!crseBaseDomBox.contains(validLoc))
+                  {
+                    validLoc.shift(dir, -crseBaseDomBox.size(dir));
+                  }
                 for (int comp=0; comp<tester.nComp(); comp++)
                   {
                     Real validVal = dataVal(validLoc, comp);
@@ -295,6 +306,46 @@ main(int argc ,char *argv[] )
           } // end loop over directions
       } // end loop over boxes
     // end multi-image exchange test
+
+    
+    // test multi-shift copyTo in this case -- should fill ghost and valid cells with
+    // periodically copied (multi-wrapped) data (
+    if (verbose) pout() << "    begin multiShift-Image copyTo..." << endl;
+    crseTester.copyTo(crseShiftTester);
+    if (verbose) pout() << "    done multiShift-Image copyTo..." << endl;
+
+    DataIterator destDit = crseShiftTester.dataIterator();
+    for (destDit.begin(); destDit.ok(); ++destDit)
+      {
+        FArrayBox& testFab = crseShiftTester[destDit()];
+        // now check to be sure that this passed
+        BoxIterator validBit(testFab.box());
+        for (validBit.begin(); validBit.ok(); ++validBit)
+          {
+            const IntVect iv = validBit();
+            IntVect srcLoc = iv;
+            while (!crseBaseDomBox.contains(srcLoc))
+              {
+                srcLoc.shift(-crseBaseDomBox.size(0)*IntVect::Unit);
+              }
+            for (int comp=0; comp<tester.nComp(); comp++)
+              {
+                Real srcVal = dataVal(srcLoc, comp);
+                if (testFab(iv, comp) != srcVal)
+                  {
+                    if (verbose)
+                      {
+                        pout() << "failed single-box multi-wrap copyTo test at "
+                               << iv << endl;
+                      }
+                    status += 10;
+                  }
+              } // end loop over comps
+          } // end loop over dest cells
+
+      } // end loop over dest boxes
+    // end multi-shift domain copyTo test
+    
     if (verbose) pout() << "done single-box test" << endl;
   } // end single-box test
 
@@ -565,11 +616,11 @@ initData(LevelData<FArrayBox>& a_data, const Real a_dx)
 Real dataVal(const IntVect& a_loc, int a_comp)
 {
   Real localVal = (a_comp+1.0)*(D_TERM6(0.1*a_loc[0]+0.5,
-					+a_loc[1]+0.5,
-					+100*a_loc[2]+0.5,
-					+10*a_loc[3]+0.5,
-					+1000*a_loc[4]+0.5,
-					+10000*a_loc[5]+0.5));
+                                        +a_loc[1]+0.5,
+                                        +100*a_loc[2]+0.5,
+                                        +10*a_loc[3]+0.5,
+                                        +1000*a_loc[4]+0.5,
+                                        +10000*a_loc[5]+0.5));
 
   return localVal;
 }

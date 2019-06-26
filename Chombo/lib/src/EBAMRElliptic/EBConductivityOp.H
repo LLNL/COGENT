@@ -502,6 +502,9 @@ class EBConductivityOp: public LevelTGAHelmOp<LevelData<EBCellFAB>, EBFluxFAB >
       a_ebbcFluxStencil = m_ebBC->getFluxStencil(0);
   }
 
+  static int                      s_numComps;
+  static int                      s_whichComp;
+
 protected:
   void incrOpRegularAllDirs(Box * a_loBox,
                             Box * a_hiBox,

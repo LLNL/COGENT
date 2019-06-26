@@ -135,10 +135,10 @@ public:
   /** useful for full-multigrid types of schemes
    */
   virtual void residualNF(LevelData<FArrayBox>& a_lhs,
-			  LevelData<FArrayBox>& a_phi,
-			  const LevelData<FArrayBox>* a_phiCoarse,
-			  const LevelData<FArrayBox>& a_rhs,
-			  bool a_homogeneous = false);
+                          LevelData<FArrayBox>& a_phi,
+                          const LevelData<FArrayBox>* a_phiCoarse,
+                          const LevelData<FArrayBox>& a_rhs,
+                          bool a_homogeneous = false);
 
  /// despite what you might think, the "I" here means "Ignore the coarse-fine boundary"
   virtual void residualI(LevelData<FArrayBox>&       a_lhs,
@@ -227,9 +227,9 @@ public:
   /** useful for full-multigrid/FAS schemes
    */
   virtual void relaxNF(LevelData<FArrayBox>& a_phi,
-		       const LevelData<FArrayBox>* a_phiCoarse,
-		       const LevelData<FArrayBox>& a_rhs,
-		       int a_iterations);
+                       const LevelData<FArrayBox>* a_phiCoarse,
+                       const LevelData<FArrayBox>& a_rhs,
+                       int a_iterations);
 
   virtual void createCoarser(LevelData<FArrayBox>&       a_coarse,
                              const LevelData<FArrayBox>& a_fine,

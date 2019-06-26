@@ -157,8 +157,10 @@ void setRHS(Vector<LevelData<FArrayBox>* > a_rhs,
           loc += ccOffset;
 
           D_TERM(Real x = loc[0];, Real y = loc[1];, Real z = loc[2];)
-	    Real arg = D_TERM((x-x*x),*(y-y*y),*(z-z*z));
-          thisRhs(iv, 0) = ( 2*arg + gamma*arg*exp(arg));
+          Real mult_arg = D_TERM((x-x*x),*(y-y*y),*(z-z*z));
+          Real plus_arg = D_TERM((x-x*x),+(y-y*y),+(z-z*z));
+
+          thisRhs(iv, 0) = ( 2*plus_arg + gamma*mult_arg*exp(mult_arg));
 
         }
       }
@@ -173,11 +175,11 @@ void setRHS(Vector<LevelData<FArrayBox>* > a_rhs,
           loc *= a_amrDx[lev];
           loc += ccOffset;
 
-	  Real x=1;
-	  Real y=0;
-	  Real z=1;
+          Real x=1;
+          Real y=0;
+          Real z=1;
           D_TERM(x = loc[0];, y = loc[1];,  z = loc[2];)
-	    thisRhs(iv, 0) = ((9*M_PI*M_PI + gamma*exp((x*x-x*x*x)*sin(3*M_PI*(y*z))))*(x*x-x*x*x) +6*x -2)*sin(3*M_PI*y);
+            thisRhs(iv, 0) = ((9*M_PI*M_PI + gamma*exp((x*x-x*x*x)*sin(3*M_PI*(y*z))))*(x*x-x*x*x) +6*x -2)*sin(3*M_PI*y);
 
         }
       }
@@ -227,7 +229,7 @@ void setExact(Vector<LevelData<FArrayBox>* > a_rhs,
 
 
           D_TERM(Real x = loc[0];, Real y = loc[1];, Real z = loc[2];)
-	  Real arg = D_TERM((x-x*x),*(y-y*y),*(z-z*z));
+          Real arg = D_TERM((x-x*x),*(y-y*y),*(z-z*z));
           thisRhs(iv, 0) = arg;
 
         }
@@ -242,9 +244,9 @@ void setExact(Vector<LevelData<FArrayBox>* > a_rhs,
           loc *= a_amrDx[lev];
           loc += ccOffset;
 
-	  Real x=1;
-	  Real y=0;
-	  Real z=1;
+          Real x=1;
+          Real y=0;
+          Real z=1;
           D_TERM(x = loc[0];, y = loc[1];, z = loc[2];)
           thisRhs(iv, 0) = (x*x - x*x*x)*sin(3*M_PI*y*z);
 

@@ -3440,7 +3440,10 @@ levelJacobi(LevelData<EBCellFAB>&       a_phi,
   create(lphi, a_rhs);
   for (int whichIter =0; whichIter < a_iterations; whichIter++)
     {
-      applyHomogeneousCFBCs(a_phi);
+      if (m_hasCoar)
+        {
+          applyHomogeneousCFBCs(a_phi);
+        }
 
       //after this lphi = L(phi)
       //this call contains bcs and exchange

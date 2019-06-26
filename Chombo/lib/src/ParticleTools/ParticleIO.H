@@ -69,9 +69,9 @@ void write_vect_to_header(HDF5Handle&         a_handle,
 /// A helper function that reads a vector of 'T's to the HDF5 file under a_dataname
 template <class T>
 void read_vect_from_header(HDF5Handle&        a_handle,
-			   vector<T>&          a_vect,
-			   const hid_t&        H5T_type,
-			   const std::string&  a_dataname);
+                           vector<T>&          a_vect,
+                           const hid_t&        H5T_type,
+                           const std::string&  a_dataname);
 
 /// Write the particle data contained in a_particles to the HDF5 file described by a_handle.
 /// This is the function that users should actually call. The string a_dataType gives a way
@@ -93,7 +93,7 @@ void readParticlesFromHDF(HDF5Handle&        a_handle,
 template<class P> void
 writeParticlesToHDF(HDF5Handle&            a_handle,
                     const ParticleData<P>& a_particles,
-		    const Box&             a_domain,
+                    const Box&             a_domain,
                     const std::string&     a_dataType);
 
 #endif // HDF5

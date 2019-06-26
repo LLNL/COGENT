@@ -46,10 +46,7 @@ LevelData<T>::LevelData(const DisjointBoxLayout& dp, int comps, const IntVect& g
                         const DataFactory<T>& a_factory)
   : m_disjointBoxLayout(dp), m_ghost(ghost)
 {
-#ifdef CH_MPI
-  this->numSends = 0;
-  this->numReceives = 0;
-#endif
+
   this->m_boxLayout = dp;
   this->m_comps = comps;
   this->m_isdefined = true;
@@ -423,8 +420,8 @@ void LevelData<T>::exchange(void)
 //-----------------------------------------------------------------------
 template<class T>
 void LevelData<T>::exchange(const Interval& comps,
-			    const Copier& copier,
-			    const LDOperator<T>& a_op)
+                            const Copier& copier,
+                            const LDOperator<T>& a_op)
 {
   CH_TIME("exchange");
 #ifdef CH_MPI
@@ -451,7 +448,7 @@ void LevelData<T>::exchangeNoOverlap(const Copier& copier)
 {
   CH_TIME("exchangeNoOverlap");
   this->makeItSoBegin(this->interval(), *this, *this, this->interval(), copier);
-  this->makeItSoEnd(*this, this->interval());
+  this->makeItSoEnd(this->interval());
   this->makeItSoLocalCopy(this->interval(), *this, *this, this->interval(), copier);
 }
 //-----------------------------------------------------------------------
@@ -471,7 +468,7 @@ template<class T>
 void LevelData<T>::exchangeEnd()
 {
   CH_TIME("exchangeEnd");
-  this->makeItSoEnd(*this, this->interval());
+  this->makeItSoEnd(this->interval());
 }
 //-----------------------------------------------------------------------
 

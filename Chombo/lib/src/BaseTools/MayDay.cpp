@@ -64,7 +64,7 @@ static void write_to_stderr_without_buffering (const char * const a_str)
   }
 }
 
-bool maydayabortFlag = false; //used by registerDebugger, that is listening for SIGABORT
+bool maydayabortFlag = true; //used by registerDebugger, that is listening for SIGABORT
 
 void MayDay::Error(const char * const a_msg, int exit_code)
 {

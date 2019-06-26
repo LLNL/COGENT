@@ -1334,7 +1334,7 @@ void AMRMultiGrid<T>::getInfo() const
      <<" cycles "<<m_mg[i]->m_cycle<< "domain "<<m_mg[i]->m_topLevelDomain<<"\n";
   }
 }
-  	 
+         
 template<class T>
 void AMRMultiGrid<T>::AMRVCycle(Vector<T*>& a_uberCorrection,
                                 Vector<T*>& a_uberResidual,

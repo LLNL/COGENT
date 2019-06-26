@@ -48,11 +48,11 @@ inline IntVect locateBin(const RealVect a_x, const RealVect a_dx, const RealVect
 {
   CH_TIME("locateBin");
   const IntVect bin(D_DECL6((int)floor((a_x[0] - a_origin[0])/a_dx[0]),
-			    (int)floor((a_x[1] - a_origin[1])/a_dx[1]),
-			    (int)floor((a_x[2] - a_origin[2])/a_dx[2]),
-			    (int)floor((a_x[3] - a_origin[3])/a_dx[3]),
-			    (int)floor((a_x[4] - a_origin[4])/a_dx[4]),
-			    (int)floor((a_x[5] - a_origin[5])/a_dx[5])));
+                            (int)floor((a_x[1] - a_origin[1])/a_dx[1]),
+                            (int)floor((a_x[2] - a_origin[2])/a_dx[2]),
+                            (int)floor((a_x[3] - a_origin[3])/a_dx[3]),
+                            (int)floor((a_x[4] - a_origin[4])/a_dx[4]),
+                            (int)floor((a_x[5] - a_origin[5])/a_dx[5])));
   return bin;
 }
 
@@ -81,16 +81,16 @@ public:
   /// a_origin:       the origin of the coordinate system, also for particle binning.
   ParticleData(const BoxLayout&         a_dp,
                const ProblemDomain&     a_domain,
-	       const int&               a_fixedBoxSize,
-	       const RealVect&          a_meshSpacing,
-	       const RealVect&          a_origin);
+               const int&               a_fixedBoxSize,
+               const RealVect&          a_meshSpacing,
+               const RealVect&          a_origin);
 
   /// Define function. Same as the full constructor
   void define(const BoxLayout&         a_dp,
-	      const ProblemDomain&     a_domain,
-	      const int&               a_fixedBoxSize,
-	      const RealVect&          a_meshSpacing,
-	      const RealVect&          a_origin);
+              const ProblemDomain&     a_domain,
+              const int&               a_fixedBoxSize,
+              const RealVect&          a_meshSpacing,
+              const RealVect&          a_origin);
 
   /// Get the BoxLayout on which this ParticleData<P> is defined.
   const BoxLayout& getBoxes() const;
@@ -173,7 +173,7 @@ public:
   ///                       both "valid" and "ghost" particls.
   /// a_numGhost            the number of ghost cells to fill
   void fillGhosts(ParticleData<P>& a_particlesWithGhosts,
-		  const int a_numGhost) const;
+                  const int a_numGhost) const;
 
   bool isDefined() const;
 

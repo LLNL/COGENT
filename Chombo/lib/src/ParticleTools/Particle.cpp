@@ -1,3 +1,13 @@
+#ifdef CH_LANG_CC
+/*
+ *      _______              __
+ *     / ___/ /  ___  __ _  / /  ___
+ *    / /__/ _ \/ _ \/  V \/ _ \/ _ \
+ *    \___/_//_/\___/_/_/_/_.__/\___/
+ *    Please refer to Copyright.txt, in Chombo's root directory.
+ */
+#endif
+
 #include "Particle.H"
 #include "NamespaceHeader.H"
 
@@ -122,25 +132,25 @@ void Particle::linearOut(void* buf) const
 {
   Real* buffer = (Real*)buf;
   D_TERM6( *buffer++ = m_position[0];,
-	   *buffer++ = m_position[1];,
-	   *buffer++ = m_position[2];,
-	   *buffer++ = m_position[3];,
-	   *buffer++ = m_position[4];,
-	   *buffer++ = m_position[5];);
+           *buffer++ = m_position[1];,
+           *buffer++ = m_position[2];,
+           *buffer++ = m_position[3];,
+           *buffer++ = m_position[4];,
+           *buffer++ = m_position[5];);
 
   D_TERM6( *buffer++ = m_velocity[0];,
-	   *buffer++ = m_velocity[1];,
-	   *buffer++ = m_velocity[2];,
-	   *buffer++ = m_velocity[3];,
-	   *buffer++ = m_velocity[4];,
-	   *buffer++ = m_velocity[5];);
+           *buffer++ = m_velocity[1];,
+           *buffer++ = m_velocity[2];,
+           *buffer++ = m_velocity[3];,
+           *buffer++ = m_velocity[4];,
+           *buffer++ = m_velocity[5];);
 
   D_TERM6( *buffer++ = m_acceleration[0];,
-	   *buffer++ = m_acceleration[1];,
-	   *buffer++ = m_acceleration[2];,
-	   *buffer++ = m_acceleration[3];,
-	   *buffer++ = m_acceleration[4];,
-	   *buffer++ = m_acceleration[5];);
+           *buffer++ = m_acceleration[1];,
+           *buffer++ = m_acceleration[2];,
+           *buffer++ = m_acceleration[3];,
+           *buffer++ = m_acceleration[4];,
+           *buffer++ = m_acceleration[5];);
 
     *buffer = m_mass;
 }
@@ -152,25 +162,25 @@ void Particle::linearIn(void* buf)
 {
   Real* buffer = (Real*)buf;
   D_TERM6( m_position[0] = *buffer++;,
-	   m_position[1] = *buffer++;,
-	   m_position[2] = *buffer++;,
-	   m_position[3] = *buffer++;,
-	   m_position[4] = *buffer++;,
-	   m_position[5] = *buffer++;);
+           m_position[1] = *buffer++;,
+           m_position[2] = *buffer++;,
+           m_position[3] = *buffer++;,
+           m_position[4] = *buffer++;,
+           m_position[5] = *buffer++;);
 
   D_TERM6( m_velocity[0] = *buffer++;,
-	   m_velocity[1] = *buffer++;,
-	   m_velocity[2] = *buffer++;,
-	   m_velocity[3] = *buffer++;,
-	   m_velocity[4] = *buffer++;,
-	   m_velocity[5] = *buffer++;);
+           m_velocity[1] = *buffer++;,
+           m_velocity[2] = *buffer++;,
+           m_velocity[3] = *buffer++;,
+           m_velocity[4] = *buffer++;,
+           m_velocity[5] = *buffer++;);
 
   D_TERM6( m_acceleration[0] = *buffer++;,
-	   m_acceleration[1] = *buffer++;,
-	   m_acceleration[2] = *buffer++;,
-	   m_acceleration[3] = *buffer++;,
-	   m_acceleration[4] = *buffer++;,
-	   m_acceleration[5] = *buffer++;);
+           m_acceleration[1] = *buffer++;,
+           m_acceleration[2] = *buffer++;,
+           m_acceleration[3] = *buffer++;,
+           m_acceleration[4] = *buffer++;,
+           m_acceleration[5] = *buffer++;);
 
   m_mass = *buffer;
 }

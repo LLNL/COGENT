@@ -439,9 +439,9 @@ this->m_op[ilev]->write(a_phi[ilev],"zh_coarsest_phi_1.hdf5");
 this->m_op[ilev]->write(this->m_residual[ilev],"za_fine_res_0.hdf5");
 this->m_op[ilev]->write(a_phi[ilev],"zb_fine_phi_0.hdf5");
 #endif
-		// Replacing relax with relaxNF
+                // Replacing relax with relaxNF
  //     this->m_op[ilev]->relax( *(a_phi[ilev]), *(this->m_residual[ilev]), this->m_pre );
- 		this->m_op[ilev]->relaxNF( *(a_phi[ilev]), (a_phi[ilev-1]), *rhs, this->m_pre );
+                this->m_op[ilev]->relaxNF( *(a_phi[ilev]), (a_phi[ilev-1]), *rhs, this->m_pre );
 
 #ifdef FAS_PRINT
 this->m_op[ilev]->write(this->m_residual[ilev],"za_fine_res_1.hdf5");
@@ -568,9 +568,9 @@ this->m_op[ilev]->write(a_phi[ilev],"zl_fine_phi_1.hdf5");
 this->m_op[ilev]->residual( *(this->m_correction[ilev]),  *a_phi[ilev], *(this->m_residual[ilev]), false);
 this->m_op[ilev]->write(this->m_correction[ilev],"zz_fine_res_1.hdf5");
 #endif
-		// Replacing relax with relaxNF
+                // Replacing relax with relaxNF
 //      this->m_op[ilev]->relax( *(a_phi[ilev]), *(this->m_residual[ilev]), this->m_post );
-		this->m_op[ilev]->relaxNF( *(a_phi[ilev]),  (a_phi[ilev-1]), *rhs, this->m_post );
+                this->m_op[ilev]->relaxNF( *(a_phi[ilev]),  (a_phi[ilev-1]), *rhs, this->m_post );
 
 #ifdef FAS_PRINT
 this->m_op[ilev]->write(a_phi[ilev],"zl_fine_phi_2.hdf5");

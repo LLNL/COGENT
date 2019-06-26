@@ -17,11 +17,22 @@
 #include "EdgeToCell.H"
 #include "EdgeToCellF_F.H"
 #include "ProtoInterface.H"
-
+#ifdef USE_PROTO
+#include "Proto_Stencil.H"
+#endif
 #include "NamespaceHeader.H"
 
 #ifdef USE_PROTO
-using namespace Proto;
+
+using Proto::Point;
+using Proto::BoxData;
+using Proto::Var;
+using Proto::Stencil;
+using Proto::Shift;
+using CH_XD::IntVect;
+using CH_XD::Box;
+using CH_XD::BaseFab;
+
 void
 ProtoEdgeToCellPatch(BaseFab<Real>      & a_cellData, 
                      const int          & a_cellComp,
@@ -33,7 +44,7 @@ ProtoEdgeToCellPatch(BaseFab<Real>      & a_cellData,
   BoxData<double, 1> bdcell, bdedge;
   ProtoCh::aliasBoxData<double, 1>(bdedge, a_edgeData, a_edgeComp);
   ProtoCh::aliasBoxData<double, 1>(bdcell, a_cellData, a_cellComp);
-  Bx cellbx = ProtoCh::getBx(a_cellBox);
+  Proto::Box cellbx = ProtoCh::getProtoBox(a_cellBox);
   Stencil<double> edgeToCellSten = (0.5)*Shift::Basis(a_idir, 1) + (0.5)*Shift::Zeros();
   bdcell |= edgeToCellSten(bdedge, cellbx);
 }
@@ -60,12 +71,12 @@ ProtoEdgeToCellPatchMax(BaseFab<Real>      & a_cellData,
   BoxData<double, 1> bdcell, bdedge, bdlo, bdhi;
   ProtoCh::aliasBoxData<double, 1>(bdedge, a_edgeData, a_edgeComp);
   ProtoCh::aliasBoxData<double, 1>(bdcell, a_cellData, a_cellComp);
-  Bx cellbx = ProtoCh::getBx(a_cellBox);
+  Proto::Box cellbx = ProtoCh::getProtoBox(a_cellBox);
   Stencil<double> loSten = (1.0)*Shift::Basis(a_idir, -1);
   Stencil<double> hiSten = (1.0)*Shift::Zeros();
   BoxData<double> lovals(cellbx);
   BoxData<double> hivals(cellbx);
-  bdcell = forall<double>(maxValLoHi, cellbx, lovals, hivals);
+  bdcell = Proto::forall<double>(maxValLoHi, cellbx, lovals, hivals);
 }
 
 #endif

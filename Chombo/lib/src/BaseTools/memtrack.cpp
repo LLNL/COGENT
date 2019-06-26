@@ -667,7 +667,7 @@ void RemoveTrack(void* a_addr,
             MayDay::Error("memory allocated with malloc-family returned using DELETE");
           }
         }
-	ch_memcount-=(*c)->size;
+        ch_memcount-=(*c)->size;
         // At least one compiler/OS/HDF5-version combination was
         // causing segfault in the memory-tracking (MT) code.
         // Normally, one might just turn off MT at compile-time via

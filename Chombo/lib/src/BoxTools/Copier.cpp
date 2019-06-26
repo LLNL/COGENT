@@ -540,6 +540,10 @@ void Copier::define(const BoxLayout& a_level,
   Box grownDomainCheckBox = a_domain.domainBox();
   grownDomainCheckBox.grow(1);
   int periodicCheckRadius = 1;
+  // keep track of whether any boxes are in the negative domain, since they will require an extra shift
+  // due to integer math
+  CH_assert(SpaceDim <= 6);
+  bool negativeStretch[6] = {false};
 
   // since valid regions of the "from" DBL may also be outside
   // the primary domain, need to keep track of whether any of these
@@ -566,12 +570,36 @@ void Copier::define(const BoxLayout& a_level,
         {
           if (a_domain.isPeriodic(dir))
             {
+              // first, check to see if ghost cells require multiple wraps
               if (a_ghost[dir] > domainBox.size(dir))
-		{
-		  MayDay::Warning("nGhost > domainBox size in periodic direction - requires multiple wraps");
-		  multipleWraps = true;
-		}
+                {
+                  MayDay::Warning("nGhost > domainBox size in periodic direction - requires multiple wraps");
+                  multipleWraps = true;
+                }
+              // then, check to see if valid regions require multiple shifts
+              // don't bother if we've already decided to do multiple wraps
+              if (!multipleWraps)
+                {
+                  int singleWrapHi = domainBox.bigEnd(dir) +domainBox.size(dir);
+                  int singleWrapLo = domainBox.smallEnd(dir) -domainBox.size(dir);
 
+                  // for now, do this for all boxes (no need for communication
+                  // for really big layouts, may want to distribute this
+                  LayoutIterator lit = dest.layoutIterator();             
+                  for (lit.begin(); lit.ok(); ++lit)
+                    {
+                      // check to see if this box requires multiple wraps
+                      Box destBox = dest[lit];
+                      if ((destBox.bigEnd(dir) > singleWrapHi) ||
+                          (destBox.smallEnd(dir) < singleWrapLo))
+                        {
+                          multipleWraps = true;
+                        } // end if box doesn't fit in single-wrapped domain
+                    } // end loop over dest boxes
+                } // end if we don't already have multiple wraps
+
+              // if we switch to distrubuted testing for the last loop, 
+              // would need a reduction here...
             }
         }
     }
@@ -794,6 +822,10 @@ void Copier::define(const BoxLayout& a_level,
           {
             grownDomainCheckBox.grow(1);
             periodicCheckRadius++;
+            for (int dir=0; dir<SpaceDim; dir++)
+              {
+                if (ghost.smallEnd()[dir] < 0) negativeStretch[dir] = true;
+              }
           }
         } // end if we need to grow radius around domain
 
@@ -819,23 +851,25 @@ void Copier::define(const BoxLayout& a_level,
 
       
       if (multipleWraps)
-	{
-	  // make this be a function of direction in case 
-	  // our domains are very lopsided
-	  for (int dir=0; dir<SpaceDim; dir++)
-	    {
-	      numWraps[dir] = Max(numWraps[dir], periodicCheckRadius/shiftMult[dir]);
-	    }
-	}
+        {
+          // make this be a function of direction in case 
+          // our domains are very lopsided
+          for (int dir=0; dir<SpaceDim; dir++)
+            {
+              numWraps[dir] = Max(numWraps[dir], periodicCheckRadius/shiftMult[dir]);
+              // if we have boxes in the negative plane, need to add an extra wrap
+              if (negativeStretch[dir]) numWraps[dir] += 1;
+            }
+        }
 
       
       ShiftIterator shiftIt = a_domain.shiftIterator();
       // if multipleWraps, make a custom ShiftIterator here
       if (multipleWraps)
-	{
-	  const bool* isPeriodic = a_domain.isPeriodicVect();
-	  shiftIt.computeShifts(isPeriodic, numWraps);
-	}
+        {
+          const bool* isPeriodic = a_domain.isPeriodicVect();
+          shiftIt.computeShifts(isPeriodic, numWraps);
+        }
 
       // now loop over "from" boxes
       for (LayoutIterator from(a_level.layoutIterator()); from.ok(); ++from)

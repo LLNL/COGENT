@@ -25,8 +25,6 @@
 #include "CellToEdge.H"
 #include "BRMeshRefine.H"
 
-#include "fftw3.h"
-
 #include <fstream>
 #include <float.h>
 

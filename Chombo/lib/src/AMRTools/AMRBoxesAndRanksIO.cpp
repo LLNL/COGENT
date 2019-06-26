@@ -21,7 +21,7 @@
 #include "parstream.H"
 
 #ifdef MPI
-#include <mpi.h>
+#include "mpi.h"
 #endif
 #include "NamespaceHeader.H"
 

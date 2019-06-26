@@ -17,6 +17,8 @@
 #include "ProblemDomain.H"
 #include <unordered_map>
 #include <cstdint>
+#include "SPMD.H"
+
 #include "NamespaceHeader.H"
 
 
@@ -115,6 +117,11 @@ public:
   mutable std::vector<bufEntry> m_toMe;
   mutable std::vector<std::vector<bufEntry> > m_toMeUnpack;
 
+#ifdef CH_MPI
+  mutable Vector<MPI_Request>  m_sendRequests,  m_receiveRequests;
+  mutable Vector<MPI_Status>   m_receiveStatus, m_sendStatus;
+#endif
+  mutable int numSends, numReceives;
 
 protected:
 
@@ -214,7 +221,7 @@ public:
   ///  alternative version of define for exchange copiers that uses new optimized neighborIterator
   virtual void exchangeDefine(const DisjointBoxLayout& a_grids,
                               const IntVect& a_ghost,
-	                      bool a_includeSelf=false);
+                              bool a_includeSelf=false);
   
   void defineFixedBoxSize(const DisjointBoxLayout& a_src,
                           const LMap&  a_lmap,

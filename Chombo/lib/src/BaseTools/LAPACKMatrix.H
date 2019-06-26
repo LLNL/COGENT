@@ -8,8 +8,8 @@
  */
 #endif
 
-#ifndef _LAPACKMatrix_H_
-#define _LAPACKMatrix_H_
+#ifndef _LAPACKMATRIX_H_
+#define _LAPACKMATRIX_H_
 
 #include "REAL.H"
 #include "LoHiSide.H"

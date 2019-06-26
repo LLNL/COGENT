@@ -32,7 +32,14 @@ void CellToEdge(const LevelData<FArrayBox>& a_cellData,
 }
 
 #ifdef USE_PROTO
-using namespace Proto;
+using Proto::Point;
+using Proto::BoxData;
+using Proto::Var;
+using Proto::Stencil;
+using CH_XD::IntVect;
+using CH_XD::Box;
+using CH_XD::BaseFab;
+
 void
 ProtoCellToEdgePatch(BaseFab<Real>      & a_edgeData, 
                      const int          & a_edgeComp,
@@ -44,8 +51,8 @@ ProtoCellToEdgePatch(BaseFab<Real>      & a_edgeData,
   BoxData<double, 1> bdcell, bdedge;
   ProtoCh::aliasBoxData<double, 1>(bdedge, a_edgeData, a_edgeComp);
   ProtoCh::aliasBoxData<double, 1>(bdcell, a_cellData, a_cellComp);
-  Bx edgebx = ProtoCh::getBx(a_edgeBox);
-  Stencil<double> cellToEdgeSten = (0.5)*Shift::Basis(a_idir, -1) + (0.5)*Shift::Zeros();
+  Proto::Box edgebx = ProtoCh::getProtoBox(a_edgeBox);
+  Stencil<double> cellToEdgeSten = (0.5)*Proto::Shift::Basis(a_idir, -1) + (0.5)*Proto::Shift::Zeros();
   bdedge |= cellToEdgeSten(bdcell, edgebx);
 }
 

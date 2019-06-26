@@ -14,7 +14,7 @@ using std::pow;
 #include "BoxLayoutData.H"
 #include "FluxBox.H"
 #ifdef CH_MPI
-#include <mpi.h>
+#include "mpi.h"
 #endif
 #include "NamespaceHeader.H"
 
@@ -55,6 +55,27 @@ Real norm(const BoxLayoutData<FArrayBox>& a_layout,
           norm += a_layout[it()].norm(validRegion[it()],
                                       1,
                                       interval.begin(),
+                                      interval.size());
+        }
+#     ifdef CH_MPI
+      Real recv;
+      int result = MPI_Allreduce(&norm, &recv, 1, MPI_CH_REAL,
+                                 MPI_SUM, Chombo_MPI::comm);
+      if (result != MPI_SUCCESS)
+      {
+        //bark!!!
+        MayDay::Error("sorry, but I had a communcation error on norm");
+      }
+      norm = recv;
+#     endif
+    }
+
+  else if (p == -3) //  sum norm
+    {
+      cout << "taking sum of boxlayoutdata" << endl;
+      for (;it.ok(); ++it)
+        {
+          norm += a_layout[it()].sum (interval.begin(),
                                       interval.size());
         }
 #     ifdef CH_MPI

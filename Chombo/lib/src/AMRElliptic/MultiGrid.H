@@ -130,7 +130,7 @@ class MGLevelOp : public LinearOp<T>, public MGLevelOpObserver<T>
   */
   virtual void relaxNF(T& a_phi, const T* a_phiCoarse, const T& a_rhs, int a_iterations)
   {
-	  this->relax(a_phi, a_rhs, a_iterations);
+          this->relax(a_phi, a_rhs, a_iterations);
   }
 
   ///
@@ -143,7 +143,7 @@ class MGLevelOp : public LinearOp<T>, public MGLevelOpObserver<T>
   /// full-multigrid version of restrictResidual, useful for FAS-type schemes. Defaults to standard restriction 
   virtual void restrictResidual(T& a_resCoarse, T& a_phiFine, const T* a_phiCoarse, const T& a_rhsFine, bool homogeneous)
   {
-	  restrictResidual(a_resCoarse, a_phiFine, a_rhsFine);
+          restrictResidual(a_resCoarse, a_phiFine, a_rhsFine);
   }
 
   /// simple restriction function
@@ -186,7 +186,7 @@ class MGLevelOp : public LinearOp<T>, public MGLevelOpObserver<T>
   // For use by full-multigrid schemes if we have a coarser level. Just do standard residual by default.
   virtual void residualNF(T& a_lhs, T& a_phi, const T* a_phiCoarse, const T& a_rhs, bool a_homogeneous = false)
   {
-	  this->residual(a_lhs, a_phi, a_rhs, a_homogeneous);
+          this->residual(a_lhs, a_phi, a_rhs, a_homogeneous);
   }
 
   //! Removes the given observer from the operator's list of observers. This

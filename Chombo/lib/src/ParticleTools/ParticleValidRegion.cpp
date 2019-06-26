@@ -123,8 +123,8 @@ void ParticleValidRegion::bufferGhostJob(BaseFab<bool>& a_valid,
       if (!a_valid(abi(), 0))
         {
           const Box bbox = (buffer + abi());
-	  invalidLo.minBox(bbox);
-	}
+          invalidLo.minBox(bbox);
+        }
     }
 
   const Box bboxlo = invalidLo & a_domain;
@@ -136,8 +136,8 @@ void ParticleValidRegion::bufferGhostJob(BaseFab<bool>& a_valid,
       if (!a_valid(abi(),0))
         {
           const Box bbox = (buffer+abi());
-	  invalidHi.minBox(bbox);
-	}
+          invalidHi.minBox(bbox);
+        }
     }
 
   const Box bboxhi = invalidHi & a_domain;

@@ -1629,14 +1629,14 @@ public:
   static void setTempestOutputFormat( bool );
 
 #ifdef USE_PROTO
-    Box(Proto::Bx a_box)
+    Box(Proto::Box a_box)
     {
         define(a_box.low(), a_box.high());
     }
     
-    operator Proto::Bx() const
+    operator Proto::Box() const
     {
-        return Proto::Bx(smallend, bigend); //calls IntVect -> Proto::Point converter
+        return Proto::Box(smallend, bigend); //calls IntVect -> Proto::Point converter
     }
 #endif
 

@@ -46,7 +46,7 @@ public:
 
   /// Factory function. Note that both a_numComps and a_dit are ignored.
   virtual ListBox<T>* create(const Box& a_box, int a_numComps, 
-			     const DataIndex& a_datInd) const;
+                             const DataIndex& a_datInd) const;
   /// Destructor
   virtual ~ListBoxFactory();
 
