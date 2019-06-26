@@ -814,10 +814,16 @@ GKPoissonBoltzmann::solveSimpleBoltzmann( const LevelData<FArrayBox>& a_Zni,
 
    const DisjointBoxLayout& grids = m_geometry.grids();
 
+   LevelData<FArrayBox> n0_fs_aver;
+   n0_fs_aver.define(a_Zni);
+   m_flux_surface.averageAndSpread(m_initial_ion_charge_density, n0_fs_aver);
+   
    if (m_linear_response) {
       // Sets phi = Zni * Te / (e0 * n0)
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          a_phi[dit].copy(a_Zni[dit]);
+         a_phi[dit].minus(n0_fs_aver[dit]);
+         a_phi[dit].divide(n0_fs_aver[dit]);
          a_phi[dit].mult(Te[dit]); 
       }
    } 
@@ -827,7 +833,7 @@ GKPoissonBoltzmann::solveSimpleBoltzmann( const LevelData<FArrayBox>& a_Zni,
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          for (BoxIterator bit( grids[dit] ); bit.ok(); ++bit) {
              IntVect iv( bit() );
-             a_phi[dit](iv,0) = log(a_Zni[dit](iv,0));
+             a_phi[dit](iv,0) = log(a_Zni[dit](iv,0)/n0_fs_aver[dit](iv,0));
          }
          a_phi[dit].mult(Te[dit]); 
       }
@@ -1473,8 +1479,8 @@ GKPoissonBoltzmann::computeBoundaryData( FArrayBox& a_inner_divertor_bvs,
   double norm_dir_loc = 0;
   double norm_dir_glob = 0;
 
-  int nrad = m_geometry.getBlockCoordSys(RSOL).domain().domainBox().size(RADIAL_DIR)
-             + m_geometry.getBlockCoordSys(RPF).domain().domainBox().size(RADIAL_DIR);  
+  int nrad = m_geometry.getBlockCoordSys(SingleNullBlockCoordSys::RSOL).domain().domainBox().size(RADIAL_DIR)
+             + m_geometry.getBlockCoordSys(SingleNullBlockCoordSys::RPF).domain().domainBox().size(RADIAL_DIR);  
 
   //Initialize 1D arrays for boundary data
   m_Zni_outer_plate = new double[nrad];
@@ -1520,10 +1526,10 @@ GKPoissonBoltzmann::computeBoundaryData( FArrayBox& a_inner_divertor_bvs,
   }
 
 
-  const ProblemDomain& domain_RSOL = m_geometry.getBlockCoordSys(RSOL).domain();
+  const ProblemDomain& domain_RSOL = m_geometry.getBlockCoordSys(SingleNullBlockCoordSys::RSOL).domain();
   const Box& domain_RSOL_box = domain_RSOL.domainBox();
 
-  const ProblemDomain& domain_LSOL = m_geometry.getBlockCoordSys(LSOL).domain();
+  const ProblemDomain& domain_LSOL = m_geometry.getBlockCoordSys(SingleNullBlockCoordSys::LSOL).domain();
   const Box& domain_LSOL_box = domain_LSOL.domainBox();
 
   const MagCoordSys& coord_sys( *(m_geometry.getCoordSys()) );
@@ -1653,8 +1659,8 @@ GKPoissonBoltzmann::computeBoundaryData( FArrayBox& a_inner_divertor_bvs,
   //Fill the BC arrays
   //We use the fact that the inner and outer blocks has the same radial index structure
 
-  int hi_bnd_PF = m_geometry.getBlockCoordSys(RPF).domain().domainBox().bigEnd(RADIAL_DIR); 
-  int lo_bnd_SOL = m_geometry.getBlockCoordSys(RSOL).domain().domainBox().smallEnd(RADIAL_DIR);
+  int hi_bnd_PF = m_geometry.getBlockCoordSys(SingleNullBlockCoordSys::RPF).domain().domainBox().bigEnd(RADIAL_DIR); 
+  int lo_bnd_SOL = m_geometry.getBlockCoordSys(SingleNullBlockCoordSys::RSOL).domain().domainBox().smallEnd(RADIAL_DIR);
 
   int i = 0;
   for (BoxIterator bit( a_inner_divertor_bvs.box() ); bit.ok(); ++bit) {
@@ -1694,8 +1700,8 @@ GKPoissonBoltzmann::computeSheathEllipticOpBC( const BoltzmannElectron& a_ne,
   //TEMPORARY USE CONSTANT TE (UNITY)
   double Te = 1.0;
 
-  int nrad = m_geometry.getBlockCoordSys(RSOL).domain().domainBox().size(RADIAL_DIR)
-             + m_geometry.getBlockCoordSys(RPF).domain().domainBox().size(RADIAL_DIR);  
+  int nrad = m_geometry.getBlockCoordSys(SingleNullBlockCoordSys::RSOL).domain().domainBox().size(RADIAL_DIR)
+             + m_geometry.getBlockCoordSys(SingleNullBlockCoordSys::RPF).domain().domainBox().size(RADIAL_DIR);  
 
   double pi = 3.14159265359;
   double v_thermal_e = sqrt(Te/(2.0 * pi * me));
@@ -1726,7 +1732,7 @@ GKPoissonBoltzmann::getConsequtiveRadialIndex( const int a_mapped_index,
 {
    int irad;
 
-   if (a_block_number == RPF || a_block_number == LPF) {
+   if (a_block_number == SingleNullBlockCoordSys::RPF || a_block_number == SingleNullBlockCoordSys::LPF) {
      int i_ref = m_geometry.getBlockCoordSys(a_block_number).domain().domainBox().smallEnd(RADIAL_DIR);
      irad = a_mapped_index - i_ref;
    }
@@ -1734,8 +1740,8 @@ GKPoissonBoltzmann::getConsequtiveRadialIndex( const int a_mapped_index,
    else {
     int i_ref = m_geometry.getBlockCoordSys(a_block_number).domain().domainBox().bigEnd(RADIAL_DIR);
 
-    int nrad = m_geometry.getBlockCoordSys(RSOL).domain().domainBox().size(RADIAL_DIR)
-               + m_geometry.getBlockCoordSys(RPF).domain().domainBox().size(RADIAL_DIR);  
+    int nrad = m_geometry.getBlockCoordSys(SingleNullBlockCoordSys::RSOL).domain().domainBox().size(RADIAL_DIR)
+               + m_geometry.getBlockCoordSys(SingleNullBlockCoordSys::RPF).domain().domainBox().size(RADIAL_DIR);  
 
     irad = (nrad - 1) - (i_ref - a_mapped_index) ;
    }

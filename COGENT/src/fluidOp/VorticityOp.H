@@ -113,9 +113,11 @@ public:
                                  const FluidSpeciesPtrVect&        a_fluid_species_rhs,
                                  const int                         a_component );
 
-   virtual void updatePCImEx( const PS::KineticSpeciesPtrVect& kinetic_species,
-                              double                           time,
-                              double                           shift );
+   virtual void updatePCImEx( const FluidSpeciesPtrVect&       fluid_species,
+                              const PS::KineticSpeciesPtrVect& kinetic_species,
+                              const double                     time,
+                              const double                     shift,
+                              const int                        component);
 
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
@@ -141,12 +143,15 @@ public:
                                             const PS::KineticSpeciesPtrVect&  species,
                                             const Real&                       time );
 
-   void computeDivPerpIonCurrentDensity( LevelData<FArrayBox>&             div_Jperp,
-                                         const EField&                     E_field,
-                                         const PS::KineticSpeciesPtrVect&  species,
-                                         const LevelData<FArrayBox>&       ion_charge_density,
-                                         const Real&                       time,
-                                         const bool                        compute_mag_contrib = true );
+   void computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&             div_Jperp,
+                                            const EField&                     E_field,
+                                            const PS::KineticSpeciesPtrVect&  species,
+                                            const LevelData<FArrayBox>&       ion_charge_density,
+                                            const Real&                       time);
+   
+   void computeReynoldsStressTerm( LevelData<FArrayBox>&             div_ExB_times_vorticity,
+                                   const LevelData<FArrayBox>&       vorticity,
+                                   const EField&                     E_field) const;
 
    void initializeOldModel( const PS::KineticSpeciesPtrVect&  kinetic_species,
                             const Vector<Real>&               scalar_data );

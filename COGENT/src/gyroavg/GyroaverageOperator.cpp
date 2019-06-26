@@ -1,60 +1,67 @@
 #include "GyroaverageOperator.H"
 #include "Directions.H"
 #include "PhaseGeom.H"
+#include "SpaceUtils.H"
+
+#undef CH_SPACEDIM
+#define CH_SPACEDIM CFG_DIM
+#include "SpaceUtils.H"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM PDIM
 
 #include "NamespaceHeader.H"
 
-static void fillGhostCells( FArrayBox& a_phi,
-                            const Box& a_bx_int,
-                            const int  a_dir )
+static bool closerPoint(  const pair<CFG::IntVect, Real>& a_i,
+                          const pair<CFG::IntVect, Real>& a_j )
 {
-  const Box& phi_bx = a_phi.box();
-
-  for (int side=-1; side<2; side+=2) {
-
-    int ii;
-    Box bdrybox;
-
-    if (side == -1) {
-      int n_gpt = a_bx_int.smallEnd(a_dir) - phi_bx.smallEnd(a_dir);
-      ii = a_bx_int.smallEnd(a_dir);
-      bdrybox = adjCellLo(a_bx_int, a_dir, n_gpt);
-    } else {
-      int n_gpt = phi_bx.bigEnd(a_dir) - a_bx_int.bigEnd(a_dir);
-      ii = a_bx_int.bigEnd(a_dir);
-      bdrybox = adjCellHi(a_bx_int, a_dir, n_gpt);
-    }
-
-    BoxIterator bit(bdrybox);
-    for (bit.begin(); bit.ok(); ++bit) {
-
-      IntVect iv(bit());
-      int j = (Real) (side < 0 ? ii-iv[a_dir] : iv[a_dir]-ii );
-
-      IntVect i_int_0(iv); i_int_0[a_dir] = ii;
-      IntVect i_int_1(iv); i_int_1[a_dir] = ii - side;
-      IntVect i_int_2(iv); i_int_2[a_dir] = ii - 2*side;
-      IntVect i_int_3(iv); i_int_3[a_dir] = ii - 3*side;
-
-      Real c0 = ((1.0+j)*(2.0+j)*(3.0+j))/6.0;
-      Real c1 = -(j*(2.0+j)*(3.0+j))/2.0;
-      Real c2 = (j*(1.0+j)*(3.0+j))/2.0;
-      Real c3 = -(j*(1.0+j)*(2.0+j))/6.0;
-
-      for (int n=0; n<a_phi.nComp(); n++) {
-//        a_phi(iv,n) =   a_phi(i_int_0,n);
-//        a_phi(iv,n) =   a_phi(i_int_0,n) + j*(a_phi(i_int_0,n)-a_phi(i_int_1,n));
-        a_phi(iv,n) =   c0 * a_phi(i_int_0,n)
-                      + c1 * a_phi(i_int_1,n)
-                      + c2 * a_phi(i_int_2,n)
-                      + c3 * a_phi(i_int_3,n);
-      }
-
-    }
-  }
-
-  return;
+  return (a_i.second < a_j.second);
 }
+
+static bool isColinear( const CFG::IntVect&               a_point,
+                        const std::vector<CFG::IntVect>&  a_set )
+{
+  if (a_set.size() < 2) { 
+    return false;
+  } else {
+    bool retval = false;
+    for (int d=0; d<CFG_DIM; d++) {
+      int count = 0;
+#if CFG_DIM==2
+      for (int i=0; i<a_set.size(); i++) {
+        if (a_set[i][d] == a_point[d]) count++;
+      }
+#else
+      int d1 = d+1; if (d1 >= CFG_DIM) d1 -= CFG_DIM;
+      int d2 = d+2; if (d2 >= CFG_DIM) d2 -= CFG_DIM;
+      for (int i=0; i<a_set.size(); i++) {
+        if ((a_set[i][d1] == a_point[d1]) && (a_set[i][d2] == a_point[d2])) count++;
+      }
+#endif
+      if (count >= 2) retval = true;
+    }
+    return retval;
+  }
+}
+
+#if CFG_DIM==3
+static bool isCoplanar( const CFG::IntVect&               a_point,
+                        const std::vector<CFG::IntVect>&  a_set )
+{
+  if (a_set.size() < 4) { 
+    return false;
+  } else {
+    bool retval = false;
+    for (int d=0; d<CFG_DIM; d++) {
+      int count = 0;
+      for (int i=0; i<a_set.size(); i++) {
+        if (a_set[i][d] == a_point[d]) count++;
+      }
+      if (count >= 4) retval = true;
+    }
+    return retval;
+  }
+}
+#endif
 
 void GyroaverageOperator::parseParams(const ParmParse& a_pp)
 {
@@ -89,6 +96,7 @@ void GyroaverageOperator::define( const PhaseGeom&          a_phase_geom,
   /* default values */
   m_npts_interp = 5;
   m_gpt = 5;
+  m_tolerance = 1e-12;
 
   /* read inputs */
   ParmParse pp("gyroavg");
@@ -102,6 +110,11 @@ void GyroaverageOperator::define( const PhaseGeom&          a_phase_geom,
 
   /* print useful things to screen */
   printParams();
+
+  /* start time */
+#ifdef CH_MPI
+  double wc_define_start = MPI_Wtime();
+#endif
 
   /* get dmu */
   const VEL::VelCoordSys& vel_coords = a_phase_geom.velSpaceCoordSys();
@@ -118,11 +131,10 @@ void GyroaverageOperator::define( const PhaseGeom&          a_phase_geom,
   const CFG::LevelData<CFG::FArrayBox>& cfg_b_field_magn(mag_geom.getCCBFieldMag());
   const CFG::LevelData<CFG::FArrayBox>& cfg_b_field(mag_geom.getCCBField());
 
-  /* create CFG leveldatas for mapped and real coordinates */
+  /* create CFG leveldatas for real coordinates */
   const CFG::MultiBlockCoordSys& mag_coord_sys( *(mag_geom.coordSysPtr()) );
   const CFG::DisjointBoxLayout& cfg_grids(mag_geom.grids());
   CFG::LevelData<CFG::FArrayBox> cfg_rcoords(cfg_grids, CFG_DIM, m_gpt*CFG::IntVect::Unit);
-  CFG::LevelData<CFG::FArrayBox> cfg_mcoords(cfg_grids, CFG_DIM, m_gpt*CFG::IntVect::Unit);
 
   for (CFG::DataIterator dit(cfg_grids.dataIterator()); dit.ok(); ++dit) {
 
@@ -130,37 +142,32 @@ void GyroaverageOperator::define( const PhaseGeom&          a_phase_geom,
     const int block_number( mag_coord_sys.whichBlock(bx) );
     const CFG::MagBlockCoordSys& block_coord_sys = static_cast<const CFG::MagBlockCoordSys&>
                                                     (*(mag_coord_sys.getCoordSys(block_number)));
-
     /* get the physical coordinates */
     block_coord_sys.getCellCenteredRealCoords( cfg_rcoords[dit] );
-    /* get the mapped coordinates */
-    block_coord_sys.getCellCenteredMappedCoords( cfg_mcoords[dit] );
   }
 
   /* Inject the configuration space variables to phase space variables */
   LevelData<FArrayBox> inj_b_field, inj_b_field_magn, inj_rcoords, inj_mcoords;
   a_phase_geom.injectConfigurationToPhase(cfg_b_field, inj_b_field);
   a_phase_geom.injectConfigurationToPhase(cfg_b_field_magn, inj_b_field_magn);
-  a_phase_geom.injectConfigurationToPhase(cfg_rcoords, inj_rcoords);
-  a_phase_geom.injectConfigurationToPhase(cfg_mcoords, inj_mcoords);
+  a_phase_geom.injectConfigurationToPhaseNoExchange(cfg_rcoords, inj_rcoords);
 
   /* define the gyroaveraging grids - phase space grids collapsed in vpar direction */
   a_phase_geom.getConfigurationPlusMuGrids( m_grids, -1 );
 
   /* define and allocate the gyroaveraging operator */
   m_gyroavg_op.define(m_grids, 1);
+
+  int count_all_points = 0, count_bad_points = 0;
   
   for (DataIterator dit(m_grids.dataIterator()); dit.ok(); ++dit) {
 
     /* create configuration space boxes for physical and mapped coordinates */
-    CFG::Box rcoords_bx, mcoords_bx;
+    CFG::Box rcoords_bx;
     a_phase_geom.projectPhaseToConfiguration(inj_rcoords[dit].box(), rcoords_bx);
-    a_phase_geom.projectPhaseToConfiguration(inj_mcoords[dit].box(), mcoords_bx);
     /* create configuration space physical and mapped coordinates*/
-    CFG::FArrayBox  rcoords(rcoords_bx, inj_rcoords[dit].nComp()), 
-                    mcoords(mcoords_bx, inj_mcoords[dit].nComp());
+    CFG::FArrayBox  rcoords(rcoords_bx, inj_rcoords[dit].nComp());
     a_phase_geom.projectPhaseToConfigurationLocal(inj_rcoords[dit], rcoords);
-    a_phase_geom.projectPhaseToConfigurationLocal(inj_mcoords[dit], mcoords);
 
     /* configuration space magnetic field */
     CFG::Box mag_bx;
@@ -186,18 +193,11 @@ void GyroaverageOperator::define( const PhaseGeom&          a_phase_geom,
       CFG::RealVect x;
       for (int d=0; d<CFG_DIM; d++) x[d] = rcoords(i_cfg, d);
 
-      /* mapped coordinates of this grid point (x,y) */
-      CFG::RealVect xi;
-      for (int d=0; d<CFG_DIM; d++) xi[d] = mcoords(i_cfg, d);
-
-      /* min and max indices of mapped coordinates box */
-      CFG::IntVect  i_max(mcoords_bx.bigEnd()),
-                    i_min(mcoords_bx.smallEnd());
-
-#if CFG_DIM == 2
       /* magnetic field and its magnitude at this grid point */
       Real b_magn = b_field_magn(i_cfg, 0);
-      Real by = b_field(i_cfg,1);
+      Real bx = b_field(i_cfg,0),
+           by = b_field(i_cfg,1),
+           bz = b_field(i_cfg,2);
 
       /* initialize the gyroavg operator at this grid point */
       Stencil& op = op_fab(iv, 0);
@@ -209,95 +209,185 @@ void GyroaverageOperator::define( const PhaseGeom&          a_phase_geom,
       /* calculate gyroradius for this mu */
       Real rho = computeGyroradius(larmor, a_mass, a_charge, b_magn, mu);
 
-      /* calculate major and minor radii of the elliptical gyro-orbit */
-      Real rho_a, rho_b;
-      if (b_magn == 0.0) {
-        rho_a = rho_b = 0.0;
+      if (rho < m_tolerance) {
+
+        op.push_back(StencilPoint(i_cfg, 1.0));
+
       } else {
-        rho_a = rho;
-        rho_b = rho * (by/b_magn);
-      }
 
-      /* create interpolation points */
-      for (int n = 0; n < m_npts_interp; n++) {
-        
-        /* compute angle */
-        Real alpha = n * delta_alpha;
-
-        /* compute coordinates of interpolation points */
-        CFG::RealVect x_pts;
-        x_pts[0] = x[0] + rho_a * cos(alpha);
-        x_pts[1] = x[1] + rho_b * sin(alpha);
-
-        /* weight of this point */
-        Real pt_weight = 1.0 / ((Real)m_npts_interp);
-
-        /* find this point in the grid - i.e. locate the (i,j) index of the 
-         * left-bottom grid point of the cell that contains this point*/
-
-        /* find its mapped coordinates */
-        const PhaseBlockCoordSys& block_coord_sys(a_phase_geom.getBlockCoordSys(m_grids[dit]));
-        RealVect x_pts_inj = a_phase_geom.config_inject(x_pts);
-        RealVect xi_pts_inj = block_coord_sys.mappedCoord(x_pts_inj);
-        CFG::RealVect xi_pts = a_phase_geom.config_restrict(xi_pts_inj);
-        
-        /* initialize to current grid point */
-        CFG::IntVect i_pts(i_cfg);
-
-        /* along each configuration space dimension, find the grid point index */
-        for (int d=0; d < CFG_DIM; d++) {
-          if (xi_pts[d] > xi[d]) {
-            while (mcoords(i_pts+CFG::BASISV(d),d) < xi_pts[d]) {
-              i_pts[d]++;
-              if (i_pts[d] == i_max[d]) {
-                std::cout << "Rank " << procID() << ", dim = " << d
-                          << ", Error in GyroaverageOperator::define(): "
-                          << "search for interpolation point reached end of box. "
-                          << "Consider increasing number of ghost points for gyroaverage operator.\n";
-                MayDay::Error("");
-              }
-            }
-          } else {
-            while (mcoords(i_pts,d) > xi_pts[d]) {
-              i_pts[d]--;
-              if (i_pts[d] < i_min[d]) {
-                std::cout << "Rank " << procID() << ", dim = " << d
-                          << ", Error in GyroaverageOperator::define(): "
-                          << "search for interpolation point reached end of box. "
-                          << "Consider increasing number of ghost points for gyroaverage operator.\n";
-                MayDay::Error("");
-              }
-            }
-          }
-          CH_assert( (mcoords(i_pts,d) - xi_pts[d]) * (mcoords(i_pts+CFG::BASISV(d),d) - xi_pts[d]) <= 0 );
-
-          /* check if this point is within reasonable distance of the grid point */
-          if (abs(i_pts[d]-i_cfg[d]) > m_gpt) {
-            MayDay::Error("Error in GyroaverageOperator::define() - interpolation point too far away!");
-          }
+#if CFG_DIM==2
+        /* calculate major and minor radii of the elliptical gyro-orbit */
+        Real rho_a, rho_b;
+        if (b_magn == 0.0) {
+          rho_a = rho_b = 0.0;
+        } else {
+          rho_a = rho;
+          rho_b = rho * (by/b_magn);
         }
-
-        /* get the stencil to interpolate a variable at this point from grid data */
-        Stencil op_pt;
-        op_pt.clear();
-        getInterpStencil(op_pt, rcoords, i_pts, x_pts);
-
-        /* scale interp weights by the weight of this point 
-         * and push to the overall averaging operator */
-        for (int k = 0; k < op_pt.size(); k++) {
-          op_pt[k].second *= pt_weight;
-          op.push_back(op_pt[k]);
-        }
-
-      }
-
 #else
-      MayDay::Error("Gyroaveraging operator not yet implemented for CFG_DIM=3.");
+        /* normalized magnetic field vector */
+        CFG::RealVect nb;
+        nb[0] = bx / sqrt(bx*bx+by*by+bz*bz);
+        nb[1] = by / sqrt(bx*bx+by*by+bz*bz);
+        nb[2] = bz / sqrt(bx*bx+by*by+bz*bz);
 #endif
+  
+        /* create interpolation points */
+        for (int n = 0; n < m_npts_interp; n++) {
+          
+          /* compute angle */
+          Real alpha = n * delta_alpha;
+  
+          /* compute coordinates of interpolation point */
+          CFG::RealVect x_pts;
+#if CFG_DIM==2
+          {
+            x_pts[0] = x[0] + rho_a * cos(alpha);
+            x_pts[1] = x[1] + rho_b * sin(alpha);
+          }
+#else
+          {
+            /* find one normal vector to the magnetic field */
+            CFG::RealVect v1;
+            if (sqrt(bx*bx+bz*bz) > m_tolerance) {
+              v1[0] = nb[2];
+              v1[1] = 0.0;
+              v1[2] = -nb[0];
+            } else {
+              v1[0] = 0.0;
+              v1[1] = nb[2];
+              v1[2] = -nb[1];
+            }
+
+            /* find the other normal vector to the magnetic field */
+            CFG::RealVect v2;
+            v2[0] = nb[1]*v1[2] - nb[2]*v1[1];
+            v2[1] = nb[2]*v1[0] - nb[0]*v1[2];
+            v2[2] = nb[0]*v1[1] - nb[1]*v1[0];
+
+            /* compute coordinates of interpolation point */
+            x_pts[0] = x[0] + rho * (v1[0]*cos(alpha) + v2[0]*sin(alpha));
+            x_pts[1] = x[1] + rho * (v1[1]*cos(alpha) + v2[1]*sin(alpha));
+            x_pts[2] = x[2] + rho * (v1[2]*cos(alpha) + v2[2]*sin(alpha));
+          }
+#endif
+  
+          /* weight of this point */
+          Real pt_weight = 1.0 / ((Real)m_npts_interp);
+  
+          /* let's find the grid point closest to the interpolation point */
+          CFG::IntVect i_pts(i_cfg);
+          Real delta = distanceFunction(rcoords, i_pts, x_pts);
+          while(1) {
+            bool did_i_move = false;
+            for (int d=0; d<CFG_DIM; d++) {
+              for (int sign=-1; sign<=1; sign+=2) {
+                CFG::IntVect i_new = i_pts + sign*CFG::BASISV(d);
+                if (rcoords_bx.contains(i_new)) {
+                  Real delta_new = distanceFunction(rcoords, i_new, x_pts);
+                  if (delta_new < delta) {
+                    delta = delta_new;
+                    i_pts = i_new;
+                    did_i_move = true;
+                  }
+                }
+              }
+            }
+            if (!did_i_move) break;
+          }
+  
+          if (distanceFunction(rcoords, i_pts, x_pts) > distanceFunction(rcoords, i_cfg, x_pts)) {
+            std::cout << "Rank " << procID() << ": Error in GyroaverageOperator::define() - "
+                      << "probe moved away from interp point on gyro-orbit!\n";
+            MayDay::Error("Error encountered; see message above");
+          }
+  
+          /* Now, let's find the other nearby points for the interpolation */
+          std::vector<int> sign(CFG_DIM,0);
+          for (int d=0; d<CFG_DIM; d++) {
+
+            CFG::IntVect j1 = i_pts + CFG::BASISV(d);
+            Real distance_1 = (rcoords_bx.contains(j1) ? distanceFunction(rcoords, j1, x_pts) : DBL_MAX);
+
+            CFG::IntVect j2 = i_pts - CFG::BASISV(d);
+            Real distance_2 = (rcoords_bx.contains(j2) ? distanceFunction(rcoords, j2, x_pts) : DBL_MAX);
+
+            CH_assert(rcoords_bx.contains(j1) || rcoords_bx.contains(j2));
+            sign[d] = (distance_1 < distance_2 ? 1 : -1);
+          }
+
+          std::vector<CFG::IntVect> index_set(0);
+#if CFG_DIM==2
+          {
+            index_set.push_back(i_pts);
+            index_set.push_back(i_pts + sign[0]*CFG::BASISV(0));
+            index_set.push_back(i_pts + sign[1]*CFG::BASISV(1));
+            index_set.push_back(i_pts + sign[0]*CFG::BASISV(0) + sign[1]*CFG::BASISV(1));
+          }
+#else
+          {
+            index_set.push_back(i_pts);
+            index_set.push_back(i_pts + sign[0]*CFG::BASISV(0));
+            index_set.push_back(i_pts + sign[1]*CFG::BASISV(1));
+            index_set.push_back(i_pts + sign[0]*CFG::BASISV(0) + sign[1]*CFG::BASISV(1));
+            index_set.push_back(i_pts + sign[2]*CFG::BASISV(2));
+            index_set.push_back(i_pts + sign[0]*CFG::BASISV(0) + sign[2]*CFG::BASISV(2));
+            index_set.push_back(i_pts + sign[1]*CFG::BASISV(1) + sign[2]*CFG::BASISV(2));
+            index_set.push_back(i_pts + sign[0]*CFG::BASISV(0) + sign[1]*CFG::BASISV(1) + sign[2]*CFG::BASISV(2));
+          }
+#endif
+  
+          /* get the stencil to interpolate a variable at this point from grid data */
+          Stencil op_pt;
+          op_pt.clear();
+          bool status;
+          getInterpStencil(op_pt, rcoords, index_set, x_pts, status);
+
+          if (status == false) {
+            count_bad_points++;
+          }
+          count_all_points++;
+  
+          /* scale interp weights by the weight of this point 
+           * and push to the overall averaging operator */
+          for (int k = 0; k < op_pt.size(); k++) {
+            op_pt[k].second *= pt_weight;
+            op.push_back(op_pt[k]);
+          }
+  
+        }
+
+      }
 
     }
 
   }
+
+  int count_all_points_global = 0, count_bad_points_global = 0;
+#ifdef CH_MPI
+  MPI_Allreduce(&count_all_points, &count_all_points_global, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(&count_bad_points, &count_bad_points_global, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#else
+  count_all_points_global = count_all_points;
+  count_bad_points_global = count_bad_points;
+#endif
+
+  /* stop time */
+#ifdef CH_MPI
+  double wc_define_stop = MPI_Wtime();
+
+  if (!procID()) {
+    std::cout << "Gyro-averaging operator for species " 
+              << m_name
+              << ":\n"
+              << "  " << count_bad_points_global
+              << " of " << count_all_points_global
+              << " were outside local domains with ghost cells.\n"
+              << "  setup time = "
+              << wc_define_stop-wc_define_start
+              << " (seconds) \n\n";
+  }
+#endif
 
   m_is_defined = true;
   return;
@@ -325,161 +415,167 @@ void GyroaverageOperator::define(const GyroaverageOperator& a_gyroavg)
   m_is_defined = true;
 }
 
-void GyroaverageOperator::applyOp(FArrayBox&               a_phi_bar,
-                                  const FArrayBox&         a_phi,
-                                  const BaseFab<Stencil>&  a_op) const
-{
-  CH_assert(isDefined());
-  CH_assert(a_phi_bar.nComp() == a_phi.nComp());
-  
-  const Box& phi_bar_bx = a_phi_bar.box();
-  const Box& op_bx = a_op.box();
-  const Box& phi_bx = a_phi.box();
-  CH_assert(op_bx == phi_bar_bx);
-
-  const int ncomp = a_phi.nComp();
-
-  /* project a_phi to a configuration space variable */
-  CFG::Box cfg_bx;
-  m_phase_geom->projectPhaseToConfiguration(phi_bx, cfg_bx);
-  CFG::FArrayBox phi(cfg_bx, a_phi.nComp());
-  m_phase_geom->projectPhaseToConfigurationLocal(a_phi, phi);
-
-  BoxIterator bit(phi_bar_bx);
-  for (bit.begin(); bit.ok(); ++bit) {
-
-    const IntVect iv(bit());
-    const Stencil& op = a_op(iv, 0);
-
-    std::vector<Real> phi_avg;
-    evalStencil(phi_avg, phi, op);
-
-    for (int v=0; v<ncomp; v++) {
-      a_phi_bar(iv,v) = phi_avg[v];
-    }
-  }
-
-  return;
-}
-
-void GyroaverageOperator::applyOp(LevelData<FArrayBox>&                 a_phi_bar,
-                                  const CFG::LevelData<CFG::FArrayBox>& a_phi ) const
-{
-  CH_assert(isDefined());
-  CH_assert(a_phi.isDefined());
-
-  if (a_phi_bar.isDefined()) {
-    a_phi_bar.clear();
-  }
-  /* define it */
-  a_phi_bar.define(m_grids, a_phi.nComp());
-
-  /* inject phi into phase space */
-  LevelData<FArrayBox> injected_phi;
-  m_phase_geom->injectConfigurationToPhase(a_phi, injected_phi);
-
-  /* create a version with ghost points in the configuration dimensions */
-  IntVect ghost_vec(IntVect::Zero); for (int d=0; d<CFG_DIM; d++) ghost_vec[d] = m_gpt;
-  LevelData<FArrayBox> phi_wghosts;
-  phi_wghosts.define(injected_phi.disjointBoxLayout(), a_phi.nComp(), ghost_vec);
-
-  /* copy phi to the version with ghost points and then fill the ghost points */
-  /* interior */
-  for (DataIterator dit(m_grids); dit.ok(); ++dit) {
-    phi_wghosts[dit].setVal(0.0);
-    phi_wghosts[dit].copy(injected_phi[dit], injected_phi[dit].box());
-  }
-  /* codim-1 boundaries */
-  for (DataIterator dit(m_grids); dit.ok(); ++dit) {
-    for (int dir=0; dir<CFG_DIM; dir++) {
-      fillGhostCells(phi_wghosts[dit], injected_phi[dit].box(), dir);
-    }
-  }
-  phi_wghosts.exchange();
-  /* higher codim boundaries */
-  for (DataIterator dit(m_grids); dit.ok(); ++dit) {
-    Box bx_int(injected_phi[dit].box());
-    const Box& bx_phi(phi_wghosts[dit].box());
-    for (int dir=0; dir<CFG_DIM-1; dir++) {
-      bx_int.growLo(dir, (bx_int.smallEnd(dir)-bx_phi.smallEnd(dir)) );
-      bx_int.growHi(dir, (bx_phi.bigEnd(dir)-bx_int.bigEnd(dir)) );
-      fillGhostCells(phi_wghosts[dit], bx_int, dir+1);
-    }
-  }
-  phi_wghosts.exchange();
-  /* done - hopefully! */
-
-  /* now apply the gyroaveraging */
-  for (DataIterator dit(m_grids); dit.ok(); ++dit) {
-    applyOp(a_phi_bar[dit], phi_wghosts[dit], m_gyroavg_op[dit]);
-  }
-
-  return;
-}
-
-void GyroaverageOperator::getInterpStencil( Stencil&              a_stencil,
-                                            const CFG::FArrayBox& a_coords,
-                                            const CFG::IntVect&   a_i0,
-                                            const CFG::RealVect&  a_x )
+void GyroaverageOperator::getInterpStencil( Stencil&                          a_stencil,
+                                            const CFG::FArrayBox&             a_coords,
+                                            const std::vector<CFG::IntVect>&  a_idx_set,
+                                            const CFG::RealVect&              a_x,
+                                            bool&                             a_status)
 {
   a_stencil.clear();
 
+  Real  ub = 1.0+m_tolerance,
+        lb = -m_tolerance;
+
 #if CFG_DIM==2
 
-  /* 
-   * Bilinear interpolation using 4 arbitrary points in 2D space 
-  */
+  UnstructuredInterpUtils::bilinearInterpStencil( a_stencil,
+                                                  a_coords,
+                                                  a_idx_set,
+                                                  a_x );
+  /* checking the bilinear interp coefficients */
+  CH_assert(a_stencil.size() == 4);
+  Real  c0 = a_stencil[0].second,
+        c1 = a_stencil[1].second,
+        c2 = a_stencil[2].second,
+        c3 = a_stencil[3].second;
+  if (    (c0 > ub) || (c1 > ub) || (c2 > ub) || (c3 > ub)
+      ||  (c0 < lb) || (c1 < lb) || (c2 < lb) || (c3 < lb) ) {
+    a_status = false;
+  } else {
+    a_status = true;
+  }
 
-  /* set the (i,j) grid coordinates of the 4 points */
-  CFG::IntVect  i0(a_i0),
-                i1(a_i0[0]+1,a_i0[1]),
-                i2(a_i0[0],a_i0[1]+1),
-                i3(a_i0[0]+1,a_i0[1]+1);
+#else 
 
-  /* extract the (x,y) coords of the interpolation point */
-  Real  xc = a_x[0],
-        yc = a_x[1];
+  UnstructuredInterpUtils::trilinearInterpStencil(  a_stencil,
+                                                    a_coords,
+                                                    a_idx_set,
+                                                    a_x );
+  /* checking the bilinear interp coefficients */
+  CH_assert(a_stencil.size() == 8);
+  Real  c0 = a_stencil[0].second,
+        c1 = a_stencil[1].second,
+        c2 = a_stencil[2].second,
+        c3 = a_stencil[3].second,
+        c4 = a_stencil[4].second,
+        c5 = a_stencil[5].second,
+        c6 = a_stencil[6].second,
+        c7 = a_stencil[7].second;
+  if (    (c0 > ub) || (c1 > ub) || (c2 > ub) || (c3 > ub)
+      ||  (c4 > ub) || (c5 > ub) || (c6 > ub) || (c7 > ub)
+      ||  (c0 < lb) || (c1 < lb) || (c2 < lb) || (c3 < lb) 
+      ||  (c4 < lb) || (c5 < lb) || (c6 < lb) || (c7 < lb) ) {
+    a_status = false;
+  } else {
+    a_status = true;
+  }
 
-  /* extract the (x,y) coords of the four points */
-  Real  x0 = a_coords(i0,0),
-        y0 = a_coords(i0,1);
-  Real  x1 = a_coords(i1,0),
-        y1 = a_coords(i1,1);
-  Real  x2 = a_coords(i2,0),
-        y2 = a_coords(i2,1);
-  Real  x3 = a_coords(i3,0),
-        y3 = a_coords(i3,1);
-
-  /* bilinear interp coefficients - computed using Mathematica */
-  Real c0, c1, c2, c3;
-  c0 = (x1*(-(xc*(y2 - y3)*(y1 - yc)) + x3*(y1 - y3)*(y2 - yc) - x2*(y1 - y2)*(y3 - yc)) - 
-       x2*x3*(y2 - y3)*(y1 - yc) + x2*xc*(y1 - y3)*(y2 - yc) - x3*xc*(y1 - y2)*(y3 - yc))/
-          (x0*(x3*(y1 - y2)*(y0 - y3) - x2*(y0 - y2)*(y1 - y3) + x1*(y0 - y1)*(y2 - y3)) + 
-               x1*x2*(y1 - y2)*(y0 - y3) - x1*x3*(y0 - y2)*(y1 - y3) + x2*x3*(y0 - y1)*(y2 - y3));
-  c1 = (x0*(xc*(y2 - y3)*(y0 - yc) - x3*(y0 - y3)*(y2 - yc) + x2*(y0 - y2)*(y3 - yc)) + 
-       x2*x3*(y2 - y3)*(y0 - yc) - x2*xc*(y0 - y3)*(y2 - yc) + x3*xc*(y0 - y2)*(y3 - yc))/
-          (x0*(x3*(y1 - y2)*(y0 - y3) - x2*(y0 - y2)*(y1 - y3) + x1*(y0 - y1)*(y2 - y3)) + 
-               x1*x2*(y1 - y2)*(y0 - y3) - x1*x3*(y0 - y2)*(y1 - y3) + x2*x3*(y0 - y1)*(y2 - y3));
-  c2 = (x0*(-(xc*(y1 - y3)*(y0 - yc)) + x3*(y0 - y3)*(y1 - yc) - x1*(y0 - y1)*(y3 - yc)) - 
-       x1*x3*(y1 - y3)*(y0 - yc) + x1*xc*(y0 - y3)*(y1 - yc) - x3*xc*(y0 - y1)*(y3 - yc))/
-          (x0*(x3*(y1 - y2)*(y0 - y3) - x2*(y0 - y2)*(y1 - y3) + x1*(y0 - y1)*(y2 - y3)) + 
-               x1*x2*(y1 - y2)*(y0 - y3) - x1*x3*(y0 - y2)*(y1 - y3) + x2*x3*(y0 - y1)*(y2 - y3));
-  c3 = (x0*(xc*(y1 - y2)*(y0 - yc) - x2*(y0 - y2)*(y1 - yc) + x1*(y0 - y1)*(y2 - yc)) + 
-       x1*x2*(y1 - y2)*(y0 - yc) - x1*xc*(y0 - y2)*(y1 - yc) + x2*xc*(y0 - y1)*(y2 - yc))/
-          (x0*(x3*(y1 - y2)*(y0 - y3) - x2*(y0 - y2)*(y1 - y3) + x1*(y0 - y1)*(y2 - y3)) + 
-               x1*x2*(y1 - y2)*(y0 - y3) - x1*x3*(y0 - y2)*(y1 - y3) + x2*x3*(y0 - y1)*(y2 - y3));
-
-  /* push these coefficients and coordinates to the stencil */
-  a_stencil.push_back(StencilPoint(i0,c0));
-  a_stencil.push_back(StencilPoint(i1,c1));
-  a_stencil.push_back(StencilPoint(i2,c2));
-  a_stencil.push_back(StencilPoint(i3,c3));
-
-#else
-  MayDay::Error("Gyroaveraging operator not yet implemented for CFG_DIM=3.");
 #endif
 
   /* done */
+  return;
+}
+
+void GyroaverageOperator::applyOp(FArrayBox&               a_var_bar,
+                                  const FArrayBox&         a_var,
+                                  const BaseFab<Stencil>&  a_op) const
+{
+  CH_assert(isDefined());
+  CH_assert(a_var_bar.nComp() == a_var.nComp());
+  
+  const Box& var_bar_bx = a_var_bar.box();
+  const Box& op_bx = a_op.box();
+  const Box& var_bx = a_var.box();
+  CH_assert(var_bar_bx.contains(op_bx));
+
+  const int ncomp = a_var.nComp();
+
+  BoxIterator bit(var_bar_bx);
+  for (bit.begin(); bit.ok(); ++bit) {
+
+    const IntVect iv(bit());
+
+    IntVect stencil_idx(iv);
+    stencil_idx[VPARALLEL_DIR] = op_bx.smallEnd(VPARALLEL_DIR);
+    const Stencil& op = a_op(stencil_idx, 0);
+
+    VEL::IntVect vel_idx = m_phase_geom->vel_restrict(iv);
+    for (int d = VPARALLEL_DIR; d <= MU_DIR; d++) {
+      int imin = var_bx.smallEnd(d),
+          imax = var_bx.bigEnd(d),
+          i    = vel_idx[d-VPARALLEL_DIR];
+
+      if (imin == imax) {
+        vel_idx[d-VPARALLEL_DIR] = imin;
+      } else {
+        if ((i-imin)*(i-imax) > 0) {
+          MayDay::Abort("Error in GyroaverageOperator::applyOp(): invalid velocity space index!");
+        }
+      }
+    }
+
+    std::vector<Real> var_avg;
+    evalStencil(var_avg, a_var, op, vel_idx);
+
+    for (int v=0; v<ncomp; v++) {
+      a_var_bar(iv,v) = var_avg[v];
+    }
+  }
+
+  return;
+}
+
+void GyroaverageOperator::applyOp(LevelData<FArrayBox>&                 a_var_bar,
+                                  const CFG::LevelData<CFG::FArrayBox>& a_var ) const
+{
+  CH_assert(isDefined());
+  CH_assert(a_var.isDefined());
+
+  /* if the gyroaveraged var is already defined, clear it */
+  if (a_var_bar.isDefined()) a_var_bar.clear();
+  /* and now define it */
+  a_var_bar.define(m_grids, a_var.nComp());
+
+  /* inject var into phase space */
+  LevelData<FArrayBox> injected_var;
+  m_phase_geom->injectConfigurationToPhase(a_var, injected_var);
+
+  /* create a version with ghost points in the configuration dimensions */
+  IntVect ghost_vec(IntVect::Zero); for (int d=0; d<CFG_DIM; d++) ghost_vec[d] = m_gpt;
+  LevelData<FArrayBox> var_wghosts;
+  var_wghosts.define(injected_var.disjointBoxLayout(), a_var.nComp(), ghost_vec);
+  SpaceUtils::copyAndFillGhostCellsSimple(var_wghosts, injected_var);
+
+  /* now apply the gyroaveraging */
+  for (DataIterator dit(m_grids); dit.ok(); ++dit) {
+    applyOp(a_var_bar[dit], var_wghosts[dit], m_gyroavg_op[dit]);
+  }
+
+  return;
+}
+
+void GyroaverageOperator::applyOp(LevelData<FArrayBox>&       a_var_bar,
+                                  const LevelData<FArrayBox>& a_var ) const
+{
+  CH_assert(isDefined());
+  CH_assert(a_var.isDefined());
+
+  /* if the gyroaveraged var is already defined, clear it */
+  if (a_var_bar.isDefined()) a_var_bar.clear();
+  /* and now define it */
+  a_var_bar.define(a_var.disjointBoxLayout(), a_var.nComp());
+
+  /* create a version with ghost points in the configuration dimensions */
+  IntVect ghost_vec(IntVect::Zero); for (int d=0; d<CFG_DIM; d++) ghost_vec[d] = m_gpt;
+  LevelData<FArrayBox> var_wghosts;
+  var_wghosts.define(a_var.disjointBoxLayout(), a_var.nComp(), ghost_vec);
+  SpaceUtils::copyAndFillGhostCellsSimple(var_wghosts, a_var);
+
+  /* now apply the gyroaveraging */
+  for (DataIterator dit(m_grids); dit.ok(); ++dit) {
+    applyOp(a_var_bar[dit], var_wghosts[dit], m_gyroavg_op[dit]);
+  }
+
   return;
 }
 
@@ -490,6 +586,10 @@ void GyroaverageOperator::gyroaveragedEField( LevelData<FArrayBox>&             
   CH_assert(isDefined());
   CH_assert(a_phi.nComp() == 1);
 
+  /* even for CFG_DIM=2, efield has 3 components.
+   * The second component (toroidal) is 0 */
+  int n_efield_comp = 3;
+
   /* compute gyroaveraged potential */
   LevelData<FArrayBox> phi_bar;
   applyOp(phi_bar, a_phi);
@@ -499,14 +599,23 @@ void GyroaverageOperator::gyroaveragedEField( LevelData<FArrayBox>&             
   if (a_E_field.isDefined()) a_E_field.clear();
   IntVect gvec = IntVect::Zero;
   for (int d=0; d<CFG_DIM; d++) gvec[d] = 1;
-  a_E_field.define(m_grids, CFG_DIM, gvec);
+  a_E_field.define(m_grids, n_efield_comp, gvec);
 
   /* compute the gradient in configuration space */
   m_phase_geom->computeGradientCfgSpace(phi_bar, a_E_field, a_order);
 
-  /* negate it since E-field is -grad */
   for (DataIterator dit(a_E_field.dataIterator()); dit.ok(); ++dit) {
+    /* negate it since E-field is -grad */
     a_E_field[dit].negate();
+
+#if CFG_DIM==2
+    /* if CFG_DIM = 2, then PhaseGeom::computeGradientCfgSpace() would have
+     * populated the first two components with the radial and poloidal gradients.
+     * So, push the 2nd component to 3rd (since the 3rd component is the 
+     * poloidal one, and set 2nd component to zero */
+    a_E_field[dit].copy(a_E_field[dit], CFG_DIM-1, CFG_DIM);
+    a_E_field[dit].setVal(0.0, CFG_DIM-1);
+#endif
   }
 
   return;
@@ -543,18 +652,33 @@ void GyroaverageOperator::gyroaveragedEField( LevelData<FluxBox>&               
       /* negate it since E-field is -grad */
       a_E_field[dit][dir].negate();
 
+#if CFG_DIM==2
       /* if CFG_DIM = 2, then PhaseGeom::computeGradientCfgSpace() would have
        * populated the first two components with the radial and poloidal gradients.
        * So, push the 2nd component to 3rd (since the 3rd component is the 
        * poloidal one, and set 2nd component to zero */
-      if (CFG_DIM==2) {
-        a_E_field[dit][dir].copy(a_E_field[dit][dir], CFG_DIM-1, CFG_DIM);
-        a_E_field[dit][dir].setVal(0.0, CFG_DIM-1);
-      }
+      a_E_field[dit][dir].copy(a_E_field[dit][dir], CFG_DIM-1, CFG_DIM);
+      a_E_field[dit][dir].setVal(0.0, CFG_DIM-1);
+#endif
     }
   }
 
 
+  return;
+}
+
+void GyroaverageOperator::evalStencil(  std::vector<Real>&    a_var_avg,
+                                        const FArrayBox&      a_var,
+                                        const Stencil&        a_op,
+                                        const VEL::IntVect&   a_vel_idx ) const
+{
+  a_var_avg = std::vector<Real>(a_var.nComp(),0.0);
+  for (int i=0; i<a_op.size(); i++) {
+    IntVect idx = m_phase_geom->tensorProduct(a_op[i]._point_, a_vel_idx);
+    for (int v=0; v<a_var.nComp(); v++) {
+      a_var_avg[v] += a_op[i]._weight_ * a_var(idx, v);
+    }
+  }
   return;
 }
 

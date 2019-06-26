@@ -1,0 +1,114 @@
+
+c    COMPUTE SQUARE ROOT FUNCTION
+
+      subroutine compute_sqrt_func(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[F],
+     &     CHF_FRA1[sqrtF]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+       sqrtF(CHF_AUTOIX[i]) = dsqrt(F(CHF_AUTOIX[i]))
+
+      CHF_ENDDO
+
+      return
+      end
+
+c    COMPUTE VECTOR PROJECTION ON B DIRECTION
+
+      subroutine compute_b_projection(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[vector],
+     &     CHF_CONST_FRA[unitb],
+     &     CHF_FRA1[projection]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], n
+      double precision proj
+
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+       proj = zero
+
+#if CH_SPACEDIM==3
+
+       do n = 0, CHF_NCOMP[vector]-1
+        proj = proj + vector(CHF_AUTOIX[i],n)*unitb(CHF_AUTOIX[i],n) 
+       enddo
+
+#else
+
+       proj = vector(CHF_AUTOIX[i],0)*unitb(CHF_AUTOIX[i],0) + 
+     &        vector(CHF_AUTOIX[i],1)*unitb(CHF_AUTOIX[i],2)  
+
+#endif
+
+       projection(CHF_AUTOIX[i]) = proj
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+c    ADD BACKGROUND SOURCE FOR GAS PARTICLES
+
+      subroutine add_bckgr_src(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[iz_rate],
+     &     CHF_CONST_FRA1[rho_g],
+     &     CHF_CONST_REAL[n_bckgr],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_FRA1[bckgr_src]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], n
+      double precision ratio
+
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+       ratio = n_bckgr / rho_g(CHF_AUTOIX[i]) / mass
+
+       bckgr_src(CHF_AUTOIX[i]) = bckgr_src(CHF_AUTOIX[i]) + iz_rate(CHF_AUTOIX[i]) * mass * n_bckgr * (0.9d0 + 0.1d0 * ratio**2)
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+c    ADD BACKGROUND SOURCE FOR BETA CALCULATIONS
+
+      subroutine add_bckgr_src_beta(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[iz_rate],
+     &     CHF_CONST_FRA1[rho_g],
+     &     CHF_CONST_REAL[n_bckgr],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_FRA1[beta]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], n
+      double precision ratio
+
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+       ratio = n_bckgr / rho_g(CHF_AUTOIX[i]) / mass
+
+       beta(CHF_AUTOIX[i]) = beta(CHF_AUTOIX[i]) - iz_rate(CHF_AUTOIX[i]) * (0.9d0 + 0.1d0 * ratio**2)
+
+      CHF_ENDDO
+
+      return
+      end

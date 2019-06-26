@@ -1,15 +1,7 @@
 #ifndef _LOCALIZED_H_
 #define _LOCALIZED_H_
 
-#include "REAL.H"
-#include "FArrayBox.H"
 #include "GridFunction.H"
-#include "LevelData.H"
-#include "ParmParse.H"
-#include "MagBlockCoordSys.H"
-#include "MultiBlockLevelGeom.H"
-#include "RealVect.H"
-
 #include "NamespaceHeader.H"
 
 /**
@@ -66,74 +58,6 @@ class Localized : public GridFunction
        */
       virtual ~Localized() {;}
 
-      /// Set the grid function.
-      /**
-       * Sets the grid function on the LevelData for the given geometry
-       * at the given time.  It is assumed that derived classes will check
-       * that the specification is suitable for the given geometry.  Cell
-       * average values are set unless the optional parameter is false, in
-       * which case, pointwise values are set.
-       *
-       * @param[out] data LevelData to set.
-       * @param[in] geometry Corresponding level geometry.
-       * @param[in] time Time value at which to evaluate the function.
-       * @param[in] as_cell_name Boolean switch for cell average values or
-       *                         point values.
-       */
-      virtual void assign( LevelData<FArrayBox>& data,
-                           const MultiBlockLevelGeom& geometry,
-                           const Real& time,
-                           const bool& cell_averages = true ) const;
-
-      virtual void assign( LevelData<FluxBox>& data,
-                           const MultiBlockLevelGeom& geometry,
-                           const Real& time,
-                           const bool& cell_averages = true ) const;
-
-      /// Set the grid function.
-      /**
-       * Sets the grid function on the box for the given geometry
-       * at the given time.  It is assumed that derived classes will check
-       * that the specification is suitable for the given geometry.  Cell
-       * average values are set unless the optional parameter is false, in
-       * which case, pointwise values are set.
-       *
-       * @param[out] data LevelData to set.
-       * @param[in] geometry Corresponding level geometry.
-       * @param[in] box Box from which to get coordinate system.
-       * @param[in] time Time value at which to evaluate the function.
-       * @param[in] as_cell_name Boolean switch for cell average values or
-       *                         point values.
-       */
-      virtual void assign( FArrayBox& data,
-                           const MultiBlockLevelGeom& geometry,
-                           const Box& box,
-                           const Real& time,
-                           const bool& cell_averages = true ) const;
-
-      virtual void assign( FluxBox& data,
-                           const MultiBlockLevelGeom& geometry,
-                           const Box& box,
-                           const Real& time,
-                           const bool& cell_averages = true ) const;
-
-      /// Set the function on the boundary boxes.
-      /**
-       * Sets the cell-averaged function value for the grid function
-       * at the given time on the boxes specified in the BoundaryBoxLayout.
-       *
-       * NB: The cell-averaged values include the J and BStarParallel factors,
-       * i.e., the internal LevelData contains the average of fJB^*_{\parallel}
-       *
-       * @param[inout] data  Grid function to set.
-       * @param[in] bdry_layout BoundaryBoxLayout defining boxes to fill.
-       * @param[in] time Time value at which to evaluate the function.
-       */
-      virtual void assign( LevelData<FArrayBox>& data,
-                           const MultiBlockLevelGeom& geometry,
-                           const BoundaryBoxLayout& bdry_layout,
-                           const Real& time ) const;
-
       /// Print object parameters.
       /**
        */
@@ -145,29 +69,24 @@ class Localized : public GridFunction
       Localized( const Localized& );
       Localized& operator=( const Localized& );
 
-      /// Set cell-average values.
-      /**
-       */
-      inline void setCellAverages( FArrayBox&              data,
-                                   const MagBlockCoordSys& coord_sys ) const;
-
       /// Set pointwise values at cell centers.
       /**
        */
-      inline void setPointwise( FArrayBox&              data,
-                                const MagBlockCoordSys& coord_sys ) const;
-
+      virtual void setPointwise(FArrayBox&                  dfn,
+                                const MultiBlockLevelGeom&  geometry,
+                                const FArrayBox&            real_coords,
+                                const FArrayBox&            normalized_flux,
+                                const int                   block_number ) const;
+   
       /// Parse the input database for parameters.
       /**
        */
       inline void parseParameters( ParmParse& pp );
-
-      /// Check that the geometry is annular or single null.
+   
+      /// Check geometry validity.
       /**
        */
-      inline void checkGeometryValidity( const MultiBlockLevelGeom& geometry ) const;
-
-      int m_verbosity;
+      virtual void checkGeometryValidity( const MultiBlockLevelGeom& geometry ) const;
 
       Real        m_amplitude;
       RealVect    m_location;

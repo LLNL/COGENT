@@ -382,14 +382,20 @@ FluxSurface::zeroBlockData( const int                   region_type,
      switch (region_type) 
       { 
       case CORE:
-         if ((block_number == MCORE) || (block_number == RCORE) || (block_number == LCORE)) {a_dst[dit].setVal(0.0); }
+         if ((block_number == SingleNullBlockCoordSys::MCORE) || 
+             (block_number == SingleNullBlockCoordSys::RCORE) ||
+             (block_number == SingleNullBlockCoordSys::LCORE)) {a_dst[dit].setVal(0.0); }
         break;
       case PF:
-        if ((block_number == RPF) || (block_number == LPF)) {a_dst[dit].setVal(0.0);}
+        if ((block_number == SingleNullBlockCoordSys::RPF) ||
+            (block_number == SingleNullBlockCoordSys::LPF)) {a_dst[dit].setVal(0.0);}
         break;    
       case SOL:
-        if ((block_number == MCSOL) || (block_number == RCSOL) || (block_number == LCSOL) ||
-            (block_number == RSOL) || (block_number == LSOL)) {a_dst[dit].setVal(0.0);}
+        if ((block_number == SingleNullBlockCoordSys::MCSOL) ||
+            (block_number == SingleNullBlockCoordSys::RCSOL) ||
+            (block_number == SingleNullBlockCoordSys::LCSOL) ||
+            (block_number == SingleNullBlockCoordSys::RSOL) ||
+            (block_number == SingleNullBlockCoordSys::LSOL)) {a_dst[dit].setVal(0.0);}
         break;    
       default:
          MayDay::Error("FluxSurface::zeroBlockData(): Invalid region_type encountered");

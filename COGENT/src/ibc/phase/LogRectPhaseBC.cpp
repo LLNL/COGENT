@@ -221,6 +221,9 @@ void LogRectPhaseBC::fillInflowData( KineticSpeciesPtrVect& a_bdry_data,
                                      const BoundaryBoxLayoutPtrVect& a_bdry_layout,
                                      const Real& a_time )
 {
+   CH_TIMERS("LogRectPhaseBC::fillInflowData");
+   CH_TIMER("inflow_func.assign", t_inflow_func_assign);
+
    a_bc_type.resize(a_bdry_layout.size());
    for (int i(0); i<a_bdry_layout.size(); i++) {
       const BoundaryBoxLayout& bdry_layout( *(a_bdry_layout[i]) );
@@ -228,7 +231,9 @@ void LogRectPhaseBC::fillInflowData( KineticSpeciesPtrVect& a_bdry_data,
       const Side::LoHiSide& side( bdry_layout.side() );
       KineticSpecies& bdry_data( *(a_bdry_data[i]) );
       KineticFunction& inflow_func( inflowFunc( dir, side ) );
+      CH_START(t_inflow_func_assign);
       inflow_func.assign( bdry_data, bdry_layout, a_time );
+      CH_STOP(t_inflow_func_assign);
       a_bc_type[i] = getBcType(dir, side);
    }
 }
@@ -253,6 +258,13 @@ void LogRectPhaseBC::apply( KineticSpecies& a_species_comp,
                            const LevelData<FluxBox>& a_velocity,
                            const Real& a_time )
 {
+   CH_TIMERS("LogRectPhaseBC::apply");
+   CH_TIMER("defineBoundaryBoxLayouts", t_define_boundary_box_layouts);
+   CH_TIMER("defineInflowDataStorage", t_define_inflow_data_storage);
+   CH_TIMER("fillInflowData", t_fill_inflow_data);
+   CH_TIMER("setInflowOutflowBC", t_set_inflow_outflow_BC);
+   CH_TIMER("setCodimBoundaryValues", t_set_codim_boundary_values);
+
    const PhaseGeom& geometry( a_species_comp.phaseSpaceGeometry() );
    const MultiBlockCoordSys& coord_sys( *(geometry.coordSysPtr()) );
    
@@ -260,24 +272,34 @@ void LogRectPhaseBC::apply( KineticSpecies& a_species_comp,
    const DisjointBoxLayout& grids( BfJ.disjointBoxLayout() );
    const IntVect& ghost_vect( BfJ.ghostVect() );
    
+   CH_START(t_define_boundary_box_layouts);
    BoundaryBoxLayoutPtrVect all_bdry_layouts;
    PhaseBCUtils::defineBoundaryBoxLayouts( all_bdry_layouts, grids, coord_sys, ghost_vect );
+   CH_STOP(t_define_boundary_box_layouts);
    
+   CH_START(t_define_inflow_data_storage);
    KineticSpeciesPtrVect all_bdry_data;
    PhaseBCUtils::defineInflowDataStorage( all_bdry_data, all_bdry_layouts, a_species_comp );
+   CH_STOP(t_define_inflow_data_storage);
 
+   CH_START(t_fill_inflow_data);
    Vector<std::string> all_bc_type;
    fillInflowData( all_bdry_data, all_bc_type, all_bdry_layouts, a_time );
+   CH_STOP(t_fill_inflow_data);
    
+   CH_START(t_set_inflow_outflow_BC);
    PhaseBCUtils::setInflowOutflowBC( BfJ,
                                      all_bdry_layouts,
                                      all_bdry_data,
                                      all_bc_type,
                                      coord_sys,
                                      a_velocity );
+   CH_STOP(t_set_inflow_outflow_BC);
    
+   CH_START(t_set_codim_boundary_values);
    // interpolate all other codim boundaries
    CodimBC::setCodimBoundaryValues( BfJ, coord_sys );
+   CH_STOP(t_set_codim_boundary_values);
 }
 
 void LogRectPhaseBC::printParameters() const

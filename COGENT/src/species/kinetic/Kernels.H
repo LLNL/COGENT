@@ -228,7 +228,7 @@ class MomentumDensityKernel : public Kernel
        * @return real-valued scale to be applied in configuration space.
        */
       virtual Real scale( const KineticSpecies& kinetic_species ) const
-      { return kinetic_species.mass(); }
+      { return 1.0; }
 
       /// Returns the number of kernel components
       /**

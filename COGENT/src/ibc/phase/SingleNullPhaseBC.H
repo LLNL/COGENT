@@ -114,6 +114,10 @@ class SingleNullPhaseBC
       inline KineticFunction& radialInflowFunc( const Side::LoHiSide& a_side,
                                                  const int& a_block_type );
 
+#if CFG_DIM==3
+      inline KineticFunction& toroidalInflowFunc( const Side::LoHiSide& a_side );
+#endif
+
       inline KineticFunction& poloidalInflowFunc( const Side::LoHiSide& a_side );
 
       inline KineticFunction& vParallelInflowFunc( const Side::LoHiSide& a_side );
@@ -127,6 +131,10 @@ class SingleNullPhaseBC
    
       inline std::string radialBcType( const Side::LoHiSide& a_side,
                                        const int& a_block_type );
+   
+#if CFG_DIM==3
+      inline std::string toroidalBcType( const Side::LoHiSide& a_side );
+#endif
    
       inline std::string poloidalBcType( const Side::LoHiSide& a_side );
    
@@ -144,6 +152,9 @@ class SingleNullPhaseBC
 
       enum {INVALID=-1,
             RADIAL_CORE, RADIAL_SOL, RADIAL_PF,
+#if CFG_DIM==3
+            TOROIDAL_LOWER, TOROIDAL_UPPER,
+#endif
             POLOIDAL_INNER_DIV, POLOIDAL_OUTER_DIV,
             VPAR_LOWER, VPAR_UPPER,
             MU_LOWER, MU_UPPER,

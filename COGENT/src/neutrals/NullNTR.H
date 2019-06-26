@@ -44,7 +44,8 @@ class NullNTR
       /**
        * Computes and returns an estimate of the maximum stable time step.
        */
-      Real computeDt( const KineticSpeciesPtrVect& soln ) { return DBL_MAX; }
+      Real computeDtExplicitTI( const KineticSpeciesPtrVect& soln ) { return DBL_MAX; }
+      Real computeDtImExTI( const KineticSpeciesPtrVect& soln ) { return DBL_MAX; }
 };
 
 

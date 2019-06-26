@@ -37,20 +37,20 @@
 inline
 KineticFunction& SingleNullPhaseBC::radialInflowFunc( const Side::LoHiSide& a_side, const int& a_block_type )
 {
-   if ( a_block_type==MCORE ||
-        a_block_type==LCORE ||
-        a_block_type==RCORE ){
+   if ( a_block_type==CFG::SingleNullBlockCoordSys::MCORE ||
+        a_block_type==CFG::SingleNullBlockCoordSys::LCORE ||
+        a_block_type==CFG::SingleNullBlockCoordSys::RCORE ){
       return *(m_inflow_function[RADIAL_CORE]);
    }
-   else if ( a_block_type==LPF ||
-             a_block_type==RPF ){
+   else if ( a_block_type==CFG::SingleNullBlockCoordSys::LPF ||
+             a_block_type==CFG::SingleNullBlockCoordSys::RPF ){
       return *(m_inflow_function[RADIAL_PF]);
    }
-   else if (a_block_type==LSOL  ||
-            a_block_type==MCSOL ||
-            a_block_type==LCSOL ||
-            a_block_type==RCSOL ||
-            a_block_type==RSOL  ){
+   else if (a_block_type==CFG::SingleNullBlockCoordSys::LSOL  ||
+            a_block_type==CFG::SingleNullBlockCoordSys::MCSOL ||
+            a_block_type==CFG::SingleNullBlockCoordSys::LCSOL ||
+            a_block_type==CFG::SingleNullBlockCoordSys::RCSOL ||
+            a_block_type==CFG::SingleNullBlockCoordSys::RSOL  ){
       return *(m_inflow_function[RADIAL_SOL]);
    }
    else {
@@ -60,6 +60,18 @@ KineticFunction& SingleNullPhaseBC::radialInflowFunc( const Side::LoHiSide& a_si
    // This return will never be reached, but the compiler wants to see something returned
    return *(m_inflow_function[RADIAL_CORE]);
 }
+
+
+#if CFG_DIM==3
+inline
+KineticFunction& SingleNullPhaseBC::toroidalInflowFunc( const Side::LoHiSide& a_side )
+{
+   if (a_side==Side::Lo) {
+      return *(m_inflow_function[TOROIDAL_LOWER]);
+   }
+   return *(m_inflow_function[TOROIDAL_UPPER]);
+}
+#endif
 
 
 inline
@@ -100,6 +112,11 @@ KineticFunction& SingleNullPhaseBC::inflowFunc( const int& a_dir,
    if (a_dir==RADIAL_DIR) {
       MayDay::Error( "SingleNullPhaseBC::inflowFunc(): Does not handle RADIAL inflow functions!" );
    }
+#if CFG_DIM==3
+   else if (a_dir==TOROIDAL_DIR) {
+      inflow_func = &toroidalInflowFunc( a_side );
+   }
+#endif
    else if (a_dir==POLOIDAL_DIR) {
       inflow_func = &poloidalInflowFunc( a_side );
    }
@@ -110,7 +127,7 @@ KineticFunction& SingleNullPhaseBC::inflowFunc( const int& a_dir,
       inflow_func = &muInflowFunc( a_side );
    }
    else {
-      MayDay::Error( "SingleNullPhaseBC::inflowFunc(): Toroidal BCs not implemented!" );
+      MayDay::Error( "SingleNullPhaseBC::inflowFunc(): BCs in a_dir direction not implemented!" );
    }
    return *(inflow_func);
 }
@@ -119,20 +136,20 @@ KineticFunction& SingleNullPhaseBC::inflowFunc( const int& a_dir,
 inline
 std::string SingleNullPhaseBC::radialBcType( const Side::LoHiSide& a_side, const int& a_block_type )
 {
-   if ( a_block_type==MCORE ||
-        a_block_type==LCORE ||
-        a_block_type==RCORE ){
+   if ( a_block_type==CFG::SingleNullBlockCoordSys::MCORE ||
+        a_block_type==CFG::SingleNullBlockCoordSys::LCORE ||
+        a_block_type==CFG::SingleNullBlockCoordSys::RCORE ){
       return m_bc_type[RADIAL_CORE];
    }
-   else if ( a_block_type==LPF ||
-            a_block_type==RPF ){
+   else if ( a_block_type==CFG::SingleNullBlockCoordSys::LPF ||
+            a_block_type==CFG::SingleNullBlockCoordSys::RPF ){
       return m_bc_type[RADIAL_PF];
    }
-   else if (a_block_type==LSOL  ||
-            a_block_type==MCSOL ||
-            a_block_type==LCSOL ||
-            a_block_type==RCSOL ||
-            a_block_type==RSOL  ){
+   else if (a_block_type==CFG::SingleNullBlockCoordSys::LSOL  ||
+            a_block_type==CFG::SingleNullBlockCoordSys::MCSOL ||
+            a_block_type==CFG::SingleNullBlockCoordSys::LCSOL ||
+            a_block_type==CFG::SingleNullBlockCoordSys::RCSOL ||
+            a_block_type==CFG::SingleNullBlockCoordSys::RSOL  ){
       return m_bc_type[RADIAL_SOL];
    }
    else {
@@ -142,6 +159,19 @@ std::string SingleNullPhaseBC::radialBcType( const Side::LoHiSide& a_side, const
    // This return will never be reached, but the compiler wants to see something returned
    return m_bc_type[RADIAL_CORE];
 }
+
+
+#if CFG_DIM==3
+inline
+std::string SingleNullPhaseBC::toroidalBcType( const Side::LoHiSide& a_side )
+{
+   if (a_side==Side::Lo) {
+      return m_bc_type[TOROIDAL_LOWER];
+   }
+   return m_bc_type[TOROIDAL_UPPER];
+}
+#endif
+
 
 inline
 std::string SingleNullPhaseBC::poloidalBcType( const Side::LoHiSide& a_side )
@@ -178,6 +208,11 @@ std::string SingleNullPhaseBC::getBcType( const int& a_dir,
    if (a_dir==RADIAL_DIR) {
       MayDay::Error( "SingleNullPhaseBC::inflowFunc(): Does not handle RADIAL inflow functions!" );
    }
+#if CFG_DIM==3
+   else if (a_dir==TOROIDAL_DIR) {
+      bc_type = toroidalBcType( a_side );
+   }
+#endif
    else if (a_dir==POLOIDAL_DIR) {
       bc_type = poloidalBcType( a_side );
    }
@@ -188,7 +223,7 @@ std::string SingleNullPhaseBC::getBcType( const int& a_dir,
       bc_type = muBcType( a_side );
    }
    else {
-      MayDay::Error( "SingleNullPhaseBC::inflowFunc(): Toroidal BCs not implemented!" );
+      MayDay::Error( "SingleNullPhaseBC::inflowFunc(): BCs in direction a_dir not implemented!" );
    }
    return bc_type;
 }
@@ -213,6 +248,10 @@ SingleNullPhaseBC::SingleNullPhaseBC( const std::string& a_name,
    m_bdry_name[RADIAL_CORE] = "radial_core";
    m_bdry_name[RADIAL_SOL] = "radial_sol";
    m_bdry_name[RADIAL_PF] = "radial_pf";
+#if CFG_DIM==3
+   m_bdry_name[TOROIDAL_LOWER] = "toroidal_lower";
+   m_bdry_name[TOROIDAL_UPPER] = "toroidal_upper";
+#endif
    m_bdry_name[POLOIDAL_INNER_DIV] = "poloidal_inner_div";
    m_bdry_name[POLOIDAL_OUTER_DIV] = "poloidal_outer_div";
    m_bdry_name[VPAR_LOWER] = "vpar_lower";
@@ -242,6 +281,9 @@ void SingleNullPhaseBC::fillInflowData( KineticSpeciesPtrVect& a_bdry_data,
                                         const BoundaryBoxLayoutPtrVect& a_bdry_layout,
                                         const Real& a_time )
 {
+   CH_TIMERS("SingleNullPhaseBC::fillInflowData");
+   CH_TIMER("inflow_func.assign", t_inflow_func_assign);
+
    a_bc_type.resize(a_bdry_layout.size());
    for (int i(0); i<a_bdry_layout.size(); i++) {
       const BoundaryBoxLayout& bdry_layout( *(a_bdry_layout[i]) );
@@ -259,13 +301,17 @@ void SingleNullPhaseBC::fillInflowData( KineticSpeciesPtrVect& a_bdry_data,
             const int block( coord_sys.whichBlock( interior_box ) );
             const int block_type( coord_sys.blockType( block ) );
             KineticFunction& inflow_func( radialInflowFunc( side, block_type ) );
+            CH_START(t_inflow_func_assign);
             inflow_func.assign( bdry_data, bdry_layout, a_time );
+            CH_STOP(t_inflow_func_assign);
             a_bc_type[i] = radialBcType(side, block_type);
          }
       }
       else {
          KineticFunction& inflow_func( inflowFunc( dir, side ) );
+         CH_START(t_inflow_func_assign);
          inflow_func.assign( bdry_data, bdry_layout, a_time );
+         CH_STOP(t_inflow_func_assign);
          a_bc_type[i] = getBcType(dir, side);
       }
    }
@@ -276,6 +322,13 @@ void SingleNullPhaseBC::apply( KineticSpecies& a_species_comp,
                                const LevelData<FluxBox>& a_velocity,
                                const Real& a_time )
 {
+   CH_TIMERS("SingleNullPhaseBC::apply");
+   CH_TIMER("defineBoundaryBoxLayouts", t_define_boundary_box_layouts);
+   CH_TIMER("defineInflowDataStorage", t_define_inflow_data_storage);
+   CH_TIMER("fillInflowData", t_fill_inflow_data);
+   CH_TIMER("setInflowOutflowBC", t_set_inflow_outflow_BC);
+   CH_TIMER("setCodimBoundaryValues", t_set_codim_boundary_values);
+
    const PhaseGeom& geometry( a_species_comp.phaseSpaceGeometry() );
    const SingleNullPhaseCoordSys& coord_sys(
       dynamic_cast<const SingleNullPhaseCoordSys&>( geometry.phaseCoordSys()) );
@@ -284,33 +337,43 @@ void SingleNullPhaseBC::apply( KineticSpecies& a_species_comp,
    const DisjointBoxLayout& grids( u.disjointBoxLayout() );
    const IntVect& ghost_vect( u.ghostVect() );
 
+   CH_START(t_define_boundary_box_layouts);
    BoundaryBoxLayoutPtrVect all_bdry_layouts;
    PhaseBCUtils::defineBoundaryBoxLayouts( all_bdry_layouts,
                                            grids,
                                            coord_sys,
                                            ghost_vect );
+   CH_STOP(t_define_boundary_box_layouts);
 
+   CH_START(t_define_inflow_data_storage);
    KineticSpeciesPtrVect all_bdry_data;
    PhaseBCUtils::defineInflowDataStorage( all_bdry_data,
                                           all_bdry_layouts,
                                           a_species_comp );
+   CH_STOP(t_define_inflow_data_storage);
    
+   CH_START(t_fill_inflow_data);
    Vector<std::string> all_bc_type;
    fillInflowData( all_bdry_data, all_bc_type, all_bdry_layouts, a_time );
+   CH_STOP(t_fill_inflow_data);
 
+   CH_START(t_set_inflow_outflow_BC);
    PhaseBCUtils::setInflowOutflowBC( u,
                                      all_bdry_layouts,
                                      all_bdry_data,
                                      all_bc_type,
                                      coord_sys,
                                      a_velocity );
+   CH_STOP(t_set_inflow_outflow_BC);
 
    if (m_logical_sheath) {
        applyLogicalSheathBC(a_species_comp, all_bdry_layouts, a_velocity, a_phi, a_time);
    }
    
+   CH_START(t_set_codim_boundary_values);
    // interpolate all other codim boundaries
    CodimBC::setCodimBoundaryValues( u, coord_sys );
+   CH_STOP(t_set_codim_boundary_values);
 }
 
 

@@ -42,13 +42,16 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
      m_using_electrons(false),
      m_enforce_stage_positivity(false),
      m_enforce_step_positivity(false),
+     m_enforce_step_floor(false),
      m_max_grid_size(0),
      m_ghostVect(4*IntVect::Unit),
+     //m_ghostVect(2*IntVect::Unit), // JRAgv
      m_ti_class("rk"),
      m_ti_method("4"),
      m_gk_ops(NULL),
      m_state_comp( GKState(m_ghostVect) ),
      m_hdf_potential(false),
+     m_hdf_potential_non_zonal(false),
      m_hdf_efield(false),
      m_hdf_density(false),
      m_hdf_momentum(false),
@@ -143,6 +146,7 @@ void
 GKSystem::initialize( const int     a_cur_step,
                       const double  a_cur_time )
 {
+   CH_TIME("GKSystem::initialize");
    if ( a_cur_step == 0 ) {
       // If this is the first step, then set the initial conditions for the
       // full system
@@ -159,6 +163,9 @@ GKSystem::initialize( const int     a_cur_step,
 
    // Initialize the physical state variables
    m_gk_ops->convertToPhysical( m_state_comp, m_state_phys );
+
+   // Initialize physical fluid species used in fluidOp (has ghost cells)
+   m_gk_ops->initializeFluidSpeciesPhysical( m_state_comp.dataFluid() );
    
    // Initialize the electric field:
    // a.  If the fixed_efield option is true, then the field is calculated
@@ -383,7 +390,15 @@ GKSystem::getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids 
     for (int n=0; n<boxes.size(); n++) {
       bounding_box = minBox(bounding_box, boxes[n]);
     }
+#if CFG_DIM==3
+    bool is_periodic[CFG_DIM];
+    is_periodic[RADIAL_DIR] = false;
+    is_periodic[TOROIDAL_DIR] = true;
+    is_periodic[POLOIDAL_DIR] = false;
+    prob_domain = CFG::ProblemDomain(bounding_box, is_periodic);
+#else
     prob_domain = CFG::ProblemDomain(bounding_box);
+#endif
   }
 
   else {
@@ -761,7 +776,6 @@ GKSystem::createFluidSpecies( CFG::FluidSpeciesPtrVect& a_fluid_species )
       else {
          more_vars = false;
       }
-      
       if ( more_vars ) {
          CFG::CFGVars* cfg_var = var_factory.create( s.str(), name, op_type, *m_mag_geom, CFG::IntVect::Zero );
          a_fluid_species.push_back( CFG::FluidSpeciesPtr(cfg_var) );
@@ -967,6 +981,11 @@ Real GKSystem::stableDt( const int a_step_number )
     } else if ( m_integrator->isImEx() ) {
       return m_gk_ops->stableDtImEx( m_state_comp, a_step_number );
     } else {
+      /* if fully implicit time integration, then there is not really a maximum
+       * stable dt. So using 1000 times the explicit stable dt as a limit, because
+       * systems get really stiff to solve for larger time steps.
+       * January 2019: this is not really important right now since we are not
+       * considering fully implicit time integration in the near future. */
       return (1000.0*m_gk_ops->stableDtExpl( m_state_comp, a_step_number ));
     }
   } else {
@@ -992,6 +1011,7 @@ void GKSystem::advance( Real& a_cur_time,
                         Real& a_dt,
                         int&  a_step_number)
 {
+   CH_TIME("GKSystem::advance()");
    CH_assert(m_use_native_time_integrator);
    m_integrator->setTimeStepSize( a_dt );
 
@@ -1009,6 +1029,11 @@ void GKSystem::advance( Real& a_cur_time,
    if (m_enforce_step_positivity) {
       enforcePositivity( m_state_comp.dataKinetic() );
    }
+   
+   if (m_enforce_step_floor) {
+      m_floor_post_processor.enforce( m_state_comp.dataFluid() );
+   }
+   
    m_gk_ops->convertToPhysical( m_state_comp, m_state_phys );
 }
 
@@ -1071,6 +1096,7 @@ void GKSystem::writePlotFile(const char    *prefix,
                              const int     cur_step,
                              const double& cur_time )
 {
+   CH_TIME("GKSystem::writePlotFile()");
    // If the efield and potential are fixed, only consider plotting them at step 0
    if ( !m_gk_ops->fixedEField() || cur_step == 0 ) {
    
@@ -1078,7 +1104,7 @@ void GKSystem::writePlotFile(const char    *prefix,
          std::string filename( plotFileName( prefix,
                                              "potential",
                                              cur_step ) );
-         m_gk_ops->plotPotential( filename, cur_time );
+         m_gk_ops->plotPotential( filename, m_hdf_potential_non_zonal, cur_time );
       }
 
       if (m_hdf_efield) {
@@ -1349,7 +1375,6 @@ void GKSystem::writePlotFile(const char    *prefix,
                                                    fluid_species.name(),
                                                    cur_step,
                                                    species + 1));
-         
                m_gk_ops->plotFluid( filename, fluid_species, fluid_species.cell_var_name(n), cur_time );
             }
          }
@@ -1571,6 +1596,7 @@ void GKSystem::writeFieldHistory(int cur_step, double cur_time, bool startup_fla
 
 void GKSystem::printDiagnostics()
 {
+   CH_TIME("GKSystem::printDiagnostics()");
    pout() << "  Distribution Function Extrema:" << std::endl;
    if (procID()==0) {
       cout << "  Distribution Function Extrema:" << std::endl;
@@ -1594,11 +1620,12 @@ void GKSystem::printDiagnostics()
 
 void GKSystem::preTimeStep(int a_cur_step, Real a_cur_time)
 {
+   CH_TIME("GKSystem::preTimeStep()");
    if (m_use_native_time_integrator) {
       m_integrator->setCurrentTime( a_cur_time );
       m_integrator->setTimeStep( a_cur_step );
    }
-   m_gk_ops->convertToPhysical( m_state_comp, m_state_phys );
+   //m_gk_ops->convertToPhysical( m_state_comp, m_state_phys );
    m_gk_ops->preTimeStep( a_cur_step, a_cur_time, m_state_comp, m_state_phys );
 }
 
@@ -1618,7 +1645,7 @@ void GKSystem::postTimeStep(int a_cur_step, Real a_dt, Real a_cur_time)
 {
   CH_TIME("postTimeStep");
   m_gk_ops->postTimeStep( a_cur_step, a_dt, a_cur_time, m_state_comp );
-  m_gk_ops->convertToPhysical( m_state_comp, m_state_phys );
+  //m_gk_ops->convertToPhysical( m_state_comp, m_state_phys );
   if (procID() == 0) {
     cout << "  ----\n";
     cout << "  dt: " << a_dt << std::endl;
@@ -1752,6 +1779,9 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
    // Should we make an hdf file for the potential?
    a_ppgksys.query("hdf_potential",m_hdf_potential);
 
+   // Should we make an hdf file for the non-zonal potential components?
+   a_ppgksys.query("hdf_potential_non_zonal",m_hdf_potential_non_zonal);
+   
    // Should we make an hdf file for the electric field?
    a_ppgksys.query("hdf_efield",m_hdf_efield);
 
@@ -1885,6 +1915,22 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
       m_positivity_post_processor.define( halo, n_iter, verbose );
    }
 
+   bool enforce_floor(false);
+   if (a_ppgksys.contains("enforce_floor")) {
+      a_ppgksys.get("enforce_floor", enforce_floor);
+   }
+   if (enforce_floor) {
+      m_enforce_step_floor = true;
+
+      Real floor_value(0.);
+      a_ppgksys.query( "floor_value", floor_value );
+
+      bool absolute_floor(true);
+      a_ppgksys.query( "absolute_floor", absolute_floor );
+
+      m_floor_post_processor.define( floor_value, absolute_floor );
+   }
+   
    if (a_ppgksys.contains("old_vorticity_model")) {
       a_ppgksys.get("old_vorticity_model", m_old_vorticity_model);
    }

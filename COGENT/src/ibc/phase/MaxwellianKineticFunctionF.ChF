@@ -93,7 +93,7 @@ c     with (m,n) [poloilda, toridal] perturbations
       REAL_T den, temp, B, psi
       REAL_T psi_inv, rho_inv, rho_p, vpar, mu, phi, theta, r
       REAL_T eparnorm, munorm
-      REAL_T factor, norm_mom, norm_psi, norm_kappa
+      REAL_T factor, norm_mom, norm_psi, norm_kappa, norm_kappaN, norm_kappaT
       REAL_T val, arg, rad_prof, pi
 
       pi = four*datan(one)
@@ -119,20 +119,19 @@ c     with (m,n) [poloilda, toridal] perturbations
          mu       = coords(CHF_IX[i;j;k;l;m],imu)
 
          norm_mom = larmor * mass / charge
-         psi_inv  = psi + norm_mom * (RBtor/B*vpar + 0.0*RBtor/2.0 * dsqrt(vpar**2 + mu*B/mass))         
- 
+         psi_inv  = psi + norm_mom * RBtor/B*vpar
+
          if (option.eq.1) then 
           
-          norm_psi = two * q_p * R0/RBtor
-          rho_inv = sqrt(norm_psi * (psi_inv - psi_p) + r_p**2)
-          rho_p = r_p 
+          rho_inv = psi_inv
+          rho_p = psi_p
 
 c         Legend: 0 -value, 1 - kappa, 2 - width, 3 - flatTop factor 
 
-          norm_kappa = one/R0
-
-          den   = n(0) * (dcosh((rho_inv - rho_p + n(3))/n(2))/dcosh((rho_inv - rho_p - n(3))/n(2)))**(-half*norm_kappa*n(1)*n(2))
-          temp  = T(0) * (dcosh((rho_inv - rho_p + T(3))/T(2))/dcosh((rho_inv - rho_p - T(3))/T(2)))**(-half*norm_kappa*T(1)*T(2))  
+          norm_kappaT = one/(dpsidr_p *R0)/dtanh(T(3)/T(2));
+          norm_kappaN = one/(dpsidr_p *R0)/dtanh(n(3)/n(2));
+          den   = n(0) * (dcosh((rho_inv - rho_p + n(3))/n(2))/dcosh((rho_inv - rho_p - n(3))/n(2)))**(-half*norm_kappaN*n(1)*n(2))
+          temp  = T(0) * (dcosh((rho_inv - rho_p + T(3))/T(2))/dcosh((rho_inv - rho_p - T(3))/T(2)))**(-half*norm_kappaT*T(1)*T(2))  
 
          else if  (option.eq.2) then
 
@@ -160,7 +159,7 @@ c        Legend: 0 - amplitude, 1 - radial width, 2 - (n), 3 - (m)
          arg      = mode_coeff(2)*phi + mode_coeff(3)*theta
          rad_prof = dexp(-half*((rho_inv - rho_p)/mode_coeff(1))**2)
          val      = val * (one + mode_coeff(0)*rad_prof*cos(arg))
-
+         
          f(CHF_IX[i;j;k;l;m]) = val
 
       CHF_ENDDO

@@ -28,6 +28,10 @@ class NullCLS
        */
       virtual ~NullCLS() {;}
   
+      virtual Real computeDtExplicitTI(const KineticSpeciesPtrVect& soln, const int i) { return DBL_MAX; }
+      virtual Real computeDtImExTI(const KineticSpeciesPtrVect& soln, const int i) { return DBL_MAX; }
+      virtual Real computeTimeScale(const KineticSpeciesPtrVect& soln, const int i) { return -1; }
+
       /// Accumulates the RHS of the collision operator.
       /**
        * @param[out] rhs data holder for rhs (without ghost cells).

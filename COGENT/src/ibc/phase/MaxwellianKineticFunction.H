@@ -121,6 +121,7 @@ class MaxwellianKineticFunction : public KineticFunction
                                   const FArrayBox&          a_temperature,
                                   const FArrayBox&          a_vparallel,
                                   const FArrayBox&          a_B,
+                                  const FArrayBox&          a_real_coords,
                                   const Real&               a_mass ) const;
 
       /// Initialize density or temperature field on a LevelData.
@@ -138,6 +139,8 @@ class MaxwellianKineticFunction : public KineticFunction
       inline void initializeField( FArrayBox& a_field,
                                    const CFG::GridFunction& a_ic,
                                    const PhaseGeom& a_geometry,
+                                   const FArrayBox& a_real_coords,
+                                   const FArrayBox& a_normalized_flux,
                                    const Box& a_interior_box,
                                    const Real& a_time ) const;
 

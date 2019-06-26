@@ -10,6 +10,9 @@
 #include "mappedAdvectionFlux.H"
 #include "KineticFunctionLibrary.H"
 
+#include "GKVector.H"
+#include "GKOps.H"
+
 #undef TEST_ZERO_DIVERGENCE
 
 #include "NamespaceHeader.H"
@@ -43,8 +46,8 @@ MaxNorm( const LevelData<FArrayBox>& a )
 
 
 
-GKVlasov::GKVlasov( ParmParse& a_pp,
-                    const Real a_larmor_number )
+GKVlasov::GKVlasov( ParmParse&                      a_pp,
+                    const Real                      a_larmor_number )
   : m_larmor_number(a_larmor_number),
     m_face_avg_type(INVALID),
     m_dt_dim_factor(1.0)
@@ -59,6 +62,8 @@ GKVlasov::GKVlasov( ParmParse& a_pp,
    else {
       m_verbose = false;
    }
+
+   m_ti_type.clear();
    
    if (a_pp.contains("subtract_maxwellian_background")) {
       a_pp.get("subtract_maxwellian_background", m_subtract_maxwellian);
@@ -112,11 +117,27 @@ GKVlasov::GKVlasov( ParmParse& a_pp,
    m_dt_dim_factor = (m_face_avg_type>PPM) ? sqrt(PDIM) : 1.0;
 }
 
+GKVlasov::GKVlasov( ParmParse&                      a_pp,
+                    const Real                      a_larmor_number,
+                    const std::vector<std::string>& a_name_list )
+  : GKVlasov(a_pp, a_larmor_number) 
+{
+   m_ti_type.clear();
+   for (int n=0; n<a_name_list.size(); n++) {
+     std::string species_name = a_name_list[n];
+     std::string key = species_name + ".time_implicit";
+     bool flag = false;
+     a_pp.query(key.c_str(), flag);
+     m_ti_type[species_name] = (flag ? _implicit_ : _explicit_);
+   }
+}
+
 
 void GKVlasov::accumulateRHS( GKRHSData&                            a_rhs,
                               const KineticSpeciesPtrVect&          a_kinetic_phys,
                               const CFG::LevelData<CFG::FArrayBox>& a_phi,
                               const CFG::EField&                    a_E_field,
+                              const bool                            a_implicit,
                               const Real&                           a_time )
 {
    /*
@@ -131,29 +152,102 @@ void GKVlasov::accumulateRHS( GKRHSData&                            a_rhs,
       const PhaseGeom& phase_geom = rhs_species.phaseSpaceGeometry();
       if ( phase_geom.divFreeVelocity() ) {
          bool fourth_order_Efield = !a_E_field.secondOrder();
-         evalRHS( rhs_species, 
-                  soln_species, 
-                  a_phi, 
-                  a_E_field.getCellCenteredField(), 
-                  a_E_field.getPhiNode(),
-                  fourth_order_Efield, 
-                  PhaseGeom::FULL_VELOCITY, 
-                  a_time );
+         if (a_implicit) {
+           evalRHSImplicit( rhs_species, 
+                            soln_species, 
+                            a_phi,
+                            a_E_field.getCellCenteredField(), 
+                            a_E_field.getPhiNode(),
+                            fourth_order_Efield, 
+                            PhaseGeom::FULL_VELOCITY, 
+                            a_time );
+         } else {
+           evalRHSExplicit( rhs_species, 
+                            soln_species, 
+                            a_phi,
+                            a_E_field.getCellCenteredField(), 
+                            a_E_field.getPhiNode(),
+                            fourth_order_Efield, 
+                            PhaseGeom::FULL_VELOCITY, 
+                            a_time );
+         }
       }
       else {
-         evalRHS( rhs_species, soln_species, a_phi, a_E_field, a_time );
+        if (a_implicit) {
+          evalRHSImplicit( rhs_species,
+                           soln_species,
+                           a_phi,
+                           a_E_field,
+                           PhaseGeom::FULL_VELOCITY,
+                           a_time );
+        } else {
+          evalRHSExplicit( rhs_species,
+                           soln_species,
+                           a_phi,
+                           a_E_field,
+                           PhaseGeom::FULL_VELOCITY,
+                           a_time );
+        }
       }
    }
 }
 
 
 void
+GKVlasov::evalRHSExplicit( KineticSpecies&                        a_rhs_species,
+                           const KineticSpecies&                  a_soln_species,
+                           const CFG::LevelData<CFG::FArrayBox>&  a_phi,
+                           const CFG::EField&                     a_E_field,
+                           const int                              a_velocity_option,
+                           const Real                             a_time )
+{
+  const std::string& name = a_soln_species.name();
+
+  std::map<std::string, tiType>::iterator it;
+  it = m_ti_type.find(name);
+  if (it == m_ti_type.end()) {
+    MayDay::Error("in GKVlasov::evalRHSExplicit - m_ti_type does not contain species info.");
+  }
+
+  if (m_ti_type[name] == _explicit_) {
+    evalRHS(a_rhs_species, a_soln_species, a_phi, a_E_field, a_velocity_option, a_time);
+  }
+   
+  return;
+}
+
+void
+GKVlasov::evalRHSImplicit( KineticSpecies&                        a_rhs_species,
+                           const KineticSpecies&                  a_soln_species,
+                           const CFG::LevelData<CFG::FArrayBox>&  a_phi,
+                           const CFG::EField&                     a_E_field,
+                           const int                              a_velocity_option,
+                           const Real                             a_time )
+{
+  const std::string& name = a_soln_species.name();
+
+  std::map<std::string, tiType>::iterator it;
+  it = m_ti_type.find(name);
+  if (it == m_ti_type.end()) {
+    MayDay::Error("in GKVlasov::evalRHSImplicit - m_ti_type does not contain species info.");
+  }
+
+  if (m_ti_type[name] == _implicit_) {
+    evalRHS(a_rhs_species, a_soln_species, a_phi, a_E_field, a_velocity_option, a_time);
+  }
+  return;
+}
+
+void
 GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
                    const KineticSpecies&                  a_soln_species,
                    const CFG::LevelData<CFG::FArrayBox>&  a_phi,
                    const CFG::EField&                     a_E_field,
+                   const int                              a_velocity_option,
                    const Real                             a_time )
 {
+   CH_TIME("GKVlasov::evalRHS");
+
    /*
      Evaluates the (negated) phase space divergence:
         rhs = - divergence_R ( R_dot soln ) - divergence_v ( v_dot soln )
@@ -162,31 +256,67 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
    const DisjointBoxLayout& dbl( soln_dfn.getBoxes() );
    const PhaseGeom& geometry( a_rhs_species.phaseSpaceGeometry() );
 
-   LevelData<FluxBox> velocity( dbl, SpaceDim, IntVect::Unit );
+   LevelData<FluxBox> E_field;
 
    if (a_soln_species.isGyrokinetic()) {
 
      LevelData<FluxBox> gyroaveraged_E_field;
      int order (a_E_field.secondOrder() ? 2 : 4);
-     a_soln_species.gyroaveragedEField( gyroaveraged_E_field, 
+     a_soln_species.gyroaveragedEField( E_field,
                                         a_phi, 
                                         order );
 
-     a_soln_species.computeVelocity( velocity, gyroaveraged_E_field);
 
    } else {
 
-     LevelData<FluxBox> injected_E_field;
      geometry.injectConfigurationToPhase( a_E_field.getFaceCenteredField(),
                                           a_E_field.getCellCenteredField(),
-                                          injected_E_field );
+                                          E_field );
   
-     a_soln_species.computeVelocity( velocity, injected_E_field );
-
    }
 
+   LevelData<FluxBox> velocity( dbl, SpaceDim, IntVect::Unit );
+   a_soln_species.computeVelocity( velocity, E_field, a_velocity_option);
+   
    LevelData<FluxBox> flux( dbl, SpaceDim, IntVect::Unit );
-   computeFlux( soln_dfn, velocity, flux, geometry );
+
+   if (!m_subtract_maxwellian) {
+     
+      computeFlux( soln_dfn, velocity, flux, geometry );
+      
+   }
+   
+   else {
+      
+      LevelData<FArrayBox> dfn_no_bstar(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
+      for (DataIterator dit(dbl); dit.ok(); ++dit) {
+         dfn_no_bstar[dit].copy(soln_dfn[dit]);
+      }
+      geometry.divideBStarParallel(dfn_no_bstar);
+      
+      LevelData<FArrayBox> maxwellian_dfn(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
+      LevelData<FArrayBox> delta_dfn(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
+      computeDeltaF(a_soln_species, dfn_no_bstar, delta_dfn, maxwellian_dfn);
+      geometry.multBStarParallel(delta_dfn);
+      
+      LevelData<FluxBox> flux_df( dbl, 1, IntVect::Unit );
+      computeFlux( delta_dfn, velocity, flux_df, geometry );
+      
+      a_soln_species.computeVelocity( velocity, E_field, PhaseGeom::NO_ZERO_ORDER_TERMS );
+      
+      if (!m_update_maxwellian) {
+         geometry.multBStarParallel(m_F0);
+         computeFlux( m_F0, velocity, flux, geometry);
+      }
+      else {
+         geometry.multBStarParallel(maxwellian_dfn);
+         computeFlux( maxwellian_dfn, velocity, flux, geometry);
+      }
+      
+      for (DataIterator dit(dbl); dit.ok(); ++dit) {
+         flux[dit] += flux_df[dit];
+      }
+   }
 
    LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
    const bool OMIT_NT(false);
@@ -216,6 +346,70 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
 }
 
 
+
+void
+GKVlasov::evalRHSExplicit( KineticSpecies&                        a_rhs_species,
+                           const KineticSpecies&                  a_soln_species,
+                           const CFG::LevelData<CFG::FArrayBox>&  a_phi,
+                           const CFG::LevelData<CFG::FArrayBox>&  a_Efield_cell,
+                           const CFG::LevelData<CFG::FArrayBox>&  a_phi_node,
+                           const bool                             a_fourth_order_Efield,
+                           const int                              a_velocity_option,
+                           const Real                             a_time )
+{
+  const std::string& name = a_soln_species.name();
+
+  std::map<std::string, tiType>::iterator it;
+  it = m_ti_type.find(name);
+  if (it == m_ti_type.end()) {
+    MayDay::Error("in GKVlasov::evalRHSExplicit - m_ti_type does not contain species info.");
+  }
+
+  if (m_ti_type[name] == _explicit_) {
+    evalRHS(  a_rhs_species, 
+              a_soln_species, 
+              a_phi,
+              a_Efield_cell, 
+              a_phi_node, 
+              a_fourth_order_Efield, 
+              a_velocity_option, 
+              a_time);
+  }
+
+  return;
+}
+
+void
+GKVlasov::evalRHSImplicit( KineticSpecies&                        a_rhs_species,
+                           const KineticSpecies&                  a_soln_species,
+                           const CFG::LevelData<CFG::FArrayBox>&  a_phi,
+                           const CFG::LevelData<CFG::FArrayBox>&  a_Efield_cell,
+                           const CFG::LevelData<CFG::FArrayBox>&  a_phi_node,
+                           const bool                             a_fourth_order_Efield,
+                           const int                              a_velocity_option,
+                           const Real                             a_time )
+{
+  const std::string& name = a_soln_species.name();
+
+  std::map<std::string, tiType>::iterator it;
+  it = m_ti_type.find(name);
+  if (it == m_ti_type.end()) {
+    MayDay::Error("in GKVlasov::evalRHSImplicit - m_ti_type does not contain species info.");
+  }
+
+  if (m_ti_type[name] == _implicit_) {
+    evalRHS(  a_rhs_species, 
+              a_soln_species, 
+              a_phi,
+              a_Efield_cell, 
+              a_phi_node, 
+              a_fourth_order_Efield, 
+              a_velocity_option, 
+              a_time);
+  }
+
+  return;
+}
 
 void
 GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
@@ -262,7 +456,7 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
       computeFluxNormal( delta_dfn, velocity_normal, flux_tmp, geometry );
  
       a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield,
-                                                   PhaseGeom::NO_ZERO_ORDER_PARALLEL_VELOCITY );
+                                                   PhaseGeom::NO_ZERO_ORDER_TERMS );
 
       if (!m_update_maxwellian) {
 	computeFluxNormal( m_F0, velocity_normal, flux_normal, geometry);
@@ -353,7 +547,7 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
       computeFluxNormal( delta_dfn, velocity_normal, flux_tmp, geometry );
  
       a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield,
-                                                   PhaseGeom::NO_ZERO_ORDER_PARALLEL_VELOCITY );
+                                                   PhaseGeom::NO_ZERO_ORDER_TERMS );
 
       if (!m_update_maxwellian) {
 	computeFluxNormal( m_F0, velocity_normal, flux_normal, geometry);
@@ -596,8 +790,8 @@ GKVlasov::computeDeltaF(const KineticSpecies&         a_soln_species,
 
 
 Real
-GKVlasov::computeDt( const CFG::EField&            a_E_field,
-                     const KineticSpeciesPtrVect&  a_species_vect )
+GKVlasov::computeDtExplicitTI( const CFG::EField&            a_E_field,
+                               const KineticSpeciesPtrVect&  a_species_vect )
 {
    Real dt(BASEFAB_REAL_SETVAL);
 
@@ -646,6 +840,85 @@ GKVlasov::computeDt( const CFG::EField&            a_E_field,
          CH_assert(speciesDt >= 0);
 
          dt = Min( dt, speciesDt );
+      }
+   }
+
+   return dt;
+}
+
+Real
+GKVlasov::computeDtImExTI( const CFG::EField&            a_E_field,
+                           const KineticSpeciesPtrVect&  a_species_vect )
+{
+   Real dt(BASEFAB_REAL_SETVAL);
+
+   if ( a_E_field.supportsDivFreePhaseVel() ) {
+
+      const CFG::LevelData<CFG::FArrayBox>& Efield_cell = a_E_field.getCellCenteredField();
+      const CFG::LevelData<CFG::FArrayBox>& phi_node = a_E_field.getPhiNode();
+
+      for (int s(0); s<a_species_vect.size(); s++) {
+
+         const KineticSpecies& species( *(a_species_vect[s]) );
+         const std::string& name = species.name();
+
+         std::map<std::string, tiType>::iterator it;
+         it = m_ti_type.find(name);
+         if (it == m_ti_type.end()) {
+           MayDay::Error("in GKVlasov::computeDtImExTI - m_ti_type does not contain species info.");
+         }
+
+         if (m_ti_type[name] == _explicit_) {
+
+           const LevelData<FArrayBox>& dfn( species.distributionFunction() );
+  
+           LevelData<FluxBox> velocity_normals( dfn.getBoxes(), 1, IntVect::Unit );
+           species.computeMappedVelocityNormals( velocity_normals, Efield_cell, phi_node, false, PhaseGeom::FULL_VELOCITY );
+  
+           const Real UNIT_CFL(1.0);
+           const PhaseGeom& geometry( species.phaseSpaceGeometry() );
+           Real speciesDt( computeMappedDtSpeciesFromNormals( velocity_normals, geometry, UNIT_CFL ) );
+           CH_assert(speciesDt >= 0);
+  
+           dt = Min( dt, speciesDt );
+         }
+      }
+   }
+   else {
+
+      LevelData<FluxBox> injected_E_field;
+
+      for (int s(0); s<a_species_vect.size(); s++) {
+
+         const KineticSpecies& species( *(a_species_vect[s]) );
+         const std::string& name = species.name();
+
+         std::map<std::string, tiType>::iterator it;
+         it = m_ti_type.find(name);
+         if (it == m_ti_type.end()) {
+           MayDay::Error("in GKVlasov::computeDtImExTI - m_ti_type does not contain species info.");
+         }
+
+         if (m_ti_type[name] == _explicit_) {
+
+           const LevelData<FArrayBox>& dfn( species.distributionFunction() );
+           const PhaseGeom& geometry( species.phaseSpaceGeometry() );
+  
+           if ( !injected_E_field.isDefined() ) {
+              geometry.injectConfigurationToPhase( a_E_field.getFaceCenteredField(),
+                                                   a_E_field.getCellCenteredField(),
+                                                   injected_E_field );
+           }
+  
+           LevelData<FluxBox> velocity( dfn.getBoxes(), SpaceDim, IntVect::Unit );
+           species.computeMappedVelocity( velocity, injected_E_field );
+  
+           const Real UNIT_CFL(1.0);
+           Real speciesDt( computeMappedDtSpecies( velocity, geometry, UNIT_CFL ) );
+           CH_assert(speciesDt >= 0);
+  
+           dt = Min( dt, speciesDt );
+         }
       }
    }
 
@@ -885,7 +1158,7 @@ GKVlasov::computeMappedDtSpecies( const LevelData<FluxBox>& a_faceVel,
 #if PDIM==5
       cout << "Vlasov operator time step ("<< newDt <<") was limited by the velocity at (X,Y,Z,vparallel,mu) = " << X << " and mapped coordinate = " << maxind << endl;
 #endif
-      cout << "The (";
+      cout << "The ";
       switch(maxDir)
          {
          case RADIAL_DIR:
@@ -906,7 +1179,7 @@ GKVlasov::computeMappedDtSpecies( const LevelData<FluxBox>& a_faceVel,
             cout << "mu";
             break;
          }
-      cout << ") direction makes the largest contribution to the stable dt reciprocal at that point" << endl;
+      cout << " direction makes the largest contribution to the stable dt reciprocal at that point" << endl;
    }
 
 #ifdef PLOT_STABLEDT
@@ -1535,6 +1808,172 @@ GKVlasov::globalMax( const double a_data ) const
    return global_max;
 }
 
+
+void 
+GKVlasov::defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
+                               std::vector<DOFList>&                         a_dof_list,
+                               const KineticSpeciesPtrVect&                  a_soln,
+                               const GlobalDOFKineticSpeciesPtrVect&         a_gdofs,
+                               const GKVector&                               a_x,
+                               GKOps&                                        a_ops,
+                               const std::string&                            a_out_string,
+                               const std::string&                            a_opt_string,
+                               bool                                          a_im )
+{
+  m_my_pc_idx.clear();
+
+  for (int species(0); species<a_soln.size(); species++) {
+    const KineticSpecies&           soln_species(*(a_soln[species]));
+    const GlobalDOFKineticSpecies&  gdofs_species(*(a_gdofs[species]));
+    const std::string               species_name(soln_species.name());
+
+    defineBlockPC(  a_pc, 
+                    a_dof_list, 
+                    a_x, 
+                    a_ops, 
+                    a_out_string, 
+                    a_opt_string, 
+                    a_im, 
+                    soln_species, 
+                    gdofs_species, 
+                    species );
+  }
+}
+
+
+void 
+GKVlasov::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
+                         std::vector<DOFList>&                         a_dof_list,
+                         const GKVector&                               a_X,
+                         GKOps&                                        a_ops,
+                         const std::string&                            a_out_string,
+                         const std::string&                            a_opt_string,
+                         bool                                          a_im,
+                         const KineticSpecies&                         a_species,
+                         const GlobalDOFKineticSpecies&                a_global_dofs,
+                         const int                                     a_species_index )
+{
+  const std::string& name = a_species.name();
+
+  {
+    std::map<std::string, tiType>::iterator it;
+    it = m_ti_type.find(name);
+    if (it == m_ti_type.end()) {
+      MayDay::Error("in GKVlasov::defineBlockPC - m_ti_type does not contain species info.");
+    }
+  }
+
+  if ( a_im && (m_ti_type[name] == _implicit_) ) {
+  
+    CH_assert(a_pc.size() == a_dof_list.size());
+
+    if (!procID()) {
+      std::cout << "  Kinetic Species " << a_species_index
+                << " - Vlasov term: "
+                << " creating " << _BASIC_GK_PC_ << " preconditioner "
+                << " (index = " << a_pc.size() << ").\n";
+    }
+
+    Preconditioner<GKVector, GKOps> *pc;
+    pc = new BasicGKPreconditioner<GKVector,GKOps>;
+    DOFList dof_list(0);
+
+    const LevelData<FArrayBox>& soln_dfn    (a_species.distributionFunction());
+    const DisjointBoxLayout&    grids       (soln_dfn.disjointBoxLayout());
+    const int                   n_comp      (soln_dfn.nComp());
+    const LevelData<FArrayBox>& pMapping    (a_global_dofs.data()); 
+  
+    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      const Box& grid = grids[dit];
+      const FArrayBox& pMap = pMapping[dit];
+      for (BoxIterator bit(grid); bit.ok(); ++bit) {
+        IntVect ic = bit();
+        for (int n(0); n < n_comp; n++) {
+          dof_list.push_back((int) pMap.get(ic ,n) - a_global_dofs.mpiOffset());
+        }
+      }
+    }
+
+    m_my_pc_idx[name] = a_pc.size();
+
+    std::string out_string = pp_name + std::string(".") + name;
+    std::string opt_string = pp_name + std::string(".") + name;
+    dynamic_cast<BasicGKPreconditioner<GKVector,GKOps>*>
+      (pc)->define(a_X, a_ops, out_string, opt_string, a_im, dof_list);
+    a_pc.push_back(pc);
+    a_dof_list.push_back(dof_list);
+
+  }
+
+  return;
+}
+
+
+void 
+GKVlasov::updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
+                               const KineticSpeciesPtrVect&                  a_soln,
+                               const GlobalDOFKineticSpeciesPtrVect&         a_gdofs,
+                               const Real                                    a_time,
+                               const Real                                    a_shift,
+                               const bool                                    a_im )
+{
+  for (int species(0); species<a_soln.size(); species++) {
+    const KineticSpecies&           soln_species(*(a_soln[species]));
+    const GlobalDOFKineticSpecies&  gdofs_species(*(a_gdofs[species]));
+    const std::string               species_name(soln_species.name());
+
+    updateBlockPC(a_pc, soln_species, gdofs_species, a_time, a_shift, a_im, species);
+  }
+}
+
+
+void 
+GKVlasov::updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
+                         const KineticSpecies&                         a_species,
+                         const GlobalDOFKineticSpecies&                a_global_dofs,
+                         const Real                                    a_time,
+                         const Real                                    a_shift,
+                         const bool                                    a_im,
+                         const int                                     a_species_index )
+{
+  const std::string& name = a_species.name();
+
+  {
+    std::map<std::string, tiType>::iterator it;
+    it = m_ti_type.find(name);
+    if (it == m_ti_type.end()) {
+      MayDay::Error("in GKVlasov::updateBlockPC - m_ti_type does not contain species info.");
+    }
+  }
+  {
+    std::map<std::string, int>::iterator it;
+    it = m_my_pc_idx.find(name);
+    if ( (it == m_my_pc_idx.end()) && (m_ti_type[name] == _implicit_) ) {
+      MayDay::Error("in GKVlasov::updateBlockPC - m_my_pc_idx does not contain species info.");
+    }
+  }
+
+  if ( a_im && (m_ti_type[name] == _implicit_) ) {
+    CH_assert(m_my_pc_idx[name] >= 0);
+    CH_assert(a_pc.size() > m_my_pc_idx[name]);
+
+    if (!procID()) {
+      std::cout << "    ==> Updating " <<_BASIC_GK_PC_ << " preconditioner "
+                << " for Vlasov term of kinetic species " << a_species_index << ".\n";
+    }
+
+    BasicGKPreconditioner<GKVector,GKOps> *pc = dynamic_cast<BasicGKPreconditioner<GKVector,GKOps>*>
+                                                  (a_pc[m_my_pc_idx[name]]);
+    CH_assert(pc != NULL);
+
+    BandedMatrix *pc_mat((BandedMatrix*)pc->getBandedMatrix());
+    pc_mat->setToIdentityMatrix();
+    //assemblePrecondMatrix((void*)pc_mat, a_species, a_global_dofs, a_shift);
+    pc_mat->finalAssembly();
+  }
+
+  return;
+}
 
 
 #include "NamespaceFooter.H"

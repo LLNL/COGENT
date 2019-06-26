@@ -182,6 +182,18 @@ void TiRK<Vector,Ops>::define( ParmParse& a_pp,
       b[1]    = {1.0};
     setCoefficients(m_nstages,&A[0][0],&b[0]);
 
+  } else if (a_name == "2") {
+
+    /* 2nd order, 2-stage Runge-Kutta */
+    m_name = a_name;
+    m_nstages = 2;
+    
+    const Real
+      A[2][2]     = {{0.0,0.0},
+                    {0.5,0.0}},
+      b[2]        = {0.0,1.0};
+    setCoefficients(m_nstages,&A[0][0],&b[0]); 
+
   } else if (a_name == "2a") {
 
     /* 2nd order, 2-stage Runge-Kutta */
@@ -348,6 +360,7 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
   m_YStage.copy(a_Y);
 
   /* Stage calculations */
+
   int i, j;
   for (i = 0; i < m_nstages; i++) {
 
@@ -357,7 +370,7 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
       if ( m_step_const_coef && i==0 ) {
          // Initialize the coefficients for the right-hand side operators,
          // which are assumed to be constant over the step
-         m_Operators.preOpEval(a_Y,m_time,true);
+         m_Operators.preOpEval(a_Y,m_time,true,true);
       }
       m_YStage.copy(a_Y);
       for (j=0; j<i; j++) m_YStage.increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
@@ -375,7 +388,10 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
          if ( i==0 ) {
             // Initialize the coefficients for both the solution and right-hand side
             // operators, which are assumed to be constant over the step
-            m_Operators.preOpEval(a_Y,stage_time,true);
+            m_Operators.preOpEval(a_Y,stage_time,true,true);
+         }
+         else {
+            m_Operators.preOpEval(a_Y,stage_time,false,false);
          }
       }
       else {
@@ -389,12 +405,11 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
     }
 
     m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage,i);
-    m_Operators.preOpEval(m_YStage,stage_time,!m_step_const_coef);
+    m_Operators.preOpEval(m_YStage,stage_time,true,!m_step_const_coef);
     m_Operators.explicitOp(m_rhsStage[i],stage_time,m_YStage);
   }
 
   /* Step completion */
-
   if (m_Operators.trivialSolutionOp()) {
 
     for (i = 0; i < m_nstages; i++) {

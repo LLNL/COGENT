@@ -393,7 +393,11 @@ LogRectEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
    }
 
    if ( !func.isNull() ) {
-      func->assign(a_phi, a_geom, a_coord_sys_box, a_time, false);
+      // Get the block id
+      const MultiBlockCoordSys& coord_sys( *(a_geom.coordSysPtr()) );
+      const int block_number( coord_sys.whichBlock( a_coord_sys_box ) );
+      FArrayBox dummy;
+      func->assign(a_phi, a_geom, dummy, dummy, block_number, a_time, false);
    }
    else {
       a_phi.setVal(value);

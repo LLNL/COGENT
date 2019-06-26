@@ -424,7 +424,12 @@ void FixedBckgr::printParameters()
    }
 }
 
-Real FixedBckgr::computeDt(const KineticSpeciesPtrVect& a_soln, const int a_species)
+Real FixedBckgr::computeDtExplicitTI(const KineticSpeciesPtrVect& a_soln, const int a_species)
+{
+  return TimeScale(a_soln, a_species);
+}
+
+Real FixedBckgr::computeDtImExTI(const KineticSpeciesPtrVect& a_soln, const int a_species)
 {
   return TimeScale(a_soln, a_species);
 }

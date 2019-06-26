@@ -111,7 +111,7 @@ Real GKTransport::computeTimeScale( const KineticSpeciesPtrVect& soln )
    return dt_stable;
 }
 
-Real GKTransport::computeDt( const KineticSpeciesPtrVect& soln )
+Real GKTransport::computeDtExplicitTI( const KineticSpeciesPtrVect& soln )
 {
    // This is copied from computeDt in GKCollision
    /*
@@ -119,7 +119,28 @@ Real GKTransport::computeDt( const KineticSpeciesPtrVect& soln )
    int count(0);
    std::map<std::string,int>::iterator it;
    for (it=m_transport_model_name.begin(); it!=m_transport_model_name.end(); ++it) {
-      Real tmp = m_transport_model[it->second]->computeDt(soln,it->second);
+      Real tmp = m_transport_model[it->second]->computeDtExplicitTI(soln,it->second);
+      dt = (tmp < dt ? tmp : dt);
+      count++;
+   }
+   //cout << "JRA: dt = " << dt << endl;
+   return (count ? dt : -1);
+   */   
+
+   Real dt(DBL_MAX);
+   
+   return dt;
+}
+
+Real GKTransport::computeDtImExTI( const KineticSpeciesPtrVect& soln )
+{
+   // This is copied from computeDt in GKCollision
+   /*
+   Real dt(DBL_MAX);
+   int count(0);
+   std::map<std::string,int>::iterator it;
+   for (it=m_transport_model_name.begin(); it!=m_transport_model_name.end(); ++it) {
+      Real tmp = m_transport_model[it->second]->computeDtImExTI(soln,it->second);
       dt = (tmp < dt ? tmp : dt);
       count++;
    }

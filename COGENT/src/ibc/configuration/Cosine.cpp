@@ -1,154 +1,19 @@
 #include "Cosine.H"
 
 #include "CosineF_F.H"
-
-#include <iostream>
-#include <typeinfo>
-#include <string>
-
-#include "ConstFact.H"
-#include "DataIterator.H"
 #include "Directions.H"
-#include "DisjointBoxLayout.H"
-#include "FArrayBox.H"
-#include "FourthOrderUtil.H"
-#include "LevelData.H"
-#include "MayDay.H"
+#include "ConstFact.H"
 #include "LogRectCoordSys.H"
-#include "MultiBlockCoordSys.H"
-#include "Vector.H"
-#include "MagGeom.H"
 
 #include "NamespaceHeader.H"
 
-inline
-const MagBlockCoordSys& getCoordSys( const MultiBlockLevelGeom& a_geometry,
-                                     const Box& a_box )
-{
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-   const int block_number( coord_sys.whichBlock( a_box ) );
-   const NewCoordSys* block_coord_sys( coord_sys.getCoordSys( block_number ) );
-   return static_cast<const MagBlockCoordSys&>( *block_coord_sys );
-}
-
-
-Cosine::Cosine( //const std::string& a_name,
-                    ParmParse& a_pp,
-                    const int& a_verbosity )
-   : //m_name(a_name),
-     m_verbosity(a_verbosity),
+Cosine::Cosine( ParmParse& a_pp,
+                const int& a_verbosity )
+   : GridFunction(a_verbosity),
      m_constant(0.0),
      m_amplitude(0.0)
 {
    parseParameters( a_pp );
-}
-
-
-void Cosine::assign( LevelData<FArrayBox>& a_data,
-                     const MultiBlockLevelGeom& a_geometry,
-                     const Real& a_time,
-                     const bool& a_cell_averages ) const
-{
-   checkGeometryValidity( a_geometry );
-
-   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
-   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
-      if (a_cell_averages) {
-         setCellAverages( a_data[dit], getCoordSys( a_geometry, grids[dit] ) );
-      }
-      else {
-         setPointwise( a_data[dit], getCoordSys( a_geometry, grids[dit] ) );
-      }
-   }
-   a_data.exchange();
-}
-
-
-void Cosine::assign( LevelData<FluxBox>& a_data,
-                     const MultiBlockLevelGeom& a_geometry,
-                     const Real& a_time,
-                     const bool& a_cell_averages ) const
-{
-   checkGeometryValidity( a_geometry );
-
-   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
-
-   if (a_cell_averages) {
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         for (int dir=0; dir<SpaceDim; ++dir) {
-            setCellAverages( a_data[dit][dir], getCoordSys( a_geometry, grids[dit] ) );
-         }
-      }
-   }
-   else {
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         for (int dir=0; dir<SpaceDim; ++dir) {
-            setPointwise( a_data[dit][dir], getCoordSys( a_geometry, grids[dit] ) );
-         }
-      }
-   }
-   a_data.exchange();
-}
-
-
-void Cosine::assign( FArrayBox& a_data,
-                     const MultiBlockLevelGeom& a_geometry,
-                     const Box& a_box,
-                     const Real& a_time,
-                     const bool& a_cell_averages ) const
-{
-   if (a_cell_averages) {
-      setCellAverages( a_data, getCoordSys( a_geometry, a_box ) );
-   }
-   else {
-      setPointwise( a_data, getCoordSys( a_geometry, a_box ) );
-   }
-}
-
-
-void Cosine::assign( FluxBox& a_data,
-                     const MultiBlockLevelGeom& a_geometry,
-                     const Box& a_box,
-                     const Real& a_time,
-                     const bool& a_cell_averages ) const
-{
-   if (a_cell_averages) {
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         setCellAverages( a_data[dir], getCoordSys( a_geometry, a_box ) );
-      }
-   }
-   else {
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         setPointwise( a_data[dir], getCoordSys( a_geometry, a_box ) );
-      }
-   }
-}
-
-
-void Cosine::assign( LevelData<FArrayBox>& a_data,
-                     const MultiBlockLevelGeom& a_geometry,
-                     const BoundaryBoxLayout& a_bdry_layout,
-                     const Real& a_time ) const
-{
-   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
-   // NB: This is a cheat - there's one too many cells at the (dir,side) face
-   // of the boundary box, but it doesn't matter because one-sided difference
-   // will be used at that face to construct the cell average.  We do want the
-   // extra cell in all other directions.
-   LevelData<FArrayBox> data_tmp( grids, a_data.nComp(), IntVect::Unit );
-   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
-      const Box box( a_bdry_layout.interiorBox( dit ) );
-      const MagBlockCoordSys& coord_sys( ((MagGeom&)a_geometry).getBlockCoordSys( box ) );
-      setPointwise( data_tmp[dit], coord_sys );
-   }
-   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
-      Box domain_box( data_tmp[dit].box() );
-      domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
-      ProblemDomain domain( domain_box );
-      fourthOrderAverageCell( data_tmp[dit], domain, grids[dit] );
-   }
-   data_tmp.copyTo( a_data );
-   a_data.exchange();
 }
 
 
@@ -183,7 +48,6 @@ void Cosine::parseParameters( ParmParse& a_pp )
 }
 
 
-inline
 void Cosine::checkGeometryValidity( const MultiBlockLevelGeom& a_geometry ) const
 {
    const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
@@ -195,38 +59,25 @@ void Cosine::checkGeometryValidity( const MultiBlockLevelGeom& a_geometry ) cons
 }
 
 
-inline
-void Cosine::setCellAverages( FArrayBox&              a_data,
-                                const MagBlockCoordSys& a_coord_sys ) const
+void Cosine::setPointwise(FArrayBox&                 a_data,
+                          const MultiBlockLevelGeom& a_geometry,
+                          const FArrayBox&           a_real_coords,
+                          const FArrayBox&           a_normalized_flux,
+                          const int                  a_block_number) const
 {
-   Box box( a_data.box() );
-   Box tmp_box( box );
-   tmp_box.grow( IntVect::Unit );
-   FArrayBox tmp( tmp_box, a_data.nComp() );
+   
+   const MagBlockCoordSys& coord_sys = getCoordSys(a_geometry, a_block_number);
 
-   setPointwise( tmp, a_coord_sys );
-
-   fourthOrderAverageCell( tmp, a_coord_sys.domain(), box );
-
-   a_data.copy( tmp, box );
-}
-
-
-inline
-void Cosine::setPointwise( FArrayBox&              a_data,
-                             const MagBlockCoordSys& a_coord_sys ) const
-
-{
    Box box( a_data.box() );
    FArrayBox cell_center_coords( box, SpaceDim );
-   a_coord_sys.getCellCenteredMappedCoords( cell_center_coords );
-   RealVect dx = a_coord_sys.getMappedCellSize();
+   coord_sys.getCellCenteredMappedCoords( cell_center_coords );
+   RealVect dx = coord_sys.getMappedCellSize();
 
    RealVect k( m_mode );
    k[RADIAL_DIR] *= 2.0 * Constants::PI;
-   k[RADIAL_DIR] /= ( a_coord_sys.upperMappedCoordinate(RADIAL_DIR) - a_coord_sys.lowerMappedCoordinate(RADIAL_DIR) );
+   k[RADIAL_DIR] /= ( coord_sys.upperMappedCoordinate(RADIAL_DIR) - coord_sys.lowerMappedCoordinate(RADIAL_DIR) );
 
-   Real shift = -0.5*( a_coord_sys.upperMappedCoordinate(RADIAL_DIR) + a_coord_sys.lowerMappedCoordinate(RADIAL_DIR));
+   Real shift = -0.5*( coord_sys.upperMappedCoordinate(RADIAL_DIR) + coord_sys.lowerMappedCoordinate(RADIAL_DIR));
    
    FORT_SET_COSINE( CHF_FRA(a_data),
                     CHF_BOX(box),

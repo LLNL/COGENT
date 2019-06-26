@@ -37,6 +37,13 @@ SingleNullEllipticOpBC::setNames()
    m_bdry_name[RADIAL_PF] = "radial_pf";
    m_bdry_name[POLOIDAL_INNER_DIV] = "poloidal_inner_div";
    m_bdry_name[POLOIDAL_OUTER_DIV] = "poloidal_outer_div";
+#if CFG_DIM==3
+   m_bdry_name[TOROIDAL_CORE] = "toroidal_core";
+   m_bdry_name[TOROIDAL_SOL] = "toroidal_sol";
+   m_bdry_name[TOROIDAL_PF] = "toroidal_pf";
+   m_bdry_name[TOROIDAL_INNER_DIV] = "toroidal_inner_div";
+   m_bdry_name[TOROIDAL_OUTER_DIV] = "toroidal_outer_div";
+#endif
 }
 
 
@@ -51,30 +58,45 @@ SingleNullEllipticOpBC::setBCType( const int  a_block_number,
 
    switch( a_block_number )
       {
-      case MCORE:
-      case LCORE:
-      case RCORE:
+      case SingleNullBlockCoordSys::MCORE:
+      case SingleNullBlockCoordSys::LCORE:
+      case SingleNullBlockCoordSys::RCORE:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             m_bc_type[RADIAL_CORE] = a_type;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_type[TOROIDAL_CORE] = a_type;
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::setBCType(): Invalid argument");
          }
          break;
-      case MCSOL:
-      case LCSOL:
-      case RCSOL:
+      case SingleNullBlockCoordSys::MCSOL:
+      case SingleNullBlockCoordSys::LCSOL:
+      case SingleNullBlockCoordSys::RCSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             m_bc_type[RADIAL_SOL] = a_type;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_type[TOROIDAL_SOL] = a_type;
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::setBCType(): Invalid argument");
          }
          break;
-      case LSOL:
+      case SingleNullBlockCoordSys::LSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             m_bc_type[RADIAL_SOL] = a_type;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_type[TOROIDAL_SOL] = a_type;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             m_bc_type[POLOIDAL_INNER_DIV] = a_type;
          }
@@ -82,10 +104,15 @@ SingleNullEllipticOpBC::setBCType( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::setBCType(): Invalid argument");
          }
          break;
-      case RSOL:
+      case SingleNullBlockCoordSys::RSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             m_bc_type[RADIAL_SOL] = a_type;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_type[TOROIDAL_SOL] = a_type;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             m_bc_type[POLOIDAL_OUTER_DIV] = a_type;
          }
@@ -93,10 +120,15 @@ SingleNullEllipticOpBC::setBCType( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::setBCType(): Invalid argument");
          }
          break;
-      case LPF:
+      case SingleNullBlockCoordSys::LPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             m_bc_type[RADIAL_PF] = a_type;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_type[TOROIDAL_PF] = a_type;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             m_bc_type[POLOIDAL_INNER_DIV] = a_type;
          }
@@ -104,10 +136,15 @@ SingleNullEllipticOpBC::setBCType( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::setBCType(): Invalid argument");
          }
          break;
-      case RPF:
+      case SingleNullBlockCoordSys::RPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             m_bc_type[RADIAL_PF] = a_type;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_type[TOROIDAL_PF] = a_type;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             m_bc_type[POLOIDAL_OUTER_DIV] = a_type;
          }
@@ -131,30 +168,45 @@ SingleNullEllipticOpBC::getBCType( const int  a_block_number,
 
    switch( a_block_number )
       {
-      case MCORE:
-      case LCORE:
-      case RCORE:
+      case SingleNullBlockCoordSys::MCORE:
+      case SingleNullBlockCoordSys::LCORE:
+      case SingleNullBlockCoordSys::RCORE:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             bc_type = m_bc_type[RADIAL_CORE];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_type = m_bc_type[TOROIDAL_CORE];
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
-      case MCSOL:
-      case LCSOL:
-      case RCSOL:
+      case SingleNullBlockCoordSys::MCSOL:
+      case SingleNullBlockCoordSys::LCSOL:
+      case SingleNullBlockCoordSys::RCSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             bc_type = m_bc_type[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_type = m_bc_type[TOROIDAL_SOL];
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
-      case LSOL:
+      case SingleNullBlockCoordSys::LSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             bc_type = m_bc_type[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_type = m_bc_type[TOROIDAL_SOL];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             bc_type = m_bc_type[POLOIDAL_INNER_DIV];
          }
@@ -162,10 +214,15 @@ SingleNullEllipticOpBC::getBCType( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
-      case RSOL:
+      case SingleNullBlockCoordSys::RSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             bc_type = m_bc_type[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_type = m_bc_type[TOROIDAL_SOL];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             bc_type = m_bc_type[POLOIDAL_OUTER_DIV];
          }
@@ -173,10 +230,15 @@ SingleNullEllipticOpBC::getBCType( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
-      case LPF:
+      case SingleNullBlockCoordSys::LPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             bc_type = m_bc_type[RADIAL_PF];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_type = m_bc_type[TOROIDAL_PF];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             bc_type = m_bc_type[POLOIDAL_INNER_DIV];
          }
@@ -184,10 +246,15 @@ SingleNullEllipticOpBC::getBCType( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
-      case RPF:
+      case SingleNullBlockCoordSys::RPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             bc_type = m_bc_type[RADIAL_PF];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_type = m_bc_type[TOROIDAL_PF];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             bc_type = m_bc_type[POLOIDAL_OUTER_DIV];
          }
@@ -214,30 +281,45 @@ SingleNullEllipticOpBC::setBCValue( const int     a_block_number,
 
    switch( a_block_number )
       {
-      case MCORE:
-      case LCORE:
-      case RCORE:
+      case SingleNullBlockCoordSys::MCORE:
+      case SingleNullBlockCoordSys::LCORE:
+      case SingleNullBlockCoordSys::RCORE:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             m_bc_value[RADIAL_CORE] = a_value;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_value[TOROIDAL_CORE] = a_value;
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Invalid argument");
          }
          break;
-      case MCSOL:
-      case LCSOL:
-      case RCSOL:
+      case SingleNullBlockCoordSys::MCSOL:
+      case SingleNullBlockCoordSys::LCSOL:
+      case SingleNullBlockCoordSys::RCSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             m_bc_value[RADIAL_SOL] = a_value;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_value[TOROIDAL_SOL] = a_value;
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Invalid argument");
          }
          break;
-      case LSOL:
+      case SingleNullBlockCoordSys::LSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             m_bc_value[RADIAL_SOL] = a_value;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_value[TOROIDAL_SOL] = a_value;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             m_bc_value[POLOIDAL_INNER_DIV] = a_value;
          }
@@ -245,10 +327,15 @@ SingleNullEllipticOpBC::setBCValue( const int     a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Invalid argument");
          }
          break;
-      case RSOL:
+      case SingleNullBlockCoordSys::RSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             m_bc_value[RADIAL_SOL] = a_value;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_value[TOROIDAL_SOL] = a_value;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             m_bc_value[POLOIDAL_OUTER_DIV] = a_value;
          }
@@ -256,10 +343,15 @@ SingleNullEllipticOpBC::setBCValue( const int     a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Invalid argument");
          }
          break;
-      case LPF:
+      case SingleNullBlockCoordSys::LPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             m_bc_value[RADIAL_PF] = a_value;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_value[TOROIDAL_PF] = a_value;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             m_bc_value[POLOIDAL_INNER_DIV] = a_value;
          }
@@ -267,10 +359,15 @@ SingleNullEllipticOpBC::setBCValue( const int     a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::setBCValue(): Invalid argument");
          }
          break;
-      case RPF:
+      case SingleNullBlockCoordSys::RPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             m_bc_value[RADIAL_PF] = a_value;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_value[TOROIDAL_PF] = a_value;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             m_bc_value[POLOIDAL_OUTER_DIV] = a_value;
          }
@@ -295,30 +392,45 @@ SingleNullEllipticOpBC::getBCValue( const int  a_block_number,
 
    switch( a_block_number )
       {
-      case MCORE:
-      case LCORE:
-      case RCORE:
+      case SingleNullBlockCoordSys::MCORE:
+      case SingleNullBlockCoordSys::LCORE:
+      case SingleNullBlockCoordSys::RCORE:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             bc_value = m_bc_value[RADIAL_CORE];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_value = m_bc_value[TOROIDAL_CORE];
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Invalid argument");
          }
          break;
-      case MCSOL:
-      case LCSOL:
-      case RCSOL:
+      case SingleNullBlockCoordSys::MCSOL:
+      case SingleNullBlockCoordSys::LCSOL:
+      case SingleNullBlockCoordSys::RCSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             bc_value = m_bc_value[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_value = m_bc_value[TOROIDAL_SOL];
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Invalid argument");
          }
          break;
-      case LSOL:
+      case SingleNullBlockCoordSys::LSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             bc_value = m_bc_value[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_value = m_bc_value[TOROIDAL_SOL];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             bc_value = m_bc_value[POLOIDAL_INNER_DIV];
          }
@@ -326,10 +438,15 @@ SingleNullEllipticOpBC::getBCValue( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Invalid argument");
          }
          break;
-      case RSOL:
+      case SingleNullBlockCoordSys::RSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             bc_value = m_bc_value[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_value = m_bc_value[TOROIDAL_SOL];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             bc_value = m_bc_value[POLOIDAL_OUTER_DIV];
          }
@@ -337,10 +454,15 @@ SingleNullEllipticOpBC::getBCValue( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Invalid argument");
          }
          break;
-      case LPF:
+      case SingleNullBlockCoordSys::LPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             bc_value = m_bc_value[RADIAL_PF];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_value = m_bc_value[TOROIDAL_PF];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             bc_value = m_bc_value[POLOIDAL_INNER_DIV];
          }
@@ -348,10 +470,15 @@ SingleNullEllipticOpBC::getBCValue( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::getBCValue(): Invalid argument");
          }
          break;
-      case RPF:
+      case SingleNullBlockCoordSys::RPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             bc_value = m_bc_value[RADIAL_PF];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            bc_value = m_bc_value[TOROIDAL_PF];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             bc_value = m_bc_value[POLOIDAL_OUTER_DIV];
          }
@@ -378,30 +505,45 @@ SingleNullEllipticOpBC::setBCFunction( const int                           a_blo
 
    switch( a_block_number )
       {
-      case MCORE:
-      case LCORE:
-      case RCORE:
+      case SingleNullBlockCoordSys::MCORE:
+      case SingleNullBlockCoordSys::LCORE:
+      case SingleNullBlockCoordSys::RCORE:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             m_bc_function[RADIAL_CORE] = a_function;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_function[TOROIDAL_CORE] = a_function;
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Invalid argument");
          }
          break;
-      case MCSOL:
-      case LCSOL:
-      case RCSOL:
+      case SingleNullBlockCoordSys::MCSOL:
+      case SingleNullBlockCoordSys::LCSOL:
+      case SingleNullBlockCoordSys::RCSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             m_bc_function[RADIAL_SOL] = a_function;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_function[TOROIDAL_SOL] = a_function;
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Invalid argument");
          }
          break;
-      case LSOL:
+      case SingleNullBlockCoordSys::LSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             m_bc_function[RADIAL_SOL] = a_function;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_function[TOROIDAL_SOL] = a_function;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             m_bc_function[POLOIDAL_INNER_DIV] = a_function;
          }
@@ -409,10 +551,15 @@ SingleNullEllipticOpBC::setBCFunction( const int                           a_blo
             MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Invalid argument");
          }
          break;
-      case RSOL:
+      case SingleNullBlockCoordSys::RSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             m_bc_function[RADIAL_SOL] = a_function;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_function[TOROIDAL_SOL] = a_function;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             m_bc_function[POLOIDAL_OUTER_DIV] = a_function;
          }
@@ -420,10 +567,15 @@ SingleNullEllipticOpBC::setBCFunction( const int                           a_blo
             MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Invalid argument");
          }
          break;
-      case LPF:
+      case SingleNullBlockCoordSys::LPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             m_bc_function[RADIAL_PF] = a_function;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_function[TOROIDAL_PF] = a_function;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             m_bc_function[POLOIDAL_INNER_DIV] = a_function;
          }
@@ -431,10 +583,15 @@ SingleNullEllipticOpBC::setBCFunction( const int                           a_blo
             MayDay::Error("SingleNullEllipticOpBC::setBCFunction(): Invalid argument");
          }
          break;
-      case RPF:
+      case SingleNullBlockCoordSys::RPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             m_bc_function[RADIAL_PF] = a_function;
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            m_bc_function[TOROIDAL_PF] = a_function;
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             m_bc_function[POLOIDAL_OUTER_DIV] = a_function;
          }
@@ -459,27 +616,42 @@ SingleNullEllipticOpBC::getBCFunction( const int  a_block_number,
 
    switch( a_block_number )
       {
-      case MCORE:
-      case LCORE:
-      case RCORE:
+      case SingleNullBlockCoordSys::MCORE:
+      case SingleNullBlockCoordSys::LCORE:
+      case SingleNullBlockCoordSys::RCORE:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             function = m_bc_function[RADIAL_CORE];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_CORE];
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::getBCFunction(): Invalid argument");
          }
          break;
-      case MCSOL:
-      case LCSOL:
-      case RCSOL:
+      case SingleNullBlockCoordSys::MCSOL:
+      case SingleNullBlockCoordSys::LCSOL:
+      case SingleNullBlockCoordSys::RCSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             function = m_bc_function[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_SOL];
+         }
+#endif
          break;
-      case LSOL:
+      case SingleNullBlockCoordSys::LSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             function = m_bc_function[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_SOL];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             function = m_bc_function[POLOIDAL_INNER_DIV];
          }
@@ -487,10 +659,15 @@ SingleNullEllipticOpBC::getBCFunction( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::getBCFunction(): Invalid argument");
          }
          break;
-      case RSOL:
+      case SingleNullBlockCoordSys::RSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             function = m_bc_function[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_SOL];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             function = m_bc_function[POLOIDAL_OUTER_DIV];
          }
@@ -498,10 +675,15 @@ SingleNullEllipticOpBC::getBCFunction( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::getBCFunction(): Invalid argument");
          }
          break;
-      case LPF:
+      case SingleNullBlockCoordSys::LPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             function = m_bc_function[RADIAL_PF];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_PF];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             function = m_bc_function[POLOIDAL_INNER_DIV];
          }
@@ -509,10 +691,15 @@ SingleNullEllipticOpBC::getBCFunction( const int  a_block_number,
             MayDay::Error("SingleNullEllipticOpBC::getBCFunction(): Invalid argument");
          }
          break;
-      case RPF:
+      case SingleNullBlockCoordSys::RPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             function = m_bc_function[RADIAL_PF];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_PF];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             function = m_bc_function[POLOIDAL_OUTER_DIV];
          }
@@ -545,33 +732,51 @@ SingleNullEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
 
    switch( block_number )
       {
-      case MCORE:
-      case LCORE:
-      case RCORE:
+      case SingleNullBlockCoordSys::MCORE:
+      case SingleNullBlockCoordSys::LCORE:
+      case SingleNullBlockCoordSys::RCORE:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             function = m_bc_function[RADIAL_CORE];
             value = m_bc_value[RADIAL_CORE];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_CORE];
+            value = m_bc_value[TOROIDAL_CORE];
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::apply(): Invalid argument");
          }
          break;
-      case MCSOL:
-      case LCSOL:
-      case RCSOL:
+      case SingleNullBlockCoordSys::MCSOL:
+      case SingleNullBlockCoordSys::LCSOL:
+      case SingleNullBlockCoordSys::RCSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             function = m_bc_function[RADIAL_SOL];
             value = m_bc_value[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_SOL];
+            value = m_bc_value[TOROIDAL_SOL];
+         }
+#endif
          else {
             MayDay::Error("SingleNullEllipticOpBC::apply(): Invalid argument");
          }
          break;
-      case LSOL:
+      case SingleNullBlockCoordSys::LSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             function = m_bc_function[RADIAL_SOL];
             value = m_bc_value[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_SOL];
+            value = m_bc_value[TOROIDAL_SOL];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             function = m_bc_function[POLOIDAL_INNER_DIV];
             value = m_bc_value[POLOIDAL_INNER_DIV];
@@ -580,11 +785,17 @@ SingleNullEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
             MayDay::Error("SingleNullEllipticOpBC::apply(): Invalid argument");
          }
          break;
-      case RSOL:
+      case SingleNullBlockCoordSys::RSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
             function = m_bc_function[RADIAL_SOL];
             value = m_bc_value[RADIAL_SOL];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_SOL];
+            value = m_bc_value[TOROIDAL_SOL];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             function = m_bc_function[POLOIDAL_OUTER_DIV];
             value = m_bc_value[POLOIDAL_OUTER_DIV];
@@ -593,11 +804,17 @@ SingleNullEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
             MayDay::Error("SingleNullEllipticOpBC::apply(): Invalid argument");
          }
          break;
-      case LPF:
+      case SingleNullBlockCoordSys::LPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             function = m_bc_function[RADIAL_PF];
             value = m_bc_value[RADIAL_PF];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_PF];
+            value = m_bc_value[TOROIDAL_PF];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             function = m_bc_function[POLOIDAL_INNER_DIV];
             value = m_bc_value[POLOIDAL_INNER_DIV];
@@ -606,11 +823,17 @@ SingleNullEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
             MayDay::Error("SingleNullEllipticOpBC::apply(): Invalid argument");
          }
          break;
-      case RPF:
+      case SingleNullBlockCoordSys::RPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
             function = m_bc_function[RADIAL_PF];
             value = m_bc_value[RADIAL_PF];
          }
+#if CFG_DIM==3
+         else if (a_dir == TOROIDAL_DIR) {
+            function = m_bc_function[TOROIDAL_PF];
+            value = m_bc_value[TOROIDAL_PF];
+         }
+#endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             function = m_bc_function[POLOIDAL_OUTER_DIV];
             value = m_bc_value[POLOIDAL_OUTER_DIV];
@@ -624,7 +847,11 @@ SingleNullEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
       }
 
    if ( !function.isNull() ) {
-      function->assign(a_phi, a_geom, a_coord_sys_box, a_time, false);
+      // Get the block id
+      const MultiBlockCoordSys& coord_sys( *(a_geom.coordSysPtr()) );
+      const int block_number( coord_sys.whichBlock( a_coord_sys_box ) );
+      FArrayBox dummy;
+      function->assign(a_phi, a_geom, dummy, dummy, block_number, a_time, false);
    }
    else {
       a_phi.setVal(value);

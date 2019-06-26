@@ -19,12 +19,13 @@ public:
   ///
   /** Default constructor.
   */
-   MagCoordSys() {;}
+   MagCoordSys()
+      : m_provides_flux(false) {;}
 
   ///
   /** Destructor.
    */
-  virtual ~MagCoordSys();
+   virtual ~MagCoordSys() {;}
 
   /*@}*/
 
@@ -78,6 +79,12 @@ public:
                                        const Side::LoHiSide& a_side) const = 0;
 
 #endif
+
+   bool providesFlux() const {return m_provides_flux;}
+
+protected:
+
+   bool m_provides_flux;
 };
 
 

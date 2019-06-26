@@ -5,6 +5,8 @@
 #include "BlockRegister.H"
 #include "SparseCoupling.H"
 #include "newMappedGridIO.H"
+#include "MagGeom.H"
+#include "DataArray.H"
 
 #include "NamespaceHeader.H"
 
@@ -625,11 +627,34 @@ MBSolver::constructBoundaryStencils( const bool                        a_fourth_
                Box box = bdryBox(domain_box, dir, side, 1);
                FArrayBox bv(box,1);
 
+	       Box box_tmp = adjCellBox(domain_box, dir, side, -1);
+               FluxBox bv_tmp(box_tmp,1);
+
                RefCountedPtr<GridFunction> bc_func = a_bc.getBCFunction(block_number, dir, side );
-               if (bc_func) {
-                  bc_func->assign(bv, m_geometry, box, 0., false);
+	       if (bc_func && !(typeid(*bc_func) == typeid(DataArray))) {
+		  FluxBox real_coords(box_tmp,CFG_DIM);
+		  FluxBox norm_flux(box_tmp,1);
+
+                  const MagBlockCoordSys& coord_sys( ((MagGeom&)m_geometry).getBlockCoordSys( block_number ) );
+
+                  coord_sys.getFaceCenteredRealCoords(dir, real_coords[dir]);
+		  coord_sys.getNormMagneticFlux(real_coords[dir], norm_flux[dir]);
+
+                  bc_func->assign(bv_tmp, m_geometry, real_coords, norm_flux, block_number, 0., false);
+		  
+                  for (BoxIterator bit(box); bit.ok(); ++bit) {
+                     IntVect iv = bit();
+                     iv[dir] = (bv_tmp[dir].box()).sideEnd(side)[dir];
+                     bv(bit(),0) = bv_tmp[dir](iv,0);
+                  }
                }
-               else {
+
+	       else if (bc_func && typeid(*bc_func) == typeid(DataArray)) {
+		  FArrayBox dummy;
+		  bc_func->assign(bv, m_geometry, dummy, dummy, block_number, 0., false);
+	       }
+
+	       else {
                   for (BoxIterator bit(box); bit.ok(); ++bit) {
                      bv(bit(),0) = a_bc.getBCValue(block_number, dir, side);
                   }

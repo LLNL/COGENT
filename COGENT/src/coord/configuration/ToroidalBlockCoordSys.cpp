@@ -1,10 +1,9 @@
 #if CFG_DIM==3
+#include <array>
 #include "ToroidalBlockCoordSys.H"
 #include "MagBlockCoordSysF_F.H"
-
 #include "Directions.H"
 #include "BoxIterator.H"
-//#include "ConstFact.H"
 #include "CONSTANTS.H"
 
 #include "NamespaceHeader.H"
@@ -308,11 +307,11 @@ ToroidalBlockCoordSys::computeFieldData(const int  a_dir,
   convertCylindricalToCartesian(a_curlBFieldDir,X);
 }
 
-Vector<Real>
+
+array<double,3>
 ToroidalBlockCoordSys::computeBField(const RealVect& a_X) const
 {
-  
-  Vector<Real> result(3,0);
+  array<double,3> result;
   
   double R_shift = sqrt(pow(a_X[0],2)+pow(a_X[1],2)) - m_R0;
   double Z_shift = a_X[2];
@@ -344,7 +343,6 @@ ToroidalBlockCoordSys::computeBField(const RealVect& a_X) const
   result[2] = tmp[2];
   
   return result;
-  
 }
 
 

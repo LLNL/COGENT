@@ -3,12 +3,6 @@
 #include "NamespaceHeader.H"
 
 
-MagCoordSys::~MagCoordSys()
-{
-}
-
-
-
 void
 MagCoordSys::defineCoordSystemsAndBoundaries( Vector<MagBlockCoordSys *>& a_geom_vec )
 {
@@ -28,11 +22,10 @@ MagCoordSys::defineCoordSystemsAndBoundaries( Vector<MagBlockCoordSys *>& a_geom
 }
 
 
-
 RealVect
-MagCoordSys::blockRemappingGeneral(int a_nDst,
-                                   const RealVect& a_xiSrc,
-                                   int a_nSrc) const
+MagCoordSys::blockRemappingGeneral( int              a_nDst,
+                                    const RealVect&  a_xiSrc,
+                                    int              a_nSrc) const
 {
    return MultiBlockCoordSys::blockRemappingGeneral(a_nDst, a_xiSrc, a_nSrc);
 }

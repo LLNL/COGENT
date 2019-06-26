@@ -635,7 +635,11 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
                               }
                               else {
 
-                                 // If we've landed here, then stencil_box_iv is neither a valid cell nor an extrablock
+                                 for (IVSIterator givsit(extra_block_ghosts); givsit.ok(); ++givsit) {
+                                    cout << iv << " " << stencil_box_iv << " " << givsit() << endl;
+                                 }
+
+                                    // If we've landed here, then stencil_box_iv is neither a valid cell nor an extrablock
                                  // ghost cell (relative to the center cell iv).  The only remaining possibility is that
                                  // it's a ghost cell at a codim = 1 or codim = 2 physical boundary, in which case 
                                  // the stencil modification to account for boundary conditions should have zeroed

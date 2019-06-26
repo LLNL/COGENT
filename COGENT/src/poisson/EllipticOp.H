@@ -182,7 +182,13 @@ public:
                                 double&                   lo_value,
                                 double&                   hi_value,
                                 LevelData<FArrayBox>&     out ) const;
-    
+   
+   
+   /// Substract flux-averaged parallel divergence; used for 3D MB vorticity 
+   void subtractFSAverParDiv( LevelData<FArrayBox>&      divergence,
+                              const  LevelData<FluxBox>& flux) const;
+   
+   
    void fillInternalGhosts( LevelData<FArrayBox>& phi ) const;
 
    void extractNormalComponent( const LevelData<FluxBox>& in,
@@ -267,6 +273,13 @@ public:
 
    double L2Norm( const LevelData<FArrayBox>& data );
 
+   const string getPrecondMethod() const {return m_precond_method;}
+   const Real   getPrecondTol() const {return m_precond_tol;}
+   const Real   getPrecondMaxIter() const {return m_precond_max_iter;}
+   const bool   getPrecondVerbose() const {return m_precond_verbose;}
+  
+   bool m_subtract_fs_par_div;
+
 protected:
 
    // Computes the cell-centered (i.e., pointwise) field in the mapped frame. It assumes
@@ -336,7 +349,7 @@ protected:
    bool m_second_order;
    bool m_low_pollution;
    int m_num_potential_ghosts;
-
+   
    LinearSolver< LevelData<FArrayBox> >* m_Chombo_solver;
 
    Vector< Vector<CoDim1Stencil> > m_codim1_stencils;

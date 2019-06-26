@@ -4,10 +4,12 @@
 #include "MagCoordSys.H"
 #include "SingleNullBlockCoordSys.H"
 #include "SingleNullEllipticOpBC.H"
+#include "SingleNullBlockCoordSys.H"
 
 #include "NamespaceHeader.H"
 
-#define BLOCK_SEPARATION 2
+#define POLOIDAL_BLOCK_SEP 2
+#define TOROIDAL_BLOCK_SEP 8
 
 class SingleNullCoordSys : public MagCoordSys
 {
@@ -37,7 +39,7 @@ public:
                                const RealVect& xiSrc,
                                int nSrc) const;
 
-   int findBlockNearXpt(const RealVect& X ) const;
+   int findBlockNearXpt(const POL::RealVect& X_pol ) const;
 
    virtual void defineBoundaries();
 
@@ -47,7 +49,11 @@ public:
 
    virtual void defineEllipticOpBC( EllipticOpBC& bc ) const;
 
-   int blockType(int a_block) const {return ((SingleNullBlockCoordSys*)m_coordSysVect[a_block])->blockType();}
+   int blockType(int a_block) const {return ((SingleNullBlockCoordSys*)m_coordSysVect[a_block])->poloidalIndex();}
+
+   int numPoloidalBlocks() const {return m_num_poloidal_blocks;}
+
+   int numToroidalBlocks() const {return m_num_toroidal_blocks;}
 
    int numCellsCoreRadial() const {return m_numcells_core_radial;}
 
@@ -57,12 +63,14 @@ public:
 
    int numCellsRcorePoloidal() const {return m_numcells_rcore_poloidal;}
    
-   bool isModelGeom() const {return m_model_geometry;}
+   int numCellsToroidal() const {return m_numcells_toroidal;}
    
+   bool isModelGeom() const {return m_model_geometry;}
+
      //ABSOLETE: Extrapolate E-field into the open-field-line region
    void extrapolateEfield( LevelData<FluxBox>&   Er_average_face,
                            LevelData<FArrayBox>& Er_average_cell ) const;
-   RealVect m_Xpoint;
+   POL::RealVect m_Xpoint;
 
    void defineStencilsUe( const DisjointBoxLayout&  grids,
                          const int                 nghost );
@@ -77,22 +85,27 @@ public:
    
    virtual std::string type() const { return "SingleNull"; }
 
-#if CFG_DIM ==3
-   /// toroidal block mapping conversion function
-   /** Given a_xiSrc in mapped space of block a_nSrc,
-    and a_side, returns coordinate in mapped space of the
-    destination block (determined from a_side argument)
-    and the  second-order interpolation stencil.
-    */
-   
-   virtual void toroidalBlockRemapping(IntVect& a_ivDst,
-                                       Vector<Real>& a_interpStecil,
-                                       const RealVect& a_xiSrc,
-                                       const int a_nSrc,
-                                       const Side::LoHiSide& a_side) const;
-   
+#if CFG_DIM==3
+   virtual void toroidalBlockRemapping(IntVect&               ivDst,
+                                       Vector<Real>&          interpStecil,
+                                       const RealVect&        xiSrc,
+                                       const int              nSrc,
+                                       const Side::LoHiSide&  side) const;
 #endif
 
+   virtual Vector<RealVect> displacements(const Vector<RealVect>&   dstCoords,
+                                          const Vector<int>&        dstBlocks,
+                                          const RealVect&           srcCoords,
+                                          int                       srcBlock) const;
+
+   int poloidalBlockNumber(const int block_number) const {return block_number % m_num_poloidal_blocks;}
+
+   int toroidalBlockNumber(const int block_number) const {return block_number / m_num_poloidal_blocks;}
+
+#if CFG_DIM==3
+   double toroidalWidth() const {return m_toroidal_width;}
+#endif
+   
 protected:
 
    void defineBoundaries8();
@@ -117,6 +130,8 @@ protected:
 
    void readGridParams( ParmParse& a_pp );
 
+   void readGeomParams( ParmParse& a_pp );
+
    void printInvalidPointDiagnostics( const int                      nSrc,
                                       const RealVect&                xiSrc,
                                       const RealVect&                X,
@@ -129,9 +144,9 @@ protected:
 
    void checkGridConsistency() const;
 
-   IntVect lo_mapped_index(int block) const;
+   IntVect lo_mapped_index(int block_number) const;
 
-   IntVect hi_mapped_index(int block) const;
+   IntVect hi_mapped_index(int block_number) const;
 
    string m_geom_type;
 
@@ -147,6 +162,7 @@ protected:
    int m_numcells_lpf_poloidal;
    int m_numcells_rpf_poloidal;
    int m_numcells_pf_radial;
+   int m_numcells_toroidal;
 
    IntVect m_decomp_mcore;
    IntVect m_decomp_lcore;
@@ -159,11 +175,15 @@ protected:
    IntVect m_decomp_lsol;
    IntVect m_decomp_rsol;
 
+   int m_num_poloidal_blocks;
+   int m_num_toroidal_blocks;
+
    double m_xpoint_radius;
+   double m_toroidal_width;
         
-   double m_ray_angle[NUM_SINGLE_NULL_BLOCKS+1];
-   RealVect m_ray[NUM_SINGLE_NULL_BLOCKS];
-   int m_sector_block[NUM_SINGLE_NULL_BLOCKS];
+   double m_ray_angle[SingleNullBlockCoordSys::NUM_POLOIDAL_BLOCKS+1];
+   POL::RealVect m_ray[SingleNullBlockCoordSys::NUM_POLOIDAL_BLOCKS];
+   int m_sector_block[SingleNullBlockCoordSys::NUM_POLOIDAL_BLOCKS];
 
    SingleNullEllipticOpBC m_divergence_cleaning_bc;
    

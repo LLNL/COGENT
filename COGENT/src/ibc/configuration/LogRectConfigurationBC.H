@@ -3,6 +3,7 @@
 
 #include "GridFunction.H"
 #include "FluidVarBC.H"
+#include "EdgeDataBox.H"
 
 #include "NamespaceHeader.H"
 
@@ -37,6 +38,18 @@ class LogRectConfigurationBC
       virtual void apply( FluidSpecies&  species_comp,
                           const Real&    time );
 
+      virtual void applyFluxBC( const FluidSpecies&       a_species_comp,
+                                LevelData<FluxBox>& a_dst,
+                          const LevelData<FluxBox>& a_src,
+                          const Real&               a_time );
+      
+      virtual void applyEdgeBC( const FluidSpecies&       a_species_comp,
+                                LevelData<EdgeDataBox>& a_dst,
+                          const LevelData<EdgeDataBox>& a_src,
+                          const Real&               a_time );
+
+
+
       /// Check association with variable
       /**
        * Returns true if this boundary condition corresponds to the variable
@@ -61,11 +74,10 @@ class LogRectConfigurationBC
       LogRectConfigurationBC( const LogRectConfigurationBC& );
       LogRectConfigurationBC& operator=( const LogRectConfigurationBC& );
 
-      void fillInflowData( FluidSpeciesPtrVect& a_bdry_data,
-                           Vector<std::string>& a_bc_type,
-                           const BoundaryBoxLayoutPtrVect& a_bdry_layout,
-                           const Real& a_time );
-   
+      void fillInflowData( const MagGeom&  a_geometry, 
+                           const Real      a_time );
+      
+      void setAllBcType( const BoundaryBoxLayoutPtrVect&  a_bdry_layout );
  
 //      void createReflectedData( LevelData<FArrayBox>&       a_rflct_data,
 //                              AuxDataMap&                 a_rflct_data_map,
@@ -115,6 +127,18 @@ class LogRectConfigurationBC
       Vector<RefCountedPtr<GridFunction> > m_inflow_function;
       Vector<std::string> m_bdry_name;
       Vector<std::string> m_bc_type;
+
+      // JRA, stuff for making BCs more efficient
+      //
+      Vector<std::string> m_all_bc_type;
+      BoundaryBoxLayoutPtrVect m_all_bdry_layouts;
+      BoundaryBoxLayoutPtrVect m_all_bdry_layouts_flux;
+      BoundaryBoxLayoutPtrVect m_all_bdry_layouts_edge;
+      Vector< RefCountedPtr<LevelData<FArrayBox>> > m_all_bdry_data;
+      bool m_all_bdry_defined=false;
+      bool m_all_bdry_layouts_flux_defined=false;
+      bool m_all_bdry_layouts_edge_defined=false;
+
 };
 
 #include "NamespaceFooter.H"

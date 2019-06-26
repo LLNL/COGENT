@@ -53,6 +53,16 @@ class FluidSpecies
       /**
        */
       virtual void massDensity( LevelData<FArrayBox>& rho ) const;
+      
+      /// Returns species velocity in virtual direction
+      /**
+       */
+      virtual void velocity_virtual( LevelData<FArrayBox>& velocity ) const;
+
+      /// Returns species mean energy.
+      /**
+       */
+      virtual void meanEnergy( LevelData<FArrayBox>& meanEnergy ) const;
 
       /// Returns species charge density.
       /**
@@ -75,20 +85,24 @@ class FluidSpecies
       /**
        */
       virtual void pressure( LevelData<FArrayBox>& pressure ) const;
-
-      /// Returns species pressure.
+      
+      /// Returns species magnetic pressure.
       /**
        */
-      virtual void temperature( LevelData<FArrayBox>& pressure ) const;
+      virtual void Bpressure( LevelData<FArrayBox>& Bpressure ) const;
+
+      /// Returns species temperature.
+      /**
+       */
+      virtual void temperature( LevelData<FArrayBox>& temperature ) const;
 
       /// Returns true if the species is name.
       /**
        */
       virtual bool isSpecies( const string& name ) const;
 
-      virtual
-      RefCountedPtr<CFGVars> convertToPhysical( const IntVect& a_ghost_vect ) const;
-
+      virtual void convertToPhysical();
+      
       virtual void convertFromPhysical();
 
       /// Factory method
@@ -121,6 +135,11 @@ class FluidSpecies
 
       Real maxValue() const;
       Real minValue() const;
+
+      int m_evolve_momentumDensity_virtual=0;
+      int m_evolve_magneticField_virtual=0;
+      int m_evolve_momentumDensity=0, m_evolve_energyDensity=0;
+      Real m_gamma = 5.0/3.0;
 
 private:
 

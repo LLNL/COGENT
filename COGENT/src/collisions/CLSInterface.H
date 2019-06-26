@@ -56,8 +56,9 @@ class CLSInterface
 
       virtual inline bool isLinear() { return false; }
       
-      virtual Real computeDt(const KineticSpeciesPtrVect& soln, const int i) { return DBL_MAX; }
-      virtual Real TimeScale(const KineticSpeciesPtrVect& soln, const int i) { return -1; }
+      virtual Real computeDtExplicitTI(const KineticSpeciesPtrVect& soln, const int i) = 0;
+      virtual Real computeDtImExTI(const KineticSpeciesPtrVect& soln, const int i) = 0;
+      virtual Real computeTimeScale(const KineticSpeciesPtrVect& soln, const int i) = 0;
 
       virtual int precondMatrixBands() { return(0); }
 

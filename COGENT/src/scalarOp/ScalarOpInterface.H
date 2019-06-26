@@ -58,7 +58,12 @@ class ScalarOpInterface
                                           const bool                         recompute_kinetic_terms,
                                           const Real                         time ) = 0;
 
-      virtual Real computeDt(const ScalarPtrVect& scalars)
+      virtual Real computeDtExplicitTI(const ScalarPtrVect& scalars)
+      {
+         return DBL_MAX;
+      }
+   
+      virtual Real computeDtImExTI(const ScalarPtrVect& scalars)
       {
          return DBL_MAX;
       }

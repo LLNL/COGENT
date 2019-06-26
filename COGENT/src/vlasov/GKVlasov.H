@@ -2,6 +2,8 @@
 #define _GKVLASOV_H_
 
 #include "KineticFunction.H"
+#include "GlobalDOF.H"
+#include "MultiPhysicsPreconditioner.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -10,6 +12,10 @@
 #define CH_SPACEDIM PDIM
 
 #include "NamespaceHeader.H"
+
+class GKVector;
+class GKOps;
+typedef enum {_explicit_, _implicit_} tiType;
 
 /**
  * Gyrokinetic Vlasov operator class.
@@ -23,8 +29,12 @@ public:
     *  @param[in] pp the input database.
     *  @param[in] larmor_number the Larmor number for the operator.
     */
-   GKVlasov( ParmParse&  pp,
-             const Real  larmor_number);
+   GKVlasov( ParmParse&                       pp,
+             const Real                       larmor_number );
+
+   GKVlasov( ParmParse&                       pp,
+             const Real                       larmor_number,
+             const std::vector<std::string>&  species_name_list );
 
    /// Destructor.
    /**
@@ -35,6 +45,7 @@ public:
                                const KineticSpeciesPtrVect&           kinetic_phys,
                                const CFG::LevelData<CFG::FArrayBox>&  phi,
                                const CFG::EField&                     E_field,
+                               const bool                             implicit,
                                const Real&                            time );
 
    /// Compute a stable time step.
@@ -42,8 +53,11 @@ public:
     * Computes and returns an estimate of the maximum stable time step.
     */
 
-   Real computeDt( const CFG::EField&           Efield_cfg,
-                   const KineticSpeciesPtrVect& soln );
+   Real computeDtExplicitTI(const CFG::EField&           Efield_cfg,
+                            const KineticSpeciesPtrVect& soln );
+
+   Real computeDtImExTI( const CFG::EField&           Efield_cfg,
+                         const KineticSpeciesPtrVect& soln );
 
    /// Compute the time scale.
    /**
@@ -70,30 +84,98 @@ public:
    // Operator evaluation using a phase space velocity computed directly from
    // a phase-space injected electric field (Efield), as opposed to the
    // divergence-free method
-   void evalRHS( KineticSpecies&                        rhs,
-                 const KineticSpecies&                  soln,
-                 const CFG::LevelData<CFG::FArrayBox>&  phi,
-                 const CFG::EField&                     Efield,
-                 const Real                             time );
+   void evalRHSExplicit( KineticSpecies&                        rhs,
+                         const KineticSpecies&                  soln,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::EField&                     Efield,
+                         const int                              velocity_option,
+                         const Real                             time );
+
+   void evalRHSImplicit( KineticSpecies&                        rhs,
+                         const KineticSpecies&                  soln,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::EField&                     Efield,
+                         const int                              velocity_option,
+                         const Real                             time );
+
+   void evalRHS(         KineticSpecies&                        rhs,
+                         const KineticSpecies&                  soln,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::EField&                     Efield,
+                         const int                              velocity_option,
+                         const Real                             time );
+
 
    // Operator evaluation using a divergence-free phase space velocity computed from
    // the cell-centered field (Efield_cell) and nodal potential (phi_node)
-   void evalRHS( KineticSpecies&                        rhs,
-                 const KineticSpecies&                  soln,
-                 const CFG::LevelData<CFG::FArrayBox>&  phi,
-                 const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
-                 const CFG::LevelData<CFG::FArrayBox>&  phi_node,
-                 const bool                             fourth_order_Efield,
-                 const int                              velocity_option,
-                 const Real                             time );
+   void evalRHSExplicit( KineticSpecies&                        rhs,
+                         const KineticSpecies&                  soln,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
+                         const bool                             fourth_order_Efield,
+                         const int                              velocity_option,
+                         const Real                             time );
 
-   void evalRHS( KineticSpecies&                        rhs,
-                 const KineticSpecies&                  soln,
-                 const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
-                 const CFG::LevelData<CFG::FArrayBox>&  phi_node,
-                 const bool                             fourth_order_Efield,
-                 const int                              velocity_option,
-                 const Real                             time );
+   void evalRHSImplicit( KineticSpecies&                        rhs,
+                         const KineticSpecies&                  soln,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
+                         const bool                             fourth_order_Efield,
+                         const int                              velocity_option,
+                         const Real                             time );
+
+   void evalRHS(         KineticSpecies&                        rhs,
+                         const KineticSpecies&                  soln,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
+                         const bool                             fourth_order_Efield,
+                         const int                              velocity_option,
+                         const Real                             time );
+
+   void evalRHS(         KineticSpecies&                        rhs,
+                         const KineticSpecies&                  soln,
+                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
+                         const bool                             fourth_order_Efield,
+                         const int                              velocity_option,
+                         const Real                             time );
+
+   void defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>&,
+                             std::vector<DOFList>&,
+                             const KineticSpeciesPtrVect&,
+                             const GlobalDOFKineticSpeciesPtrVect&,
+                             const GKVector&,
+                             GKOps&,
+                             const std::string&,
+                             const std::string&,
+                             bool);
+
+   void updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>&,
+                             const KineticSpeciesPtrVect&,
+                             const GlobalDOFKineticSpeciesPtrVect&,
+                             const Real, const Real, const bool);
+
+   void defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+                       std::vector<DOFList>&,
+                       const GKVector&,
+                       GKOps&,
+                       const std::string&,
+                       const std::string&,
+                       bool,
+                       const KineticSpecies&,
+                       const GlobalDOFKineticSpecies&,
+                       int );
+
+   void updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+                       const KineticSpecies&,
+                       const GlobalDOFKineticSpecies&,
+                       const Real,
+                       const Real,
+                       const bool,
+                       const int );
 
 protected:
 
@@ -162,6 +244,9 @@ protected:
    
    LevelData<FArrayBox> m_F0;
    RefCountedPtr<KineticFunction> m_ref_func;
+
+   std::map<std::string, tiType> m_ti_type;
+   std::map<std::string, int> m_my_pc_idx;
 };
 
 #include "NamespaceFooter.H"

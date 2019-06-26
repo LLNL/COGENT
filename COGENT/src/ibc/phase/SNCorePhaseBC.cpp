@@ -37,7 +37,7 @@
 inline
 KineticFunction& SNCorePhaseBC::radialInflowFunc( const Side::LoHiSide& a_side, const int& a_block_type )
 {
-   if (a_block_type==L_CORE||R_CORE) {
+   if (a_block_type==CFG::SNCoreBlockCoordSys::LCORE||CFG::SNCoreBlockCoordSys::RCORE) {
       if (a_side == 0) {
          return *(m_inflow_function[RADIAL_INNER]);
       }
@@ -52,6 +52,18 @@ KineticFunction& SNCorePhaseBC::radialInflowFunc( const Side::LoHiSide& a_side, 
    // This return will never be reached, but the compiler wants to see something returned
    return *(m_inflow_function[RADIAL_INNER]);
 }
+
+
+#if CFG_DIM==3
+inline
+KineticFunction& SNCorePhaseBC::toroidalInflowFunc( const Side::LoHiSide& a_side )
+{
+   if (a_side==Side::Lo) {
+      return *(m_inflow_function[TOROIDAL_LOWER]);
+   }
+   return *(m_inflow_function[TOROIDAL_UPPER]);
+}
+#endif
 
 
 inline
@@ -82,6 +94,11 @@ KineticFunction& SNCorePhaseBC::inflowFunc( const int& a_dir,
    if (a_dir==RADIAL_DIR) {
       MayDay::Error( "SNCorePhaseBC::inflowFunc(): Does not handle RADIAL inflow functions!" );
    }
+#if CFG_DIM==3
+   else if (a_dir==TOROIDAL_DIR) {
+      inflow_func = &toroidalInflowFunc( a_side );
+   }
+#endif
    else if (a_dir==VPARALLEL_DIR) {
       inflow_func = &vParallelInflowFunc( a_side );
    }
@@ -89,7 +106,7 @@ KineticFunction& SNCorePhaseBC::inflowFunc( const int& a_dir,
       inflow_func = &muInflowFunc( a_side );
    }
    else {
-      MayDay::Error( "SNCorePhaseBC::inflowFunc(): Toroidal BCs not implemented!" );
+      MayDay::Error( "SNCorePhaseBC::inflowFunc(): BCs in direction a_dir not implemented!" );
    }
    return *(inflow_func);
 }
@@ -98,7 +115,7 @@ KineticFunction& SNCorePhaseBC::inflowFunc( const int& a_dir,
 inline
 std::string SNCorePhaseBC::radialBcType( const Side::LoHiSide& a_side, const int& a_block_type )
 {
-   if (a_block_type==L_CORE||R_CORE) {
+   if (a_block_type==CFG::SNCoreBlockCoordSys::LCORE||CFG::SNCoreBlockCoordSys::RCORE) {
       if (a_side == 0) {
          return m_bc_type[RADIAL_INNER];
       }
@@ -113,6 +130,17 @@ std::string SNCorePhaseBC::radialBcType( const Side::LoHiSide& a_side, const int
    // This return will never be reached, but the compiler wants to see something returned
    return m_bc_type[RADIAL_INNER];
 }
+
+#if CFG_DIM==3
+inline
+std::string SNCorePhaseBC::toroidalBcType( const Side::LoHiSide& a_side )
+{
+   if (a_side==Side::Lo) {
+      return m_bc_type[TOROIDAL_LOWER];
+   }
+   return m_bc_type[TOROIDAL_UPPER];
+}
+#endif
 
 inline
 std::string SNCorePhaseBC::vParallelBcType( const Side::LoHiSide& a_side )
@@ -140,6 +168,11 @@ std::string SNCorePhaseBC::getBcType( const int& a_dir,
    if (a_dir==RADIAL_DIR) {
       MayDay::Error( "SNCorePhaseBC::inflowFunc(): Does not handle RADIAL inflow functions!" );
    }
+#if CFG_DIM==3
+   else if (a_dir==TOROIDAL_DIR) {
+      bc_type = toroidalBcType( a_side );
+   }
+#endif
    else if (a_dir==VPARALLEL_DIR) {
       bc_type = vParallelBcType( a_side );
    }
@@ -147,7 +180,7 @@ std::string SNCorePhaseBC::getBcType( const int& a_dir,
       bc_type = muBcType( a_side );
    }
    else {
-      MayDay::Error( "SNCorePhaseBC::inflowFunc(): Toroidal BCs not implemented!" );
+      MayDay::Error( "SNCorePhaseBC::inflowFunc(): BCs in direction a_dir not implemented!" );
    }
    return bc_type;
 }
@@ -169,6 +202,10 @@ SNCorePhaseBC::SNCorePhaseBC( const std::string& a_name,
 
    m_bdry_name[RADIAL_INNER] = "radial_inner";
    m_bdry_name[RADIAL_OUTER] = "radial_outer";
+#if CFG_DIM==3
+   m_bdry_name[TOROIDAL_LOWER] = "toroidal_lower";
+   m_bdry_name[TOROIDAL_UPPER] = "toroidal_upper";
+#endif
    m_bdry_name[VPAR_LOWER] = "vpar_lower";
    m_bdry_name[VPAR_UPPER] = "vpar_upper";
    m_bdry_name[MU_LOWER] = "mu_lower";

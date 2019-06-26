@@ -61,7 +61,14 @@ gksystem.magnetic_geometry_mapping.cylindrical.r_min = 0.064171
 gksystem.magnetic_geometry_mapping.cylindrical.r_max = 0.065829
 gksystem.magnetic_geometry_mapping.cylindrical.z_min = -0.00082903
 gksystem.magnetic_geometry_mapping.cylindrical.z_max = 0.00082903
+
+#gksystem.magnetic_geometry_mapping.cylindrical.B_type = "constant"
+#gksystem.magnetic_geometry_mapping.cylindrical.Btor_0 = 0.63
+gksystem.magnetic_geometry_mapping.cylindrical.B_type = "toroidal"
 gksystem.magnetic_geometry_mapping.cylindrical.Btor_scale = 0.63
+#gksystem.magnetic_geometry_mapping.cylindrical.B_type = "bennett"
+#gksystem.magnetic_geometry_mapping.cylindrical.Btor_0 = 1.0
+#gksystem.magnetic_geometry_mapping.cylindrical.r_0 = 0.091
 
 #####################################################
 # Phase Space Geometry Definitions

@@ -77,6 +77,11 @@ class KineticSpecies
        */
       virtual void chargeDensity( CFG::LevelData<CFG::FArrayBox>& rho ) const;
 
+      /// Returns gyroaveraged species charge density.
+      /**
+       */
+      virtual void gyroaveragedChargeDensity( CFG::LevelData<CFG::FArrayBox>& rho ) const;
+
       /// Returns species momentum density.
       /**
        */
@@ -233,17 +238,18 @@ class KineticSpecies
       Real maxValue() const;
       Real minValue() const;
 
-      void computeVelocity( LevelData<FluxBox>& a_velocity,
-                            const LevelData<FluxBox>& a_E_field ) const;
+      void computeVelocity( LevelData<FluxBox>& velocity,
+                            const LevelData<FluxBox>& E_field,
+                            const int  velocity_option) const;
 
-      void computeMappedVelocityNormals( LevelData<FluxBox>& a_velocity,
-                                         const CFG::LevelData<CFG::FArrayBox>& a_E_field_cell,
-                                         const CFG::LevelData<CFG::FArrayBox>& a_phi_node,
+      void computeMappedVelocityNormals( LevelData<FluxBox>& velocity,
+                                         const CFG::LevelData<CFG::FArrayBox>& E_field_cell,
+                                         const CFG::LevelData<CFG::FArrayBox>& phi_node,
                                          const bool fourth_order_Efield,
                                          const int  velocity_option ) const;
 
-      void computeMappedVelocity( LevelData<FluxBox>& a_velocity,
-                                  const LevelData<FluxBox>& a_E_field ) const;
+      void computeMappedVelocity( LevelData<FluxBox>& velocity,
+                                  const LevelData<FluxBox>& E_field ) const;
 
       inline
       virtual int size( bool a_count_ghosts = false )

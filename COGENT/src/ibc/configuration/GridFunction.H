@@ -5,17 +5,28 @@
 #include "FArrayBox.H"
 #include "LevelData.H"
 #include "MultiBlockLevelGeom.H"
+#include "MagBlockCoordSys.H"
 #include "BoundaryBoxLayout.H.multidim"
 
 #include "NamespaceHeader.H"
 
 /**
- * Generic grid function abstract interface.
+ * Generic grid function interface.
 */
 class GridFunction
 {
    public:
 
+      /// Constructor using a database.
+      /**
+       * Constructs the object by getting parameter from a ParmParse database.
+       *
+       * @param[in] pp ParmParse database that contains the parameters for
+       *               the new GridFunction object.
+       * @param[in] verbosity Flag to turn on additional levels of output
+       */
+      GridFunction( const int& verbosity );
+   
       /// Destructor.
       /**
        */
@@ -35,15 +46,15 @@ class GridFunction
        * @param[in] as_cell_name Boolean switch for cell average values or
        *                         point values.
        */
-      virtual void assign( LevelData<FArrayBox>& data,
-                           const MultiBlockLevelGeom& geometry,
-                           const Real& time,
-                           const bool& as_cell_averages = true ) const = 0;
+      void assign(LevelData<FArrayBox>& data,
+                  const MultiBlockLevelGeom& geometry,
+                  const Real& time,
+                  const bool& as_cell_averages = true ) const;
 
-      virtual void assign( LevelData<FluxBox>& data,
-                           const MultiBlockLevelGeom& geometry,
-                           const Real& time,
-                           const bool& as_cell_averages = true ) const = 0;
+      void assign(LevelData<FluxBox>& data,
+                  const MultiBlockLevelGeom& geometry,
+                  const Real& time,
+                  const bool& as_face_averages = true ) const;
 
       /// Set the grid function.
       /**
@@ -60,17 +71,21 @@ class GridFunction
        * @param[in] as_cell_name Boolean switch for cell average values or
        *                         point values.
        */
-      virtual void assign( FArrayBox& dfn,
-                           const MultiBlockLevelGeom& geometry,
-                           const Box& box,
-                           const Real& time,
-                           const bool& cell_averages = true ) const = 0;
+      void assign(FArrayBox& dfn,
+                  const MultiBlockLevelGeom& geometry,
+                  const FArrayBox& real_coords,
+                  const FArrayBox& normalized_flux,
+                  const int  block_number,
+                  const Real& time,
+                  const bool& cell_averages = true ) const;
 
-      virtual void assign( FluxBox& dfn,
-                           const MultiBlockLevelGeom& geometry,
-                           const Box& box,
-                           const Real& time,
-                           const bool& cell_averages = true ) const = 0;
+      void assign(FluxBox& dfn,
+                  const MultiBlockLevelGeom& geometry,
+                  const FluxBox& real_coords,
+                  const FluxBox& normalized_flux,
+                  const int block_number,
+                  const Real& time,
+                  const bool& face_averages = true ) const;
 
       /// Set the function on the boundary boxes.
       /**
@@ -84,15 +99,60 @@ class GridFunction
        * @param[in] bdry_layout BoundaryBoxLayout defining boxes to fill.
        * @param[in] time Time value at which to evaluate the function.
        */
-      virtual void assign( LevelData<FArrayBox>& data,
-                           const MultiBlockLevelGeom& geometry,
-                           const BoundaryBoxLayout& bdry_layout,
-                           const Real& time ) const = 0;
+      void assign(LevelData<FArrayBox>& data,
+                  const MultiBlockLevelGeom& geometry,
+                  const BoundaryBoxLayout& bdry_layout,
+                  const Real& time ) const;
 
       /// Print object parameters.
       /**
        */
       virtual void printParameters() const = 0;
+   
+   protected:
+   
+      /// Check that the geometry is consistent with a particular grid function realization.
+      /**
+       */
+      virtual void checkGeometryValidity( const MultiBlockLevelGeom& geometry ) const {;}
+   
+      /// Set pointwise values at cell centers.
+      /**
+       */
+      virtual void setPointwise(FArrayBox&                  dfn,
+                                const MultiBlockLevelGeom&  geometry,
+                                const FArrayBox&            real_coords,
+                                const FArrayBox&            normalized_flux,
+                                const int                   block_number ) const = 0;
+      /// Set cell-average values.
+      /**
+       */
+      void setCellAverages(FArrayBox&                  data,
+                           const MultiBlockLevelGeom&  geometry,
+                           const FArrayBox&            real_coords,
+                           const FArrayBox&            normalized_flux,
+                           const int                   block_number) const;
+      /// Set face-average values.
+      /**
+       */
+      void setFaceAverages(FluxBox&                    data,
+                           const MultiBlockLevelGeom&  geometry,
+                           const FluxBox&              real_coords,
+                           const FluxBox&              normalized_flux,
+                           const int                   block_number) const;
+   
+
+      /// Returns block coordinate system
+      const MagBlockCoordSys& getCoordSys(const MultiBlockLevelGeom& geometry,
+                                          const Box&                 box ) const;
+
+
+      /// Returns block coordinate system
+      const MagBlockCoordSys& getCoordSys(const MultiBlockLevelGeom& geometry,
+                                          const int                  block_number ) const;
+   
+      bool m_verbosity;
+  
 };
 
 #include "NamespaceFooter.H"

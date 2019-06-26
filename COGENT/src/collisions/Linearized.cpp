@@ -778,9 +778,25 @@ void Linearized::printParameters()
 
 
 
-Real Linearized::computeDt(const KineticSpeciesPtrVect& soln)
+Real Linearized::computeTimeScale(const KineticSpeciesPtrVect& soln, const int a_idx)
 {
+   // Replace with an estimate of time scale
    return DBL_MAX;
+}
+
+Real Linearized::computeDtExplicitTI(const KineticSpeciesPtrVect& soln, const int a_idx)
+{
+   // Replace with an estimate of dt
+   return DBL_MAX;
+}
+
+Real Linearized::computeDtImExTI(const KineticSpeciesPtrVect& soln, const int a_idx)
+{
+  if (m_time_implicit) {
+    return DBL_MAX;
+  } else {
+    return computeDtExplicitTI(soln, a_idx);
+  }
 }
 
 #include "NamespaceFooter.H"

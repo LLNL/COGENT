@@ -380,6 +380,12 @@ public:
 
    const LevelData<FArrayBox>& getBFieldMagnitude() const {return *m_BMagCell;}
 
+   const LevelData<FArrayBox>& getCellCenteredRealCoords() const {return *m_cell_centered_real_coords;}
+
+   const LevelData<FArrayBox>& getNormalizedMagneticFluxCell() const {return *m_normalized_magnetic_flux_cell;}
+
+   const LevelData<FluxBox>& getNormalizedMagneticFluxFace() const {return *m_normalized_magnetic_flux_face;}
+
    const CFG::MagGeom& magGeom() const {return *m_mag_geom;}
 
    /// Returns \f$v_{\parallel}-\mu\f$ space mapping.
@@ -409,6 +415,9 @@ public:
 
    void injectConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& src,
                                     LevelData<FArrayBox>&                 dst ) const;
+
+   void injectConfigurationToPhaseNoExchange( const CFG::LevelData<CFG::FArrayBox>& src,
+                                              LevelData<FArrayBox>&                 dst ) const;
 
    void injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>& src,
                                     LevelData<FluxBox>&                 dst ) const;
@@ -620,7 +629,7 @@ public:
                                    const LevelData<FArrayBox>& vector) const;
 
    enum velocity_option {FULL_VELOCITY, PARALLEL_STREAMING_VELOCITY, DRIFT_VELOCITY, EXB_DRIFT_VELOCITY,
-                         MAGNETIC_DRIFT_VELOCITY, NO_ZERO_ORDER_PARALLEL_VELOCITY};
+                         MAGNETIC_DRIFT_VELOCITY, NO_ZERO_ORDER_TERMS};
    
    double getLarmorNumber() const {return m_larmor_number;}
 
@@ -682,6 +691,8 @@ public:
 
 protected:
 
+   void setCellCenteredRealCoords();
+
    Box configurationFlatten( const Box& disjointBox,
                              const Box& src_box ) const;
 
@@ -695,6 +706,8 @@ protected:
 
 private:
 
+   void setNormalizedMagneticFlux();
+
    const RefCountedPtr<PhaseCoordSys> m_phase_coords;
 
    const RefCountedPtr<PhaseGrid> m_phase_grid;
@@ -702,6 +715,8 @@ private:
    ProblemDomain m_domain;
 
    LevelData<FluxBox> *   m_configuration_metrics;
+   LevelData<FluxBox> *   m_configuration_metrics_pointwise;
+   LevelData<FArrayBox> * m_configuration_poloidal_J;
    LevelData<FluxBox> *   m_configuration_tangrad_metrics;
    LevelData<FArrayBox> * m_configuration_volumes;
    LevelData<FArrayBox> * m_configuration_J;
@@ -713,6 +728,8 @@ private:
    LevelData<FArrayBox> * m_velocity_J;
    LevelData<FluxBox> *   m_velocity_face_areas;
 
+   LevelData<FArrayBox> * m_cell_centered_real_coords;
+
    LevelData<FArrayBox> * m_BCell;
    LevelData<FluxBox> * m_BFace;
    LevelData<FArrayBox> * m_gradBCell;
@@ -723,6 +740,9 @@ private:
    LevelData<FluxBox> * m_BMagFace;
    LevelData<FArrayBox> * m_bdotcurlbCell;
    LevelData<FluxBox> * m_bdotcurlbFace;
+
+   LevelData<FArrayBox> * m_normalized_magnetic_flux_cell;
+   LevelData<FluxBox> * m_normalized_magnetic_flux_face;
 
    LevelData<FArrayBox> m_BStar;
    LevelData<FArrayBox> m_BStarParallel;

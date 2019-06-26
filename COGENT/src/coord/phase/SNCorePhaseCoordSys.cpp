@@ -40,54 +40,72 @@ SNCorePhaseCoordSys::defineBoundaries2()
 
    int bc_tag = 0;  // define this later
 
-   for (int block = 0; block < numBlocks(); block++) {
+   int num_poloidal_blocks = ((RefCountedPtr<CFG::SNCoreCoordSys>)m_mag_coords)->numPoloidalBlocks();
+   int num_toroidal_blocks = ((RefCountedPtr<CFG::SNCoreCoordSys>)m_mag_coords)->numToroidalBlocks();
 
-      IndicesTransformation it;
-      IntVect shift;
-      Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block];
-      const CFG::SNCoreBlockCoordSys* mag_block_coord_sys
-         = (const CFG::SNCoreBlockCoordSys*)m_mag_coords->getCoordSys(block);
-      int block_type = mag_block_coord_sys->blockType();
+   for ( int block_number=0, toroidal_index=0; toroidal_index<num_toroidal_blocks; ++toroidal_index ) {
+      for ( int poloidal_index=0; poloidal_index<num_poloidal_blocks; ++poloidal_index, ++block_number ) {
 
-      if( block_type == L_CORE ) {
+         IndicesTransformation it;
+         IntVect shift;
+         Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block_number];
+         const CFG::SNCoreBlockCoordSys* mag_block_coord_sys
+            = (const CFG::SNCoreBlockCoordSys*)m_mag_coords->getCoordSys(block_number);
+         int block_type = mag_block_coord_sys->poloidalIndex();
 
-        blockBoundaries[RADIAL_DIR].define(bc_tag);
-        blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+         if( block_type == CFG::SNCoreBlockCoordSys::LCORE ) {
 
-        shift = -BLOCK_SEPARATION*(m_mappingBlocks[L_CORE].size(POLOIDAL_DIR) +
-                                   m_mappingBlocks[R_CORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-        it.defineFromTranslation(shift);
-        blockBoundaries[POLOIDAL_DIR].define(it,R_CORE);
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
 
-        shift = -(BLOCK_SEPARATION+1)*(m_mappingBlocks[L_CORE].size(POLOIDAL_DIR)
-                    + m_mappingBlocks[R_CORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-        it.defineFromTranslation(shift);
-        blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,R_CORE);
-      }
-      else if( block_type == R_CORE ) {
+            shift = -POLOIDAL_BLOCK_SEP*(m_mappingBlocks[CFG::SNCoreBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                         m_mappingBlocks[CFG::SNCoreBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,CFG::SNCoreBlockCoordSys::RCORE);
 
-        blockBoundaries[RADIAL_DIR].define(bc_tag);
-        blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+            shift = -(POLOIDAL_BLOCK_SEP+1)*(m_mappingBlocks[CFG::SNCoreBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+                                             + m_mappingBlocks[CFG::SNCoreBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,CFG::SNCoreBlockCoordSys::RCORE);
+         }
+         else if( block_type == CFG::SNCoreBlockCoordSys::RCORE ) {
+            
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
 
-        shift = (BLOCK_SEPARATION+1)*(m_mappingBlocks[L_CORE].size(POLOIDAL_DIR)
-                   + m_mappingBlocks[R_CORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-        it.defineFromTranslation(shift);
-        blockBoundaries[POLOIDAL_DIR].define(it,L_CORE);
+            shift = (POLOIDAL_BLOCK_SEP+1)*(m_mappingBlocks[CFG::SNCoreBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+                                            + m_mappingBlocks[CFG::SNCoreBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,CFG::SNCoreBlockCoordSys::LCORE);
 
-        shift = BLOCK_SEPARATION*(m_mappingBlocks[L_CORE].size(POLOIDAL_DIR) +
-                                  m_mappingBlocks[R_CORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-        it.defineFromTranslation(shift);
-        blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,L_CORE);
-      }
-      else {
+            shift = POLOIDAL_BLOCK_SEP*(m_mappingBlocks[CFG::SNCoreBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                        m_mappingBlocks[CFG::SNCoreBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,CFG::SNCoreBlockCoordSys::LCORE);
+         }
+         else {
             MayDay::Error("SNCorePhaseCoordSys::defineBoundaries(): case not implemented");
-      }
+         }
 
-      // Block boundaries in the velocity directions are always physical
-      blockBoundaries[VPARALLEL_DIR].define(bc_tag);
-      blockBoundaries[VPARALLEL_DIR+SpaceDim].define(bc_tag);
-      blockBoundaries[MU_DIR].define(bc_tag);
-      blockBoundaries[MU_DIR+SpaceDim].define(bc_tag);
+#if CFG_DIM==3
+         if ( num_toroidal_blocks == 1 ) {  // Assuming periodic coupling
+            shift = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+            it.defineFromTranslation( shift );
+            blockBoundaries[TOROIDAL_DIR].define( it, block_number );
+            it.defineFromTranslation( -shift );
+            blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number );
+         }
+         else {
+            MayDay::Error("SNCorePhaseCoordSys::defineBoundaries2(): Toroidal block coupling is not defined");
+         }
+#endif
+
+         // Block boundaries in the velocity directions are always physical
+         blockBoundaries[VPARALLEL_DIR].define(bc_tag);
+         blockBoundaries[VPARALLEL_DIR+SpaceDim].define(bc_tag);
+         blockBoundaries[MU_DIR].define(bc_tag);
+         blockBoundaries[MU_DIR+SpaceDim].define(bc_tag);
+      }
    }
 
    m_gotBoundaries = true;
@@ -100,74 +118,92 @@ SNCorePhaseCoordSys::defineBoundaries3()
    CH_assert(gotMappingBlocks());
    m_boundaries.resize(numBlocks());
 
-   int numcells_mcore_poloidal = m_mappingBlocks[M_CORE].size(POLOIDAL_DIR);
-   int numcells_lcore_poloidal = m_mappingBlocks[L_CORE].size(POLOIDAL_DIR);
-   int numcells_rcore_poloidal = m_mappingBlocks[R_CORE].size(POLOIDAL_DIR);
+   int numcells_mcore_poloidal = m_mappingBlocks[CFG::SNCoreBlockCoordSys::MCORE].size(POLOIDAL_DIR);
+   int numcells_lcore_poloidal = m_mappingBlocks[CFG::SNCoreBlockCoordSys::LCORE].size(POLOIDAL_DIR);
+   int numcells_rcore_poloidal = m_mappingBlocks[CFG::SNCoreBlockCoordSys::RCORE].size(POLOIDAL_DIR);
 
    int lL1 = numcells_mcore_poloidal/2 + numcells_lcore_poloidal;
    int rL1 = numcells_mcore_poloidal/2 + numcells_rcore_poloidal;
 
    int bc_tag = 0;  // define this later
 
-   for (int block = 0; block < numBlocks(); block++) {
+   int num_poloidal_blocks = ((RefCountedPtr<CFG::SNCoreCoordSys>)m_mag_coords)->numPoloidalBlocks();
+   int num_toroidal_blocks = ((RefCountedPtr<CFG::SNCoreCoordSys>)m_mag_coords)->numToroidalBlocks();
 
-      IndicesTransformation it;
-      IntVect shift;
-      Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block];
-      const CFG::SingleNullBlockCoordSys* mag_block_coord_sys
-         = (const CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block);
-      int block_type = mag_block_coord_sys->blockType();
+   for ( int block_number=0, toroidal_index=0; toroidal_index<num_toroidal_blocks; ++toroidal_index ) {
+      for ( int poloidal_index=0; poloidal_index<num_poloidal_blocks; ++poloidal_index, ++block_number ) {
 
-      if( block_type == M_CORE ) {
+         IndicesTransformation it;
+         IntVect shift;
+         Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block_number];
+         const CFG::SingleNullBlockCoordSys* mag_block_coord_sys
+            = (const CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block_number);
+         int block_type = mag_block_coord_sys->poloidalIndex();
 
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+         if( block_type == CFG::SNCoreBlockCoordSys::MCORE ) {
 
-         shift = -(BLOCK_SEPARATION * rL1 + numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,R_CORE);
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
 
-         shift =  (BLOCK_SEPARATION * lL1 + numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,L_CORE);
-      }
-      else if( block_type == L_CORE ) {
+            shift = -(POLOIDAL_BLOCK_SEP * rL1 + numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,CFG::SNCoreBlockCoordSys::RCORE);
 
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+            shift =  (POLOIDAL_BLOCK_SEP * lL1 + numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,CFG::SNCoreBlockCoordSys::LCORE);
+         }
+         else if( block_type == CFG::SNCoreBlockCoordSys::LCORE ) {
 
-         shift = -(BLOCK_SEPARATION * lL1 + numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,M_CORE);
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
 
-         shift = -((BLOCK_SEPARATION+1) * (lL1 + rL1)
-                   + numcells_lcore_poloidal + numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,R_CORE);
-      }
-      else if( block_type == R_CORE ) {
+            shift = -(POLOIDAL_BLOCK_SEP * lL1 + numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,CFG::SNCoreBlockCoordSys::MCORE);
 
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+            shift = -((POLOIDAL_BLOCK_SEP+1) * (lL1 + rL1)
+                      + numcells_lcore_poloidal + numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,CFG::SNCoreBlockCoordSys::RCORE);
+         }
+         else if( block_type == CFG::SNCoreBlockCoordSys::RCORE ) {
 
-         shift = ((BLOCK_SEPARATION+1) * (lL1 + rL1)
-                  + numcells_lcore_poloidal + numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,L_CORE);
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
 
-         shift = (BLOCK_SEPARATION * rL1 + numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,M_CORE);
-      }
-      else {
+            shift = ((POLOIDAL_BLOCK_SEP+1) * (lL1 + rL1)
+                     + numcells_lcore_poloidal + numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,CFG::SNCoreBlockCoordSys::LCORE);
+
+            shift = (POLOIDAL_BLOCK_SEP * rL1 + numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,CFG::SNCoreBlockCoordSys::MCORE);
+         }
+         else {
             MayDay::Error("SNCorePhaseCoordSys::defineBoundaries(): case not implemented");
-      }
+         }
 
-      // Block boundaries in the velocity directions are always physical
-      blockBoundaries[VPARALLEL_DIR].define(bc_tag);
-      blockBoundaries[VPARALLEL_DIR+SpaceDim].define(bc_tag);
-      blockBoundaries[MU_DIR].define(bc_tag);
-      blockBoundaries[MU_DIR+SpaceDim].define(bc_tag);
+#if CFG_DIM==3
+         if ( num_toroidal_blocks == 1 ) {  // Assuming periodic coupling
+            shift = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+            it.defineFromTranslation( shift );
+            blockBoundaries[TOROIDAL_DIR].define( it, block_number );
+            it.defineFromTranslation( -shift );
+            blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number );
+         }
+         else {
+            MayDay::Error("SNCorePhaseCoordSys::defineBoundaries3(): Toroidal block coupling is not defined");
+         }
+#endif
+
+         // Block boundaries in the velocity directions are always physical
+         blockBoundaries[VPARALLEL_DIR].define(bc_tag);
+         blockBoundaries[VPARALLEL_DIR+SpaceDim].define(bc_tag);
+         blockBoundaries[MU_DIR].define(bc_tag);
+         blockBoundaries[MU_DIR+SpaceDim].define(bc_tag);
+      }
    }
 
    m_gotBoundaries = true;
@@ -253,13 +289,13 @@ SNCorePhaseCoordSys::getDecomposition( int a_block ) const
 
    switch (a_block)
       {
-      case M_CORE:
+      case CFG::SNCoreBlockCoordSys::MCORE:
          decomp = m_decomp_mcore;
          break;
-      case L_CORE:
+      case CFG::SNCoreBlockCoordSys::LCORE:
          decomp = m_decomp_lcore;
          break;
-      case R_CORE:
+      case CFG::SNCoreBlockCoordSys::RCORE:
          decomp = m_decomp_rcore;
          break;
       default:
@@ -327,6 +363,45 @@ SNCorePhaseCoordSys::getDecompositionParams( ParmParse& a_pp )
    }
 }
 
+
+Vector<RealVect>
+SNCorePhaseCoordSys::displacements(const Vector<RealVect>&   a_dstCoords,
+                                   const Vector<int>&        a_dstBlocks,
+                                   const RealVect&           a_srcCoords,
+                                   int                       a_srcBlock) const
+{
+   Vector<RealVect> disps =
+      MultiBlockCoordSys::displacements(a_dstCoords, a_dstBlocks,
+                                        a_srcCoords, a_srcBlock);
+
+#if CFG_DIM==3
+
+   Vector<CFG::RealVect> dstCoords_config(a_dstCoords.size());
+   for (int i=0; i<a_dstCoords.size(); ++i) {
+      for (int n=0; n<CFG_DIM; ++n) {
+         dstCoords_config[i][n] = a_dstCoords[i][n];
+      }
+   }
+
+   CFG::RealVect srcCoords_config;
+   for (int n=0; n<CFG_DIM; ++n) {
+      srcCoords_config[n] = a_srcCoords[n];
+   }
+
+   Vector<CFG::RealVect> dips_config = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->displacements(dstCoords_config,
+                                                                                                             a_dstBlocks,
+                                                                                                             srcCoords_config,
+                                                                                                             a_srcBlock);
+   for (int i=0; i<disps.size(); ++i) {
+      for (int n=0; n<CFG_DIM; ++n) {
+         disps[i][n] = dips_config[i][n];
+      }
+    }
+
+#endif
+
+   return disps;
+}
 
 
 #include "NamespaceFooter.H"

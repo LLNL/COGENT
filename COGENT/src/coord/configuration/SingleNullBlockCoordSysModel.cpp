@@ -1,143 +1,30 @@
-#include <float.h>
-#include <fstream>
+#include <array>
 #include "SingleNullBlockCoordSysModel.H"
-#include "MagBlockCoordSysF_F.H"
-#include "SingleNullBlockCoordSysF_F.H"
-#include "HermiteInterp.H"
-#include "SplineInterp.H"
-#include "BSplineInterp.H"
 #include "Directions.H"
-#include "BoxIterator.H"
 #include "CONSTANTS.H"
 
-#undef REPORT_NEWTON_FAILURE
-
-enum SingleNullBlockType {LCORE,RCORE,LCSOL,RCSOL,LSOL,RSOL,LPF,RPF,MCORE,MCSOL,NUM_SINGLE_NULL_BLOCKS};
-enum interpolation_package {HERMITE, SPLINE, BSPLINE};
-enum interpolation_mode {FUNCTION, RADIAL_DERIVATIVE, POLOIDAL_DERIVATIVE, SECOND_RADIAL_DERIVATIVE, RADIAL_POLOIDAL_DERIVATIVE, SECOND_POLOIDAL_DERIVATIVE};
-enum field_vars {RBR_VAR, RBZ_VAR, RB_VAR, UNIT_BR_VAR, UNIT_BPHI_VAR, UNIT_BZ_VAR, NUM_FIELD_VARS};
-enum rz_vars {R_VAR, Z_VAR};
+// Poloidal namespace headers
+#undef CH_SPACEDIM
+#define CH_SPACEDIM POL_DIM
+#include "BSplineInterp.H"
+#include "HermiteInterp.H"
+#include "SplineInterp.H"
+#ifdef CH_SPACEDIM
+#undef CH_SPACEDIM
+#endif
+#define CH_SPACEDIM CFG_DIM
 
 #include "NamespaceHeader.H"
 
 const std::string SingleNullBlockCoordSysModel::pp_name = "singlenullModelGeom";
 
-SingleNullBlockCoordSysModel::SingleNullBlockCoordSysModel( ParmParse&     a_parm_parse,
-                                                  const ProblemDomain&     a_domain,
-                                                  const RealVect&          a_dx,
-                                                  const int                a_block_type )
-   : MagBlockCoordSys(a_parm_parse),
-     m_block_type(a_block_type),
-     m_poloidally_truncated(false)
-{
-   if (SpaceDim != 2) {
-      MayDay::Error("SingleNullBlockCoordSysModel is only two-dimensional");
-   }
-
-   if (m_verbose && procID()==0) {
-      cout << "Constructing single null ";
-      switch (a_block_type)
-         {
-         case LCORE:
-           cout << "left core";
-           break;
-         case MCORE:
-           cout << "middle core";
-           break;
-         case RCORE:
-           cout << "right core";
-           break;
-         case LCSOL:
-           cout << "left center scrape-off layer";
-           break;
-         case MCSOL:
-           cout << "middle center scrape-off layer";
-           break;
-         case RCSOL:
-           cout << "right center scrape-off layer";
-           break;
-         case LSOL:
-           cout << "left scrape_off layer";
-           break;
-         case RSOL:
-           cout << "right scrape-off layer";
-           break;
-         case LPF:
-           cout << "left private flux";
-           break;
-         case RPF:
-           cout << "right private flux";
-           break;
-         default:
-           MayDay::Error("SingleNullBlockCoordSysModelModel::SingleNullBlockCoordSysModel(): Invalid block_type encountered");
-         }
-
-      cout << " block with global index space domain box = " << a_domain.domainBox() << endl;
-   }
-
-   define( a_domain, a_dx );
-
-   if (m_verbose && procID()==0) {
-      switch (a_block_type)
-         {
-         case LCORE:
-           cout << "Left core mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0) << ", "
-                << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         case MCORE:
-           cout << "Middle core mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0) << ", "
-                << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         case RCORE:
-            cout << "Right core mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0) << ", "
-                 << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         case LCSOL:
-            cout << "Left center scrape-off layer mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0)
-                 << ", " << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         case MCSOL:
-            cout << "Middle center scrape-off layer mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0)
-                 << ", " << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         case RCSOL:
-            cout << "Right center scrape-off layer mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0)
-                 << ", " << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         case LSOL:
-            cout << "Left scrape_off layer mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0)
-                 << ", " << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         case RSOL:
-            cout << "Right scrape-off layer mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0)
-                 << ", " << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         case LPF:
-            cout << "Left private flux mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0)
-                 << ", " << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         case RPF:
-            cout << "Right private flux mapped domain " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0)
-                 << ", " << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         default:
-           MayDay::Error("SingleNullBlockCoordSysModel::SingleNullBlockCoordSysModel(): Invalid block_type encountered");
-         }
-
-      cout << endl;
-   }
-
-   init( a_parm_parse );
-}
-
-
-SingleNullBlockCoordSysModel::~SingleNullBlockCoordSysModel()
-{
-}
 
 void
 SingleNullBlockCoordSysModel::init( ParmParse& a_pp )
 {
+#if CFG_DIM==3
+   MayDay::Error("SingleNullBlockCoordSysModel is not fully implemented in 3D");
+#endif
    
    //Default values
    m_a =  1.2;
@@ -174,15 +61,6 @@ SingleNullBlockCoordSysModel::init( ParmParse& a_pp )
    m_max_iterations = 1000;
    m_tol = 1.1e-7;
    
-   // Get the toroidal field component scale factor
-   if (a_pp.contains("Btor_scale")) {
-      a_pp.get("Btor_scale", m_RB_toroidal);
-   }
-   else {
-      m_RB_toroidal = 0.;  // default
-   }
-   
-   
    // Get the poloidal field component scale factor
    if (a_pp.contains("Bpol_scale")) {
       a_pp.get("Bpol_scale", m_BpScale);
@@ -207,61 +85,62 @@ SingleNullBlockCoordSysModel::init( ParmParse& a_pp )
    }
    
    int m_ghost = 4;
-   IntVect interp_box_smallEnd;
-   interp_box_smallEnd[RADIAL_DIR] = m_N_mr[RADIAL_DIR] * (m_domain.domainBox().smallEnd()[RADIAL_DIR] - m_ghost);
-   interp_box_smallEnd[POLOIDAL_DIR] = m_N_mr[POLOIDAL_DIR] * (m_domain.domainBox().smallEnd()[POLOIDAL_DIR] - m_ghost);
+   POL::IntVect interp_box_smallEnd;
+   interp_box_smallEnd[0] = m_N_mr[RADIAL_DIR] * (m_domain.domainBox().smallEnd()[RADIAL_DIR] - m_ghost);
+   interp_box_smallEnd[1] = m_N_mr[POLOIDAL_DIR] * (m_domain.domainBox().smallEnd()[POLOIDAL_DIR] - m_ghost);
    
-   IntVect interp_box_bigEnd;
-   interp_box_bigEnd[RADIAL_DIR] = m_N_mr[RADIAL_DIR] * ( m_domain.domainBox().bigEnd()[RADIAL_DIR] + (m_ghost + 1) );
-   interp_box_bigEnd[POLOIDAL_DIR] = m_N_mr[POLOIDAL_DIR] * ( m_domain.domainBox().bigEnd()[POLOIDAL_DIR] + (m_ghost + 1) );
+   POL::IntVect interp_box_bigEnd;
+   interp_box_bigEnd[0] = m_N_mr[RADIAL_DIR] * ( m_domain.domainBox().bigEnd()[RADIAL_DIR] + (m_ghost + 1) );
+   interp_box_bigEnd[1] = m_N_mr[POLOIDAL_DIR] * ( m_domain.domainBox().bigEnd()[POLOIDAL_DIR] + (m_ghost + 1) );
    
    
-   Box interp_box(interp_box_smallEnd,interp_box_bigEnd);
+   POL::Box interp_box(interp_box_smallEnd,interp_box_bigEnd);
    
-   FArrayBox interp_node_coords(interp_box, SpaceDim);
+   POL::FArrayBox interp_node_coords(interp_box, POL_DIM);
    
-   FArrayBox RZ_data(interp_box, 2);
+   POL::FArrayBox RZ_data(interp_box, POL_DIM);
    
-   BoxIterator bit(interp_box);
+   POL::BoxIterator bit(interp_box);
    for (bit.begin();bit.ok();++bit) {
-      IntVect iv = bit();
+      POL::IntVect iv = bit();
       RealVect mapped_coord;
+#if CFG_DIM==2
       for (int dir=0; dir<SpaceDim; ++dir) {
          mapped_coord[dir] = (m_dx[dir] * iv[dir]) / m_N_mr[dir];
+      }
+#endif
+#if CFG_DIM==3
+      mapped_coord[RADIAL_DIR] = (m_dx[RADIAL_DIR] * iv[0]) / m_N_mr[RADIAL_DIR];
+      mapped_coord[TOROIDAL_DIR] = m_dx[TOROIDAL_DIR] * m_domain.domainBox().smallEnd()[TOROIDAL_DIR];
+      mapped_coord[POLOIDAL_DIR] = (m_dx[POLOIDAL_DIR] * iv[1]) / m_N_mr[POLOIDAL_DIR];
+#endif
+
+      for (int dir=0; dir<POL_DIM; ++dir) {
+#if CFG_DIM==2
          RZ_data(iv,dir) = realCoordPointwise(mapped_coord)[dir];
          interp_node_coords(iv,dir) = mapped_coord[dir];
+#endif
+#if CFG_DIM==3
+         RZ_data(iv,0) = realCoordPointwise(mapped_coord)[RADIAL_DIR];
+         interp_node_coords(iv,0) = mapped_coord[RADIAL_DIR];
+         RZ_data(iv,1) = realCoordPointwise(mapped_coord)[POLOIDAL_DIR];
+         interp_node_coords(iv,1) = mapped_coord[POLOIDAL_DIR];
+#endif
       }
    }
    
    if (interp_method == "bspline") {
-      m_RZ_interp = new BSplineInterp(a_pp, interp_node_coords, RZ_data);
+      m_RZ_interp = new POL::BSplineInterp(a_pp, interp_node_coords, RZ_data);
    }
    else if (interp_method == "hermite") {
-      m_RZ_interp = new HermiteInterp(a_pp, interp_node_coords, RZ_data);
+      m_RZ_interp = new POL::HermiteInterp(a_pp, interp_node_coords, RZ_data);
    }
    else if (interp_method == "spline") {
-      m_RZ_interp = new SplineInterp(a_pp, interp_node_coords, RZ_data);
+      m_RZ_interp = new POL::SplineInterp(a_pp, interp_node_coords, RZ_data);
    }
  
 }
 
-RealVect
-SingleNullBlockCoordSysModel::realCoord( const RealVect& a_xi ) const
-{
-   RealVect x;
-   D_TERM(x[0] = m_RZ_interp->interpolate(R_VAR, FUNCTION, a_xi);,
-          x[1] = m_RZ_interp->interpolate(Z_VAR, FUNCTION, a_xi);,
-          x[2] = 0.;)
-   
-   return x;
-}
-
-//Keep it so we not break the code structure, but make trivial
-RealVect
-SingleNullBlockCoordSysModel::mappedCoord( const RealVect& a_X ) const
-{
-   return a_X;
-}
 
 RealVect
 SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
@@ -288,7 +167,7 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
    mapped_block_width[RADIAL_DIR] = upperMappedCoordinate(RADIAL_DIR) - lowerMappedCoordinate(RADIAL_DIR);
    mapped_block_width[POLOIDAL_DIR] = upperMappedCoordinate(POLOIDAL_DIR) - lowerMappedCoordinate(POLOIDAL_DIR);
    
-   if (m_block_type == RCORE || m_block_type == LCORE) {
+   if (m_poloidal_index == SingleNullBlockCoordSys::RCORE || m_poloidal_index == SingleNullBlockCoordSys::LCORE) {
       
       double z_hi = (m_Zsep_hi - m_core_width + m_Z0) + m_core_width * (a_xi_tmp[RADIAL_DIR]-lowerMappedCoordinate(RADIAL_DIR))/mapped_block_width[RADIAL_DIR];
       double psiVal = psiAtR0(z_hi);
@@ -296,7 +175,7 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
       double length = m_pol_ref_length * (a_xi_tmp[POLOIDAL_DIR]-lowerMappedCoordinate(POLOIDAL_DIR)) / mapped_block_width[POLOIDAL_DIR];
       length = length*(1.0 - Lmin*abs(cos(length/2.0))); //mesh packing
       
-      if (m_block_type == LCORE)  {
+      if (m_poloidal_index == SingleNullBlockCoordSys::LCORE)  {
          length = m_pol_ref_length * (upperMappedCoordinate(POLOIDAL_DIR) - a_xi_tmp[POLOIDAL_DIR]) / mapped_block_width[POLOIDAL_DIR];
          length = length*(1.0 - Lmin*abs(cos(length/2.0)));
       }
@@ -337,11 +216,11 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
          }
       }
       
-      if ( m_block_type == LCORE ) x[0] = m_R0 - (x[0]-m_R0);
+      if ( m_poloidal_index == SingleNullBlockCoordSys::LCORE ) x[0] = m_R0 - (x[0]-m_R0);
       
    }
    
-   if (m_block_type == RCSOL || m_block_type == LCSOL) {
+   if (m_poloidal_index == SingleNullBlockCoordSys::RCSOL || m_poloidal_index == SingleNullBlockCoordSys::LCSOL) {
       
       double z_hi = (m_Zsep_hi + m_Z0) + m_sol_width * (a_xi_tmp[RADIAL_DIR]-lowerMappedCoordinate(RADIAL_DIR))/mapped_block_width[RADIAL_DIR];
       double psiVal = psiAtR0(z_hi);
@@ -349,7 +228,7 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
       double length = m_pol_ref_length * (a_xi_tmp[POLOIDAL_DIR]-lowerMappedCoordinate(POLOIDAL_DIR)) / mapped_block_width[POLOIDAL_DIR];
       length = length*(1.0 - Lmin*abs(cos(length/2.0)));
       
-      if (m_block_type == LCSOL) {
+      if (m_poloidal_index == SingleNullBlockCoordSys::LCSOL) {
          length = m_pol_ref_length * (upperMappedCoordinate(POLOIDAL_DIR) - a_xi_tmp[POLOIDAL_DIR]) / mapped_block_width[POLOIDAL_DIR];
          length = length*(1.0 - Lmin*abs(cos(length/2.0)));
       }
@@ -366,7 +245,7 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
             x[1] = getZlo(psiVal);
          }
          
-         if ( m_block_type == LCSOL ) x[0] = m_R0 - (x[0]-m_R0);
+         if ( m_poloidal_index == SingleNullBlockCoordSys::LCSOL ) x[0] = m_R0 - (x[0]-m_R0);
       }
       
       else if ((2.0 * length > (m_pol_ref_length - epsilon)) && (2.0 * length < (m_pol_ref_length + epsilon))) {
@@ -374,14 +253,14 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
          x[0] = m_R0 + acos(psiVal - m_b * sin(m_Zc) + m_c * m_Zc)/m_a;
          x[1] = m_Zc + m_Z0;
          
-         if ( m_block_type == LCSOL ) x[0] = m_R0 - (x[0]-m_R0);
+         if ( m_poloidal_index == SingleNullBlockCoordSys::LCSOL ) x[0] = m_R0 - (x[0]-m_R0);
       }
       
       else if (length > m_pol_ref_length - epsilon) {
          x[0] = m_R0 + epsilon;
          x[1] = z_hi;
          
-         if ( m_block_type == LCSOL ) x[0] = m_R0 - (x[0]-m_R0);
+         if ( m_poloidal_index == SingleNullBlockCoordSys::LCSOL ) x[0] = m_R0 - (x[0]-m_R0);
       }
       
       else {
@@ -391,13 +270,13 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
          int side = (length < m_pol_ref_length_mp) ? -1 : 1;
          x = gridLinesIntersection(psiVal, thetaVal, side);
          
-         if ( ((a_xi_tmp[POLOIDAL_DIR] <= upperMappedCoordinate(POLOIDAL_DIR)) && (a_xi_tmp[POLOIDAL_DIR]>=lowerMappedCoordinate(POLOIDAL_DIR))) &&  m_block_type == LCSOL) {
+         if ( ((a_xi_tmp[POLOIDAL_DIR] <= upperMappedCoordinate(POLOIDAL_DIR)) && (a_xi_tmp[POLOIDAL_DIR]>=lowerMappedCoordinate(POLOIDAL_DIR))) &&  m_poloidal_index == SingleNullBlockCoordSys::LCSOL) {
             x[0] = m_R0 - (x[0]-m_R0);
          }
          
-         if ( (a_xi_tmp[POLOIDAL_DIR] > upperMappedCoordinate(POLOIDAL_DIR)) &&  m_block_type == RCSOL) x[0] = m_R0 - (x[0]-m_R0);
-         if ( (a_xi_tmp[POLOIDAL_DIR] < lowerMappedCoordinate(POLOIDAL_DIR)) &&  m_block_type == RCSOL) x[1] = (m_Z0 +m_Zx) - (x[1]-m_Z0-m_Zx);
-         if ( (a_xi_tmp[POLOIDAL_DIR] > upperMappedCoordinate(POLOIDAL_DIR)) &&  m_block_type == LCSOL) {
+         if ( (a_xi_tmp[POLOIDAL_DIR] > upperMappedCoordinate(POLOIDAL_DIR)) &&  m_poloidal_index == SingleNullBlockCoordSys::RCSOL) x[0] = m_R0 - (x[0]-m_R0);
+         if ( (a_xi_tmp[POLOIDAL_DIR] < lowerMappedCoordinate(POLOIDAL_DIR)) &&  m_poloidal_index == SingleNullBlockCoordSys::RCSOL) x[1] = (m_Z0 +m_Zx) - (x[1]-m_Z0-m_Zx);
+         if ( (a_xi_tmp[POLOIDAL_DIR] > upperMappedCoordinate(POLOIDAL_DIR)) &&  m_poloidal_index == SingleNullBlockCoordSys::LCSOL) {
             x[1] = (m_Z0 +m_Zx) - (x[1]-m_Z0-m_Zx);
             x[0] = m_R0 - (x[0]-m_R0);
          }
@@ -405,7 +284,7 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
    }
    
    
-   if (m_block_type == RSOL || m_block_type == LSOL) {
+   if (m_poloidal_index == SingleNullBlockCoordSys::RSOL || m_poloidal_index == SingleNullBlockCoordSys::LSOL) {
       
       double z_hi = (m_Zsep_hi + m_Z0) + m_sol_width * (a_xi_tmp[RADIAL_DIR]-lowerMappedCoordinate(RADIAL_DIR))/mapped_block_width[RADIAL_DIR];
       double psiVal = psiAtR0(z_hi);
@@ -413,7 +292,7 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
       double length = m_div_leg_length * (upperMappedCoordinate(POLOIDAL_DIR) - a_xi_tmp[POLOIDAL_DIR]) / mapped_block_width[POLOIDAL_DIR];
       length = length*(1.0 - Lmin*abs(cos(length/2.0)));
       
-      if (m_block_type == LSOL) {
+      if (m_poloidal_index == SingleNullBlockCoordSys::LSOL) {
          length = m_div_leg_length * (a_xi_tmp[POLOIDAL_DIR] - lowerMappedCoordinate(POLOIDAL_DIR)) / mapped_block_width[POLOIDAL_DIR];
          length = length*(1.0 - Lmin*abs(cos(length/2.0)));
       }
@@ -432,7 +311,7 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
             x[0] = m_R0 + epsilon;
          }
          
-         if ( m_block_type == LSOL ) x[0] = m_R0 - (x[0]-m_R0);
+         if ( m_poloidal_index == SingleNullBlockCoordSys::LSOL ) x[0] = m_R0 - (x[0]-m_R0);
          
          x[1] = (m_Z0 +m_Zx) - (x[1]-m_Z0-m_Zx);
       }
@@ -440,7 +319,7 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
       else if ((2.0 * length > (m_pol_ref_length - epsilon)) && (2.0 * length < (m_pol_ref_length + epsilon))) {
          x[0] = m_R0 + acos(psiVal - m_b * sin(m_Zc) + m_c * m_Zc)/m_a;
          x[1] = m_Zc + m_Z0;
-         if ( m_block_type == LSOL ) x[0] = m_R0 - (x[0]-m_R0);
+         if ( m_poloidal_index == SingleNullBlockCoordSys::LSOL ) x[0] = m_R0 - (x[0]-m_R0);
          x[1] = (m_Z0 +m_Zx) - (x[1]-m_Z0-m_Zx);
       }
       
@@ -453,15 +332,15 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
          
          x[1] = (m_Z0 +m_Zx) - (x[1]-m_Z0-m_Zx);
          
-         if ( (a_xi_tmp[POLOIDAL_DIR]>=lowerMappedCoordinate(POLOIDAL_DIR)) &&  m_block_type == LSOL) {
+         if ( (a_xi_tmp[POLOIDAL_DIR]>=lowerMappedCoordinate(POLOIDAL_DIR)) &&  m_poloidal_index == SingleNullBlockCoordSys::LSOL) {
             x[0] = m_R0 - (x[0]-m_R0);
          }
          
-         else if ((a_xi_tmp[POLOIDAL_DIR]<lowerMappedCoordinate(POLOIDAL_DIR)) &&  m_block_type == LSOL) {
+         else if ((a_xi_tmp[POLOIDAL_DIR]<lowerMappedCoordinate(POLOIDAL_DIR)) &&  m_poloidal_index == SingleNullBlockCoordSys::LSOL) {
             x[0] = m_R0 - (x[0]-m_R0);
             x[1] = (m_Z0 +m_Zx) - (x[1]-m_Z0-m_Zx); //another reflection to bring the vertical coordinate back to upper blocks
          }
-         else if ((a_xi_tmp[POLOIDAL_DIR]>upperMappedCoordinate(POLOIDAL_DIR)) &&  m_block_type == RSOL) {
+         else if ((a_xi_tmp[POLOIDAL_DIR]>upperMappedCoordinate(POLOIDAL_DIR)) &&  m_poloidal_index == SingleNullBlockCoordSys::RSOL) {
             x[1] = (m_Z0 +m_Zx) - (x[1]-m_Z0-m_Zx); //another reflection to bring the vertical coordinate back to upper blocks
          }
          
@@ -469,7 +348,7 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
       
    }
    
-   if (m_block_type == RPF || m_block_type == LPF) {
+   if (m_poloidal_index == SingleNullBlockCoordSys::RPF || m_poloidal_index == SingleNullBlockCoordSys::LPF) {
       
       double z_hi = (m_Zsep_hi - m_pf_width + m_Z0) + m_pf_width * (a_xi_tmp[RADIAL_DIR]-lowerMappedCoordinate(RADIAL_DIR))/mapped_block_width[RADIAL_DIR];
       double psiVal = psiAtR0(z_hi);
@@ -477,7 +356,7 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
       double length = m_div_leg_length * (upperMappedCoordinate(POLOIDAL_DIR) - a_xi_tmp[POLOIDAL_DIR]) / mapped_block_width[POLOIDAL_DIR];
       length = length*(1.0 - Lmin*abs(cos(length/2.0)));
       
-      if (m_block_type == LPF) {
+      if (m_poloidal_index == SingleNullBlockCoordSys::LPF) {
          length = m_div_leg_length * (a_xi_tmp[POLOIDAL_DIR] - lowerMappedCoordinate(POLOIDAL_DIR)) / mapped_block_width[POLOIDAL_DIR];
          length = length*(1.0 - Lmin*abs(cos(length/2.0)));
       }
@@ -506,8 +385,8 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
          int side = (length < m_pol_ref_length_mp) ? -1 : 1;
          x = gridLinesIntersection(psiVal, thetaVal, side);
          
-         if ( ((a_xi_tmp[POLOIDAL_DIR]>upperMappedCoordinate(POLOIDAL_DIR)) && m_block_type == RPF)
-             || ((a_xi_tmp[POLOIDAL_DIR]<lowerMappedCoordinate(POLOIDAL_DIR)) && m_block_type == LPF ) ) {
+         if ( ((a_xi_tmp[POLOIDAL_DIR]>upperMappedCoordinate(POLOIDAL_DIR)) && m_poloidal_index == SingleNullBlockCoordSys::RPF)
+             || ((a_xi_tmp[POLOIDAL_DIR]<lowerMappedCoordinate(POLOIDAL_DIR)) && m_poloidal_index == SingleNullBlockCoordSys::LPF ) ) {
             
             x[0] = m_R0 - (x[0]-m_R0);
          }
@@ -516,12 +395,13 @@ SingleNullBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
       
       x[1] = (m_Z0 +m_Zx) - (x[1]-m_Z0-m_Zx);
       
-      if ( m_block_type == LPF ) x[0] = m_R0 - (x[0]-m_R0);
+      if ( m_poloidal_index == SingleNullBlockCoordSys::LPF ) x[0] = m_R0 - (x[0]-m_R0);
       
    }
    
    return x;
 }
+
 
 Real
 SingleNullBlockCoordSysModel::dXdXi( const RealVect& a_Xi,
@@ -548,36 +428,6 @@ SingleNullBlockCoordSysModel::dXdXi( const RealVect& a_Xi,
    
    return metrics[a_dirX];
    
-}
-
-
-void
-SingleNullBlockCoordSysModel::dXdXi(FArrayBox&       a_dXdXi,
-                                    const FArrayBox& a_Xi,
-                                    int              a_destComp,
-                                    int              a_dirX,
-                                    int              a_dirXi,
-                                    const Box&       a_box ) const
-{
-   BoxIterator bit(a_box);
-   for (bit.begin(); bit.ok(); ++bit) {
-      IntVect iv = bit();
-      RealVect this_Xi;
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         this_Xi[dir] = a_Xi(iv,dir);
-      }
-      a_dXdXi(iv,a_destComp) = dXdXi(this_Xi,a_dirX,a_dirXi);
-   }
-}
-
-
-bool
-SingleNullBlockCoordSysModel::isValid(const RealVect& xi) const
-{
-   return xi[RADIAL_DIR]   >= lowerMappedCoordinate(RADIAL_DIR)   &&
-   xi[RADIAL_DIR]   <= upperMappedCoordinate(RADIAL_DIR)   &&
-   xi[POLOIDAL_DIR] >= lowerMappedCoordinate(POLOIDAL_DIR) &&
-   xi[POLOIDAL_DIR] <= upperMappedCoordinate(POLOIDAL_DIR);
 }
 
 
@@ -698,13 +548,14 @@ double SingleNullBlockCoordSysModel::getOuterMidplaneCoord(const double psiNorm)
    return half_R;
 }
    
+
 double SingleNullBlockCoordSysModel::getOuterRsep() const
 {
    double psiNorm_atSep = getNormMagneticFlux(m_Xpoint);
 
    return getOuterMidplaneCoord(psiNorm_atSep);
 }
-   
+
 
 void
 SingleNullBlockCoordSysModel::computeFieldData( const int  a_dir,
@@ -825,11 +676,11 @@ SingleNullBlockCoordSysModel::getNodalFieldData(FArrayBox& a_points,
   }
 }
 
-Vector<Real>
+
+array<double,3>
 SingleNullBlockCoordSysModel::computeBField(const RealVect& a_X) const
 {
-   
-   Vector<Real> result(3,0);
+   array<double,3> result;
    
    //Compute unshifted coordinate
    double r = a_X[0]-m_R0;
@@ -849,6 +700,7 @@ SingleNullBlockCoordSysModel::computeBField(const RealVect& a_X) const
    
    return result;
 }
+
 
 RealVect
 SingleNullBlockCoordSysModel::gridLinesIntersection( const double psiVal, const double thetaVal, const int side ) const
@@ -1230,7 +1082,6 @@ void SingleNullBlockCoordSysModel::normalizeBpScale() {
    
    m_BpScale *= m_R0/sqrt(pow(psiX(sepTop),2) + pow(psiZ(sepTop),2));
 }
-
 
 
 #include "NamespaceFooter.H"

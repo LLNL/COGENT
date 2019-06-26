@@ -58,7 +58,8 @@ public:
   /**
    * Computes and returns an estimate of the maximum stable time step.
    */
-  Real computeDt(const KineticSpeciesPtrVect& a_soln, const int a_species);
+  Real computeDtExplicitTI(const KineticSpeciesPtrVect& a_soln, const int a_species);
+  Real computeDtImExTI(const KineticSpeciesPtrVect& a_soln, const int a_species);
   Real TimeScale(const KineticSpeciesPtrVect& a_soln, const int a_species);
    
 private:

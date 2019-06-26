@@ -1,94 +1,30 @@
-#include <float.h>
-#include <fstream>
-#include "SNCoreBlockCoordSys.H"
+#include <array>
 #include "SNCoreBlockCoordSysModel.H"
-#include "MagBlockCoordSysF_F.H"
-#include "SingleNullBlockCoordSysF_F.H"
-#include "HermiteInterp.H"
-#include "SplineInterp.H"
-#include "BSplineInterp.H"
 #include "Directions.H"
-#include "BoxIterator.H"
 #include "CONSTANTS.H"
 
-#undef REPORT_NEWTON_FAILURE
-
-enum interpolation_package {HERMITE, SPLINE, BSPLINE};
-enum interpolation_mode {FUNCTION, RADIAL_DERIVATIVE, POLOIDAL_DERIVATIVE};
-enum field_vars {RBR_VAR, RBZ_VAR, RB_VAR, UNIT_BR_VAR, UNIT_BPHI_VAR, UNIT_BZ_VAR, NUM_FIELD_VARS};
-enum rz_vars {R_VAR, Z_VAR};
+// Poloidal namespace headers
+#undef CH_SPACEDIM
+#define CH_SPACEDIM POL_DIM
+#include "BSplineInterp.H"
+#include "HermiteInterp.H"
+#include "SplineInterp.H"
+#ifdef CH_SPACEDIM
+#undef CH_SPACEDIM
+#endif
+#define CH_SPACEDIM CFG_DIM
 
 #include "NamespaceHeader.H"
 
 const std::string SNCoreBlockCoordSysModel::pp_name = "sncoreModelGeom";
 
-SNCoreBlockCoordSysModel::SNCoreBlockCoordSysModel( ParmParse&               a_parm_parse,
-                                                    const ProblemDomain&     a_domain,
-                                                    const RealVect&          a_dx,
-                                                    const int                a_block_type )
-   : MagBlockCoordSys(a_parm_parse),
-     m_block_type(a_block_type)
-{
-   if (SpaceDim != 2) {
-      MayDay::Error("SNCoreBlockCoordSysModel is only two-dimensional");
-   }
-
-   if (m_verbose && procID()==0) {
-      cout << "Constructing single null ";
-      switch (a_block_type)
-         {
-         case M_CORE:
-           cout << "middle core";
-           break;
-         case L_CORE:
-           cout << "left core";
-           break;
-         case R_CORE:
-           cout << "right core";
-           break;
-         default:
-           MayDay::Error("SNCoreBlockCoordSysModel::SNCoreBlockCoordSysModel(): Invalid block_type encountered");
-         }
-
-      cout << " block with global index space domain box = " << a_domain.domainBox() << endl;
-   }
-
-   define( a_domain, a_dx );
-
-   if (m_verbose && procID()==0) {
-      switch (a_block_type)
-         {
-         case M_CORE:
-           cout << "Middle core mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0) << ", "
-                << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         case L_CORE:
-           cout << "Left core mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0) << ", "
-                << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         case R_CORE:
-            cout << "Right core mapped domain: " << lowerMappedCoordinate(0) << " < xi_0 < " << upperMappedCoordinate(0) << ", "
-                 << lowerMappedCoordinate(1) << " < xi_1 < " << upperMappedCoordinate(1);
-            break;
-         default:
-           MayDay::Error("SNCoreBlockCoordSysModel::SNCoreBlockCoordSysModel(): Invalid block_type encountered");
-         }
-
-      cout << endl;
-   }
-
-   init( a_parm_parse );
-}
-
-
-SNCoreBlockCoordSysModel::~SNCoreBlockCoordSysModel()
-{
-}
-
 
 void
 SNCoreBlockCoordSysModel::init( ParmParse& a_pp )
 {
+#if CFG_DIM==3
+   MayDay::Error("SNCoreBlockCoordSysModel is not fully implemented in 3D");
+#endif
    
    //Default values
    m_a =  1.2;
@@ -120,14 +56,6 @@ SNCoreBlockCoordSysModel::init( ParmParse& a_pp )
    m_max_iterations = 1000;
    m_tol = 1.1e-7;
    
-   // Get the toroidal field component scale factor
-   if (a_pp.contains("Btor_scale")) {
-      a_pp.get("Btor_scale", m_RB_toroidal);
-   }
-   else {
-      m_RB_toroidal = 0.;  // default
-   }
-   
    // Get the poloidal field component scale factor
    if (a_pp.contains("Bpol_scale")) {
       a_pp.get("Bpol_scale", m_BpScale);
@@ -152,63 +80,63 @@ SNCoreBlockCoordSysModel::init( ParmParse& a_pp )
    }
    
    int m_ghost = 4;
-   IntVect interp_box_smallEnd;
-   interp_box_smallEnd[RADIAL_DIR] = m_N_mr[RADIAL_DIR] * (m_domain.domainBox().smallEnd()[RADIAL_DIR] - m_ghost);
-   interp_box_smallEnd[POLOIDAL_DIR] = m_N_mr[POLOIDAL_DIR] * (m_domain.domainBox().smallEnd()[POLOIDAL_DIR] - m_ghost);
+   POL::IntVect interp_box_smallEnd;
+   interp_box_smallEnd[0] = m_N_mr[RADIAL_DIR] * (m_domain.domainBox().smallEnd()[RADIAL_DIR] - m_ghost);
+   interp_box_smallEnd[1] = m_N_mr[POLOIDAL_DIR] * (m_domain.domainBox().smallEnd()[POLOIDAL_DIR] - m_ghost);
    
-   IntVect interp_box_bigEnd;
-   interp_box_bigEnd[RADIAL_DIR] = m_N_mr[RADIAL_DIR] * ( m_domain.domainBox().bigEnd()[RADIAL_DIR] + (m_ghost + 1) );
-   interp_box_bigEnd[POLOIDAL_DIR] = m_N_mr[POLOIDAL_DIR] * ( m_domain.domainBox().bigEnd()[POLOIDAL_DIR] + (m_ghost + 1) );
+   POL::IntVect interp_box_bigEnd;
+   interp_box_bigEnd[0] = m_N_mr[RADIAL_DIR] * ( m_domain.domainBox().bigEnd()[RADIAL_DIR] + (m_ghost + 1) );
+   interp_box_bigEnd[1] = m_N_mr[POLOIDAL_DIR] * ( m_domain.domainBox().bigEnd()[POLOIDAL_DIR] + (m_ghost + 1) );
    
    
-   Box interp_box(interp_box_smallEnd,interp_box_bigEnd);
+   POL::Box interp_box(interp_box_smallEnd,interp_box_bigEnd);
    
-   FArrayBox interp_node_coords(interp_box, SpaceDim);
+   POL::FArrayBox interp_node_coords(interp_box, POL_DIM);
    
-   FArrayBox RZ_data(interp_box, 2);
+   POL::FArrayBox RZ_data(interp_box, POL_DIM);
    
-   BoxIterator bit(interp_box);
+   POL::BoxIterator bit(interp_box);
    for (bit.begin();bit.ok();++bit) {
-      IntVect iv = bit();
+      POL::IntVect iv = bit();
       RealVect mapped_coord;
+#if CFG_DIM==2
       for (int dir=0; dir<SpaceDim; ++dir) {
          mapped_coord[dir] = (m_dx[dir] * iv[dir]) / m_N_mr[dir];
+      }
+#endif
+#if CFG_DIM==3
+      mapped_coord[RADIAL_DIR] = (m_dx[RADIAL_DIR] * iv[0]) / m_N_mr[RADIAL_DIR];
+      mapped_coord[TOROIDAL_DIR] = m_dx[TOROIDAL_DIR] * m_domain.domainBox().smallEnd()[TOROIDAL_DIR];
+      mapped_coord[POLOIDAL_DIR] = (m_dx[POLOIDAL_DIR] * iv[1]) / m_N_mr[POLOIDAL_DIR];
+#endif
+
+      for (int dir=0; dir<POL_DIM; ++dir) {
+#if CFG_DIM==2
          RZ_data(iv,dir) = realCoordPointwise(mapped_coord)[dir];
          interp_node_coords(iv,dir) = mapped_coord[dir];
+#endif
+#if CFG_DIM==3
+         RZ_data(iv,0) = realCoordPointwise(mapped_coord)[RADIAL_DIR];
+         interp_node_coords(iv,0) = mapped_coord[RADIAL_DIR];
+         RZ_data(iv,1) = realCoordPointwise(mapped_coord)[POLOIDAL_DIR];
+         interp_node_coords(iv,1) = mapped_coord[POLOIDAL_DIR];
+#endif
       }
    }
    
    if (interp_method == "bspline") {
-      m_RZ_interp = new BSplineInterp(a_pp, interp_node_coords, RZ_data);
+      m_RZ_interp = new POL::BSplineInterp(a_pp, interp_node_coords, RZ_data);
    }
    else if (interp_method == "hermite") {
-      m_RZ_interp = new HermiteInterp(a_pp, interp_node_coords, RZ_data);
+      m_RZ_interp = new POL::HermiteInterp(a_pp, interp_node_coords, RZ_data);
    }
    else if (interp_method == "spline") {
-      m_RZ_interp = new SplineInterp(a_pp, interp_node_coords, RZ_data);
+      m_RZ_interp = new POL::SplineInterp(a_pp, interp_node_coords, RZ_data);
    }
    
    
 }
 
-
-RealVect
-SNCoreBlockCoordSysModel::realCoord( const RealVect& a_xi ) const
-{
-   RealVect x;
-   D_TERM(x[0] = m_RZ_interp->interpolate(R_VAR, FUNCTION, a_xi);,
-          x[1] = m_RZ_interp->interpolate(Z_VAR, FUNCTION, a_xi);,
-          x[2] = 0.;)
-   
-   return x;
-}
-
-//Keep it so we not break the code structure, but make trivial
-RealVect
-SNCoreBlockCoordSysModel::mappedCoord( const RealVect& a_X ) const
-{
-   return a_X;
-}
 
 RealVect
 SNCoreBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
@@ -235,7 +163,7 @@ SNCoreBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
    mapped_block_width[RADIAL_DIR] = upperMappedCoordinate(RADIAL_DIR) - lowerMappedCoordinate(RADIAL_DIR);
    mapped_block_width[POLOIDAL_DIR] = upperMappedCoordinate(POLOIDAL_DIR) - lowerMappedCoordinate(POLOIDAL_DIR);
    
-   if (m_block_type == R_CORE || m_block_type == L_CORE) {
+   if (m_poloidal_index == SingleNullBlockCoordSys::RCORE || m_poloidal_index == SingleNullBlockCoordSys::LCORE) {
       
       double z_hi = (m_Zsep_hi - m_core_width + m_Z0) + m_core_width * (a_xi_tmp[RADIAL_DIR]-lowerMappedCoordinate(RADIAL_DIR))/mapped_block_width[RADIAL_DIR];
       double psiVal = psiAtR0(z_hi);
@@ -243,7 +171,7 @@ SNCoreBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
       double length = m_pol_ref_length * (a_xi_tmp[POLOIDAL_DIR]-lowerMappedCoordinate(POLOIDAL_DIR)) / mapped_block_width[POLOIDAL_DIR];
       length = length*(1.0 - Lmin*abs(cos(length/2.0))); //mesh packing
       
-      if (m_block_type == L_CORE)  {
+      if (m_poloidal_index == SingleNullBlockCoordSys::LCORE)  {
          length = m_pol_ref_length * (upperMappedCoordinate(POLOIDAL_DIR) - a_xi_tmp[POLOIDAL_DIR]) / mapped_block_width[POLOIDAL_DIR];
          length = length*(1.0 - Lmin*abs(cos(length/2.0)));
       }
@@ -284,7 +212,7 @@ SNCoreBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
          }
       }
       
-      if ( m_block_type == L_CORE ) x[0] = m_R0 - (x[0]-m_R0);
+      if ( m_poloidal_index == SingleNullBlockCoordSys::LCORE ) x[0] = m_R0 - (x[0]-m_R0);
       
    }
    
@@ -318,35 +246,6 @@ SNCoreBlockCoordSysModel::dXdXi( const RealVect& a_Xi,
    
 }
 
-
-void
-SNCoreBlockCoordSysModel::dXdXi(FArrayBox&       a_dXdXi,
-                                    const FArrayBox& a_Xi,
-                                    int              a_destComp,
-                                    int              a_dirX,
-                                    int              a_dirXi,
-                                    const Box&       a_box ) const
-{
-   BoxIterator bit(a_box);
-   for (bit.begin(); bit.ok(); ++bit) {
-      IntVect iv = bit();
-      RealVect this_Xi;
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         this_Xi[dir] = a_Xi(iv,dir);
-      }
-      a_dXdXi(iv,a_destComp) = dXdXi(this_Xi,a_dirX,a_dirXi);
-   }
-}
-
-
-bool
-SNCoreBlockCoordSysModel::isValid(const RealVect& xi) const
-{
-   return xi[RADIAL_DIR]   >= lowerMappedCoordinate(RADIAL_DIR)   &&
-   xi[RADIAL_DIR]   <= upperMappedCoordinate(RADIAL_DIR)   &&
-   xi[POLOIDAL_DIR] >= lowerMappedCoordinate(POLOIDAL_DIR) &&
-   xi[POLOIDAL_DIR] <= upperMappedCoordinate(POLOIDAL_DIR);
-}
 
 void
 SNCoreBlockCoordSysModel::getMagneticFlux( const FArrayBox& a_physical_coordinates,
@@ -592,11 +491,10 @@ SNCoreBlockCoordSysModel::getNodalFieldData(FArrayBox& a_points,
    }
 }
 
-Vector<Real>
+array<double,3>
 SNCoreBlockCoordSysModel::computeBField(const RealVect& X) const
 {
-   
-   Vector<Real> result(3,0);
+   array<double,3> result;
    
    //Compute unshifted coordinate
    double r = X[0]-m_R0;
@@ -996,5 +894,19 @@ void SNCoreBlockCoordSysModel::normalizeBpScale() {
    
    m_BpScale *= m_R0/sqrt(pow(psiX(sepTop),2) + pow(psiZ(sepTop),2));
 }
+
+#if 0
+POL::RealVect
+SNCoreBlockCoordSysModel::restrictPoloidal( const RealVect& a_v ) const
+{
+#if CFG_DIM==2
+   return a_v;
+#endif
+#if CFG_DIM==3
+   return POL::RealVect(a_v[RADIAL_DIR], a_v[POLOIDAL_DIR]);
+#endif
+}
+#endif
+
 
 #include "NamespaceFooter.H"

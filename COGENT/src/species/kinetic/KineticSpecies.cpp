@@ -63,6 +63,14 @@ void KineticSpecies::chargeDensity( CFG::LevelData<CFG::FArrayBox>& a_rho ) cons
    m_moment_op.compute( a_rho, *this, ChargeDensityKernel() );
 }
 
+void KineticSpecies::gyroaveragedChargeDensity( CFG::LevelData<CFG::FArrayBox>& a_rho ) const
+{
+   CH_assert(isGyrokinetic());
+   KineticSpecies tmp(*this);
+   m_gyroavg_op->applyOp(tmp.distributionFunction(), (*this).distributionFunction());
+   m_moment_op.compute( a_rho, tmp, ChargeDensityKernel() );
+}
+
 
 void KineticSpecies::momentumDensity( CFG::LevelData<CFG::FArrayBox>& a_momentum,
 				      const LevelData<FluxBox>& a_field,
@@ -363,6 +371,8 @@ const KineticSpecies& KineticSpecies::operator=( const KineticSpecies& a_rhs )
       m_name = a_rhs.m_name;
       m_mass = a_rhs.m_mass;
       m_charge = a_rhs.m_charge;
+      m_is_gyrokinetic = a_rhs.m_is_gyrokinetic;
+      m_gyroavg_op = a_rhs.m_gyroavg_op;
       m_dist_func.define( a_rhs.m_dist_func );
    }
    return *this;
@@ -376,6 +386,8 @@ void KineticSpecies::copy( const KineticSpecies& a_rhs )
       m_name = a_rhs.m_name;
       m_mass = a_rhs.m_mass;
       m_charge = a_rhs.m_charge;
+      m_is_gyrokinetic = a_rhs.m_is_gyrokinetic;
+      m_gyroavg_op = a_rhs.m_gyroavg_op;
 
       DataIterator dit( m_dist_func.dataIterator() );
       for (dit.begin(); dit.ok(); ++dit) {
@@ -547,11 +559,12 @@ Real KineticSpecies::minValue() const
 
 
 void KineticSpecies::computeVelocity(LevelData<FluxBox>& a_velocity,
-                                     const LevelData<FluxBox>& a_E_field ) const
+                                     const LevelData<FluxBox>& a_E_field,
+                                     const int  a_velocity_option) const
 {
    const DisjointBoxLayout& dbl( m_dist_func.getBoxes() );
    a_velocity.define( dbl, SpaceDim, IntVect::Unit );
-   m_geometry->updateVelocities( a_E_field, a_velocity, PhaseGeom::FULL_VELOCITY, isGyrokinetic(), true );
+   m_geometry->updateVelocities( a_E_field, a_velocity, a_velocity_option, isGyrokinetic(), true );
 }
 
 

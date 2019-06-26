@@ -62,11 +62,6 @@ FokkerPlanck::~FokkerPlanck()
 {
 }
 
-Real FokkerPlanck::computeDt(const KineticSpeciesPtrVect& a_soln, const int a_species)
-{
-  return TimeScale(a_soln, a_species);
-}
-
 static inline int sign(Real x)
 {
   return(x < 0 ? -1 : 1);
@@ -1733,7 +1728,7 @@ void FokkerPlanck::evalClsRHS(  KineticSpeciesPtrVect&        a_rhs,
   return;
 }
 
-Real FokkerPlanck::TimeScale(const KineticSpeciesPtrVect& a_soln, const int a_species)
+Real FokkerPlanck::computeTimeScale(const KineticSpeciesPtrVect& a_soln, const int a_species)
 {
   const KineticSpecies&       soln_species(*(a_soln[a_species]));
   const LevelData<FArrayBox>& dfn(soln_species.distributionFunction());
@@ -1789,6 +1784,20 @@ Real FokkerPlanck::TimeScale(const KineticSpeciesPtrVect& a_soln, const int a_sp
 #endif
 
   return global_tau;
+}
+
+Real FokkerPlanck::computeDtExplicitTI(const KineticSpeciesPtrVect& a_soln, const int a_species)
+{
+  return computeTimeScale(a_soln, a_species);
+}
+
+Real FokkerPlanck::computeDtImExTI(const KineticSpeciesPtrVect& a_soln, const int a_species)
+{
+  if (m_time_implicit) {
+    return DBL_MAX;
+  } else {
+    return computeTimeScale(a_soln, a_species);
+  }
 }
 
 #include "NamespaceFooter.H"

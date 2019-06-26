@@ -130,13 +130,26 @@ void GKCollisions::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
    }
 }
 
-Real GKCollisions::computeDt( const KineticSpeciesPtrVect& soln )
+Real GKCollisions::computeDtExplicitTI( const KineticSpeciesPtrVect& soln )
 {
   Real dt(DBL_MAX);
   int count(0);
   std::map<std::string,int>::iterator it;
   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
-    Real tmp = m_collision_model[it->second]->computeDt(soln,it->second);
+    Real tmp = m_collision_model[it->second]->computeDtExplicitTI(soln,it->second);
+    dt = (tmp < dt ? tmp : dt);
+    count++;
+  }
+  return (count ? dt : -1);
+}
+
+Real GKCollisions::computeDtImExTI( const KineticSpeciesPtrVect& soln )
+{
+  Real dt(DBL_MAX);
+  int count(0);
+  std::map<std::string,int>::iterator it;
+  for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
+    Real tmp = m_collision_model[it->second]->computeDtImExTI(soln,it->second);
     dt = (tmp < dt ? tmp : dt);
     count++;
   }
@@ -149,7 +162,7 @@ Real GKCollisions::computeTimeScale( const KineticSpeciesPtrVect& soln )
   Real scale = DBL_MAX;
   int count = 0;
   for (it=m_collision_model_name.begin(); it!=m_collision_model_name.end(); ++it) {
-    Real tmp = m_collision_model[it->second]->TimeScale(soln,it->second);
+    Real tmp = m_collision_model[it->second]->computeTimeScale(soln,it->second);
     scale = (tmp < scale ? tmp : scale);
     count++;
   }

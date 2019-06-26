@@ -1,51 +1,27 @@
 #include "OneDimData.H"
 
-#include <iostream>
-#include <typeinfo>
-#include <string>
-#include <fstream>
-#include <cstdlib>
-#include <iomanip>
-#include <istream>
-
+// Needed by external utils
 using namespace std;
 
 #include "rbf_interp_2d.hpp"
 #include "r8lib.hpp"
 #include "test_interp_2d.hpp"
 
-#include "DataIterator.H"
 #include "Directions.H"
-#include "DisjointBoxLayout.H"
-#include "FArrayBox.H"
-#include "FourthOrderUtil.H"
-#include "LevelData.H"
-#include "MayDay.H"
+#include "SNCoreCoordSys.H"
+#include "SingleNullCoordSys.H"
 #include "SNCoreBlockCoordSys.H"
 #include "SingleNullBlockCoordSys.H"
 #include "SNCoreBlockCoordSysModel.H"
 #include "SingleNullBlockCoordSysModel.H"
-#include "MagGeom.H"
-
-#include "MultiBlockCoordSys.H"
-#include "Vector.H"
 
 #include "NamespaceHeader.H"
 
-inline
-const MagBlockCoordSys& getCoordSys( const MultiBlockLevelGeom& a_geometry,
-                                     const Box& a_box )
-{
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-   const int block_number( coord_sys.whichBlock( a_box ) );
-   const NewCoordSys* block_coord_sys( coord_sys.getCoordSys( block_number ) );
-   return static_cast<const MagBlockCoordSys&>( *block_coord_sys );
-}
 
 
 OneDimData::OneDimData( ParmParse& a_pp,
                 const int& a_verbosity )
-   : m_verbosity(a_verbosity),
+   : GridFunction(a_verbosity),
      m_subtype("MBA"),
      m_coord_type("flux"),
      m_coords(NULL),
@@ -67,127 +43,7 @@ OneDimData::~OneDimData()
 }
 
 
-void OneDimData::assign( LevelData<FArrayBox>& a_data,
-                     const MultiBlockLevelGeom& a_geometry,
-                     const Real& a_time,
-                     const bool& a_cell_averages ) const
-{
 
-   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-
-   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
- 
-      int block_number( coord_sys.whichBlock( grids[dit] ) );
-
-      if (a_cell_averages) {
-         setCellAverages( a_data[dit], coord_sys, getCoordSys( a_geometry, grids[dit] ), block_number );
-      }
-      else {
-         setPointwise( a_data[dit], getCoordSys( a_geometry, grids[dit] ) );
-      }
-   }
-   a_data.exchange();
-}
-
-
-void OneDimData::assign( LevelData<FluxBox>& a_data,
-                     const MultiBlockLevelGeom& a_geometry,
-                     const Real& a_time,
-                     const bool& a_cell_averages ) const
-{
-
-   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-
-   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
- 
-      int block_number( coord_sys.whichBlock( grids[dit] ) );
-
-      if (a_cell_averages) {
-         for (int dir=0; dir<SpaceDim; ++dir) {
-            setCellAverages( a_data[dit][dir], coord_sys, getCoordSys( a_geometry, grids[dit] ), block_number );
-         }
-      }
-      else {
-         for (int dir=0; dir<SpaceDim; ++dir) {
-            setPointwise( a_data[dit][dir], getCoordSys( a_geometry, grids[dit] ) );
-         }
-      }
-   }
-   a_data.exchange();
-}
-
-
-void OneDimData::assign( FArrayBox& a_data,
-                     const MultiBlockLevelGeom& a_geometry,
-                     const Box& a_box, // interior box
-                     const Real& a_time,
-                     const bool& a_cell_averages ) const
-{
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-   const int block_number( coord_sys.whichBlock( a_box ) );
-
-   if (a_cell_averages) {
-      setCellAverages( a_data, coord_sys, getCoordSys( a_geometry, a_box ), block_number );
-   }
-   else {
-      setPointwise( a_data, getCoordSys( a_geometry, a_box ) );
-   }
-}
-
-
-void OneDimData::assign( FluxBox& a_data,
-                     const MultiBlockLevelGeom& a_geometry,
-                     const Box& a_box, // interior box
-                     const Real& a_time,
-                     const bool& a_cell_averages ) const
-{
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-   const int block_number( coord_sys.whichBlock( a_box ) );
-
-   if (a_cell_averages) {
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         setCellAverages( a_data[dir], coord_sys, getCoordSys( a_geometry, a_box ), block_number );
-      }
-   }
-   else {
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         setPointwise( a_data[dir], getCoordSys( a_geometry, a_box ) );
-      }
-   }
-}
-
-
-void OneDimData::assign( LevelData<FArrayBox>& a_data,
-                     const MultiBlockLevelGeom& a_geometry,
-                     const BoundaryBoxLayout& a_bdry_layout,
-                     const Real& a_time ) const
-{
-   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
-   // NB: This is a cheat - there's one too many cells at the (dir,side) face
-   // of the boundary box, but it doesn't matter because one-sided difference
-   // will be used at that face to construct the cell average.  We do want the
-   // extra cell in all other directions.
-   LevelData<FArrayBox> data_tmp( grids, a_data.nComp(), IntVect::Unit );
-   for (DataIterator dit( grids ); dit.ok(); ++dit) {
-      const Box box( a_bdry_layout.interiorBox( dit ) );
-      const MagBlockCoordSys& coord_sys( ((MagGeom&)a_geometry).getBlockCoordSys( box ) );
-
-      setPointwise( data_tmp[dit], coord_sys );
-   }
-   for (DataIterator dit( grids ); dit.ok(); ++dit) {
-      Box domain_box( data_tmp[dit].box() );
-      domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
-      ProblemDomain domain( domain_box );
-      fourthOrderAverageCell( data_tmp[dit], domain, grids[dit] );
-   }
-   data_tmp.copyTo( a_data );
-   a_data.exchange();
-}
-
-
-inline
 void OneDimData::parseParameters( ParmParse& a_pp )
 {
    
@@ -206,51 +62,34 @@ void OneDimData::parseParameters( ParmParse& a_pp )
    }
 }
 
-
-inline
-void OneDimData::setCellAverages( FArrayBox&        a_data,
-                              const MultiBlockCoordSys& a_coords,
-                              const MagBlockCoordSys&   a_block_coord,
-                              const int               block_number ) const
-
+void OneDimData::checkGeometryValidity( const MultiBlockLevelGeom& a_geometry ) const
 {
-   Box box( a_data.box() );
-   Box tmp_box( box );
-   tmp_box.grow( IntVect::Unit );
-   FArrayBox tmp( tmp_box, a_data.nComp() );
-
-   setPointwise( tmp, a_block_coord );
-
-   fourthOrderAverageCell( tmp, a_block_coord.domain(), box );
-
-   a_data.copy( tmp, box );
-}
-
-
-inline
-void OneDimData::setPointwise(FArrayBox&                a_data,
-                              const MagBlockCoordSys&   a_coord_sys )  const
-
-{
+   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
    
-   //Check geometry validity for "flux" or "outer_midplane" types
    if (m_coord_type == "flux" || m_coord_type == "outer_midplane") {
-      bool not_sn( typeid(a_coord_sys) != typeid(SNCoreBlockCoordSys) );
-      not_sn &= (typeid(a_coord_sys) != typeid(SNCoreBlockCoordSysModel));
-      not_sn &= (typeid(a_coord_sys) != typeid(SingleNullBlockCoordSys));
-      not_sn &= (typeid(a_coord_sys) != typeid(SingleNullBlockCoordSysModel));
+      bool not_sn( typeid(coord_sys) != typeid(SNCoreCoordSys) );
+      not_sn &= (typeid(coord_sys) != typeid(SingleNullCoordSys));
       if ( not_sn ) {
-         const std::string msg( "OneDimData: Attempt to use not a single-null geometry with the flux or outer_midplane options. ");
+         const std::string msg( "Arbitrary: Attempt to use not a single-null geometry with the flux or outer_midplane options. ");
          MayDay::Error( msg.c_str() );
       }
    }
+}
+
+void OneDimData::setPointwise(FArrayBox&                 a_data,
+                              const MultiBlockLevelGeom& a_geometry,
+                              const FArrayBox&           a_real_coords,
+                              const FArrayBox&           a_normalized_flux,
+                              const int                  a_block_number) const
+{
+   const MagBlockCoordSys& coord_sys = getCoordSys(a_geometry, a_block_number);
 
    Box box( a_data.box() );
    FArrayBox cc_phys_coords( box, SpaceDim );
-   a_coord_sys.getCellCenteredRealCoords( cc_phys_coords );
+   coord_sys.getCellCenteredRealCoords( cc_phys_coords );
 
    FArrayBox cc_mapped_coords( box, SpaceDim );
-   a_coord_sys.getCellCenteredMappedCoords( cc_mapped_coords );
+   coord_sys.getCellCenteredMappedCoords( cc_mapped_coords );
    
 
    //We need this for the RBF method
@@ -280,39 +119,39 @@ void OneDimData::setPointwise(FArrayBox&                a_data,
       }
       
       if (m_coord_type == "flux") {
-         if (typeid(a_coord_sys) == typeid(SNCoreBlockCoordSys))  coord = ((const SNCoreBlockCoordSys&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
-         if (typeid(a_coord_sys) == typeid(SingleNullBlockCoordSys))  coord = ((const SingleNullBlockCoordSys&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
+         if (typeid(coord_sys) == typeid(SNCoreBlockCoordSys))  coord = ((const SNCoreBlockCoordSys&)coord_sys).getNormMagneticFlux(phys_coordinate);
+         if (typeid(coord_sys) == typeid(SingleNullBlockCoordSys))  coord = ((const SingleNullBlockCoordSys&)coord_sys).getNormMagneticFlux(phys_coordinate);
          
-         if (typeid(a_coord_sys) == typeid(SNCoreBlockCoordSysModel))  coord = ((const SNCoreBlockCoordSysModel&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
-         if (typeid(a_coord_sys) == typeid(SingleNullBlockCoordSysModel))  coord = ((const SingleNullBlockCoordSysModel&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
+         if (typeid(coord_sys) == typeid(SNCoreBlockCoordSysModel))  coord = ((const SNCoreBlockCoordSysModel&)coord_sys).getNormMagneticFlux(phys_coordinate);
+         if (typeid(coord_sys) == typeid(SingleNullBlockCoordSysModel))  coord = ((const SingleNullBlockCoordSysModel&)coord_sys).getNormMagneticFlux(phys_coordinate);
       }
       
       if (m_coord_type == "outer_midplane") {
          
-         if (typeid(a_coord_sys) == typeid(SNCoreBlockCoordSys)) {
-            double fluxNorm  = ((const SNCoreBlockCoordSys&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
-            double Rsep  = ((const SNCoreBlockCoordSys&)a_coord_sys).getOuterRsep();
-            coord = ((const SNCoreBlockCoordSys&)a_coord_sys).getOuterMidplaneCoord(fluxNorm) - Rsep;
+         if (typeid(coord_sys) == typeid(SNCoreBlockCoordSys)) {
+            double fluxNorm  = ((const SNCoreBlockCoordSys&)coord_sys).getNormMagneticFlux(phys_coordinate);
+            double Rsep  = ((const SNCoreBlockCoordSys&)coord_sys).getOuterRsep();
+            coord = ((const SNCoreBlockCoordSys&)coord_sys).getOuterMidplaneCoord(fluxNorm) - Rsep;
             
          }
          
-         if (typeid(a_coord_sys) == typeid(SingleNullBlockCoordSys)) {
-            double fluxNorm  = ((const SingleNullBlockCoordSys&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
-            double Rsep  = ((const SingleNullBlockCoordSys&)a_coord_sys).getOuterRsep();
-            coord = ((const SingleNullBlockCoordSys&)a_coord_sys).getOuterMidplaneCoord(fluxNorm) - Rsep;
+         if (typeid(coord_sys) == typeid(SingleNullBlockCoordSys)) {
+            double fluxNorm  = ((const SingleNullBlockCoordSys&)coord_sys).getNormMagneticFlux(phys_coordinate);
+            double Rsep  = ((const SingleNullBlockCoordSys&)coord_sys).getOuterRsep();
+            coord = ((const SingleNullBlockCoordSys&)coord_sys).getOuterMidplaneCoord(fluxNorm) - Rsep;
          }
          
-         if (typeid(a_coord_sys) == typeid(SNCoreBlockCoordSysModel)) {
-            double fluxNorm  = ((const SNCoreBlockCoordSysModel&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
-            double Rsep  = ((const SNCoreBlockCoordSysModel&)a_coord_sys).getOuterRsep();
-            coord = ((const SNCoreBlockCoordSysModel&)a_coord_sys).getOuterMidplaneCoord(fluxNorm) - Rsep;
+         if (typeid(coord_sys) == typeid(SNCoreBlockCoordSysModel)) {
+            double fluxNorm  = ((const SNCoreBlockCoordSysModel&)coord_sys).getNormMagneticFlux(phys_coordinate);
+            double Rsep  = ((const SNCoreBlockCoordSysModel&)coord_sys).getOuterRsep();
+            coord = ((const SNCoreBlockCoordSysModel&)coord_sys).getOuterMidplaneCoord(fluxNorm) - Rsep;
             
          }
          
-         if (typeid(a_coord_sys) == typeid(SingleNullBlockCoordSysModel)) {
-            double fluxNorm  = ((const SingleNullBlockCoordSysModel&)a_coord_sys).getNormMagneticFlux(phys_coordinate);
-            double Rsep  = ((const SingleNullBlockCoordSysModel&)a_coord_sys).getOuterRsep();
-            coord = ((const SingleNullBlockCoordSysModel&)a_coord_sys).getOuterMidplaneCoord(fluxNorm) - Rsep;
+         if (typeid(coord_sys) == typeid(SingleNullBlockCoordSysModel)) {
+            double fluxNorm  = ((const SingleNullBlockCoordSysModel&)coord_sys).getNormMagneticFlux(phys_coordinate);
+            double Rsep  = ((const SingleNullBlockCoordSysModel&)coord_sys).getOuterRsep();
+            coord = ((const SingleNullBlockCoordSysModel&)coord_sys).getOuterMidplaneCoord(fluxNorm) - Rsep;
          }
          
       }

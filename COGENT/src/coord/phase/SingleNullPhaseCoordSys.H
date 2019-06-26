@@ -61,7 +61,12 @@ public:
 
    virtual void defineBoundaries();
 
-   int blockType(int block) const {return ((CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block))->blockType();}
+   Vector<RealVect> displacements(const Vector<RealVect>&   dstCoords,
+                                  const Vector<int>&        dstBlocks,
+                                  const RealVect&           srcCoords,
+                                  int                       srcBlock) const;
+
+   int blockType(int block) const {return ((CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block))->poloidalIndex();}
 
    virtual std::string type() const { return "SingleNull"; }
 

@@ -47,8 +47,12 @@ MagBlockCoordSys::MagBlockCoordSys( ParmParse& a_parm_parse )
 
    if (a_parm_parse.contains("axisymmetric")) {
       a_parm_parse.get("axisymmetric", m_axisymmetric);
-   }
 
+      if (m_axisymmetric && CFG_DIM==3) {
+         MayDay::Error("MagBlockCoordSys::MagBlockCoordSys(): Cannot specify axisymmetry in 3D");
+      }
+   }
+   
    if (a_parm_parse.contains("field_aligned")) {
       a_parm_parse.get("field_aligned", m_field_aligned);
    }
@@ -180,7 +184,10 @@ MagBlockCoordSys::compute_dXdXiCofac ( FArrayBox& a_cofarr,
                                        const FArrayBox& a_xi,
                                        const Box& a_box  ) const
 {
-  // Compute cofactors of dXdXi with negation
+   CH_TIMERS("MagBlockCoordSys::compute_dXdXiCofac");
+   CH_TIMER("compute_dXdXi", t_compute_dxdxi);
+
+   // Compute cofactors of dXdXi with negation
    if ( SpaceDim == 2 ){
        dXdXi(a_cofarr, a_xi, 0, 1, 1, a_box);
        dXdXi(a_cofarr, a_xi, 1, 1, 0, a_box);
@@ -189,12 +196,14 @@ MagBlockCoordSys::compute_dXdXiCofac ( FArrayBox& a_cofarr,
        a_cofarr.negate(1,2);
    }
    else if ( SpaceDim == 3 ){
+       CH_START(t_compute_dxdxi);
        FArrayBox tmp(a_box,9);
        for (int icomp = 0; icomp < 9; ++icomp){
           int ind1 = icomp/3;
           int ind2 = icomp % 3;
           dXdXi(tmp, a_xi, icomp, ind1,ind2,a_box);
        }
+       CH_STOP(t_compute_dxdxi);
 
        // Get components of a_cofarr
        TRM1x2less3x4(a_cofarr, tmp, a_box, 0, 4, 8, 7, 5);
@@ -206,7 +215,6 @@ MagBlockCoordSys::compute_dXdXiCofac ( FArrayBox& a_cofarr,
        TRM1x2less3x4(a_cofarr, tmp, a_box, 6, 1, 5, 2, 4);
        TRM1x2less3x4(a_cofarr, tmp, a_box, 7, 2, 3, 0, 5);
        TRM1x2less3x4(a_cofarr, tmp, a_box, 8, 0, 4, 1, 3);
-
    }
    // NOTE ABOVE WILL PRODUCE ERROR IF spacedim = 1
    else{
@@ -217,6 +225,9 @@ MagBlockCoordSys::compute_dXdXiCofac ( FArrayBox& a_cofarr,
 Vector<Real>
 MagBlockCoordSys::compute_dXdXiCofac ( const RealVect& a_Xi) const
 {
+   CH_TIMERS("MagBlockCoordSys::compute_dXdXiCofac_point");
+   CH_TIMER("compute_dXdXi", t_compute_dxdxi_point);
+
    Vector<Real> cofarr(SpaceDim*SpaceDim,0);
    
    // Compute cofactors of dXdXi with negation
@@ -229,11 +240,13 @@ MagBlockCoordSys::compute_dXdXiCofac ( const RealVect& a_Xi) const
    }
    else if ( SpaceDim == 3 ){
       Vector<Real> tmp(SpaceDim*SpaceDim,0);
+      CH_START(t_compute_dxdxi_point);
       for (int icomp = 0; icomp < 9; ++icomp){
          int ind1 = icomp/3;
          int ind2 = icomp % 3;
          tmp[icomp] = dXdXi(a_Xi, ind1, ind2);
       }
+      CH_STOP(t_compute_dxdxi_point);
       
       // Get components of a_cofarr
       cofarr[0] = TRM1x2less3x4(tmp, 4, 8, 7, 5);
@@ -302,7 +315,6 @@ MagBlockCoordSys::cellVol( FArrayBox&     a_vol,
 #endif
          }
       } // end loop over directions
-
 
       // convert point values to 4th-order face averages
       fourthOrderAverageFace(F);
@@ -481,6 +493,7 @@ void MagBlockCoordSys::getPointwiseMajorRadius( FluxBox& a_R ) const
 
 void MagBlockCoordSys::getCellCentereddXdxi( FArrayBox& a_dXdxi ) const
 {
+   CH_TIME("MagBlockCoordSys::getCellCentereddXdxi()");
    CH_assert(a_dXdxi.nComp() == SpaceDim*SpaceDim);
    const Box& box = a_dXdxi.box();
 
@@ -511,8 +524,9 @@ void MagBlockCoordSys::getFaceCentereddXdxi( FluxBox& a_dXdxi ) const
 
 void MagBlockCoordSys::getPointwiseN( FArrayBox& a_N ) const
 {
+   CH_TIME("MagBlockCoordSys::getPointwiseN()");
    const Box& box = a_N.box();
-
+ 
    FArrayBox xi(box,SpaceDim);
    getCellCenteredMappedCoords(xi);
 
@@ -542,6 +556,9 @@ void MagBlockCoordSys::getPointwiseN( FArrayBox& a_N ) const
 
 void MagBlockCoordSys::getPointwiseN( FluxBox& a_N ) const
 {
+   CH_TIMERS("MagBlockCoordSys::getPointwiseN");
+   CH_TIMER("compute_dXdXiCoFac", t_compute_dxdxi_cofac);
+
    for (int dir=0; dir<SpaceDim; ++dir) {
       FArrayBox& this_N = a_N[dir];
       const Box& box = this_N.box();
@@ -549,7 +566,9 @@ void MagBlockCoordSys::getPointwiseN( FluxBox& a_N ) const
       FArrayBox xi(box,SpaceDim);
       getFaceCenteredMappedCoords(dir, xi);
 
+      CH_START(t_compute_dxdxi_cofac);
       compute_dXdXiCofac( this_N, xi, box );
+      CH_STOP(t_compute_dxdxi_cofac);
 
       if ( m_axisymmetric ) {
          BoxIterator bit(box);
@@ -616,7 +635,6 @@ void MagBlockCoordSys::getPointwiseMetrics( FluxBox& a_N ) const
                this_xi[POLOIDAL_DIR] = xi(iv,POLOIDAL_DIR);
             
                double TwoPiRmaj = 2. * Pi * majorRadius(this_xi);
-            
                for (int comp=0; comp<(SpaceDim*SpaceDim); ++comp) {
                   this_N(iv,comp) *= TwoPiRmaj;
                }
@@ -799,60 +817,50 @@ void MagBlockCoordSys::pointwiseJ(FArrayBox& a_J,
 
 
 
-void MagBlockCoordSys::getTwoPirRmaj( FArrayBox& a_TwoPirRmaj ) const
+void MagBlockCoordSys::getPointwisePoloidalJ( FArrayBox& a_poloidal_J ) const
 {
-   const Box& box = a_TwoPirRmaj.box();
+   const Box& box = a_poloidal_J.box();
 
    FArrayBox xi(box,SpaceDim);
    getCellCenteredMappedCoords(xi);
 
    FArrayBox dXdXi_fab(box,SpaceDim*SpaceDim);
    compute_dXdXiCofac( dXdXi_fab, xi, box ); //this may be a bug for cfg_dim>2
-
-   BoxIterator bit(box);
-
+   
    FArrayBox temp_dXdxi(box, SpaceDim*SpaceDim);
    getCellCentereddXdxi(temp_dXdxi);
 
-   if (SpaceDim == 3){
-       for (bit.begin();bit.ok();++bit) {
-           const IntVect& iv = bit();
+   if ( SpaceDim == 3 ) {
+      for (BoxIterator bit(box); bit.ok(); ++bit) {
+         const IntVect& iv = bit();
 
-           // N is the inverse of the 2x2 matrix dXdXi times its determinant J
-           double r;
-           r =   temp_dXdxi(iv,0)*(temp_dXdxi(iv,4)*temp_dXdxi(iv,8) - temp_dXdxi(iv,5)*temp_dXdxi(iv,7));
-           r = r-temp_dXdxi(iv,1)*(temp_dXdxi(iv,3)*temp_dXdxi(iv,8) - temp_dXdxi(iv,5)*temp_dXdxi(iv,6));
-           r = r+temp_dXdxi(iv,2)*(temp_dXdxi(iv,3)*temp_dXdxi(iv,7) - temp_dXdxi(iv,4)*temp_dXdxi(iv,6));
+         // N is the inverse of the 2x2 matrix dXdXi times its determinant J
+         double r;
+         r =   temp_dXdxi(iv,0)*(temp_dXdxi(iv,4)*temp_dXdxi(iv,8) - temp_dXdxi(iv,5)*temp_dXdxi(iv,7));
+         r = r-temp_dXdxi(iv,1)*(temp_dXdxi(iv,3)*temp_dXdxi(iv,8) - temp_dXdxi(iv,5)*temp_dXdxi(iv,6));
+         r = r+temp_dXdxi(iv,2)*(temp_dXdxi(iv,3)*temp_dXdxi(iv,7) - temp_dXdxi(iv,4)*temp_dXdxi(iv,6));
 
-           a_TwoPirRmaj(iv,0) = r;
-
-           //if ( m_axisymmetric ) {
-           //    RealVect this_xi;
-           //    this_xi[RADIAL_DIR] = xi(iv,RADIAL_DIR);
-           //    this_xi[POLOIDAL_DIR] = xi(iv,POLOIDAL_DIR);
-
-           //    a_TwoPirRmaj(iv,0) *= 2. * Pi * majorRadius(this_xi);
-           //}
-       }
-   }else{
-       for (bit.begin();bit.ok();++bit) {
-           const IntVect& iv = bit();
-
-           // N is the inverse of the 2x2 matrix dXdXi times its determinant J
-           double r = dXdXi_fab(iv,0)*dXdXi_fab(iv,3) - dXdXi_fab(iv,1)*dXdXi_fab(iv,2);
-
-           a_TwoPirRmaj(iv,0) = r;
-
-           if ( m_axisymmetric ) {
-               RealVect this_xi;
-               this_xi[RADIAL_DIR] = xi(iv,RADIAL_DIR);
-               this_xi[POLOIDAL_DIR] = xi(iv,POLOIDAL_DIR);
-
-               a_TwoPirRmaj(iv,0) *= 2. * Pi * majorRadius(this_xi);
-           }
-       }
+         a_poloidal_J(iv,0) = r;
+      }
    }
-   
+   else {
+      for (BoxIterator bit(box); bit.ok(); ++bit) {
+         const IntVect& iv = bit();
+
+         // N is the inverse of the 2x2 matrix dXdXi times its determinant J
+         double r = dXdXi_fab(iv,0)*dXdXi_fab(iv,3) - dXdXi_fab(iv,1)*dXdXi_fab(iv,2);
+
+         a_poloidal_J(iv,0) = r;
+
+         if ( m_axisymmetric ) {
+            RealVect this_xi;
+            this_xi[RADIAL_DIR] = xi(iv,RADIAL_DIR);
+            this_xi[POLOIDAL_DIR] = xi(iv,POLOIDAL_DIR);
+            
+            a_poloidal_J(iv,0) *= 2. * Pi * majorRadius(this_xi);
+         }
+      }
+   }
 }
 
 
@@ -906,6 +914,7 @@ MagBlockCoordSys::getNodeCenteredRealCoords( FArrayBox&  a_X ) const
 void
 MagBlockCoordSys::getCellCenteredRealCoords( FArrayBox& a_x ) const
 {
+   CH_TIME("MagBlockCoordSys::getCellCenteredRealCoords()");
    const Box& box( a_x.box() );
    FArrayBox xi_array( box, a_x.nComp() );
    getCellCenteredMappedCoords( xi_array );
@@ -978,6 +987,34 @@ MagBlockCoordSys::computeFluxSurfaceUnitTangent( FluxBox& a_data ) const
 }
 
 
+double
+MagBlockCoordSys::mappingError( const Box& a_box ) const
+{
+   CH_assert(a_box.cellCentered());
+
+   double max_diff = 0.;
+
+   RealVect offset = 0.5*m_dx;
+
+   for (BoxIterator bit(a_box); bit.ok(); ++bit) {
+      IntVect iv = bit();
+      RealVect xi = m_dx*iv;
+      xi += offset;
+
+      RealVect new_xi = mappedCoord(realCoord(xi));
+      RealVect delta_xi =  new_xi - xi;
+
+      double diff = delta_xi.vectorLength();
+      double normalization = 0.5 * (xi.vectorLength() + new_xi.vectorLength());
+      if ( normalization > 0. ) diff /= normalization;
+      
+      if (diff > max_diff) max_diff = diff;
+   }
+
+   return max_diff;
+}
+
+
 
 void
 MagBlockCoordSys::projectOntoFluxSurface( FArrayBox& a_data ) const
@@ -999,7 +1036,6 @@ MagBlockCoordSys::projectOntoFluxSurface( FluxBox& a_data ) const
       projectOntoFluxSurface(a_data[dir]);
    }
 }
-
 
 
 void
@@ -1173,8 +1209,6 @@ MagBlockCoordSys::incrementFaceMetricWithEdgeTerm(FArrayBox& a_N,
 
         } // end loop over s directions
     } // end loop over faces in faceMetrics
-
-
 }
 #endif
 
@@ -1331,7 +1365,6 @@ MagBlockCoordSys::computeTransverseFaceMetric(FArrayBox& a_faceMetrics,
       //
       a_faceMetrics.mult(faceArea, metricComp, 1);
     }
-
 }
 
 #endif

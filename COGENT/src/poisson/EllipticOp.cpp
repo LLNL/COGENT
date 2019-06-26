@@ -11,6 +11,7 @@
 #include "BicubicInterp.H"
 #include "SimpleDivergence.H"
 #include "CornerCopier.H"
+#include "DataArray.H"
 #include "inspect.H"
 
 #include "NamespaceHeader.H"
@@ -76,6 +77,8 @@ EllipticOp::EllipticOp( const ParmParse& a_pp,
    }
 
    m_bc_divergence.define(grids, 1, IntVect::Zero);
+   
+   m_subtract_fs_par_div = false;
 }
       
 
@@ -667,8 +670,8 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
        const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
        RealVect faceArea = block_coord_sys.getMappedFaceArea();
        for (int dir=0; dir<SpaceDim; ++dir) {
-	 NTF_normal[dit][dir].copy(flux[dit][dir],dir,0,1);
-	 NTF_normal[dit][dir].mult(faceArea[dir]);
+          NTF_normal[dit][dir].copy(flux[dit][dir],dir,0,1);
+          NTF_normal[dit][dir].mult(faceArea[dir]);
        }
      }
 
@@ -682,6 +685,11 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       a_out[dit] /= m_volume[dit];
    }
+   
+   if (m_subtract_fs_par_div) {
+      subtractFSAverParDiv(a_out, flux);
+   }
+   
 }
 
 
@@ -929,6 +937,47 @@ EllipticOp::computeRadialFSAverage( const LevelData<FluxBox>&  a_in,
    a_hi_value = globalMax(a_hi_value);
 }
 
+void
+EllipticOp::subtractFSAverParDiv( LevelData<FArrayBox>&      a_div,
+                                  const  LevelData<FluxBox>& a_flux) const
+{
+   
+   const DisjointBoxLayout& grids = a_div.disjointBoxLayout();
+   
+   LevelData<FluxBox> NTF_normal(grids, 1, IntVect::Zero);
+   for (DataIterator dit(a_flux.dataIterator()); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
+      RealVect faceArea = block_coord_sys.getMappedFaceArea();
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         NTF_normal[dit][dir].copy(a_flux[dit][dir],dir,0,1);
+         NTF_normal[dit][dir].mult(faceArea[dir]);
+         
+         //zero out flux on radial faces
+         if (dir == RADIAL_DIR) {
+            NTF_normal[dit][dir].setVal(0.);
+         }
+      }
+   }
+   
+   RealVect fakeDx = RealVect::Unit;
+   LevelData<FArrayBox> parallel_div(grids, 1, IntVect::Zero);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      simpleDivergence(parallel_div[dit], NTF_normal[dit], grids[dit], fakeDx);
+   }
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      parallel_div[dit] /= m_volume[dit];
+   }
+
+   //subtract parallel divergence
+   FluxSurface flux_surface(m_geometry);
+   LevelData<FArrayBox> par_div_fs(grids, 1, IntVect::Zero);
+   flux_surface.averageAndSpread(parallel_div, par_div_fs);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      a_div[dit] -= par_div_fs[dit];
+   }
+}
 
 void
 EllipticOp::fillInternalGhosts( LevelData<FArrayBox>& a_phi ) const
@@ -1522,10 +1571,33 @@ EllipticOp::constructBoundaryStencils( const bool                         a_four
                Box box = bdryBox(domain_box, dir, side, 1);
                FArrayBox bv(box,1);
 
+               Box box_tmp = adjCellBox(domain_box, dir, side, -1);
+               FluxBox bv_tmp(box_tmp,1);
+               
                RefCountedPtr<GridFunction> bc_func = a_bc.getBCFunction(block_number, dir, side );
-               if (bc_func) {
-                  bc_func->assign(bv, m_geometry, box, 0., false);
+               if (bc_func && !(typeid(*bc_func) == typeid(DataArray))) {
+ 		  FluxBox real_coords(box_tmp,CFG_DIM);
+		  FluxBox norm_flux(box_tmp,1);
+
+		  const MagBlockCoordSys& coord_sys( m_geometry.getBlockCoordSys( block_number ) );
+		  
+		  coord_sys.getFaceCenteredRealCoords(dir, real_coords[dir]);
+		  coord_sys.getNormMagneticFlux(real_coords[dir], norm_flux[dir]);
+		  
+                  bc_func->assign(bv_tmp, m_geometry, real_coords, norm_flux, block_number, 0., false);
+
+                  for (BoxIterator bit(box); bit.ok(); ++bit) {
+                     IntVect iv = bit();
+                     iv[dir] = (bv_tmp[dir].box()).sideEnd(side)[dir];
+                     bv(bit(),0) = bv_tmp[dir](iv,0);
+                  }
                }
+
+	       else if (bc_func && (typeid(*bc_func) == typeid(DataArray))) {
+                 FArrayBox dummy;
+                 bc_func->assign(bv, m_geometry, dummy, dummy, block_number, 0., false);
+	       }
+	       
                else {
                   for (BoxIterator bit(box); bit.ok(); ++bit) {
                      bv(bit(),0) = a_bc.getBCValue(block_number, dir, side);
@@ -1658,6 +1730,10 @@ void
 EllipticOp::interpToNodes( const LevelData<FArrayBox>&  a_phi,
                            LevelData<FArrayBox>&        a_phi_node ) const
 {
+#if CFG_DIM==3
+   MayDay::Error("EllipticOp::interpToNodes() not yet implemented");
+#else
+   
    CH_assert(a_phi_node.ghostVect() >= 2*IntVect::Unit);
 
    // Make a temporary with ghost cells and copy the potential on valid cells
@@ -1737,6 +1813,7 @@ EllipticOp::interpToNodes( const LevelData<FArrayBox>&  a_phi,
    }
 
    a_phi_node.exchange();
+#endif
 }
 
 

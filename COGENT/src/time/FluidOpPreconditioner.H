@@ -70,7 +70,7 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
       CH_assert(a_im == m_im);
 
       if (m_im) {
-        m_fluid_ops->updatePCImEx(a_kin_species_phys, a_time, a_shift);
+        m_fluid_ops->updatePCImEx(a_fluid_species, a_kin_species_phys, a_time, a_shift, a_idx);
       }
       return;
     }

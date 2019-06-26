@@ -1,0 +1,349 @@
+
+c    COMPUTE FLUX-FREEZING SPEED
+
+      subroutine eval_flux_freezing_speed(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[RHO],
+     &     CHF_CONST_FRA1[P],
+     &     CHF_CONST_FRA1[magP],
+     &     CHF_CONST_FRA[V],
+     &     CHF_CONST_FRA[N],
+     &     CHF_CONST_FRA1[J],
+     &     CHF_CONST_REAL[gamma],
+     &     CHF_CONST_INT[Dims],
+     &     CHF_FRA[Cspeed]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision C0, Cspeed1, Cspeed2, Cspeed3, Vmap1, Vmap2, Vmap3
+      double precision dq1dx1, dq1dx2, dq1dx3
+      double precision dq2dx1, dq2dx2, dq2dx3
+      double precision dq3dx1, dq3dx2, dq3dx3
+
+c        print*, "shape N_cent       = ", shape(N)
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+         C0  = sqrt( (gamma*P(CHF_AUTOIX[i]) + 2.0*magP(CHF_AUTOIX[i]))/RHO(CHF_AUTOIX[i]) )
+         if (Dims==3) then
+            
+            dq1dx1 = N(CHF_AUTOIX[i],0)/J(CHF_AUTOIX[i])
+            dq1dx2 = N(CHF_AUTOIX[i],3)/J(CHF_AUTOIX[i])
+            dq1dx3 = N(CHF_AUTOIX[i],6)/J(CHF_AUTOIX[i])
+            dq2dx1 = N(CHF_AUTOIX[i],1)/J(CHF_AUTOIX[i])
+            dq2dx2 = N(CHF_AUTOIX[i],4)/J(CHF_AUTOIX[i])
+            dq2dx3 = N(CHF_AUTOIX[i],7)/J(CHF_AUTOIX[i])
+            dq3dx1 = N(CHF_AUTOIX[i],2)/J(CHF_AUTOIX[i])
+            dq3dx2 = N(CHF_AUTOIX[i],5)/J(CHF_AUTOIX[i])
+            dq3dx3 = N(CHF_AUTOIX[i],8)/J(CHF_AUTOIX[i])
+            
+            Vmap1 = dq1dx1*V(CHF_AUTOIX[i],0) 
+     &            + dq1dx2*V(CHF_AUTOIX[i],1) 
+     &            + dq1dx3*V(CHF_AUTOIX[i],2) 
+            Vmap2 = dq2dx1*V(CHF_AUTOIX[i],0) 
+     &            + dq2dx2*V(CHF_AUTOIX[i],1) 
+     &            + dq2dx3*V(CHF_AUTOIX[i],2) 
+            Vmap3 = dq3dx1*V(CHF_AUTOIX[i],0) 
+     &            + dq3dx2*V(CHF_AUTOIX[i],1) 
+     &            + dq3dx3*V(CHF_AUTOIX[i],2) 
+ 
+            Cspeed1  = C0*sqrt( dq1dx1**2 + dq1dx2**2 + dq1dx3**2 )
+            Cspeed2  = C0*sqrt( dq2dx1**2 + dq2dx2**2 + dq2dx3**2 )
+            Cspeed3  = C0*sqrt( dq3dx1**2 + dq3dx2**2 + dq3dx3**2 )
+            
+            Cspeed(CHF_AUTOIX[i],0) = abs(Vmap1) + Cspeed1
+            Cspeed(CHF_AUTOIX[i],1) = abs(Vmap2) + Cspeed2
+            Cspeed(CHF_AUTOIX[i],2) = abs(Vmap3) + Cspeed3
+     
+         else
+
+            dq1dx1 = N(CHF_AUTOIX[i],0)/J(CHF_AUTOIX[i])
+            dq1dx2 = N(CHF_AUTOIX[i],2)/J(CHF_AUTOIX[i])
+            dq2dx1 = N(CHF_AUTOIX[i],1)/J(CHF_AUTOIX[i])
+            dq2dx2 = N(CHF_AUTOIX[i],3)/J(CHF_AUTOIX[i])
+      
+            Vmap1 = dq1dx1*V(CHF_AUTOIX[i],0) 
+     &            + dq1dx2*V(CHF_AUTOIX[i],1) 
+            Vmap2 = dq2dx1*V(CHF_AUTOIX[i],0) 
+     &            + dq2dx2*V(CHF_AUTOIX[i],1) 
+ 
+            Cspeed1  = C0*sqrt( dq1dx1**2 + dq1dx2**2 )
+            Cspeed2  = C0*sqrt( dq2dx1**2 + dq2dx2**2 )
+c            print*, "shape(P)   = ", shape(P)
+c            print*, "Cspeed1    = ", Cspeed1
+c            print*, "CHF_AUTOIX[i]    = ", CHF_AUTOIX[i]
+c            print*, "dq1dx1    = ", dq1dx1
+c            print*, "dq1dx2    = ", dq1dx2
+c            print*, "dq2dx1    = ", dq2dx1
+c            print*, "dq2dx2    = ", dq2dx2
+
+            Cspeed(CHF_AUTOIX[i],0) = abs(Vmap1) + Cspeed1
+            Cspeed(CHF_AUTOIX[i],1) = abs(Vmap2) + Cspeed2
+c            Cspeed(CHF_AUTOIX[i],0) = abs(V(CHF_AUTOIX[i],0)) + C0
+c            Cspeed(CHF_AUTOIX[i],1) = abs(V(CHF_AUTOIX[i],1)) + C0
+      
+         endif
+ 
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    RETURN SQUARE OF EACH ROW OF METRIC TENSOR NT
+
+      subroutine mag_nt_row_sq(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[N],
+     &     CHF_FRA[NTmagRowSq]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision norm0, norm1, norm2
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+      if (CH_SPACEDIM==3) then
+
+        norm0  = N(CHF_AUTOIX[i],0)**2 + N(CHF_AUTOIX[i],3)**2 + N(CHF_AUTOIX[i],6)**2
+        norm1  = N(CHF_AUTOIX[i],1)**2 + N(CHF_AUTOIX[i],4)**2 + N(CHF_AUTOIX[i],7)**2
+        norm2  = N(CHF_AUTOIX[i],2)**2 + N(CHF_AUTOIX[i],5)**2 + N(CHF_AUTOIX[i],8)**2
+        NTmagRowSq(CHF_AUTOIX[i],0) = norm0
+        NTmagRowSq(CHF_AUTOIX[i],1) = norm1
+        NTmagRowSq(CHF_AUTOIX[i],2) = norm2
+
+      else 
+
+        norm0  = N(CHF_AUTOIX[i],0)**2 + N(CHF_AUTOIX[i],2)**2
+        norm1  = N(CHF_AUTOIX[i],1)**2 + N(CHF_AUTOIX[i],3)**2
+        NTmagRowSq(CHF_AUTOIX[i],0) = norm0
+        NTmagRowSq(CHF_AUTOIX[i],1) = norm1
+
+      endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE CELL CENTER FLUXES
+
+      subroutine cell_center_fluxes(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[eneDen],
+     &     CHF_CONST_FRA[momDen],
+     &     CHF_CONST_FRA[V],
+     &     CHF_CONST_FRA1[P],
+     &     CHF_FRA[rhoFlux],
+     &     CHF_FRA[mxFlux],
+     &     CHF_FRA[myFlux],
+     &     CHF_FRA[mzFlux],
+     &     CHF_FRA[enFlux]
+     &     )
+
+c     local variables
+      integer n, CHF_AUTODECL[i]
+      double precision norm0, norm1, norm2
+
+      do n=0, (CH_SPACEDIM-1)
+      
+         CHF_AUTOMULTIDO[gridbox;i]
+          
+            rhoFlux(CHF_AUTOIX[i],n) = momDen(CHF_AUTOIX[i],n)
+            mxFlux(CHF_AUTOIX[i],n) = momDen(CHF_AUTOIX[i],0)*V(CHF_AUTOIX[i],n)
+            myFlux(CHF_AUTOIX[i],n) = momDen(CHF_AUTOIX[i],1)*V(CHF_AUTOIX[i],n)
+ 
+            if (CH_SPACEDIM==3) then
+               mzFlux(CHF_AUTOIX[i],n) = momDen(CHF_AUTOIX[i],2)*V(CHF_AUTOIX[i],n)
+            endif
+         
+            if (n==0) then
+               mxFlux(CHF_AUTOIX[i],n) = mxFlux(CHF_AUTOIX[i],n) + P(CHF_AUTOIX[i])
+            endif
+            if (n==1) then
+               myFlux(CHF_AUTOIX[i],n) = myFlux(CHF_AUTOIX[i],n) + P(CHF_AUTOIX[i])
+            endif
+            if (n==2) then
+               mzFlux(CHF_AUTOIX[i],n) = mzFlux(CHF_AUTOIX[i],n) + P(CHF_AUTOIX[i])
+            endif
+
+            enFlux(CHF_AUTOIX[i],n) = (eneDen(CHF_AUTOIX[i]) + P(CHF_AUTOIX[i]))
+     &                                *V(CHF_AUTOIX[i],n)
+
+         CHF_ENDDO
+
+      enddo
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE LAX FLUX SPLITTING
+
+      subroutine lax_flux_splitting(
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA[fluxL],
+     &     CHF_FRA[fluxR],
+     &     CHF_CONST_FRA[flux],
+     &     CHF_CONST_FRA[C],
+     &     CHF_CONST_FRA1[Jf]
+     &     )
+
+c     local variables
+      integer n, CHF_AUTODECL[i]
+
+      do n=0, (CHF_NCOMP[flux]-1)
+      
+         CHF_AUTOMULTIDO[gridbox;i]
+          
+            fluxL(CHF_AUTOIX[i],n) = 0.5*(flux(CHF_AUTOIX[i],n) - C(CHF_AUTOIX[i],n)*Jf(CHF_AUTOIX[i]))
+            fluxR(CHF_AUTOIX[i],n) = 0.5*(flux(CHF_AUTOIX[i],n) + C(CHF_AUTOIX[i],n)*Jf(CHF_AUTOIX[i]))
+ 
+         CHF_ENDDO
+
+      enddo
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    CONVERT FLUX FROM PHYSICAL TO MAPPED
+
+      subroutine convert_to_mapped(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[physFlux],
+     &     CHF_CONST_FRA[N],
+c     &     CHF_CONST_FRA1[twoPiRmaj],
+c     &     CHF_CONST_BOOL[twoDaxisymm],
+     &     CHF_CONST_INT[Dims],
+     &     CHF_FRA[mappedFlux]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision mapped0, mapped1, mapped2
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+      if (Dims==3) then
+        
+        mapped0  = N(CHF_AUTOIX[i],0)*physFlux(CHF_AUTOIX[i],0) 
+     &           + N(CHF_AUTOIX[i],3)*physFlux(CHF_AUTOIX[i],1)
+     &           + N(CHF_AUTOIX[i],6)*physFlux(CHF_AUTOIX[i],2)
+        mapped1  = N(CHF_AUTOIX[i],1)*physFlux(CHF_AUTOIX[i],0) 
+     &           + N(CHF_AUTOIX[i],4)*physFlux(CHF_AUTOIX[i],1)
+     &           + N(CHF_AUTOIX[i],7)*physFlux(CHF_AUTOIX[i],2)
+        mapped2  = N(CHF_AUTOIX[i],3)*physFlux(CHF_AUTOIX[i],0) 
+     &           + N(CHF_AUTOIX[i],5)*physFlux(CHF_AUTOIX[i],1)
+     &           + N(CHF_AUTOIX[i],8)*physFlux(CHF_AUTOIX[i],2)
+        
+        mappedFlux(CHF_AUTOIX[i],0) = mapped0
+        mappedFlux(CHF_AUTOIX[i],1) = mapped1
+        mappedFlux(CHF_AUTOIX[i],2) = mapped2
+
+      else 
+
+        mapped0  = N(CHF_AUTOIX[i],0)*physFlux(CHF_AUTOIX[i],0) 
+     &           + N(CHF_AUTOIX[i],2)*physFlux(CHF_AUTOIX[i],1)
+        mapped1  = N(CHF_AUTOIX[i],1)*physFlux(CHF_AUTOIX[i],0) 
+     &           + N(CHF_AUTOIX[i],3)*physFlux(CHF_AUTOIX[i],1)
+c        print*, "shape(J)   = ", shape(J)
+c        print*, "norm0    = ", norm0
+c        print*, "CHF_AUTOIX[i]    = ", CHF_AUTOIX[i]
+c        print*, "physFlux0    = ", physFlux(CHF_AUTOIX[i],0)
+c        print*, "mappedFlux0  = ", mapped0
+c        print*, "J    = ", J(CHF_AUTOIX[i])
+c        print*, "J    = ", J(CHF_AUTOIX[i])
+
+        mappedFlux(CHF_AUTOIX[i],0) = mapped0
+        mappedFlux(CHF_AUTOIX[i],1) = mapped1
+
+      endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    EASY WAY TO LOOK AT WHAT IS IN FARRAYBOX
+
+      subroutine inspect_farraybox(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[FA0],
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision F00
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+        F00  = FA0(CHF_AUTOIX[i]) 
+c        print*, "shape(F0)   = ", shape(F0)
+        print*, "CHF_AUTOIX[i]    = ", CHF_AUTOIX[i]
+        print*, "F00    = ", F00
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    EASY WAY TO LOOK AT WHAT IS IN FLUXBOX / EDGEBOX
+
+      subroutine inspect_fluxbox(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[Flux],
+     &     CHF_CONST_INT[dir]
+     &     )
+
+c     local variables
+      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+      double precision F00, F01, F10, F11, F2, F3
+      integer n0, n1
+c      integer, dimension (3) :: shapeF
+
+      CHF_DTERM[
+      ii = CHF_ID(dir, 0);
+      jj = CHF_ID(dir, 1);
+      kk = CHF_ID(dir, 2)]
+c      shapeF = shape(Flux)
+c      print*, "shape(Flux)  = ", shapeF
+
+      do n=0, (CHF_NCOMP[Flux]-1)
+        print*, "component    = ", n
+c         do j=0, (shapeF(2)-1) 
+c            do i=0, (shapeF(1)-1)
+
+      CHF_MULTIDO[gridbox;i;j;k]
+
+c        print*, "component    = ", n
+c        shapeF = reshape(shapeF,shape(Flux))
+c        print*, "shapeF(dir+1)  = ", shapeF(dir+1)
+        print*, "CHF_IX[i;j]  = ", CHF_IX[i;j;k]
+        print*, "Flux    = ", Flux(CHF_IX[i;j;k],n)
+c        print*, "Flux    = ", Flux(CHF_IX[ii;jj;kk],n)
+
+      CHF_ENDDO
+c            enddo
+c         enddo
+      enddo
+  
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+

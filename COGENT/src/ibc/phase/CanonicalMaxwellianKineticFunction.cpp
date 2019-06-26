@@ -35,7 +35,9 @@
 CanonicalMaxwellianKineticFunction::CanonicalMaxwellianKineticFunction( ParmParse& a_pp,
                                                       const int& a_verbosity )
    : m_verbosity(a_verbosity),
-     m_profile_option(1)
+     m_profile_option(1),
+     m_zero_larmor(false)
+
 {
    parseParameters( a_pp );
 }
@@ -101,6 +103,10 @@ void CanonicalMaxwellianKineticFunction::assign( KineticSpecies& a_species,
                                                  const BoundaryBoxLayout& a_bdry_layout,
                                                  const Real& a_time ) const
 {
+   CH_TIMERS("CanonicalMaxwellianKineticFunction::assign");
+   CH_TIMER("setPointValues", t_set_point_values);
+   CH_TIMER("multBStarParallel", t_mult_bstar_parallel);
+
    const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
    checkGeometryValidity( geometry );
 
@@ -124,6 +130,7 @@ void CanonicalMaxwellianKineticFunction::assign( KineticSpecies& a_species,
       const CFG::MagBlockCoordSys& mag_coord_sys( geometry.getMagBlockCoordSys( interior_box ) );
       
       const DataIndex& internal_dit( a_bdry_layout.dataIndex( dit ) );
+      CH_START(t_set_point_values);
       setPointValues( dfn_tmp[dit],
                       fill_box,
                       phase_coord_sys,
@@ -132,9 +139,12 @@ void CanonicalMaxwellianKineticFunction::assign( KineticSpecies& a_species,
                       a_species.mass(),
                       a_species.charge(),
                       geometry.getLarmorNumber());
+      CH_STOP(t_set_point_values);
    }
 
+   CH_START(t_mult_bstar_parallel);
    geometry.multBStarParallel( dfn_tmp, a_bdry_layout );
+   CH_STOP(t_mult_bstar_parallel);
    
    if ( !(geometry.secondOrder()) )  {
       for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
@@ -160,6 +170,8 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
                                                         const Real&                   a_charge,
                                                         const Real&                   a_larmor_number ) const
 {
+   CH_TIMERS("CanonicalMaxwellianKineticFunction::setPointValues");
+   CH_TIMER("getCellCenteredRealCoords", t_get_real_coords);
 
 #if CFG_DIM == 3
    if (typeid(a_mag_coord_sys) != typeid(CFG::ToroidalBlockCoordSys)) {
@@ -183,8 +195,10 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
    FArrayBox magnetic_flux_inj;
    a_phase_coord_sys.injectConfigurationToPhase(magnetic_flux, magnetic_flux_inj);
 
+   CH_START(t_get_real_coords);
    FArrayBox cc_phase_coords( a_box, SpaceDim );
    a_phase_coord_sys.getCellCenteredRealCoords( cc_phase_coords );
+   CH_STOP(t_get_real_coords);
 
 #if CFG_DIM == 3
    
@@ -200,6 +214,8 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
    Real psi_p = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getMagneticFlux(r_p);
    Real dpsidr_p = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).dpsidr(r_p);
    Real q_p = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getSafetyFactor(r_p/R0);
+
+   Real larmor_number = (m_zero_larmor) ? 0.0 : a_larmor_number;
 
    //NB:For convenience the input for kappa is always in 1/R0 units,
    //thus need to renormalize to be consitent the paticular coordinate choice
@@ -222,7 +238,7 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
                               CHF_CONST_VR(m_perturbation_parm),
                               CHF_CONST_REAL(a_mass),
                               CHF_CONST_REAL(a_charge),
-                              CHF_CONST_REAL(a_larmor_number),
+                              CHF_CONST_REAL(larmor_number),
                               CHF_CONST_INT(m_profile_option));
 #endif
 }
@@ -246,7 +262,8 @@ void CanonicalMaxwellianKineticFunction::parseParameters( ParmParse& a_pp )
 {
 
    a_pp.query( "functional_option", m_profile_option);
-   
+   a_pp.query( "zero_larmor", m_zero_larmor); 
+  
    int num_parm;
    if (m_profile_option == 1) {
       num_parm = 4;

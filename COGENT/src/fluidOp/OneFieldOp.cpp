@@ -3,7 +3,6 @@
 #include "FluidVarBCFactory.H"
 #include "FourthOrderUtil.H"
 
-
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 #include "GKOps.H"
@@ -253,9 +252,11 @@ void OneFieldOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS:
 }
 
 
-void OneFieldOp::updatePCImEx( const PS::KineticSpeciesPtrVect& a_kinetic_species,
+void OneFieldOp::updatePCImEx( const FluidSpeciesPtrVect&       a_fluid_species,
+                               const PS::KineticSpeciesPtrVect& a_kinetic_species,
                                const double                     a_time,
-                               const double                     a_shift )
+                               const double                     a_shift,
+                               const int                        a_component)
 {
    CH_TIME("OneFieldOp::updatePCImEx");
    
@@ -524,9 +525,19 @@ void OneFieldOp::printParameters()
    }
 }
 
-Real OneFieldOp::computeDt( const FluidSpeciesPtrVect&  a_fluid_species )
+Real OneFieldOp::computeDtExplicitTI( const FluidSpeciesPtrVect&  a_fluid_species )
 {
+   // Replace with an estimate of the dt
    return DBL_MAX;
+}
+
+Real OneFieldOp::computeDtImExTI( const FluidSpeciesPtrVect&  a_fluid_species )
+{
+   if (m_is_time_implicit) {
+     return DBL_MAX;
+   } else {
+     return computeDtExplicitTI(a_fluid_species);
+   }
 }
 
 

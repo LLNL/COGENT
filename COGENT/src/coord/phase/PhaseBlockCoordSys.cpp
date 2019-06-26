@@ -168,27 +168,27 @@ void
 PhaseBlockCoordSys::getAvgJ( FArrayBox& a_J,
                              const Box& a_box ) const
 {
-  CH_assert(a_J.box().contains(a_box));
+   CH_assert(a_J.box().contains(a_box));
 
-  IntVect lo = a_box.smallEnd();
-  IntVect hi = a_box.bigEnd();
+   IntVect lo = a_box.smallEnd();
+   IntVect hi = a_box.bigEnd();
 
-  CFG::Box cfg_box(config_restrict(lo),config_restrict(hi));
-  CFG::FArrayBox cfg_J(cfg_box,1);
-  m_configuration_coords.getAvgJ(cfg_J, cfg_box);
+   CFG::Box cfg_box(config_restrict(lo),config_restrict(hi));
+   CFG::FArrayBox cfg_J(cfg_box,1);
+   m_configuration_coords.getAvgJ(cfg_J, cfg_box);
 
-  VEL::Box vel_box(vel_restrict(lo),vel_restrict(hi));
-  VEL::FArrayBox vel_J(vel_box,1);
-  m_velocity_coords.getAvgJ(vel_J, vel_box);
+   VEL::Box vel_box(vel_restrict(lo),vel_restrict(hi));
+   VEL::FArrayBox vel_J(vel_box,1);
+   m_velocity_coords.getAvgJ(vel_J, vel_box);
 
-  BoxIterator bit(a_box);
-  for (bit.begin(); bit.ok(); ++bit) {
-    IntVect iv = bit();
-    CFG::IntVect cfg_iv = config_restrict(iv);
-    VEL::IntVect vel_iv = vel_restrict(iv);
+   BoxIterator bit(a_box);
+   for (bit.begin(); bit.ok(); ++bit) {
+      IntVect iv = bit();
+      CFG::IntVect cfg_iv = config_restrict(iv);
+      VEL::IntVect vel_iv = vel_restrict(iv);
 
-    a_J(iv) = cfg_J(cfg_iv) * vel_J(vel_iv);
-  }
+      a_J(iv) = cfg_J(cfg_iv) * vel_J(vel_iv);
+   }
 }
 
 
@@ -196,37 +196,37 @@ void
 PhaseBlockCoordSys::pointwiseJ( FArrayBox& a_J,
                                 const Box& a_box ) const
 {
-  CH_assert(a_J.box().contains(a_box));
+   CH_assert(a_J.box().contains(a_box));
 
-  IntVect lo(a_box.smallEnd());
-  IntVect hi(a_box.bigEnd());
+   IntVect lo(a_box.smallEnd());
+   IntVect hi(a_box.bigEnd());
 
-  CFG::Box cfg_box(config_restrict(lo),config_restrict(hi));
-  CFG::FArrayBox cfg_J(cfg_box,1);
-  CFG::FArrayBox cfg_Xi(cfg_box,CFG_DIM);
-  m_configuration_coords.getCellCenteredMappedCoords(cfg_Xi);
-  m_configuration_coords.pointwiseJ(cfg_J, cfg_Xi, cfg_box);
+   CFG::Box cfg_box(config_restrict(lo),config_restrict(hi));
+   CFG::FArrayBox cfg_J(cfg_box,1);
+   CFG::FArrayBox cfg_Xi(cfg_box,CFG_DIM);
+   m_configuration_coords.getCellCenteredMappedCoords(cfg_Xi);
+   m_configuration_coords.pointwiseJ(cfg_J, cfg_Xi, cfg_box);
 
-  VEL::Box vel_box(vel_restrict(lo),vel_restrict(hi));
-  VEL::FArrayBox vel_J(vel_box,1);
-  VEL::FArrayBox vel_Xi(vel_box,VEL_DIM);
-  const RealVect offset(0.5 * RealVect::Unit);
-  for (BoxIterator bit(a_box); bit.ok(); ++bit) {
-     IntVect iv(bit());
-     VEL::RealVect mappedLoc(vel_restrict(m_dx * iv + offset));
-     VEL::IntVect vel_iv(vel_restrict(iv));
-     for (int dir(0); dir<VEL_DIM; ++dir) {
-        vel_Xi(vel_iv,dir) = mappedLoc[dir];
-     }
-  }
-  m_velocity_coords.pointwiseJ(vel_J, vel_Xi, vel_box);
+   VEL::Box vel_box(vel_restrict(lo),vel_restrict(hi));
+   VEL::FArrayBox vel_J(vel_box,1);
+   VEL::FArrayBox vel_Xi(vel_box,VEL_DIM);
+   const RealVect offset(0.5 * RealVect::Unit);
+   for (BoxIterator bit(a_box); bit.ok(); ++bit) {
+      IntVect iv(bit());
+      VEL::RealVect mappedLoc(vel_restrict(m_dx * iv + offset));
+      VEL::IntVect vel_iv(vel_restrict(iv));
+      for (int dir(0); dir<VEL_DIM; ++dir) {
+         vel_Xi(vel_iv,dir) = mappedLoc[dir];
+      }
+   }
+   m_velocity_coords.pointwiseJ(vel_J, vel_Xi, vel_box);
 
-  for (BoxIterator bit(a_box); bit.ok(); ++bit) {
-     IntVect iv(bit());
-     CFG::IntVect cfg_iv(config_restrict(iv));
-     VEL::IntVect vel_iv(vel_restrict(iv));
-     a_J(iv) = cfg_J(cfg_iv) * vel_J(vel_iv);
-  }
+   for (BoxIterator bit(a_box); bit.ok(); ++bit) {
+      IntVect iv(bit());
+      CFG::IntVect cfg_iv(config_restrict(iv));
+      VEL::IntVect vel_iv(vel_restrict(iv));
+      a_J(iv) = cfg_J(cfg_iv) * vel_J(vel_iv);
+   }
 }
 
 

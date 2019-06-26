@@ -126,9 +126,23 @@ void MyKrook::printParameters()
 }
 
 
-Real MyKrook::computeDt(const KineticSpeciesPtrVect& soln)
+Real MyKrook::computeTimeScale(const KineticSpeciesPtrVect& soln, const int a_idx)
 {
    return 1.0/m_cls_freq;
+}
+
+Real MyKrook::computeDtExplicitTI(const KineticSpeciesPtrVect& soln, const int a_idx)
+{
+   return 1.0/m_cls_freq;
+}
+
+Real MyKrook::computeDtImExTI(const KineticSpeciesPtrVect& soln, const int a_idx)
+{
+  if (m_time_implicit) {
+    return DBL_MAX;
+  } else {
+    return computeDtExplicitTI(soln, a_idx);
+  }
 }
 
 

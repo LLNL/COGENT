@@ -175,6 +175,7 @@ void ExplicitStageJacobian<T,Ops>::residual(
 template <class T, class Ops>
 void ExplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y)
 {
+  CH_TIME("ExplicitStageJacobian::apllyOp()");
   Real normY = a_y.computeNorm(2);
   if (normY < 1e-15) a_F.zero();
   else {
@@ -186,6 +187,7 @@ void ExplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y)
     }
 
     m_Z.copy(m_Y0); m_Z.increment(a_y,eps);
+    m_ops->preOpEval(m_Z,m_stage_time,false,false); // JRA
     m_ops->solutionOp(m_M,m_stage_time,m_Z);
 
     a_F.copy(m_M); 

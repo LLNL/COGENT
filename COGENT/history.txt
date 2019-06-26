@@ -1,4 +1,222 @@
 ------------------------------------------------------------------------
+r1555 | mdorf | 2019-06-24 11:51:38 -0700 (Mon, 24 Jun 2019) | 1 line
+
+Restored DataArray (nodal box) BC option for EllipticOp BCs
+------------------------------------------------------------------------
+r1554 | mdorf | 2019-06-21 15:55:17 -0700 (Fri, 21 Jun 2019) | 1 line
+
+Small changes in the 4th-order code for the two-field neutral model
+------------------------------------------------------------------------
+r1553 | mdorf | 2019-06-20 18:48:08 -0700 (Thu, 20 Jun 2019) | 1 line
+
+Added the test of two-field neutral model
+------------------------------------------------------------------------
+r1552 | mdorf | 2019-06-20 17:09:13 -0700 (Thu, 20 Jun 2019) | 1 line
+
+Improved two-field neutral model; Fixed 4th-order bug in species Dirichet BC
+------------------------------------------------------------------------
+r1551 | angus1 | 2019-06-15 14:21:09 -0700 (Sat, 15 Jun 2019) | 1 line
+
+fixing issue with upWindToFaces() for 4th order
+------------------------------------------------------------------------
+r1550 | angus1 | 2019-06-14 17:09:03 -0700 (Fri, 14 Jun 2019) | 1 line
+
+refactoring IdealMhdOp
+------------------------------------------------------------------------
+r1549 | angus1 | 2019-06-14 12:05:07 -0700 (Fri, 14 Jun 2019) | 1 line
+
+fluid cell_var IC set for each component now
+------------------------------------------------------------------------
+r1548 | mdorr | 2019-06-13 18:31:24 -0700 (Thu, 13 Jun 2019) | 3 lines
+
+Fixing physical_coordinates_pol variable that was declared but not defined.
+
+
+------------------------------------------------------------------------
+r1547 | angus1 | 2019-06-13 13:33:27 -0700 (Thu, 13 Jun 2019) | 1 line
+
+significant refactoring of IdealMHDOp for speed
+------------------------------------------------------------------------
+r1546 | angus1 | 2019-06-13 13:21:29 -0700 (Thu, 13 Jun 2019) | 1 line
+
+refactoring fluid Flux/Edge BCs
+------------------------------------------------------------------------
+r1545 | angus1 | 2019-06-13 11:51:57 -0700 (Thu, 13 Jun 2019) | 1 line
+
+overloading some SpaceUtils to operator on Boxes
+------------------------------------------------------------------------
+r1544 | angus1 | 2019-06-04 19:59:45 -0700 (Tue, 04 Jun 2019) | 1 line
+
+refactoring use of preOpEval... fixing bug
+------------------------------------------------------------------------
+r1543 | angus1 | 2019-05-31 08:21:07 -0700 (Fri, 31 May 2019) | 1 line
+
+changing m_ghostVect in GKSystem.cpp back to 4
+------------------------------------------------------------------------
+r1542 | angus1 | 2019-05-30 21:01:52 -0700 (Thu, 30 May 2019) | 1 line
+
+putting m_ghost_vect in GKOps.H back to 4
+------------------------------------------------------------------------
+r1541 | angus1 | 2019-05-30 20:54:30 -0700 (Thu, 30 May 2019) | 1 line
+
+refactoring convertToPhysical() calls for fluids
+------------------------------------------------------------------------
+r1540 | mdorf | 2019-05-23 16:58:20 -0700 (Thu, 23 May 2019) | 1 line
+
+Major refactoring of GridFunction classes
+------------------------------------------------------------------------
+r1539 | angus1 | 2019-05-21 15:27:39 -0700 (Tue, 21 May 2019) | 1 line
+
+cleaning up fluid BCs
+------------------------------------------------------------------------
+r1538 | mdorr | 2019-05-21 13:23:05 -0700 (Tue, 21 May 2019) | 3 lines
+
+Removing unneeded exchanges from getPointwiseN(LD<FluxBox>&) and getPointwiseNJinverse(LD<FluxBox>&).
+
+
+------------------------------------------------------------------------
+r1537 | mdorf | 2019-05-20 16:20:34 -0700 (Mon, 20 May 2019) | 1 line
+
+Updated GNUmakefile.multidim by adding src/advectUtil to CFG_DIM folders
+------------------------------------------------------------------------
+r1536 | mdorf | 2019-05-20 16:18:39 -0700 (Mon, 20 May 2019) | 1 line
+
+Added two-field neutral model, also some minor changes to ImEx preconditioner infrastructure
+------------------------------------------------------------------------
+r1535 | angus1 | 2019-05-16 14:35:07 -0700 (Thu, 16 May 2019) | 1 line
+
+fixing bug that prevented 5D build
+------------------------------------------------------------------------
+r1534 | angus1 | 2019-05-14 10:54:57 -0700 (Tue, 14 May 2019) | 1 line
+
+deleting unsimplified fluid samples
+------------------------------------------------------------------------
+r1533 | angus1 | 2019-05-14 10:49:06 -0700 (Tue, 14 May 2019) | 1 line
+
+simplifying fluid samples
+------------------------------------------------------------------------
+r1532 | angus1 | 2019-05-14 10:32:00 -0700 (Tue, 14 May 2019) | 1 line
+
+adding fluid module samples
+------------------------------------------------------------------------
+r1531 | angus1 | 2019-05-13 20:53:46 -0700 (Mon, 13 May 2019) | 1 line
+
+updating IdealMhd computeDt()
+------------------------------------------------------------------------
+r1530 | angus1 | 2019-05-13 14:26:18 -0700 (Mon, 13 May 2019) | 1 line
+
+updating fluid modules
+------------------------------------------------------------------------
+r1529 | geyko1 | 2019-05-08 13:57:58 -0700 (Wed, 08 May 2019) | 1 line
+
+Fixed entropy_mode.in to be compatible with the new geometries
+------------------------------------------------------------------------
+r1528 | mdorf | 2019-05-01 15:32:25 -0700 (Wed, 01 May 2019) | 1 line
+
+Improved defineBoundaries() function of LogRectCoordSys class for a toroidal multiblock case; also added the capability to subtract flux-surface averaged parallel divergence to the Vorticity solve
+------------------------------------------------------------------------
+r1527 | mdorf | 2019-04-22 20:44:59 -0700 (Mon, 22 Apr 2019) | 1 line
+
+Restored m_no_parallel_streaming flag in computeGKVelocities
+------------------------------------------------------------------------
+r1526 | geyko1 | 2019-04-19 20:28:21 -0700 (Fri, 19 Apr 2019) | 3 lines
+
+1. Fixed a bug with a mass factor in MomentumDensityKernel class in species/kinetic/Kernels.H
+2. Added 3 magnetic configuration: constant, toroidal and bennett in src/coord/configuration/CylindricalBlockCoordSys.cpp and src/coord/configuration/CylindricalBlockCoordSys.H
+
+------------------------------------------------------------------------
+r1525 | mdorf | 2019-04-11 15:07:22 -0700 (Thu, 11 Apr 2019) | 1 line
+
+Fixed minor bugs in the implementation of vorticity model extensions
+------------------------------------------------------------------------
+r1524 | mdorf | 2019-04-10 10:58:30 -0700 (Wed, 10 Apr 2019) | 1 line
+
+Added 5D ITG test case for localy field-aligned multiblock code
+------------------------------------------------------------------------
+r1523 | mdorf | 2019-04-02 17:43:57 -0700 (Tue, 02 Apr 2019) | 1 line
+
+Extended (a) SubtractMaxwellian Vlasov option and (b) Vorticity model to be compatible with the old velocity formulation
+------------------------------------------------------------------------
+r1522 | mdorr | 2019-04-02 09:46:25 -0700 (Tue, 02 Apr 2019) | 3 lines
+
+Some speed improvements to help in 5D, mainly involving the precomputation of physical coordinates and normalized magnetic flux used in the application of boundary conditions.  Only the MaxwellianKineticFunction and Arbitrary GridFunction classes have been updated, since we still intend refactor these and other boundary condition class to remove redundant code.
+
+
+------------------------------------------------------------------------
+r1521 | debo | 2019-03-27 18:50:48 -0700 (Wed, 27 Mar 2019) | 1 line
+
+1) Implemented selective implicit treatement of species Vlasov terms, 2) Cleaned up and extended the CFL-based dt calculation, etc to be more flexible given that we are going to be more flexible with what terms are treated implicitly, 3) implemented the preconditioning interface for Vlasov (but without an actual preconditioner), 4) bugfix in gyroaveraging operator
+------------------------------------------------------------------------
+r1520 | debo | 2019-03-26 18:51:51 -0700 (Tue, 26 Mar 2019) | 1 line
+
+Finished up the gyroaveraging operator in 3D - implemented the trilinear interpolation for arbitrary points
+------------------------------------------------------------------------
+r1519 | mdorr | 2019-03-20 18:50:48 -0700 (Wed, 20 Mar 2019) | 5 lines
+
+Adding toroidal periodicity to the single null block ProblemDomains (to be revisited when there are more than one block in the toroidal dimension).
+
+Removing the reading of the mapping and flux files from the single null constructor, which was calling derived class functions before the base class construction was complete, leading to some bad behavior.  The mapping and flux files are now read by calling a readFiles() member after the single null object is constructed.
+
+
+------------------------------------------------------------------------
+r1518 | debo | 2019-03-20 17:58:40 -0700 (Wed, 20 Mar 2019) | 1 line
+
+1) Extended the gyroaveraging interface to apply the operator on phase space objects; 2) Added a gyroaveragedChargeDensity() function in kinetic species that returns the charge density computed from the gyroaveraged distribution function; 3) In EField calculation, use gyroaveraged charge density on RHS of the Poisson's equation if the species is specified as gyrokinetic; 4) Cleaned up the gyroaveraging operator including some bugfixes and overhaul of the point-lookup algorithm. NOTE: In 3D, using a coefficient of 1/8 right now to compute field at gyro-orbit point from surrounding 8 points, will implemented more accurate coefficients shortly.
+------------------------------------------------------------------------
+r1517 | mdorf | 2019-03-19 11:26:25 -0700 (Tue, 19 Mar 2019) | 1 line
+
+Added toroidal IC option for a 3D SingleNull geometry
+------------------------------------------------------------------------
+r1516 | mdorf | 2019-03-19 11:10:42 -0700 (Tue, 19 Mar 2019) | 1 line
+
+Added headers for C++11 arrays; required to support build on MacOS
+------------------------------------------------------------------------
+r1515 | mdorr | 2019-03-15 12:49:19 -0700 (Fri, 15 Mar 2019) | 9 lines
+
+Adding a field-aligned mapping option for the 3D single null geometry, enabled in input files via:
+
+gksystem.magnetic_geometry_mapping.singlenull.field_aligned_mapping = true
+
+with the default set to false.
+
+Also renaming coord/configuration/poloidal to coord/configuration/2d and adding coord/configuration/3d to contain configuration geometry files that are explicitly 2D or 3D, respectively.
+
+
+------------------------------------------------------------------------
+r1514 | mdorr | 2019-03-07 16:04:55 -0800 (Thu, 07 Mar 2019) | 3 lines
+
+Replacing absolute path names for the mapping and flux files with local.
+
+
+------------------------------------------------------------------------
+r1513 | mdorr | 2019-03-07 14:23:18 -0800 (Thu, 07 Mar 2019) | 13 lines
+
+Refactoring the single null geometries to:
+
+1. Enable limited 3D operation.  Current restrictions:
+   a. one periodic toroidal block
+   b. toroidal mapping only (i.e. not yet field-aligned)
+   c. model geometry implementation still needs work
+
+2. Remove much replicated code by deriving all single null geometries from SingleNullBlockCoordSys and SingleNullCoordSys.  There is now a "poloidal" subdirectory of src/coord/configuration containing code that is always 2D (e.g., the code that reads the mapping and flux files) regardless of whether CFG_DIM=2 or CFG_DIM=3.
+
+Also added a 5D flux-aligned single null loss cone sample problem "sn_flux_aligned".
+
+
+
+------------------------------------------------------------------------
+r1512 | mdorf | 2019-03-04 18:59:27 -0800 (Mon, 04 Mar 2019) | 1 line
+
+Fixed the zero_larmor option
+------------------------------------------------------------------------
+r1511 | mdorf | 2019-03-04 16:53:07 -0800 (Mon, 04 Mar 2019) | 1 line
+
+Added 5D single-block ITG test case; used for CYCLONE Base Case verification
+------------------------------------------------------------------------
+r1510 | mdorf | 2019-03-04 16:18:30 -0800 (Mon, 04 Mar 2019) | 1 line
+
+Minor code modifications to support CYCLONE baseline case testing. Includes harmonic filtering capability, plotting non-zonal potential component, some modifications to CanonicalMaxwellian. Also, updated simple_boltzmann model
+------------------------------------------------------------------------
 r1509 | debo | 2019-02-21 20:19:12 -0800 (Thu, 21 Feb 2019) | 1 line
 
 1) Implemented the computation of electric field from gyroaveraged potential, 2) updated Vlasov velocity calculation to use this gyroaveraged E-field if species is specified to be gyrokinetic (kinetic_species.<n>.is_gyrokinetic = true [default - false]), 3) added gradient calculation functions to PhaseGeom on the same lines as what was available in MagGeom and also functions that compute CFG-space-only gradients of phase space objects, and 4) Unified some multidim gradient calculation and interpolation/extrapolation functions in SpaceUtils that are called by EllipticOp, MagGeom, and PhaseGeom.

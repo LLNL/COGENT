@@ -76,6 +76,8 @@ public:
     */
 
    void initializeElectricField( const GKState& state, const int cur_step, const double cur_time );
+ 
+   void initializeFluidSpeciesPhysical( const CFG::FluidSpeciesPtrVect&  a_species_comp );
 
    inline
    void initializeState( GKState& a_state, const int a_cur_step, const Real a_time )
@@ -194,8 +196,10 @@ public:
       m_dt_scale(1.0),
       m_is_defined(false),
       m_ghost_vect(4*IntVect::Unit),
+      //m_ghost_vect(2*IntVect::Unit), // JRAgv
       m_cfg_nghosts(2*CFG::IntVect::Unit),
       m_fixed_efield(false),
+      m_zero_efield(false), // JRA
       m_transport_model_on(false),     
       m_enforce_quasineutrality(false),
       m_history(false),
@@ -204,12 +208,18 @@ public:
       m_hist_count(0),
       m_expand_incr(100),
       m_hist_fieldname("field"),
-      m_dt_vlasov(DBL_MAX),
-      m_dt_collisions(DBL_MAX),
-      m_dt_transport(DBL_MAX),
-      m_dt_fluids(DBL_MAX),
-      m_dt_scalars(DBL_MAX),
-      m_dt_neutrals(DBL_MAX),
+      m_dt_vlasov_expl(DBL_MAX),
+      m_dt_collisions_expl(DBL_MAX),
+      m_dt_transport_expl(DBL_MAX),
+      m_dt_fluids_expl(DBL_MAX),
+      m_dt_scalars_expl(DBL_MAX),
+      m_dt_neutrals_expl(DBL_MAX),
+      m_dt_vlasov_imex(DBL_MAX),
+      m_dt_collisions_imex(DBL_MAX),
+      m_dt_transport_imex(DBL_MAX),
+      m_dt_fluids_imex(DBL_MAX),
+      m_dt_scalars_imex(DBL_MAX),
+      m_dt_neutrals_imex(DBL_MAX),
       m_time_scale_vlasov(-1),
       m_time_scale_collisions(-1),
       m_time_scale_transport(-1),
@@ -256,13 +266,14 @@ public:
 
    inline bool trivialSolutionOp() const { return m_trivial_solution_op; }
 
-   void preOpEval( const GKState&, const Real, const bool);
+   void preOpEval( const GKState&, const Real, const bool, const bool);
    inline void preOpEval(const GKVector&  a_state,
                          const Real       a_time,
+                         const bool       a_update_kinetic_phys,
                          const bool       a_update_fluid_ops)
    {
       m_Y.copyFrom(a_state.data());
-      preOpEval(m_Y,a_time,a_update_fluid_ops);
+      preOpEval(m_Y,a_time,a_update_kinetic_phys,a_update_fluid_ops);
    }
 
    void preSolutionOpEval( const GKState&, const Real, const bool);
@@ -511,6 +522,7 @@ public:
                       const double&         time ) const;
 
    void plotPotential( const std::string& filename,
+                       const bool&        non_zonal_comp,
                        const double&      time ) const;
 
    void plotEField( const std::string& filename,
@@ -595,12 +607,12 @@ private:
                                      const KineticSpeciesPtrVect&  in,
                                      const double                  time );
    
-   void createPhysicalSpeciesVector( CFG::FluidSpeciesPtrVect&        out,
-                                     const CFG::FluidSpeciesPtrVect&  in,
+   void updatePhysicalSpeciesVector( const CFG::FluidSpeciesPtrVect&  in,
                                      const double                     time );
    
    void applyVlasovOperator( GKRHSData&                    rhs,
                              const KineticSpeciesPtrVect&  kinetic_phys,
+                             const opType                  op_type,
                              const Real&                   time );
 
    void applyKineticSpeciesSolutionOperator( KineticSpeciesPtrVect&       rhs,
@@ -695,7 +707,8 @@ private:
    CFG::BoltzmannElectron*        m_boltzmann_electron;
 
    KineticSpeciesPtrVect          m_kinetic_species_phys;
-   
+   CFG::FluidSpeciesPtrVect       m_fluid_species_phys;
+
    const GKUnits*                 m_units;
    const GKSystemIC*              m_initial_conditions;
    const GKSystemBC*              m_boundary_conditions;
@@ -713,6 +726,7 @@ private:
    bool                           m_ampere_law;
    bool                           m_ampere_cold_electrons;
    bool                           m_fixed_efield;
+   bool                           m_zero_efield; // JRA
    bool                           m_transport_model_on;
    bool                           m_neutrals_model_on;
    bool                           m_enforce_quasineutrality;
@@ -721,7 +735,6 @@ private:
    bool                           m_old_vorticity_model;
    
    /* The following 4 flags are relevant only for IMEX time integration */
-   bool                           m_vlasov_imex_implicit;
    bool                           m_transport_imex_implicit;
    bool                           m_neutrals_imex_implicit;
 
@@ -740,12 +753,21 @@ private:
    std::string m_hist_fieldname; // type of field, e.g. "potential", now a temporary
 
    /* stable time step sizes and time scales */
-   Real m_dt_vlasov;
-   Real m_dt_collisions;
-   Real m_dt_transport;
-   Real m_dt_fluids;
-   Real m_dt_scalars;
-   Real m_dt_neutrals;
+
+   Real m_dt_vlasov_expl;
+   Real m_dt_collisions_expl;
+   Real m_dt_transport_expl;
+   Real m_dt_fluids_expl;
+   Real m_dt_scalars_expl;
+   Real m_dt_neutrals_expl;
+
+   Real m_dt_vlasov_imex;
+   Real m_dt_collisions_imex;
+   Real m_dt_transport_imex;
+   Real m_dt_fluids_imex;
+   Real m_dt_scalars_imex;
+   Real m_dt_neutrals_imex;
+
    Real m_time_scale_vlasov;
    Real m_time_scale_collisions;
    Real m_time_scale_transport;

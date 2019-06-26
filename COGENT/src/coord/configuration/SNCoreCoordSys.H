@@ -42,7 +42,7 @@ public:
                                const RealVect& xiSrc,
                                int nSrc) const;
 
-   int findBlock(const RealVect& X) const;
+   int findBlockNearXpt( const POL::RealVect& X_pol ) const;
 
    virtual void defineBoundaries();
 
@@ -52,7 +52,13 @@ public:
 
    virtual void defineEllipticOpBC( EllipticOpBC& a_bc ) const;
 
-   int blockType(int a_block) const {return ((SNCoreBlockCoordSys*)m_coordSysVect[a_block])->blockType();}
+   int blockType(int a_block) const {return ((SNCoreBlockCoordSys*)m_coordSysVect[a_block])->poloidalIndex();}
+
+   int numPoloidalBlocks() const {return m_num_poloidal_blocks;}
+
+   int numToroidalBlocks() const {return m_num_toroidal_blocks;}
+
+   int toroidalBlockNumber(const int block_number) const {return block_number / m_num_poloidal_blocks;}
 
    // Object ParmParse name.
    static const std::string pp_name;
@@ -74,6 +80,11 @@ public:
                                        const Side::LoHiSide& a_side) const;
    
 #endif
+
+   virtual Vector<RealVect> displacements(const Vector<RealVect>&   dstCoords,
+                                          const Vector<int>&        dstBlocks,
+                                          const RealVect&           srcCoords,
+                                          int                       srcBlock) const;
 
 protected:
 
@@ -116,15 +127,22 @@ protected:
    int m_numcells_mcore_poloidal;
    int m_numcells_lcore_poloidal;
    int m_numcells_rcore_poloidal;
+   int m_numcells_toroidal;
+#if CFG_DIM==3
+   double m_toroidal_width;
+#endif
    IntVect m_decomp_mcore;
    IntVect m_decomp_lcore;
    IntVect m_decomp_rcore;
 
-   RealVect m_Xpoint;
+   int m_num_poloidal_blocks;
+   int m_num_toroidal_blocks;
+
+   POL::RealVect m_Xpoint;
    double m_xpoint_radius;
-   double m_ray_angle[NUM_SNCORE_BLOCKS+1];
-   RealVect m_ray[NUM_SNCORE_BLOCKS+1];
-   int m_sector_block[NUM_SNCORE_BLOCKS];
+   double m_ray_angle[SNCoreBlockCoordSys::NUM_SNCORE_BLOCKS+1];
+   POL::RealVect m_ray[SNCoreBlockCoordSys::NUM_SNCORE_BLOCKS+1];
+   int m_sector_block[SNCoreBlockCoordSys::NUM_SNCORE_BLOCKS];
 
    SNCoreEllipticOpBC m_divergence_cleaning_bc;
 

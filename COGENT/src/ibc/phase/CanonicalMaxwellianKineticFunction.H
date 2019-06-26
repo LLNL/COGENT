@@ -150,6 +150,7 @@ class CanonicalMaxwellianKineticFunction : public KineticFunction
       int m_verbosity;
    
       int m_profile_option;
+      bool m_zero_larmor;
    
       Vector<Real> m_density_parm;
       Vector<Real> m_temperature_parm;

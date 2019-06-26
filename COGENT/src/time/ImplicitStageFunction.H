@@ -51,9 +51,16 @@ void ImplicitStageFunction<T,Ops>::define(const T& a_state, Ops& a_ops)
 template <class T, class Ops>
 void ImplicitStageFunction<T,Ops>::evalFunction(T& a_F, const T& a_Y, const T& a_b, int a_its, bool a_update_fluid_ops)
 {
+  CH_TIME("ImplicitStageFunction::evalFunction()");
   CH_assert(isDefined());
 
-  if ( a_its==0 ) m_ops->preOpEval(a_Y,m_StageTime,a_update_fluid_ops);
+  bool update_kinetic_phys = false;
+  a_update_fluid_ops = false;
+  if ( a_its==0 ) {
+    update_kinetic_phys = true;
+    a_update_fluid_ops = true;
+  }
+  m_ops->preOpEval(a_Y,m_StageTime,update_kinetic_phys,a_update_fluid_ops);
   if (m_ops->trivialSolutionOp()){
     m_W.copy(a_Y);
   } else{

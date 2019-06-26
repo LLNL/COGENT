@@ -333,9 +333,26 @@ inline void ConsDragDiff::printParameters( const KineticSpeciesPtrVect&  soln )
    }
 }
 
-Real ConsDragDiff::computeDt( const KineticSpeciesPtrVect&  soln )
+Real ConsDragDiff::computeTimeScale( const KineticSpeciesPtrVect&  soln, const int a_idx )
 {
+   // replace with a good estimate of time scale
    return DBL_MAX;
+}
+
+Real ConsDragDiff::computeDtExplicitTI( const KineticSpeciesPtrVect&  soln, const int a_idx )
+{
+   // replace with a good estimate of dt
+   return DBL_MAX;
+}
+
+Real ConsDragDiff::computeDtImExTI( const KineticSpeciesPtrVect&  soln, const int a_idx )
+{
+  if (m_time_implicit) {
+    return DBL_MAX;
+  } else {
+   // replace with a good estimate of dt
+   return DBL_MAX;
+  }
 }
 
 #include "NamespaceFooter.H"

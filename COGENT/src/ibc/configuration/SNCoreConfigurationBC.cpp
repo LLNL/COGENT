@@ -17,7 +17,7 @@
 inline
 GridFunction& SNCoreConfigurationBC::radialInflowFunc( const Side::LoHiSide& a_side, const int& a_block_type )
 {
-   if (a_block_type==L_CORE||R_CORE) {
+   if (a_block_type==SNCoreBlockCoordSys::LCORE||SNCoreBlockCoordSys::RCORE) {
       if (a_side == 0) {
          return *(m_inflow_function[RADIAL_INNER]);
       }
@@ -52,7 +52,7 @@ GridFunction& SNCoreConfigurationBC::inflowFunc( const int& a_dir,
 inline
 std::string SNCoreConfigurationBC::radialBcType( const Side::LoHiSide& a_side, const int& a_block_type )
 {
-   if (a_block_type==L_CORE||R_CORE) {
+   if (a_block_type==SNCoreBlockCoordSys::LCORE||SNCoreBlockCoordSys::RCORE) {
       if (a_side == 0) {
          return m_bc_type[RADIAL_INNER];
       }
@@ -110,30 +110,27 @@ SNCoreConfigurationBC::~SNCoreConfigurationBC()
 
 
 inline
-void SNCoreConfigurationBC::fillInflowData( FluidSpeciesPtrVect& a_bdry_data,
-                                    Vector<std::string>& a_bc_type,
-                                    const BoundaryBoxLayoutPtrVect& a_bdry_layout,
-                                    const Real& a_time )
+void SNCoreConfigurationBC::fillInflowData( const  MagGeom&  a_geometry,
+                                            const  Real      a_time )
 {
-   a_bc_type.resize(a_bdry_layout.size());
-   for (int i(0); i<a_bdry_layout.size(); i++) {
-      const BoundaryBoxLayout& bdry_layout( *(a_bdry_layout[i]) );
+   m_all_bc_type.resize( m_all_bdry_layouts.size() );
+   for (int i(0); i<m_all_bdry_layouts.size(); i++) {
+      const BoundaryBoxLayout& bdry_layout( *(m_all_bdry_layouts[i]) );
       const int& dir( bdry_layout.dir() );
       const Side::LoHiSide& side( bdry_layout.side() );
-      FluidSpecies& bdry_data( static_cast<FluidSpecies&>(*(a_bdry_data[i])) );
-      const MagGeom& geometry( bdry_data.configurationSpaceGeometry() );
+      LevelData<FArrayBox>& bdry_data( *(m_all_bdry_data[i]) );
 
       if (dir==RADIAL_DIR) {
          const SNCoreCoordSys& coord_sys(
-            dynamic_cast<const SNCoreCoordSys&>( *geometry.getCoordSys()) );
+            dynamic_cast<const SNCoreCoordSys&>( *a_geometry.getCoordSys()) );
          const DisjointBoxLayout& grids( bdry_layout.disjointBoxLayout() );
          for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
             const Box& interior_box( bdry_layout.interiorBox( dit ) );
             const int block( coord_sys.whichBlock( interior_box ) );
             const int block_type( coord_sys.blockType( block ) );
             GridFunction& inflow_func( radialInflowFunc( side, block_type ) );
-            inflow_func.assign( bdry_data.cell_var(0), geometry, bdry_layout, a_time );
-            a_bc_type[i] = radialBcType( side, block_type );
+            inflow_func.assign( bdry_data, a_geometry, bdry_layout, a_time );
+            m_all_bc_type[i] = radialBcType( side, block_type );
          }
       }
    }
@@ -150,32 +147,47 @@ void SNCoreConfigurationBC::apply( FluidSpecies&  a_species_comp,
    const DisjointBoxLayout& grids( u.disjointBoxLayout() );
    const IntVect& ghost_vect( u.ghostVect() );
 
+   if(m_all_bdry_defined==false) {
+      FluidBCUtils::defineBoundaryBoxLayouts( m_all_bdry_layouts,
+                                              grids,
+                                              coord_sys,
+                                              ghost_vect );
+
+      FluidBCUtils::defineInflowDataStorage( m_all_bdry_data,
+                                             m_all_bdry_layouts,
+                                             m_variable_name,
+                                             a_species_comp );
+      fillInflowData( geometry, a_time );
+      m_all_bdry_defined = true;
+   }
+ 
    const LevelData<FluxBox>& velocity= a_species_comp.velocity();
-
-   BoundaryBoxLayoutPtrVect all_bdry_layouts;
-   FluidBCUtils::defineBoundaryBoxLayouts( all_bdry_layouts,
-                                           grids,
-                                           coord_sys,
-                                           ghost_vect );
-
-   FluidSpeciesPtrVect all_bdry_data;
-   FluidBCUtils::defineInflowDataStorage( all_bdry_data,
-                                          all_bdry_layouts,
-                                          a_species_comp );
-   Vector<std::string> all_bc_type;
-   fillInflowData( all_bdry_data, all_bc_type, all_bdry_layouts, a_time );
-
-  
    FluidBCUtils::setInflowOutflowBC( u,
-                                     all_bdry_layouts,
-                                     all_bdry_data,
-                                     all_bc_type,
-                                     coord_sys,
+                                     m_all_bdry_layouts,
+                                     m_all_bdry_data,
+                                     m_all_bc_type,
+                                     geometry,
                                      velocity );
 
    // interpolate all other codim boundaries
    CodimBC::setCodimBoundaryValues( u, coord_sys );
 }
+
+void SNCoreConfigurationBC::applyFluxBC(const FluidSpecies&  a_species_comp,
+                                         LevelData<FluxBox>& a_dst,
+                                         const LevelData<FluxBox>& a_src,
+                                         const Real&    a_time )
+{
+}
+
+void SNCoreConfigurationBC::applyEdgeBC(const FluidSpecies&  a_species_comp,
+                                         LevelData<EdgeDataBox>& a_dst,
+                                         const LevelData<EdgeDataBox>& a_src,
+                                         const Real&    a_time )
+{
+}
+
+
 
 
 void SNCoreConfigurationBC::printParameters() const

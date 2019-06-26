@@ -1,6 +1,6 @@
+#include <array>
 #include "SlabBlockCoordSys.H"
 #include "SlabBlockCoordSysF_F.H"
-
 #include "Directions.H"
 #include "BoxIterator.H"
 #include "ConstFact.H"
@@ -211,6 +211,7 @@ SlabBlockCoordSys::computeFieldData( const int  a_dir,
       xix(iv)    = xi[RADIAL_DIR];
    } 
 
+   // cout << box << endl;
    FORT_GET_SLAB_FIELD_DATA(CHF_BOX(box),
                             CHF_CONST_FRA1(xix,0),
                             CHF_CONST_REAL(m_ByInner),
@@ -227,19 +228,19 @@ SlabBlockCoordSys::computeFieldData( const int  a_dir,
                             CHF_FRA1(a_BFieldDirdotcurlBFieldDir,0));
 }
 
-Vector<Real>
+
+array<double,3>
 SlabBlockCoordSys::computeBField(const RealVect& a_X) const
 {
-   
-   Vector<Real> result(3,0);
+   array<double,3> result;
    
    result[0] = 0;
    result[1] = m_ByInner + (m_ByOuter - m_ByInner) * a_X[0]/m_xmax;
    result[2] = m_BzInner + (m_BzOuter - m_BzInner) * a_X[0]/m_xmax;
    
    return result;
-   
 }
+
 
 
 void SlabBlockCoordSys::getMagneticFlux( const FArrayBox& physical_coordinates,
@@ -258,7 +259,7 @@ double SlabBlockCoordSys::getMagneticFlux( const RealVect& a_physical_coordinate
 
 double SlabBlockCoordSys::getPitch( const RealVect& a_physical_coordinate ) const
 {
-   Vector<Real> B = computeBField(a_physical_coordinate);
+   array<double,3> B = computeBField(a_physical_coordinate);
    double pitch = B[2] / B[1];
    return pitch;
 }
@@ -270,7 +271,7 @@ double SlabBlockCoordSys::getPitchShear( const RealVect& a_physical_coordinate )
    double dBydX = (m_ByOuter - m_ByInner) /m_xmax;
    double dBzdX = (m_BzOuter - m_BzInner) /m_xmax;
    
-   Vector<Real> B = computeBField(a_physical_coordinate);
+   array<double,3> B = computeBField(a_physical_coordinate);
    double Bz = B[2];
    double By = B[1];
    

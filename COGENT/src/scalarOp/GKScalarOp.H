@@ -51,7 +51,8 @@ class GKScalarOp
       /**
        * Computes and returns an estimate of the maximum stable time step.
        */
-      Real computeDt( const ScalarPtrVect& scalars);
+      Real computeDtExplicitTI( const ScalarPtrVect& scalars);
+      Real computeDtImExTI( const ScalarPtrVect& scalars);
 
       /// Compute time scale.
       /**

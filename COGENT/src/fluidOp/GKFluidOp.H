@@ -66,9 +66,8 @@ class GKFluidOp
                       const EField&                      E_field,
                       const double                       time );
 
-      virtual void convertToPhysical( FluidSpeciesPtrVect&        fluid_species_phys,
-                                      const FluidSpeciesPtrVect&  fluid_species_comp,
-                                      const IntVect&              ghosts ) const;
+      virtual void convertToPhysical( FluidSpeciesPtrVect&  a_fluid_species_phys,
+                                const FluidSpeciesPtrVect&  a_fluid_species_comp ) const;
 
       virtual void evalSolutionOp( FluidSpeciesPtrVect&               a_rhs,
                                    const PS::KineticSpeciesPtrVect&   a_kinetic_species_comp,
@@ -123,7 +122,8 @@ class GKFluidOp
       /**
        * Computes and returns an estimate of the maximum stable time step.
        */
-      Real computeDt( const FluidSpeciesPtrVect&  fluids);
+      Real computeDtExplicitTI( const FluidSpeciesPtrVect&  fluids);
+      Real computeDtImExTI( const FluidSpeciesPtrVect&  fluids);
    
 
       /// Compute time scale.

@@ -75,6 +75,9 @@ static void __attribute__ ((constructor)) trapfpe(void)
  *    -\b plot_interval
  *      integer value specifying the number of steps between plot dumps
  *
+ *    -\b plot_time_interval
+ *      Real value specifying the time interval between plot dumps
+ *
  *    -\b plot_prefix
  *      string used as prefix for plot file names ["plt"]
  *
@@ -204,15 +207,12 @@ class Simulation
 
       int m_cur_step;
       int m_max_step;
-      int m_subiterations;
 
       Real m_cur_time;
       Real m_max_time;
 
       Real m_cur_dt;
       Real m_fixed_dt;
-      bool m_fixed_dt_subiteration;
-      Real m_sub_dt;
       Real m_max_dt_grow;
       Real m_init_dt_frac;
       Real m_cfl;
@@ -224,6 +224,8 @@ class Simulation
       std::string m_checkpoint_prefix;
 
       int         m_plot_interval;
+      Real        m_plot_time_interval;
+      Real        m_plot_time;
       int         m_last_plot;
       std::string m_plot_prefix;
 

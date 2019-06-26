@@ -125,6 +125,9 @@ public:
                                             const EllipticOpBC&          bc, 
                                             const LevelData<FArrayBox>&  ion_density) const;
 
+   void applyHarmonicFiltering(LevelData<FArrayBox>& phi,
+                               const int& dir) const;
+   
    virtual
    RefCountedPtr<CFGVars> clone( const bool copy_data = true ) const;
 
@@ -148,6 +151,12 @@ protected:
    bool m_fixed_efield;
    GKPoisson* m_poisson;
    bool m_defined;
+   bool m_apply_harm_filtering;
+   int m_harm_filtering_dir;
+   
+private:
+   void parseParameters( ParmParse& pp);
+   
 };
 
 

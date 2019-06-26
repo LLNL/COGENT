@@ -2,6 +2,7 @@
 #include "NewGKPoissonBoltzmann.H"
 #include "Directions.H"
 #include "LogRectCoordSys.H"
+#include "ConstFact.H"
 
 #include "NamespaceHeader.H"
 
@@ -30,6 +31,7 @@ void EField::define( const double                      a_larmor,
       computeIonChargeDensity( ion_charge_density, a_kinetic_species );
 
       ParmParse pp( GKPoissonBoltzmann::pp_name );
+      parseParameters(pp);
       if ( typeid(*(mag_geom.getCoordSys())) == typeid(SingleNullCoordSys) ) {
          m_poisson = new NewGKPoissonBoltzmann( pp, mag_geom, a_larmor, a_debye, ion_charge_density );
       }
@@ -39,6 +41,7 @@ void EField::define( const double                      a_larmor,
    }
    else {
       ParmParse pp( GKPoisson::pp_name );
+      parseParameters(pp);
       m_poisson = new GKPoisson( pp, mag_geom, a_larmor, a_debye );
    }
 
@@ -122,13 +125,18 @@ void EField::computeEField( const PS::GKState&                a_state,
                }
             }
          }
+
+         // Filter out all harmonics except for the primary mode
+         if (m_apply_harm_filtering) {
+            applyHarmonicFiltering(a_phi, m_harm_filtering_dir);
+         }
       }
 
       if ( !m_fixed_efield || a_initial_time ) {
          fillInternalGhosts(a_phi);
          m_poisson->computeField( a_phi, E_field_cell );
          m_poisson->computeField( a_phi, E_field_face );
-
+         
          // Update nodal phi if supporting the calculation of a divergence-free phase velocity
          interpToNodes(a_phi);
       }
@@ -154,11 +162,11 @@ void EField::setCoreBC( const double   a_core_inner_bv,
       a_bc.setBCValue(0,RADIAL_DIR,1,a_core_outer_bv);
    }
    else if ( typeid(*(mag_geom.getCoordSys())) == typeid(SNCoreCoordSys) ) {
-      a_bc.setBCValue(L_CORE,RADIAL_DIR,0,a_core_inner_bv);
-      a_bc.setBCValue(L_CORE,RADIAL_DIR,1,a_core_outer_bv);
+      a_bc.setBCValue(SNCoreBlockCoordSys::LCORE,RADIAL_DIR,0,a_core_inner_bv);
+      a_bc.setBCValue(SNCoreBlockCoordSys::LCORE,RADIAL_DIR,1,a_core_outer_bv);
    }
    else if ( typeid(*(mag_geom.getCoordSys())) == typeid(SingleNullCoordSys) ) {
-      a_bc.setBCValue(LCORE,RADIAL_DIR,0,a_core_inner_bv);
+      a_bc.setBCValue(SingleNullBlockCoordSys::LCORE,RADIAL_DIR,0,a_core_inner_bv);
    }
    else {
       MayDay::Error("EField::setCoreBC(): unknown geometry with consistent bcs");
@@ -241,7 +249,11 @@ void EField::computeIonChargeDensity( LevelData<FArrayBox>&             a_ion_ch
       if ( this_species.charge() < 0.0 ) continue;
       
       // Compute the charge density for this species
-      this_species.chargeDensity( species_charge_density );
+      if (this_species.isGyrokinetic()) {
+        this_species.gyroaveragedChargeDensity( species_charge_density );
+      } else {
+        this_species.chargeDensity( species_charge_density );
+      }
       
       DataIterator dit( a_ion_charge_density.dataIterator() );
       for (dit.begin(); dit.ok(); ++dit) {
@@ -295,8 +307,12 @@ void EField::computeTotalChargeDensity( LevelData<FArrayBox>&             a_char
       const PS::KineticSpecies& this_species( *(a_species[species]) );
 
       // Compute the charge density for this species
-      this_species.chargeDensity( species_charge_density );
-      
+      if (this_species.isGyrokinetic()) {
+        this_species.gyroaveragedChargeDensity( species_charge_density );
+      } else {
+        this_species.chargeDensity( species_charge_density );
+      }
+
       DataIterator dit( a_charge_density.dataIterator() );
       for (dit.begin(); dit.ok(); ++dit) {
          a_charge_density[dit].plus( species_charge_density[dit] );
@@ -333,5 +349,58 @@ void EField::computeIonParallelCurrentDensity( LevelData<FArrayBox>&            
    }
 }
 
+void
+EField::applyHarmonicFiltering(LevelData<FArrayBox>& a_phi,
+                               const int& a_dir) const
+{
+   Real pi = Constants::PI;
+   const DisjointBoxLayout& grids = a_phi.getBoxes();
+   
+   LevelData<FArrayBox> tmp;
+   tmp.define(a_phi);
+   
+   Box domain_box = grids.physDomain().domainBox();
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      int Npts = grids[dit].size(a_dir);
+      
+      if (Npts != domain_box.size(a_dir)) {
+         MayDay::Error("EField::applyHarmonicFiltering(): the direction of filtering must be single-block and has no domain decomposition");
+      }
+      
+      for (BoxIterator bit( grids[dit] ); bit.ok(); ++bit) {
+         IntVect iv( bit() );
+         
+         double A = 0.0;
+         double B = 0.0;
+         for (int n=0; n<Npts; ++n) {
+            IntVect ivSum(iv);
+            ivSum[a_dir] = n;
+            double phase = 2.0 * pi * (n+0.5)/Npts;
+            A += (2.0/Npts) * tmp[dit](ivSum,0) * cos(phase);
+            B += (2.0/Npts) * tmp[dit](ivSum,0) * sin(phase);
+         }
+         double phase = 2.0 * pi * (iv[a_dir]+0.5)/Npts;
+         a_phi[dit](iv,0) = A*cos(phase)+B*sin(phase);
+      }
+   }
+}
+
+
+void
+EField::parseParameters( ParmParse& a_pp)
+{
+  if (a_pp.contains("harmonic_filtering")) {
+    a_pp.get("harmonic_filtering", m_apply_harm_filtering);
+  }
+  else {
+    m_apply_harm_filtering = false;
+  }
+  
+  if (m_apply_harm_filtering) {
+    a_pp.get("harmonic_filtering_dir", m_harm_filtering_dir);
+  }
+}
 
 #include "NamespaceFooter.H"

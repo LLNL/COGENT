@@ -104,9 +104,8 @@ class CFGVars
       virtual
       RefCountedPtr<CFGVars> clone( const IntVect& ghost_vect = IntVect::Zero, const bool copy_data = true ) const;
 
-      virtual
-      RefCountedPtr<CFGVars> convertToPhysical( const IntVect& ghost_vect ) const {return clone(ghost_vect, true);}
-
+      virtual void convertToPhysical() {;}
+      
       virtual void convertFromPhysical() {;}
    
       /// Copy
@@ -142,6 +141,7 @@ class CFGVars
            }
 
            if (component == -1) {
+              cout << "name = " << name << endl;
               MayDay::Error("CFGVars::cell_component(): Variable name not found");
            }
 

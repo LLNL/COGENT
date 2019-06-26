@@ -76,9 +76,11 @@ public:
                                 const bool,
                                 const int );
 
-   virtual void updatePCImEx( const PS::KineticSpeciesPtrVect&  kinetic_species,
+   virtual void updatePCImEx( const FluidSpeciesPtrVect&        fluid_species,
+                              const PS::KineticSpeciesPtrVect&  kinetic_species,
                               const double                      time,
-                              const double                      shift );
+                              const double                      shift,
+                              const int                         component);
 
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
@@ -102,7 +104,8 @@ public:
    /**
     * Computes and returns an estimate of the maximum stable time step.
     */
-   Real computeDt( const FluidSpeciesPtrVect&  fluid_species );
+   Real computeDtExplicitTI( const FluidSpeciesPtrVect&  fluid_species );
+   Real computeDtImExTI( const FluidSpeciesPtrVect&  fluid_species );
    
    static const char* pp_name;
 

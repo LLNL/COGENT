@@ -49,6 +49,7 @@ PhaseGrid::PhaseGrid(const Vector<ProblemDomain>&      a_domains,
 
          for (int dir=0; dir<PDIM; ++dir) {
             if (box_size[dir] < 4) {
+            //if (box_size[dir] < 2) { // JRA
                MayDay::Error( "Phase space box is less than 4 cells wide" );
             }
          }
@@ -106,7 +107,13 @@ PhaseGrid::PhaseGrid(const Vector<ProblemDomain>&      a_domains,
       for (int n=0; n<phase_boxes.size(); n++) {
          bounding_box = minBox(bounding_box, phase_boxes[n]);
       }
+#if CH_SPACEDIM==4
       prob_domain = ProblemDomain(bounding_box);
+#endif
+#if CH_SPACEDIM==5
+      bool is_periodic[] = {false, true, false, false, false};
+      prob_domain = ProblemDomain(bounding_box, is_periodic);
+#endif
    }
    else {
       MayDay::Error("Invalid magnetic geometry type");

@@ -92,8 +92,9 @@ public:
   /**
    * Computes and returns an estimate of the maximum stable time step.
    */
-  Real computeDt(const KineticSpeciesPtrVect&, const int);
-  Real TimeScale(const KineticSpeciesPtrVect&, const int);
+  Real computeDtExplicitTI(const KineticSpeciesPtrVect&, const int);
+  Real computeDtImExTI(const KineticSpeciesPtrVect&, const int);
+  Real computeTimeScale(const KineticSpeciesPtrVect&, const int);
 
   /// Report that collision operator is nonlinear
   /**

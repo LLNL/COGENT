@@ -20,7 +20,8 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
                                  const std::vector<int>&  a_numcells,
                                  const std::vector<bool>& a_is_periodic,
                                  const std::vector<int>&  a_decomposition)
-  : m_decomposition(a_decomposition)
+  : m_decomposition(a_decomposition),
+    m_num_blocks(1)
 {
   m_spread_radially = false;
   m_mag_geom_type = a_mag_geom_type;
@@ -33,27 +34,23 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
     m_mb_dir = POLOIDAL_DIR;
 #endif
 
-  int num_blocks = 1;
-  a_pp.query( "number_of_blocks", num_blocks);
-  m_decomposition[m_mb_dir] /= num_blocks;
+  a_pp.query( "number_of_blocks", m_num_blocks);
+  m_decomposition[m_mb_dir] /= m_num_blocks;
 
-  if (num_blocks != 1 && m_decomposition[m_mb_dir] != 1) {
+  if (m_num_blocks != 1 && m_decomposition[m_mb_dir] != 1) {
     MayDay::Error("LogRectCoordSys:: current multiblock sheared geometry implementation only works for the same number of blocks and proc in the toroidal dir");  
   }
   
-  int num_block_cells = a_numcells[m_mb_dir] / num_blocks;
-  //need to make sure that the block separatrion is larger
-  //than two ghost layers
-  int block_separation = 8;
+  int num_block_cells = a_numcells[m_mb_dir] / m_num_blocks;
   
-  Vector<Box> domain_boxes(num_blocks);
-  for ( int block_number=0; block_number<num_blocks; ++block_number ) {
+  Vector<Box> domain_boxes(m_num_blocks);
+  for ( int block_number=0; block_number<m_num_blocks; ++block_number ) {
     IntVect lo = IntVect::Zero;
     IntVect hi;
     for (int dir=0; dir<SpaceDim; ++dir) {
       hi[dir] = a_numcells[dir] - 1;
       if (dir == m_mb_dir ) {
-        lo[dir] = (block_separation + num_block_cells) * block_number;
+        lo[dir] = (BLOCK_SEPARATION + num_block_cells) * block_number;
         hi[dir] = lo[dir] + num_block_cells - 1;
       }
     }
@@ -65,7 +62,7 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
     is_periodic[dir] = a_is_periodic[dir];
   }
 
-  for ( int block_number = 0; block_number < num_blocks; ++block_number ) {
+  for ( int block_number = 0; block_number < m_num_blocks; ++block_number ) {
 
      if (m_mag_geom_type == "miller") {
         MillerBlockCoordSys* block_coords = new MillerBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic));
@@ -74,13 +71,13 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
      }
      else if (m_mag_geom_type == "slab") {
         SlabBlockCoordSys* block_coords = new SlabBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic),
-                                                                 block_number, num_blocks, block_separation);
+                                                                 block_number, m_num_blocks, BLOCK_SEPARATION);
         m_coord_vec.push_back(block_coords);
      }
 #if CFG_DIM==3
      else if (m_mag_geom_type == "toroidal") {
        ToroidalBlockCoordSys* block_coords = new ToroidalBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic),
-                                                                    block_number, num_blocks, block_separation);
+                                                                    block_number, m_num_blocks, BLOCK_SEPARATION);
        m_coord_vec.push_back(block_coords);
      }
 #endif
@@ -95,7 +92,7 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
 #if 1
   // Define the boundary conditions for divergence cleaning (whether or not they're used)
   // Does not check for periodicity. FIX IF NEEDED.
-  for (int block = 0; block < num_blocks; block++) {
+  for (int block = 0; block < m_num_blocks; block++) {
     Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block];
     const MagBlockCoordSys& coord_sys( *(MagBlockCoordSys*)getCoordSys(block) );
     const ProblemDomain& domain( coord_sys.domain() );
@@ -168,6 +165,49 @@ LogRectCoordSys::defineBoundaries()
             blockBoundaries[idir+SpaceDim].define(0);
 	 }
       }
+
+#if CGF_DIM==3
+      // Overwrite toroidal boundary coupling
+      // Needed to properly construct stencils for MBSolver 
+
+      if ( m_num_blocks == 1 ) {  // Assuming periodic coupling 
+	shift = m_mappingBlocks[iblock].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+	it.defineFromTranslation( shift );
+	blockBoundaries[TOROIDAL_DIR].define( it, iblock );
+	it.defineFromTranslation( -shift );
+	blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, iblock );
+      }
+
+      else {
+	// Lower face coupling
+	if ( iblock > 0 ) {  // Couple to the block on the lower boundary
+	  shift = -BLOCK_SEPARATION * BASISV(TOROIDAL_DIR);
+	  it.defineFromTranslation( shift );
+	  blockBoundaries[TOROIDAL_DIR].define( it, iblock - 1);
+	}
+
+	else {  // First toroidal block: couple it to the last one
+	  shift = (m_num_blocks * (BLOCK_SEPARATION + m_mappingBlocks[iblock].size(TOROIDAL_DIR))
+		   - BLOCK_SEPARATION) * BASISV(TOROIDAL_DIR);
+	  it.defineFromTranslation( shift );
+	  blockBoundaries[TOROIDAL_DIR].define( it, iblock + m_num_blocks - 1);
+	}
+	
+	// Upper face coupling
+	if ( toroidal_sector < m_num_blocks-1 ) {  // Couple to the block on the upper toroidal boundary
+	  shift = BLOCK_SEPARATION * BASISV(TOROIDAL_DIR);
+	  it.defineFromTranslation( shift );
+	  blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, iblock + 1);
+	}
+
+	else {  // Last toroidal block: couple it to the first one
+	  shift = -(m_num_blocks * (BLOCK_SEPARATION + m_mappingBlocks[iblock].size(TOROIDAL_DIR))
+		    - BLOCK_SEPARATION) * BASISV(TOROIDAL_DIR);
+	  it.defineFromTranslation( shift );
+	  blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, iblock - m_num_blocks + 1);
+	}
+      }
+#endif
    }
 }
 
@@ -306,7 +346,6 @@ LogRectCoordSys::spreadRadially( LevelData<FluxBox>& a_data ) const
                face.shiftHalf(dir,side);  // put it back
             }
             tmp_cell.exchange();
-            
             fourthOrderCellToFace(tmp_face, tmp_cell);
             
             for (dit.begin(); dit.ok(); ++dit) {

@@ -101,11 +101,13 @@ gkpoisson.verbose = true
 kinetic_species.1.name   = "hydrogen"
 kinetic_species.1.mass   = 2.0
 kinetic_species.1.charge = 1.0
+#kinetic_species.1.is_gyrokinetic = true
 kinetic_species.1.velocity_renormalization = true
 
 kinetic_species.2.name   = "electron"
 kinetic_species.2.mass   = 0.01
 kinetic_species.2.charge = -1.0
+#kinetic_species.2.is_gyrokinetic = true
 #kinetic_species.2.cls    = "Krook"
 kinetic_species.2.velocity_renormalization = true
 

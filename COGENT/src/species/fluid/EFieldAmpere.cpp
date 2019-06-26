@@ -204,7 +204,7 @@ void EFieldAmpere::updateAveragedEfield( LevelData<FluxBox>&          a_Er_avera
       int hi_radial_index = block_coord_sys.domain().domainBox().bigEnd(RADIAL_DIR);
         
       //This is the main calculation of Er on closed flux surfaces (within the core).
-      if ( block_number <= RCORE || block_number == MCORE ) {
+      if ( block_number <= SingleNullBlockCoordSys::RCORE || block_number == SingleNullBlockCoordSys::MCORE ) {
             
          for (int dir = 0; dir < 2; dir++) {
                 
@@ -249,9 +249,9 @@ void EFieldAmpere::updateAveragedEfield( LevelData<FluxBox>&          a_Er_avera
       //Linear extrapolation of Er into the SOL blocks (here, assumed that the cut is vertical, i.e., dPsi/dz = dPsi/dr)
       //To provide continuity, the mapped field is scaled by |grad_Psi|, i.e., Emapped_sol = Emapped_core * gradPsi_core / gradPsi_sol
       //Fix later for 10 block and DIII-D
-      else if (m_Esol_extrapolation && ((block_number < LPF) || (block_number == MCORE) || (block_number == MCSOL))) {
-         const MagBlockCoordSys& lcore_coord_sys = (const MagBlockCoordSys&)(*(coords.getCoordSys(LCORE)));
-         const MagBlockCoordSys& lsol_coord_sys = (const MagBlockCoordSys&)(*(coords.getCoordSys(LCSOL)));
+      else if (m_Esol_extrapolation && ((block_number < SingleNullBlockCoordSys::LPF) || (block_number == SingleNullBlockCoordSys::MCORE) || (block_number == SingleNullBlockCoordSys::MCSOL))) {
+         const MagBlockCoordSys& lcore_coord_sys = (const MagBlockCoordSys&)(*(coords.getCoordSys(SingleNullBlockCoordSys::LCORE)));
+         const MagBlockCoordSys& lsol_coord_sys = (const MagBlockCoordSys&)(*(coords.getCoordSys(SingleNullBlockCoordSys::LCSOL)));
          double lo_rad_end = block_coord_sys.lowerMappedCoordinate(0);
          double hi_rad_end = block_coord_sys.upperMappedCoordinate(0);
             
@@ -331,7 +331,7 @@ void EFieldAmpere::updateAveragedEfield( LevelData<FluxBox>&          a_Er_avera
       if (!m_Esol_extrapolation) {
          for (DataIterator dit(mag_grids); dit.ok(); ++dit) {
             int block_number( coords.whichBlock( mag_grids[dit] ) );
-            if ((block_number == RPF) || (block_number == LPF)) {
+            if ((block_number == SingleNullBlockCoordSys::RPF) || (block_number == SingleNullBlockCoordSys::LPF)) {
                a_Er_average_face[dit].setVal(0.0);
                a_Er_average_cell[dit].setVal(0.0);
             }

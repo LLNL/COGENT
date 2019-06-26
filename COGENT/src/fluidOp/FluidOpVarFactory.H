@@ -3,6 +3,9 @@
 
 #include "CellVar.H"
 #include "OneFieldOp.H"
+#include "BurgersOp.H"
+#include "IdealMhdOp.H"
+#include "TwoFieldNeutralsOp.H"
 #include "AmpereErAverageOp.H"
 
 #include <string>
@@ -55,6 +58,18 @@ CFGVars* FluidOpVarFactory::create( const string&      a_pp_prefix,
    }
    else if (a_op_type == "OneFieldOp" ) {
       OneFieldOp op(prefix, a_species_name, a_geometry, false);
+      result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
+   }
+   else if (a_op_type == "BurgersOp" ) {
+      BurgersOp op(prefix, a_species_name, a_geometry, true);
+      result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
+   }
+   else if (a_op_type == "IdealMhdOp" ) {
+      IdealMhdOp op(prefix, a_species_name, a_geometry, true);
+      result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
+   }
+   else if (a_op_type == "TwoFieldNeutralsOp" ) {
+      TwoFieldNeutralsOp op(prefix, a_species_name, a_geometry, true);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
    }
    else if ( a_op_type == "AmpereErAverageOp" ) {

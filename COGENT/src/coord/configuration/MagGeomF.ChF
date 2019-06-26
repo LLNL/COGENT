@@ -173,6 +173,133 @@ c     local variables
 
       return
       end
+      
+      subroutine simple_curl(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir_j],
+     &     CHF_CONST_INT[dir_k],
+     &     CHF_CONST_REAL[dX_j],
+     &     CHF_CONST_REAL[dX_k],
+     &     CHF_CONST_FRA[Edge_j],
+     &     CHF_CONST_FRA[Edge_k],
+     &     CHF_FRA[Face_i])
+c     local variables
+      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii_j;jj_j;kk_j], CHF_DDECL[ii_k;jj_k;kk_k] 
+      double precision djEk, dkEj
+
+      CHF_DTERM[
+      ii_j = CHF_ID(0,dir_j);
+      jj_j = CHF_ID(1,dir_j);
+      kk_j = CHF_ID(2,dir_j)]
+      
+      CHF_DTERM[
+      ii_k = CHF_ID(0,dir_k);
+      jj_k = CHF_ID(1,dir_k);
+      kk_k = CHF_ID(2,dir_k)]
+
+      do n=0, (CHF_NCOMP[Face_i]-1)
+         
+         CHF_MULTIDO[box;i;j;k]
+      
+            djEk = (Edge_k(CHF_IX[i+ii_j;j+jj_j;k+kk_j],n) - Edge_k(CHF_IX[i;j;k],n))/dX_j
+            dkEj = (Edge_j(CHF_IX[i+ii_k;j+jj_k;k+kk_k],n) - Edge_j(CHF_IX[i;j;k],n))/dX_k
+            Face_i(CHF_IX[i;j;k],n) = djEk - dkEj
+
+         CHF_ENDDO
+
+      enddo
+
+      return
+      end
+      
+      subroutine simple_curl_virt(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REAL[dXdir],
+     &     CHF_CONST_FRA[Fy],
+     &     CHF_FRA[Jdir])
+c     local variables
+      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk] 
+      double precision val
+
+      CHF_DTERM[
+      ii = CHF_ID(0,0);
+      jj = CHF_ID(1,0);
+      kk = CHF_ID(2,0)]
+      
+      do n=0, (CHF_NCOMP[Fy]-1)
+         
+         CHF_MULTIDO[box;i;j;k]
+     
+            if(dir==1) then
+               val = (Fy(CHF_IX[i;j;k],n) - Fy(CHF_IX[i-1;j;k],n))/dXdir
+            else
+               val = -(Fy(CHF_IX[i;j;k],n) - Fy(CHF_IX[i;j-1;k],n))/dXdir
+            endif
+            Jdir(CHF_IX[i;j;k],n) = val
+
+c            print*, "shape(Fy) = ", shape(Fy)
+c            print*, "shape(Jdir) = ", shape(Jdir)
+c            print*, "dir = ", dir
+c            print*, "i = ", i 
+c            print*, "j = ", j 
+c            print*, "Fy(i,j)   = ", Fy(CHF_IX[i;j;k],n)
+c            print*, "Fy(i-1,j) = ", Fy(CHF_IX[i-1;j;k],n)
+c            print*, "Fy(i,j-1) = ", Fy(CHF_IX[i;j-1;k],n)
+c            print*, "Jdir(i)   = ", Jdir(CHF_IX[i;j;k],n)
+
+         CHF_ENDDO
+
+      enddo
+
+      return
+      end
+      
+      subroutine phys_to_covar(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_FRA[F])
+      
+      integer CHF_DDECL[i;j;k] 
+      double precision covar0, covar1, covar2
+
+      CHF_MULTIDO[box;i;j;k]
+      
+         if (CH_SPACEDIM==3) then
+  
+            covar0 = dXdxi(CHF_IX[i;j;k],0)*F(CHF_IX[i;j;k],0) 
+     &             + dXdxi(CHF_IX[i;j;k],1)*F(CHF_IX[i;j;k],1)
+     &             + dXdxi(CHF_IX[i;j;k],2)*F(CHF_IX[i;j;k],2)
+            
+            covar1 = dXdxi(CHF_IX[i;j;k],3)*F(CHF_IX[i;j;k],0) 
+     &             + dXdxi(CHF_IX[i;j;k],4)*F(CHF_IX[i;j;k],1)
+     &             + dXdxi(CHF_IX[i;j;k],5)*F(CHF_IX[i;j;k],2)
+            
+            covar2 = dXdxi(CHF_IX[i;j;k],6)*F(CHF_IX[i;j;k],0) 
+     &             + dXdxi(CHF_IX[i;j;k],7)*F(CHF_IX[i;j;k],1)
+     &             + dXdxi(CHF_IX[i;j;k],8)*F(CHF_IX[i;j;k],2)
+
+            F(CHF_IX[i;j;k],0) = covar0
+            F(CHF_IX[i;j;k],1) = covar1
+            F(CHF_IX[i;j;k],2) = covar2
+
+         else
+            
+            covar0 = dXdxi(CHF_IX[i;j;k],0)*F(CHF_IX[i;j;k],0) 
+     &             + dXdxi(CHF_IX[i;j;k],1)*F(CHF_IX[i;j;k],1)
+            
+            covar1 = dXdxi(CHF_IX[i;j;k],2)*F(CHF_IX[i;j;k],0) 
+     &             + dXdxi(CHF_IX[i;j;k],3)*F(CHF_IX[i;j;k],1)
+
+            F(CHF_IX[i;j;k],0) = covar0
+            F(CHF_IX[i;j;k],1) = covar1
+
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
 
       subroutine compute_face_transverse_E(
      &     CHF_BOX[box],
@@ -196,6 +323,27 @@ c     local variables
 
       return
       end
+
+
+      subroutine compute_exb_drift(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[E],
+     &     CHF_CONST_FRA[B],
+     &     CHF_FRA[ExB])
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      CHF_MULTIDO[box;i;j;k]
+       
+       ExB(CHF_IX[i;j;k],0) = E(CHF_IX[i;j;k],1)*B(CHF_IX[i;j;k],2) - E(CHF_IX[i;j;k],2)*B(CHF_IX[i;j;k],1)
+       ExB(CHF_IX[i;j;k],1) = E(CHF_IX[i;j;k],2)*B(CHF_IX[i;j;k],0) - E(CHF_IX[i;j;k],0)*B(CHF_IX[i;j;k],2)
+       ExB(CHF_IX[i;j;k],2) = E(CHF_IX[i;j;k],0)*B(CHF_IX[i;j;k],1) - E(CHF_IX[i;j;k],1)*B(CHF_IX[i;j;k],0)
+      
+      CHF_ENDDO
+
+      return
+      end
+
 
       subroutine compute_volume_B_integrals(
      &     CHF_BOX[box],

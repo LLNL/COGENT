@@ -37,7 +37,8 @@ class NTRInterface
                                const int                    species,
                                const Real                   time ) = 0;
 
-      virtual Real computeDt(const KineticSpeciesPtrVect& soln, const int i) { return DBL_MAX; }
+      virtual Real computeDtExplicitTI(const KineticSpeciesPtrVect& soln, const int i) { return DBL_MAX; }
+      virtual Real computeDtImExTI(const KineticSpeciesPtrVect& soln, const int i) { return DBL_MAX; }
       virtual Real TimeScale(const KineticSpeciesPtrVect& soln, const int i) { return -1; }
 
 

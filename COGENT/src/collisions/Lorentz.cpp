@@ -622,9 +622,25 @@ void Lorentz::printParameters()
 }
 
 
-Real Lorentz::computeDt(const KineticSpeciesPtrVect& soln)
+Real Lorentz::computeTimeScale(const KineticSpeciesPtrVect& soln, const int a_idx)
 {
+   // Replace with an estimate of the time scale
    return DBL_MAX;
+}
+
+Real Lorentz::computeDtExplicitTI(const KineticSpeciesPtrVect& soln, const int a_idx)
+{
+   // Replace with an estimate of the dt
+   return DBL_MAX;
+}
+
+Real Lorentz::computeDtImExTI(const KineticSpeciesPtrVect& soln, const int a_idx)
+{
+  if (m_time_implicit) {
+    return DBL_MAX;
+  } else {
+    return computeDtExplicitTI(soln, a_idx);
+  }
 }
 
 #include "NamespaceFooter.H"

@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <vector>
+#include <algorithm>
 #include <utility>
 #include <map>
 #include <string>
@@ -14,6 +15,7 @@
 #include "FArrayBox.H"
 #include "LevelData.H"
 #include "PhaseCoordSys.H"
+#include "UnstructuredInterpUtils.H"
 
 #define _MU_ 1
 
@@ -24,9 +26,6 @@
 
 namespace CFG = CFG_NAMESPACE;
 namespace VEL = VEL_NAMESPACE;
-
-typedef pair<CFG::IntVect,Real> StencilPoint;
-typedef std::vector<StencilPoint> Stencil;
 
 class PhaseGeom;
 
@@ -42,6 +41,9 @@ class GyroaverageOperator
 
     void applyOp(LevelData<FArrayBox>&, 
                  const CFG::LevelData<CFG::FArrayBox>& ) const;
+
+    void applyOp(LevelData<FArrayBox>&, 
+                 const LevelData<FArrayBox>& ) const;
 
     void gyroaveragedEField(  LevelData<FArrayBox>&,
                               const CFG::LevelData<CFG::FArrayBox>&,
@@ -69,6 +71,7 @@ class GyroaverageOperator
     std::string m_name;
     Real        m_mass;
     Real        m_charge;
+    Real        m_tolerance;
 
     const PhaseGeom* m_phase_geom;
 
@@ -79,8 +82,11 @@ class GyroaverageOperator
     void parseParams(const ParmParse&);
     void printParams() const;
 
-    void getInterpStencil(Stencil&, const CFG::FArrayBox&, 
-                          const CFG::IntVect&, const CFG::RealVect&);
+    void getInterpStencil(Stencil&, 
+                          const CFG::FArrayBox&, 
+                          const std::vector<CFG::IntVect>&, 
+                          const CFG::RealVect&,
+                          bool& );
 
     void applyOp( FArrayBox&, 
                   const FArrayBox&, 
@@ -97,17 +103,30 @@ class GyroaverageOperator
       else return( a_La * sqrt(a_mass * a_mu / (a_charge*a_charge * a_B) ) );
     }
 
-    inline void evalStencil(std::vector<Real>&    a_var_avg, 
-                            const CFG::FArrayBox& a_var, 
-                            const Stencil&        a_op) const
+    inline void evalStencil(std::vector<Real>&,
+                            const FArrayBox&, 
+                            const Stencil&,
+                            const VEL::IntVect& ) const;
+
+    inline Real distanceFunction( const CFG::FArrayBox& a_coords,
+                                  const CFG::IntVect&   a_i,
+                                  const CFG::RealVect&  a_x0 ) const
     {
-      a_var_avg = std::vector<Real>(a_var.nComp(),0.0);
-      for (int i=0; i<a_op.size(); i++) {
-        for (int v=0; v<a_var.nComp(); v++) {
-          a_var_avg[v] += a_op[i]._weight_ * a_var(a_op[i]._point_,v);
-        }
+      CH_assert(a_coords.nComp() == CFG_DIM);
+      const CFG::Box& bx = a_coords.box();
+      CH_assert(bx.contains(a_i));
+
+      CFG::RealVect dx;
+      for (int d=0; d<CFG_DIM; d++) {
+        dx[d] = a_x0[d] - a_coords(a_i,d);
       }
-      return;
+
+      Real retval = 0.0;
+      for (int d=0; d<CFG_DIM; d++) {
+        retval += (dx[d]*dx[d]);
+      }
+
+      return retval;
     }
 
 };

@@ -7,6 +7,8 @@
 
 #include "NamespaceHeader.H"
 
+#define BLOCK_SEPARATION 8
+
 class LogRectCoordSys : public MagCoordSys
 {
 public:
@@ -86,6 +88,7 @@ private:
 
    void operator = (const LogRectCoordSys&){;}
    int m_mb_dir;
+   int m_num_blocks;
 
    Vector<MagBlockCoordSys *> m_coord_vec;
    

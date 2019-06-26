@@ -1,7 +1,7 @@
+#include <array>
 #include "MillerBlockCoordSys.H"
 #include "MagBlockCoordSysF_F.H"
 #include "MillerBlockCoordSysF_F.H"
-
 #include "Directions.H"
 #include "BoxIterator.H"
 #include "CONSTANTS.H"
@@ -503,7 +503,7 @@ MillerBlockCoordSys::computeFieldData( const int  a_dir,
 
 #endif
 
-Vector<Real>
+array<double,3>
 MillerBlockCoordSys::computeBField(const RealVect& a_X) const
 {
    
@@ -511,7 +511,7 @@ MillerBlockCoordSys::computeBField(const RealVect& a_X) const
       MayDay::Error("MillerBlockCoordSys::computeBField(): Not implemented for specified geometry parameters");
    }
    
-   Vector<Real> result(3,0);
+   array<double,3> result;
    
    double R_shift = a_X[0] - m_origin[0];
    double Z_shift = a_X[1] - m_origin[1];
@@ -527,7 +527,6 @@ MillerBlockCoordSys::computeBField(const RealVect& a_X) const
    result[2] =  m_dpsidr * ct / a_X[0];
    
    return result;
-   
 }
 
 

@@ -49,9 +49,16 @@ void ExplicitStageFunction<T,Ops>::define(const T& a_state, Ops& a_ops)
 template <class T, class Ops>
 void ExplicitStageFunction<T,Ops>::evalFunction(T& a_F, const T& a_Y, const T& a_b, int a_its, bool a_update_fluid_ops)
 {
+  CH_TIME("ExplicitStageFunction::evalFunction()");
   CH_assert(isDefined());
 
-  if ( a_its==0 ) m_ops->preOpEval(a_Y,m_StageTime,a_update_fluid_ops);
+  bool update_kinetic_phys = false;
+  a_update_fluid_ops = false;
+  if ( a_its==0 ) {
+    update_kinetic_phys = true;
+    a_update_fluid_ops = true;
+  }
+  m_ops->preOpEval(a_Y,m_StageTime,update_kinetic_phys,a_update_fluid_ops);
   m_ops->solutionOp(m_W,m_StageTime,a_Y);
 
   /* set base Y and G(Y) for Jacobian */

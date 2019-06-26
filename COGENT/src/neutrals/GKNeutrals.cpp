@@ -88,13 +88,27 @@ void GKNeutrals::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
 }
 
 
-Real GKNeutrals::computeDt( const KineticSpeciesPtrVect& soln )
+Real GKNeutrals::computeDtExplicitTI( const KineticSpeciesPtrVect& soln )
 {
   Real dt(DBL_MAX);
   int count(0);
   std::map<std::string,int>::iterator it;
   for (it=m_neutral_model_name.begin(); it!=m_neutral_model_name.end(); ++it) {
-    Real tmp = m_neutral_model[it->second]->computeDt(soln,it->second);
+    Real tmp = m_neutral_model[it->second]->computeDtExplicitTI(soln,it->second);
+    dt = (tmp < dt ? tmp : dt);
+    count++;
+  }
+  return (count ? dt : -1);
+
+}
+
+Real GKNeutrals::computeDtImExTI( const KineticSpeciesPtrVect& soln )
+{
+  Real dt(DBL_MAX);
+  int count(0);
+  std::map<std::string,int>::iterator it;
+  for (it=m_neutral_model_name.begin(); it!=m_neutral_model_name.end(); ++it) {
+    Real tmp = m_neutral_model[it->second]->computeDtImExTI(soln,it->second);
     dt = (tmp < dt ? tmp : dt);
     count++;
   }

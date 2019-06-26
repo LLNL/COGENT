@@ -42,11 +42,12 @@ CHOMBO_HOME = ../../Chombo/lib
 base_dir = .
 
 ifeq ($(MAXDIM),4)
-2dsrc_dirs =  ../src/coord/configuration ../src/coord/velocity 
+2dsrc_dirs =  ../src/coord/configuration ../src/coord/velocity ../src/coord/configuration/2d
 2dsrc_dirs += ../src/ibc/configuration ../src/poisson
 2dsrc_dirs += ../src/util ../src/ibc ../src/species/fluid
 2dsrc_dirs += ../src/fluidOp
-3dsrc_dirs += ../src/util ../src/ibc
+2dsrc_dirs += ../src/advectUtil
+3dsrc_dirs += ../src/util ../src/ibc ../src/coord/configuration/3d
 4dsrc_dirs =  ../src/core ../src/driver ../src/vlasov
 4dsrc_dirs += ../src/collisions ../src/transport ../src/neutrals
 4dsrc_dirs += ../src/coord/phase ../src/ibc/phase ../src/util 
@@ -58,13 +59,15 @@ ifeq ($(MAXDIM),4)
 4dsrc_dirs += ../src/time
 4dsrc_dirs += ../src/scalarOp ../src/species/scalar
 else
-2dsrc_dirs =  ../src/coord/velocity 
+2dsrc_dirs =  ../src/coord/configuration/2d ../src/coord/velocity 
 3dsrc_dirs  = ../src/coord/configuration  
 3dsrc_dirs += ../src/ibc ../src/ibc/configuration  
 3dsrc_dirs += ../src/poisson  
 3dsrc_dirs += ../src/util  
 3dsrc_dirs += ../src/species/fluid
 3dsrc_dirs += ../src/fluidOp
+3dsrc_dirs += ../src/coord/configuration/3d
+3dsrc_dirs += ../src/advectUtil
 5dsrc_dirs =  ../src/driver ../src/core
 5dsrc_dirs += ../src/species/kinetic
 5dsrc_dirs += ../src/advectUtil ../src/vlasov   

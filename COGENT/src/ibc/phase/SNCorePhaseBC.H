@@ -106,6 +106,10 @@ class SNCorePhaseBC
       inline KineticFunction& radialInflowFunc( const Side::LoHiSide& a_side,
                                                 const int& a_block_type );
 
+#if CFG_DIM==3
+      inline KineticFunction& toroidalInflowFunc( const Side::LoHiSide& a_side );
+#endif
+
       inline KineticFunction& vParallelInflowFunc( const Side::LoHiSide& a_side );
 
       inline KineticFunction& muInflowFunc( const Side::LoHiSide& a_side );
@@ -115,6 +119,10 @@ class SNCorePhaseBC
    
       inline std::string radialBcType( const Side::LoHiSide& a_side,
                                        const int& a_block_type );
+   
+#if CFG_DIM==3
+      inline std::string toroidalBcType( const Side::LoHiSide& a_side );
+#endif
    
       inline std::string poloidalBcType( const Side::LoHiSide& a_side );
    
@@ -132,6 +140,9 @@ class SNCorePhaseBC
 
       enum {INVALID=-1,
             RADIAL_INNER, RADIAL_OUTER,
+#if CFG_DIM==3
+            TOROIDAL_LOWER, TOROIDAL_UPPER,
+#endif
             VPAR_LOWER, VPAR_UPPER,
             MU_LOWER, MU_UPPER,
             NUM_INFLOW};

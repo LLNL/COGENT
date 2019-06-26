@@ -6,6 +6,7 @@
 #include "MultiBlockLevelExchangeAverage.H"
 #include "BlockRegister.H"
 #include "EllipticOpBC.H"
+#include "EdgeDataBox.H"
 
 #include "BoundaryBoxLayout.H.multidim"
 #include "SpaceUtils.H"
@@ -32,6 +33,11 @@ public:
   virtual ~MagGeom();
 
   /*@}*/
+   
+   int m_num_ghosts;
+
+   void initializeMetricMembers( const DisjointBoxLayout& a_grids,
+                                 const IntVect&           a_ghostVect ) const;
 
    void getMetricTerms( LevelData<FluxBox>& N,
                         LevelData<FluxBox>& tanGradN ) const;
@@ -41,6 +47,14 @@ public:
    void getCellVolumes( LevelData<FArrayBox>& volume ) const;
 
    void getJ( LevelData<FArrayBox>& J ) const;
+   
+   void getN( LevelData<FArrayBox>& N ) const;
+   
+   void getdXdxi( LevelData<FArrayBox>& dXdxi ) const;
+   
+   void getXphys( LevelData<FArrayBox>& Xphys ) const;
+
+   void getPointwisePoloidalJ( LevelData<FArrayBox>& a_data ) const;
 
    void getPointwiseN( LevelData<FluxBox>& N ) const;
 
@@ -65,7 +79,32 @@ public:
    void computeMappedGridDivergence( const LevelData<FluxBox>& F,
                                      LevelData<FArrayBox>&     divergence,
                                      const bool                fourthOrder ) const;
+   
+   void mappedGridDivergenceFromFluxNorms( const LevelData<FluxBox>&    F,
+                                                 LevelData<FArrayBox>&  divergence ) const;
+   
+   void mappedGridDivergenceFromFluxNorms( const FluxBox&    F,
+                                                 FArrayBox&  divergence ) const;
 
+   void mappedGridCurlFromEdgeTans( const LevelData<EdgeDataBox>&  E,
+                                    const int                      face_dir,
+                                          LevelData<FArrayBox>&    face_curl) const;
+   
+   void mappedGridCurlofVirtComp( const LevelData<FArrayBox>&    F,
+                                        LevelData<EdgeDataBox>&  edge_curl) const;
+   
+   void convertPhysToCovar( LevelData<FArrayBox>&  a_F,
+                      const int                    a_inverse) const;
+
+   // Project the vector from phys directions to unit normal
+   // coord sys with 0-component normal to the a_dir direction 
+   // (or inverse)
+   //
+   void projectOntoFluxSurfaceDir( FArrayBox&  a_data,
+                             const DataIndex&  a_dit,
+                             const int         a_dir,
+                             const int         a_inverse ) const;
+   
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
    void exchangeTransverseAtBlockBoundaries(LevelData<FluxBox>& data) const;
@@ -76,9 +115,19 @@ public:
 
    double maxBlockBoundaryDifference(LevelData<FluxBox>& data) const;
 
+   double maxMappingError() const;
+
    void getMagneticFlux(LevelData<FArrayBox>& psi) const;
 
    void getMagneticFlux(LevelData<FluxBox>& psi) const;
+   
+   const LevelData<FArrayBox>& getCellCenteredRealCoords() const {return m_cell_centered_real_coords;}
+
+   const LevelData<FluxBox>& getFaceCenteredRealCoords() const {return m_face_centered_real_coords;}
+
+   const LevelData<FArrayBox>& getNormalizedMagneticFluxCell() const {return m_normalized_magnetic_flux_cell;}
+
+   const LevelData<FluxBox>& getNormalizedMagneticFluxFace() const {return m_normalized_magnetic_flux_face;}
 
    const LevelData<FArrayBox>& getCCBField() const {return m_BField_cc;}
 
@@ -168,6 +217,9 @@ public:
                              bool                        fourth_order,
                              LevelData<FluxBox>&         Exb_integral ) const;
 
+   void computeEXBDrift( const LevelData<FluxBox>& E_field,
+                         LevelData<FluxBox>&       ExB_drift ) const;
+   
    //Extracts a radial electric field at the top cut, and then interpolates
    //it on the grid (taking into account the the magnetic flux expansion)
    void interpolateErFromMagFS(LevelData<FluxBox>&   Er_face,
@@ -240,9 +292,9 @@ public:
                                                 LevelData<FluxBox>&          field,
                                                 const int                    order ) const;
 
-  bool shearedMBGeom() const {return m_sheared_mb_geom;}
-
-  bool secondOrder() const {return m_second_order;}
+   bool shearedMBGeom() const {return m_sheared_mb_geom;}
+  
+   bool secondOrder() const {return m_second_order;}
 
 #if CFG_DIM == 3
 
@@ -254,9 +306,14 @@ public:
    void interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const;
    
 #endif
-   
+
+   bool providesFlux() const {return m_coord_sys->providesFlux();}
    
 private:
+
+   void setRealCoords();
+
+   void setNormalizedMagneticFlux();
 
    void computeFieldData( LevelData<FArrayBox>& BField,
                           LevelData<FArrayBox>& BFieldMag,
@@ -340,11 +397,15 @@ private:
    mutable LevelData<FArrayBox> m_cell_volume;
 
    mutable LevelData<FArrayBox> m_J;
+   mutable LevelData<FArrayBox> m_N;
+   mutable LevelData<FArrayBox> m_dXdxi;
+   mutable LevelData<FArrayBox> m_Xphys;
 
    mutable LevelData<FluxBox> m_metrics;
    mutable LevelData<FluxBox> m_N_face_centered;
    mutable LevelData<FluxBox> m_NJinverse_face_centered;
    mutable LevelData<FArrayBox> m_NJinverse_cell_centered;
+   mutable LevelData<FArrayBox> m_poloidal_J;
 
    const RefCountedPtr<MagCoordSys> m_coord_sys;
 
@@ -360,6 +421,12 @@ private:
    LevelData<FArrayBox> m_curlBFieldDir_cc;
    LevelData<FArrayBox> m_BFieldDirdotcurlBFieldDir_cc;
 
+   LevelData<FArrayBox> m_cell_centered_real_coords;
+   LevelData<FluxBox> m_face_centered_real_coords;
+
+   LevelData<FArrayBox> m_normalized_magnetic_flux_cell;
+   LevelData<FluxBox> m_normalized_magnetic_flux_face;
+   
    LevelData<FluxBox> m_BField_fc;
    LevelData<FluxBox> m_BFieldMag_fc;
    LevelData<FluxBox> m_BFieldDir_fc;

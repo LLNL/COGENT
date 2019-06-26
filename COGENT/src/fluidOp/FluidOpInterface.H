@@ -3,6 +3,7 @@
 
 #include "FluidSpecies.H"
 #include "EField.H"
+#include "inspect.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -111,9 +112,11 @@ class FluidOpInterface
          rhs[component]->copy(*(fluid_species_comp[component]));
       }
 
-      virtual void updatePCImEx( const PS::KineticSpeciesPtrVect& kinetic_species,
+      virtual void updatePCImEx( const FluidSpeciesPtrVect&       fluid_species,
+                                 const PS::KineticSpeciesPtrVect& kinetic_species,
                                  const double                     time,
-                                 const double                     shift ) {}
+                                 const double                     shift,
+                                 const int                        component) {}
 
       virtual void solveSolutionPC( FluidSpeciesPtrVect&              fluid_species_solution,
                                     const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
@@ -145,8 +148,29 @@ class FluidOpInterface
                                Real           a_time )
       {
          for (int n=0; n<a_species.num_cell_vars(); ++n) {
-            const GridFunction& fsic( fluidSpeciesIC( a_species.cell_var_name(n) ) );
-            fsic.assign( a_species.cell_var(n), a_species.configurationSpaceGeometry(), a_time );
+            
+            const int num_comps = a_species.cell_var(n).nComp();
+            if (num_comps>1) {
+               string this_cell_var_comp_name;
+               for (int m=0; m<num_comps; m++) {
+                  if(m==0) this_cell_var_comp_name = a_species.cell_var_name(n)+"_x";
+                  if(m==1) this_cell_var_comp_name = a_species.cell_var_name(n)+"_y";
+                  if(m==2) this_cell_var_comp_name = a_species.cell_var_name(n)+"_z";
+                  const GridFunction& fsic( fluidSpeciesIC( this_cell_var_comp_name ) );
+                  LevelData<FArrayBox> this_cell_var_comp( a_species.cell_var(n).getBoxes(), 1, 
+                                                           a_species.cell_var(n).ghostVect() );
+                  fsic.assign( this_cell_var_comp, a_species.configurationSpaceGeometry(), a_time );
+                  LevelData<FArrayBox>& cell_var_ref( a_species.cell_var(n) );
+                  for (DataIterator dit( this_cell_var_comp.dataIterator() ); dit.ok(); ++dit) {
+                     cell_var_ref[dit].copy(this_cell_var_comp[dit],0,m,1);
+                  }
+               }
+            } 
+            else {
+               const GridFunction& fsic( fluidSpeciesIC( a_species.cell_var_name(n) ) );
+               fsic.assign( a_species.cell_var(n), a_species.configurationSpaceGeometry(), a_time );
+            }
+            
          }
          for (int n=0; n<a_species.num_face_vars(); ++n) {
             const GridFunction& fsic( fluidSpeciesIC( a_species.face_var_name(n) ) );
@@ -160,7 +184,12 @@ class FluidOpInterface
       virtual void fillGhostCells( FluidSpecies&  a_species_phys,
                                    const double   a_time ) = 0;
 
-      virtual Real computeDt(const FluidSpeciesPtrVect& fluids)
+      virtual Real computeDtExplicitTI(const FluidSpeciesPtrVect& fluids)
+      {
+         return DBL_MAX;
+      }
+   
+      virtual Real computeDtImExTI(const FluidSpeciesPtrVect& fluids)
       {
          return DBL_MAX;
       }
@@ -184,7 +213,6 @@ class FluidOpInterface
          else {
             ic_prefix = "IC." + a_species_name + "." + a_variable_name;
          }
-   
          ParmParse ppic( ic_prefix.c_str() );
          std::string function_name;
          ppic.query( "function", function_name );

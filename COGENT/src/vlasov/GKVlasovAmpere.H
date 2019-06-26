@@ -18,9 +18,14 @@ public:
     *  @param[in] pp the input database.
     *  @param[in] larmor_number the Larmor number for the operator.
     */
-   GKVlasovAmpere( ParmParse&  pp,
-                   const Real  larmor_number,
-                   const bool  self_consistent_bcs_only = false );
+   GKVlasovAmpere( ParmParse&                       pp,
+                   const Real                       larmor_number,
+                   const bool                       self_consistent_bcs_only = false );
+
+   GKVlasovAmpere( ParmParse&                       pp,
+                   const Real                       larmor_number,
+                   const std::vector<std::string>&  species_name_list,
+                   const bool                       self_consistent_bcs_only = false );
 
    /// Destructor.
    /**
@@ -31,6 +36,7 @@ public:
                                const KineticSpeciesPtrVect&           kinetic_phys,
                                const CFG::LevelData<CFG::FArrayBox>&  phi,
                                const CFG::EField&                     E_field,
+                               const bool                             implicit,
                                const Real&                            time );
 
    static const char* pp_name;
@@ -45,32 +51,77 @@ public:
    // Operator evaluation using a phase space velocity computed directly from
    // a phase-space injected electric field (Efield), as opposed to the
    // divergence-free method
-   void evalRHS( KineticSpecies&                        rhs_species,
-                 double&                                lo_value,
-                 double&                                hi_value,
-                 CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
-                 const KineticSpecies&                  soln_species,
-                 const CFG::LevelData<CFG::FArrayBox>&  phi,
-                 const CFG::EField&                     E_field,
-                 const Real                             time );
+
+   void evalRHSExplicit( KineticSpecies&                        rhs_species,
+                         double&                                lo_value,
+                         double&                                hi_value,
+                         CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
+                         const KineticSpecies&                  soln_species,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::EField&                     E_field,
+                         const int                              velocity_option,
+                         const Real                             time );
+
+   void evalRHSImplicit( KineticSpecies&                        rhs_species,
+                         double&                                lo_value,
+                         double&                                hi_value,
+                         CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
+                         const KineticSpecies&                  soln_species,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::EField&                     E_field,
+                         const int                              velocity_option,
+                         const Real                             time );
+
+   void evalRHS(         KineticSpecies&                        rhs_species,
+                         double&                                lo_value,
+                         double&                                hi_value,
+                         CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
+                         const KineticSpecies&                  soln_species,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::EField&                     E_field,
+                         const int                              velocity_option,
+                         const Real                             time );
+
 
    // Operator evaluation using a divergence-free phase space velocity computed from
    // the cell-centered field (Efield_cell) and nodal potential (phi_node)
-   void evalRHS( KineticSpecies&                        rhs_species,
-                 double&                                lo_value,
-                 double&                                hi_value,
-                 CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
-                 const KineticSpecies&                  soln_species,
-                 const CFG::LevelData<CFG::FArrayBox>&  phi,
-                 const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
-                 const CFG::LevelData<CFG::FArrayBox>&  phi_node,
-                 const bool                             fourth_order_Efield,
-                 const int                              velocity_option,
-                 const Real                             time );
-
-protected:
+   void evalRHSExplicit( KineticSpecies&                        rhs_species,
+                         double&                                lo_value,
+                         double&                                hi_value,
+                         CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
+                         const KineticSpecies&                  soln_species,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
+                         const bool                             fourth_order_Efield,
+                         const int                              velocity_option,
+                         const Real                             time );
+   void evalRHSImplicit( KineticSpecies&                        rhs_species,
+                         double&                                lo_value,
+                         double&                                hi_value,
+                         CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
+                         const KineticSpecies&                  soln_species,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
+                         const bool                             fourth_order_Efield,
+                         const int                              velocity_option,
+                         const Real                             time );
+   void evalRHS(         KineticSpecies&                        rhs_species,
+                         double&                                lo_value,
+                         double&                                hi_value,
+                         CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
+                         const KineticSpecies&                  soln_species,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi,
+                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
+                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
+                         const bool                             fourth_order_Efield,
+                         const int                              velocity_option,
+                         const Real                             time );
 
    /// Computes FS_averaged particle flux normalized by the shell_volume (i.e., <Flux*grad(Psi)>/Shell_volume).
+protected:
+
    /**
     * Computes <grad(psi) * Flux>/(one-cell wide shell volume) 
     * radial_flux_divergence_average does not have ghost cells, and stores the data in the radial direction  as follows

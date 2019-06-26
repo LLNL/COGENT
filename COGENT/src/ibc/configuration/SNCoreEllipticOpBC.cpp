@@ -39,9 +39,9 @@ SNCoreEllipticOpBC::SNCoreEllipticOpBC( const SingleNullEllipticOpBC&  a_bc,
    setNames();
 
    // Use the same lower radial conditions as the initializing full single null
-   m_bc_type[RADIAL_INNER] = a_bc.getBCType(LCORE, RADIAL_DIR, 0);
-   m_bc_value[RADIAL_INNER] = a_bc.getBCValue(LCORE, RADIAL_DIR, 0);
-   m_bc_function[RADIAL_INNER] = a_bc.getBCFunction(LCORE, RADIAL_DIR, 0);
+   m_bc_type[RADIAL_INNER] = a_bc.getBCType(SNCoreBlockCoordSys::LCORE, RADIAL_DIR, 0);
+   m_bc_value[RADIAL_INNER] = a_bc.getBCValue(SNCoreBlockCoordSys::LCORE, RADIAL_DIR, 0);
+   m_bc_function[RADIAL_INNER] = a_bc.getBCFunction(SNCoreBlockCoordSys::LCORE, RADIAL_DIR, 0);
 
    // Assume outer radial conditions provided by a grid function
    m_bc_type[RADIAL_OUTER] = a_outer_radial_bc_type;
@@ -68,9 +68,9 @@ SNCoreEllipticOpBC::setBCType( const int  a_block_number,
 
    switch( a_block_number )
       {
-      case M_CORE:
-      case L_CORE:
-      case R_CORE:
+      case SNCoreBlockCoordSys::MCORE:
+      case SNCoreBlockCoordSys::LCORE:
+      case SNCoreBlockCoordSys::RCORE:
          if ( a_dir == RADIAL_DIR ) {
             if ( a_side == 0 ) {
                m_bc_type[RADIAL_INNER] = a_type;
@@ -102,9 +102,9 @@ SNCoreEllipticOpBC::getBCType( const int  a_block_number,
 
    switch( a_block_number )
       {
-      case M_CORE:
-      case L_CORE:
-      case R_CORE:
+      case SNCoreBlockCoordSys::MCORE:
+      case SNCoreBlockCoordSys::LCORE:
+      case SNCoreBlockCoordSys::RCORE:
          if ( a_dir == RADIAL_DIR ) {
             if ( a_side == 0 ) {
                bc_type = m_bc_type[RADIAL_INNER];
@@ -139,9 +139,9 @@ SNCoreEllipticOpBC::setBCValue( const int     a_block_number,
 
    switch( a_block_number )
       {
-      case M_CORE:
-      case L_CORE:
-      case R_CORE:
+      case SNCoreBlockCoordSys::MCORE:
+      case SNCoreBlockCoordSys::LCORE:
+      case SNCoreBlockCoordSys::RCORE:
          if ( a_dir == RADIAL_DIR ) {
             if ( a_side == 0 ) {
                m_bc_value[RADIAL_INNER] = a_value;
@@ -174,9 +174,9 @@ SNCoreEllipticOpBC::getBCValue( const int  a_block_number,
 
    switch( a_block_number )
       {
-      case M_CORE:
-      case L_CORE:
-      case R_CORE:
+      case SNCoreBlockCoordSys::MCORE:
+      case SNCoreBlockCoordSys::LCORE:
+      case SNCoreBlockCoordSys::RCORE:
          if ( a_dir == RADIAL_DIR ) {
             if ( a_side == 0 ) {
                bc_value = m_bc_value[RADIAL_INNER];
@@ -211,9 +211,9 @@ SNCoreEllipticOpBC::setBCFunction( const int                           a_block_n
 
    switch( a_block_number )
       {
-      case M_CORE:
-      case L_CORE:
-      case R_CORE:
+      case SNCoreBlockCoordSys::MCORE:
+      case SNCoreBlockCoordSys::LCORE:
+      case SNCoreBlockCoordSys::RCORE:
          if ( a_dir == RADIAL_DIR ) {
             if ( a_side == 0 ) {
                m_bc_function[RADIAL_INNER] = a_function;
@@ -246,9 +246,9 @@ SNCoreEllipticOpBC::getBCFunction( const int  a_block_number,
 
    switch( a_block_number )
       {
-      case M_CORE:
-      case L_CORE:
-      case R_CORE:
+      case SNCoreBlockCoordSys::MCORE:
+      case SNCoreBlockCoordSys::LCORE:
+      case SNCoreBlockCoordSys::RCORE:
          if ( a_dir == RADIAL_DIR ) {
             if ( a_side == 0 ) {
                function = m_bc_function[RADIAL_INNER];
@@ -289,9 +289,9 @@ SNCoreEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
 
    switch( block_number )
       {
-      case M_CORE:
-      case L_CORE:
-      case R_CORE:
+      case SNCoreBlockCoordSys::MCORE:
+      case SNCoreBlockCoordSys::LCORE:
+      case SNCoreBlockCoordSys::RCORE:
          if ( a_dir == RADIAL_DIR ) {
             if ( a_side == 0 ) {
                function = m_bc_function[RADIAL_INNER];
@@ -314,7 +314,11 @@ SNCoreEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
       }
 
    if ( !function.isNull() ) {
-      function->assign(a_phi, a_geom, a_coord_sys_box, a_time, false);
+      // Get the block id
+      const MultiBlockCoordSys& coord_sys( *(a_geom.coordSysPtr()) );
+      const int block_number( coord_sys.whichBlock( a_coord_sys_box ) );
+      FArrayBox dummy;
+      function->assign(a_phi, a_geom, dummy, dummy, block_number, a_time, false);
    }
    else {
       a_phi.setVal(value);

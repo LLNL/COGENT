@@ -24,11 +24,21 @@
 #define CH_SPACEDIM CFG_DIM
 #include "GridFunctionLibrary.H"
 #include "Constant.H"
+#include "inspect.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
+#undef CH_SPACEDIM
+#include "Slicing.H.transdim"
+#ifdef CH_SPACEDIM
+#undef CH_SPACEDIM
+#endif
+#define CH_SPACEDIM PDIM
+
+
 #include "NamespaceHeader.H"
 
+using namespace CH_MultiDim;
 
 
 MaxwellianKineticFunction::MaxwellianKineticFunction( ParmParse& a_pp,
@@ -91,6 +101,7 @@ void MaxwellianKineticFunction::assign( KineticSpecies& a_species,
    //CH_assert( isPositiveDefinite( injected_vparallel ) );
  
    const LevelData<FArrayBox>& injected_B( geometry.getBFieldMagnitude() );
+   const LevelData<FArrayBox>& real_coords( geometry.getCellCenteredRealCoords() );
 
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       setPointValues( dfn[dit],
@@ -100,6 +111,7 @@ void MaxwellianKineticFunction::assign( KineticSpecies& a_species,
                       injected_temperature[dit],
                       injected_vparallel[dit],
                       injected_B[dit],
+                      real_coords[dit],
                       a_species.mass() );
    }
 
@@ -116,6 +128,13 @@ void MaxwellianKineticFunction::assign( KineticSpecies& a_species,
                                         const BoundaryBoxLayout& a_bdry_layout,
                                         const Real& a_time ) const
 {
+   CH_TIMERS("MaxwellianKineticFunction::assign");
+   CH_TIMER("setPointValues", t_set_point_values);
+   CH_TIMER("initializeDensity", t_initialize_density);
+   CH_TIMER("initializeTemperature", t_initialize_temperature);
+   CH_TIMER("initializeVparallel", t_initialize_vparallel);
+   CH_TIMER("multBStarParallel", t_mult_bstar_parallel);
+
    const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
    checkGeometryValidity( geometry );
 
@@ -123,6 +142,8 @@ void MaxwellianKineticFunction::assign( KineticSpecies& a_species,
    const DisjointBoxLayout& grids( dfn.disjointBoxLayout() );
 
    const LevelData<FArrayBox>& injected_B( geometry.getBFieldMagnitude() );
+   const LevelData<FArrayBox>& real_coords( geometry.getCellCenteredRealCoords() );
+   const LevelData<FArrayBox>& normalized_flux( geometry.getNormalizedMagneticFluxCell() );
 
    // NB: This is a cheat - there's one too many cells at the (dir,side) face
    // of the boundary box, but it doesn't matter because one-sided difference
@@ -130,22 +151,29 @@ void MaxwellianKineticFunction::assign( KineticSpecies& a_species,
    // extra cell in all other directions.
    LevelData<FArrayBox> dfn_tmp( grids, dfn.nComp(), IntVect::Unit );
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
+      const DataIndex& internal_dit( a_bdry_layout.dataIndex( dit ) );
 
       const Box& interior_box( a_bdry_layout.interiorBox( dit ) );
       Box fill_box( dfn_tmp[dit].box() );
       fill_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
 
+      CH_START(t_initialize_density);
       FArrayBox density( fill_box, 1 );
-      initializeField( density, *m_ic_density, geometry, interior_box, a_time );
+      initializeField( density, *m_ic_density, geometry, real_coords[internal_dit], normalized_flux[internal_dit], interior_box, a_time );
+      CH_STOP(t_initialize_density);
 
+      CH_START(t_initialize_temperature);
       FArrayBox temperature( fill_box, 1 );
-      initializeField( temperature, *m_ic_temperature, geometry, interior_box, a_time );
+      initializeField( temperature, *m_ic_temperature, geometry, real_coords[internal_dit], normalized_flux[internal_dit], interior_box, a_time );
+      CH_STOP(t_initialize_temperature);
 
+      CH_START(t_initialize_vparallel);
       FArrayBox vparallel( fill_box, 1 );
-      initializeField( vparallel, *m_ic_vparallel, geometry, interior_box, a_time );
+      initializeField( vparallel, *m_ic_vparallel, geometry, real_coords[internal_dit], normalized_flux[internal_dit], interior_box, a_time );
+      CH_STOP(t_initialize_vparallel);
 
       const PhaseBlockCoordSys& coord_sys( geometry.getBlockCoordSys( interior_box ) );
-      const DataIndex& internal_dit( a_bdry_layout.dataIndex( dit ) );
+      CH_START(t_set_point_values);
       setPointValues( dfn_tmp[dit],
                       fill_box,
                       coord_sys,
@@ -153,9 +181,13 @@ void MaxwellianKineticFunction::assign( KineticSpecies& a_species,
                       temperature,
                       vparallel,
                       injected_B[internal_dit],
+                      real_coords[internal_dit],
                       a_species.mass() );
+      CH_STOP(t_set_point_values);
    }
+   CH_START(t_mult_bstar_parallel);
    geometry.multBStarParallel( dfn_tmp, a_bdry_layout );
+   CH_STOP(t_mult_bstar_parallel);
    
    if ( !(geometry.secondOrder()) )  {
       for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
@@ -226,9 +258,14 @@ inline
 void MaxwellianKineticFunction::initializeField( FArrayBox& a_field,
                                                  const CFG::GridFunction& a_ic,
                                                  const PhaseGeom& a_geometry,
+                                                 const FArrayBox& a_real_coords,
+                                                 const FArrayBox& a_normalized_flux,
                                                  const Box& a_interior_box,
                                                  const Real& a_time ) const
 {
+   CH_TIMERS("MaxwellianKineticFunction::initializeField");
+   CH_TIMER("initializeFieldAssign", t_assign);
+
    const CFG::MultiBlockLevelGeom& mag_geometry( a_geometry.magGeom() );
 
    const Box& box( a_field.box() );
@@ -238,9 +275,44 @@ void MaxwellianKineticFunction::initializeField( FArrayBox& a_field,
    CFG::Box interior_box_cfg;
    a_geometry.projectPhaseToConfiguration( a_interior_box, interior_box_cfg );
 
+   CFG::FArrayBox real_coords_cfg(box_cfg,CFG_DIM);
+
+   // Slice in the mu direction at the low mu coordinate
+   SliceSpec slice_mu(MU_DIR,box.smallEnd(MU_DIR));
+   CP1::FArrayBox temp1;
+   sliceBaseFab((CP1::BaseFab<Real>&)temp1, (BaseFab<Real>&)a_real_coords, slice_mu);
+
+   // Slice in the v_parallel direction at the low v_parallel coordinate
+   CP1::SliceSpec slice_vp(VPARALLEL_DIR,box.smallEnd(VPARALLEL_DIR));
+   CFG::FArrayBox temp2;
+   sliceBaseFab((CFG::BaseFab<Real>&)temp2, (CP1::BaseFab<Real>&)temp1, slice_vp);
+
+   real_coords_cfg.copy(temp2);
+   
+   const Box& flux_box = a_normalized_flux.box();
+
+   CFG::FArrayBox normalized_flux_cfg(box_cfg,1);
+
+   SliceSpec slice_mu2(MU_DIR, flux_box.smallEnd(MU_DIR));
+   CP1::FArrayBox temp3;
+   sliceBaseFab((CP1::BaseFab<Real>&)temp3, (BaseFab<Real>&)a_normalized_flux, slice_mu2);
+
+   // Slice in the v_parallel direction at the low v_parallel coordinate
+   CP1::SliceSpec slice_vp2(VPARALLEL_DIR, flux_box.smallEnd(VPARALLEL_DIR));
+   CFG::FArrayBox temp4;
+   sliceBaseFab((CFG::BaseFab<Real>&)temp4, (CP1::BaseFab<Real>&)temp3, slice_vp2);
+
+   normalized_flux_cfg.copy(temp4);
+
    CFG::FArrayBox cfg_field( box_cfg, 1 );
    const bool cell_average( false );
-   a_ic.assign( cfg_field, mag_geometry, interior_box_cfg, a_time, cell_average );
+   CH_START(t_assign);
+   
+   const CFG::MultiBlockCoordSys& coord_sys( *(mag_geometry.coordSysPtr()) );
+   const int block_number( coord_sys.whichBlock( interior_box_cfg ) );
+   
+   a_ic.assign( cfg_field, mag_geometry, real_coords_cfg, normalized_flux_cfg, block_number, a_time, cell_average );
+   CH_STOP(t_assign);
 
    a_geometry.injectConfigurationToPhase( cfg_field, a_field );
 }
@@ -269,13 +341,14 @@ void MaxwellianKineticFunction::setPointValues(
    const FArrayBox&          a_temperature,
    const FArrayBox&          a_vparallel,
    const FArrayBox&          a_B,
+   const FArrayBox&          a_real_coords,
    const Real&               a_mass ) const
 {
-   FArrayBox cell_center_coords( a_box, PDIM );
-   a_coord_sys.getCellCenteredRealCoords( cell_center_coords );
+   CH_TIME("MaxwellianKineticFunction::setPointValues");
+
    FORT_SET_MAXWELL4D( CHF_FRA(a_dfn),
                        CHF_BOX(a_box),
-                       CHF_CONST_FRA(cell_center_coords),
+                       CHF_CONST_FRA(a_real_coords),
                        CHF_CONST_FRA1(a_density,0),
                        CHF_CONST_FRA1(a_temperature,0),
                        CHF_CONST_FRA1(a_vparallel,0),

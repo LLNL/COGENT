@@ -63,7 +63,12 @@ public:
    void defineBoundaries2();
    void defineBoundaries3();
 
-   int blockType(int block) const {return ((CFG::SNCoreBlockCoordSys*)m_mag_coords->getCoordSys(block))->blockType();}
+   Vector<RealVect> displacements(const Vector<RealVect>&   dstCoords,
+                                  const Vector<int>&        dstBlocks,
+                                  const RealVect&           srcCoords,
+                                  int                       srcBlock) const;
+
+   int blockType(int block) const {return ((CFG::SNCoreBlockCoordSys*)m_mag_coords->getCoordSys(block))->poloidalIndex();}
 
    virtual std::string type() const { return "SNCore"; }
 

@@ -127,6 +127,47 @@ c
 c
       return
       end
+      
+      subroutine fourth_order_odd_bc(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_INTVECT[ng],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[is;js;ks;ls;ms]
+      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3;ibeg4]
+      integer n
+      integer isign
+c
+      isign = 2*iside-1
+
+      CHF_DTERM[
+      ibeg0 = ibdryboxlo0+CHF_ID(idir,0)*((1-iside)*(ng(0)+1)-1);
+      ibeg1 = ibdryboxlo1+CHF_ID(idir,1)*((1-iside)*(ng(1)+1)-1);
+      ibeg2 = ibdryboxlo2+CHF_ID(idir,2)*((1-iside)*(ng(2)+1)-1);
+      ibeg3 = ibdryboxlo3+CHF_ID(idir,3)*((1-iside)*(ng(3)+1)-1);
+      ibeg4 = ibdryboxlo4+CHF_ID(idir,4)*((1-iside)*(ng(4)+1)-1)]
+c
+      do n=0,nfcomp-1
+      CHF_MULTIDO[bdrybox;i;j;k;l;m]
+c
+        CHF_DTERM[
+        is = i + CHF_ID(idir,0)*(2*(ibeg0-i)+isign);
+        js = j + CHF_ID(idir,1)*(2*(ibeg1-j)+isign);
+        ks = k + CHF_ID(idir,2)*(2*(ibeg2-k)+isign);
+        ls = l + CHF_ID(idir,3)*(2*(ibeg3-l)+isign);
+        ms = m + CHF_ID(idir,4)*(2*(ibeg4-m)+isign)]
+c
+        f(CHF_IX[i;j;k;l;m],n) = -f(CHF_IX[is;js;ks;ls;ms],n)
+c
+      CHF_ENDDO
+      enddo
+c
+      return
+      end
 
       subroutine fourth_order_dirichlet_bc(
      &     CHF_FRA[f],
@@ -227,6 +268,7 @@ c
       subroutine second_order_dirichlet_bc(
      &     CHF_FRA[f],
      &     CHF_BOX[bdrybox],
+     &     CHF_CONST_FRA[ghost_data],
      &     CHF_CONST_INT[idir],
      &     CHF_CONST_INT[iside]
      &     )
@@ -277,7 +319,8 @@ c
         iv4 = m+CHF_ID(idir,4)*(ibeg4-m)]
 
 c     *** compute the boundary face value
-        val(n) = (three/two)*f(CHF_IX[iv0;iv1;iv2;iv3;iv4],n) - (one/two)*f(CHF_IX[iv0+i1;iv1+j1;iv2+k1;iv3+l1;iv4+m1],n)
+        val(n) = (three/two)*ghost_data(CHF_IX[iv0;iv1;iv2;iv3;iv4],n) 
+     &         - (one/two)*ghost_data(CHF_IX[iv0+i1;iv1+j1;iv2+k1;iv3+l1;iv4+m1],n)
 
         CHF_DTERM[
         ii = i+CHF_ID(idir,0)*(iside-1)*(2*(i-ibeg0)+ng0);
@@ -295,6 +338,10 @@ c     *** compute the boundary face value
 
         f(CHF_IX[ii;jj;kk;ll;mm],n) = two*(one + gn(idir)) * val(n) 
      &      - (one + two * gn(idir)) * f(CHF_IX[iv0-i1;iv1-j1;iv2-k1;iv3-l1;iv4-m1],n)
+
+c        if (jj.ne.ibeg1) then
+c          f(CHF_IX[ii;jj;kk;ll;mm],n) = 1.0/0.000000000000000000000000001
+c        endif
 
 
       CHF_ENDDO

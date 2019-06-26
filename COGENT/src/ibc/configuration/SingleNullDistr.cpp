@@ -1,41 +1,14 @@
-#include <math.h>
 #include "SingleNullDistr.H"
 
-#include <iostream>
-#include <typeinfo>
-#include <string>
-
-
-#include "DataIterator.H"
 #include "Directions.H"
-#include "DisjointBoxLayout.H"
-#include "FArrayBox.H"
-#include "FourthOrderUtil.H"
-#include "LevelData.H"
-#include "MayDay.H"
 #include "SingleNullCoordSys.H"
-#include "MultiBlockCoordSys.H"
-#include "Vector.H"
 #include "MagGeom.H"
 
 #include "NamespaceHeader.H"
 
-inline
-const MagBlockCoordSys& getCoordSys( const MultiBlockLevelGeom& a_geometry,
-                                     const Box& a_box )
-{
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-   const int block_number( coord_sys.whichBlock( a_box ) );
-   const NewCoordSys* block_coord_sys( coord_sys.getCoordSys( block_number ) );
-   return static_cast<const MagBlockCoordSys&>( *block_coord_sys );
-}
-
-
-SingleNullDistr::SingleNullDistr( //const std::string& a_name,
-                                 ParmParse& a_pp,
+SingleNullDistr::SingleNullDistr(ParmParse& a_pp,
                                  const int& a_verbosity )
-   : //m_name(a_name),
-     m_verbosity(a_verbosity),
+   : GridFunction(a_verbosity),
      m_core_value(1.0),
      m_sep_value(0.5),
      m_pf_value(0.1),
@@ -51,131 +24,6 @@ SingleNullDistr::SingleNullDistr( //const std::string& a_name,
 
 {
    parseParameters( a_pp );
-}
-
-
-void SingleNullDistr::assign( LevelData<FArrayBox>& a_data,
-                              const MultiBlockLevelGeom& a_geometry,
-                              const Real& a_time,
-                              const bool& a_cell_averages ) const
-{
-   checkGeometryValidity( a_geometry );
-
-   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-
-   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
- 
-      int block_number( coord_sys.whichBlock( grids[dit] ) );
-
-      if (a_cell_averages) {
-         setCellAverages( a_data[dit], a_geometry,coord_sys, getCoordSys( a_geometry, grids[dit] ), block_number );
-      }
-      else {
-         setPointwise( a_data[dit], a_geometry, coord_sys, getCoordSys( a_geometry, grids[dit] ), block_number );
-      }
-   }
-   a_data.exchange();
-}
-
-
-void SingleNullDistr::assign( LevelData<FluxBox>& a_data,
-                              const MultiBlockLevelGeom& a_geometry,
-                              const Real& a_time,
-                              const bool& a_cell_averages ) const
-{
-   checkGeometryValidity( a_geometry );
-
-   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-
-   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
- 
-      int block_number( coord_sys.whichBlock( grids[dit] ) );
-
-      if (a_cell_averages) {
-         for (int dir=0; dir<SpaceDim; ++dir) {
-            setCellAverages( a_data[dit][dir], a_geometry,coord_sys, getCoordSys( a_geometry, grids[dit] ), block_number );
-         }
-      }
-      else {
-         for (int dir=0; dir<SpaceDim; ++dir) {
-            setPointwise( a_data[dit][dir], a_geometry, coord_sys, getCoordSys( a_geometry, grids[dit] ), block_number );
-         }
-      }
-   }
-   a_data.exchange();
-}
-
-
-void SingleNullDistr::assign( FArrayBox& a_data,
-                              const MultiBlockLevelGeom& a_geometry,
-                              const Box& a_box, // interior box
-                              const Real& a_time,
-                              const bool& a_cell_averages ) const
-{
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-   const int block_number( coord_sys.whichBlock( a_box ) );
-
-   if (a_cell_averages) {
-      setCellAverages( a_data, a_geometry, coord_sys, getCoordSys( a_geometry, a_box ), block_number );
-   }
-   else {
-      setPointwise( a_data, a_geometry, coord_sys, getCoordSys( a_geometry, a_box ), block_number );
-   }
-}
-
-
-void SingleNullDistr::assign( FluxBox& a_data,
-                              const MultiBlockLevelGeom& a_geometry,
-                              const Box& a_box, // interior box
-                              const Real& a_time,
-                              const bool& a_cell_averages ) const
-{
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-   const int block_number( coord_sys.whichBlock( a_box ) );
-
-   if (a_cell_averages) {
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         setCellAverages( a_data[dir], a_geometry, coord_sys, getCoordSys( a_geometry, a_box ), block_number );
-      }
-   }
-   else {
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         setPointwise( a_data[dir], a_geometry, coord_sys, getCoordSys( a_geometry, a_box ), block_number );
-      }
-   }
-}
-
-
-void SingleNullDistr::assign( LevelData<FArrayBox>& a_data,
-                              const MultiBlockLevelGeom& a_geometry,
-                              const BoundaryBoxLayout& a_bdry_layout,
-                              const Real& a_time ) const
-{
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-
-   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
-   // NB: This is a cheat - there's one too many cells at the (dir,side) face
-   // of the boundary box, but it doesn't matter because one-sided difference
-   // will be used at that face to construct the cell average.  We do want the
-   // extra cell in all other directions.
-   LevelData<FArrayBox> data_tmp( grids, a_data.nComp(), IntVect::Unit );
-   for (DataIterator dit( grids ); dit.ok(); ++dit) {
-      const Box box( a_bdry_layout.interiorBox( dit ) );
-      const MagBlockCoordSys& block_coord_sys( ((MagGeom&)a_geometry).getBlockCoordSys( box ) );
-      const int block_number( coord_sys.whichBlock( box ) );
-
-      setPointwise( data_tmp[dit], a_geometry, coord_sys, block_coord_sys, block_number );
-   }
-   for (DataIterator dit( grids ); dit.ok(); ++dit) {
-      Box domain_box( data_tmp[dit].box() );
-      domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
-      ProblemDomain domain( domain_box );
-      fourthOrderAverageCell( data_tmp[dit], domain, grids[dit] );
-   }
-   data_tmp.copyTo( a_data );
-   a_data.exchange();
 }
 
 
@@ -215,79 +63,56 @@ void SingleNullDistr::checkGeometryValidity( const MultiBlockLevelGeom& a_geomet
    }
 }
 
-
-inline
-void SingleNullDistr::setCellAverages( FArrayBox&        a_data,
-                                       const MultiBlockLevelGeom& a_geometry,
-                                       const MultiBlockCoordSys& a_coords,
-                                       const MagBlockCoordSys&   a_block_coord,
-                                       const int               block_number ) const
-
+void SingleNullDistr::setPointwise(FArrayBox&                 a_data,
+                                   const MultiBlockLevelGeom& a_geometry,
+                                   const FArrayBox&           a_real_coords,
+                                   const FArrayBox&           a_normalized_flux,
+                                   const int                  a_block_number) const
 {
-   Box box( a_data.box() );
-   Box tmp_box( box );
-   tmp_box.grow( IntVect::Unit );
-   FArrayBox tmp( tmp_box, a_data.nComp() );
-
-   setPointwise( tmp, a_geometry, a_coords, a_block_coord, block_number );
-
-   fourthOrderAverageCell( tmp, a_block_coord.domain(), box );
-
-   a_data.copy( tmp, box );
-}
-
-
-inline
-void SingleNullDistr::setPointwise( FArrayBox&          a_data,
-                                    const MultiBlockLevelGeom& a_geometry,
-                                    const MultiBlockCoordSys& a_coords,
-                                    const MagBlockCoordSys&   a_block_coords,
-                                    const int                 block_number)  const
-
-{
-
    const MagGeom& mag_geom = (const MagGeom&) a_geometry;
-    
+   const MultiBlockCoordSys& coords( *(a_geometry.coordSysPtr()) );
+   const MagBlockCoordSys& block_coord_sys = getCoordSys(a_geometry, a_block_number);
+   
    Box box( a_data.box() );
    FArrayBox cell_center_coords( box, SpaceDim );
-   a_block_coords.getCellCenteredMappedCoords( cell_center_coords );
+   block_coord_sys.getCellCenteredMappedCoords( cell_center_coords );
     
    FArrayBox cell_center_real_coords( box, SpaceDim );
-   a_block_coords.getCellCenteredRealCoords( cell_center_real_coords );
+   block_coord_sys.getCellCenteredRealCoords( cell_center_real_coords );
 
 
    //Set the distribution for (LCORE,RCORE,LCSOL,RCSOL,LSOL,RSOL) blocks 
-   if (block_number <= RSOL) { 
+   if (a_block_number <= SingleNullBlockCoordSys::RSOL) {
      BoxIterator bit(box);
      for (bit.begin(); bit.ok(); ++bit) {
        IntVect iv = bit();
 
        RealVect mapped_coord;
        mapped_coord[0] = cell_center_coords (iv,0);
-       mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))
+       mapped_coord[1] = ((const MagBlockCoordSys*)coords.getCoordSys(SingleNullBlockCoordSys::LCORE))
                                  ->lowerMappedCoordinate(1);
 
        //Get a physical Z coordinate at the top of a tokamak corresponding to this flux label  
        Real this_Z;
 
-       if ((block_number == RCORE)||(block_number == LCORE)) {
-         this_Z = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))
+       if ((a_block_number == SingleNullBlockCoordSys::RCORE)||(a_block_number == SingleNullBlockCoordSys::LCORE)) {
+         this_Z = ((const MagBlockCoordSys*)coords.getCoordSys(SingleNullBlockCoordSys::LCORE))
                          ->realCoord(mapped_coord)[1];
        }
 
        else {
-         this_Z = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCSOL))
+         this_Z = ((const MagBlockCoordSys*)coords.getCoordSys(SingleNullBlockCoordSys::LCSOL))
                          ->realCoord(mapped_coord)[1];
        }
          
-       if (m_mag_surf_on && block_number<=RSOL) {
+       if (m_mag_surf_on && a_block_number<=SingleNullBlockCoordSys::RSOL) {
            RealVect real_coord;
            real_coord[0] = cell_center_real_coords(iv,0);
            real_coord[1] = cell_center_real_coords(iv,1);
            this_Z = mag_geom.getMagFS(real_coord);
        }
 
-       a_data(iv,0) = radialCoreSol(this_Z, a_coords);
+       a_data(iv,0) = radialCoreSol(this_Z, coords);
 
      }
    }
@@ -299,14 +124,14 @@ void SingleNullDistr::setPointwise( FArrayBox&          a_data,
        IntVect iv = bit();
        RealVect mapped_coord;
        mapped_coord[0] = cell_center_coords (iv,0);
-       mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LPF))
+       mapped_coord[1] = ((const MagBlockCoordSys*)coords.getCoordSys(SingleNullBlockCoordSys::LPF))
                                  ->lowerMappedCoordinate(1);
 
        //Get a physical Z coordinate at the top of a tokamak corresponding to this flux label  
-       Real this_Z = ((const MagBlockCoordSys*)a_coords.getCoordSys(LPF))
+       Real this_Z = ((const MagBlockCoordSys*)coords.getCoordSys(SingleNullBlockCoordSys::LPF))
                          ->realCoord(mapped_coord)[1];
 
-       a_data(iv,0) = radialPF(this_Z, a_coords);
+       a_data(iv,0) = radialPF(this_Z, coords);
 
      }
 
@@ -322,17 +147,17 @@ Real SingleNullDistr::radialCoreSol(const Real                 a_Z,
    //Get necessary global geometry parameters
    RealVect mapped_coord;
 
-   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->lowerMappedCoordinate(0);
-   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->lowerMappedCoordinate(1);
-   Real Z_core = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->realCoord(mapped_coord)[1];
+   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->lowerMappedCoordinate(0);
+   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->lowerMappedCoordinate(1);
+   Real Z_core = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->realCoord(mapped_coord)[1];
 
-   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->upperMappedCoordinate(0);
-   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->lowerMappedCoordinate(1);
-   Real Z_sep = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->realCoord(mapped_coord)[1];
+   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->upperMappedCoordinate(0);
+   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->lowerMappedCoordinate(1);
+   Real Z_sep = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->realCoord(mapped_coord)[1];
 
-   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCSOL))->upperMappedCoordinate(0);
-   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCSOL))->lowerMappedCoordinate(1);
-   Real Z_sol = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCSOL))->realCoord(mapped_coord)[1];
+   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCSOL))->upperMappedCoordinate(0);
+   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCSOL))->lowerMappedCoordinate(1);
+   Real Z_sol = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCSOL))->realCoord(mapped_coord)[1];
 
    double val;
 
@@ -367,25 +192,25 @@ Real SingleNullDistr::radialPF(const Real                 a_Z,
    //Get necessary global geometry parameters
    RealVect mapped_coord;
 
-   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->upperMappedCoordinate(0);
-   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->upperMappedCoordinate(1);
-   Real Z_xpt = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->realCoord(mapped_coord)[1];
+   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->upperMappedCoordinate(0);
+   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->upperMappedCoordinate(1);
+   Real Z_xpt = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->realCoord(mapped_coord)[1];
 
-   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LPF))->lowerMappedCoordinate(0);
-   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LPF))->lowerMappedCoordinate(1);
-   Real Z_pf = ((const MagBlockCoordSys*)a_coords.getCoordSys(LPF))->realCoord(mapped_coord)[1];
+   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LPF))->lowerMappedCoordinate(0);
+   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LPF))->lowerMappedCoordinate(1);
+   Real Z_pf = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LPF))->realCoord(mapped_coord)[1];
 
-   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->lowerMappedCoordinate(0);
-   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->lowerMappedCoordinate(1);
-   Real Z_core = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->realCoord(mapped_coord)[1];
+   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->lowerMappedCoordinate(0);
+   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->lowerMappedCoordinate(1);
+   Real Z_core = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->realCoord(mapped_coord)[1];
 
-   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->upperMappedCoordinate(0);
-   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->lowerMappedCoordinate(1);
-   Real Z_sep = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCORE))->realCoord(mapped_coord)[1];
+   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->upperMappedCoordinate(0);
+   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->lowerMappedCoordinate(1);
+   Real Z_sep = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCORE))->realCoord(mapped_coord)[1];
 
-   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCSOL))->upperMappedCoordinate(0);
-   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCSOL))->lowerMappedCoordinate(1);
-   Real Z_sol = ((const MagBlockCoordSys*)a_coords.getCoordSys(LCSOL))->realCoord(mapped_coord)[1];
+   mapped_coord[0] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCSOL))->upperMappedCoordinate(0);
+   mapped_coord[1] = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCSOL))->lowerMappedCoordinate(1);
+   Real Z_sol = ((const MagBlockCoordSys*)a_coords.getCoordSys(SingleNullBlockCoordSys::LCSOL))->realCoord(mapped_coord)[1];
 
    double val;
 

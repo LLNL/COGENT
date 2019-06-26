@@ -108,7 +108,7 @@ class SlabBlockCoordSys
                          int dirXi,
                          const Box& box) const;
    
-      virtual Vector<Real> computeBField(const RealVect& a_X) const;
+      virtual array<double,3> computeBField(const RealVect& a_X) const;
 
       virtual void computeFieldData( const int  dir,
                                      FArrayBox& BField,

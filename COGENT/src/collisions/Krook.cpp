@@ -490,7 +490,7 @@ void Krook::addReferenceDfn( KineticSpecies& a_result,
    }
 }
 
-Real Krook::computeDt(const KineticSpeciesPtrVect& soln)
+Real Krook::computeDtExplicitTI(const KineticSpeciesPtrVect& soln, const int a_idx)
 {
    if (m_fixed_cls_freq)  return 1.0/m_cls_freq;
    else {
@@ -505,7 +505,16 @@ Real Krook::computeDt(const KineticSpeciesPtrVect& soln)
    } 
 }
 
-Real Krook::TimeScale(const KineticSpeciesPtrVect& soln)
+Real Krook::computeDtImExTI(const KineticSpeciesPtrVect& soln, const int a_idx)
+{
+  if (m_time_implicit) {
+    return DBL_MAX;
+  } else {
+    return computeDtExplicitTI(soln, a_idx);
+  }
+}
+
+Real Krook::computeTimeScale(const KineticSpeciesPtrVect& soln, const int a_idx)
 {
    if (m_fixed_cls_freq)  return 1.0/m_cls_freq;
    else {

@@ -10,7 +10,8 @@ c  NOTE in this file CH_SPACEDIM is total phase space dimension
      &     CHF_CONST_REAL[larmor],
      &     CHF_CONST_INT[include_drifts],
      &     CHF_CONST_INT[include_par_streaming],
-     &     CHF_CONST_INT[include_gradb],
+     &     CHF_CONST_INT[include_gradB_par_force],
+     &     CHF_CONST_INT[include_mag_drifts],
      &     CHF_CONST_INT[mag_drifts_only],
      &     CHF_CONST_INT[use_field_alignment],
      &     CHF_CONST_FRA[E],
@@ -79,11 +80,6 @@ c     local variables
          do n = 0, 2
             G(n) = -Z * this_E(n)
 
-c            *** this low-pollution option can be used for filed-aligned grids only if Epoloidal = 0 
-c            if (((use_field_alignment .ne. 0) .and. (dir.eq.0)) .or. (mag_drifts_only.ne.0)) then
-c               G(n) = 0.0
-c            endif
-
             if (mag_drifts_only.ne.0) then
                G(n) = 0.0
             endif 
@@ -95,7 +91,7 @@ c            endif
             Bstar_par = Bstar_par + b(n) * Bstar(n)
          enddo
 
-         if (include_gradb .ne. 0) then
+         if (include_mag_drifts .ne. 0) then
             do n = 0, 2
                G(n) = G(n) + half * mu * this_gradB(n)
             enddo
@@ -108,15 +104,17 @@ c        R_dot
          bxG(2) = b(0)*G(1) - b(1)*G(0)
 
          do n = 0, CH_SPACEDIM-3
-            velocity(CHF_AUTOIX[i],n)  = fac*bxG(phys_comp(n)) + vpar * mag_drift_fac(phys_comp(n))
+            velocity(CHF_AUTOIX[i],n)  = fac*bxG(phys_comp(n))
 
-            if (include_par_streaming .ne. 0) then
+            if (include_mag_drifts .ne. 0) then
+               velocity(CHF_AUTOIX[i],n) = velocity(CHF_AUTOIX[i],n) 
+     &              + vpar * mag_drift_fac(phys_comp(n))
+            endif 
+
+
+            if ((include_par_streaming .ne. 0) .and. (.not.((use_field_alignment .ne. 0). and. (dir.ne.1)))) then
                velocity(CHF_AUTOIX[i],n) = velocity(CHF_AUTOIX[i],n) 
      &              + vpar * this_Bvec(phys_comp(n))
-            endif
-
-            if ((use_field_alignment .ne. 0). and. (dir.eq.0)) then
-                velocity(CHF_AUTOIX[i],n)  = fac * bxG(phys_comp(n)) + vpar * mag_drift_fac(phys_comp(n))
             endif
 
             velocity(CHF_AUTOIX[i],n)  = velocity(CHF_AUTOIX[i],n) / Bstar_par
@@ -126,7 +124,13 @@ c        vpar_dot
 
          Bstar_dot_G = zero
          do n = 0, 2
+
             Bstar_dot_G = Bstar_dot_G + Bstar(n) * G(n)
+
+            if (include_gradB_par_force .eq. 0) then
+              Bstar_dot_G = Bstar_dot_G - B(n) * half * mu * this_gradB(n)   
+            endif
+
          enddo
 
          velocity(CHF_AUTOIX[i],CH_SPACEDIM-2) = - Bstar_dot_G / (mass * Bstar_par)

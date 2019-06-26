@@ -84,7 +84,7 @@ class CylindricalBlockCoordSys
                          int dirXi,
                          const Box& box) const;
    
-      virtual Vector<Real> computeBField(const RealVect& a_X) const;
+      virtual array<double,3> computeBField(const RealVect& a_X) const;
 
       virtual void computeFieldData( const int  dir,
                                      FArrayBox& BField,
@@ -94,6 +94,14 @@ class CylindricalBlockCoordSys
                                      FArrayBox& curlBFieldDir,
                                      FArrayBox& BFieldDirdotcurlBFieldDir,
                                      const bool derived_data_only = false ) const;
+									 
+		// pointer to class methods
+		void (CylindricalBlockCoordSys::*calcB)(double R, double Z, double* p_B) const;
+		
+		// magnetic field types: Const, Toroidal, Bennett
+		void calcBConst(double, double, double*) const;
+		void calcBTor(double, double, double*) const;
+		void calcBBennett(double, double, double*) const;
 
       virtual void getMagneticFlux( const FArrayBox& physical_coordinates,
                                     FArrayBox&       magnetic_flux ) const;
@@ -107,8 +115,8 @@ class CylindricalBlockCoordSys
        * Return geometry parameters
        */
 
-      double getRBtoroidal() const {return m_Btor_scale;}
-
+  double getRBtoroidal() const;
+  
       // Object ParmParse name.
       static const std::string pp_name;
 
@@ -122,8 +130,10 @@ class CylindricalBlockCoordSys
 #if CFG_DIM==3
       double m_phimin, m_phimax;
 #endif
-      double m_Btor_scale;
-
+      double m_Btor_scale;	// magnetic constant for toroidal model: B_0*r_0
+      double m_Btor_0;	// magnetic field amplitude for constant and bennett models
+      double m_r0;	// radial size of bennett model
+	  
 };
 
 #include "NamespaceFooter.H"

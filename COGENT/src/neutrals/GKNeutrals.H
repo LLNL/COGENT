@@ -42,7 +42,8 @@ class GKNeutrals
       /**
        * Computes and returns an estimate of the maximum stable time step.
        */
-      Real computeDt( const KineticSpeciesPtrVect& soln );
+      Real computeDtExplicitTI( const KineticSpeciesPtrVect& soln );
+      Real computeDtImExTI( const KineticSpeciesPtrVect& soln );
 
       /// Compute the time scale.
       /**

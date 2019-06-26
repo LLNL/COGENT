@@ -1,10 +1,10 @@
 #include "SingleNullCoordSys.H"
-#include "SingleNullBlockCoordSys.H"
 #include "SingleNullBlockCoordSysModel.H"
 #include "BlockBoundary.H"
 #include "DataArray.H"
 #include "Directions.H"
 #include "CONSTANTS.H"
+#include <float.h>
 
 #include "NamespaceHeader.H"
 
@@ -12,59 +12,80 @@ const std::string SingleNullCoordSys::pp_name = "singlenull";
 
 SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
                                         ParmParse& a_pp_geom )
+   : m_model_geometry(false),
+     m_num_toroidal_blocks(1)
 {
-   readGridParams( a_pp_grid );
+   readGridParams(a_pp_grid);
+   readGeomParams(a_pp_geom);
+
+   int num_blocks = m_num_poloidal_blocks * m_num_toroidal_blocks;
    
-   m_model_geometry = false;
-   a_pp_geom.query( "model_geometry", m_model_geometry);
-
-   int num_blocks = m_original_eight_blocks? 8: NUM_SINGLE_NULL_BLOCKS;
-
    Vector<Box> domain_boxes(num_blocks);
    for ( int block_number=0; block_number<num_blocks; ++block_number ) {
       domain_boxes[block_number] = Box(lo_mapped_index(block_number), hi_mapped_index(block_number));
    }
 
    /*
-     Compute the computational mesh size.  We arbitrarily set the radial and poloidal width
-     of the core computational domain to 1.  This, together with the input number of
-     cells across the core radial and poloidal widths sets the uniform cell size for
-     all of the blocks.  The dimension of the blocks other than the core blocks are thereby
-     determined by the specifed number of cells in those blocks.
+     Compute the computational mesh size.  We arbitrarily set the radial, poloidal and toroidal
+     width of the core computational domain to 1.  This, together with the input number of
+     cells across the core radial, poloidal and toroidal widths sets the uniform cell size for
+     all of the blocks.  The computational domain widths of the blocks other than the core blocks
+     are therefore determined by the specifed number of cells in those blocks.
    */
    int radial_width;
    int core_poloidal_width;
-   if ( num_blocks == 8 ) {
-      radial_width = domain_boxes[LCORE].size(RADIAL_DIR);
-      core_poloidal_width =  domain_boxes[LCORE].size(POLOIDAL_DIR)
-         + domain_boxes[RCORE].size(POLOIDAL_DIR);
+   if ( m_num_poloidal_blocks == 8 ) {
+      radial_width = domain_boxes[SingleNullBlockCoordSys::LCORE].size(RADIAL_DIR);
+      core_poloidal_width =  domain_boxes[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+         + domain_boxes[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR);
    }
    else {
-      radial_width = domain_boxes[MCORE].size(RADIAL_DIR);
-      core_poloidal_width = domain_boxes[MCORE].size(POLOIDAL_DIR)
-         + domain_boxes[LCORE].size(POLOIDAL_DIR)
-         + domain_boxes[RCORE].size(POLOIDAL_DIR);
+      radial_width = domain_boxes[SingleNullBlockCoordSys::MCORE].size(RADIAL_DIR);
+      core_poloidal_width = domain_boxes[SingleNullBlockCoordSys::MCORE].size(POLOIDAL_DIR)
+         + domain_boxes[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+         + domain_boxes[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR);
    }
 
    RealVect dx;
    dx[RADIAL_DIR]   = 1./(double)radial_width;
    dx[POLOIDAL_DIR] = 1./(double)core_poloidal_width;
 
-   for ( int block_number = 0; block_number < num_blocks; ++block_number ) {
-      if (!m_model_geometry) {
-         MagBlockCoordSys* geom = new SingleNullBlockCoordSys( a_pp_geom, ProblemDomain(domain_boxes[block_number]), dx, block_number );
-         m_coord_vec.push_back(geom);
-      }
-      else {
-         MagBlockCoordSys* geom = new SingleNullBlockCoordSysModel( a_pp_geom, ProblemDomain(domain_boxes[block_number]), dx, block_number );
-         m_coord_vec.push_back(geom);
-      }
+   bool is_periodic[SpaceDim];
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      is_periodic[dir] = false;
+   }
 
+#if CFG_DIM==3
+   is_periodic[TOROIDAL_DIR] = true;
+   dx[TOROIDAL_DIR] = m_toroidal_width / (double)m_numcells_toroidal;
+#endif
+
+   for ( int block_number=0, toroidal_index=0; toroidal_index<m_num_toroidal_blocks; ++toroidal_index ) {
+      for ( int poloidal_index=0; poloidal_index<m_num_poloidal_blocks; ++poloidal_index, ++block_number ) {
+         if ( !m_model_geometry ) {
+            SingleNullBlockCoordSys* geom
+               = new SingleNullBlockCoordSys(a_pp_geom,
+                                             ProblemDomain(domain_boxes[block_number], is_periodic),
+                                             dx,
+                                             poloidal_index,
+                                             toroidal_index);
+            geom->readFiles(a_pp_geom);
+            m_coord_vec.push_back(geom);
+         }
+         else {
+            SingleNullBlockCoordSysModel* geom 
+               = new SingleNullBlockCoordSysModel(a_pp_geom,
+                                                  ProblemDomain(domain_boxes[block_number], is_periodic),
+                                                  dx,
+                                                  poloidal_index,
+                                                  toroidal_index);
+            m_coord_vec.push_back(geom);
+         }
+      }
    }
 
    defineCoordSystemsAndBoundaries(m_coord_vec);
 
-   //if (!m_model_geometry) setXPointNeighborhood();
    setXPointNeighborhood();
 
    // Define the boundary conditions for divergence cleaning (whether or not they're used)
@@ -84,9 +105,7 @@ SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
    }
 
    //Checks if the grid cell sizes are continious across block boundaries (assumed for the model geoemtry)
-   if (m_model_geometry) checkGridConsistency();
-   
-   
+   if ( m_model_geometry ) checkGridConsistency();
 }
 
 
@@ -121,165 +140,174 @@ SingleNullCoordSys::defineBoundaries8()
 
    int bc_tag = 0;
 
-   for (int iblock = 0; iblock < numBlocks(); iblock++) {
+   for ( int block_number=0, toroidal_index=0; toroidal_index<m_num_toroidal_blocks; ++toroidal_index ) {
+      for ( int poloidal_index=0; poloidal_index<m_num_poloidal_blocks; ++poloidal_index, ++block_number ) {
 
-      IndicesTransformation it;
-      IntVect shift;
-      Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[iblock];
+         IndicesTransformation it;
+         IntVect shift;
+         Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block_number];
       
+         bool poloidally_truncated;
       
-      int block_type;
-      bool poloidally_truncated;
-      
-      if (m_model_geometry) {
-         const SingleNullBlockCoordSysModel* coord_sys = (const SingleNullBlockCoordSysModel*)m_coordSysVect[iblock];
-         block_type = coord_sys->blockType();
-         poloidally_truncated = coord_sys->truncated();
-      }
-
-      else {
-         const SingleNullBlockCoordSys* coord_sys = (const SingleNullBlockCoordSys*)m_coordSysVect[iblock];
-         block_type = coord_sys->blockType();
-         poloidally_truncated = coord_sys->truncated();
-      }
+         if ( m_model_geometry ) {
+            const SingleNullBlockCoordSysModel* coord_sys = (const SingleNullBlockCoordSysModel*)m_coordSysVect[block_number];
+            poloidally_truncated = coord_sys->truncated();
+         }
+         else {
+            const SingleNullBlockCoordSys* coord_sys = (const SingleNullBlockCoordSys*)m_coordSysVect[block_number];
+            poloidally_truncated = coord_sys->truncated();
+         }
      
-      
-      if( block_type == LCORE ) {
+         if( poloidal_index == SingleNullBlockCoordSys::LCORE ) {
 
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
-         shift = (BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(it,LCSOL);
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
+            shift = (POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LCSOL);
 
-         if ( poloidally_truncated ) {
-           blockBoundaries[POLOIDAL_DIR].define(bc_tag);
+            if ( poloidally_truncated ) {
+               blockBoundaries[POLOIDAL_DIR].define(bc_tag);
+            }
+            else {
+               shift = -POLOIDAL_BLOCK_SEP*(m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                            m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               it.defineFromTranslation(shift);
+               blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::RCORE);
+            }
+            shift = -(POLOIDAL_BLOCK_SEP+1)*(m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+                                             + m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::RCORE);
+         }
+         else if( poloidal_index == SingleNullBlockCoordSys::RCORE ) {
+
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
+            shift = (POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::RCSOL);
+
+            shift = (POLOIDAL_BLOCK_SEP+1)*(m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+                                          + m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::LCORE);
+
+            if ( poloidally_truncated ) {
+               blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
+            }
+            else {
+               shift = POLOIDAL_BLOCK_SEP*(m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                           m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               it.defineFromTranslation(shift);
+               blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LCORE);
+            }
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::LCSOL ) {
+
+            shift = - (POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR].define(it,SingleNullBlockCoordSys::LCORE);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+
+            if ( poloidally_truncated ) {
+               blockBoundaries[POLOIDAL_DIR].define(bc_tag);
+            }
+            else {
+               shift = -POLOIDAL_BLOCK_SEP*(m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                            m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               it.defineFromTranslation(shift);
+               blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::RCSOL);
+            }
+            shift = POLOIDAL_BLOCK_SEP*m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LSOL);
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::RCSOL ) {
+
+            shift = - (POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR].define(it,SingleNullBlockCoordSys::RCORE);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+
+            shift = -POLOIDAL_BLOCK_SEP*m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::RSOL);
+
+            if ( poloidally_truncated ) {
+               blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
+            }
+            else {
+               shift = POLOIDAL_BLOCK_SEP*(m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                           m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               it.defineFromTranslation(shift);
+               blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LCSOL);
+            }
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::LSOL ) {
+
+            shift = - (POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR].define(it,SingleNullBlockCoordSys::LPF);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+
+            shift = -POLOIDAL_BLOCK_SEP*m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::LCSOL);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::RSOL ) {
+            
+            shift = - (POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR].define(it,SingleNullBlockCoordSys::RPF);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+
+            blockBoundaries[POLOIDAL_DIR].define(bc_tag);
+            shift = POLOIDAL_BLOCK_SEP*m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::RCSOL);
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::LPF ) {
+
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
+            shift = (POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LSOL);
+
+            shift = -(2*POLOIDAL_BLOCK_SEP+1)*(m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+                                               + m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::RPF);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::RPF ) {
+
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
+            shift = (POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::RSOL);
+
+            blockBoundaries[POLOIDAL_DIR].define(bc_tag);
+            shift = (2*POLOIDAL_BLOCK_SEP+1)*(m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+                                              + m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LPF);
          }
          else {
-           shift = -BLOCK_SEPARATION*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
-                     m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-           it.defineFromTranslation(shift);
-           blockBoundaries[POLOIDAL_DIR].define(it,RCORE);
-         }
-         shift = -(BLOCK_SEPARATION+1)*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
-                  + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,RCORE);
-      }
-      else if( block_type == RCORE ) {
-
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
-         shift = (BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(it,RCSOL);
-
-         shift = (BLOCK_SEPARATION+1)*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
-                + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,LCORE);
-
-         if ( poloidally_truncated ) {
-           blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
-         }
-         else {
-           shift = BLOCK_SEPARATION*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
-                     m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-           it.defineFromTranslation(shift);
-           blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,LCORE);
-         }
-      }
-      else if ( block_type == LCSOL ) {
-
-         shift = - (BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR].define(it,LCORE);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
-
-         if ( poloidally_truncated ) {
-           blockBoundaries[POLOIDAL_DIR].define(bc_tag);
-         }
-         else {
-           shift = -BLOCK_SEPARATION*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
-                     m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-           it.defineFromTranslation(shift);
-           blockBoundaries[POLOIDAL_DIR].define(it,RCSOL);
-         }
-         shift = BLOCK_SEPARATION*m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,LSOL);
-      }
-      else if ( block_type == RCSOL ) {
-
-         shift = - (BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR].define(it,RCORE);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
-
-         shift = -BLOCK_SEPARATION*m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,RSOL);
-
-         if ( poloidally_truncated ) {
-           blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
-         }
-         else {
-           shift = BLOCK_SEPARATION*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
-                     m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-           it.defineFromTranslation(shift);
-           blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,LCSOL);
-         }
-      }
-      else if ( block_type == LSOL ) {
-
-         shift = - (BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR].define(it,LPF);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
-
-         shift = -BLOCK_SEPARATION*m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,LCSOL);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
-      }
-      else if ( block_type == RSOL ) {
-
-         shift = - (BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR].define(it,RPF);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
-
-         blockBoundaries[POLOIDAL_DIR].define(bc_tag);
-         shift = BLOCK_SEPARATION*m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,RCSOL);
-      }
-      else if ( block_type == LPF ) {
-
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
-         shift = (BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(it,LSOL);
-
-         shift = -(2*BLOCK_SEPARATION+1)*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
-                + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,RPF);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
-      }
-      else if ( block_type == RPF ) {
-
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
-         shift = (BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(RADIAL_DIR)) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(it,RSOL);
-
-         blockBoundaries[POLOIDAL_DIR].define(bc_tag);
-         shift = (2*BLOCK_SEPARATION+1)*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
-                + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,LPF);
-      }
-      else {
             MayDay::Error("SingleNullCoordSys::defineBoundaries(): case not implemented");
+         }
+
+#if CFG_DIM==3
+         if ( m_num_toroidal_blocks == 1 ) {  // Assuming periodic coupling
+            shift = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+            it.defineFromTranslation( shift );
+            blockBoundaries[TOROIDAL_DIR].define( it, block_number );
+            it.defineFromTranslation( -shift );
+            blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number );
+         }
+         else {
+            MayDay::Error("SingleNullCoordSys::defineBoundaries8(): Toroidal block connectivity is not defined");
+         }
+#endif
       }
    }
 }
@@ -298,180 +326,183 @@ SingleNullCoordSys::defineBoundaries10()
 
    int bc_tag = 0;
 
-   for (int iblock = 0; iblock < numBlocks(); iblock++) {
+   for ( int block_number=0, toroidal_index=0; toroidal_index<m_num_toroidal_blocks; ++toroidal_index ) {
+      for ( int poloidal_index=0; poloidal_index<m_num_poloidal_blocks; ++poloidal_index, ++block_number ) {
 
-      IndicesTransformation it;
-      IntVect shift;
-      Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[iblock];
+         IndicesTransformation it;
+         IntVect shift;
+         Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block_number];
 
-      int block_type;
-      
-      if (m_model_geometry) {
-         const SingleNullBlockCoordSysModel* coord_sys = (const SingleNullBlockCoordSysModel*)m_coordSysVect[iblock];
-         block_type = coord_sys->blockType();
-      }
-      
-      else {
-         const SingleNullBlockCoordSys* coord_sys = (const SingleNullBlockCoordSys*)m_coordSysVect[iblock];
-         block_type = coord_sys->blockType();
-       }
-
-      if( block_type == MCORE ) {
+         if( poloidal_index == SingleNullBlockCoordSys::MCORE ) {
          
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
 
-         shift =  (BLOCK_SEPARATION * L0) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(it,MCSOL);
+            shift =  (POLOIDAL_BLOCK_SEP * L0) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::MCSOL);
 
-         shift = -(BLOCK_SEPARATION * rL1 + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,RCORE);
+            shift = -(POLOIDAL_BLOCK_SEP * rL1 + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::RCORE);
 
-         shift =  (BLOCK_SEPARATION * lL1 + m_numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,LCORE);
-      }
-      else if( block_type == LCORE ) {
+            shift =  (POLOIDAL_BLOCK_SEP * lL1 + m_numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LCORE);
+         }
+         else if( poloidal_index == SingleNullBlockCoordSys::LCORE ) {
             
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
 
-         shift = (BLOCK_SEPARATION * L0) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(it,LCSOL);
+            shift = (POLOIDAL_BLOCK_SEP * L0) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LCSOL);
 
-         shift = -(BLOCK_SEPARATION * lL1 + m_numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,MCORE);
+            shift = -(POLOIDAL_BLOCK_SEP * lL1 + m_numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::MCORE);
 
-         shift = -((BLOCK_SEPARATION+1) * (lL1 + rL1)
-                   + m_numcells_lcore_poloidal + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,RCORE);
-      }
-      else if( block_type == RCORE ) {
+            shift = -((POLOIDAL_BLOCK_SEP+1) * (lL1 + rL1)
+                      + m_numcells_lcore_poloidal + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::RCORE);
+         }
+         else if( poloidal_index == SingleNullBlockCoordSys::RCORE ) {
 
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
 
-         shift = (BLOCK_SEPARATION * L0) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(it,RCSOL);
+            shift = (POLOIDAL_BLOCK_SEP * L0) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::RCSOL);
 
-         shift = ((BLOCK_SEPARATION+1) * (lL1 + rL1)
-                  + m_numcells_lcore_poloidal + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,LCORE);
+            shift = ((POLOIDAL_BLOCK_SEP+1) * (lL1 + rL1)
+                     + m_numcells_lcore_poloidal + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::LCORE);
 
-         shift = (BLOCK_SEPARATION * rL1 + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,MCORE);
-      }
-      else if ( block_type == MCSOL ) {
+            shift = (POLOIDAL_BLOCK_SEP * rL1 + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::MCORE);
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::MCSOL ) {
 
-         shift = -(BLOCK_SEPARATION * L0) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR].define(it,MCORE);
+            shift = -(POLOIDAL_BLOCK_SEP * L0) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR].define(it,SingleNullBlockCoordSys::MCORE);
 
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
 
-         shift = -(BLOCK_SEPARATION * rL1 + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,RCSOL);
+            shift = -(POLOIDAL_BLOCK_SEP * rL1 + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::RCSOL);
 
-         shift =  (BLOCK_SEPARATION * lL1 + m_numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,LCSOL);
-      }
-      else if ( block_type == LCSOL ) {
+            shift =  (POLOIDAL_BLOCK_SEP * lL1 + m_numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LCSOL);
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::LCSOL ) {
 
-         shift = -(BLOCK_SEPARATION * L0) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR].define(it,LCORE);
+            shift = -(POLOIDAL_BLOCK_SEP * L0) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR].define(it,SingleNullBlockCoordSys::LCORE);
 
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
 
-         shift = -(BLOCK_SEPARATION * lL1 + m_numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,MCSOL);
+            shift = -(POLOIDAL_BLOCK_SEP * lL1 + m_numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::MCSOL);
 
-         shift =  ((BLOCK_SEPARATION+1) * lL1 - m_numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,LSOL);
-      }
-      else if ( block_type == RCSOL ) {
+            shift =  ((POLOIDAL_BLOCK_SEP+1) * lL1 - m_numcells_lcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LSOL);
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::RCSOL ) {
 
-         shift = -(BLOCK_SEPARATION * L0) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR].define(it,RCORE);
+            shift = -(POLOIDAL_BLOCK_SEP * L0) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR].define(it,SingleNullBlockCoordSys::RCORE);
 
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
 
-         shift = -((BLOCK_SEPARATION+1) * rL1 - m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,RSOL);
+            shift = -((POLOIDAL_BLOCK_SEP+1) * rL1 - m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::RSOL);
 
-         shift = (BLOCK_SEPARATION * rL1 + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,MCSOL);
-      }
-      else if ( block_type == LPF ) {
+            shift = (POLOIDAL_BLOCK_SEP * rL1 + m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::MCSOL);
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::LPF ) {
 
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
 
-         shift = (BLOCK_SEPARATION * L0) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(it,LSOL);
+            shift = (POLOIDAL_BLOCK_SEP * L0) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LSOL);
 
-         shift = -(2*(BLOCK_SEPARATION+1) * (lL1 + rL1))*BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,RPF);
+            shift = -(2*(POLOIDAL_BLOCK_SEP+1) * (lL1 + rL1))*BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::RPF);
 
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
-      }
-      else if ( block_type == RPF ) {
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::RPF ) {
 
-         blockBoundaries[RADIAL_DIR].define(bc_tag);
+            blockBoundaries[RADIAL_DIR].define(bc_tag);
 
-         shift = (BLOCK_SEPARATION * L0) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(it,RSOL);
+            shift = (POLOIDAL_BLOCK_SEP * L0) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::RSOL);
 
-         blockBoundaries[POLOIDAL_DIR].define(bc_tag);
+            blockBoundaries[POLOIDAL_DIR].define(bc_tag);
 
-         shift =  (2*(BLOCK_SEPARATION+1) * (lL1 + rL1))*BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,LPF);
-      }
-      else if ( block_type == LSOL ) {
+            shift =  (2*(POLOIDAL_BLOCK_SEP+1) * (lL1 + rL1))*BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::LPF);
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::LSOL ) {
             
-         shift = -(BLOCK_SEPARATION * L0) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR].define(it,LPF);
+            shift = -(POLOIDAL_BLOCK_SEP * L0) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR].define(it,SingleNullBlockCoordSys::LPF);
 
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
 
-         shift = -((BLOCK_SEPARATION+1) * lL1 - m_numcells_lcore_poloidal ) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR].define(it,LCSOL);
+            shift = -((POLOIDAL_BLOCK_SEP+1) * lL1 - m_numcells_lcore_poloidal ) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR].define(it,SingleNullBlockCoordSys::LCSOL);
 
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
-      }
-      else if ( block_type == RSOL ) {
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(bc_tag);
+         }
+         else if ( poloidal_index == SingleNullBlockCoordSys::RSOL ) {
 
-         shift = -(BLOCK_SEPARATION * L0) * BASISV(RADIAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[RADIAL_DIR].define(it,RPF);
-         
-         blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
+            shift = -(POLOIDAL_BLOCK_SEP * L0) * BASISV(RADIAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[RADIAL_DIR].define(it,SingleNullBlockCoordSys::RPF);
+            
+            blockBoundaries[RADIAL_DIR + SpaceDim].define(bc_tag);
 
-         blockBoundaries[POLOIDAL_DIR].define(bc_tag);
+            blockBoundaries[POLOIDAL_DIR].define(bc_tag);
 
-         shift = ((BLOCK_SEPARATION+1) * rL1 - m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
-         it.defineFromTranslation(shift);
-         blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,RCSOL);
-      }
-      else {
-         MayDay::Error("SingleNullCoordSys::defineBoundaries(): case not implemented");
+            shift = ((POLOIDAL_BLOCK_SEP+1) * rL1 - m_numcells_rcore_poloidal) * BASISV(POLOIDAL_DIR);
+            it.defineFromTranslation(shift);
+            blockBoundaries[POLOIDAL_DIR + SpaceDim].define(it,SingleNullBlockCoordSys::RCSOL);
+         }
+         else {
+            MayDay::Error("SingleNullCoordSys::defineBoundaries(): case not implemented");
+         }
+
+#if CFG_DIM==3
+         if ( m_num_toroidal_blocks == 1 ) {  // Assuming periodic coupling
+            shift = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+            it.defineFromTranslation( shift );
+            blockBoundaries[TOROIDAL_DIR].define( it, block_number );
+            it.defineFromTranslation( -shift );
+            blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number );
+         }
+         else {
+            MayDay::Error("SingleNullCoordSys::defineBoundaries10(): Toroidal block connectivity is not defined");
+         }
+#endif
       }
    }
 }
@@ -501,19 +532,20 @@ SingleNullCoordSys::blockRemapping8(RealVect&       a_xi_valid,
 {
    const SingleNullBlockCoordSys* src_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nSrc);
 
-   if ( src_coord_sys->isValid(a_xiSrc) ) {
+   if ( src_coord_sys->isValid(a_xiSrc, true) ) {
       a_n_valid = a_nSrc;
       a_xi_valid = a_xiSrc;
    }
    else {
 
       RealVect X = src_coord_sys->realCoord(a_xiSrc);
+      POL::RealVect X_pol = src_coord_sys->restrictPhysCoordToPoloidal(X);
 
-      RealVect XminusXpt = X - m_Xpoint;
+      POL::RealVect XminusXpt = X_pol - m_Xpoint;
       double distance_to_Xpt = XminusXpt.vectorLength();
 
       if ( distance_to_Xpt < m_xpoint_radius ) {
-         a_n_valid = findBlockNearXpt(X);
+         a_n_valid = findBlockNearXpt(X_pol);
       }
       else {
 
@@ -525,158 +557,158 @@ SingleNullCoordSys::blockRemapping8(RealVect&       a_xi_valid,
 
          switch (a_nSrc)
             {
-            case LCORE:
-               if ( a_xiSrc[0] < lo_mapped_radial ||
-                    (a_xiSrc[1] < lo_mapped_poloidal && poloidally_truncated) ) {
+            case SingleNullBlockCoordSys::LCORE:
+               if ( a_xiSrc[RADIAL_DIR] < lo_mapped_radial ||
+                    (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal && poloidally_truncated) ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] > hi_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = LSOL;
+               else if (a_xiSrc[RADIAL_DIR] > hi_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LSOL;
                   }
-                  else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = RCSOL;
+                  else if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RCSOL;
                   }
                   else {
-                     a_n_valid = LCSOL;
+                     a_n_valid = SingleNullBlockCoordSys::LCSOL;
                   }
                }
                else {
-                  a_n_valid = RCORE;
+                  a_n_valid = SingleNullBlockCoordSys::RCORE;
                }
                break;
-            case RCORE:
-               if ( a_xiSrc[0] < lo_mapped_radial ||
-                    (a_xiSrc[1] > hi_mapped_poloidal && poloidally_truncated) ) {
+            case SingleNullBlockCoordSys::RCORE:
+               if ( a_xiSrc[RADIAL_DIR] < lo_mapped_radial ||
+                    (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal && poloidally_truncated) ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] > hi_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = LCSOL;
+               else if (a_xiSrc[RADIAL_DIR] > hi_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LCSOL;
                   }
-                  else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = RSOL;
+                  else if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RSOL;
                   }
                   else {
-                     a_n_valid = RCSOL;
+                     a_n_valid = SingleNullBlockCoordSys::RCSOL;
                   }
                }
                else {
-                  a_n_valid = LCORE;
+                  a_n_valid = SingleNullBlockCoordSys::LCORE;
                }
                break;
-            case LCSOL:
-               if ( a_xiSrc[0] > hi_mapped_radial ||
-                    (a_xiSrc[1] < lo_mapped_poloidal && poloidally_truncated) ) {
+            case SingleNullBlockCoordSys::LCSOL:
+               if ( a_xiSrc[RADIAL_DIR] > hi_mapped_radial ||
+                    (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal && poloidally_truncated) ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] < lo_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = LPF;
+               else if (a_xiSrc[RADIAL_DIR] < lo_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LPF;
                   }
-                  else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = RCORE;
+                  else if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RCORE;
                   }
                   else {
-                     a_n_valid = LCORE;
+                     a_n_valid = SingleNullBlockCoordSys::LCORE;
                   }
                }
-               else if (a_xiSrc[1] > hi_mapped_poloidal) {
-                  a_n_valid = LSOL;
+               else if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                  a_n_valid = SingleNullBlockCoordSys::LSOL;
                }
                else {
-                  a_n_valid = RCSOL;
+                  a_n_valid = SingleNullBlockCoordSys::RCSOL;
                }
                break;
-            case RCSOL:
-               if ( a_xiSrc[0] > hi_mapped_radial ||
-                    (a_xiSrc[1] > hi_mapped_poloidal && poloidally_truncated) ) {
+            case SingleNullBlockCoordSys::RCSOL:
+               if ( a_xiSrc[RADIAL_DIR] > hi_mapped_radial ||
+                    (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal && poloidally_truncated) ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] < lo_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = LCORE;
+               else if (a_xiSrc[RADIAL_DIR] < lo_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LCORE;
                   }
-                  else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = RPF;
-                  }
-                  else {
-                     a_n_valid = RCORE;
-                  }
-               }
-               else if (a_xiSrc[1] > hi_mapped_poloidal) {
-                  a_n_valid = LCSOL;
-               }
-               else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                  a_n_valid = RSOL;
-               }
-               break;
-            case LSOL:
-               if ( a_xiSrc[0] > hi_mapped_radial ||
-                    a_xiSrc[1] > hi_mapped_poloidal ) {
-                  a_n_valid = -1;
-               }
-               else if (a_xiSrc[0] < lo_mapped_radial) {
-                  if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = LCORE;
+                  else if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RPF;
                   }
                   else {
-                     a_n_valid = LPF;
+                     a_n_valid = SingleNullBlockCoordSys::RCORE;
                   }
+               }
+               else if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                  a_n_valid = SingleNullBlockCoordSys::LCSOL;
                }
                else {
-                  a_n_valid = LCSOL;
+                  a_n_valid = SingleNullBlockCoordSys::RSOL;
                }
                break;
-            case RSOL:
-               if ( a_xiSrc[0] > hi_mapped_radial ||
-                    a_xiSrc[1] < lo_mapped_poloidal ) {
+            case SingleNullBlockCoordSys::LSOL:
+               if ( a_xiSrc[RADIAL_DIR] > hi_mapped_radial ||
+                    a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] < lo_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = RCORE;
+               else if (a_xiSrc[RADIAL_DIR] < lo_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LCORE;
                   }
                   else {
-                     a_n_valid = RPF;
+                     a_n_valid = SingleNullBlockCoordSys::LPF;
                   }
                }
                else {
-                  a_n_valid = RCSOL;
+                  a_n_valid = SingleNullBlockCoordSys::LCSOL;
                }
                break;
-            case LPF:
-               if ( a_xiSrc[0] < lo_mapped_radial ||
-                    a_xiSrc[1] > hi_mapped_poloidal ) {
+            case SingleNullBlockCoordSys::RSOL:
+               if ( a_xiSrc[RADIAL_DIR] > hi_mapped_radial ||
+                    a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] > hi_mapped_radial) {
-                  if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = LCSOL;
+               else if (a_xiSrc[RADIAL_DIR] < lo_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RCORE;
                   }
                   else {
-                     a_n_valid = LSOL;
+                     a_n_valid = SingleNullBlockCoordSys::RPF;
                   }
                }
                else {
-                  a_n_valid = RPF;
+                  a_n_valid = SingleNullBlockCoordSys::RCSOL;
                }
                break;
-            case RPF:
-               if ( a_xiSrc[0] < lo_mapped_radial ||
-                    a_xiSrc[1] < lo_mapped_poloidal ) {
+            case SingleNullBlockCoordSys::LPF:
+               if ( a_xiSrc[RADIAL_DIR] < lo_mapped_radial ||
+                    a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] > hi_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = RCSOL;
+               else if (a_xiSrc[RADIAL_DIR] > hi_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LCSOL;
                   }
                   else {
-                     a_n_valid = RSOL;
+                     a_n_valid = SingleNullBlockCoordSys::LSOL;
                   }
                }
                else {
-                  a_n_valid = LPF;
+                  a_n_valid = SingleNullBlockCoordSys::RPF;
+               }
+               break;
+            case SingleNullBlockCoordSys::RPF:
+               if ( a_xiSrc[RADIAL_DIR] < lo_mapped_radial ||
+                    a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal ) {
+                  a_n_valid = -1;
+               }
+               else if (a_xiSrc[RADIAL_DIR] > hi_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RCSOL;
+                  }
+                  else {
+                     a_n_valid = SingleNullBlockCoordSys::RSOL;
+                  }
+               }
+               else {
+                  a_n_valid = SingleNullBlockCoordSys::LPF;
                }
                break;
             default:
@@ -691,56 +723,56 @@ SingleNullCoordSys::blockRemapping8(RealVect&       a_xi_valid,
          a_xi_valid = valid_cs->mappedCoord(X);
 
          // Check that the point is actually valid
-         if ( !valid_cs->isValid(a_xi_valid) ) {
+         if ( !valid_cs->isValid(a_xi_valid, true) ) {
 
             if (distance_to_Xpt < m_xpoint_radius) {
 
                // If we've arrived here, it's because the separatrix isn't perfectly straight
                // in the X point neighborhood, as was assumed in findBlock().  We therefore
-               // have to deal with the special cases.
+               // have to deal with the individual cases.
 
                int n_valid_new = a_n_valid;
 
                switch ( a_n_valid )
                   {
-                  case LCORE:
+                  case SingleNullBlockCoordSys::LCORE:
                      if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = LCSOL;
+                        n_valid_new = SingleNullBlockCoordSys::LCSOL;
                      }
                      break;
-                  case LCSOL:
+                  case SingleNullBlockCoordSys::LCSOL:
                      if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = LCORE;
+                        n_valid_new = SingleNullBlockCoordSys::LCORE;
                      }
                      break;
-                  case RCORE:
+                  case SingleNullBlockCoordSys::RCORE:
                      if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = RCSOL;
+                        n_valid_new = SingleNullBlockCoordSys::RCSOL;
                      }
                      break;
-                  case RCSOL:
+                  case SingleNullBlockCoordSys::RCSOL:
                      if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = RCORE;
+                        n_valid_new = SingleNullBlockCoordSys::RCORE;
                      }
                      break;
-                  case LPF:
+                  case SingleNullBlockCoordSys::LPF:
                      if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = LSOL;
+                        n_valid_new = SingleNullBlockCoordSys::LSOL;
                      }
                      break;
-                  case LSOL:
+                  case SingleNullBlockCoordSys::LSOL:
                      if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = LPF;
+                        n_valid_new = SingleNullBlockCoordSys::LPF;
                      }
                      break;
-                  case RPF:
+                  case SingleNullBlockCoordSys::RPF:
                      if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = RSOL;
+                        n_valid_new = SingleNullBlockCoordSys::RSOL;
                      }
                      break;
-                  case RSOL:
+                  case SingleNullBlockCoordSys::RSOL:
                      if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = RPF;
+                        n_valid_new = SingleNullBlockCoordSys::RPF;
                      }
                      break;
                   default:
@@ -755,24 +787,30 @@ SingleNullCoordSys::blockRemapping8(RealVect&       a_xi_valid,
                   a_xi_valid = new_valid_cs->mappedCoord(X);
                   a_n_valid = n_valid_new;
 
-                  if ( !new_valid_cs->isValid(a_xi_valid) ) {
+                  if ( !new_valid_cs->isValid(a_xi_valid, true) ) {
 #ifndef MODEL_GEOM
 		    printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, new_valid_cs);
-                    //                    exit(1);
 #endif
                   }
                }
 #endif
             }
             else {
-#if 0
 	            printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, valid_cs);
-                    //                    exit(1);
-#endif
-        }
+            }
+         }
       }
-    }
-  }
+
+#if CFG_DIM==3
+      while ( a_xi_valid[TOROIDAL_DIR] < 0. ) {
+         a_xi_valid[TOROIDAL_DIR] += m_toroidal_width;
+      }
+      while ( a_xi_valid[TOROIDAL_DIR] > m_toroidal_width ) {
+         a_xi_valid[TOROIDAL_DIR] -= m_toroidal_width;
+      }
+#endif
+
+   }  // end of invalid point
 }
 
 
@@ -785,19 +823,20 @@ SingleNullCoordSys::blockRemapping10( RealVect&       a_xi_valid,
 {
    const SingleNullBlockCoordSys* src_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nSrc);
 
-   if ( src_coord_sys->isValid(a_xiSrc) ) {
+   if ( src_coord_sys->isValid(a_xiSrc, true) ) {
       a_n_valid = a_nSrc;
       a_xi_valid = a_xiSrc;
    }
    else {
 
       RealVect X = src_coord_sys->realCoord(a_xiSrc);
+      POL::RealVect X_pol = src_coord_sys->restrictPhysCoordToPoloidal(X);
 
-      RealVect XminusXpt = X - m_Xpoint;
+      POL::RealVect XminusXpt = X_pol - m_Xpoint;
       double distance_to_Xpt = XminusXpt.vectorLength();
 
       if ( distance_to_Xpt < m_xpoint_radius ) {
-         a_n_valid = findBlockNearXpt(X);
+         a_n_valid = findBlockNearXpt(X_pol);
       }
       else {
 
@@ -809,215 +848,215 @@ SingleNullCoordSys::blockRemapping10( RealVect&       a_xi_valid,
 
          switch (a_nSrc)
             {
-            case MCORE:
-               if ( a_xiSrc[0] < lo_mapped_radial ) {
+            case SingleNullBlockCoordSys::MCORE:
+               if ( a_xiSrc[RADIAL_DIR] < lo_mapped_radial ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] > hi_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = LCSOL;
+               else if (a_xiSrc[RADIAL_DIR] > hi_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LCSOL;
                   }
-                  else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = RCSOL;
+                  else if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RCSOL;
                   }
                   else {
-                     a_n_valid = MCSOL;
+                     a_n_valid = SingleNullBlockCoordSys::MCSOL;
                   }
                }
                else {
-                  if ( a_xiSrc[1] > hi_mapped_poloidal ) {
-                     a_n_valid = LCORE;
+                  if ( a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal ) {
+                     a_n_valid = SingleNullBlockCoordSys::LCORE;
                   }
                   else {
-                     a_n_valid = RCORE;
+                     a_n_valid = SingleNullBlockCoordSys::RCORE;
                   }
                }
                break;
-            case LCORE:
-               if ( a_xiSrc[0] < lo_mapped_radial ||
-                    (a_xiSrc[1] < lo_mapped_poloidal && poloidally_truncated) ) {
+            case SingleNullBlockCoordSys::LCORE:
+               if ( a_xiSrc[RADIAL_DIR] < lo_mapped_radial ||
+                    (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal && poloidally_truncated) ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] > hi_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = LSOL;
+               else if (a_xiSrc[RADIAL_DIR] > hi_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LSOL;
                   }
-                  else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = MCSOL;
+                  else if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::MCSOL;
                   }
                   else {
-                     a_n_valid = LCSOL;
+                     a_n_valid = SingleNullBlockCoordSys::LCSOL;
                   }
                }
                else {
-                  if ( a_xiSrc[1] > hi_mapped_poloidal ) {
-                     a_n_valid = RCORE;
+                  if ( a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal ) {
+                     a_n_valid = SingleNullBlockCoordSys::RCORE;
                   }
                   else {
-                     a_n_valid = MCORE;
+                     a_n_valid = SingleNullBlockCoordSys::MCORE;
                   }
                }
                break;
-            case RCORE:
-               if ( a_xiSrc[0] < lo_mapped_radial ||
-                    (a_xiSrc[1] > hi_mapped_poloidal && poloidally_truncated) ) {
+            case SingleNullBlockCoordSys::RCORE:
+               if ( a_xiSrc[RADIAL_DIR] < lo_mapped_radial ||
+                    (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal && poloidally_truncated) ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] > hi_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = MCSOL;
+               else if (a_xiSrc[RADIAL_DIR] > hi_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::MCSOL;
                   }
-                  else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = RSOL;
+                  else if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RSOL;
                   }
                   else {
-                     a_n_valid = RCSOL;
+                     a_n_valid = SingleNullBlockCoordSys::RCSOL;
                   }
                }
                else {
-                  if ( a_xiSrc[1] > hi_mapped_poloidal ) {
-                     a_n_valid = MCORE;
+                  if ( a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal ) {
+                     a_n_valid = SingleNullBlockCoordSys::MCORE;
                   }
                   else {
-                     a_n_valid = LCORE;
+                     a_n_valid = SingleNullBlockCoordSys::LCORE;
                   }
                }
                break;
-            case MCSOL:
-               if ( a_xiSrc[0] > hi_mapped_radial ||
-                    (a_xiSrc[1] < lo_mapped_poloidal && poloidally_truncated) ) {
+            case SingleNullBlockCoordSys::MCSOL:
+               if ( a_xiSrc[RADIAL_DIR] > hi_mapped_radial ||
+                    (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal && poloidally_truncated) ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] < lo_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = LCORE;
+               else if (a_xiSrc[RADIAL_DIR] < lo_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LCORE;
                   }
-                  else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = RCORE;
+                  else if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RCORE;
                   }
                   else {
-                     a_n_valid = MCORE;
+                     a_n_valid = SingleNullBlockCoordSys::MCORE;
                   }
                }
-               else if (a_xiSrc[1] > hi_mapped_poloidal) {
-                  a_n_valid = LCSOL;
+               else if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                  a_n_valid = SingleNullBlockCoordSys::LCSOL;
                }
                else {
-                  a_n_valid = RCSOL;
+                  a_n_valid = SingleNullBlockCoordSys::RCSOL;
                }
                break;
-            case LCSOL:
-               if ( a_xiSrc[0] > hi_mapped_radial ||
-                    (a_xiSrc[1] < lo_mapped_poloidal && poloidally_truncated) ) {
+            case SingleNullBlockCoordSys::LCSOL:
+               if ( a_xiSrc[RADIAL_DIR] > hi_mapped_radial ||
+                    (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal && poloidally_truncated) ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] < lo_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = LPF;
+               else if (a_xiSrc[RADIAL_DIR] < lo_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LPF;
                   }
-                  else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = MCORE;
+                  else if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::MCORE;
                   }
                   else {
-                     a_n_valid = LCORE;
+                     a_n_valid = SingleNullBlockCoordSys::LCORE;
                   }
                }
-               else if (a_xiSrc[1] > hi_mapped_poloidal) {
-                  a_n_valid = LSOL;
+               else if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                  a_n_valid = SingleNullBlockCoordSys::LSOL;
                }
                else {
-                  a_n_valid = MCSOL;
+                  a_n_valid = SingleNullBlockCoordSys::MCSOL;
                }
                break;
-            case RCSOL:
-               if ( a_xiSrc[0] > hi_mapped_radial ||
-                    (a_xiSrc[1] > hi_mapped_poloidal && poloidally_truncated) ) {
+            case SingleNullBlockCoordSys::RCSOL:
+               if ( a_xiSrc[RADIAL_DIR] > hi_mapped_radial ||
+                    (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal && poloidally_truncated) ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] < lo_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = MCORE;
+               else if (a_xiSrc[RADIAL_DIR] < lo_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::MCORE;
                   }
-                  else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = RPF;
-                  }
-                  else {
-                     a_n_valid = RCORE;
-                  }
-               }
-               else if (a_xiSrc[1] > hi_mapped_poloidal) {
-                  a_n_valid = MCSOL;
-               }
-               else if (a_xiSrc[1] < lo_mapped_poloidal) {
-                  a_n_valid = RSOL;
-               }
-               break;
-            case LSOL:
-               if ( a_xiSrc[0] > hi_mapped_radial ||
-                    a_xiSrc[1] > hi_mapped_poloidal ) {
-                  a_n_valid = -1;
-               }
-               else if (a_xiSrc[0] < lo_mapped_radial) {
-                  if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = LCORE;
+                  else if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RPF;
                   }
                   else {
-                     a_n_valid = LPF;
+                     a_n_valid = SingleNullBlockCoordSys::RCORE;
                   }
+               }
+               else if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                  a_n_valid = SingleNullBlockCoordSys::MCSOL;
                }
                else {
-                  a_n_valid = LCSOL;
+                  a_n_valid = SingleNullBlockCoordSys::RSOL;
                }
                break;
-            case RSOL:
-               if ( a_xiSrc[0] > hi_mapped_radial ||
-                    a_xiSrc[1] < lo_mapped_poloidal ) {
+            case SingleNullBlockCoordSys::LSOL:
+               if ( a_xiSrc[RADIAL_DIR] > hi_mapped_radial ||
+                    a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] < lo_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = RCORE;
+               else if (a_xiSrc[RADIAL_DIR] < lo_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LCORE;
                   }
                   else {
-                     a_n_valid = RPF;
+                     a_n_valid = SingleNullBlockCoordSys::LPF;
                   }
                }
                else {
-                  a_n_valid = RCSOL;
+                  a_n_valid = SingleNullBlockCoordSys::LCSOL;
                }
                break;
-            case LPF:
-               if ( a_xiSrc[0] < lo_mapped_radial ||
-                    a_xiSrc[1] > hi_mapped_poloidal ) {
+            case SingleNullBlockCoordSys::RSOL:
+               if ( a_xiSrc[RADIAL_DIR] > hi_mapped_radial ||
+                    a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] > hi_mapped_radial) {
-                  if (a_xiSrc[1] < lo_mapped_poloidal) {
-                     a_n_valid = LCSOL;
+               else if (a_xiSrc[RADIAL_DIR] < lo_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RCORE;
                   }
                   else {
-                     a_n_valid = LSOL;
+                     a_n_valid = SingleNullBlockCoordSys::RPF;
                   }
                }
                else {
-                  a_n_valid = RPF;
+                  a_n_valid = SingleNullBlockCoordSys::RCSOL;
                }
                break;
-            case RPF:
-               if ( a_xiSrc[0] < lo_mapped_radial ||
-                    a_xiSrc[1] < lo_mapped_poloidal ) {
+            case SingleNullBlockCoordSys::LPF:
+               if ( a_xiSrc[RADIAL_DIR] < lo_mapped_radial ||
+                    a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal ) {
                   a_n_valid = -1;
                }
-               else if (a_xiSrc[0] > hi_mapped_radial) {
-                  if (a_xiSrc[1] > hi_mapped_poloidal) {
-                     a_n_valid = RCSOL;
+               else if (a_xiSrc[RADIAL_DIR] > hi_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::LCSOL;
                   }
                   else {
-                     a_n_valid = RSOL;
+                     a_n_valid = SingleNullBlockCoordSys::LSOL;
                   }
                }
                else {
-                  a_n_valid = LPF;
+                  a_n_valid = SingleNullBlockCoordSys::RPF;
+               }
+               break;
+            case SingleNullBlockCoordSys::RPF:
+               if ( a_xiSrc[RADIAL_DIR] < lo_mapped_radial ||
+                    a_xiSrc[POLOIDAL_DIR] < lo_mapped_poloidal ) {
+                  a_n_valid = -1;
+               }
+               else if (a_xiSrc[RADIAL_DIR] > hi_mapped_radial) {
+                  if (a_xiSrc[POLOIDAL_DIR] > hi_mapped_poloidal) {
+                     a_n_valid = SingleNullBlockCoordSys::RCSOL;
+                  }
+                  else {
+                     a_n_valid = SingleNullBlockCoordSys::RSOL;
+                  }
+               }
+               else {
+                  a_n_valid = SingleNullBlockCoordSys::LPF;
                }
                break;
             default:
@@ -1032,16 +1071,16 @@ SingleNullCoordSys::blockRemapping10( RealVect&       a_xi_valid,
          a_xi_valid = valid_cs->mappedCoord(X);
 
          // Check that the point is actually valid
-         if ( !valid_cs->isValid(a_xi_valid) ) {
+         if ( !valid_cs->isValid(a_xi_valid, true) ) {
 
-            if (a_n_valid == MCORE) {
-               cout << "Invalid MCORE point = " << a_xi_valid << endl;
-               exit(1);
+            if (a_n_valid == SingleNullBlockCoordSys::MCORE) {
+               //               cout << "Invalid MCORE point = " << a_xi_valid << endl;
+               //               exit(1);
             }
 
-            if (a_n_valid == MCSOL) {
-               cout << "Invalid MCSOL point = " << a_xi_valid << endl;
-               exit(1);
+            if (a_n_valid == SingleNullBlockCoordSys::MCSOL) {
+               //               cout << "Invalid MCSOL point = " << a_xi_valid << endl;
+               //               exit(1);
             }
 
             if (distance_to_Xpt < m_xpoint_radius) {
@@ -1055,55 +1094,55 @@ SingleNullCoordSys::blockRemapping10( RealVect&       a_xi_valid,
                switch ( a_n_valid )
                   {
 #if 0
-                  case MCORE:
+                  case SingleNullBlockCoordSys::MCORE:
                      if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = MCSOL;
+                        n_valid_new = SingleNullBlockCoordSys::MCSOL;
                      }
                      break;
-                  case MCSOL:
+                  case SingleNullBlockCoordSys::MCSOL:
                      if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = MCORE;
+                        n_valid_new = SingleNullBlockCoordSys::MCORE;
                      }
                      break;
 #endif
-                  case LCORE:
+                  case SingleNullBlockCoordSys::LCORE:
                      if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = LCSOL;
+                        n_valid_new = SingleNullBlockCoordSys::LCSOL;
                      }
                      break;
-                  case LCSOL:
+                  case SingleNullBlockCoordSys::LCSOL:
                      if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = LCORE;
+                        n_valid_new = SingleNullBlockCoordSys::LCORE;
                      }
                      break;
-                  case RCORE:
+                  case SingleNullBlockCoordSys::RCORE:
                      if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = RCSOL;
+                        n_valid_new = SingleNullBlockCoordSys::RCSOL;
                      }
                      break;
-                  case RCSOL:
+                  case SingleNullBlockCoordSys::RCSOL:
                      if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = RCORE;
+                        n_valid_new = SingleNullBlockCoordSys::RCORE;
                      }
                      break;
-                  case LPF:
+                  case SingleNullBlockCoordSys::LPF:
                      if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = LSOL;
+                        n_valid_new = SingleNullBlockCoordSys::LSOL;
                      }
                      break;
-                  case LSOL:
+                  case SingleNullBlockCoordSys::LSOL:
                      if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = LPF;
+                        n_valid_new = SingleNullBlockCoordSys::LPF;
                      }
                      break;
-                  case RPF:
+                  case SingleNullBlockCoordSys::RPF:
                      if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = RSOL;
+                        n_valid_new = SingleNullBlockCoordSys::RSOL;
                      }
                      break;
-                  case RSOL:
+                  case SingleNullBlockCoordSys::RSOL:
                      if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_new = RPF;
+                        n_valid_new = SingleNullBlockCoordSys::RPF;
                      }
                      break;
                   default:
@@ -1118,10 +1157,9 @@ SingleNullCoordSys::blockRemapping10( RealVect&       a_xi_valid,
                   a_xi_valid = new_valid_cs->mappedCoord(X);
                   a_n_valid = n_valid_new;
 
-                  if ( !new_valid_cs->isValid(a_xi_valid) ) {
+                  if ( !new_valid_cs->isValid(a_xi_valid, true) ) {
 #ifndef MODEL_GEOM
 		      printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, new_valid_cs);
-                     //              exit(1);
 #endif
                   }
                }
@@ -1131,12 +1169,21 @@ SingleNullCoordSys::blockRemapping10( RealVect&       a_xi_valid,
 #if 1
 #ifndef MODEL_GEOM
                      printInvalidPointDiagnostics(a_nSrc, a_xiSrc, X, a_xi_valid, a_n_valid, src_coord_sys, valid_cs);
-               //      exit(1);
 #endif
 #endif
             }
          }
       }
+
+#if CFG_DIM==3
+      while ( a_xi_valid[TOROIDAL_DIR] < 0. ) {
+         a_xi_valid[TOROIDAL_DIR] += m_toroidal_width;
+      }
+      while ( a_xi_valid[TOROIDAL_DIR] > m_toroidal_width ) {
+         a_xi_valid[TOROIDAL_DIR] -= m_toroidal_width;
+      }
+#endif
+
    }
 }
 
@@ -1151,177 +1198,41 @@ SingleNullCoordSys::printInvalidPointDiagnostics( const int                     
                                                   const SingleNullBlockCoordSys* a_src_cs,
                                                   const SingleNullBlockCoordSys* a_valid_cs ) const
 {
-  cout << "xi not valid, nSrc = " << a_nSrc << " a_xiSrc = " << a_xiSrc << " X = " << a_X
-       << " xi_valid = " << a_xi_valid << " nvalid = " << a_n_valid << endl;
-  cout << "src block: "
-       << a_src_cs->lowerMappedCoordinate(RADIAL_DIR) << " "
-       << a_src_cs->upperMappedCoordinate(RADIAL_DIR) << " "
-       << a_src_cs->lowerMappedCoordinate(POLOIDAL_DIR) << " "
-       << a_src_cs->upperMappedCoordinate(POLOIDAL_DIR) << endl;
-  cout << "valid block: "
-       << a_valid_cs->lowerMappedCoordinate(RADIAL_DIR) << " "
-       << a_valid_cs->upperMappedCoordinate(RADIAL_DIR) << " "
-       << a_valid_cs->lowerMappedCoordinate(POLOIDAL_DIR) << " "
-       << a_valid_cs->upperMappedCoordinate(POLOIDAL_DIR) << endl;
+#if 0
+   cout << "xi not valid, nSrc = " << a_nSrc << " a_xiSrc = " << a_xiSrc << " X = " << a_X
+        << " xi_valid = " << a_xi_valid << " nvalid = " << a_n_valid << endl;
+   cout << "src block: "
+        << a_src_cs->lowerMappedCoordinate(RADIAL_DIR) << " "
+        << a_src_cs->upperMappedCoordinate(RADIAL_DIR) << " "
+#if CFG_DIM==3
+        << a_src_cs->lowerMappedCoordinate(TOROIDAL_DIR) << " "
+        << a_src_cs->upperMappedCoordinate(TOROIDAL_DIR) << " "
+#endif
+        << a_src_cs->lowerMappedCoordinate(POLOIDAL_DIR) << " "
+        << a_src_cs->upperMappedCoordinate(POLOIDAL_DIR) << endl;
+   cout << "valid block: "
+        << a_valid_cs->lowerMappedCoordinate(RADIAL_DIR) << " "
+        << a_valid_cs->upperMappedCoordinate(RADIAL_DIR) << " "
+#if CFG_DIM==3
+        << a_valid_cs->lowerMappedCoordinate(TOROIDAL_DIR) << " "
+        << a_valid_cs->upperMappedCoordinate(TOROIDAL_DIR) << " "
+#endif
+        << a_valid_cs->lowerMappedCoordinate(POLOIDAL_DIR) << " "
+        << a_valid_cs->upperMappedCoordinate(POLOIDAL_DIR) << endl;
+#endif
 }
 
 
 
 void
 SingleNullCoordSys::setXPointNeighborhood()
-#if CFG_DIM==3
 {
-  double cut_frac = 1.;
-  double cut_frac2 = 0.15;
+#if CFG_DIM==2
 
-  const SingleNullBlockCoordSys* lcore_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(LCORE);
-
-#if CFG_DIM==3
-  RealVect Xpoint_mapped(lcore_coord_sys->upperMappedCoordinate(RADIAL_DIR),lcore_coord_sys->upperMappedCoordinate(POLOIDAL_DIR),0.);
-#else
-  RealVect Xpoint_mapped(lcore_coord_sys->upperMappedCoordinate(RADIAL_DIR),lcore_coord_sys->upperMappedCoordinate(POLOIDAL_DIR));
-#endif
-  m_Xpoint = lcore_coord_sys->realCoord(Xpoint_mapped);
-
-  double rad_mapped;
-  double pol_mapped;
-  double cut_frac_tmp;
-
-  cut_frac_tmp = ( lcore_coord_sys->truncated() || numBlocks() == 10 )? cut_frac: cut_frac2;
-
-  rad_mapped = (1.-cut_frac_tmp)*lcore_coord_sys->upperMappedCoordinate(RADIAL_DIR)
-                  + cut_frac_tmp*lcore_coord_sys->lowerMappedCoordinate(RADIAL_DIR);
-  pol_mapped = lcore_coord_sys->upperMappedCoordinate(POLOIDAL_DIR);
-
-#if CFG_DIM==3
-  m_ray[0] = lcore_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped,0.)) - m_Xpoint;
-#else
-  m_ray[0] = lcore_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped)) - m_Xpoint;
-#endif
-
-  const SingleNullBlockCoordSys* rcore_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(RCORE);
-
-  cut_frac_tmp = ( rcore_coord_sys->truncated() || numBlocks() == 10 )? cut_frac: cut_frac2;
-
-  rad_mapped = rcore_coord_sys->upperMappedCoordinate(RADIAL_DIR);
-  pol_mapped = (1.-cut_frac_tmp)*rcore_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR)
-    + cut_frac_tmp*rcore_coord_sys->upperMappedCoordinate(POLOIDAL_DIR);
-
-#if CFG_DIM==3
-  m_ray[1] = rcore_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped,0.)) - m_Xpoint;
-#else
-  m_ray[1] = rcore_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped)) - m_Xpoint;
-#endif
-
-  const SingleNullBlockCoordSys* rcsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(RCSOL);
-
-  cut_frac_tmp = ( rcsol_coord_sys->truncated() || numBlocks() == 10 )? cut_frac: cut_frac2;
-
-  rad_mapped = (1.-cut_frac_tmp)*rcsol_coord_sys->lowerMappedCoordinate(RADIAL_DIR)
-    + cut_frac_tmp*rcsol_coord_sys->upperMappedCoordinate(RADIAL_DIR);
-  pol_mapped = rcsol_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR);
-
-#if CFG_DIM==3
-  m_ray[2] = rcsol_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped,0.)) - m_Xpoint;
-#else
-  m_ray[2] = rcsol_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped)) - m_Xpoint;
-#endif
-
-  const SingleNullBlockCoordSys* rsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(RSOL);
-
-  rad_mapped = rsol_coord_sys->lowerMappedCoordinate(RADIAL_DIR);
-  pol_mapped = (1.-cut_frac)*rsol_coord_sys->upperMappedCoordinate(POLOIDAL_DIR)
-    + cut_frac*rsol_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR);
-
-#if CFG_DIM==3
-  m_ray[3] = rsol_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped,0.)) - m_Xpoint;
-#else
-  m_ray[3] = rsol_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped)) - m_Xpoint;
-#endif
-
-  const SingleNullBlockCoordSys* rpf_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(RPF);
-
-  rad_mapped = (1.-cut_frac)*rpf_coord_sys->upperMappedCoordinate(RADIAL_DIR)
-    + cut_frac*rpf_coord_sys->lowerMappedCoordinate(RADIAL_DIR);
-  pol_mapped = rpf_coord_sys->upperMappedCoordinate(POLOIDAL_DIR);
-
-#if CFG_DIM==3
-  m_ray[4] = rpf_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped,0.)) - m_Xpoint;
-#else
-  m_ray[4] = rpf_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped)) - m_Xpoint;
-#endif
-
-  const SingleNullBlockCoordSys* lpf_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(LPF);
-
-  rad_mapped = lpf_coord_sys->upperMappedCoordinate(RADIAL_DIR);
-  pol_mapped = (1.-cut_frac)*lpf_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR)
-    + cut_frac*lpf_coord_sys->upperMappedCoordinate(POLOIDAL_DIR);
-
-#if CFG_DIM==3
-  m_ray[5] = lpf_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped,0.)) - m_Xpoint;
-#else
-  m_ray[5] = lpf_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped)) - m_Xpoint;
-#endif
-
-  const SingleNullBlockCoordSys* lsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(LSOL);
-
-  rad_mapped = (1.-cut_frac)*lsol_coord_sys->lowerMappedCoordinate(RADIAL_DIR)
-    + cut_frac*lsol_coord_sys->upperMappedCoordinate(RADIAL_DIR);
-  pol_mapped = lsol_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR);
-
-#if CFG_DIM==3
-  m_ray[6] = lsol_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped,0.)) - m_Xpoint;
-#else
-  m_ray[6] = lsol_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped)) - m_Xpoint;
-#endif
-
-  const SingleNullBlockCoordSys* lcsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(LCSOL);
-
-  cut_frac_tmp = ( lcsol_coord_sys->truncated() || numBlocks() == 10 )? cut_frac: cut_frac2;
-
-  rad_mapped = lcsol_coord_sys->lowerMappedCoordinate(RADIAL_DIR);
-  pol_mapped = (1.-cut_frac_tmp)*lcsol_coord_sys->upperMappedCoordinate(POLOIDAL_DIR)
-    + cut_frac_tmp*lcsol_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR);
-
-#if CFG_DIM==3
-  m_ray[7] = lcsol_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped,0.)) - m_Xpoint;
-#else
-  m_ray[7] = lcsol_coord_sys->realCoord(RealVect(rad_mapped,pol_mapped)) - m_Xpoint;
-#endif
-
-  m_xpoint_radius = m_ray[0].vectorLength();
-  m_ray[0] /= m_xpoint_radius;
-  for (int block=1; block<8; ++block) {
-    double ray_length = m_ray[block].vectorLength();
-    if (ray_length < m_xpoint_radius) m_xpoint_radius = ray_length;
-    m_ray[block] /= ray_length;
-  }
-
-  if (procID()==0) {
-    cout << "X point neighborhood radius = " << m_xpoint_radius << endl;
-  }
-
-  m_ray_angle[0] = 0.;
-  for (int block=1; block<8; ++block) {
-    m_ray_angle[block] = m_ray_angle[block-1] + acos(m_ray[block].dotProduct(m_ray[block-1]));
-  }
-  m_ray_angle[8] = 2.*Pi;
-
-  m_sector_block[0] = RCORE;
-  m_sector_block[1] = RCSOL;
-  m_sector_block[2] = RSOL;
-  m_sector_block[3] = RPF;
-  m_sector_block[4] = LPF;
-  m_sector_block[5] = LSOL;
-  m_sector_block[6] = LCSOL;
-  m_sector_block[7] = LCORE;
-}
-#else
-{
    {
       // Block boundary between LCORE and RCORE
 
-      const SingleNullBlockCoordSys* lcore_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(LCORE);
+      const SingleNullBlockCoordSys* lcore_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::LCORE);
 
       Box boundary_box = surroundingNodes(bdryHi(lcore_coord_sys->domain().domainBox(), POLOIDAL_DIR, 1), RADIAL_DIR);
       IntVect lo = boundary_box.smallEnd();
@@ -1329,11 +1240,12 @@ SingleNullCoordSys::setXPointNeighborhood()
 
       FArrayBox X(boundary_box,SpaceDim);
       lcore_coord_sys->getNodeCenteredRealCoords(X);
-     
-      m_Xpoint = RealVect(X(hi,0),X(hi,1));
+      
+      m_Xpoint = RealVect(X(hi,0), X(hi,1));
 
       // Initialize the ray to lie on the block boundary, pointing away from X point
-      m_ray[0] = RealVect(X(lo,0),X(lo,1)) - m_Xpoint;
+
+      m_ray[0] = RealVect(X(lo,0), X(lo,1)) - m_Xpoint;
 
       // Set the radius of the X point neighborhood, which we currently take to as the
       // length of the block interface between the LCORE and RCORE.  If there is any
@@ -1344,7 +1256,9 @@ SingleNullCoordSys::setXPointNeighborhood()
       // This loop isn't actually necessary unless the preceding m_xpoint_radius
       // definition has somehow been manually overridden to a smaller value
       for( IntVect iv(hi); iv[RADIAL_DIR] >= lo[RADIAL_DIR]; iv[RADIAL_DIR]--) {
-         RealVect diff = RealVect(X(iv,0),X(iv,1)) - m_Xpoint;
+
+         RealVect diff = RealVect(X(iv,0), X(iv,1)) - m_Xpoint;
+
 
          if (diff.vectorLength() > m_xpoint_radius) {
             break;
@@ -1358,7 +1272,7 @@ SingleNullCoordSys::setXPointNeighborhood()
    {
       // Block boundary between RCORE and RCSOL
 
-      const SingleNullBlockCoordSys* rcore_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(RCORE);
+      const SingleNullBlockCoordSys* rcore_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::RCORE);
 
       Box boundary_box = surroundingNodes(bdryHi(rcore_coord_sys->domain().domainBox(), RADIAL_DIR, 1), POLOIDAL_DIR);
       IntVect lo = boundary_box.smallEnd();
@@ -1368,10 +1282,12 @@ SingleNullCoordSys::setXPointNeighborhood()
       rcore_coord_sys->getNodeCenteredRealCoords(X);
 
       // Initialize the ray to lie on the block boundary, pointing away from X point
-      m_ray[1] = RealVect(X(hi,0),X(hi,1)) - m_Xpoint;
+
+      m_ray[1] = RealVect(X(hi,0), X(hi,1)) - m_Xpoint;
 
       for( IntVect iv(lo); iv[POLOIDAL_DIR] <= hi[POLOIDAL_DIR]; iv[POLOIDAL_DIR]++) {
-         RealVect diff = RealVect(X(iv,0),X(iv,1)) - m_Xpoint;
+
+         RealVect diff = RealVect(X(iv,0), X(iv,1)) - m_Xpoint;
 
          if (diff.vectorLength() > m_xpoint_radius) {
             break;
@@ -1385,7 +1301,7 @@ SingleNullCoordSys::setXPointNeighborhood()
    {
       // Block boundary between RCSOL and RSOL
 
-      const SingleNullBlockCoordSys* rcsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(RCSOL);
+      const SingleNullBlockCoordSys* rcsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::RCSOL);
 
       Box boundary_box = surroundingNodes(bdryLo(rcsol_coord_sys->domain().domainBox(), POLOIDAL_DIR, 1), RADIAL_DIR);
       IntVect lo = boundary_box.smallEnd();
@@ -1395,10 +1311,12 @@ SingleNullCoordSys::setXPointNeighborhood()
       rcsol_coord_sys->getNodeCenteredRealCoords(X);
 
       // Initialize the ray to lie on the block boundary, pointing away from X point
-      m_ray[2] = RealVect(X(hi,0),X(hi,1)) - m_Xpoint;
+
+      m_ray[2] = RealVect(X(hi,0), X(hi,1)) - m_Xpoint;
 
       for( IntVect iv(lo); iv[RADIAL_DIR] <= hi[RADIAL_DIR]; iv[RADIAL_DIR]++) {
-         RealVect diff = RealVect(X(iv,0),X(iv,1)) - m_Xpoint;
+
+         RealVect diff = RealVect(X(iv,0), X(iv,1)) - m_Xpoint;
 
          if (diff.vectorLength() > m_xpoint_radius) {
             break;
@@ -1412,7 +1330,7 @@ SingleNullCoordSys::setXPointNeighborhood()
    {
       // Block boundary between RSOL and RPF
 
-      const SingleNullBlockCoordSys* rsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(RSOL);
+      const SingleNullBlockCoordSys* rsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::RSOL);
 
       Box boundary_box = surroundingNodes(bdryLo(rsol_coord_sys->domain().domainBox(), RADIAL_DIR, 1), POLOIDAL_DIR);
       IntVect lo = boundary_box.smallEnd();
@@ -1422,10 +1340,12 @@ SingleNullCoordSys::setXPointNeighborhood()
       rsol_coord_sys->getNodeCenteredRealCoords(X);
 
       // Initialize the ray to lie on the block boundary, pointing away from X point
-      m_ray[3] = RealVect(X(lo,0),X(lo,1)) - m_Xpoint;
+
+      m_ray[3] = RealVect(X(lo,0), X(lo,1)) - m_Xpoint;
 
       for( IntVect iv(hi); iv[POLOIDAL_DIR] >= lo[POLOIDAL_DIR]; iv[POLOIDAL_DIR]--) {
-         RealVect diff = RealVect(X(iv,0),X(iv,1)) - m_Xpoint;
+
+         RealVect diff = RealVect(X(iv,0), X(iv,1)) - m_Xpoint;
 
          if (diff.vectorLength() > m_xpoint_radius) {
             break;
@@ -1439,7 +1359,7 @@ SingleNullCoordSys::setXPointNeighborhood()
    {
       // Block boundary between RPF and LPF
 
-      const SingleNullBlockCoordSys* rpf_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(RPF);
+      const SingleNullBlockCoordSys* rpf_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::RPF);
 
       Box boundary_box = surroundingNodes(bdryHi(rpf_coord_sys->domain().domainBox(), POLOIDAL_DIR, 1), RADIAL_DIR);
       IntVect lo = boundary_box.smallEnd();
@@ -1449,10 +1369,12 @@ SingleNullCoordSys::setXPointNeighborhood()
       rpf_coord_sys->getNodeCenteredRealCoords(X);
 
       // Initialize the ray to lie on the block boundary, pointing away from X point
-      m_ray[4] = RealVect(X(lo,0),X(lo,1)) - m_Xpoint;
+
+      m_ray[4] = RealVect(X(lo,0), X(lo,1)) - m_Xpoint;
 
       for( IntVect iv(hi); iv[RADIAL_DIR] >= lo[RADIAL_DIR]; iv[RADIAL_DIR]--) {
-         RealVect diff = RealVect(X(iv,0),X(iv,1)) - m_Xpoint;
+
+         RealVect diff = RealVect(X(iv,0), X(iv,1)) - m_Xpoint;
 
          if (diff.vectorLength() > m_xpoint_radius) {
             break;
@@ -1466,7 +1388,7 @@ SingleNullCoordSys::setXPointNeighborhood()
    {
       // Block boundary between LPF and LSOL
 
-      const SingleNullBlockCoordSys* lpf_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(LPF);
+      const SingleNullBlockCoordSys* lpf_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::LPF);
 
       Box boundary_box = surroundingNodes(bdryHi(lpf_coord_sys->domain().domainBox(), RADIAL_DIR, 1), POLOIDAL_DIR);
       IntVect lo = boundary_box.smallEnd();
@@ -1476,10 +1398,12 @@ SingleNullCoordSys::setXPointNeighborhood()
       lpf_coord_sys->getNodeCenteredRealCoords(X);
 
       // Initialize the ray to lie on the block boundary, pointing away from X point
-      m_ray[5] = RealVect(X(hi,0),X(hi,1)) - m_Xpoint;
+
+      m_ray[5] = RealVect(X(hi,0), X(hi,1)) - m_Xpoint;
 
       for( IntVect iv(lo); iv[POLOIDAL_DIR] <= hi[POLOIDAL_DIR]; iv[POLOIDAL_DIR]++) {
-         RealVect diff = RealVect(X(iv,0),X(iv,1)) - m_Xpoint;
+
+         RealVect diff = RealVect(X(iv,0), X(iv,1)) - m_Xpoint;
 
          if (diff.vectorLength() > m_xpoint_radius) {
             break;
@@ -1493,7 +1417,7 @@ SingleNullCoordSys::setXPointNeighborhood()
    {
       // Block boundary between LSOL and LCSOL
 
-      const SingleNullBlockCoordSys* lsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(LSOL);
+      const SingleNullBlockCoordSys* lsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::LSOL);
 
       Box boundary_box = surroundingNodes(bdryLo(lsol_coord_sys->domain().domainBox(), POLOIDAL_DIR, 1), RADIAL_DIR);
       IntVect lo = boundary_box.smallEnd();
@@ -1503,10 +1427,12 @@ SingleNullCoordSys::setXPointNeighborhood()
       lsol_coord_sys->getNodeCenteredRealCoords(X);
 
       // Initialize the ray to lie on the block boundary, pointing away from X point
-      m_ray[6] = RealVect(X(hi,0),X(hi,1)) - m_Xpoint;
+
+      m_ray[6] = RealVect(X(hi,0), X(hi,1)) - m_Xpoint;
 
       for( IntVect iv(lo); iv[RADIAL_DIR] <= hi[RADIAL_DIR]; iv[RADIAL_DIR]++) {
-         RealVect diff = RealVect(X(iv,0),X(iv,1)) - m_Xpoint;
+
+         RealVect diff = RealVect(X(iv,0), X(iv,1)) - m_Xpoint;
 
          if (diff.vectorLength() > m_xpoint_radius) {
             break;
@@ -1520,7 +1446,7 @@ SingleNullCoordSys::setXPointNeighborhood()
    {
       // Block boundary between LCSOL and LCORE
 
-      const SingleNullBlockCoordSys* lcsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(LCSOL);
+      const SingleNullBlockCoordSys* lcsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::LCSOL);
 
       Box boundary_box = surroundingNodes(bdryLo(lcsol_coord_sys->domain().domainBox(), RADIAL_DIR, 1), POLOIDAL_DIR);
       IntVect lo = boundary_box.smallEnd();
@@ -1530,10 +1456,12 @@ SingleNullCoordSys::setXPointNeighborhood()
       lcsol_coord_sys->getNodeCenteredRealCoords(X);
 
       // Initialize the ray to lie on the block boundary, pointing away from X point
-      m_ray[7] = RealVect(X(lo,0),X(lo,1)) - m_Xpoint;
+
+      m_ray[7] = RealVect(X(lo,0), X(lo,1)) - m_Xpoint;
 
       for( IntVect iv(hi); iv[POLOIDAL_DIR] >= lo[POLOIDAL_DIR]; iv[POLOIDAL_DIR]--) {
-         RealVect diff = RealVect(X(iv,0),X(iv,1)) - m_Xpoint;
+
+         RealVect diff = RealVect(X(iv,0), X(iv,1)) - m_Xpoint;
 
          if (diff.vectorLength() > m_xpoint_radius) {
             break;
@@ -1558,33 +1486,162 @@ SingleNullCoordSys::setXPointNeighborhood()
    }
    m_ray_angle[8] = 2.*Pi;
 
-   m_sector_block[0] = RCORE;
-   m_sector_block[1] = RCSOL;
-   m_sector_block[2] = RSOL;
-   m_sector_block[3] = RPF;
-   m_sector_block[4] = LPF;
-   m_sector_block[5] = LSOL;
-   m_sector_block[6] = LCSOL;
-   m_sector_block[7] = LCORE;
-}
 #endif
 
+#if CFG_DIM==3
+
+   double cut_frac = 1.;
+   double cut_frac2 = 0.15;
+
+   const SingleNullBlockCoordSys* lcore_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::LCORE);
+
+   RealVect Xpoint_mapped;
+   for (int n=0; n<SpaceDim; ++n) {
+      Xpoint_mapped[n] = lcore_coord_sys->upperMappedCoordinate(n);
+   }
+
+   m_Xpoint = lcore_coord_sys->restrictPhysCoordToPoloidal(lcore_coord_sys->realCoord(Xpoint_mapped));
+
+   double rad_mapped;
+   double tor_mapped;
+   double pol_mapped;
+   double cut_frac_tmp;
+
+   cut_frac_tmp = ( lcore_coord_sys->truncated() || numBlocks() == 10 )? cut_frac: cut_frac2;
+
+   rad_mapped = (1.-cut_frac_tmp)*lcore_coord_sys->upperMappedCoordinate(RADIAL_DIR)
+                   + cut_frac_tmp*lcore_coord_sys->lowerMappedCoordinate(RADIAL_DIR);
+   tor_mapped = lcore_coord_sys->lowerMappedCoordinate(TOROIDAL_DIR);
+   pol_mapped = lcore_coord_sys->upperMappedCoordinate(POLOIDAL_DIR);
+
+   RealVect mapped_coord = RealVect(rad_mapped, tor_mapped, pol_mapped);
+
+   m_ray[0] = lcore_coord_sys->restrictPhysCoordToPoloidal(lcore_coord_sys->realCoord(mapped_coord)) - m_Xpoint;
+
+   const SingleNullBlockCoordSys* rcore_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::RCORE);
+
+   cut_frac_tmp = ( rcore_coord_sys->truncated() || numBlocks() == 10 )? cut_frac: cut_frac2;
+
+   rad_mapped = rcore_coord_sys->upperMappedCoordinate(RADIAL_DIR);
+   tor_mapped = rcore_coord_sys->lowerMappedCoordinate(TOROIDAL_DIR);
+   pol_mapped = (1.-cut_frac_tmp)*rcore_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR)
+                   + cut_frac_tmp*rcore_coord_sys->upperMappedCoordinate(POLOIDAL_DIR);
+
+   mapped_coord = RealVect(rad_mapped, tor_mapped, pol_mapped);
+
+   m_ray[1] = rcore_coord_sys->restrictPhysCoordToPoloidal(rcore_coord_sys->realCoord(mapped_coord)) - m_Xpoint;
+
+   const SingleNullBlockCoordSys* rcsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::RCSOL);
+
+   cut_frac_tmp = ( rcsol_coord_sys->truncated() || numBlocks() == 10 )? cut_frac: cut_frac2;
+
+   rad_mapped = (1.-cut_frac_tmp)*rcsol_coord_sys->lowerMappedCoordinate(RADIAL_DIR)
+                   + cut_frac_tmp*rcsol_coord_sys->upperMappedCoordinate(RADIAL_DIR);
+   tor_mapped = rcsol_coord_sys->lowerMappedCoordinate(TOROIDAL_DIR);
+   pol_mapped = rcsol_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR);
+
+   mapped_coord = RealVect(rad_mapped, tor_mapped, pol_mapped);
+
+   m_ray[2] = rcsol_coord_sys->restrictPhysCoordToPoloidal(rcsol_coord_sys->realCoord(mapped_coord)) - m_Xpoint;
+
+   const SingleNullBlockCoordSys* rsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::RSOL);
+
+   rad_mapped = rsol_coord_sys->lowerMappedCoordinate(RADIAL_DIR);
+   tor_mapped = rsol_coord_sys->lowerMappedCoordinate(TOROIDAL_DIR);
+   pol_mapped = (1.-cut_frac)*rsol_coord_sys->upperMappedCoordinate(POLOIDAL_DIR)
+                   + cut_frac*rsol_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR);
+
+   mapped_coord = RealVect(rad_mapped, tor_mapped, pol_mapped);
+
+   m_ray[3] = rsol_coord_sys->restrictPhysCoordToPoloidal(rsol_coord_sys->realCoord(mapped_coord)) - m_Xpoint;
+
+   const SingleNullBlockCoordSys* rpf_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::RPF);
+
+   rad_mapped = (1.-cut_frac)*rpf_coord_sys->upperMappedCoordinate(RADIAL_DIR)
+                   + cut_frac*rpf_coord_sys->lowerMappedCoordinate(RADIAL_DIR);
+   tor_mapped = rpf_coord_sys->lowerMappedCoordinate(TOROIDAL_DIR);
+   pol_mapped = rpf_coord_sys->upperMappedCoordinate(POLOIDAL_DIR);
+
+   mapped_coord = RealVect(rad_mapped, tor_mapped, pol_mapped);
+
+   m_ray[4] = rpf_coord_sys->restrictPhysCoordToPoloidal(rpf_coord_sys->realCoord(mapped_coord)) - m_Xpoint;
+
+   const SingleNullBlockCoordSys* lpf_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::LPF);
+
+   rad_mapped = lpf_coord_sys->upperMappedCoordinate(RADIAL_DIR);
+   tor_mapped = lpf_coord_sys->lowerMappedCoordinate(TOROIDAL_DIR);
+   pol_mapped = (1.-cut_frac)*lpf_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR)
+                   + cut_frac*lpf_coord_sys->upperMappedCoordinate(POLOIDAL_DIR);
+
+   mapped_coord = RealVect(rad_mapped, tor_mapped, pol_mapped);
+
+   m_ray[5] = lpf_coord_sys->restrictPhysCoordToPoloidal(lpf_coord_sys->realCoord(mapped_coord)) - m_Xpoint;
+
+   const SingleNullBlockCoordSys* lsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::LSOL);
+
+   rad_mapped = (1.-cut_frac)*lsol_coord_sys->lowerMappedCoordinate(RADIAL_DIR)
+                   + cut_frac*lsol_coord_sys->upperMappedCoordinate(RADIAL_DIR);
+   tor_mapped = lsol_coord_sys->lowerMappedCoordinate(TOROIDAL_DIR);
+   pol_mapped = lsol_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR);
+
+   mapped_coord = RealVect(rad_mapped, tor_mapped, pol_mapped);
+
+   m_ray[6] = lsol_coord_sys->restrictPhysCoordToPoloidal(lsol_coord_sys->realCoord(mapped_coord)) - m_Xpoint;
+
+   const SingleNullBlockCoordSys* lcsol_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(SingleNullBlockCoordSys::LCSOL);
+
+   cut_frac_tmp = ( lcsol_coord_sys->truncated() || numBlocks() == 10 )? cut_frac: cut_frac2;
+
+   rad_mapped = lcsol_coord_sys->lowerMappedCoordinate(RADIAL_DIR);
+   tor_mapped = lcsol_coord_sys->lowerMappedCoordinate(TOROIDAL_DIR);
+   pol_mapped = (1.-cut_frac_tmp)*lcsol_coord_sys->upperMappedCoordinate(POLOIDAL_DIR)
+                   + cut_frac_tmp*lcsol_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR);
+
+   mapped_coord = RealVect(rad_mapped, tor_mapped, pol_mapped);
+
+   m_ray[7] = lcsol_coord_sys->restrictPhysCoordToPoloidal(lcsol_coord_sys->realCoord(mapped_coord)) - m_Xpoint;
+
+   m_xpoint_radius = m_ray[0].vectorLength();
+   m_ray[0] /= m_xpoint_radius;
+   for (int block=1; block<8; ++block) {
+      double ray_length = m_ray[block].vectorLength();
+      if (ray_length < m_xpoint_radius) m_xpoint_radius = ray_length;
+      m_ray[block] /= ray_length;
+   }
+
+   if (procID()==0) {
+      cout << "X point neighborhood radius = " << m_xpoint_radius << endl;
+   }
+
+   m_ray_angle[0] = 0.;
+   for (int block=1; block<8; ++block) {
+      m_ray_angle[block] = m_ray_angle[block-1] + acos(m_ray[block].dotProduct(m_ray[block-1]));
+   }
+   m_ray_angle[8] = 2.*Pi;
+
+#endif
+
+   m_sector_block[0] = SingleNullBlockCoordSys::RCORE;
+   m_sector_block[1] = SingleNullBlockCoordSys::RCSOL;
+   m_sector_block[2] = SingleNullBlockCoordSys::RSOL;
+   m_sector_block[3] = SingleNullBlockCoordSys::RPF;
+   m_sector_block[4] = SingleNullBlockCoordSys::LPF;
+   m_sector_block[5] = SingleNullBlockCoordSys::LSOL;
+   m_sector_block[6] = SingleNullBlockCoordSys::LCSOL;
+   m_sector_block[7] = SingleNullBlockCoordSys::LCORE;
+}
 
 
 int
-SingleNullCoordSys::findBlockNearXpt(const RealVect& X) const
+SingleNullCoordSys::findBlockNearXpt( const POL::RealVect& a_X_pol ) const
 {
-   RealVect local_X = X - m_Xpoint;
+   POL::RealVect local_X_pol = a_X_pol - m_Xpoint;
 
-#if CFG_DIM==3
-   RealVect ray0_normal(m_ray[0][1],-m_ray[0][0],0.);  // m_ray[0] rotated 90 degrees clockwise
-#else
-   RealVect ray0_normal(m_ray[0][1],-m_ray[0][0]);  // m_ray[0] rotated 90 degrees clockwise
-#endif
+   POL::RealVect ray0_normal(m_ray[0][1],-m_ray[0][0]);  // m_ray[0] rotated 90 degrees clockwise
 
-   double angle = acos( local_X.dotProduct(m_ray[0]) / local_X.vectorLength() );
+   double angle = acos( local_X_pol.dotProduct(m_ray[0]) / local_X_pol.vectorLength() );
 
-   if (local_X.dotProduct(ray0_normal) < 0.) {
+   if (local_X_pol.dotProduct(ray0_normal) < 0.) {
       angle = 2.*Pi - angle;
    }
 
@@ -1603,8 +1660,8 @@ SingleNullCoordSys::findBlockNearXpt(const RealVect& X) const
    }
 
    if (block == -1) {
-      cout << "Looking for block of " << X << endl;
-      MayDay::Error("SingleNullCoordSys::findBlock(): Couldn't find block");
+      cout << "Looking for block of " << a_X_pol << endl;
+      MayDay::Error("SingleNullCoordSys::findBlockNearXpt(): Couldn't find block");
    }
 
    return block;
@@ -1624,8 +1681,8 @@ SingleNullCoordSys::defineEllipticOpBC( EllipticOpBC& a_bc ) const
          RefCountedPtr<DataArray> data_array = (RefCountedPtr<DataArray>)radial_core_function;
          CH_assert( !data_array.isNull() );
 
-         const Box& lcore_domain_box = getCoordSys(LCORE)->domain().domainBox();
-         const Box& rcore_domain_box = getCoordSys(RCORE)->domain().domainBox();
+         const Box& lcore_domain_box = getCoordSys(SingleNullBlockCoordSys::LCORE)->domain().domainBox();
+         const Box& rcore_domain_box = getCoordSys(SingleNullBlockCoordSys::RCORE)->domain().domainBox();
 
          Box fab_box = minBox( bdryLo(lcore_domain_box, RADIAL_DIR, 1),
                                bdryLo(rcore_domain_box, RADIAL_DIR, 1) );
@@ -1642,10 +1699,10 @@ SingleNullCoordSys::defineEllipticOpBC( EllipticOpBC& a_bc ) const
          RefCountedPtr<DataArray> data_array = (RefCountedPtr<DataArray>)radial_sol_function;
          CH_assert( !data_array.isNull() );
 
-         const Box& lcsol_domain_box = getCoordSys(LCSOL)->domain().domainBox();
-         const Box& rcsol_domain_box = getCoordSys(RCSOL)->domain().domainBox();
-         const Box& lsol_domain_box  = getCoordSys(LSOL)->domain().domainBox();
-         const Box& rsol_domain_box  = getCoordSys(RSOL)->domain().domainBox();
+         const Box& lcsol_domain_box = getCoordSys(SingleNullBlockCoordSys::LCSOL)->domain().domainBox();
+         const Box& rcsol_domain_box = getCoordSys(SingleNullBlockCoordSys::RCSOL)->domain().domainBox();
+         const Box& lsol_domain_box  = getCoordSys(SingleNullBlockCoordSys::LSOL)->domain().domainBox();
+         const Box& rsol_domain_box  = getCoordSys(SingleNullBlockCoordSys::RSOL)->domain().domainBox();
 
          Box fab_box = minBox( bdryHi(lcsol_domain_box, RADIAL_DIR, 1),
                                bdryHi(rcsol_domain_box, RADIAL_DIR, 1) );
@@ -1664,8 +1721,8 @@ SingleNullCoordSys::defineEllipticOpBC( EllipticOpBC& a_bc ) const
          RefCountedPtr<DataArray> data_array = (RefCountedPtr<DataArray>)radial_pf_function;
          CH_assert( !data_array.isNull() );
 
-         const Box& lpf_domain_box = getCoordSys(LPF)->domain().domainBox();
-         const Box& rpf_domain_box = getCoordSys(RPF)->domain().domainBox();
+         const Box& lpf_domain_box = getCoordSys(SingleNullBlockCoordSys::LPF)->domain().domainBox();
+         const Box& rpf_domain_box = getCoordSys(SingleNullBlockCoordSys::RPF)->domain().domainBox();
 
          Box fab_box = minBox( bdryLo(lpf_domain_box, RADIAL_DIR, 1),
                                bdryLo(rpf_domain_box, RADIAL_DIR, 1) );
@@ -1682,8 +1739,8 @@ SingleNullCoordSys::defineEllipticOpBC( EllipticOpBC& a_bc ) const
          RefCountedPtr<DataArray> data_array = (RefCountedPtr<DataArray>)radial_left_function;
          CH_assert( !data_array.isNull() );
 
-         const Box& lsol_domain_box = getCoordSys(LSOL)->domain().domainBox();
-         const Box& lpf_domain_box = getCoordSys(LPF)->domain().domainBox();
+         const Box& lsol_domain_box = getCoordSys(SingleNullBlockCoordSys::LSOL)->domain().domainBox();
+         const Box& lpf_domain_box = getCoordSys(SingleNullBlockCoordSys::LPF)->domain().domainBox();
 
          Box fab_box = minBox( bdryHi(lsol_domain_box, POLOIDAL_DIR, 1),
                                bdryHi(lpf_domain_box, POLOIDAL_DIR, 1) );
@@ -1700,8 +1757,8 @@ SingleNullCoordSys::defineEllipticOpBC( EllipticOpBC& a_bc ) const
          RefCountedPtr<DataArray> data_array = (RefCountedPtr<DataArray>)radial_right_function;
          CH_assert( !data_array.isNull() );
 
-         const Box& rsol_domain_box = getCoordSys(RSOL)->domain().domainBox();
-         const Box& rpf_domain_box = getCoordSys(RPF)->domain().domainBox();
+         const Box& rsol_domain_box = getCoordSys(SingleNullBlockCoordSys::RSOL)->domain().domainBox();
+         const Box& rpf_domain_box = getCoordSys(SingleNullBlockCoordSys::RPF)->domain().domainBox();
 
          Box fab_box = minBox( bdryLo(rsol_domain_box, POLOIDAL_DIR, 1),
                                bdryLo(rpf_domain_box, POLOIDAL_DIR, 1) );
@@ -1714,7 +1771,7 @@ SingleNullCoordSys::defineEllipticOpBC( EllipticOpBC& a_bc ) const
 
 
 IntVect
-SingleNullCoordSys::lo_mapped_index(int block) const
+SingleNullCoordSys::lo_mapped_index(int a_block_number) const
 {
   IntVect index;
 
@@ -1722,42 +1779,42 @@ SingleNullCoordSys::lo_mapped_index(int block) const
 
      int numcells_core_poloidal = m_numcells_lcore_poloidal + m_numcells_rcore_poloidal;
 
-     switch ( block )
+     switch ( poloidalBlockNumber(a_block_number) )
         {
-        case LCORE:
+        case SingleNullBlockCoordSys::LCORE:
            index[RADIAL_DIR] = 0;
-           index[POLOIDAL_DIR] = BLOCK_SEPARATION*numcells_core_poloidal/2;
+           index[POLOIDAL_DIR] = POLOIDAL_BLOCK_SEP*numcells_core_poloidal/2;
            break;
-        case RCORE:
+        case SingleNullBlockCoordSys::RCORE:
            index[RADIAL_DIR] = 0;
-           index[POLOIDAL_DIR] = -(BLOCK_SEPARATION+1)*numcells_core_poloidal/2;
+           index[POLOIDAL_DIR] = -(POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2;
            break;
-        case LCSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*m_numcells_core_radial;
-           index[POLOIDAL_DIR] = BLOCK_SEPARATION*numcells_core_poloidal/2;
+        case SingleNullBlockCoordSys::LCSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*m_numcells_core_radial;
+           index[POLOIDAL_DIR] = POLOIDAL_BLOCK_SEP*numcells_core_poloidal/2;
            break;
-        case RCSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*m_numcells_core_radial;
-           index[POLOIDAL_DIR] = -(BLOCK_SEPARATION+1)*numcells_core_poloidal/2;
+        case SingleNullBlockCoordSys::RCSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*m_numcells_core_radial;
+           index[POLOIDAL_DIR] = -(POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2;
            break;
-        case LSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*m_numcells_core_radial;      // same radial extent as CSOL
-           index[POLOIDAL_DIR] = (2*BLOCK_SEPARATION+1)*numcells_core_poloidal/2;
+        case SingleNullBlockCoordSys::LSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*m_numcells_core_radial;      // same radial extent as CSOL
+           index[POLOIDAL_DIR] = (2*POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2;
            break;
-        case RSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*m_numcells_core_radial;      // same radial extent as CSOL
-           index[POLOIDAL_DIR] = -(2*BLOCK_SEPARATION+1)*numcells_core_poloidal/2 - m_numcells_rpf_poloidal;
+        case SingleNullBlockCoordSys::RSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*m_numcells_core_radial;      // same radial extent as CSOL
+           index[POLOIDAL_DIR] = -(2*POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2 - m_numcells_rpf_poloidal;
            break;
-        case LPF:
+        case SingleNullBlockCoordSys::LPF:
            index[RADIAL_DIR] = m_numcells_core_radial - m_numcells_pf_radial;
-           index[POLOIDAL_DIR] = (2*BLOCK_SEPARATION+1)*numcells_core_poloidal/2;
+           index[POLOIDAL_DIR] = (2*POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2;
            break;
-        case RPF:
+        case SingleNullBlockCoordSys::RPF:
            index[RADIAL_DIR] = m_numcells_core_radial - m_numcells_pf_radial;
-           index[POLOIDAL_DIR] = -(2*BLOCK_SEPARATION+1)*numcells_core_poloidal/2 - m_numcells_rpf_poloidal;
+           index[POLOIDAL_DIR] = -(2*POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2 - m_numcells_rpf_poloidal;
            break;
         default:
-           MayDay::Error("SingleNullCoordSys::lo_mapped_index(): Invalid block number");
+           MayDay::Error("SingleNullCoordSys::lo_mapped_index(): Invalid poloidal block number");
         }
   }
   else {
@@ -1766,59 +1823,65 @@ SingleNullCoordSys::lo_mapped_index(int block) const
      int lL1 = m_numcells_mcore_poloidal/2 + m_numcells_lcore_poloidal;
      int rL1 = m_numcells_mcore_poloidal/2 + m_numcells_rcore_poloidal;
 
-     switch ( block )
+     switch ( poloidalBlockNumber(a_block_number) )
         {
-        case MCORE:
+        case SingleNullBlockCoordSys::MCORE:
            index[RADIAL_DIR] = 0;
            index[POLOIDAL_DIR] = -m_numcells_mcore_poloidal/2;
            break;
-        case LCORE:
+        case SingleNullBlockCoordSys::LCORE:
            index[RADIAL_DIR] = 0;
-           index[POLOIDAL_DIR] = (BLOCK_SEPARATION+1)*lL1;
+           index[POLOIDAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*lL1;
            break;
-        case RCORE:
+        case SingleNullBlockCoordSys::RCORE:
            index[RADIAL_DIR] = 0;
-           index[POLOIDAL_DIR] = -(BLOCK_SEPARATION+1)*rL1 - m_numcells_rcore_poloidal;
+           index[POLOIDAL_DIR] = -(POLOIDAL_BLOCK_SEP+1)*rL1 - m_numcells_rcore_poloidal;
            break;
-        case LPF:
+        case SingleNullBlockCoordSys::LPF:
            index[RADIAL_DIR] = L0 - m_numcells_pf_radial;
-           index[POLOIDAL_DIR] = 2*(BLOCK_SEPARATION+1)*lL1;
+           index[POLOIDAL_DIR] = 2*(POLOIDAL_BLOCK_SEP+1)*lL1;
            break;
-        case RPF:
+        case SingleNullBlockCoordSys::RPF:
            index[RADIAL_DIR] = L0 - m_numcells_pf_radial;
-           index[POLOIDAL_DIR] = -2*(BLOCK_SEPARATION+1)*rL1 - m_numcells_rpf_poloidal;
+           index[POLOIDAL_DIR] = -2*(POLOIDAL_BLOCK_SEP+1)*rL1 - m_numcells_rpf_poloidal;
            break;
-        case MCSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*L0;
+        case SingleNullBlockCoordSys::MCSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*L0;
            index[POLOIDAL_DIR] = -m_numcells_mcore_poloidal/2;
            break;
-        case LCSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*L0;
-           index[POLOIDAL_DIR] = (BLOCK_SEPARATION+1)*lL1;
+        case SingleNullBlockCoordSys::LCSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*L0;
+           index[POLOIDAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*lL1;
            break;
-        case RCSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*L0;
-           index[POLOIDAL_DIR] = -(BLOCK_SEPARATION+1)*rL1 - m_numcells_rcore_poloidal;
+        case SingleNullBlockCoordSys::RCSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*L0;
+           index[POLOIDAL_DIR] = -(POLOIDAL_BLOCK_SEP+1)*rL1 - m_numcells_rcore_poloidal;
            break;
-        case LSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*L0;
-           index[POLOIDAL_DIR] = 2*(BLOCK_SEPARATION+1)*lL1;
+        case SingleNullBlockCoordSys::LSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*L0;
+           index[POLOIDAL_DIR] = 2*(POLOIDAL_BLOCK_SEP+1)*lL1;
            break;
-        case RSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*L0;
-           index[POLOIDAL_DIR] = -2*(BLOCK_SEPARATION+1)*rL1 - m_numcells_rpf_poloidal;
+        case SingleNullBlockCoordSys::RSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*L0;
+           index[POLOIDAL_DIR] = -2*(POLOIDAL_BLOCK_SEP+1)*rL1 - m_numcells_rpf_poloidal;
            break;
         default:
-           MayDay::Error("SingleNullCoordSys::lo_mapped_index(): Invalid block number");
+           MayDay::Error("SingleNullCoordSys::lo_mapped_index(): Invalid poloidal block number");
         }
   }
+
+#if CFG_DIM==3
+  int num_block_toroidal_cells = m_numcells_toroidal / m_num_toroidal_blocks;
+  
+  index[TOROIDAL_DIR] = toroidalBlockNumber(a_block_number) * (num_block_toroidal_cells + TOROIDAL_BLOCK_SEP);
+#endif
 
   return index;
 }
 
 
 IntVect
-SingleNullCoordSys::hi_mapped_index(int block) const
+SingleNullCoordSys::hi_mapped_index(int a_block_number) const
 {
   IntVect index;
 
@@ -1826,39 +1889,39 @@ SingleNullCoordSys::hi_mapped_index(int block) const
 
      int numcells_core_poloidal = m_numcells_lcore_poloidal + m_numcells_rcore_poloidal;
 
-     switch ( block )
+     switch ( poloidalBlockNumber(a_block_number) )
         {
-        case LCORE:
+        case SingleNullBlockCoordSys::LCORE:
            index[RADIAL_DIR] = m_numcells_core_radial - 1;
-           index[POLOIDAL_DIR] = (BLOCK_SEPARATION+1)*numcells_core_poloidal/2 - 1;
+           index[POLOIDAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2 - 1;
            break;
-        case RCORE:
+        case SingleNullBlockCoordSys::RCORE:
            index[RADIAL_DIR] = m_numcells_core_radial - 1;
-           index[POLOIDAL_DIR] = -BLOCK_SEPARATION*numcells_core_poloidal/2 - 1;
+           index[POLOIDAL_DIR] = -POLOIDAL_BLOCK_SEP*numcells_core_poloidal/2 - 1;
            break;
-        case LCSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*m_numcells_core_radial + m_numcells_sol_radial - 1;
-           index[POLOIDAL_DIR] = (BLOCK_SEPARATION+1)*numcells_core_poloidal/2 - 1;
+        case SingleNullBlockCoordSys::LCSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*m_numcells_core_radial + m_numcells_sol_radial - 1;
+           index[POLOIDAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2 - 1;
            break;
-        case RCSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*m_numcells_core_radial + m_numcells_sol_radial - 1;
-           index[POLOIDAL_DIR] = -BLOCK_SEPARATION*numcells_core_poloidal/2 - 1;
+        case SingleNullBlockCoordSys::RCSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*m_numcells_core_radial + m_numcells_sol_radial - 1;
+           index[POLOIDAL_DIR] = -POLOIDAL_BLOCK_SEP*numcells_core_poloidal/2 - 1;
            break;
-        case LSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*m_numcells_core_radial + m_numcells_sol_radial - 1;
-           index[POLOIDAL_DIR] = (2*BLOCK_SEPARATION+1)*numcells_core_poloidal/2 + m_numcells_lpf_poloidal - 1;
+        case SingleNullBlockCoordSys::LSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*m_numcells_core_radial + m_numcells_sol_radial - 1;
+           index[POLOIDAL_DIR] = (2*POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2 + m_numcells_lpf_poloidal - 1;
            break;
-        case RSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*m_numcells_core_radial + m_numcells_sol_radial - 1;
-           index[POLOIDAL_DIR] = -(2*BLOCK_SEPARATION+1)*numcells_core_poloidal/2 - 1;  // poloidal domain shifted downward
+        case SingleNullBlockCoordSys::RSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*m_numcells_core_radial + m_numcells_sol_radial - 1;
+           index[POLOIDAL_DIR] = -(2*POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2 - 1;  // poloidal domain shifted downward
            break;
-        case LPF:
+        case SingleNullBlockCoordSys::LPF:
            index[RADIAL_DIR] = m_numcells_core_radial - 1;                                // same hi radial boundary as CORE
-           index[POLOIDAL_DIR] = (2*BLOCK_SEPARATION+1)*numcells_core_poloidal/2 + m_numcells_lpf_poloidal - 1;
+           index[POLOIDAL_DIR] = (2*POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2 + m_numcells_lpf_poloidal - 1;
            break;
-        case RPF:
+        case SingleNullBlockCoordSys::RPF:
            index[RADIAL_DIR] = m_numcells_core_radial - 1;                           // same hi radial boundary as CORE
-           index[POLOIDAL_DIR] = -(2*BLOCK_SEPARATION+1)*numcells_core_poloidal/2 - 1;  // poloidal domain shifted downward
+           index[POLOIDAL_DIR] = -(2*POLOIDAL_BLOCK_SEP+1)*numcells_core_poloidal/2 - 1;  // poloidal domain shifted downward
            break;
         default:
            MayDay::Error("SingleNullCoordSys::lo_mapped_index(): Invalid block number");
@@ -1870,52 +1933,59 @@ SingleNullCoordSys::hi_mapped_index(int block) const
      int lL1 = m_numcells_mcore_poloidal/2 + m_numcells_lcore_poloidal;
      int rL1 = m_numcells_mcore_poloidal/2 + m_numcells_rcore_poloidal;
 
-     switch ( block )
+     switch ( poloidalBlockNumber(a_block_number) )
         {
-        case MCORE:
+        case SingleNullBlockCoordSys::MCORE:
            index[RADIAL_DIR] = L0 - 1;
            index[POLOIDAL_DIR] = m_numcells_mcore_poloidal/2 - 1;
            break;
-        case LCORE:
+        case SingleNullBlockCoordSys::LCORE:
            index[RADIAL_DIR] = L0 - 1;
-           index[POLOIDAL_DIR] = (BLOCK_SEPARATION+1)*lL1 + m_numcells_lcore_poloidal - 1;
+           index[POLOIDAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*lL1 + m_numcells_lcore_poloidal - 1;
            break;
-        case RCORE:
+        case SingleNullBlockCoordSys::RCORE:
            index[RADIAL_DIR] = L0 - 1;
-           index[POLOIDAL_DIR] = -(BLOCK_SEPARATION+1)*rL1 - 1;
+           index[POLOIDAL_DIR] = -(POLOIDAL_BLOCK_SEP+1)*rL1 - 1;
            break;
-        case LPF:
+        case SingleNullBlockCoordSys::LPF:
            index[RADIAL_DIR] = L0 - 1;
-           index[POLOIDAL_DIR] = 2*(BLOCK_SEPARATION+1)*lL1 + m_numcells_lpf_poloidal - 1; 
+           index[POLOIDAL_DIR] = 2*(POLOIDAL_BLOCK_SEP+1)*lL1 + m_numcells_lpf_poloidal - 1; 
            break;
-        case RPF:
+        case SingleNullBlockCoordSys::RPF:
            index[RADIAL_DIR] = L0 - 1;
-           index[POLOIDAL_DIR] = -2*(BLOCK_SEPARATION+1)*rL1 - 1;
+           index[POLOIDAL_DIR] = -2*(POLOIDAL_BLOCK_SEP+1)*rL1 - 1;
            break;
-        case MCSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*L0 + m_numcells_sol_radial - 1;
+        case SingleNullBlockCoordSys::MCSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*L0 + m_numcells_sol_radial - 1;
            index[POLOIDAL_DIR] = m_numcells_mcore_poloidal/2 - 1;
            break;
-        case LCSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*L0 + m_numcells_sol_radial - 1;
-           index[POLOIDAL_DIR] = (BLOCK_SEPARATION+1)*lL1 + m_numcells_lcore_poloidal - 1;
+        case SingleNullBlockCoordSys::LCSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*L0 + m_numcells_sol_radial - 1;
+           index[POLOIDAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*lL1 + m_numcells_lcore_poloidal - 1;
            break;
-        case RCSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*L0 + m_numcells_sol_radial - 1;
-           index[POLOIDAL_DIR] = -(BLOCK_SEPARATION+1)*rL1 - 1;
+        case SingleNullBlockCoordSys::RCSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*L0 + m_numcells_sol_radial - 1;
+           index[POLOIDAL_DIR] = -(POLOIDAL_BLOCK_SEP+1)*rL1 - 1;
            break;
-        case LSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*L0 + m_numcells_sol_radial - 1;
-           index[POLOIDAL_DIR] = 2*(BLOCK_SEPARATION+1)*lL1 + m_numcells_lpf_poloidal - 1;
+        case SingleNullBlockCoordSys::LSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*L0 + m_numcells_sol_radial - 1;
+           index[POLOIDAL_DIR] = 2*(POLOIDAL_BLOCK_SEP+1)*lL1 + m_numcells_lpf_poloidal - 1;
            break;
-        case RSOL:
-           index[RADIAL_DIR] = (BLOCK_SEPARATION+1)*L0 + m_numcells_sol_radial - 1;
-           index[POLOIDAL_DIR] = -2*(BLOCK_SEPARATION+1)*rL1 - 1;
+        case SingleNullBlockCoordSys::RSOL:
+           index[RADIAL_DIR] = (POLOIDAL_BLOCK_SEP+1)*L0 + m_numcells_sol_radial - 1;
+           index[POLOIDAL_DIR] = -2*(POLOIDAL_BLOCK_SEP+1)*rL1 - 1;
            break;
         default:
            MayDay::Error("SingleNullCoordSys::lo_mapped_index(): Invalid block number");
         }
   }
+
+#if CFG_DIM==3
+  int num_block_toroidal_cells = m_numcells_toroidal / m_num_toroidal_blocks;
+  
+  index[TOROIDAL_DIR] = toroidalBlockNumber(a_block_number) * (num_block_toroidal_cells + TOROIDAL_BLOCK_SEP)
+                        + num_block_toroidal_cells - 1;
+#endif
 
   return index;
 }
@@ -1923,40 +1993,40 @@ SingleNullCoordSys::hi_mapped_index(int block) const
 
 
 IntVect
-SingleNullCoordSys::getDecomposition(int block) const
+SingleNullCoordSys::getDecomposition( int a_block_number ) const
 {
   IntVect decomp;
 
-  switch (block)
+  switch ( poloidalBlockNumber(a_block_number) )
     {
-    case MCORE:
+    case SingleNullBlockCoordSys::MCORE:
       decomp = m_decomp_mcore;
       break;
-    case LCORE:
+    case SingleNullBlockCoordSys::LCORE:
       decomp = m_decomp_lcore;
       break;
-    case RCORE:
+    case SingleNullBlockCoordSys::RCORE:
       decomp = m_decomp_rcore;
       break;
-    case MCSOL:
+    case SingleNullBlockCoordSys::MCSOL:
       decomp = m_decomp_mcsol;
       break;
-    case LCSOL:
+    case SingleNullBlockCoordSys::LCSOL:
       decomp = m_decomp_lcsol;
       break;
-    case RCSOL:
+    case SingleNullBlockCoordSys::RCSOL:
       decomp = m_decomp_rcsol;
       break;
-    case LSOL:
+    case SingleNullBlockCoordSys::LSOL:
       decomp = m_decomp_lsol;
       break;
-    case RSOL:
+    case SingleNullBlockCoordSys::RSOL:
       decomp = m_decomp_rsol;
       break;
-    case LPF:
+    case SingleNullBlockCoordSys::LPF:
       decomp = m_decomp_lpf;
       break;
-    case RPF:
+    case SingleNullBlockCoordSys::RPF:
       decomp = m_decomp_rpf;
       break;
     default:
@@ -1983,8 +2053,8 @@ SingleNullCoordSys::readGridParams( ParmParse& a_pp )
    std::vector<int> decomp_rsol( SpaceDim );
 
    // If the input specifies the mesh and decomposition for the
-   // MCORE block, we assume a 10 block geometry.  Otherwise, we
-   // assume the original 8 block geometry
+   // MCORE block, we assume a 10 poloidal block geometry.  Otherwise,
+   // we assume the original 8 poloidal block geometry
    if ( a_pp.contains("numcells.mcore_poloidal") &&
         a_pp.contains("decomp.mcore.configuration") &&
         a_pp.contains("decomp.mcsol.configuration") ) {
@@ -1995,7 +2065,7 @@ SingleNullCoordSys::readGridParams( ParmParse& a_pp )
 
       // For now, we require that the MCORE has an even number of cells in the 
       // poloidal direction so that it can be located symmetrically about
-      // zero in index space.  This assumption can be removed if needed.
+      // zero in index space.  This assumption can be removed later if needed.
       if ( m_numcells_mcore_poloidal%2 != 0 ) {
          MayDay::Error("Number of mcore cells in poloidal direction must be even");
       }
@@ -2021,11 +2091,19 @@ SingleNullCoordSys::readGridParams( ParmParse& a_pp )
          m_numcells_lcore_poloidal = numcells_core[POLOIDAL_DIR]/2;
          m_numcells_rcore_poloidal = numcells_core[POLOIDAL_DIR]/2;
       }
+
+#if CFG_DIM==3
+      m_numcells_toroidal = numcells_core[TOROIDAL_DIR];
+#endif
    }
    else {
       a_pp.query( "numcells.core_radial", m_numcells_core_radial );
       a_pp.query( "numcells.lcore_poloidal", m_numcells_lcore_poloidal );
       a_pp.query( "numcells.rcore_poloidal", m_numcells_rcore_poloidal );
+
+#if CFG_DIM==3
+      a_pp.query( "numcells.toroidal", m_numcells_toroidal );
+#endif
    }
 
    a_pp.query( "numcells.pf_radial", m_numcells_pf_radial );
@@ -2229,13 +2307,35 @@ SingleNullCoordSys::readGridParams( ParmParse& a_pp )
    }
 }
 
+
+void
+SingleNullCoordSys::readGeomParams( ParmParse& a_pp )
+{
+   a_pp.query( "model_geometry", m_model_geometry);
+
+   m_num_poloidal_blocks = m_original_eight_blocks? 8: SingleNullBlockCoordSys::NUM_POLOIDAL_BLOCKS;
+
+#if CFG_DIM==3
+   if ( a_pp.contains("num_toroidal_blocks") ) {
+      a_pp.query( "num_toroidal_blocks", m_num_toroidal_blocks);
+   }
+
+   a_pp.get( "toroidal_width_over_2pi", m_toroidal_width);
+   CH_assert(m_toroidal_width > 0. && m_toroidal_width <= 1.);
+   m_toroidal_width *= 2.*Pi;
+#endif
+
+   m_provides_flux = a_pp.contains("field_coefficients_file");
+}
+
+
 void
 accumulateTuples( const Box&                  a_box,
-                 const IntVect&              a_shift_vec,
-                 const int                   a_block_number,
-                 Vector< Tuple<IntVect,2> >& a_iv_pairs,
-                 Vector<int>&                a_block_numbers,
-                 IntVectSet&                 a_ghost_ivs )
+                  const IntVect&              a_shift_vec,
+                  const int                   a_block_number,
+                  Vector< Tuple<IntVect,2> >& a_iv_pairs,
+                  Vector<int>&                a_block_numbers,
+                  IntVectSet&                 a_ghost_ivs )
 {
    for (BoxIterator bit(a_box); bit.ok(); ++bit) {
       Tuple<IntVect,2> t;
@@ -2247,11 +2347,12 @@ accumulateTuples( const Box&                  a_box,
    }
 }
 
+
 void
 SingleNullCoordSys::defineStencilsUe( const DisjointBoxLayout&  a_grids,
                                      const int                 a_nghost )
 {
-   int num_blocks = m_original_eight_blocks? 8: NUM_SINGLE_NULL_BLOCKS;
+   int num_blocks = m_original_eight_blocks? 8: SingleNullBlockCoordSys::NUM_POLOIDAL_BLOCKS;
    
    if ( num_blocks == 8 ) {
       defineStencilsUe8(a_grids, a_nghost);
@@ -2285,206 +2386,262 @@ SingleNullCoordSys::defineStencilsUe8( const DisjointBoxLayout&  a_grids,
          Box rad_shifted_box;
          Box pol_shifted_box;
          IntVect shift_r, shift_p;
-         
+#if CFG_DIM==3
+         Box tor_shifted_box;
+         IntVect shift_t;
+#endif
+
          switch ( block_number )
          {
-            case LCORE:
+            case SingleNullBlockCoordSys::LCORE:
                
                // RCORE
-               shift_p = -BLOCK_SEPARATION * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
-                                              m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = -POLOIDAL_BLOCK_SEP * (m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                                m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RCORE)->domain().domainBox(), shift_p, RCORE, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RCORE)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::RCORE, iv_pairs, block_numbers, ghost_ivs );
                
-               shift_p = -(BLOCK_SEPARATION+1) * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
-                                                  m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = -(POLOIDAL_BLOCK_SEP+1) * (m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                                    m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RCORE)->domain().domainBox(), shift_p, RCORE, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RCORE)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::RCORE, iv_pairs, block_numbers, ghost_ivs );
                
                // LCSOL
-               shift_r = BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               shift_r = POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
                rad_shifted_box = grown_box + shift_r;
-               accumulateTuples( rad_shifted_box & getCoordSys(LCSOL)->domain().domainBox(), shift_r, LCSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( rad_shifted_box & getCoordSys(SingleNullBlockCoordSys::LCSOL)->domain().domainBox(), shift_r,
+                                 SingleNullBlockCoordSys::LCSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // RCSOL
-               shift_p = -BLOCK_SEPARATION * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
-                                              m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = -POLOIDAL_BLOCK_SEP * (m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                                m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RCSOL)->domain().domainBox(), shift_r + shift_p, RCSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RCSOL)->domain().domainBox(), shift_r + shift_p,
+                                 SingleNullBlockCoordSys::RCSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // LSOL
-               shift_p = BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LSOL)->domain().domainBox(), shift_r + shift_p, LSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LSOL)->domain().domainBox(), shift_r + shift_p,
+                                 SingleNullBlockCoordSys::LSOL, iv_pairs, block_numbers, ghost_ivs );
                
                break;
-            case RCORE:
+            case SingleNullBlockCoordSys::RCORE:
                
                // LCORE
-               shift_p = (BLOCK_SEPARATION+1) * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
-                                                 + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = (POLOIDAL_BLOCK_SEP+1) * (m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+                                                 + m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LCORE)->domain().domainBox(), shift_p, LCORE, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LCORE)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::LCORE, iv_pairs, block_numbers, ghost_ivs );
                
-               shift_p = BLOCK_SEPARATION * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
-                                             + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = POLOIDAL_BLOCK_SEP * (m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+                                             + m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LCORE)->domain().domainBox(), shift_p, LCORE, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LCORE)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::LCORE, iv_pairs, block_numbers, ghost_ivs );
                
                // RCSOL
-               shift_r = BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               shift_r = POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
                rad_shifted_box = grown_box + shift_r;
-               accumulateTuples( rad_shifted_box & getCoordSys(RCSOL)->domain().domainBox(), shift_r, RCSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( rad_shifted_box & getCoordSys(SingleNullBlockCoordSys::RCSOL)->domain().domainBox(), shift_r,
+                                 SingleNullBlockCoordSys::RCSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // LCSOL
-               shift_p = BLOCK_SEPARATION * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
-                                             m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = POLOIDAL_BLOCK_SEP * (m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                             m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LCSOL)->domain().domainBox(), shift_r + shift_p, LCSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LCSOL)->domain().domainBox(), shift_r + shift_p,
+                                 SingleNullBlockCoordSys::LCSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // RSOL
-               shift_p = -BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RSOL)->domain().domainBox(), shift_r + shift_p, RSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RSOL)->domain().domainBox(), shift_r + shift_p,
+                                 SingleNullBlockCoordSys::RSOL, iv_pairs, block_numbers, ghost_ivs );
                
                break;
-            case LCSOL:
+         case SingleNullBlockCoordSys::LCSOL:
                
                // LSOL
-               shift_p = BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LSOL)->domain().domainBox(), shift_p, LSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LSOL)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::LSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // RCSOL
-               shift_p = -BLOCK_SEPARATION * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
-                                              m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = -POLOIDAL_BLOCK_SEP * (m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                              m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RCSOL)->domain().domainBox(), shift_p, RCSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RCSOL)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::RCSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // LCORE
-               shift_r = -BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               shift_r = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
                rad_shifted_box = grown_box + shift_r;
-               accumulateTuples( rad_shifted_box & getCoordSys(LCORE)->domain().domainBox(), shift_r, LCORE, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( rad_shifted_box & getCoordSys(SingleNullBlockCoordSys::LCORE)->domain().domainBox(), shift_r, 
+                                 SingleNullBlockCoordSys::LCORE, iv_pairs, block_numbers, ghost_ivs );
                
                // RCORE
-               shift_p = -BLOCK_SEPARATION*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
-                                            m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = -POLOIDAL_BLOCK_SEP*(m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                            m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RCORE)->domain().domainBox(), shift_r + shift_p, RCORE, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RCORE)->domain().domainBox(), shift_r + shift_p,
+                                 SingleNullBlockCoordSys::RCORE, iv_pairs, block_numbers, ghost_ivs );
                
                // LPF
-               shift_p = BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LPF)->domain().domainBox(), shift_r + shift_p, LPF, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LPF)->domain().domainBox(), shift_r + shift_p,
+                                 SingleNullBlockCoordSys::LPF, iv_pairs, block_numbers, ghost_ivs );
                
                break;
-            case RCSOL:
+            case SingleNullBlockCoordSys::RCSOL:
                
                // RSOL
-               shift_p = -BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RSOL)->domain().domainBox(), shift_p, RSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RSOL)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::RSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // LCSOL
-               shift_p = BLOCK_SEPARATION * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
-                                             m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = POLOIDAL_BLOCK_SEP * (m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) +
+                                             m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LCSOL)->domain().domainBox(), shift_p, LCSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LCSOL)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::LCSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // RCORE
-               shift_r = -BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               shift_r = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
                rad_shifted_box = grown_box + shift_r;
-               accumulateTuples( rad_shifted_box & getCoordSys(RCORE)->domain().domainBox(), shift_r, RCORE, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( rad_shifted_box & getCoordSys(SingleNullBlockCoordSys::RCORE)->domain().domainBox(), shift_r,
+                                 SingleNullBlockCoordSys::RCORE, iv_pairs, block_numbers, ghost_ivs );
                
                // LCORE
-               shift_p = BLOCK_SEPARATION * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
-                                             + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = POLOIDAL_BLOCK_SEP * (m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+                                             + m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LCORE)->domain().domainBox(), shift_r + shift_p, LCORE, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LCORE)->domain().domainBox(), shift_r + shift_p, 
+                                 SingleNullBlockCoordSys::LCORE, iv_pairs, block_numbers, ghost_ivs );
                
                // RPF
-               shift_p = -BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RPF)->domain().domainBox(), shift_r + shift_p, RPF, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RPF)->domain().domainBox(), shift_r + shift_p,
+                                 SingleNullBlockCoordSys::RPF, iv_pairs, block_numbers, ghost_ivs );
                
                break;
-            case LSOL:
+            case SingleNullBlockCoordSys::LSOL:
                
                // LCSOL
-               shift_p = -BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LCSOL)->domain().domainBox(), shift_p, LCSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LCSOL)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::LCSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // LPF
-               shift_r = -BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               shift_r = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
                rad_shifted_box = grown_box + shift_r;
-               accumulateTuples( rad_shifted_box & getCoordSys(LPF)->domain().domainBox(), shift_r, LPF, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( rad_shifted_box & getCoordSys(SingleNullBlockCoordSys::LPF)->domain().domainBox(), shift_r,
+                                 SingleNullBlockCoordSys::LPF, iv_pairs, block_numbers, ghost_ivs );
                
                // LCORE
-               shift_p = -BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LCORE)->domain().domainBox(), shift_r + shift_p, LCORE, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LCORE)->domain().domainBox(), shift_r + shift_p,
+                                 SingleNullBlockCoordSys::LCORE, iv_pairs, block_numbers, ghost_ivs );
                
                break;
-            case RSOL:
+            case SingleNullBlockCoordSys::RSOL:
                
                // RCSOL
-               shift_p = BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RCSOL)->domain().domainBox(), shift_p, RCSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RCSOL)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::RCSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // RPF
-               shift_r = -BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               shift_r = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
                rad_shifted_box = grown_box + shift_r;
-               accumulateTuples( rad_shifted_box & getCoordSys(RPF)->domain().domainBox(), shift_r, RPF, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( rad_shifted_box & getCoordSys(SingleNullBlockCoordSys::RPF)->domain().domainBox(), shift_r, 
+                                 SingleNullBlockCoordSys::RPF, iv_pairs, block_numbers, ghost_ivs );
                
                // RCORE
-               shift_p = BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RCORE)->domain().domainBox(), shift_r + shift_p, RCORE, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RCORE)->domain().domainBox(), shift_r + shift_p,
+                                 SingleNullBlockCoordSys::RCORE, iv_pairs, block_numbers, ghost_ivs );
                
                break;
-            case LPF:
+            case SingleNullBlockCoordSys::LPF:
                
                // RPF
-               shift_p = -(2*BLOCK_SEPARATION+1)*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
-                                                  + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = -(2*POLOIDAL_BLOCK_SEP+1)*(m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+                                                  + m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RPF)->domain().domainBox(), shift_p, RPF, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RPF)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::RPF, iv_pairs, block_numbers, ghost_ivs );
                
                // LSOL
-               shift_r = BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               shift_r = POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
                rad_shifted_box = grown_box + shift_r;
-               accumulateTuples( rad_shifted_box & getCoordSys(LSOL)->domain().domainBox(), shift_r, LSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( rad_shifted_box & getCoordSys(SingleNullBlockCoordSys::LSOL)->domain().domainBox(), shift_r, 
+                                 SingleNullBlockCoordSys::LSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // LCSOL
-               shift_p = -BLOCK_SEPARATION * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LCSOL)->domain().domainBox(), shift_r + shift_p, LCSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LCSOL)->domain().domainBox(), shift_r + shift_p,
+                                 SingleNullBlockCoordSys::LCSOL, iv_pairs, block_numbers, ghost_ivs );
                
                break;
-            case RPF:
+            case SingleNullBlockCoordSys::RPF:
                
                // LPF
-               shift_p = (2*BLOCK_SEPARATION+1) * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
-                                                   + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               shift_p = (2*POLOIDAL_BLOCK_SEP+1) * (m_mappingBlocks[SingleNullBlockCoordSys::LCORE].size(POLOIDAL_DIR)
+                                                   + m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = grown_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(LPF)->domain().domainBox(), shift_p, LPF, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::LPF)->domain().domainBox(), shift_p,
+                                 SingleNullBlockCoordSys::LPF, iv_pairs, block_numbers, ghost_ivs );
                
                // RSOL
-               shift_r = BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               shift_r = POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
                rad_shifted_box = grown_box + shift_r;
-               accumulateTuples( rad_shifted_box & getCoordSys(RSOL)->domain().domainBox(), shift_r, RSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( rad_shifted_box & getCoordSys(SingleNullBlockCoordSys::RSOL)->domain().domainBox(), shift_r,
+                                 SingleNullBlockCoordSys::RSOL, iv_pairs, block_numbers, ghost_ivs );
                
                // RCSOL
-               shift_p = BLOCK_SEPARATION * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[SingleNullBlockCoordSys::RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
                pol_shifted_box = rad_shifted_box + shift_p;
-               accumulateTuples( pol_shifted_box & getCoordSys(RCSOL)->domain().domainBox(), shift_r + shift_p, RCSOL, iv_pairs, block_numbers, ghost_ivs );
+               accumulateTuples( pol_shifted_box & getCoordSys(SingleNullBlockCoordSys::RCSOL)->domain().domainBox(), shift_r + shift_p,
+                                 SingleNullBlockCoordSys::RCSOL, iv_pairs, block_numbers, ghost_ivs );
                
                break;
             default:
                MayDay::Error("SingleNullCoordSys::blockRemapping(): Unknown block number");
          }
+
+#if CFG_DIM==3
+         //         shift_t = TOROIDAL_BLOCK_SEP * m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+         shift_t = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+
+         tor_shifted_box = grown_box + shift_t;
+         for (int other_block_number=0; other_block_number<m_num_poloidal_blocks; ++other_block_number) {
+            accumulateTuples( tor_shifted_box & getCoordSys(other_block_number)->domain().domainBox(), shift_t,
+                              other_block_number, iv_pairs, block_numbers, ghost_ivs );
+         }
+
+         //         shift_t = -TOROIDAL_BLOCK_SEP * m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+         shift_t = - m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+
+         tor_shifted_box = grown_box + shift_t;
+         for (int other_block_number=0; other_block_number<m_num_poloidal_blocks; ++other_block_number) {
+            accumulateTuples( tor_shifted_box & getCoordSys(other_block_number)->domain().domainBox(), shift_t,
+                              other_block_number, iv_pairs, block_numbers, ghost_ivs );
+         }
+#endif
          
          // Now that we have all of the extrablock ghost cells, we can allocate the IVSFAB<MBStencil>
          m_stencil_ue[dit] = RefCountedPtr< IVSFAB<MBStencil> >(new IVSFAB<MBStencil>(ghost_ivs,1));
@@ -2683,10 +2840,10 @@ void SingleNullCoordSys::checkGridConsistency() const
 {
    double epsilon = 1.0e-9; //Here, just an arbitrary very small number
    
-   const SingleNullBlockCoordSysModel& lcore_coord_sys = (const SingleNullBlockCoordSysModel&)(*(getCoordSys(LCORE)));
-   const SingleNullBlockCoordSysModel& lsol_coord_sys = (const SingleNullBlockCoordSysModel&)(*(getCoordSys(LSOL)));
-   const SingleNullBlockCoordSysModel& lpf_coord_sys = (const SingleNullBlockCoordSysModel&)(*(getCoordSys(LPF)));
-   const SingleNullBlockCoordSysModel& rpf_coord_sys = (const SingleNullBlockCoordSysModel&)(*(getCoordSys(RPF)));
+   const SingleNullBlockCoordSysModel& lcore_coord_sys = (const SingleNullBlockCoordSysModel&)(*(getCoordSys(SingleNullBlockCoordSys::LCORE)));
+   const SingleNullBlockCoordSysModel& lsol_coord_sys = (const SingleNullBlockCoordSysModel&)(*(getCoordSys(SingleNullBlockCoordSys::LSOL)));
+   const SingleNullBlockCoordSysModel& lpf_coord_sys = (const SingleNullBlockCoordSysModel&)(*(getCoordSys(SingleNullBlockCoordSys::LPF)));
+   const SingleNullBlockCoordSysModel& rpf_coord_sys = (const SingleNullBlockCoordSysModel&)(*(getCoordSys(SingleNullBlockCoordSys::RPF)));
    
    int nrad_CORE = lcore_coord_sys.domain().domainBox().size(RADIAL_DIR);
    int npol_CORE = lcore_coord_sys.domain().domainBox().size(POLOIDAL_DIR);
@@ -2713,6 +2870,7 @@ void SingleNullCoordSys::checkGridConsistency() const
 
 }
 
+
 #if CFG_DIM == 3
 void
 SingleNullCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
@@ -2721,8 +2879,45 @@ SingleNullCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
                                            const int a_nSrc,
                                            const Side::LoHiSide& a_side) const
 {
-   MayDay::Error("SingleNullCoordSys::toroidalBlockRemapping is not implemented!!!");
+   MayDay::Error("SNCoreCoordSys::toroidalBlockRemapping is not implemented!!!");
 }
 #endif
-      
+
+
+Vector<RealVect>
+SingleNullCoordSys::displacements(const Vector<RealVect>&   a_dstCoords,
+                                  const Vector<int>&        a_dstBlocks,
+                                  const RealVect&           a_srcCoords,
+                                  int                       a_srcBlock) const
+{
+#if CFG_DIM==2
+   return MultiBlockCoordSys::displacements(a_dstCoords, a_dstBlocks, a_srcCoords, a_srcBlock);
+#endif
+#if CFG_DIM==3
+   Vector<RealVect> dstCoords(a_dstCoords.size());
+
+   for (int i=0; i<a_dstCoords.size(); ++i) {
+      dstCoords[i] = a_dstCoords[i];
+
+      double toroidal_mapped_coord = a_dstCoords[i][TOROIDAL_DIR];
+
+      if ( toroidal_mapped_coord < a_srcCoords[TOROIDAL_DIR] ) {
+         double shifted_coord = toroidal_mapped_coord + m_toroidal_width;
+         if ( fabs(shifted_coord - a_srcCoords[TOROIDAL_DIR]) < fabs(toroidal_mapped_coord - a_srcCoords[TOROIDAL_DIR]) ) {
+            dstCoords[i][TOROIDAL_DIR] = shifted_coord;
+         }
+      }
+      else if ( toroidal_mapped_coord > a_srcCoords[TOROIDAL_DIR] ) {
+         double shifted_coord = toroidal_mapped_coord - m_toroidal_width;
+         if ( fabs(shifted_coord - a_srcCoords[TOROIDAL_DIR]) < fabs(toroidal_mapped_coord - a_srcCoords[TOROIDAL_DIR]) ) {
+            dstCoords[i][TOROIDAL_DIR] = shifted_coord;
+         }
+      }
+   }
+
+   return MultiBlockCoordSys::displacements(dstCoords, a_dstBlocks, a_srcCoords, a_srcBlock);
+#endif
+}
+
+
 #include "NamespaceFooter.H"

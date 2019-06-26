@@ -239,11 +239,11 @@ void
       void getPointwiseMetrics( FluxBox& N ) const;
 
       /**
-       * Fill argument with 2 pi times the minor radius times the major radius
+       * Fill argument with the poloidal Jacobian
        *
-       * @param[out] TwoPirRmaj  TwoPi * r * Rmaj
+       * @param[out] poloidalJ  poloidal Jacobian
       */
-      void getTwoPirRmaj(FArrayBox& TwoPirRmaj) const;
+      void getPointwisePoloidalJ(FArrayBox& poloidalJ) const;
 
       /// Fills the input FArrayBox with the real coordinates at cell centers
       /**
@@ -260,7 +260,16 @@ void
        */
       void getNodeCenteredRealCoords( FArrayBox&  a_X ) const;
 
-      /// Computes the flux surface unit tangent vector
+      /// Computes the maximum absolute value of the difference between the
+      /// forward and inverse mappings
+      /**
+       */
+      double mappingError( const Box& box ) const;
+
+      virtual void getNormMagneticFlux( const FArrayBox& a_physical_coordinates,
+                                        FArrayBox&       a_magnetic_flux ) const {};
+
+   /// Computes the flux surface unit tangent vector
       /**
        * @param[out] data  flux surface unit tangent vector
        */
@@ -306,7 +315,7 @@ void
       virtual double getRBtoroidal() const = 0;
 
       /// Returns B field at a given physical coordinate
-      virtual Vector<Real> computeBField(const RealVect& a_X) const = 0;
+      virtual array<double,3> computeBField(const RealVect& a_X) const = 0;
    
       virtual void computeFieldData( const int  dir,
                                      FArrayBox& BField,

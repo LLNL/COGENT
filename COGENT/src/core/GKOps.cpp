@@ -12,6 +12,7 @@
 #include "GKPoisson.H"
 #include "EFieldAmpere.H"
 #include "EFieldSelfConsistentBC.H"
+#include "FluxSurface.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -39,12 +40,13 @@ void GKOps::define( const GKState& a_state,
    m_dt = a_dt;
    m_phase_geometry = a_state.geometry();
    CH_assert( m_phase_geometry != NULL );
+   //m_ghost_vect = m_phase_geometry[0].ghostVect(); // JRAgv
+   //cout << "GKOps::m_ghost_vect = " << m_ghost_vect << endl;
 
    /* default IMEX partitioning:
     * Explicit: Vlasov, Neutrals
     * Implicit: Collisions, Transport
    */
-   m_vlasov_imex_implicit     = false;
    m_transport_imex_implicit  = false;
    m_neutrals_imex_implicit   = false;
 
@@ -56,15 +58,23 @@ void GKOps::define( const GKState& a_state,
    ParmParse pp;
    m_boundary_conditions = new GKSystemBC( pp, a_state );
    m_initial_conditions = new GKSystemIC( pp, a_state );
-   
+
+   const KineticSpeciesPtrVect& kin_species(a_state.dataKinetic());
+   int n_species = kin_species.size();
+   std::vector<std::string> name_list(n_species);
+   for (int n=0; n<n_species; n++) {
+     const KineticSpecies& species = *(kin_species[n]);
+     name_list.push_back(species.name());
+   }
+ 
    const double larmor( m_units->larmorNumber() );
    if ( a_state.dataKinetic().size() > 0 ) {
       ParmParse pp_vlasov(GKVlasov::pp_name);
       if ( m_consistent_potential_bcs ) {
-         m_vlasov = new GKVlasovAmpere( pp_vlasov, larmor, !m_ampere_law );
+         m_vlasov = new GKVlasovAmpere( pp_vlasov, larmor, name_list, !m_ampere_law );
       }
       else {
-         m_vlasov = new GKVlasov( pp_vlasov, larmor );
+         m_vlasov = new GKVlasov( pp_vlasov, larmor, name_list );
       }
    }
    else {
@@ -99,10 +109,12 @@ void GKOps::define( const GKState& a_state,
    m_phi.define( m_phase_geometry->magGeom().gridsFull(), 1, phi_ghost_vect );
 
    GyroaverageOperatorFactory::createOps(m_gyroavg_ops, a_state.dataKinetic());
-   KineticSpeciesPtrVect& kin_species(m_Y.dataKinetic());
-   for (int s=0; s<kin_species.size(); s++) {
-     KineticSpecies& species = *(kin_species[s]);
-     if (species.isGyrokinetic()) species.gyroaverageOp(m_gyroavg_ops[species.name()]);
+   {
+     KineticSpeciesPtrVect& kin_species(m_Y.dataKinetic());
+     for (int s=0; s<kin_species.size(); s++) {
+       KineticSpecies& species = *(kin_species[s]);
+       if (species.isGyrokinetic()) species.gyroaverageOp(m_gyroavg_ops[species.name()]);
+     }
    }
 
    m_is_defined = true;
@@ -219,9 +231,25 @@ void GKOps::initializeElectricField( const GKState& a_state_phys,
    }
 
    if ( m_old_vorticity_model ) {
-      const Vector<Real>& scalar_data = a_state_phys.dataScalar()[m_Y.getScalarComponent("Er_boundary")]->data();
+      Vector<Real> scalar_data;
+      if (m_consistent_potential_bcs) {
+	scalar_data = a_state_phys.dataScalar()[m_Y.getScalarComponent("Er_boundary")]->data();
+      }
       m_VorticityOp->initializeOldModel(a_state_phys.dataKinetic(), scalar_data);
    }
+}
+
+void GKOps::initializeFluidSpeciesPhysical( const CFG::FluidSpeciesPtrVect&  a_species_comp )
+{
+   int num_species = a_species_comp.size();
+   CFG::IntVect ghost_vect_cfg;
+   ghost_vect_cfg = m_phase_geometry->config_restrict(m_ghost_vect);
+   m_fluid_species_phys.resize(num_species);
+   for (int species(0); species<num_species; species++) {
+      m_fluid_species_phys[species] = a_species_comp[species]->clone(ghost_vect_cfg, true);
+      m_fluid_species_phys[species]->convertToPhysical();
+   }   
+
 }
 
 GKOps::~GKOps()
@@ -252,17 +280,19 @@ GKOps::~GKOps()
 Real GKOps::stableDtExpl( const GKState& a_state, const int a_step_number )
 {
    Real dt_stable( DBL_MAX );
-   dt_stable = Min( dt_stable, m_dt_vlasov );
-   if (m_dt_collisions > 0.) {
-      dt_stable = Min( dt_stable, m_dt_collisions );
+   if (m_dt_vlasov_expl > 0.) {
+     dt_stable = Min( dt_stable, m_dt_vlasov_expl );
    }
-   dt_stable = Min( dt_stable, m_dt_fluids );
-   dt_stable = Min( dt_stable, m_dt_scalars );
+   if (m_dt_collisions_expl > 0.) {
+      dt_stable = Min( dt_stable, m_dt_collisions_expl );
+   }
+   dt_stable = Min( dt_stable, m_dt_fluids_expl );
+   dt_stable = Min( dt_stable, m_dt_scalars_expl );
    if (m_transport_model_on) {
-      dt_stable = Min( dt_stable, m_dt_transport );
+      dt_stable = Min( dt_stable, m_dt_transport_expl );
    }
    if (m_neutrals_model_on) {
-      dt_stable = Min( dt_stable, m_dt_neutrals );
+      dt_stable = Min( dt_stable, m_dt_neutrals_expl );
    }
    return dt_stable;
 }
@@ -270,11 +300,19 @@ Real GKOps::stableDtExpl( const GKState& a_state, const int a_step_number )
 Real GKOps::stableDtImEx( const GKState& a_state, const int a_step_number )
 {
    Real dt_stable( DBL_MAX );
-   dt_stable = Min( dt_stable, m_dt_vlasov );
-   dt_stable = Min( dt_stable, m_dt_fluids );
-   dt_stable = Min( dt_stable, m_dt_scalars );
+   if (m_dt_vlasov_imex > 0.) {
+     dt_stable = Min( dt_stable, m_dt_vlasov_imex );
+   }
+   if (m_dt_collisions_imex > 0.) {
+      dt_stable = Min( dt_stable, m_dt_collisions_imex );
+   }
+   dt_stable = Min( dt_stable, m_dt_fluids_imex );
+   dt_stable = Min( dt_stable, m_dt_scalars_imex );
+   if (m_transport_model_on) {
+      dt_stable = Min( dt_stable, m_dt_transport_imex );
+   }
    if (m_neutrals_model_on) {
-      dt_stable = Min( dt_stable, m_dt_neutrals );
+      dt_stable = Min( dt_stable, m_dt_neutrals_imex );
    }
    return dt_stable;
 }
@@ -284,38 +322,51 @@ void GKOps::preTimeStep (const int       a_step,
                          const GKState&  a_state_comp, 
                          const GKState&  a_state_phys )
 {
-   setElectricField( a_state_comp, a_step, m_phi, *m_E_field, m_injected_E_field );
+   CH_TIME("GKOps::preTimeStep()");
+   if(!m_zero_efield) {
+      updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time);
+      setElectricField( a_state_comp, a_step, m_phi, *m_E_field, m_injected_E_field );
+   }
 
    const KineticSpeciesPtrVect& soln_comp( a_state_comp.dataKinetic() );
    const KineticSpeciesPtrVect& soln_phys( a_state_phys.dataKinetic() );
    m_collisions->preTimeStep( soln_comp, a_time, soln_phys );
 
+   /* compute dt for each physics */
+
    if ( m_vlasov ) {
-      m_dt_vlasov = m_vlasov->computeDt(*m_E_field, soln_comp);
+      m_dt_vlasov_expl = m_vlasov->computeDtExplicitTI(*m_E_field, soln_comp);
+      m_dt_vlasov_imex = m_vlasov->computeDtImExTI(*m_E_field, soln_comp);
       m_time_scale_vlasov = m_vlasov->computeTimeScale(*m_E_field, soln_comp );
    }
    else {
-      m_dt_vlasov = DBL_MAX;
-      m_time_scale_vlasov = DBL_MAX;
+      m_dt_vlasov_expl = -1;
+      m_dt_vlasov_imex = -1;
+      m_time_scale_vlasov = -1;
    }
 
-   m_dt_collisions = m_collisions->computeDt( soln_comp );
+   m_dt_collisions_expl = m_collisions->computeDtExplicitTI( soln_comp );
+   m_dt_collisions_imex = m_collisions->computeDtImExTI( soln_comp );
    m_time_scale_collisions = m_collisions->computeTimeScale( soln_comp );
 
    const CFG::FluidSpeciesPtrVect& fluids_comp( a_state_comp.dataFluid() );
-   m_dt_fluids = m_fluidOp->computeDt( fluids_comp );
+   m_dt_fluids_expl = m_fluidOp->computeDtExplicitTI( fluids_comp );
+   m_dt_fluids_imex = m_fluidOp->computeDtImExTI( fluids_comp );
    m_time_scale_fluids = m_fluidOp->computeTimeScale( fluids_comp );
 
    const ScalarPtrVect& scalars_comp( a_state_comp.dataScalar() );
-   m_dt_scalars = m_scalarOp->computeDt( scalars_comp );
+   m_dt_scalars_expl = m_scalarOp->computeDtExplicitTI( scalars_comp );
+   m_dt_scalars_imex = m_scalarOp->computeDtImExTI( scalars_comp );
    m_time_scale_scalars = m_scalarOp->computeTimeScale( scalars_comp );
 
    if (m_transport_model_on) {
-      m_dt_transport = m_transport->computeDt( soln_comp );
+      m_dt_transport_expl = m_transport->computeDtExplicitTI( soln_comp );
+      m_dt_transport_imex = m_transport->computeDtImExTI( soln_comp );
       m_time_scale_transport = m_transport->computeTimeScale( soln_comp );
    }
    if (m_neutrals_model_on) {
-      m_dt_neutrals = m_neutrals->computeDt( soln_phys );
+      m_dt_neutrals_expl = m_neutrals->computeDtExplicitTI( soln_phys );
+      m_dt_neutrals_imex = m_neutrals->computeDtImExTI( soln_phys );
       m_time_scale_neutrals = m_neutrals->computeTimeScale( soln_phys );
    }
 
@@ -351,9 +402,10 @@ void GKOps::postTimeStep( const int       a_step,
 
       KineticSpeciesPtrVect kinetic_species_phys;
       createPhysicalSpeciesVector(kinetic_species_phys, a_state.dataKinetic(), a_time);
-
-      const Vector<Real>& scalar_data = a_state.dataScalar()[m_Y.getScalarComponent("Er_boundary")]->data();
-
+      Vector<Real> scalar_data;
+      if (m_consistent_potential_bcs) {
+        scalar_data = a_state.dataScalar()[m_Y.getScalarComponent("Er_boundary")]->data();
+      }
       m_VorticityOp->updatePotentialOldModel(m_phi, *m_E_field, kinetic_species_phys, scalar_data, a_dt, a_time);
    }
 }
@@ -367,7 +419,7 @@ void GKOps::postTimeStage( const int       a_step,
    // Calculation of the field is skipped for stage 0, since we assume it
    // has already been calculated to compute the velocity used in the
    // time step estimate.
-   if (a_stage) {
+   if (a_stage && !m_zero_efield) {
       setElectricField( a_state_comp, a_step, m_phi, *m_E_field, m_injected_E_field );
    }
 
@@ -407,6 +459,8 @@ void GKOps::preSolutionOpEval( const GKState&  a_state,
    CH_START(t_create_phys_vector);
    createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
    CH_STOP(t_create_phys_vector);
+   
+   updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
 
    if ( a_update_fluid_ops ) {
       CH_START(t_fluid_preop_eval);
@@ -418,6 +472,7 @@ void GKOps::preSolutionOpEval( const GKState&  a_state,
 
 void GKOps::preOpEval( const GKState&  a_state,
                        const Real      a_time,
+                       const bool      a_update_kinetic_phys,
                        const bool      a_update_fluid_ops )
 {
    CH_TIMERS("GKOps::preOpEval");
@@ -425,7 +480,7 @@ void GKOps::preOpEval( const GKState&  a_state,
    CH_TIMER("fluidpreOpEval",t_fluid_preop_eval);
 
    // The purpose of this function is to enable the calculation of data prior to
-   // calling the operation evaluation class members (e.g., explicitOp, explicitOpImEx,
+   // calling the operator evaluation class members (e.g., explicitOp, explicitOpImEx,
    // implicitOpImEx, etc.).  Presently, it is used to precompute the physical
    // kinetic species from the computational kinetic species, which is somewhat
    // expensive due to the need to divide by J and fill ghost cells.  By caching
@@ -434,10 +489,14 @@ void GKOps::preOpEval( const GKState&  a_state,
    // function calls, or we don't care if it did, e.g., for an approximate preconditioner
    // operator evaluation.  Dependence on class state like this is dangerous,
    // but necessary for performance.
-   
-   CH_START(t_create_phys_vector);
-   createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
-   CH_STOP(t_create_phys_vector);
+
+   if ( a_update_kinetic_phys ) {
+      CH_START(t_create_phys_vector);
+      createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
+      CH_STOP(t_create_phys_vector);
+   }
+
+   updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
 
    if ( a_update_fluid_ops ) {
       CH_START(t_fluid_preop_eval);
@@ -455,18 +514,17 @@ void GKOps::solutionOp( GKRHSData&      a_rhs,
 
    a_rhs.zero();
    applyKineticSpeciesSolutionOperator(a_rhs.dataKinetic(), a_state.dataKinetic(), a_time);
-
-   CFG::FluidSpeciesPtrVect fluid_species_phys;
-   createPhysicalSpeciesVector( fluid_species_phys, a_state.dataFluid(), a_time );
-
+   
+   //updatePhysicalSpeciesVector( a_state.dataFluid(), a_time);
+ 
    applyFluidSpeciesSolutionOperator( a_rhs.dataFluid(), 
                                       a_state.dataKinetic(),
                                       m_kinetic_species_phys, 
                                       a_state.dataFluid(), 
-                                      fluid_species_phys, 
+                                      m_fluid_species_phys, 
                                       a_state.dataScalar(), 
                                       a_time );
-
+   
    applyScalarSolutionOperator( a_rhs.dataScalar(), a_state.dataScalar(), a_time );
 }
 
@@ -502,7 +560,7 @@ void GKOps::explicitOp( GKRHSData&      a_rhs,
 
    a_rhs.zero();
 
-   applyVlasovOperator( a_rhs, m_kinetic_species_phys, a_time );
+   applyVlasovOperator( a_rhs, m_kinetic_species_phys, unsplit, a_time );
 
    if (m_transport_model_on) {
       applyTransportOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
@@ -514,13 +572,10 @@ void GKOps::explicitOp( GKRHSData&      a_rhs,
 
    applyCollisionOperator( a_rhs.dataKinetic(), a_state_comp.dataKinetic(), unsplit, a_time );
    
-   CFG::FluidSpeciesPtrVect fluid_species_phys;
-   createPhysicalSpeciesVector( fluid_species_phys, a_state_comp.dataFluid(), a_time );
-
-   applyFluidOperator( a_rhs.dataFluid(), m_kinetic_species_phys, fluid_species_phys,
+   applyFluidOperator( a_rhs.dataFluid(), m_kinetic_species_phys, m_fluid_species_phys,
                        a_state_comp.dataScalar(), *m_E_field, unsplit, a_time );
 
-   applyScalarOperator( a_rhs, m_kinetic_species_phys, fluid_species_phys,
+   applyScalarOperator( a_rhs, m_kinetic_species_phys, m_fluid_species_phys,
                         a_state_comp.dataScalar(), *m_E_field, unsplit, true, a_time );
 }
 
@@ -532,9 +587,7 @@ void GKOps::explicitOpImEx( GKRHSData&      a_rhs,
 
    a_rhs.zero();
 
-   if (!m_vlasov_imex_implicit) {
-      applyVlasovOperator( a_rhs, m_kinetic_species_phys, a_time );
-   }
+   applyVlasovOperator( a_rhs, m_kinetic_species_phys, imex_exp, a_time );
 
    if (m_transport_model_on && (!m_transport_imex_implicit) ) {
       applyTransportOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
@@ -546,13 +599,12 @@ void GKOps::explicitOpImEx( GKRHSData&      a_rhs,
       applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
    }
 
-   CFG::FluidSpeciesPtrVect fluid_species_phys;
-   createPhysicalSpeciesVector( fluid_species_phys, a_state_comp.dataFluid(), a_time );
-
-   applyFluidOperator( a_rhs.dataFluid(), m_kinetic_species_phys, fluid_species_phys,
+   //updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time);
+   
+   applyFluidOperator( a_rhs.dataFluid(), m_kinetic_species_phys, m_fluid_species_phys,
                        a_state_comp.dataScalar(), *m_E_field, imex_exp, a_time );
 
-   applyScalarOperator( a_rhs, m_kinetic_species_phys, fluid_species_phys,
+   applyScalarOperator( a_rhs, m_kinetic_species_phys, m_fluid_species_phys,
                         a_state_comp.dataScalar(), *m_E_field, imex_exp, true, a_time );
 }
 
@@ -565,13 +617,13 @@ void GKOps::implicitOpImEx( GKRHSData&      a_rhs,
    CFG::LevelData<CFG::FArrayBox> phi( m_phase_geometry->magGeom().gridsFull(), 1, 4*CFG::IntVect::Unit );
    LevelData<FluxBox> injected_E_field;
 
-   setElectricField( a_state_comp, -1, phi, *m_E_field_ImOpImEx, injected_E_field );
+   if(!m_zero_efield) {
+      setElectricField( a_state_comp, -1, phi, *m_E_field_ImOpImEx, injected_E_field );
+   }
 
    a_rhs.zero();
 
-   if (m_vlasov_imex_implicit) {
-      applyVlasovOperator( a_rhs, m_kinetic_species_phys, a_time );
-   }
+   applyVlasovOperator( a_rhs, m_kinetic_species_phys, imex_imp, a_time );
 
    if (m_transport_model_on && (m_transport_imex_implicit) ) {
       applyTransportOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
@@ -582,14 +634,13 @@ void GKOps::implicitOpImEx( GKRHSData&      a_rhs,
    if (m_neutrals_model_on && (m_neutrals_imex_implicit) ) {
       applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
    }
+    
+   //updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time);
 
-   CFG::FluidSpeciesPtrVect fluid_species_phys;
-   createPhysicalSpeciesVector( fluid_species_phys, a_state_comp.dataFluid(), a_time );
-
-   applyFluidOperator( a_rhs.dataFluid(), m_kinetic_species_phys, fluid_species_phys,
+   applyFluidOperator( a_rhs.dataFluid(), m_kinetic_species_phys, m_fluid_species_phys,
                        a_state_comp.dataScalar(), *m_E_field_ImOpImEx, imex_imp, a_time );
 
-   applyScalarOperator( a_rhs, m_kinetic_species_phys, fluid_species_phys,
+   applyScalarOperator( a_rhs, m_kinetic_species_phys, m_fluid_species_phys,
                         a_state_comp.dataScalar(), *m_E_field_ImOpImEx, imex_imp, true, a_time );
 }
 
@@ -608,18 +659,17 @@ void GKOps::solutionPC( GKRHSData&     a_rhs,
    a_rhs.zero();
 
    applyKineticSpeciesSolutionOperator(a_rhs.dataKinetic(), m_kinetic_species_phys, a_time);
-
-   CFG::FluidSpeciesPtrVect fluid_species_phys;
-   createPhysicalSpeciesVector( fluid_species_phys, a_state.dataFluid(), a_time );
-
+     
+   updatePhysicalSpeciesVector( a_state.dataFluid(), a_time); // needed?
+   
    applyFluidSpeciesSolutionOperator( a_rhs.dataFluid(), 
                                       a_state.dataKinetic(),
                                       m_kinetic_species_phys, 
                                       a_state.dataFluid(),
-                                      fluid_species_phys, 
+                                      m_fluid_species_phys, 
                                       a_state.dataScalar(), 
                                       a_time );
-
+   
    applyScalarSolutionOperator( a_rhs.dataScalar(), a_state.dataScalar(), a_time );
 }
 
@@ -637,7 +687,9 @@ void GKOps::explicitPC( GKRHSData&     a_rhs,
 
    a_rhs.zero();
 
-   applyVlasovOperator( a_rhs, m_kinetic_species_phys, a_time );
+   applyVlasovOperator( a_rhs, m_kinetic_species_phys, unsplit, a_time );
+     
+   updatePhysicalSpeciesVector( a_state.dataFluid(), a_time); // needed?
 
    if (m_transport_model_on) {
       applyTransportOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
@@ -649,13 +701,10 @@ void GKOps::explicitPC( GKRHSData&     a_rhs,
 
    applyCollisionOperator( a_rhs.dataKinetic(), a_state.dataKinetic(), unsplit, a_time );
    
-   CFG::FluidSpeciesPtrVect fluid_species_phys;
-   createPhysicalSpeciesVector( fluid_species_phys, a_state.dataFluid(), a_time );
-
-   applyFluidOperator( a_rhs.dataFluid(), m_kinetic_species_phys, fluid_species_phys, a_state.dataScalar(),
+   applyFluidOperator( a_rhs.dataFluid(), m_kinetic_species_phys, m_fluid_species_phys, a_state.dataScalar(),
                        *m_E_field, unsplit, a_time );
 
-   applyScalarOperator( a_rhs, m_kinetic_species_phys, fluid_species_phys,
+   applyScalarOperator( a_rhs, m_kinetic_species_phys, m_fluid_species_phys,
                         a_state.dataScalar(), *m_E_field, unsplit, true, a_time );
 }
 
@@ -664,6 +713,7 @@ void GKOps::implicitPCImEx( GKRHSData&     a_rhs,
                             const GKState& a_state_comp )
 {
    CH_TIME("GKOps::implicitPCImEx");
+   updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time); // needed?
    implicitOpImEx(a_rhs, a_time, a_state_comp);
 }
 
@@ -751,6 +801,18 @@ void GKOps::defineMultiPhysicsPC( std::vector<Preconditioner<GKVector,GKOps>*>& 
   m_Y.copyFrom(a_state.data());
   const GlobalDOF* global_dof(a_state.getGlobalDOF());
 
+  if (m_vlasov) {
+    m_vlasov->defineMultiPhysicsPC( a_pc,
+                                    a_dof_list,
+                                    m_Y.dataKinetic(),
+                                    global_dof->dataKinetic(),
+                                    a_state,
+                                    *this,
+                                    a_out_string,
+                                    a_opt_string,
+                                    a_im );
+  }
+
   m_collisions->defineMultiPhysicsPC( a_pc, 
                                       a_dof_list,
                                       m_Y.dataKinetic(),
@@ -782,6 +844,13 @@ void GKOps::updateMultiPhysicsPC( std::vector<Preconditioner<GKVector,GKOps>*>& 
 {
   m_Y.copyFrom(a_state.data());
   const GlobalDOF* global_dof(a_state.getGlobalDOF());
+
+  if (m_vlasov) {
+    m_vlasov->updateMultiPhysicsPC( a_pc,
+                                    m_Y.dataKinetic(),
+                                    global_dof->dataKinetic(),
+                                    a_time, a_shift, a_im);
+  }
 
   m_collisions->updateMultiPhysicsPC( a_pc, 
                                       m_Y.dataKinetic(), 
@@ -852,7 +921,7 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
                               LevelData<FluxBox>&              a_injected_E_field ) const
 {
    CH_TIME("GKOps::setElectricField");
-   
+ 
    if ( m_state_includes_potential ) {
       const CFG::FluidSpeciesPtrVect& fluids( a_state_comp.dataFluid() );
       const CFG::LevelData<CFG::FArrayBox>& phi = fluids[a_state_comp.getFluidComponent("potential")]->cell_var("potential");
@@ -872,6 +941,7 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
 
    divideJ( a_kinetic_species, kinetic_species_phys );
    
+   /*
    const CFG::FluidSpeciesPtrVect& a_fluid_species = a_state_comp.dataFluid();
 
    const int num_fluid_species( a_fluid_species.size() );
@@ -886,14 +956,15 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
    for (int species(0); species<num_fluid_species; species++) {
       fluid_species_phys[species] = a_fluid_species[species]->convertToPhysical(ghost_vect_cfg);
    }
-   
+   */   
+
    // If the potential is a state variable or the old vorticity model is being used or the
    // efield is fixed, then something else is controlling the potential, so don't recompute it here.
    bool compute_potential = !(m_state_includes_potential || m_old_vorticity_model || m_fixed_efield);
 
    a_E_field.computeEField( m_Y,
                             kinetic_species_phys,
-                            fluid_species_phys,
+                            m_fluid_species_phys,
                             a_state_comp.dataScalar(),
                             a_phi,
                             m_boundary_conditions->getEllipticOpBC(),
@@ -929,34 +1000,37 @@ void GKOps::createPhysicalSpeciesVector( KineticSpeciesPtrVect&        a_species
 
 
 inline
-void GKOps::createPhysicalSpeciesVector( CFG::FluidSpeciesPtrVect&        a_species_phys,
-                                         const CFG::FluidSpeciesPtrVect&  a_species_comp,
+void GKOps::updatePhysicalSpeciesVector( const CFG::FluidSpeciesPtrVect&  a_species_comp,
                                          const double                     a_time )
 {
-   CH_TIME("GKOps::createPhysicalSpeciesVector (fluid)");
+   CH_TIME("GKOps::updatePhysicalSpeciesVector (fluid)");
 
-   m_fluidOp->convertToPhysical(a_species_phys, a_species_comp, m_phase_geometry->config_restrict(m_ghost_vect));
+   m_fluidOp->convertToPhysical( m_fluid_species_phys, a_species_comp ); 
 
-#if 0
-   m_boundary_conditions->fillGhostCells( a_species_phys,
-                                          m_injected_E_field,
-                                          a_time );
-#else
-   m_fluidOp->fillGhostCells( a_species_phys, a_time );
-#endif
+   m_fluidOp->fillGhostCells( m_fluid_species_phys, a_time );
 }
 
 
 inline
 void GKOps::applyVlasovOperator( GKRHSData&                    a_rhs,
                                  const KineticSpeciesPtrVect&  a_kinetic_phys,
+                                 const opType                  a_op_type,
                                  const Real&                   a_time )
 {
    CH_TIME("GKOps::applyVlasovOperator");
 
    if ( m_vlasov ) {
       m_count_vlasov++;
-      m_vlasov->accumulateRHS(a_rhs, a_kinetic_phys, m_phi, *m_E_field, a_time );
+      if (a_op_type == unsplit) {
+        m_vlasov->accumulateRHS(a_rhs, a_kinetic_phys, m_phi, *m_E_field, false, a_time );
+        m_vlasov->accumulateRHS(a_rhs, a_kinetic_phys, m_phi, *m_E_field, true, a_time );
+      } else if (a_op_type == imex_exp) {
+        m_vlasov->accumulateRHS(a_rhs, a_kinetic_phys, m_phi, *m_E_field, false, a_time );
+      } else if (a_op_type == imex_imp) {
+        m_vlasov->accumulateRHS(a_rhs, a_kinetic_phys, m_phi, *m_E_field, true, a_time );
+      } else {
+        MayDay::Error("GKOps::applyVlasovOperator: invalid value for argument a_op_type");
+      }
    }
 }
 
@@ -1090,7 +1164,8 @@ void GKOps::applyScalarOperator( GKRHSData&                       a_rhs,
 {
    CH_TIME("GKOps::applyScalarOperator");
 
-   m_count_fluids++;
+   m_count_scalars++;
+   //m_count_fluids++;
    if (a_op_type == imex_exp) {
      m_scalarOp->accumulateRHS( a_rhs, a_kinetic_species, a_fluid_species, a_scalars, a_E_field, 
                                 false, a_recompute_kinetic_terms, a_time );
@@ -1229,15 +1304,16 @@ void GKOps::divideJ( const KineticSpeciesPtrVect& a_soln_mapped,
 
 void GKOps::convertToPhysical( const GKState& a_soln_mapped, GKState& a_soln_physical )
 {
+   CH_TIME("GKOps::convertToPhysical()");
    divideJ( a_soln_mapped.dataKinetic(), a_soln_physical.dataKinetic() );
 
    const CFG::FluidSpeciesPtrVect& soln_mapped_fluid = a_soln_mapped.dataFluid();
-   const CFG::FluidSpeciesPtrVect& soln_physical_fluid = a_soln_physical.dataFluid();
-   for (int s=0; s<soln_mapped_fluid.size(); ++s) {
-      RefCountedPtr<CFG::CFGVars> this_physical_fluid
-         = soln_mapped_fluid[s]->convertToPhysical(a_soln_physical.configSpaceGhostVector());
-      soln_physical_fluid[s]->copy(*this_physical_fluid);
-   }
+   CFG::FluidSpeciesPtrVect& soln_physical_fluid = a_soln_physical.dataFluid();
+   //for (int s=0; s<soln_mapped_fluid.size(); ++s) {
+   //   soln_physical_fluid[s]->copy(*soln_mapped_fluid[s]);
+   //   soln_physical_fluid[s]->convertToPhysical();
+   //}
+   m_fluidOp->convertToPhysical( soln_physical_fluid, soln_mapped_fluid );
 
    const ScalarPtrVect& soln_mapped_scalar = a_soln_mapped.dataScalar();
    const ScalarPtrVect& soln_physical_scalar = a_soln_physical.dataScalar();
@@ -1259,8 +1335,11 @@ void GKOps::parseParameters( ParmParse& a_ppgksys )
    else {
       m_fixed_efield = false;
    }
+   
+   if (a_ppgksys.contains("zero_efield")) {
+      a_ppgksys.query( "zero_efield", m_zero_efield );
+   }
 
-   a_ppgksys.query( "imex_vlasov_implicit", m_vlasov_imex_implicit );
    a_ppgksys.query( "imex_transport_implicit", m_transport_imex_implicit );
    a_ppgksys.query( "imex_neutrals_implicit", m_neutrals_imex_implicit );
 
@@ -1390,10 +1469,30 @@ void GKOps::parseParameters( ParmParse& a_ppgksys )
 
 
 void GKOps::plotPotential( const std::string& a_filename,
+                           const bool&        a_non_zonal_comp,
                            const double&      a_time ) const
 {
    CH_assert( m_phase_geometry != NULL );
-   m_phase_geometry->plotConfigurationData( a_filename.c_str(), m_phi, a_time );
+   if (!a_non_zonal_comp){
+      m_phase_geometry->plotConfigurationData( a_filename.c_str(), m_phi, a_time );
+   }
+   else {
+      const PhaseGeom& phase_geometry( *m_phase_geometry );
+      const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+      CFG::LevelData<CFG::FArrayBox> phi( mag_geom.gridsFull(), 2, CFG::IntVect::Zero);
+      
+      CFG::LevelData<CFG::FArrayBox> phi_axisym;
+      phi_axisym.define(m_phi);
+      
+      CFG::FluxSurface flux_surface(mag_geom);
+      flux_surface.averageAndSpread(m_phi, phi_axisym);
+      for (CFG::DataIterator dit(m_phi.dataIterator()); dit.ok(); ++dit) {
+         phi[dit].copy(m_phi[dit],0,0,1);
+         phi[dit].copy(m_phi[dit],0,1,1);
+         phi[dit].minus(phi_axisym[dit],0,1,1);
+      }
+      m_phase_geometry->plotConfigurationData( a_filename.c_str(), phi, a_time );
+   }
 }
 
 void GKOps::plotEField( const std::string& a_filename,
@@ -1454,6 +1553,7 @@ void GKOps::plotFluid( const std::string&       a_filename,
                        const string&            a_var_name,
                        const double&            a_time ) const
 {
+   CH_TIME("GKOps::plotFluid()");
    m_phase_geometry->plotConfigurationData( a_filename.c_str(), a_fluid_species.cell_var(a_var_name), a_time );
 }
 

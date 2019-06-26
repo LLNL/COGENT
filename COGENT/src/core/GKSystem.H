@@ -9,6 +9,7 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "MagGeom.H"
+#include "FloorPostProcessor.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -253,7 +254,8 @@ class GKSystem
       bool m_using_electrons; // true for either boltzmann or kinetic
       bool m_enforce_stage_positivity;
       bool m_enforce_step_positivity;
-
+      bool m_enforce_step_floor;
+   
       int               m_max_grid_size;
       std::vector<int>  m_num_cells;
       std::vector<int>  m_num_velocity_cells;
@@ -299,6 +301,7 @@ class GKSystem
       * Private variables to control what hdf5 files to generate
       */
       bool m_hdf_potential;
+      bool m_hdf_potential_non_zonal;
       bool m_hdf_efield;
       bool m_hdf_density;
       bool m_hdf_momentum;
@@ -323,6 +326,7 @@ class GKSystem
       std::vector<int> m_fixed_plotindices;
 
       PositivityPostProcessor m_positivity_post_processor;
+      CFG::FloorPostProcessor m_floor_post_processor;
 
       bool m_old_vorticity_model;
 

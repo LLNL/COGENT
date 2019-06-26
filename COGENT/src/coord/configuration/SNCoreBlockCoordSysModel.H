@@ -1,13 +1,23 @@
 #ifndef _SNCOREBLOCKCOORDSYSMODEL_H_
 #define _SNCOREBLOCKCOORDSYSMODEL_H_
 
-#include "MagBlockCoordSys.H"
+#include "SNCoreBlockCoordSys.H"
+#include "Dimensions.H"
+
+// Poloidal namespace headers
+#undef CH_SPACEDIM
+#define CH_SPACEDIM POL_DIM
 #include "Interp.H"
+#ifdef CH_SPACEDIM
+#undef CH_SPACEDIM
+#endif
+#define CH_SPACEDIM CFG_DIM
 
 #include "NamespaceHeader.H"
+namespace POL = POL_NAMESPACE;
 
 class SNCoreBlockCoordSysModel
-   : public MagBlockCoordSys
+   : public SNCoreBlockCoordSys
 {
    public:
 
@@ -17,41 +27,26 @@ class SNCoreBlockCoordSysModel
        * the parm_parse object, the cellSpacing is computed and
        * the define() member is called.
        *
-       * @param[in] parm_parse the ParmParse database.
-       * @param[in] domain the configuration space domain.
-       * @param[in] ghostVect vector of ghost cells stored for mapping.
+       * @param[in] pp               the ParmParse database.
+       * @param[in] domain           the configuration space domain.
+       * @param[in] dx               mapped grid cell size
+       * @param[in] poloidal_index   poloidal block index
+       * @param[in] toroidal_index   toroidal block index
        */
-      SNCoreBlockCoordSysModel( ParmParse&           parm_parse,
-                               const ProblemDomain& domain,
-                               const RealVect&      dx,
-                               const int            block_type);
+      SNCoreBlockCoordSysModel( ParmParse&            pp,
+                                const ProblemDomain&  domain,
+                                const RealVect&       dx,
+                                const int             poloidal_index,
+                                const int             toroidal_index)
+         : SNCoreBlockCoordSys(pp, domain, dx, poloidal_index, toroidal_index) {};
 
       /// Destructor
       /**
        */
-      virtual ~SNCoreBlockCoordSysModel();
+      virtual ~SNCoreBlockCoordSysModel() {};
 
       void init( ParmParse& pp );
 
-      /// Returns real coordinate.
-      /**
-       * Returns location \f$x\f$ in real-world coordinates of
-       * mapped-coordinate location \f$\xi\f$.
-       *
-       * @param[in] xi mapped grid coordinate.
-       */
-      virtual RealVect realCoord( const RealVect& xi ) const;
-
-      /// Returns computational coordinate.
-      /**
-       * Returns location \f$\xi\f$ in mapped coordinate space of real-world
-       * location \f$x\f$.
-       *
-       * @param[in] x physical space coordinate.
-       */
-      virtual RealVect mappedCoord( const RealVect& x ) const;
-
- 
       /// Returns the derivatives of the physical coordinates with respect to
       /// the computational coordinate.
       /**
@@ -62,28 +57,7 @@ class SNCoreBlockCoordSysModel
        */
       virtual Real  dXdXi(const RealVect& Xi, int dirX, int dirXi) const;
 
-      /// Fills the destComp component of a_dxdXi with the derivative of
-      /// x w/ respect to Xi in the dirX direction
-      /**
-       * Fills the destComp component of a_dxdXi with the derivative of
-       * x w/ respect to Xi in the dirX direction
-       *
-       * @param[in] Xi mapped coordinates
-       * @param[in] destComp destination component
-       * @param[in] dirX physical coordinate to be differentiated
-       * @param[in] dirXi computational coordinate
-       * @param[in] box box within which derivatives are computed
-       * @param[out] dxdXi output derivatives
-       */
-      void dXdXi(FArrayBox&       dxdXi,
-                 const FArrayBox& Xi,
-                 int              destComp,
-                 int              dirX,
-                 int              dirXi,
-                 const Box&       box) const;
-   
-   
-      virtual Vector<Real> computeBField(const RealVect& a_X) const;
+      virtual array<double,3> computeBField(const RealVect& a_X) const;
 
       virtual void computeFieldData( const int  dir,
                                      FArrayBox& BField,
@@ -114,18 +88,8 @@ class SNCoreBlockCoordSysModel
       //Returns the radial coordinate of the separatrix at the outer midplane
       double getOuterRsep() const;
    
-      virtual double getRBtoroidal() const {return m_RB_toroidal;}
-
-      virtual const string getParmParseName() const {return pp_name;}
-
-      int blockType() const {return m_block_type;}
-
       // Object ParmParse name.
       static const std::string pp_name;
-
-      void getCellCenterRealCoords();
-
-      bool isValid(const RealVect& xi) const;
 
       virtual string geometryType() const {return "SNCore";}
    
@@ -136,61 +100,19 @@ class SNCoreBlockCoordSysModel
       double getCoreWidth() const {return m_core_width;}
       double getCoreArcLength () const {return m_pol_ref_length;}
 
-   protected:
-
-      int m_block_type;
-
    private:
-
-      void computeFieldDataSpectral( const int  dir,
-                                     FArrayBox& BField,
-                                     FArrayBox& BFieldMag,
-                                     FArrayBox& BFieldDir,
-                                     FArrayBox& gradBFieldMag,
-                                     FArrayBox& curlBFieldDir,
-                                     FArrayBox& BFieldDirdotcurlBFieldDir,
-                                     const bool derived_data_only = false ) const;
-
-      void computeFieldDataFromMappingFile( const int  dir,
-                                            FArrayBox& BField,
-                                            FArrayBox& BFieldMag,
-                                            FArrayBox& BFieldDir,
-                                            FArrayBox& gradBFieldMag,
-                                            FArrayBox& curlBFieldDir,
-                                            FArrayBox& BFieldDirdotcurlBFieldDir,
-                                            const bool derived_data_only = false ) const;
-
-      void getMagneticFluxFromDCT( const FArrayBox& a_physical_coordinates,
-                                   FArrayBox&       a_magnetic_flux ) const;
-
-      double getMagneticFluxFromDCT( const RealVect& a_physical_coordinate ) const;
 
       //Sub-grid refinement
       IntVect m_N_mr;
    
-      //In case we are doing a problem involving x-point vicinity only
-      bool m_poloidally_truncated;
-
-      double m_RB_toroidal;
-
       IntVect m_mapping_block_lo;
       IntVect m_mapping_block_hi;
       IntVect m_mapping_block_size;
 
-      Interp* m_RZ_interp;
+      POL::Interp* m_RZ_interp;
 
-      FArrayBox m_psi_coefs;
-      double m_Rmin, m_Rmax, m_Zmin, m_Zmax;   
-      FArrayBox m_RBR_coefs;
-      FArrayBox m_RBZ_coefs;
-      Interp* m_field_interp;
-      int m_psi_expansion_order;
-
-      bool m_spectral_field;
-   
       RealVect m_Xpoint;
       RealVect m_magAxis;
-
 
       //Returns (shifted) physical coordinates for the intersection of the gridlines given by psi(R,Z)=psiVal, theta(R,Z)=thetaVal
       //NB: the function returns solution only in the RCORE and RCSOL blocks, symmetry has to used to get solution in other blocks

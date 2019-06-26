@@ -115,13 +115,25 @@ void GKScalarOp::accumulateRHS( GKRHSData&                        a_rhs,
 }
 
 
-Real GKScalarOp::computeDt(const ScalarPtrVect& a_scalars)
+Real GKScalarOp::computeDtExplicitTI(const ScalarPtrVect& a_scalars)
 {
   Real dt(DBL_MAX);
 
   std::map<std::string,int>::iterator it;
   for (it=m_scalar_op_name.begin(); it!=m_scalar_op_name.end(); ++it) {
-    Real tmp = m_scalar_op[it->second]->computeDt(a_scalars);
+    Real tmp = m_scalar_op[it->second]->computeDtExplicitTI(a_scalars);
+    dt = (tmp < dt ? tmp : dt);
+  }
+  return dt;
+}
+
+Real GKScalarOp::computeDtImExTI(const ScalarPtrVect& a_scalars)
+{
+  Real dt(DBL_MAX);
+
+  std::map<std::string,int>::iterator it;
+  for (it=m_scalar_op_name.begin(); it!=m_scalar_op_name.end(); ++it) {
+    Real tmp = m_scalar_op[it->second]->computeDtImExTI(a_scalars);
     dt = (tmp < dt ? tmp : dt);
   }
   return dt;

@@ -1,8 +1,12 @@
 #include "GKFluidOp.H"
 #include "OneFieldOp.H"
+#include "BurgersOp.H"
+#include "IdealMhdOp.H"
+#include "TwoFieldNeutralsOp.H"
 #include "NullFluidOp.H"
 #include "VorticityOp.H"
 #include "AmpereErAverageOp.H"
+//#include "FluidOpF_F.H"
 
 #include <float.h>
 #include <sstream>
@@ -45,6 +49,15 @@ GKFluidOp::GKFluidOp( const MagGeom&  a_geometry,
             }
             else if (op_type == "OneFieldOp") {
                model = new OneFieldOp( prefix, species_name, a_geometry, m_verbose );
+            }
+            else if (op_type == "BurgersOp") {
+               model = new BurgersOp( prefix, species_name, a_geometry, m_verbose );
+            }
+            else if (op_type == "IdealMhdOp") {
+               model = new IdealMhdOp( prefix, species_name, a_geometry, m_verbose );
+            }
+            else if (op_type == "TwoFieldNeutralsOp") {
+               model = new TwoFieldNeutralsOp( prefix, species_name, a_geometry, m_verbose );
             }
             else {
                MayDay::Error("Unknown fluid operator type specified for a fluid species");
@@ -156,17 +169,18 @@ void GKFluidOp::preOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_species_
 }
 
 
-void GKFluidOp::convertToPhysical( FluidSpeciesPtrVect&        a_fluid_species_phys,
-                                   const FluidSpeciesPtrVect&  a_fluid_species_comp,
-                                   const IntVect&              a_ghosts ) const
+void GKFluidOp::convertToPhysical( FluidSpeciesPtrVect&  a_fluid_species_phys,
+                             const FluidSpeciesPtrVect&  a_fluid_species_comp ) const
 {
-   int num_species = a_fluid_species_comp.size();
+   CH_TIME("GKFluidOp::convertToPhysical");
+   const int num_species = a_fluid_species_phys.size();
+   CH_assert( num_species == a_fluid_species_comp.size());
 
-   a_fluid_species_phys.resize(num_species);
-   
-   for (int species(0); species<num_species; species++) {
-      a_fluid_species_phys[species] = a_fluid_species_comp[species]->convertToPhysical(a_ghosts);
+   for (int s=0; s<num_species; ++s) {
+      a_fluid_species_phys[s]->copy(*a_fluid_species_comp[s]);
+      a_fluid_species_phys[s]->convertToPhysical();
    }
+
 }
 
 
@@ -226,13 +240,13 @@ void GKFluidOp::updatePC( const PS::KineticSpeciesPtrVect&  a_kinetic_species,
          FluidSpecies& fluid_species( static_cast<FluidSpecies&>(*(a_fluid_species[species])) );
          const std::string species_name( fluid_species.name() );
          FluidOpInterface& fluidOp( fluidModel( species_name ) );
-         fluidOp.updatePCImEx( a_kinetic_species, a_time, a_shift );
+         fluidOp.updatePCImEx( a_fluid_species, a_kinetic_species, a_time, a_shift, a_idx );
       }
    } else {
       FluidSpecies& fluid_species( static_cast<FluidSpecies&>(*(a_fluid_species[a_idx])) );
       const std::string species_name( fluid_species.name() );
       FluidOpInterface& fluidOp( fluidModel( species_name ) );
-      fluidOp.updatePCImEx( a_kinetic_species, a_time, a_shift );
+      fluidOp.updatePCImEx( a_fluid_species, a_kinetic_species, a_time, a_shift, a_idx );
    }
 }
 
@@ -339,13 +353,25 @@ void GKFluidOp::fillGhostCells( FluidSpeciesPtrVect&  a_fluid_species,
 
 
 
-Real GKFluidOp::computeDt(const FluidSpeciesPtrVect& fluids)
+Real GKFluidOp::computeDtExplicitTI(const FluidSpeciesPtrVect& fluids)
 {
   Real dt(DBL_MAX);
 
   std::map<std::string,int>::iterator it;
   for (it=m_fluid_model_name.begin(); it!=m_fluid_model_name.end(); ++it) {
-    Real tmp = m_fluid_model[it->second]->computeDt(fluids);
+    Real tmp = m_fluid_model[it->second]->computeDtExplicitTI(fluids);
+    dt = (tmp < dt ? tmp : dt);
+  }
+  return dt;
+}
+
+Real GKFluidOp::computeDtImExTI(const FluidSpeciesPtrVect& fluids)
+{
+  Real dt(DBL_MAX);
+
+  std::map<std::string,int>::iterator it;
+  for (it=m_fluid_model_name.begin(); it!=m_fluid_model_name.end(); ++it) {
+    Real tmp = m_fluid_model[it->second]->computeDtImExTI(fluids);
     dt = (tmp < dt ? tmp : dt);
   }
   return dt;
