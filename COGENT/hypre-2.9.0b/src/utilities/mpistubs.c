@@ -710,7 +710,9 @@ HYPRE_Int
 hypre_MPI_Address( void           *location,
                    hypre_MPI_Aint *address )
 {
-   return (HYPRE_Int) MPI_Address(location, address);
+  // (DFM 8/1/19) deprecated API
+  //return (HYPRE_Int) MPI_Address(location, address);
+  return (HYPRE_Int) MPI_Get_address(location, address);
 }
 
 HYPRE_Int
@@ -1071,8 +1073,12 @@ hypre_MPI_Type_hvector( HYPRE_Int           count,
                         hypre_MPI_Datatype  oldtype,
                         hypre_MPI_Datatype *newtype )
 {
-   return (HYPRE_Int) MPI_Type_hvector((hypre_int)count, (hypre_int)blocklength,
-                                       stride, oldtype, newtype);
+  // (DFM 8/1/19) deprecated MPI API
+  //return (HYPRE_Int) MPI_Type_hvector((hypre_int)count, (hypre_int)blocklength,
+  //                                    stride, oldtype, newtype);
+  return (HYPRE_Int) MPI_Type_create_hvector((hypre_int)count, 
+                                             (hypre_int)blocklength,
+                                             stride, oldtype, newtype);
 }
 
 HYPRE_Int
@@ -1091,9 +1097,15 @@ hypre_MPI_Type_struct( HYPRE_Int           count,
    {
       mpi_array_of_blocklengths[i] = (hypre_int) array_of_blocklengths[i];
    }
-   ierr = (HYPRE_Int) MPI_Type_struct((hypre_int)count, mpi_array_of_blocklengths,
-                                      array_of_displacements, array_of_types,
-                                      newtype);
+   // (DFM 8/1/19) Deprecated MPI API
+   //ierr = (HYPRE_Int) MPI_Type_struct((hypre_int)count, mpi_array_of_blocklengths,
+   //                                   array_of_displacements, array_of_types,
+   //                                   newtype);
+   ierr = (HYPRE_Int) MPI_Type_create_struct((hypre_int)count, 
+                                             mpi_array_of_blocklengths,
+                                             array_of_displacements, 
+                                             array_of_types,
+                                             newtype);
    hypre_TFree(mpi_array_of_blocklengths);
 
    return ierr;

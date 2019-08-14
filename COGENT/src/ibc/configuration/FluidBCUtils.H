@@ -151,7 +151,7 @@ namespace FluidBCUtils {
       CH_TIME("FluidBCUtils::setFluxBC");
       for (int b(0); b<a_all_bdry_layouts.size(); b++) {
          const BoundaryBoxLayout& bdry_layout( *(a_all_bdry_layouts[b]) );
-         const std::string this_bc_type (a_all_bc_type[b]);
+         //const std::string this_bc_type (a_all_bc_type[b]);
          const DisjointBoxLayout& bdry_grids( bdry_layout.disjointBoxLayout() );
          //if(this_bc_type=="symmetry") {
          for (DataIterator dit( bdry_grids ); dit.ok(); ++dit) {
@@ -166,6 +166,35 @@ namespace FluidBCUtils {
    }
    
    inline
+   void setBC( LevelData<FArrayBox>&      a_dst,
+         const BoundaryBoxLayoutPtrVect&  a_all_bdry_layouts,
+         const Vector<std::string>&       a_all_bc_type,
+         const MultiBlockCoordSys&        a_coord_sys )
+   {
+      for (int b(0); b<a_all_bdry_layouts.size(); b++) {
+         const BoundaryBoxLayout& bdry_layout( *(a_all_bdry_layouts[b]) );
+         const std::string this_bc_type (a_all_bc_type[b]);
+         const DisjointBoxLayout& bdry_grids( bdry_layout.disjointBoxLayout() );
+         for (DataIterator dit( bdry_grids ); dit.ok(); ++dit) {
+            //const int dir=1;
+            const Box fill_box( bdry_grids[dit] );
+            FArrayBox& this_a_dst( a_dst[bdry_layout.dataIndex(dit)] );
+            const DataIndex& interior_dit( bdry_layout.dataIndex(dit) );
+            //cout << "JRA: this_bc_type = " << this_bc_type << endl;
+            //if(this_bc_type=="natural") {
+                
+               FourthOrderBC::setBC( this_a_dst,
+                                     fill_box,
+                                     this_bc_type,
+                                     bdry_layout.dir(),
+                                     bdry_layout.side() );
+               
+            //} 
+         }
+      }
+   }
+   
+   inline
    void setEdgeBC( LevelData<EdgeDataBox>& a_dst,
                    const BoundaryBoxLayoutPtrVect& a_all_bdry_layouts,
                    const Vector<std::string>& a_all_bc_type,
@@ -176,9 +205,50 @@ namespace FluidBCUtils {
          const BoundaryBoxLayout& bdry_layout( *(a_all_bdry_layouts[b]) );
          const std::string this_bc_type (a_all_bc_type[b]);
          const DisjointBoxLayout& bdry_grids( bdry_layout.disjointBoxLayout() );
-         //if(this_bc_type=="symmetry") {
          for (DataIterator dit( bdry_grids ); dit.ok(); ++dit) {
-            const int dir=1;
+            //const int dir=1;
+            const Box fill_box( bdry_grids[dit] );
+            EdgeDataBox& this_a_dst( a_dst[bdry_layout.dataIndex(dit)] );
+            const DataIndex& interior_dit( bdry_layout.dataIndex(dit) );
+            const EdgeDataBox& this_edge( a_edge[interior_dit] );
+            Interval Cdst(0,0);
+            Interval Csrc(0,0);
+            if(this_bc_type=="zero_on_edge") {
+               //cout << "zero value BC for edgeDataBox" << endl;
+               for (int dir=0; dir<SpaceDim; dir++) {
+                  if (dir != bdry_layout.dir()) {
+                     this_a_dst.setVal(0.0, fill_box, dir, 0, this_a_dst.nComp());
+                  }
+               }
+            } 
+            else if(this_bc_type=="neumann_on_edge" || this_bc_type=="natural" ||
+                    this_bc_type=="symmetry" ) {
+               
+               FourthOrderBC::setEdgeBC( this_a_dst,
+                                         fill_box,
+                                         this_bc_type,
+                                         bdry_layout.dir(),
+                                         bdry_layout.side() );
+               //this_a_dst.setVal(10.0, fill_box);
+               
+            } 
+            else {
+               this_a_dst.copy(fill_box, Cdst, fill_box, this_edge, Csrc);
+            }
+         }
+      }
+   }
+   
+   inline
+   void setEdgeBC( LevelData<EdgeDataBox>& a_dst,
+                   const BoundaryBoxLayoutPtrVect& a_all_bdry_layouts,
+                   const MultiBlockCoordSys& a_coord_sys,
+                   const LevelData<EdgeDataBox>& a_edge )
+   {
+      for (int b(0); b<a_all_bdry_layouts.size(); b++) {
+         const BoundaryBoxLayout& bdry_layout( *(a_all_bdry_layouts[b]) );
+         const DisjointBoxLayout& bdry_grids( bdry_layout.disjointBoxLayout() );
+         for (DataIterator dit( bdry_grids ); dit.ok(); ++dit) {
             const Box fill_box( bdry_grids[dit] );
             EdgeDataBox& this_a_dst( a_dst[bdry_layout.dataIndex(dit)] );
             const DataIndex& interior_dit( bdry_layout.dataIndex(dit) );
@@ -186,8 +256,19 @@ namespace FluidBCUtils {
             Interval Cdst(0,0);
             Interval Csrc(0,0);
             this_a_dst.copy(fill_box, Cdst, fill_box, this_edge, Csrc);
+            /*
+            for (int dir=0; dir<SpaceDim; dir++) {
+               if (dir != bdry_layout.dir()) {
+                  const FArrayBox& edge_on_dir = this_edge[dir]; 
+                  FArrayBox& dst_on_dir = this_a_dst[dir]; 
+                  const Box dst_box( dst_on_dir.box() );
+                  const Box src_box( edge_on_dir.box() );
+                  //dst_on_dir.copy(edge_on_dir, fill_box, 0, fill_box, 0, 1);
+                  dst_on_dir.copy(src_box, Cdst, fill_box, edge_on_dir, Csrc);
+               }
+            }
+            */
          }
-         //}
       }
    }
 

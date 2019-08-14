@@ -30,15 +30,16 @@ class SingleNullBlockCoordSysModel
        * @param[in] pp               the ParmParse database.
        * @param[in] domain           the configuration space domain.
        * @param[in] dx               mapped grid cell size
-       * @param[in] poloidal_index   poloidal block index
-       * @param[in] toroidal_index   toroidal block index
+       * @param[in] poloidal_block   poloidal block 
+       * @param[in] toroidal_sector  toroidal sector
        */
       SingleNullBlockCoordSysModel( ParmParse&            pp,
                                     const ProblemDomain&  domain,
                                     const RealVect&       dx,
-                                    const int             poloidal_index,
-                                    const int             toroidal_index)
-         : SingleNullBlockCoordSys(pp, domain, dx, poloidal_index, toroidal_index) {};
+                                    const int             poloidal_block,
+                                    const int             toroidal_sector,
+                                    const int             toroidal_block_separation )
+         : SingleNullBlockCoordSys(pp, domain, dx, poloidal_block, toroidal_sector, toroidal_block_separation) {};
 
       /// Destructor
       /**

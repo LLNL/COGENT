@@ -1,4 +1,57 @@
 ------------------------------------------------------------------------
+r1566 | angus1 | 2019-08-13 11:57:28 -0700 (Tue, 13 Aug 2019) | 1 line
+
+adding edge and face vars to FluidSpecies class
+------------------------------------------------------------------------
+r1565 | angus1 | 2019-08-13 11:28:01 -0700 (Tue, 13 Aug 2019) | 1 line
+
+adding some BC tools for edge and face vars
+------------------------------------------------------------------------
+r1564 | angus1 | 2019-08-13 09:58:37 -0700 (Tue, 13 Aug 2019) | 1 line
+
+adding some infrastructure for edge and face variables
+------------------------------------------------------------------------
+r1563 | mdorr | 2019-08-08 17:25:05 -0700 (Thu, 08 Aug 2019) | 5 lines
+
+Adding an accessor PhaseGrid::pids(int box_number) to return a Vector<int> containing the processor IDs of the boxes returned by PhaseGeom::velocitySlice(int box_number).
+
+Changing the return type of PhaseGeom::velocitySlice() to be a Vector<VEL::Box> instead of a List<VEL::Box> to ensure consistency between these two accessors.   This triggered the need for a few small changes in RosenBluthPotentials.cpp 
+
+
+------------------------------------------------------------------------
+r1562 | dmartin | 2019-08-01 15:25:21 -0700 (Thu, 01 Aug 2019) | 3 lines
+
+remove hardwired paths to mpi compilers
+
+
+------------------------------------------------------------------------
+r1561 | dmartin | 2019-08-01 15:24:51 -0700 (Thu, 01 Aug 2019) | 2 lines
+
+updated some MPI functions calls which were using deprecated MPI API.
+
+------------------------------------------------------------------------
+r1560 | mdorf | 2019-07-17 12:59:37 -0700 (Wed, 17 Jul 2019) | 1 line
+
+Fixed a bug in DefineBoundaries; separated the use of m_sheared_inter_stincils for SN and all other geometries. This revision should now reproduce (up to very small differences) the results of r1555 for 5D universal instability and ITG tests.
+------------------------------------------------------------------------
+r1559 | mdorf | 2019-07-15 16:00:34 -0700 (Mon, 15 Jul 2019) | 1 line
+
+Added code to support a non-periodic toroidal domain for a single-block case; revised ghostVect in the reversed Copier
+------------------------------------------------------------------------
+r1558 | mdorf | 2019-07-09 17:33:23 -0700 (Tue, 09 Jul 2019) | 1 line
+
+Refactored SingleNull BC code for the purposes of better performance
+------------------------------------------------------------------------
+r1557 | mdorf | 2019-07-03 12:53:31 -0700 (Wed, 03 Jul 2019) | 1 line
+
+Substantial code refactoring for the purposes of better performance
+------------------------------------------------------------------------
+r1556 | mdorr | 2019-06-28 14:14:40 -0700 (Fri, 28 Jun 2019) | 3 lines
+
+Adding initial code to use field-aligned mappings in a 3D single null geometry with multiple toroidal blocks.
+
+
+------------------------------------------------------------------------
 r1555 | mdorf | 2019-06-24 11:51:38 -0700 (Mon, 24 Jun 2019) | 1 line
 
 Restored DataArray (nodal box) BC option for EllipticOp BCs

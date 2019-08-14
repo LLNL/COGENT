@@ -211,6 +211,7 @@ c     local variables
 
       return
       end
+
       
       subroutine simple_curl_virt(
      &     CHF_BOX[box],
@@ -255,44 +256,101 @@ c            print*, "Jdir(i)   = ", Jdir(CHF_IX[i;j;k],n)
       return
       end
       
+   
+      subroutine on_axis_curl_correction(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REAL[dX],
+     &     CHF_CONST_FRA1[Xphys],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_FRA1[curlB])
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      CHF_MULTIDO[box;i;j;k]
+     
+         if(Xphys(CHF_IX[i;j;k])==0.0) then
+            curlB(CHF_IX[i;j;k]) = 4.0*B(CHF_IX[i;j;k])/dX;
+c            print*, "dX = ", dX 
+c            print*, "i = ", i 
+c            print*, "j = ", j 
+         endif
+
+c            print*, "shape(B) = ", shape(B)
+c            print*, "Xphys(i,j)   = ", Xphys(CHF_IX[i;j;k])
+c            print*, "B(i,j)   = ", B(CHF_IX[i;j;k])
+
+      CHF_ENDDO
+
+      return
+      end
+      
+
       subroutine phys_to_covar(
      &     CHF_BOX[box],
      &     CHF_CONST_FRA[dXdxi],
+     &     CHF_CONST_FRA[dxidX],
+     &     CHF_CONST_INT[inverse],
      &     CHF_FRA[F])
       
       integer CHF_DDECL[i;j;k] 
-      double precision covar0, covar1, covar2
+      double precision Fnew0, Fnew1, Fnew2
+      double precision a0, a1, a2, a3, a4, a5, a6, a7, a8
 
       CHF_MULTIDO[box;i;j;k]
       
          if (CH_SPACEDIM==3) then
-  
-            covar0 = dXdxi(CHF_IX[i;j;k],0)*F(CHF_IX[i;j;k],0) 
-     &             + dXdxi(CHF_IX[i;j;k],1)*F(CHF_IX[i;j;k],1)
-     &             + dXdxi(CHF_IX[i;j;k],2)*F(CHF_IX[i;j;k],2)
-            
-            covar1 = dXdxi(CHF_IX[i;j;k],3)*F(CHF_IX[i;j;k],0) 
-     &             + dXdxi(CHF_IX[i;j;k],4)*F(CHF_IX[i;j;k],1)
-     &             + dXdxi(CHF_IX[i;j;k],5)*F(CHF_IX[i;j;k],2)
-            
-            covar2 = dXdxi(CHF_IX[i;j;k],6)*F(CHF_IX[i;j;k],0) 
-     &             + dXdxi(CHF_IX[i;j;k],7)*F(CHF_IX[i;j;k],1)
-     &             + dXdxi(CHF_IX[i;j;k],8)*F(CHF_IX[i;j;k],2)
 
-            F(CHF_IX[i;j;k],0) = covar0
-            F(CHF_IX[i;j;k],1) = covar1
-            F(CHF_IX[i;j;k],2) = covar2
+            if (inverse==0) then
+               a0 = dXdxi(CHF_IX[i;j;k],0)
+               a1 = dXdxi(CHF_IX[i;j;k],1)
+               a2 = dXdxi(CHF_IX[i;j;k],2)
+               a3 = dXdxi(CHF_IX[i;j;k],3)
+               a4 = dXdxi(CHF_IX[i;j;k],4)
+               a5 = dXdxi(CHF_IX[i;j;k],5)
+               a6 = dXdxi(CHF_IX[i;j;k],6)
+               a7 = dXdxi(CHF_IX[i;j;k],7)
+               a8 = dXdxi(CHF_IX[i;j;k],8)
+            else
+               a0 = dxidX(CHF_IX[i;j;k],0)
+               a1 = dxidX(CHF_IX[i;j;k],1)
+               a2 = dxidX(CHF_IX[i;j;k],2)
+               a3 = dxidX(CHF_IX[i;j;k],3)
+               a4 = dxidX(CHF_IX[i;j;k],4)
+               a5 = dxidX(CHF_IX[i;j;k],5)
+               a6 = dxidX(CHF_IX[i;j;k],6)
+               a7 = dxidX(CHF_IX[i;j;k],7)
+               a8 = dXdxi(CHF_IX[i;j;k],8)
+            endif
+  
+            Fnew0 = a0*F(CHF_IX[i;j;k],0) + a1*F(CHF_IX[i;j;k],1) + a2*F(CHF_IX[i;j;k],2)
+            Fnew1 = a3*F(CHF_IX[i;j;k],0) + a4*F(CHF_IX[i;j;k],1) + a5*F(CHF_IX[i;j;k],2)
+            Fnew2 = a6*F(CHF_IX[i;j;k],0) + a7*F(CHF_IX[i;j;k],1) + a8*F(CHF_IX[i;j;k],2)
+
+            F(CHF_IX[i;j;k],0) = Fnew0
+            F(CHF_IX[i;j;k],1) = Fnew1
+            F(CHF_IX[i;j;k],2) = Fnew2
 
          else
             
-            covar0 = dXdxi(CHF_IX[i;j;k],0)*F(CHF_IX[i;j;k],0) 
-     &             + dXdxi(CHF_IX[i;j;k],1)*F(CHF_IX[i;j;k],1)
-            
-            covar1 = dXdxi(CHF_IX[i;j;k],2)*F(CHF_IX[i;j;k],0) 
-     &             + dXdxi(CHF_IX[i;j;k],3)*F(CHF_IX[i;j;k],1)
+            if (inverse==0) then
+               a0 = dXdxi(CHF_IX[i;j;k],0)
+               a1 = dXdxi(CHF_IX[i;j;k],1)
+               a2 = dXdxi(CHF_IX[i;j;k],2)
+               a3 = dXdxi(CHF_IX[i;j;k],3)
+               a4 = dXdxi(CHF_IX[i;j;k],4)
+            else
+               a0 = dxidX(CHF_IX[i;j;k],0)
+               a1 = dxidX(CHF_IX[i;j;k],1)
+               a2 = dxidX(CHF_IX[i;j;k],2)
+               a3 = dxidX(CHF_IX[i;j;k],3)
+               a4 = dxidX(CHF_IX[i;j;k],4)
+            endif
+ 
+            Fnew0 = a0*F(CHF_IX[i;j;k],0) + a1*F(CHF_IX[i;j;k],1)
+            Fnew1 = a2*F(CHF_IX[i;j;k],0) + a3*F(CHF_IX[i;j;k],1)
 
-            F(CHF_IX[i;j;k],0) = covar0
-            F(CHF_IX[i;j;k],1) = covar1
+            F(CHF_IX[i;j;k],0) = Fnew0
+            F(CHF_IX[i;j;k],1) = Fnew1
 
          endif
 
@@ -300,6 +358,137 @@ c            print*, "Jdir(i)   = ", Jdir(CHF_IX[i;j;k],n)
 
       return
       end
+
+      
+      subroutine phys_to_contravar(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_CONST_FRA[dxidX],
+     &     CHF_CONST_INT[inverse],
+     &     CHF_FRA[F])
+      
+      integer CHF_DDECL[i;j;k] 
+      double precision Fnew0, Fnew1, Fnew2
+      double precision a0, a1, a2, a3, a4, a5, a6, a7, a8
+
+      CHF_MULTIDO[box;i;j;k]
+      
+         if (CH_SPACEDIM==3) then
+            
+           if (inverse==0) then
+               a0 = dxidX(CHF_IX[i;j;k],0)
+               a1 = dxidX(CHF_IX[i;j;k],1)
+               a2 = dxidX(CHF_IX[i;j;k],2)
+               a3 = dxidX(CHF_IX[i;j;k],3)
+               a4 = dxidX(CHF_IX[i;j;k],4)
+               a5 = dxidX(CHF_IX[i;j;k],5)
+               a6 = dxidX(CHF_IX[i;j;k],6)
+               a7 = dxidX(CHF_IX[i;j;k],7)
+               a8 = dxidX(CHF_IX[i;j;k],8)
+            else
+               a0 = dXdxi(CHF_IX[i;j;k],0)
+               a1 = dXdxi(CHF_IX[i;j;k],1)
+               a2 = dXdxi(CHF_IX[i;j;k],2)
+               a3 = dXdxi(CHF_IX[i;j;k],3)
+               a4 = dXdxi(CHF_IX[i;j;k],4)
+               a5 = dXdxi(CHF_IX[i;j;k],5)
+               a6 = dXdxi(CHF_IX[i;j;k],6)
+               a7 = dXdxi(CHF_IX[i;j;k],7)
+               a8 = dXdxi(CHF_IX[i;j;k],8)
+            endif
+  
+            Fnew0 = a0*F(CHF_IX[i;j;k],0) + a3*F(CHF_IX[i;j;k],1) + a6*F(CHF_IX[i;j;k],2)
+            Fnew1 = a1*F(CHF_IX[i;j;k],0) + a4*F(CHF_IX[i;j;k],1) + a7*F(CHF_IX[i;j;k],2)
+            Fnew2 = a2*F(CHF_IX[i;j;k],0) + a5*F(CHF_IX[i;j;k],1) + a8*F(CHF_IX[i;j;k],2)
+
+            F(CHF_IX[i;j;k],0) = Fnew0
+            F(CHF_IX[i;j;k],1) = Fnew1
+            F(CHF_IX[i;j;k],2) = Fnew2
+
+         else
+
+            if (inverse==0) then
+               a0 = dxidX(CHF_IX[i;j;k],0)
+               a1 = dxidX(CHF_IX[i;j;k],1)
+               a2 = dxidX(CHF_IX[i;j;k],2)
+               a3 = dxidX(CHF_IX[i;j;k],3)
+               a4 = dxidX(CHF_IX[i;j;k],4)
+            else
+               a0 = dXdxi(CHF_IX[i;j;k],0)
+               a1 = dXdxi(CHF_IX[i;j;k],1)
+               a2 = dXdxi(CHF_IX[i;j;k],2)
+               a3 = dXdxi(CHF_IX[i;j;k],3)
+               a4 = dXdxi(CHF_IX[i;j;k],4)
+            endif
+            
+            Fnew0 = a0*F(CHF_IX[i;j;k],0) + a2*F(CHF_IX[i;j;k],1)
+            Fnew1 = a1*F(CHF_IX[i;j;k],0) + a3*F(CHF_IX[i;j;k],1)
+
+            F(CHF_IX[i;j;k],0) = Fnew0
+            F(CHF_IX[i;j;k],1) = Fnew1
+
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+      
+
+      subroutine contra_to_covar(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[inverse],
+     &     CHF_FRA1[F])
+      
+      integer CHF_DDECL[i;j;k], l0, l1, l2 
+      double precision gl0, gl1, gl2, glsq
+      
+      CHF_DTERM[
+      l0 = 0 + CH_SPACEDIM*dir;
+      l1 = 1 + CH_SPACEDIM*dir;
+      l2 = 2 + CH_SPACEDIM*dir]
+
+c        print*, "dir  = ", dir
+c        print*, "iboxlo0  = ", iboxlo0
+c        print*, "iboxhi0  = ", iboxhi0
+c        print*, "iboxlo1  = ", iboxlo1
+c        print*, "iboxhi1  = ", iboxhi1
+
+      CHF_MULTIDO[box;i;j;k]
+      
+         if (CH_SPACEDIM==3) then
+
+            gl0 = dXdxi(CHF_IX[i;j;k],l0)
+            gl1 = dXdxi(CHF_IX[i;j;k],l1)
+            gl2 = dXdxi(CHF_IX[i;j;k],l2)
+  
+            glsq = gl0*gl0 + gl1*gl1 + gl2*gl2
+
+         else
+            
+            gl0 = dXdxi(CHF_IX[i;j;k],l0)
+            gl1 = dXdxi(CHF_IX[i;j;k],l1)
+  
+            glsq = gl0*gl0 + gl1*gl1
+
+         endif
+        
+c        print*, "CHF_IX[i;j;k]  = ", CHF_IX[i;j;k]
+c        print*, "glsq  = ", glsq
+
+         if (inverse==0) then
+            F(CHF_IX[i;j;k]) = F(CHF_IX[i;j;k])*glsq
+         else
+            F(CHF_IX[i;j;k]) = F(CHF_IX[i;j;k])/glsq
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+
 
       subroutine compute_face_transverse_E(
      &     CHF_BOX[box],

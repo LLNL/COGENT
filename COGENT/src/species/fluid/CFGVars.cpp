@@ -33,6 +33,13 @@ const CFGVars& CFGVars::operator=( const CFGVars& a_rhs )
          addFaceVar(face_var_name(i), data.nComp(), data.ghostVect());
          m_face_data[i]->define(data);
       }
+      
+      m_edge_data.resize(0);
+      for (int i=0; i<a_rhs.num_edge_vars(); ++i) {
+         const LevelData<EdgeDataBox>& data = a_rhs.edge_var(i);
+         addEdgeVar(edge_var_name(i), data.nComp(), data.ghostVect());
+         m_edge_data[i]->define(data);
+      }
    }
    return *this;
 }
@@ -65,6 +72,17 @@ void CFGVars::copy( const CFGVars& a_rhs )
             this_face_data[dit].copy(that_face_data[dit] );
          }
       }
+      
+      int num_edge_data = a_rhs.num_edge_vars();
+      CH_assert(num_edge_data == num_edge_vars());
+      for (int i=0; i<num_edge_data; ++i) {
+         LevelData<EdgeDataBox>& this_edge_data = edge_var(i);
+         const LevelData<EdgeDataBox>& that_edge_data = a_rhs.edge_var(i);
+         CH_assert( (this_edge_data.disjointBoxLayout()).compatible( that_edge_data.disjointBoxLayout() ) );
+         for (DataIterator dit( this_edge_data.dataIterator() ); dit.ok(); ++dit) {
+            this_edge_data[dit].copy(that_edge_data[dit],0,0,this_edge_data.nComp() );
+         }
+      }
    }
 }
 
@@ -82,6 +100,13 @@ void CFGVars::zeroData()
       LevelData<FluxBox>& this_face_data = face_var(i);
       for (DataIterator dit( this_face_data.dataIterator() ); dit.ok(); ++dit) {
          this_face_data[dit].setVal(0.);
+      }
+   }
+   
+   for (int i=0; i<num_edge_vars(); ++i) {
+      LevelData<EdgeDataBox>& this_edge_data = edge_var(i);
+      for (DataIterator dit( this_edge_data.dataIterator() ); dit.ok(); ++dit) {
+         this_edge_data[dit].setVal(0.);
       }
    }
 }
@@ -113,6 +138,19 @@ void CFGVars::addData( const CFGVars&  a_rhs,
          }
       }
    }
+   
+   int num_edge_data = a_rhs.num_edge_vars();
+   CH_assert(num_edge_data == num_edge_vars());
+   for (int i=0; i<num_edge_data; ++i) {
+      LevelData<EdgeDataBox>& this_edge_data = edge_var(i);
+      const LevelData<EdgeDataBox>& that_edge_data = a_rhs.edge_var(i);
+      CH_assert( (this_edge_data.disjointBoxLayout()).compatible( that_edge_data.disjointBoxLayout() ) );
+      for (DataIterator dit( this_edge_data.dataIterator() ); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            this_edge_data[dit][dir].plus(that_edge_data[dit][dir], a_factor);
+         }
+      }
+   }
 }
 
 
@@ -136,6 +174,17 @@ int CFGVars::size( bool a_count_ghosts )
          for (int dir=0; dir<SpaceDim; ++dir) {
             const Box& box( a_count_ghosts ? this_face_data[dit][dir].box() : surroundingNodes(dbl[dit],dir) );
             size += box.numPts() * this_face_data.nComp();
+         }
+      }
+   }
+   
+   for (int i=0; i<num_edge_vars(); ++i) {
+      LevelData<EdgeDataBox>& this_edge_data = edge_var(i);
+      const DisjointBoxLayout& dbl( this_edge_data.disjointBoxLayout() );
+      for (DataIterator dit( this_edge_data.dataIterator() ); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            const Box& box( a_count_ghosts ? this_edge_data[dit][dir].box() : surroundingNodes(dbl[dit],dir) );
+            size += box.numPts() * this_edge_data.nComp();
          }
       }
    }
@@ -179,6 +228,21 @@ bool CFGVars::conformsTo( const CFGVars&  a_rhs,
          status &= ( this_face_data.ghostVect() == that_face_data.ghostVect() );
       }
    }
+   
+   for (int i=0; i<num_edge_vars(); ++i) {
+      const LevelData<EdgeDataBox>& this_edge_data = edge_var(i);
+      const LevelData<EdgeDataBox>& that_edge_data = a_rhs.edge_var(i);
+
+      const DisjointBoxLayout& thisBoxes( this_edge_data.disjointBoxLayout() );
+      const DisjointBoxLayout& rhsBoxes( that_edge_data.disjointBoxLayout() );
+   
+      status &= thisBoxes.compatible( rhsBoxes );
+      status &= ( this_edge_data.nComp() == that_edge_data.nComp() );
+   
+      if ( a_include_ghost_cells ) {
+         status &= ( this_edge_data.ghostVect() == that_edge_data.ghostVect() );
+      }
+   }
 
    return status;
 }
@@ -214,6 +278,20 @@ CFGVars::clone( const IntVect&  a_ghost_vect,
       if (a_copy_data) {
          for (DataIterator dit( new_face_data.dataIterator() ); dit.ok(); ++dit) {
             new_face_data[dit].copy(this_face_data[dit]);
+         }
+      }
+   }
+   
+   for (int i=0; i<num_edge_vars(); ++i) {
+      const LevelData<EdgeDataBox>& this_edge_data = edge_var(i);
+      
+      field_ptr->addEdgeVar(m_edge_data_var_name[i], this_edge_data.nComp(), a_ghost_vect);
+
+      LevelData<EdgeDataBox>& new_edge_data = field_ptr->edge_var(i);
+
+      if (a_copy_data) {
+         for (DataIterator dit( new_edge_data.dataIterator() ); dit.ok(); ++dit) {
+            new_edge_data[dit].copy(this_edge_data[dit],0,0,this_edge_data.nComp());
          }
       }
    }

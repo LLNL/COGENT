@@ -187,6 +187,13 @@ void SNCoreConfigurationBC::applyEdgeBC(const FluidSpecies&  a_species_comp,
 {
 }
 
+void SNCoreConfigurationBC::applyBC( const FluidSpecies&          a_species_comp,
+                                           LevelData<FArrayBox>&  a_dst,
+                                     const Real                   a_time )
+{
+}
+
+
 
 
 

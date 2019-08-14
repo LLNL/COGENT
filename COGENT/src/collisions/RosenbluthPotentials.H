@@ -64,14 +64,14 @@ public:
 
    ///Hypre routines
 
-   void createHypreData( const MPI_Comm&       comm,
-                         const List<VEL::Box>& boxes,
-                         HYPRE_StructGrid&     grid,
-                         HYPRE_StructStencil&  stencil,
-                         HYPRE_StructMatrix&   matrix,
-                         HYPRE_StructVector&   x,
-                         HYPRE_StructVector&   b,
-                         HYPRE_StructSolver&   solver ) const;
+   void createHypreData( const MPI_Comm&          comm,
+                         const Vector<VEL::Box>&  boxes,
+                         HYPRE_StructGrid&        grid,
+                         HYPRE_StructStencil&     stencil,
+                         HYPRE_StructMatrix&      matrix,
+                         HYPRE_StructVector&      x,
+                         HYPRE_StructVector&      b,
+                         HYPRE_StructSolver&      solver ) const;
 
    void destroyHypreData( HYPRE_StructSolver&  solver,
                           HYPRE_StructVector&  b,
@@ -82,14 +82,14 @@ public:
 
    void constructMatrix( const VEL::ProblemDomain& domain,
                          const VEL::RealVect&      dx,
-                         const List<VEL::Box>&     boxes,
+                         const Vector<VEL::Box>&   boxes,
                          const double&             Bfield,
                          HYPRE_StructMatrix&       matrix ) const;
 
    /// Utility function (used to make proper block arrangement)
-   void getSliceBoxes( const CFG::IntVect     cfg_iv,
-                       const List<VEL::Box>&  vel_boxes,
-                       List<Box>&             phase_boxes ) const;
+   void getSliceBoxes( const CFG::IntVect       cfg_iv,
+                       const Vector<VEL::Box>&  vel_boxes,
+                       List<Box>&               phase_boxes ) const;
 
 private:
  

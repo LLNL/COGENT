@@ -55,8 +55,11 @@ public:
       return m_local_comm[box_number];}
 #endif
 
-   const List<VEL::Box>& velocitySlice(int box_number) const {CH_assert(box_number < numConfigBoxes());
+   const Vector<VEL::Box>& velocitySlice(int box_number) const {CH_assert(box_number < numConfigBoxes());
       return m_local_velocity_slices[box_number];}
+
+   const Vector<int>& pids(int box_number) const {CH_assert(box_number < numConfigBoxes());
+      return m_local_pids[box_number];}
 
 private:
 
@@ -76,9 +79,10 @@ private:
                                         Vector<CFG::Box>&  local_config_boxes) const;
 #endif
 
-   void getVelocitySlices(const DisjointBoxLayout&  dbl,
-                          const Vector<CFG::Box>&   config_boxes,
-                          Vector< List<VEL::Box> >& velocity_slices) const;
+   void getVelocitySlicesAndPIDs(const DisjointBoxLayout&    dbl,
+                                 const Vector<CFG::Box>&     config_boxes,
+                                 Vector< Vector<VEL::Box> >& velocity_slices,
+                                 Vector< Vector<int> >&      pids ) const;
 
    void projectPhaseToConfiguration( const Box& a_src,
                                      CFG::Box&  a_dst ) const;
@@ -96,7 +100,8 @@ private:
 #ifdef CH_MPI
    Vector<MPI_Comm> m_local_comm;
 #endif
-   Vector< List<VEL::Box> > m_local_velocity_slices;
+   Vector< Vector<VEL::Box> > m_local_velocity_slices;
+   Vector< Vector<int> > m_local_pids;
 };
 
 #include "NamespaceFooter.H"

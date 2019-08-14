@@ -163,7 +163,7 @@ SNCoreBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
    mapped_block_width[RADIAL_DIR] = upperMappedCoordinate(RADIAL_DIR) - lowerMappedCoordinate(RADIAL_DIR);
    mapped_block_width[POLOIDAL_DIR] = upperMappedCoordinate(POLOIDAL_DIR) - lowerMappedCoordinate(POLOIDAL_DIR);
    
-   if (m_poloidal_index == SingleNullBlockCoordSys::RCORE || m_poloidal_index == SingleNullBlockCoordSys::LCORE) {
+   if (m_poloidal_block == SingleNullBlockCoordSys::RCORE || m_poloidal_block == SingleNullBlockCoordSys::LCORE) {
       
       double z_hi = (m_Zsep_hi - m_core_width + m_Z0) + m_core_width * (a_xi_tmp[RADIAL_DIR]-lowerMappedCoordinate(RADIAL_DIR))/mapped_block_width[RADIAL_DIR];
       double psiVal = psiAtR0(z_hi);
@@ -171,7 +171,7 @@ SNCoreBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
       double length = m_pol_ref_length * (a_xi_tmp[POLOIDAL_DIR]-lowerMappedCoordinate(POLOIDAL_DIR)) / mapped_block_width[POLOIDAL_DIR];
       length = length*(1.0 - Lmin*abs(cos(length/2.0))); //mesh packing
       
-      if (m_poloidal_index == SingleNullBlockCoordSys::LCORE)  {
+      if (m_poloidal_block == SingleNullBlockCoordSys::LCORE)  {
          length = m_pol_ref_length * (upperMappedCoordinate(POLOIDAL_DIR) - a_xi_tmp[POLOIDAL_DIR]) / mapped_block_width[POLOIDAL_DIR];
          length = length*(1.0 - Lmin*abs(cos(length/2.0)));
       }
@@ -212,7 +212,7 @@ SNCoreBlockCoordSysModel::realCoordPointwise( const RealVect& a_xi ) const
          }
       }
       
-      if ( m_poloidal_index == SingleNullBlockCoordSys::LCORE ) x[0] = m_R0 - (x[0]-m_R0);
+      if ( m_poloidal_block == SingleNullBlockCoordSys::LCORE ) x[0] = m_R0 - (x[0]-m_R0);
       
    }
    

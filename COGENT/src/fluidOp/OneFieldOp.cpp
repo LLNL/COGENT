@@ -44,7 +44,7 @@ OneFieldOp::OneFieldOp( const string&   a_pp_str,
    EllipticOpBCFactory elliptic_op_bc_factory;
    m_bc = elliptic_op_bc_factory.create( name,
                                          ppsp,
-                                         a_geometry.getCoordSys()->type(),
+                                         *(a_geometry.getCoordSys()),
                                          false );
 
    string variable_name = "density";

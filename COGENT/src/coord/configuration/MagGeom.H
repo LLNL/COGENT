@@ -33,8 +33,6 @@ public:
   virtual ~MagGeom();
 
   /*@}*/
-   
-   int m_num_ghosts;
 
    void initializeMetricMembers( const DisjointBoxLayout& a_grids,
                                  const IntVect&           a_ghostVect ) const;
@@ -47,10 +45,18 @@ public:
    void getCellVolumes( LevelData<FArrayBox>& volume ) const;
 
    void getJ( LevelData<FArrayBox>& J ) const;
+
+   void getJ( LevelData<FluxBox>& J ) const;
+   
+   void getJ( LevelData<EdgeDataBox>& J ) const;
    
    void getN( LevelData<FArrayBox>& N ) const;
    
    void getdXdxi( LevelData<FArrayBox>& dXdxi ) const;
+   
+   void getdXdxi( LevelData<FluxBox>& dXdxi ) const;
+   
+   void getdXdxi( LevelData<EdgeDataBox>& dXdxi ) const;
    
    void getXphys( LevelData<FArrayBox>& Xphys ) const;
 
@@ -63,8 +69,19 @@ public:
    void getPointwiseNJInverse( LevelData<FArrayBox>& NJinverse ) const;
 
    void multJonValid( LevelData<FArrayBox>& dfn ) const;
+   
+   void multJonFaces( LevelData<FluxBox>& dfn ) const;
+   
+   void multJonEdges( LevelData<EdgeDataBox>& dfn ) const;
 
    void divideJonValid( LevelData<FArrayBox>& dfn ) const;
+   
+   void divideJonFaces( LevelData<FluxBox>& dfn ) const;
+   
+   void divideJonEdges( LevelData<EdgeDataBox>& dfn ) const;
+
+   void applyOnAxisCurlCorrection( LevelData<EdgeDataBox>& a_Curl,
+                             const LevelData<FArrayBox>&   a_val) const;
 
    void multPointwiseJ( LevelData<FArrayBox>& dfn,
                         const BoundaryBoxLayout& bdry_layout ) const;
@@ -81,8 +98,8 @@ public:
                                      const bool                fourthOrder ) const;
    
    void mappedGridDivergenceFromFluxNorms( const LevelData<FluxBox>&    F,
-                                                 LevelData<FArrayBox>&  divergence ) const;
-   
+                                                 LevelData<FArrayBox>&  divergence) const;
+
    void mappedGridDivergenceFromFluxNorms( const FluxBox&    F,
                                                  FArrayBox&  divergence ) const;
 
@@ -95,6 +112,18 @@ public:
    
    void convertPhysToCovar( LevelData<FArrayBox>&  a_F,
                       const int                    a_inverse) const;
+   
+   void convertPhysToCovar( LevelData<FluxBox>&  a_F,
+                      const int                  a_inverse) const;
+   
+   void convertPhysToContravar( LevelData<FArrayBox>&  a_F,
+                          const int                    a_inverse) const;
+   
+   void convertPhysToContravar( LevelData<FluxBox>&  a_F,
+                          const int                  a_inverse) const;
+   
+   void convertContravarToCovar( LevelData<EdgeDataBox>&  a_F,
+                           const int                      a_inverse) const;
 
    // Project the vector from phys directions to unit normal
    // coord sys with 0-component normal to the a_dir direction 
@@ -104,7 +133,7 @@ public:
                              const DataIndex&  a_dit,
                              const int         a_dir,
                              const int         a_inverse ) const;
-   
+
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
    void exchangeTransverseAtBlockBoundaries(LevelData<FluxBox>& data) const;
@@ -124,6 +153,8 @@ public:
    const LevelData<FArrayBox>& getCellCenteredRealCoords() const {return m_cell_centered_real_coords;}
 
    const LevelData<FluxBox>& getFaceCenteredRealCoords() const {return m_face_centered_real_coords;}
+   
+   const LevelData<EdgeDataBox>& getEdgeCenteredRealCoords() const {return m_edge_centered_real_coords;}
 
    const LevelData<FArrayBox>& getNormalizedMagneticFluxCell() const {return m_normalized_magnetic_flux_cell;}
 
@@ -303,6 +334,7 @@ public:
    int getMultiblockDir() const {return m_mb_dir;}
    const LevelData<FArrayBox>& getShearedRemappedIndex() const {return m_sheared_remapped_index;}
    const LevelData<FArrayBox>& getShearedInterpStencil() const {return m_sheared_interp_stencil;}
+   const LevelData<FArrayBox>& getShearedInterpStencilOffsets() const {return m_sheared_interp_stencil_offsets;}
    void interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const;
    
 #endif
@@ -397,8 +429,12 @@ private:
    mutable LevelData<FArrayBox> m_cell_volume;
 
    mutable LevelData<FArrayBox> m_J;
+   mutable LevelData<FluxBox> m_JonFaces;
+   mutable LevelData<EdgeDataBox> m_JonEdges;
    mutable LevelData<FArrayBox> m_N;
    mutable LevelData<FArrayBox> m_dXdxi;
+   mutable LevelData<FluxBox> m_dXdxi_onFaces;
+   mutable LevelData<EdgeDataBox> m_dXdxi_onEdges;
    mutable LevelData<FArrayBox> m_Xphys;
 
    mutable LevelData<FluxBox> m_metrics;
@@ -423,6 +459,7 @@ private:
 
    LevelData<FArrayBox> m_cell_centered_real_coords;
    LevelData<FluxBox> m_face_centered_real_coords;
+   LevelData<EdgeDataBox> m_edge_centered_real_coords;
 
    LevelData<FArrayBox> m_normalized_magnetic_flux_cell;
    LevelData<FluxBox> m_normalized_magnetic_flux_face;
@@ -458,6 +495,7 @@ private:
    void getShearedGhostBoxLayout();
    void getMagShearInterpCoeff(LevelData<FArrayBox>& remapped_iv,
                                LevelData<FArrayBox>& interp_stencil,
+                               LevelData<FArrayBox>& interp_stencil_offsets,
                                const DisjointBoxLayout& grids,
                                const Side::LoHiSide& side) const;
    
@@ -470,6 +508,7 @@ private:
    
    LevelData<FArrayBox> m_sheared_remapped_index;
    LevelData<FArrayBox> m_sheared_interp_stencil;
+   LevelData<FArrayBox> m_sheared_interp_stencil_offsets;
    
 #endif
    

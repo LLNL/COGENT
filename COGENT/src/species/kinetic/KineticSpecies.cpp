@@ -3,6 +3,7 @@
 #include "MomentOp.H"
 #include "Misc.H"
 #include "Directions.H"
+#include "CFArrayBox.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -28,8 +29,13 @@ KineticSpecies::KineticSpecies(
     m_charge( a_charge ),
     m_moment_op( MomentOp::instance() ),
     m_gyroavg_op(NULL),
-    m_is_gyrokinetic(a_is_gyrokinetic)
+    m_is_gyrokinetic(a_is_gyrokinetic),
+    m_velocity_option(PhaseGeom::FULL_VELOCITY),
+    m_time(-1.0)
 {
+    int ghost = (m_geometry->secondOrder()) ? 0 : 1;
+    const DisjointBoxLayout& dbl = m_geometry->gridsFull();
+    m_velocity.define(dbl, SpaceDim, ghost * IntVect::Unit);
 }
 
 
@@ -39,11 +45,14 @@ KineticSpecies::KineticSpecies( const KineticSpecies& a_foo )
     m_mass( a_foo.m_mass ),
     m_charge( a_foo.m_charge ),
     m_moment_op( MomentOp::instance() ),
-    m_is_gyrokinetic( a_foo.m_is_gyrokinetic )
+    m_is_gyrokinetic( a_foo.m_is_gyrokinetic ),
+    m_velocity_option(a_foo.m_velocity_option),
+    m_time(a_foo.m_time)
     
 {
    gyroaverageOp(a_foo.gyroaverageOp());
    m_dist_func.define( a_foo.m_dist_func );
+   m_velocity.define( a_foo.m_velocity );
 }
 
 void KineticSpecies::numberDensity( CFG::LevelData<CFG::FArrayBox>& a_rho ) const
@@ -558,13 +567,63 @@ Real KineticSpecies::minValue() const
 }
 
 
-void KineticSpecies::computeVelocity(LevelData<FluxBox>& a_velocity,
+void KineticSpecies::computeVelocity(LevelData<FluxBox>&       a_velocity,
                                      const LevelData<FluxBox>& a_E_field,
-                                     const int  a_velocity_option) const
+                                     const int                 a_velocity_option,
+                                     const Real&               a_time,
+                                     const bool                a_apply_axisymmetric_correction) const
 {
+   
+   CH_TIMERS("KineticSpecies::computeVelocity");
+   //CH_TIMER("copy_velocity_chombo", t_copy_velocity_chombo);
+   CH_TIMER("copy_velocity_fort", t_copy_velocity_fort);
+
    const DisjointBoxLayout& dbl( m_dist_func.getBoxes() );
-   a_velocity.define( dbl, SpaceDim, IntVect::Unit );
-   m_geometry->updateVelocities( a_E_field, a_velocity, a_velocity_option, isGyrokinetic(), true );
+
+   CH_assert(a_velocity.ghostVect() <= m_velocity.ghostVect());
+   CH_assert(a_velocity.nComp() == m_velocity.nComp());
+   
+   if ((m_time != a_time) || (m_velocity_option != a_velocity_option)) {
+       m_geometry->updateVelocities( a_E_field, m_velocity, a_velocity_option, isGyrokinetic() );
+       m_time = a_time;
+       m_velocity_option = a_velocity_option;
+   }
+
+   CH_START(t_copy_velocity_fort);
+   for (DataIterator dit(m_velocity.dataIterator()); dit.ok(); ++dit) {
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         SpaceUtils::copy(a_velocity[dit][dir],m_velocity[dit][dir]);
+      }
+   }
+   CH_STOP(t_copy_velocity_fort);
+
+   // Correct for the extra R factor added to the 4th-order implementation
+   // of metric coefficients to discretely preserve free-stream
+   if ( a_apply_axisymmetric_correction) {
+      m_geometry->applyAxisymmetricCorrection(a_velocity);
+   }
+   
+   if ( !m_geometry->secondOrder() ) {
+      // Convert face-centered values to face averages on valid cell faces.
+      // The values on ghost cell faces remain second-order.
+      fourthOrderAverage(a_velocity);
+      a_velocity.exchange();
+   }
+   
+   
+#if 0
+   // This test is left to compare the speeds of Chombo naitve (no logner in Fortran)
+   // versus the local Fotran code used above). Dan hopes that DIM 1,2,3, should
+   // be optimized in Chombo, but perhaps not 4,5,6. Brian suggeted using tamplated code
+   // used for CFarrayBox performCopy
+   CH_START(t_copy_velocity_chombo);
+   for (DataIterator dit(m_velocity.dataIterator()); dit.ok(); ++dit) {
+      a_velocity[dit].copy(m_velocity[dit]);
+   }
+   CH_STOP(t_copy_velocity_chombo);
+
+#endif
+
 }
 
 
@@ -581,11 +640,16 @@ void KineticSpecies::computeMappedVelocityNormals(LevelData<FluxBox>& a_velocity
 
 
 void KineticSpecies::computeMappedVelocity(LevelData<FluxBox>& a_velocity,
-                                           const LevelData<FluxBox>& a_E_field ) const
+                                           const LevelData<FluxBox>& a_E_field,
+                                           const Real&  a_time) const
 {
+   
+   CH_TIME("KineticSpecies::computeMappedVelocity");
+
    const DisjointBoxLayout& dbl( m_dist_func.getBoxes() );
-   a_velocity.define( dbl, SpaceDim, IntVect::Unit );
-   m_geometry->updateMappedVelocities( a_E_field, a_velocity );
+   computeVelocity(a_velocity, a_E_field, PhaseGeom::FULL_VELOCITY, a_time, false);
+   m_geometry->multNTransposePointwise( a_velocity );
+
 }
 
 

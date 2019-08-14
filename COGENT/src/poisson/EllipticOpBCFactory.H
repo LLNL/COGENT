@@ -7,6 +7,7 @@
 #include "LogRectEllipticOpBC.H"
 #include "SingleNullEllipticOpBC.H"
 #include "SNCoreEllipticOpBC.H"
+#include "SingleNullCoordSys.H"
 
 #include <string>
 
@@ -42,27 +43,27 @@ class EllipticOpBCFactory
        * \verbatim
        * type = "localized"
        */
-      inline EllipticOpBC* create( const std::string& name,
-                                   ParmParse& pp,
-                                   const std::string& coord_sys_type,
-                                   const int& verbosity = 0 );
+      inline EllipticOpBC* create( const std::string&  name,
+                                   ParmParse&          pp,
+                                   const MagCoordSys&  coord_sys,
+                                   const int&          verbosity = 0 );
 };
 
 inline
-EllipticOpBC* EllipticOpBCFactory::create(
-   const std::string& a_name,
-   ParmParse& a_pp,
-   const std::string& a_coord_sys_type,
-   const int& a_verbosity )
+EllipticOpBC* EllipticOpBCFactory::create( const std::string&  a_name,
+                                           ParmParse&          a_pp,
+                                           const MagCoordSys&  a_coord_sys,
+                                           const int&          a_verbosity )
 {
    EllipticOpBC* result(NULL);
-   if (a_coord_sys_type == "LogicallyRectangular" ) {
+   if (a_coord_sys.type() == "LogicallyRectangular" ) {
       result = new LogRectEllipticOpBC( a_name, a_pp, a_verbosity );
    }
-   else if (a_coord_sys_type == "SingleNull" ) {
-      result = new SingleNullEllipticOpBC( a_name, a_pp, a_verbosity );
+   else if (a_coord_sys.type() == "SingleNull" ) {
+      int poloidal_blocks_per_sector = ((const SingleNullCoordSys&)a_coord_sys).numPoloidalBlocks();
+      result = new SingleNullEllipticOpBC( a_name, a_pp, poloidal_blocks_per_sector, a_verbosity );
    }
-   else if (a_coord_sys_type == "SNCore" ) {
+   else if (a_coord_sys.type() == "SNCore" ) {
       result = new SNCoreEllipticOpBC( a_name, a_pp, a_verbosity );
    }
    else {

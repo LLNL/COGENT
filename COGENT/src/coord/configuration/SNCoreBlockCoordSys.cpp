@@ -13,7 +13,7 @@ SNCoreBlockCoordSys::printInit() const
 {
    if ( m_verbose && procID()==0 ) {
       cout << "Constructing single null ";
-      switch (m_poloidal_index)
+      switch (m_poloidal_block)
          {
          case MCORE:
            cout << "middle core";
@@ -30,7 +30,7 @@ SNCoreBlockCoordSys::printInit() const
 
       cout << " block with global index space domain box = " << m_domain.domainBox() << endl;
 
-      switch (m_poloidal_index)
+      switch (m_poloidal_block)
          {
          case MCORE:
            cout << "Middle core mapped domain: " 
@@ -68,9 +68,9 @@ SNCoreBlockCoordSys::printInit() const
 bool
 SNCoreBlockCoordSys::blockNameIsValid( const string& a_block_name ) const
 {
-   return (a_block_name == "mcore" && m_poloidal_index == MCORE) ||
-          (a_block_name == "lcore" && m_poloidal_index == LCORE) ||
-          (a_block_name == "rcore" && m_poloidal_index == RCORE);
+   return (a_block_name == "mcore" && m_poloidal_block == MCORE) ||
+          (a_block_name == "lcore" && m_poloidal_block == LCORE) ||
+          (a_block_name == "rcore" && m_poloidal_block == RCORE);
 }
 
 
@@ -85,28 +85,28 @@ SNCoreBlockCoordSys::definePoints( const ParmParse&  a_pp,
 {
    a_dtheta *= (double)a_block_full_poloidal / (double)a_block_poloidal;
 
-   if ( m_poloidal_index == MCORE ) {
+   if ( m_poloidal_block == MCORE ) {
       a_theta_pts[a_mapping_block_size[1]-1] =
          upperMappedCoordinate(POLOIDAL_DIR) + a_n_poloidal_extend*a_dtheta;
       for (int i=a_mapping_block_size[1]-1; i>0; --i) {
          a_theta_pts[i-1] = a_theta_pts[i] - a_dtheta;
       }
    }
-   else if ( m_poloidal_index == LCORE ) {
+   else if ( m_poloidal_block == LCORE ) {
       a_theta_pts[a_mapping_block_size[1]-1] =
          upperMappedCoordinate(POLOIDAL_DIR) + a_n_poloidal_extend*a_dtheta;
       for (int i=a_mapping_block_size[1]-1; i>0; --i) {
          a_theta_pts[i-1] = a_theta_pts[i] - a_dtheta;
       }
    }
-   else if ( m_poloidal_index == RCORE ) {
+   else if ( m_poloidal_block == RCORE ) {
       a_theta_pts[0] = lowerMappedCoordinate(POLOIDAL_DIR) - a_n_poloidal_extend*a_dtheta;
       for (int i=1; i<a_mapping_block_size[1]; ++i) {
          a_theta_pts[i] = a_theta_pts[i-1] + a_dtheta;
       }
    }
    else {
-      MayDay::Error("SNCoreBlockCoordSys::definePoints(): Invalid poloidal_index encountered");
+      MayDay::Error("SNCoreBlockCoordSys::definePoints(): Invalid poloidal_block encountered");
    }
 }
 

@@ -94,10 +94,9 @@ class LogRectPhaseBC
       KineticFunction& inflowFunc( const int& a_dir,
                                     const Side::LoHiSide& a_side );
 
-      void fillInflowData( KineticSpeciesPtrVect& a_bdry_data,
-                           Vector<std::string>& a_bc_type,
-                           const BoundaryBoxLayoutPtrVect& a_bdry_layout,
-                           const Real& a_time );
+      void fillInflowData( const Real&      a_time );
+   
+      void setAllBcType( const BoundaryBoxLayoutPtrVect&  a_bdry_layout );
 
       inline std::string radialBcType( const Side::LoHiSide& a_side );
       inline std::string poloidalBcType( const Side::LoHiSide& a_side );
@@ -125,9 +124,13 @@ class LogRectPhaseBC
             MU_LOWER, MU_UPPER,
             NUM_INFLOW};
 
+      Vector<std::string> m_all_bc_type;
+      BoundaryBoxLayoutPtrVect m_all_bdry_layouts;
+      KineticSpeciesPtrVect m_all_bdry_data;
       Vector<RefCountedPtr<KineticFunction> > m_inflow_function;
       Vector<std::string> m_bc_type;
       Vector<std::string> m_bdry_name;
+      bool m_all_bdry_defined;
    
  };
 

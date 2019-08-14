@@ -209,6 +209,9 @@ bool Simulation<SYSTEM>::notDone()
 template <class SYSTEM>
 void Simulation<SYSTEM>::advance()
 {
+   CH_TIMERS("Simulation<SYSTEM>::advance");
+   CH_TIMER("print_diagnostics",t_print_diagnostcs);
+
    preTimeStep();
    if (m_verbosity >= 1) {
       pout() << endl << "Step " << m_cur_step << endl;
@@ -231,6 +234,7 @@ void Simulation<SYSTEM>::advance()
    walltime_g = walltime;
 #endif
 
+   CH_START(t_print_diagnostcs);
    if (m_verbosity >= 1) {
       m_system->printDiagnostics();
       pout()<< "Step " << m_cur_step << " completed, simulation time is "
@@ -242,6 +246,7 @@ void Simulation<SYSTEM>::advance()
               << endl << "----" << endl;
       }
    }
+   CH_STOP(t_print_diagnostcs);
 
    if ( m_plot_time_interval>0.0 ) {
       if ( m_cur_time>=m_plot_time ) {

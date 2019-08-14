@@ -91,6 +91,7 @@ class GKSystemBC
       std::vector<KineticSpeciesBC*>      m_kinetic_bcs;
       std::vector<CFG::FluidVarBC*>       m_fluid_bcs;
       CFG::EllipticOpBC*                  m_potential_bcs;
+      mutable LevelData<FluxBox>          m_mapped_velocity;
 
       typedef std::map<std::string,RefCountedPtr<CFG::GridFunction> > FieldBCMap;
       FieldBCMap m_field_bcs;

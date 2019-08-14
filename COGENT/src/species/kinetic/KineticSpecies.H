@@ -240,7 +240,9 @@ class KineticSpecies
 
       void computeVelocity( LevelData<FluxBox>& velocity,
                             const LevelData<FluxBox>& E_field,
-                            const int  velocity_option) const;
+                            const int  velocity_option,
+                            const Real& time,
+                            const bool  apply_axisymmetric_correction = true  ) const;
 
       void computeMappedVelocityNormals( LevelData<FluxBox>& velocity,
                                          const CFG::LevelData<CFG::FArrayBox>& E_field_cell,
@@ -249,7 +251,8 @@ class KineticSpecies
                                          const int  velocity_option ) const;
 
       void computeMappedVelocity( LevelData<FluxBox>& velocity,
-                                  const LevelData<FluxBox>& E_field ) const;
+                                  const LevelData<FluxBox>& E_field,
+                                  const Real& time) const;
 
       inline
       virtual int size( bool a_count_ghosts = false )
@@ -329,10 +332,14 @@ class KineticSpecies
       string m_name;
       Real m_mass;
       Real m_charge;
+   
       LevelData<FArrayBox> m_dist_func;
       MomentOp& m_moment_op;
       mutable DisjointBoxLayout m_ghost_dbl;
-
+      mutable LevelData<FluxBox> m_velocity;
+      mutable Real m_time;
+      mutable int m_velocity_option;
+   
       GyroaverageOperator const *m_gyroavg_op;
       bool m_is_gyrokinetic;
 };

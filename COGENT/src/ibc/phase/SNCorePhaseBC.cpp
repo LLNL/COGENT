@@ -249,7 +249,7 @@ void SNCorePhaseBC::fillInflowData( KineticSpeciesPtrVect& a_bdry_data,
             const SNCorePhaseCoordSys& coord_sys(
                dynamic_cast<const SNCorePhaseCoordSys&>( geometry.phaseCoordSys()) );
             const int block( coord_sys.whichBlock( interior_box ) );
-            const int block_type( coord_sys.blockType( block ) );
+            const int block_type( coord_sys.poloidalBlock( block ) );
             KineticFunction& inflow_func( radialInflowFunc( side, block_type ) );
             inflow_func.assign( bdry_data, bdry_layout, a_time );
             a_bc_type[i] = radialBcType(side, block_type);

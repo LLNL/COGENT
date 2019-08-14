@@ -40,6 +40,10 @@ GKSystemBC::GKSystemBC( ParmParse& a_pp,
 
    const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
    mag_geom.defineEllipticOpBC( *m_potential_bcs );
+   
+   int ghost = (m_phase_geometry.secondOrder()) ? 0 : 1;
+   const DisjointBoxLayout& dbl = m_phase_geometry.gridsFull();
+   m_mapped_velocity.define(dbl, SpaceDim, ghost * IntVect::Unit);
 }
 
 
@@ -59,7 +63,7 @@ void GKSystemBC::executeInternalExchanges( KineticSpecies& a_species ) const
    LevelData<FArrayBox>& dfn( a_species.distributionFunction() );
    const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
    // Fill ghost cells except for those on physical boundaries
-   geometry.fillInternalGhosts(dfn);
+   geometry.fillInternalGhosts(dfn, true );
 }
 
 
@@ -104,13 +108,12 @@ void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&           
       CH_STOP(t_execute_exchanges);
 
       CH_START(t_compute_mapped_velocity);
-      LevelData<FluxBox> velocity;
-      species_physical.computeMappedVelocity( velocity, a_E_field );
+      species_physical.computeMappedVelocity( m_mapped_velocity, a_E_field, a_time );
       CH_STOP(t_compute_mapped_velocity);
 
       CH_START(t_apply_bc);
       KineticSpeciesBC& ksbc( kineticSpeciesBC( species_physical.name() ) );
-      ksbc.apply( species_physical, a_phi, velocity, a_time );
+      ksbc.apply( species_physical, a_phi, m_mapped_velocity, a_time );
       CH_STOP(t_apply_bc);
    }
 }
@@ -237,7 +240,7 @@ void GKSystemBC::parsePotential( ParmParse& a_pp,
    CFG::EllipticOpBCFactory elliptic_op_bc_factory;
    m_potential_bcs = elliptic_op_bc_factory.create( name,
                                                     ppsp,
-                                                    a_coord_sys_type,
+                                                    *(m_phase_geometry.magGeom().getCoordSys()),
                                                     m_verbosity );
 }
 

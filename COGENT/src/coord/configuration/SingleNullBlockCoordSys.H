@@ -37,14 +37,15 @@ class SingleNullBlockCoordSys
        * @param[in] pp               the ParmParse database.
        * @param[in] domain           the configuration space domain.
        * @param[in] dx               mapped grid cell size
-       * @param[in] poloidal_index   poloidal block index
-       * @param[in] toroidal_index   toroidal block index
+       * @param[in] poloidal_block   poloidal block
+       * @param[in] toroidal_sector  toroidal sector
        */
       SingleNullBlockCoordSys( ParmParse&            pp,
                                const ProblemDomain&  domain,
                                const RealVect&       dx,
-                               const int             poloidal_index,
-                               const int             toroidal_index );
+                               const int             poloidal_block,
+                               const int             toroidal_sector,
+                               const int             toroidal_block_separation );
 
       /// Destructor
       /**
@@ -124,8 +125,11 @@ class SingleNullBlockCoordSys
       RealVect mappedCoordNewton( const RealVect&  X,
                                   const RealVect&  xi_initial,
                                   const IntVect&   iv_initial ) const;
+
 #endif
 
+      bool containsPoloidalPoint( const POL::RealVect& X, const bool verbose ) const;
+   
       virtual array<double,3> computeBField(const RealVect& a_X) const;
 
       virtual void computeFieldData( const int  dir,
@@ -159,9 +163,13 @@ class SingleNullBlockCoordSys
    
       virtual double getRBtoroidal() const {return m_RB_toroidal;}
 
+#if CFG_DIM==3
+      double getToroidalMappedOffset() const {return m_toroidal_mapped_offset;}
+#endif
+
       static const std::string pp_name;
 
-      virtual int poloidalIndex() const {return m_poloidal_index;}
+      virtual int poloidalBlock() const {return m_poloidal_block;}
 
       virtual void getCellCenterRealCoords();
 
@@ -174,6 +182,8 @@ class SingleNullBlockCoordSys
       virtual RealVect getMagAxis() const {return injectToroidal(m_poloidal_util->getMagAxis());}
    
       virtual RealVect getXpoint() const {return injectToroidal(m_poloidal_util->getXpoint());}
+
+      virtual string blockName( int poloidal_block ) const;
 
       enum SingleNullBlockType {LCORE,RCORE,LCSOL,RCSOL,LSOL,RSOL,LPF,RPF,MCORE,MCSOL,NUM_POLOIDAL_BLOCKS};
 
@@ -204,7 +214,11 @@ class SingleNullBlockCoordSys
       virtual void restrictPhysCoordsToPoloidal( const FArrayBox&  coords,
                                                  POL::FArrayBox&   coords_pol ) const;
 
-      // Restricts the input mapped coordinates to the poloidal plane and returns
+      virtual void restrictPhysCoordsToPoloidal( const FArrayBox&  coords,
+                                                 const int         toroidal_index,
+                                                 POL::FArrayBox&   coords_pol ) const;
+
+   // Restricts the input mapped coordinates to the poloidal plane and returns
       // the result in the second argument
       virtual void restrictMappedCoordsToPoloidal( const FArrayBox&  coords,
                                                    POL::FArrayBox&   coords_pol ) const;
@@ -213,15 +227,14 @@ class SingleNullBlockCoordSys
       // to the output
       virtual RealVect injectToroidal( const POL::RealVect  a_v ) const;
 
-      // Spreads the input in the toroidal direction if there is one; otherwise copies the input
-      // to the output
-      virtual void spreadToroidal( const POL::FArrayBox&  a_fab_pol,
-                                   FArrayBox&             a_fab ) const;
+      void injectToroidal( const POL::FArrayBox&  fab_pol,
+                           const int              toroidal_index,
+                           FArrayBox&             fab ) const;
 
    protected:
 
-      int m_poloidal_index;
-      int m_toroidal_index;
+      int m_poloidal_block;
+      int m_toroidal_sector;
 
 #if CFG_DIM==2
       POL::FArrayBox m_realPoloidalCoords;
@@ -252,6 +265,8 @@ class SingleNullBlockCoordSys
 
 #if CFG_DIM==3
       Interp3D* m_interp;
+
+      double m_toroidal_mapped_offset;
 #endif
 
       int m_toroidal_ghosts;   // Number of mapped ghost cells in the toroidal direction

@@ -74,6 +74,8 @@ public:
                     const Box& box, FArrayBox& dXdxi) const
        {m_RZ_interp->interpolate(src_component, dst_component, mode, xi, box, dXdxi);}
 
+   IntVect getMappingDims() const {return IntVect(m_RZ_interp->dim(0), m_RZ_interp->dim(1));}
+
    double getRmin() const {return m_Rmin;}
 
    double getRmax() const {return m_Rmax;}

@@ -243,6 +243,12 @@ void SingleNullConfigurationBC::applyEdgeBC(const FluidSpecies&  a_species_comp,
 {
 }
 
+void SingleNullConfigurationBC::applyBC( const FluidSpecies&          a_species_comp,
+                                               LevelData<FArrayBox>&  a_dst,
+                                         const Real                   a_time )
+{
+}
+
 
 void SingleNullConfigurationBC::printParameters() const
 {

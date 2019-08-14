@@ -58,6 +58,31 @@ c     local variables
 
       return
       end
+      
+      subroutine get_ec_mapped_coords(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_FRA[xi]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision offset(0:CH_SPACEDIM-1)
+
+      CHF_DTERM[offset(0) = zero;
+                offset(1) = zero;
+                offset(2) = zero]
+      offset(dir) = half
+
+      CHF_MULTIDO[box;i;j;k]
+        CHF_DTERM[xi(CHF_IX[i;j;k],0) = (i + offset(0))*dx(0);
+                  xi(CHF_IX[i;j;k],1) = (j + offset(1))*dx(1);
+                  xi(CHF_IX[i;j;k],2) = (k + offset(2))*dx(2)]
+      CHF_ENDDO
+
+      return
+      end
 
 c  ----------------------------------------------------------------------------
 c  increment lapPhi with undivided 2nd-derivative difference of phi

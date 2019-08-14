@@ -68,6 +68,8 @@ MBTridiagonalSolver::solve( const LevelData<FArrayBox>&  a_rhs,
                             LevelData<FArrayBox>&        a_solution,
                             bool                         a_homogeneous_bcs )
 {
+  CH_TIME("MBTridiagonalSolver::solve");
+
    // This function assumes that boundary values have already been 
    // included in the right-hand side, so the a_homogeneous_bcs argument
    // plays no role.  We therefore require it to be set to false and

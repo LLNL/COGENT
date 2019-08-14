@@ -54,17 +54,20 @@ public:
     */
 
    Real computeDtExplicitTI(const CFG::EField&           Efield_cfg,
-                            const KineticSpeciesPtrVect& soln );
+                            const KineticSpeciesPtrVect& soln,
+                            const Real&                  time );
 
    Real computeDtImExTI( const CFG::EField&           Efield_cfg,
-                         const KineticSpeciesPtrVect& soln );
+                         const KineticSpeciesPtrVect& soln,
+                         const Real&                  time );
 
    /// Compute the time scale.
    /**
     * Computes and returns an estimate of the Vlasov time scale.
     */
    Real computeTimeScale( const CFG::EField&           EField_cfg,
-                          const KineticSpeciesPtrVect& soln );
+                          const KineticSpeciesPtrVect& soln,
+                          const Real&                  time );
 
    void computeFluxNormal( const LevelData<FArrayBox>& dist_fn,
                            const LevelData<FluxBox>&   velocity_normal,
@@ -176,6 +179,10 @@ public:
                        const Real,
                        const bool,
                        const int );
+   
+   IntVect getSpeciesGhostVect();
+   
+   bool computeCfl() const {return m_compute_cfl;}
 
 protected:
 
@@ -231,6 +238,7 @@ protected:
 
    typedef enum {INVALID=-1, PPM, UW1, UW3, UW5, WENO5, BWENO, NUM_FLUX } FluxType;
    FluxType m_face_avg_type;
+   std::string m_method;
 
    static Real s_stability_bound[NUM_FLUX];
 
@@ -241,8 +249,12 @@ protected:
    bool m_time_step_diagnostics;
    bool m_subtract_maxwellian;
    bool m_update_maxwellian;
+   bool m_compute_cfl;
    
    LevelData<FArrayBox> m_F0;
+   LevelData<FluxBox> m_flux;
+   LevelData<FluxBox> m_velocity;
+   LevelData<FluxBox> m_face_dist;
    RefCountedPtr<KineticFunction> m_ref_func;
 
    std::map<std::string, tiType> m_ti_type;

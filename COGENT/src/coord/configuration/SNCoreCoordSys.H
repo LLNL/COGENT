@@ -52,11 +52,11 @@ public:
 
    virtual void defineEllipticOpBC( EllipticOpBC& a_bc ) const;
 
-   int blockType(int a_block) const {return ((SNCoreBlockCoordSys*)m_coordSysVect[a_block])->poloidalIndex();}
+   int blockType(int a_block) const {return ((SNCoreBlockCoordSys*)m_coordSysVect[a_block])->poloidalBlock();}
 
    int numPoloidalBlocks() const {return m_num_poloidal_blocks;}
 
-   int numToroidalBlocks() const {return m_num_toroidal_blocks;}
+   int numToroidalSectors() const {return m_num_toroidal_sectors;}
 
    int toroidalBlockNumber(const int block_number) const {return block_number / m_num_poloidal_blocks;}
 
@@ -73,11 +73,13 @@ public:
     and the  second-order interpolation stencil.
     */
    
-   virtual void toroidalBlockRemapping(IntVect& a_ivDst,
-                                       Vector<Real>& a_interpStecil,
-                                       const RealVect& a_xiSrc,
-                                       const int a_nSrc,
-                                       const Side::LoHiSide& a_side) const;
+   virtual void toroidalBlockRemapping( IntVect&               ivDst,
+                                        int&                   nDst,
+                                        Vector<Real>&          interpStecil,
+                                        Vector<int>&           interpStecilOffsets,
+                                        const RealVect&        xiSrc,
+                                        const int              nSrc,
+                                        const Side::LoHiSide&  side ) const;
    
 #endif
 
@@ -136,7 +138,7 @@ protected:
    IntVect m_decomp_rcore;
 
    int m_num_poloidal_blocks;
-   int m_num_toroidal_blocks;
+   int m_num_toroidal_sectors;
 
    POL::RealVect m_Xpoint;
    double m_xpoint_radius;

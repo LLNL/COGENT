@@ -20,6 +20,8 @@ LogRectPhaseCoordSys::LogRectPhaseCoordSys(ParmParse&                           
   m_mb_dir = POLOIDAL_DIR;
 #endif
 
+  m_mag_geom_type = a_mag_coords->getMagBlockGeomType();
+  
   defineBoundaries();
 
   initializeBlockTransformations();
@@ -35,7 +37,9 @@ LogRectPhaseCoordSys::defineBoundaries()
   CH_assert(gotMappingBlocks());
   m_boundaries.resize(numBlocks());
 
-  for (int block(0); block<numBlocks(); block++) {
+  int num_blocks = numBlocks();
+  
+  for (int block(0); block<num_blocks; block++) {
 
     const CFG::MagBlockCoordSys* mag_block_coord_sys
     = (const CFG::MagBlockCoordSys*)m_mag_coords->getCoordSys(block);
@@ -45,38 +49,65 @@ LogRectPhaseCoordSys::defineBoundaries()
     Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries( m_boundaries[block] );
     for (int idir(RADIAL_DIR); idir<CFG_DIM; idir++) {
       if ( domain.isPeriodic(idir) ) {
-	//We have to put something at the periodic domain boundary.
-	//The periodicity is used by exchange(), which is informed by the
-	//isPeriodic member of the ProblemDomain object. Here, we basically
-	//indicate that the boundary is not the one where physical BCs are
-	//applied. The value of the "shift" variable in the code below
-	//does not matter. It is however would be  important for the
-	//multiblock exchange operations requiring the info about the connectivities.
-	//NB: blockBoundaries[idir] = BlockBoundary::CONFORMAL did not work as
-	// a workaround. M.A.D. 03/20/18
-	IntVect shift( m_mappingBlocks[block].size(idir) * BASISV(idir) );
-	IndicesTransformation it;
-	it.defineFromTranslation( shift );
-	blockBoundaries[idir].define( it, block );
-	it.defineFromTranslation( -shift );
-	blockBoundaries[idir+SpaceDim].define( it, block );
+        IntVect shift( m_mappingBlocks[block].size(idir) * BASISV(idir) );
+        IndicesTransformation it;
+        it.defineFromTranslation( shift );
+        blockBoundaries[idir].define( it, block );
+        it.defineFromTranslation( -shift );
+        blockBoundaries[idir+SpaceDim].define( it, block );
       }
-      else if (idir == m_mb_dir && numBlocks()>1) {
-	IntVect shift( m_mappingBlocks[block].size(idir) * BASISV(idir) );
-	IndicesTransformation it;
-	it.defineFromTranslation( shift );
-	blockBoundaries[idir].define( it, block );
-	it.defineFromTranslation( -shift );
-	blockBoundaries[idir+SpaceDim].define( it, block );
+     
+      else if ((m_mag_geom_type == "toroidal" || num_blocks > 1) && idir == m_mb_dir) {
+        IntVect shift;
+        IndicesTransformation it;
+        
+        if ( num_blocks == 1 ) {
+          shift = m_mappingBlocks[block].size(m_mb_dir) * BASISV(m_mb_dir);
+          it.defineFromTranslation( shift );
+          blockBoundaries[m_mb_dir].define( it, block );
+          it.defineFromTranslation( -shift );
+          blockBoundaries[m_mb_dir+SpaceDim].define( it, block );
+        }
+        
+        else {
+          // Lower face coupling
+          if ( block > 0 ) {  // Couple to the block on the lower boundary
+            shift = -BLOCK_SEPARATION * BASISV(m_mb_dir);
+            it.defineFromTranslation( shift );
+            blockBoundaries[m_mb_dir].define( it, block - 1);
+          }
+          
+          else {  // First toroidal block: couple it to the last one
+            shift = (num_blocks * (BLOCK_SEPARATION + m_mappingBlocks[block].size(m_mb_dir))
+                     - BLOCK_SEPARATION) * BASISV(m_mb_dir);
+            it.defineFromTranslation( shift );
+            blockBoundaries[m_mb_dir].define( it, num_blocks - 1);
+          }
+          
+          // Upper face coupling
+          if ( block < num_blocks-1 ) {  // Couple to the block on the upper toroidal boundary
+            shift = BLOCK_SEPARATION * BASISV(m_mb_dir);
+            it.defineFromTranslation( shift );
+            blockBoundaries[m_mb_dir+SpaceDim].define( it, block + 1);
+          }
+          
+          else {  // Last toroidal block: couple it to the first one
+            shift = -(num_blocks * (BLOCK_SEPARATION + m_mappingBlocks[block].size(m_mb_dir))
+                      - BLOCK_SEPARATION) * BASISV(m_mb_dir);
+            it.defineFromTranslation( shift );
+            blockBoundaries[m_mb_dir+SpaceDim].define( it, 0);
+          }
+        }
       }
       else {
         blockBoundaries[idir].define( 0 );
         blockBoundaries[idir+SpaceDim].define( 0 );
       }
     }
+    
     for (int idir(VPARALLEL_DIR); idir<SpaceDim; idir++) {
-       blockBoundaries[idir].define( 0 );
-       blockBoundaries[idir + SpaceDim].define( 0 );
+      blockBoundaries[idir].define( 0 );
+      blockBoundaries[idir + SpaceDim].define( 0 );
     }
   }
 

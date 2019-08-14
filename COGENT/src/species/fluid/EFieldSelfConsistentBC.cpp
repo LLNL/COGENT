@@ -137,6 +137,9 @@ void EFieldSelfConsistentBC::computeEField( const PS::GKState&                a_
          E_field_face[dit].setVal(0.);
       }
    }
+
+   // Compute injected E-field
+   computeInjectedField(m_injected_E_field, a_kinetic_species, E_field_face, E_field_cell);
 }
 
 

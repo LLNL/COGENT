@@ -66,7 +66,7 @@ public:
                                   const RealVect&           srcCoords,
                                   int                       srcBlock) const;
 
-   int blockType(int block) const {return ((CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block))->poloidalIndex();}
+   int poloidalBlock(int block) const {return ((CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block))->poloidalBlock();}
 
    virtual std::string type() const { return "SingleNull"; }
 

@@ -3,6 +3,7 @@
 
 #include "REAL.H"
 #include "FArrayBox.H"
+#include "EdgeDataBox.H"
 #include "LevelData.H"
 #include "MultiBlockLevelGeom.H"
 #include "MagBlockCoordSys.H"
@@ -55,6 +56,12 @@ class GridFunction
                   const MultiBlockLevelGeom& geometry,
                   const Real& time,
                   const bool& as_face_averages = true ) const;
+      
+      void assign(LevelData<EdgeDataBox>& data,
+                  const MultiBlockLevelGeom& geometry,
+                  const Real& time,
+                  const bool& as_face_averages = false ) const;
+
 
       /// Set the grid function.
       /**

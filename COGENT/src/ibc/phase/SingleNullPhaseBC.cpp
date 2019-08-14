@@ -238,6 +238,7 @@ SingleNullPhaseBC::SingleNullPhaseBC( const std::string& a_name,
                                       const int& a_verbosity )
    : m_name(a_name),
      m_verbosity(a_verbosity),
+     m_all_bdry_defined(false),
      m_logical_sheath(false)
 {
    m_inflow_function.resize( NUM_INFLOW );
@@ -276,35 +277,30 @@ SingleNullPhaseBC::~SingleNullPhaseBC()
 
 
 inline
-void SingleNullPhaseBC::fillInflowData( KineticSpeciesPtrVect& a_bdry_data,
-                                        Vector<std::string>& a_bc_type,
-                                        const BoundaryBoxLayoutPtrVect& a_bdry_layout,
-                                        const Real& a_time )
+void SingleNullPhaseBC::fillInflowData( const Real& a_time )
 {
    CH_TIMERS("SingleNullPhaseBC::fillInflowData");
    CH_TIMER("inflow_func.assign", t_inflow_func_assign);
 
-   a_bc_type.resize(a_bdry_layout.size());
-   for (int i(0); i<a_bdry_layout.size(); i++) {
-      const BoundaryBoxLayout& bdry_layout( *(a_bdry_layout[i]) );
+   for (int i(0); i<m_all_bdry_layouts.size(); i++) {
+      const BoundaryBoxLayout& bdry_layout( *(m_all_bdry_layouts[i]) );
       const int& dir( bdry_layout.dir() );
       const Side::LoHiSide& side( bdry_layout.side() );
-      KineticSpecies& bdry_data( *(a_bdry_data[i]) );
+      KineticSpecies& bdry_data( *(m_all_bdry_data[i]) );
 
       if (dir==RADIAL_DIR) {
          const PhaseGeom& geometry( bdry_data.phaseSpaceGeometry() );
          const SingleNullPhaseCoordSys& coord_sys(
          dynamic_cast<const SingleNullPhaseCoordSys&>( geometry.phaseCoordSys()) );
-            const DisjointBoxLayout& grids( bdry_layout.disjointBoxLayout() );
+         const DisjointBoxLayout& grids( bdry_layout.disjointBoxLayout() );
          for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
             const Box& interior_box( bdry_layout.interiorBox( dit ) );
             const int block( coord_sys.whichBlock( interior_box ) );
-            const int block_type( coord_sys.blockType( block ) );
+            const int block_type( coord_sys.poloidalBlock( block ) );
             KineticFunction& inflow_func( radialInflowFunc( side, block_type ) );
             CH_START(t_inflow_func_assign);
             inflow_func.assign( bdry_data, bdry_layout, a_time );
             CH_STOP(t_inflow_func_assign);
-            a_bc_type[i] = radialBcType(side, block_type);
          }
       }
       else {
@@ -312,12 +308,11 @@ void SingleNullPhaseBC::fillInflowData( KineticSpeciesPtrVect& a_bdry_data,
          CH_START(t_inflow_func_assign);
          inflow_func.assign( bdry_data, bdry_layout, a_time );
          CH_STOP(t_inflow_func_assign);
-         a_bc_type[i] = getBcType(dir, side);
       }
    }
 }
 
-void SingleNullPhaseBC::apply( KineticSpecies& a_species_comp,
+void SingleNullPhaseBC::apply( KineticSpecies& a_species_phys,
                                const CFG::LevelData<CFG::FArrayBox>& a_phi,
                                const LevelData<FluxBox>& a_velocity,
                                const Real& a_time )
@@ -329,53 +324,80 @@ void SingleNullPhaseBC::apply( KineticSpecies& a_species_comp,
    CH_TIMER("setInflowOutflowBC", t_set_inflow_outflow_BC);
    CH_TIMER("setCodimBoundaryValues", t_set_codim_boundary_values);
 
-   const PhaseGeom& geometry( a_species_comp.phaseSpaceGeometry() );
+   const PhaseGeom& geometry( a_species_phys.phaseSpaceGeometry() );
    const SingleNullPhaseCoordSys& coord_sys(
       dynamic_cast<const SingleNullPhaseCoordSys&>( geometry.phaseCoordSys()) );
 
-   LevelData<FArrayBox>& u( a_species_comp.distributionFunction() );
-   const DisjointBoxLayout& grids( u.disjointBoxLayout() );
-   const IntVect& ghost_vect( u.ghostVect() );
+   LevelData<FArrayBox>& Bf( a_species_phys.distributionFunction() );
+   const DisjointBoxLayout& grids( Bf.disjointBoxLayout() );
+   const IntVect& ghost_vect( Bf.ghostVect() );
 
-   CH_START(t_define_boundary_box_layouts);
-   BoundaryBoxLayoutPtrVect all_bdry_layouts;
-   PhaseBCUtils::defineBoundaryBoxLayouts( all_bdry_layouts,
-                                           grids,
-                                           coord_sys,
-                                           ghost_vect );
-   CH_STOP(t_define_boundary_box_layouts);
-
-   CH_START(t_define_inflow_data_storage);
-   KineticSpeciesPtrVect all_bdry_data;
-   PhaseBCUtils::defineInflowDataStorage( all_bdry_data,
-                                          all_bdry_layouts,
-                                          a_species_comp );
-   CH_STOP(t_define_inflow_data_storage);
+   if (m_all_bdry_defined == false) {
+      CH_START(t_define_boundary_box_layouts);
+      PhaseBCUtils::defineBoundaryBoxLayouts(m_all_bdry_layouts,
+                                             grids,
+                                             coord_sys,
+                                             ghost_vect );
+      CH_STOP(t_define_boundary_box_layouts);
+      
+      CH_START(t_define_inflow_data_storage);
+      PhaseBCUtils::defineInflowDataStorage(m_all_bdry_data,
+                                            m_all_bdry_layouts,
+                                            a_species_phys );
+      CH_STOP(t_define_inflow_data_storage);
+      
+      CH_START(t_fill_inflow_data);
+      Vector<std::string> all_bc_type;
+      fillInflowData( a_time );
+      setAllBcType( m_all_bdry_layouts );
+      m_all_bdry_defined = true;
+      CH_STOP(t_fill_inflow_data);
+   }
    
-   CH_START(t_fill_inflow_data);
-   Vector<std::string> all_bc_type;
-   fillInflowData( all_bdry_data, all_bc_type, all_bdry_layouts, a_time );
-   CH_STOP(t_fill_inflow_data);
-
    CH_START(t_set_inflow_outflow_BC);
-   PhaseBCUtils::setInflowOutflowBC( u,
-                                     all_bdry_layouts,
-                                     all_bdry_data,
-                                     all_bc_type,
-                                     coord_sys,
-                                     a_velocity );
+   PhaseBCUtils::setInflowOutflowBC(Bf,
+                                    m_all_bdry_layouts,
+                                    m_all_bdry_data,
+                                    m_all_bc_type,
+                                    coord_sys,
+                                    a_velocity );
    CH_STOP(t_set_inflow_outflow_BC);
 
    if (m_logical_sheath) {
-       applyLogicalSheathBC(a_species_comp, all_bdry_layouts, a_velocity, a_phi, a_time);
+       applyLogicalSheathBC(a_species_phys, m_all_bdry_layouts, a_velocity, a_phi, a_time);
    }
    
    CH_START(t_set_codim_boundary_values);
    // interpolate all other codim boundaries
-   CodimBC::setCodimBoundaryValues( u, coord_sys );
+   CodimBC::setCodimBoundaryValues( Bf, coord_sys );
    CH_STOP(t_set_codim_boundary_values);
 }
 
+inline
+void SingleNullPhaseBC::setAllBcType( const BoundaryBoxLayoutPtrVect&  a_bdry_layout )
+{
+   m_all_bc_type.resize(a_bdry_layout.size());
+   for (int i(0); i<a_bdry_layout.size(); i++) {
+      const BoundaryBoxLayout& bdry_layout( *(a_bdry_layout[i]) );
+      const int& dir( bdry_layout.dir() );
+      const Side::LoHiSide& side( bdry_layout.side() );
+      if (dir == RADIAL_DIR) {
+         KineticSpecies& bdry_data( *(m_all_bdry_data[i]) );
+         const PhaseGeom& geometry( bdry_data.phaseSpaceGeometry() );
+         const SingleNullPhaseCoordSys& coord_sys(dynamic_cast<const SingleNullPhaseCoordSys&>( geometry.phaseCoordSys()) );
+         const DisjointBoxLayout& grids( bdry_layout.disjointBoxLayout() );
+         for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
+            const Box& interior_box( bdry_layout.interiorBox( dit ) );
+            const int block( coord_sys.whichBlock( interior_box ) );
+            const int block_type( coord_sys.poloidalBlock( block ) );
+            m_all_bc_type[i] = radialBcType(side, block_type);
+         }
+      }
+      else {
+         m_all_bc_type[i] = getBcType(dir, side);
+      }
+   }
+}
 
 
 //Presently assumes that both plates are grounded (fix later to provide the actual phi bias)

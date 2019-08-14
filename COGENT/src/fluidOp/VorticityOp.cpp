@@ -50,7 +50,7 @@ VorticityOp::VorticityOp( const std::string&  a_pp_str,
    m_parallel_current_divergence_op->m_subtract_fs_par_div = subtract_fs_par_div;
    m_parallel_current_divergence_op_bcs = elliptic_op_bc_factory.create( name,
                                                                          ppsp,
-                                                                         geomType,
+                                                                         *(a_geometry.getCoordSys()),
                                                                          false );
    //setCoreBC( 0., 0., *m_parallel_current_divergence_op_bcs );
 
@@ -60,7 +60,7 @@ VorticityOp::VorticityOp( const std::string&  a_pp_str,
    m_par_cond_op->m_subtract_fs_par_div = subtract_fs_par_div;
    m_par_cond_op_bcs = elliptic_op_bc_factory.create( name,
                                                       ppsp,
-                                                      geomType,
+                                                      *(a_geometry.getCoordSys()),
                                                       false );
 
    m_imex_pc_op = new GKPoisson(pp_vorticity_op, a_geometry, a_larmor, 0.);
@@ -69,7 +69,7 @@ VorticityOp::VorticityOp( const std::string&  a_pp_str,
    m_imex_pc_op->m_subtract_fs_par_div = subtract_fs_par_div;
    m_imex_pc_op_bcs = elliptic_op_bc_factory.create( name,
                                                      ppsp,
-                                                     geomType,
+                                                      *(a_geometry.getCoordSys()),
                                                      false );
 
    m_gyropoisson_op = new GKPoisson(pp_vorticity_op, a_geometry, a_larmor, 0.);
@@ -77,7 +77,7 @@ VorticityOp::VorticityOp( const std::string&  a_pp_str,
    m_gyropoisson_op->m_dt_implicit = 1.;
    m_gyropoisson_op_bcs = elliptic_op_bc_factory.create( name,
                                                          ppsp,
-                                                         geomType,
+                                                         *(a_geometry.getCoordSys()),
                                                          false );
 
    ParmParse pp_vlasov("vorticity_vlasov");

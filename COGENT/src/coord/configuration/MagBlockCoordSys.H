@@ -4,6 +4,7 @@
 #include "ParmParse.H"
 #include "DisjointBoxLayout.H"
 #include "NewFourthOrderCoordSys.H"
+#include "EdgeDataBox.H"
 
 #include "NamespaceHeader.H"
 
@@ -103,8 +104,14 @@ class MagBlockCoordSys
       virtual void getCellCenteredMappedCoords(FArrayBox& xi) const;
 
       virtual void getFaceCenteredMappedCoords(const int dir, FArrayBox& xi) const;
+      
+      virtual void getEdgeCenteredMappedCoords(const int dir, FArrayBox& xi) const;
 
       virtual void pointwiseJ(FArrayBox& a_J, const FArrayBox& a_Xi, const Box& a_box) const;
+      
+      virtual void pointwiseJ( FluxBox& a_J ) const;
+      
+      virtual void pointwiseJ( EdgeDataBox& a_J ) const;
 
 #if 1
 void
@@ -181,6 +188,8 @@ void
        * @param[out] dXdxi   dXdxi
       */
       void getFaceCentereddXdxi(FluxBox& dXdxi) const;
+      
+      void getEdgeCentereddXdxi(EdgeDataBox& dXdxi) const;
 
 
       /**
@@ -254,6 +263,11 @@ void
       /**
        */
       virtual void getFaceCenteredRealCoords( const int dir, FArrayBox& a_x ) const;
+      
+      /// Fills the input FArrayBox with the real coordinates at dir edge centers
+      /**
+       */
+      virtual void getEdgeCenteredRealCoords( const int dir, FArrayBox& a_x ) const;
 
       /// Fills the input FArrayBox with the real coordinates at cell nodes
       /**

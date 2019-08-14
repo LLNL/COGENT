@@ -53,7 +53,7 @@ class SingleNullPhaseBC
        * @param[in] velocity      Phase space velocity field.
        * @param[in] time          Time value at which to evaluate the function.
        */
-      virtual void apply( KineticSpecies& species_comp,
+      virtual void apply( KineticSpecies& species_phys,
                           const CFG::LevelData<CFG::FArrayBox>& phi,
                           const LevelData<FluxBox>& velocity,
                           const Real& time );
@@ -82,10 +82,7 @@ class SingleNullPhaseBC
       SingleNullPhaseBC( const SingleNullPhaseBC& );
       SingleNullPhaseBC& operator=( const SingleNullPhaseBC& );
 
-      void fillInflowData( KineticSpeciesPtrVect& a_bdry_data,
-                           Vector<std::string>& a_bc_type,
-                           const BoundaryBoxLayoutPtrVect& a_bdry_layout,
-                           const Real& a_time );
+      void fillInflowData( const Real& a_time );
    
 //      void createReflectedData( LevelData<FArrayBox>&       a_rflct_data,
 //                              AuxDataMap&                 a_rflct_data_map,
@@ -127,7 +124,7 @@ class SingleNullPhaseBC
       inline KineticFunction& inflowFunc( const int& a_dir,
                                            const Side::LoHiSide& a_side );
 
-
+      void setAllBcType( const BoundaryBoxLayoutPtrVect&  a_bdry_layout );
    
       inline std::string radialBcType( const Side::LoHiSide& a_side,
                                        const int& a_block_type );
@@ -160,9 +157,13 @@ class SingleNullPhaseBC
             MU_LOWER, MU_UPPER,
             NUM_INFLOW};
 
+      Vector<std::string> m_all_bc_type;
+      BoundaryBoxLayoutPtrVect m_all_bdry_layouts;
+      KineticSpeciesPtrVect m_all_bdry_data;
       Vector<RefCountedPtr<KineticFunction> > m_inflow_function;
       Vector<std::string> m_bdry_name;
       Vector<std::string> m_bc_type;
+      bool m_all_bdry_defined;
 };
 
 #include "NamespaceFooter.H"

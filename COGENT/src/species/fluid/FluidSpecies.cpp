@@ -1,4 +1,5 @@
 #include "FluidSpecies.H"
+#include "SpaceUtils.H"
 
 #include "NamespaceHeader.H"
 
@@ -41,9 +42,24 @@ FluidSpecies::FluidSpecies( const string&     a_pp_prefix,
    if ( pp.contains("momentumDensity_virtual") ) {
       pp.get("momentumDensity_virtual", m_evolve_momentumDensity_virtual);
    }
+   if ( pp.contains("magneticField") ) {
+      pp.get("magneticField", m_evolve_magneticField);
+   }
    if ( pp.contains("magneticField_virtual") ) {
       pp.get("magneticField_virtual", m_evolve_magneticField_virtual);
    }
+   if ( pp.contains("electricField") ) {
+      pp.get("electricField", m_evolve_electricField);
+   }
+   //if ( pp.contains("electricField_virtual") ) {
+   //   pp.get("electricField_virtual", m_evolve_electricField_virtual);
+   //}
+   if ( pp.contains("currentDensity") ) {
+      pp.get("currentDensity", m_evolve_currentDensity);
+   }
+   //if ( pp.contains("currentDensity_virtual") ) {
+   //   pp.get("currentDensity_virtual", m_evolve_currentDensity_virtual);
+   //}
    if ( pp.contains("adiabatic_coefficient") ) {
       pp.get("adiabatic_coefficient", m_gamma);
    }
@@ -52,7 +68,13 @@ FluidSpecies::FluidSpecies( const string&     a_pp_prefix,
    if(m_evolve_momentumDensity)  addCellVar("momentumDensity", SpaceDim, a_ghost_vect);
    if(m_evolve_energyDensity)    addCellVar("energyDensity",     1, a_ghost_vect);
    if(m_evolve_momentumDensity_virtual)  addCellVar("momentumDensity_virtual", 1, a_ghost_vect);
+   if(m_evolve_magneticField)    addFaceVar("magneticField", 1, a_ghost_vect);
    if(m_evolve_magneticField_virtual)    addCellVar("magneticField_virtual", 1, a_ghost_vect);
+   if(m_evolve_electricField)    addEdgeVar("electricField", 1, a_ghost_vect);
+   //if(m_evolve_electricField_virtual)    addNodeVar("electricField_virtual", 1, a_ghost_vect);
+   if(m_evolve_currentDensity)   addEdgeVar("currentDensity", 1, a_ghost_vect);
+   //if(m_evolve_currentDensity_virtual)   addNodeVar("currentDensity_virtual", 1, a_ghost_vect);
+
 
    m_velocity.define(a_geometry.gridsFull(), SpaceDim, a_ghost_vect);
    for (DataIterator dit(m_velocity.dataIterator()); dit.ok(); ++dit) {
@@ -78,6 +100,12 @@ FluidSpecies::FluidSpecies( const FluidSpecies& a_foo )
       const LevelData<FluxBox>& data = a_foo.face_var(n);
       const string& name = a_foo.face_var_name(n);
       addFaceVar(name, data.nComp(), data.ghostVect());
+   }
+   
+   for (int n=0; n<num_edge_vars(); ++n) {
+      const LevelData<EdgeDataBox>& data = a_foo.edge_var(n);
+      const string& name = a_foo.edge_var_name(n);
+      addEdgeVar(name, data.nComp(), data.ghostVect());
    }
 }
 
@@ -265,9 +293,20 @@ const FluidSpecies& FluidSpecies::operator=( const FluidSpecies& a_rhs )
       m_evolve_momentumDensity = a_rhs.m_evolve_momentumDensity;
       m_evolve_energyDensity = a_rhs.m_evolve_energyDensity;
       m_evolve_momentumDensity_virtual = a_rhs.m_evolve_momentumDensity_virtual;
+      m_evolve_magneticField = a_rhs.m_evolve_magneticField;
       m_evolve_magneticField_virtual = a_rhs.m_evolve_magneticField_virtual;
+      m_evolve_electricField = a_rhs.m_evolve_electricField;
+      //m_evolve_electricField_virtual = a_rhs.m_evolve_electricField_virtual;
+      m_evolve_currentDensity = a_rhs.m_evolve_currentDensity;
+      //m_evolve_currentDensity_virtual = a_rhs.m_evolve_currentDensity_virtual;
       for (int n=0; n<a_rhs.num_cell_vars(); ++n) {
          cell_var(n).define( a_rhs.cell_var(n) );
+      }
+      for (int n=0; n<a_rhs.num_face_vars(); ++n) {
+         face_var(n).define( a_rhs.face_var(n) );
+      }
+      for (int n=0; n<a_rhs.num_edge_vars(); ++n) {
+         edge_var(n).define( a_rhs.edge_var(n) );
       }
    }
    return *this;
@@ -285,7 +324,13 @@ void FluidSpecies::copy( const FluidSpecies& a_rhs )
       m_evolve_momentumDensity = a_rhs.m_evolve_momentumDensity;
       m_evolve_energyDensity = a_rhs.m_evolve_energyDensity;
       m_evolve_momentumDensity_virtual = a_rhs.m_evolve_momentumDensity_virtual;
+      m_evolve_magneticField = a_rhs.m_evolve_magneticField;
       m_evolve_magneticField_virtual = a_rhs.m_evolve_magneticField_virtual;
+
+      m_evolve_electricField = a_rhs.m_evolve_electricField;
+      //m_evolve_electricField_virtual = a_rhs.m_evolve_electricField_virtual;
+      m_evolve_currentDensity = a_rhs.m_evolve_currentDensity;
+      //m_evolve_currentDensity_virtual = a_rhs.m_evolve_currentDensity_virtual;
 
    }
 }
@@ -344,7 +389,45 @@ FluidSpecies::convertToPhysical()
       }
    }
    
+   for (int n=0; n<num_face_vars(); ++n) {
+      if ( face_var(n).isDefined() ) {
+         configurationSpaceGeometry().divideJonFaces(face_var(n));
+         face_var(n).exchange();
+      }
+   }
+   
+   for (int n=0; n<num_edge_vars(); ++n) {
+      if ( edge_var(n).isDefined() ) {
+         //configurationSpaceGeometry().divideJonEdges(edge_var(n));
+         //edge_var(n).exchange();
+      }
+   }
+
+
 }
+
+
+void
+FluidSpecies::interpFaceVarToCell( LevelData<FArrayBox>&  a_cell_var,
+                             const string&                a_face_var_name ) const
+{
+
+   CH_assert( face_var(a_face_var_name).isDefined() );
+   SpaceUtils::interpFacesToCell(a_cell_var,face_var(a_face_var_name),"c2");
+   
+}
+
+
+void
+FluidSpecies::interpEdgeVarToCell( LevelData<FArrayBox>&  a_cell_var,
+                             const string&                a_edge_var_name ) const
+{
+
+   CH_assert( edge_var(a_edge_var_name).isDefined() );
+   SpaceUtils::interpEdgesToCell(a_cell_var,edge_var(a_edge_var_name),"c2");
+   
+}
+   
    
 void
 FluidSpecies::convertFromPhysical()
@@ -356,6 +439,20 @@ FluidSpecies::convertFromPhysical()
          cell_var(n).exchange();
       }
    }
+   for (int n=0; n<num_face_vars(); ++n) {
+      if ( face_var(n).isDefined() ) {
+         configurationSpaceGeometry().multJonFaces(face_var(n));
+         face_var(n).exchange();
+      }
+   }
+   for (int n=0; n<num_edge_vars(); ++n) {
+      if ( edge_var(n).isDefined() ) {
+         //configurationSpaceGeometry().multJonEdges(edge_var(n));
+         //edge_var(n).exchange();
+      }
+   }
+   
+   
    
 }
    
@@ -418,11 +515,35 @@ FluidSpecies::clone( const IntVect& a_ghost_vect,
             result_momentumDensity_v[dit].copy(this_momentumDensity_v[dit] );
          }
       }
+      if(m_evolve_magneticField) {
+         const LevelData<FluxBox>& this_magneticField = face_var("magneticField");
+         LevelData<FluxBox>& result_magneticField(result->face_var("magneticField"));
+         for (DataIterator dit(result_magneticField.dataIterator() ); dit.ok(); ++dit) {
+            result_magneticField[dit].copy(this_magneticField[dit] );
+         }
+      }
       if(m_evolve_magneticField_virtual) {
          const LevelData<FArrayBox>& this_magneticField_v = cell_var("magneticField_virtual");
          LevelData<FArrayBox>& result_magneticField_v(result->cell_var("magneticField_virtual"));
          for (DataIterator dit(result_magneticField_v.dataIterator() ); dit.ok(); ++dit) {
             result_magneticField_v[dit].copy(this_magneticField_v[dit] );
+         }
+      }
+      int this_edge_nComp; 
+      if(m_evolve_electricField) {
+         const LevelData<EdgeDataBox>& this_electricField = edge_var("electricField");
+         LevelData<EdgeDataBox>& result_electricField(result->edge_var("electricField"));
+         this_edge_nComp = this_electricField.nComp(); 
+         for (DataIterator dit(result_electricField.dataIterator() ); dit.ok(); ++dit) {
+            result_electricField[dit].copy(this_electricField[dit],0,0,this_edge_nComp );
+         }
+      }
+      if(m_evolve_currentDensity) {
+         const LevelData<EdgeDataBox>& this_currentDensity = edge_var("currentDensity");
+         LevelData<EdgeDataBox>& result_currentDensity(result->edge_var("currentDensity"));
+         this_edge_nComp = this_currentDensity.nComp(); 
+         for (DataIterator dit(result_currentDensity.dataIterator() ); dit.ok(); ++dit) {
+            result_currentDensity[dit].copy(this_currentDensity[dit],0,0,this_edge_nComp );
          }
       }
 

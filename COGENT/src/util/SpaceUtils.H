@@ -31,6 +31,19 @@ namespace SpaceUtils {
                       const FArrayBox&,
                       const FArrayBox&,
                       const FArrayBox& );
+  
+  void interpToFaces( LevelData<FluxBox>&,
+                const LevelData<FArrayBox>&,
+                const LevelData<FArrayBox>&,
+                const LevelData<FluxBox>&,
+                const std::string& );
+  
+  void interpToFaces( FluxBox&,
+                const FArrayBox&,
+                const FArrayBox&,
+                const FluxBox&,
+                const Box&,
+                const std::string& );
 
   void upWindToFaces( LevelData<FluxBox>&,
                 const LevelData<FArrayBox>&,
@@ -51,6 +64,10 @@ namespace SpaceUtils {
   
   void interpEdgesToCell( LevelData<FArrayBox>&,
                     const LevelData<EdgeDataBox>&,
+                    const std::string& );
+  
+  void interpFacesToCell( LevelData<FArrayBox>&,
+                    const LevelData<FluxBox>&,
                     const std::string& );
   
   void interpToFacesWENO( LevelData<FluxBox>&,
@@ -117,6 +134,9 @@ namespace SpaceUtils {
   
   void copyAndFillGhostCellsSimple( LevelData<FArrayBox>&, 
                                     const LevelData<FArrayBox>& );
+
+  void copy( FArrayBox&,
+	     const FArrayBox& );
 
 }
 

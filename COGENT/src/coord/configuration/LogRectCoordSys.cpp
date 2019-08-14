@@ -36,7 +36,7 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
 
   a_pp.query( "number_of_blocks", m_num_blocks);
   m_decomposition[m_mb_dir] /= m_num_blocks;
-
+  
   if (m_num_blocks != 1 && m_decomposition[m_mb_dir] != 1) {
     MayDay::Error("LogRectCoordSys:: current multiblock sheared geometry implementation only works for the same number of blocks and proc in the toroidal dir");  
   }
@@ -125,6 +125,10 @@ LogRectCoordSys::~LogRectCoordSys()
 void
 LogRectCoordSys::defineBoundaries()
 {
+   // Define boundaries are used for
+   // (a) distinguish physical boundary from block interface and
+   // (b) provide connectivity bewteen blocks used by MB ghost interpolation
+  
    CH_assert(gotMappingBlocks());
    m_boundaries.resize(numBlocks());
 
@@ -136,78 +140,75 @@ LogRectCoordSys::defineBoundaries()
      
       for (int idir(RADIAL_DIR); idir<SpaceDim; idir++) {
          if ( domain.isPeriodic(idir) ) {
-	   //We have to put something at the periodic domain boundary. 
-	   //The periodicity is used by exchange(), which is informed by the 
-	   //isPeriodic member of the ProblemDomain object. Here, we basically  
-	   //indicate that the boundary is not the one where physical BCs are 
-	   //applied. The value of the "shift" variable in the code below 
-	   //does not matter. It is however would be  important for the 
-	   //multiblock exchange operations requiring the info about the connectivities.
-	   //NB: blockBoundaries[idir] = BlockBoundary::CONFORMAL did not work as
-	   // a workaround. M.A.D. 03/20/18
-	   IntVect shift( m_mappingBlocks[iblock].size(idir) * BASISV(idir) );
-	   IndicesTransformation it;
-	   it.defineFromTranslation( shift );
-	   blockBoundaries[idir].define( it, iblock );
-	   it.defineFromTranslation( -shift );
-	   blockBoundaries[idir+SpaceDim].define( it, iblock );
+           //We have to put something at the periodic domain boundary.
+           //The periodicity is used by exchange(), which is informed by the
+           //isPeriodic member of the ProblemDomain object. Here, we basically
+           //indicate that the boundary is not the one where physical BCs are
+           //applied. The value of the "shift" variable in the code below
+           //does not matter. It is however would be  important for the
+           //multiblock exchange operations requiring the info about the connectivities.
+           //NB: blockBoundaries[idir] = BlockBoundary::CONFORMAL did not work as
+           // a workaround. M.A.D. 03/20/18
+           IntVect shift( m_mappingBlocks[iblock].size(idir) * BASISV(idir) );
+           IndicesTransformation it;
+           it.defineFromTranslation( shift );
+           blockBoundaries[idir].define( it, iblock );
+           it.defineFromTranslation( -shift );
+           blockBoundaries[idir+SpaceDim].define( it, iblock );
          }
-         else if (idir == m_mb_dir && numBlocks()>1) {
-	   IntVect shift( m_mappingBlocks[iblock].size(idir) * BASISV(idir) );
-	   IndicesTransformation it;
-	   it.defineFromTranslation( shift );
-	   blockBoundaries[idir].define( it, iblock );
-	   it.defineFromTranslation( -shift );
-	   blockBoundaries[idir+SpaceDim].define( it, iblock );
+        
+         // physical vector quantities (e.g., Ex, Ey, Ez) are not periodic
+         // for a wedge 3D toroidal geometry. Therefore we cannot claim
+         // physical domain periodic, and deal with that boundary here
+        
+         else if ((m_mag_geom_type == "toroidal" || m_num_blocks > 1) && idir == m_mb_dir) {
+           IntVect shift;
+           IndicesTransformation it;
+
+           if ( m_num_blocks == 1 ) {
+             shift = m_mappingBlocks[iblock].size(m_mb_dir) * BASISV(m_mb_dir);
+             it.defineFromTranslation( shift );
+             blockBoundaries[m_mb_dir].define( it, iblock );
+             it.defineFromTranslation( -shift );
+             blockBoundaries[m_mb_dir+SpaceDim].define( it, iblock );
+           }
+           
+           else {
+             // Lower face coupling
+             if ( iblock > 0 ) {  // Couple to the block on the lower boundary
+               shift = -BLOCK_SEPARATION * BASISV(m_mb_dir);
+               it.defineFromTranslation( shift );
+               blockBoundaries[m_mb_dir].define( it, iblock - 1);
+             }
+             
+             else {  // First toroidal block: couple it to the last one
+               shift = (m_num_blocks * (BLOCK_SEPARATION + m_mappingBlocks[iblock].size(m_mb_dir))
+                        - BLOCK_SEPARATION) * BASISV(m_mb_dir);
+               it.defineFromTranslation( shift );
+               blockBoundaries[m_mb_dir].define( it, m_num_blocks - 1);
+             }
+             
+             // Upper face coupling
+             if ( iblock < m_num_blocks-1 ) {  // Couple to the block on the upper toroidal boundary
+               shift = BLOCK_SEPARATION * BASISV(m_mb_dir);
+               it.defineFromTranslation( shift );
+               blockBoundaries[m_mb_dir+SpaceDim].define( it, iblock + 1);
+             }
+             
+             else {  // Last toroidal block: couple it to the first one
+               shift = -(m_num_blocks * (BLOCK_SEPARATION + m_mappingBlocks[iblock].size(m_mb_dir))
+                         - BLOCK_SEPARATION) * BASISV(m_mb_dir);
+               it.defineFromTranslation( shift );
+               blockBoundaries[m_mb_dir+SpaceDim].define( it, 0);
+             }
+           }
          }
-	 else {
+         // otherwise set boundary to physical
+         else {
             blockBoundaries[idir].define(0);
             blockBoundaries[idir+SpaceDim].define(0);
-	 }
+         }
       }
-
-#if CGF_DIM==3
-      // Overwrite toroidal boundary coupling
-      // Needed to properly construct stencils for MBSolver 
-
-      if ( m_num_blocks == 1 ) {  // Assuming periodic coupling 
-	shift = m_mappingBlocks[iblock].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
-	it.defineFromTranslation( shift );
-	blockBoundaries[TOROIDAL_DIR].define( it, iblock );
-	it.defineFromTranslation( -shift );
-	blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, iblock );
-      }
-
-      else {
-	// Lower face coupling
-	if ( iblock > 0 ) {  // Couple to the block on the lower boundary
-	  shift = -BLOCK_SEPARATION * BASISV(TOROIDAL_DIR);
-	  it.defineFromTranslation( shift );
-	  blockBoundaries[TOROIDAL_DIR].define( it, iblock - 1);
-	}
-
-	else {  // First toroidal block: couple it to the last one
-	  shift = (m_num_blocks * (BLOCK_SEPARATION + m_mappingBlocks[iblock].size(TOROIDAL_DIR))
-		   - BLOCK_SEPARATION) * BASISV(TOROIDAL_DIR);
-	  it.defineFromTranslation( shift );
-	  blockBoundaries[TOROIDAL_DIR].define( it, iblock + m_num_blocks - 1);
-	}
-	
-	// Upper face coupling
-	if ( toroidal_sector < m_num_blocks-1 ) {  // Couple to the block on the upper toroidal boundary
-	  shift = BLOCK_SEPARATION * BASISV(TOROIDAL_DIR);
-	  it.defineFromTranslation( shift );
-	  blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, iblock + 1);
-	}
-
-	else {  // Last toroidal block: couple it to the first one
-	  shift = -(m_num_blocks * (BLOCK_SEPARATION + m_mappingBlocks[iblock].size(TOROIDAL_DIR))
-		    - BLOCK_SEPARATION) * BASISV(TOROIDAL_DIR);
-	  it.defineFromTranslation( shift );
-	  blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, iblock - m_num_blocks + 1);
-	}
-      }
-#endif
    }
 }
 
@@ -402,31 +403,32 @@ LogRectCoordSys::spreadRadially( LevelData<FluxBox>& a_data ) const
 
 #if CFG_DIM == 3
 void
-LogRectCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
-                                        Vector<Real>& a_interpStecil,
-                                        const RealVect& a_xiSrc,
-                                        const int a_nSrc,
-                                        const Side::LoHiSide& a_side) const
+LogRectCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
+                                         int&                   a_nDst,
+                                         Vector<Real>&          a_interpStecil,
+                                         Vector<int>&           a_interpStecilOffsets,
+                                         const RealVect&        a_xiSrc,
+                                         const int              a_nSrc,
+                                         const Side::LoHiSide&  a_side ) const
 {
 
    //Getting the destination block number (nDst)
-   int nDst;
-   if (a_side == Side::LoHiSide::Lo) nDst = a_nSrc - 1;
-   if (a_side == Side::LoHiSide::Hi) nDst = a_nSrc + 1;
+   if (a_side == Side::LoHiSide::Lo) a_nDst = a_nSrc - 1;
+   if (a_side == Side::LoHiSide::Hi) a_nDst = a_nSrc + 1;
    
    //Correction for periodicity
-   if (nDst == numBlocks()) {
-     nDst = 0;
+   if (a_nDst == numBlocks()) {
+     a_nDst = 0;
    }
 
-   if (nDst == -1) {
-     nDst = numBlocks() - 1;
+   if (a_nDst == -1) {
+     a_nDst = numBlocks() - 1;
    }
    
    const MagBlockCoordSys* src_coord_sys = (MagBlockCoordSys*)getCoordSys(a_nSrc);
    const RealVect& dx_src = src_coord_sys->getMappedCellSize();
    
-   const MagBlockCoordSys* dst_coord_sys = (MagBlockCoordSys*)getCoordSys(nDst);
+   const MagBlockCoordSys* dst_coord_sys = (MagBlockCoordSys*)getCoordSys(a_nDst);
    const RealVect& dx_dst = dst_coord_sys->getMappedCellSize();
    
    CH_assert(dx_src==dx_dst);

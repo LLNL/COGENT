@@ -119,7 +119,9 @@ public:
    LevelData<FArrayBox>& getPhiNode() {return m_phi_node;}
 
    const LevelData<FArrayBox>& getPhiNode() const {return m_phi_node;}
-
+   
+   const PS::LevelData<PS::FluxBox>& getInjectedField() const {return m_injected_E_field;}
+   
    void computeQuasiNeutralElectronDensity( LevelData<FArrayBox>&        quasineutral_density,
                                             LevelData<FArrayBox>&        potential,
                                             const EllipticOpBC&          bc, 
@@ -145,7 +147,13 @@ protected:
    void computeIonParallelCurrentDensity( LevelData<FArrayBox>&             ion_current_density,
                                           const PS::KineticSpeciesPtrVect&  species ) const;
 
+   void computeInjectedField(PS::LevelData<PS::FluxBox>& a_injected_E_field,
+			     const PS::KineticSpeciesPtrVect& a_kinetic_species,
+			     const LevelData<FluxBox>& a_E_field_face,
+			     const LevelData<FArrayBox>& a_E_field_cell);
+     
    LevelData<FArrayBox> m_phi_node;
+   PS::LevelData<PS::FluxBox> m_injected_E_field;
 
    BoltzmannElectron* m_boltzmann_electron;
    bool m_fixed_efield;

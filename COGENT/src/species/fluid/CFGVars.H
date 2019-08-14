@@ -2,6 +2,7 @@
 #define _CFGVARS_H_
 
 #include "MagGeom.H"
+#include "EdgeDataBox.H"
 
 #include "NamespaceHeader.H"
 
@@ -10,9 +11,9 @@
 /**
  * Configuration space variable base class
  *
- * This class is a container for vectors of cell-centered and face-centered configuration
+ * This class is a container for vectors of cell-centered and face-centered, and edge-centered configuration
  * space data, from which more specialized object classes (e.g., EField, FluidSpecies) are derived.
- * The data contained in the cell- and face-centered vectors are intended to comprise "state" data
+ * The data contained in the cell/face/edge-centered vectors are intended to comprise "state" data
  * for derived objects, i.e., they define the vector components in a time integration algorithm.
  * For example, the vector components might contain the mass, momentum and energy variables
  * used in an Euler equation solver.
@@ -55,6 +56,16 @@ class CFGVars
                                (new LevelData<FluxBox>(m_geometry.gridsFull(), a_ncomp, a_nghost)));
          m_face_data_var_name.push_back(a_name);
       }
+      
+      void addEdgeVar( const std::string&  a_name,
+                       const int           a_ncomp,
+                       const IntVect&      a_nghost )
+      {
+         m_edge_data.push_back(RefCountedPtr<LevelData<EdgeDataBox> >
+                               (new LevelData<EdgeDataBox>(m_geometry.gridsFull(), a_ncomp, a_nghost)));
+         m_edge_data_var_name.push_back(a_name);
+      }
+
 
       /// Returns name.
       /**
@@ -68,6 +79,10 @@ class CFGVars
       virtual const std::string& face_var_name(const int component) const 
             { CH_assert(component >=0 && component < num_face_vars());
             return m_face_data_var_name[component]; }
+      
+      virtual const std::string& edge_var_name(const int component) const 
+            { CH_assert(component >=0 && component < num_edge_vars());
+            return m_edge_data_var_name[component]; }
 
       /// Zeros out the internal data.
       /**
@@ -142,7 +157,7 @@ class CFGVars
 
            if (component == -1) {
               cout << "name = " << name << endl;
-              MayDay::Error("CFGVars::cell_component(): Variable name not found");
+              MayDay::Error("CFGVars::cell_var_component(): Variable name not found");
            }
 
            return component;
@@ -175,7 +190,7 @@ class CFGVars
            }
 
            if (component == -1) {
-              MayDay::Error("CFGVars::face_component(): Variable name not found");
+              MayDay::Error("CFGVars::face_var_component(): Variable name not found");
            }
 
            return component;
@@ -192,6 +207,41 @@ class CFGVars
 
       // Const access a face-centered variable by its name
       const LevelData<FluxBox>& face_var(const string& name) const {return *(m_face_data[face_var_component(name)]);}
+      
+
+
+      // Edge data accessors
+
+      const int num_edge_vars() const {return m_edge_data.size();}
+
+      inline int edge_var_component(const string& name) const
+        {
+           int component = -1;
+           for (int n=0; n<num_edge_vars(); ++n) {
+              if (name == m_edge_data_var_name[n]) {
+                 component = n;
+                 break;
+              }
+           }
+
+           if (component == -1) {
+              MayDay::Error("CFGVars::edge_var_component(): Variable name not found");
+           }
+
+           return component;
+        }
+   
+      // Access a edge-centered variable by its component
+      LevelData<EdgeDataBox>& edge_var(int component) {return *(m_edge_data[component]);}
+
+      // Const access a edge-centered variable by its component
+      const LevelData<EdgeDataBox>& edge_var(int component) const {return *(m_edge_data[component]);}
+
+      // Access a edge-centered variable by its name
+      LevelData<EdgeDataBox>& edge_var(const string& name) {return *(m_edge_data[edge_var_component(name)]);}
+
+      // Const access a edge-centered variable by its name
+      const LevelData<EdgeDataBox>& edge_var(const string& name) const {return *(m_edge_data[edge_var_component(name)]);}
 
       int size( bool a_count_ghosts = false );
 
@@ -199,11 +249,13 @@ class CFGVars
 
    private:
 
-      Vector<RefCountedPtr<LevelData<FArrayBox> > > m_cell_data;
-      Vector<RefCountedPtr<LevelData<FluxBox> > >   m_face_data;
+      Vector<RefCountedPtr<LevelData<FArrayBox> > >    m_cell_data;
+      Vector<RefCountedPtr<LevelData<FluxBox> > >      m_face_data;
+      Vector<RefCountedPtr<LevelData<EdgeDataBox> > >  m_edge_data;
 
       Vector<string> m_cell_data_var_name;
       Vector<string> m_face_data_var_name;
+      Vector<string> m_edge_data_var_name;
 
       string m_pp_prefix;
       string m_name;

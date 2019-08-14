@@ -235,7 +235,7 @@ void RosenbluthPotentials::solve( LevelData<FArrayBox>&       a_solution,
    for (int k=0; k<num_config_boxes; ++k) {
 
       const MPI_Comm& config_box_comm = phase_grid.configBoxComm(k);
-      const List<VEL::Box>& velocity_slice = phase_grid.velocitySlice(k);
+      const Vector<VEL::Box>& velocity_slice = phase_grid.velocitySlice(k);
 
       // Make the Hypre data (except the solvers, see below)
       HYPRE_StructGrid grid;
@@ -386,21 +386,21 @@ void RosenbluthPotentials::solve( LevelData<FArrayBox>&       a_solution,
 
 
 
-void RosenbluthPotentials::createHypreData( const MPI_Comm&       a_comm,
-                                            const List<VEL::Box>& a_boxes,
-                                            HYPRE_StructGrid&     a_grid,
-                                            HYPRE_StructStencil&  a_stencil,
-                                            HYPRE_StructMatrix&   a_matrix,
-                                            HYPRE_StructVector&   a_x,
-                                            HYPRE_StructVector&   a_b,
-                                            HYPRE_StructSolver&   a_solver ) const
+void RosenbluthPotentials::createHypreData( const MPI_Comm&          a_comm,
+                                            const Vector<VEL::Box>&  a_boxes,
+                                            HYPRE_StructGrid&        a_grid,
+                                            HYPRE_StructStencil&     a_stencil,
+                                            HYPRE_StructMatrix&      a_matrix,
+                                            HYPRE_StructVector&      a_x,
+                                            HYPRE_StructVector&      a_b,
+                                            HYPRE_StructSolver&      a_solver ) const
 {
    /* Create the grid */
 
    HYPRE_StructGridCreate(a_comm, VEL_DIM, &a_grid);
 
-   for (ListIterator<VEL::Box> it(a_boxes); it.ok(); ++it) {
-      const VEL::Box& box = it();
+   for (int m=0; m<a_boxes.size(); ++m) {
+      const VEL::Box& box = a_boxes[m];
 
       IntVect lower(box.loVect());
       IntVect upper(box.hiVect());
@@ -470,7 +470,7 @@ void RosenbluthPotentials::destroyHypreData( HYPRE_StructSolver&   a_solver,
 
 void RosenbluthPotentials::constructMatrix( const VEL::ProblemDomain&  a_domain,
                                             const VEL::RealVect&       a_dx,
-                                            const List<VEL::Box>&      a_boxes,
+                                            const Vector<VEL::Box>&    a_boxes,
                                             const double&              a_Bfield,
                                             HYPRE_StructMatrix&        a_matrix ) const
 {
@@ -495,8 +495,8 @@ void RosenbluthPotentials::constructMatrix( const VEL::ProblemDomain&  a_domain,
    VEL::IntVect domain_lo = domain_box.smallEnd();
    VEL::IntVect domain_hi = domain_box.bigEnd();
 
-   for (ListIterator<VEL::Box> it(a_boxes); it.ok(); ++it) {
-      const VEL::Box& box = it();
+   for (int m=0; m<a_boxes.size(); ++m) {
+      const VEL::Box& box = a_boxes[m];
 
       IntVect lower(box.loVect());
       IntVect upper(box.hiVect());
@@ -551,17 +551,17 @@ void RosenbluthPotentials::constructMatrix( const VEL::ProblemDomain&  a_domain,
 
 
 
-void RosenbluthPotentials::getSliceBoxes( const CFG::IntVect     a_cfg_iv,
-                                          const List<VEL::Box>&  a_vel_boxes,
-                                          List<Box>&             a_phase_boxes ) const
+void RosenbluthPotentials::getSliceBoxes( const CFG::IntVect       a_cfg_iv,
+                                          const Vector<VEL::Box>&  a_vel_boxes,
+                                          List<Box>&               a_phase_boxes ) const
 {
    IntVect lo, hi;
    for (int n=0; n<CFG_DIM; ++n) {
       lo[n] = hi[n] = a_cfg_iv[n];
    }
 
-   for (ListIterator<VEL::Box> it(a_vel_boxes); it.ok(); ++it) {
-      const VEL::Box& vel_box = it();
+   for (int m=0; m<a_vel_boxes.size(); ++m) {
+      const VEL::Box& vel_box = a_vel_boxes[m];
 
       VEL::IntVect vel_box_lo = vel_box.smallEnd();
       VEL::IntVect vel_box_hi = vel_box.bigEnd();

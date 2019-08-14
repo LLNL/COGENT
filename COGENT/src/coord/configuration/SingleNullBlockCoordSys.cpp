@@ -12,49 +12,54 @@
 const std::string SingleNullBlockCoordSys::pp_name = "singlenullRealisticGeom";
 
 
-SingleNullBlockCoordSys::SingleNullBlockCoordSys( ParmParse&               a_parm_parse,
-                                                  const ProblemDomain&     a_domain,
-                                                  const RealVect&          a_dx,
-                                                  const int                a_poloidal_index,
-                                                  const int                a_toroidal_index )
-   : MagBlockCoordSys(a_parm_parse),
-     m_poloidal_index(a_poloidal_index),
-     m_toroidal_index(a_toroidal_index),
-     m_poloidally_truncated(false),
-     m_phys_coord_type(CARTESIAN),
-     m_poloidal_util(NULL),
-     m_toroidal_ghosts(4),
-     m_field_aligned_mapping(false),
-     m_field_trace_step(1.),
-     m_field_trace_max_iters(100),
-     m_field_trace_tol(1.e-4)
-{
-#ifdef PLOT_INVERSE_POINTS
-   char file_name[80];
-   sprintf(file_name, "Block%d_%d", a_poloidal_index, procID());
-   m_ipt_file[a_poloidal_index] = fopen(file_name, "w");
+SingleNullBlockCoordSys::SingleNullBlockCoordSys( ParmParse&            a_parm_parse,
+                                                  const ProblemDomain&  a_domain,
+                                                  const RealVect&       a_dx,
+                                                  const int             a_poloidal_block,
+                                                  const int             a_toroidal_sector,
+                                                  const int             a_toroidal_block_separation )
+    : MagBlockCoordSys(a_parm_parse),
+      m_poloidal_block(a_poloidal_block),
+      m_toroidal_sector(a_toroidal_sector),
+      m_poloidal_util(NULL),
+      m_field_aligned_mapping(false),
+      m_poloidally_truncated(false),
+      m_phys_coord_type(CARTESIAN),
+      m_toroidal_ghosts(4),
+      m_field_trace_step(0.1),
+      m_field_trace_max_iters(100),
+      m_field_trace_tol(1.e-4)
+ {
+ #ifdef PLOT_INVERSE_POINTS
+    char file_name[80];
+    sprintf(file_name, "Block%d_%d", a_poloidal_block, procID());
+    m_ipt_file[a_poloidal_block] = fopen(file_name, "w");
 #endif
 
-   // Get the toroidal field component scale factor
-   if (a_parm_parse.contains("Btor_scale")) {
-     a_parm_parse.get("Btor_scale", m_RB_toroidal);
-   }
-   else {
-     m_RB_toroidal = 0.;  // default
-   }
+    // Get the toroidal field component scale factor
+    if (a_parm_parse.contains("Btor_scale")) {
+       a_parm_parse.get("Btor_scale", m_RB_toroidal);
+    }
+    else {
+       m_RB_toroidal = 0.;  // default
+    }
 
-   if (a_parm_parse.contains("field_aligned_mapping") && SpaceDim == 3) {
-     a_parm_parse.get("field_aligned_mapping", m_field_aligned_mapping);
-   }
+    if (a_parm_parse.contains("field_aligned_mapping") && SpaceDim == 3) {
+       a_parm_parse.get("field_aligned_mapping", m_field_aligned_mapping);
+    }
 
-   // If a field coefficients file was specified in the input, use it
-   // to define the field.  Otherwise, we read it from the mapping file.
-   m_spectral_field = a_parm_parse.contains("field_coefficients_file");
+    // If a field coefficients file was specified in the input, use it
+    // to define the field.  Otherwise, we read it from the mapping file.
+    m_spectral_field = a_parm_parse.contains("field_coefficients_file");
 
-   m_poloidal_util = new POL::SingleNullPoloidalUtil(a_parm_parse, m_spectral_field, m_RB_toroidal);
+    m_poloidal_util = new POL::SingleNullPoloidalUtil(a_parm_parse, m_spectral_field, m_RB_toroidal);
 
-   define( a_domain, a_dx );
-}
+    define( a_domain, a_dx );
+
+#if CFG_DIM==3
+    m_toroidal_mapped_offset = a_toroidal_sector * a_toroidal_block_separation * a_dx[TOROIDAL_DIR];
+#endif
+ }
 
 
 SingleNullBlockCoordSys::~SingleNullBlockCoordSys()
@@ -68,50 +73,64 @@ SingleNullBlockCoordSys::~SingleNullBlockCoordSys()
 }
 
 
+string
+SingleNullBlockCoordSys::blockName( int a_poloidal_block ) const
+{
+   CH_assert(a_poloidal_block < NUM_POLOIDAL_BLOCKS);
+
+   string name;
+
+   switch ( a_poloidal_block )
+      {
+      case LCORE:
+         name = "left core";
+         break;
+      case MCORE:
+         name = "middle core";
+         break;
+      case RCORE:
+         name = "right core";
+         break;
+      case LCSOL:
+         name = "left center scrape-off layer";
+         break;
+      case MCSOL:
+         name = "middle center scrape-off layer";
+         break;
+      case RCSOL:
+         name = "right center scrape-off layer";
+         break;
+      case LSOL:
+         name = "left scrape_off layer";
+         break;
+      case RSOL:
+         name = "right scrape-off layer";
+         break;
+      case LPF:
+         name = "left private flux";
+         break;
+      case RPF:
+         name = "right private flux";
+         break;
+      default:
+         MayDay::Error("SingleNullBlockCoordSys::blockName(): Invalid block_type encountered");
+      }
+
+   return name;
+}
+
+
 void
 SingleNullBlockCoordSys::printInit() const
 {
-   if ( m_verbose && m_toroidal_index==0 && procID()==0 ) {
-      cout << "Constructing single null ";
-      switch (m_poloidal_index)
-         {
-         case LCORE:
-           cout << "left core";
-           break;
-         case MCORE:
-           cout << "middle core";
-           break;
-         case RCORE:
-           cout << "right core";
-           break;
-         case LCSOL:
-           cout << "left center scrape-off layer";
-           break;
-         case MCSOL:
-           cout << "middle center scrape-off layer";
-           break;
-         case RCSOL:
-           cout << "right center scrape-off layer";
-           break;
-         case LSOL:
-           cout << "left scrape_off layer";
-           break;
-         case RSOL:
-           cout << "right scrape-off layer";
-           break;
-         case LPF:
-           cout << "left private flux";
-           break;
-         case RPF:
-           cout << "right private flux";
-           break;
-         default:
-           MayDay::Error("SingleNullBlockCoordSys::SingleNullBlockCoordSys(): Invalid block_type encountered");
-         }
+   if ( m_verbose && procID()==0 ) {
+      cout << "Constructing single null " << blockName(m_poloidal_block) << " block";
+#if CFG_DIM==3
+      cout << " in toroidal sector " << m_toroidal_sector;
+#endif
+      cout << " with global index space domain box = " << m_domain.domainBox() << endl;
 
-      cout << " block with global index space domain box = " << m_domain.domainBox() << endl;
-
-      switch ( m_poloidal_index )
+      switch ( m_poloidal_block )
          {
          case LCORE:
             cout << "Left core mapped domain: "
@@ -142,17 +161,17 @@ SingleNullBlockCoordSys::printInit() const
                  << lowerMappedCoordinate(RADIAL_DIR) << " < xi_" << RADIAL_DIR << " < " << upperMappedCoordinate(RADIAL_DIR) << ", " 
 #if CFG_DIM==3
                  << lowerMappedCoordinate(TOROIDAL_DIR) << " < xi_" << TOROIDAL_DIR << " < " << upperMappedCoordinate(TOROIDAL_DIR) << ", " 
-#endif
+ #endif
                  << lowerMappedCoordinate(POLOIDAL_DIR) << " < xi_" << POLOIDAL_DIR << " < " << upperMappedCoordinate(POLOIDAL_DIR);
             break;
          case MCSOL:
-            cout << "Middle center scrape-off layer mapped domain: " 
-                 << lowerMappedCoordinate(RADIAL_DIR) << " < xi_" << RADIAL_DIR << " < " << upperMappedCoordinate(RADIAL_DIR) << ", " 
+             cout << "Middle center scrape-off layer mapped domain: " 
+                  << lowerMappedCoordinate(RADIAL_DIR) << " < xi_" << RADIAL_DIR << " < " << upperMappedCoordinate(RADIAL_DIR) << ", " 
 #if CFG_DIM==3
-                 << lowerMappedCoordinate(TOROIDAL_DIR) << " < xi_" << TOROIDAL_DIR << " < " << upperMappedCoordinate(TOROIDAL_DIR) << ", " 
+                  << lowerMappedCoordinate(TOROIDAL_DIR) << " < xi_" << TOROIDAL_DIR << " < " << upperMappedCoordinate(TOROIDAL_DIR) << ", " 
 #endif
-                 << lowerMappedCoordinate(POLOIDAL_DIR) << " < xi_" << POLOIDAL_DIR << " < " << upperMappedCoordinate(POLOIDAL_DIR);
-            break;
+                  << lowerMappedCoordinate(POLOIDAL_DIR) << " < xi_" << POLOIDAL_DIR << " < " << upperMappedCoordinate(POLOIDAL_DIR);
+             break;
          case RCSOL:
             cout << "Right center scrape-off layer mapped domain: " 
                  << lowerMappedCoordinate(RADIAL_DIR) << " < xi_" << RADIAL_DIR << " < " << upperMappedCoordinate(RADIAL_DIR) << ", " 
@@ -194,34 +213,26 @@ SingleNullBlockCoordSys::printInit() const
                  << lowerMappedCoordinate(POLOIDAL_DIR) << " < xi_" << POLOIDAL_DIR << " < " << upperMappedCoordinate(POLOIDAL_DIR);
             break;
          default:
-           MayDay::Error("SingleNullBlockCoordSys::SingleNullBlockCoordSys(): Invalid block_type encountered");
+            MayDay::Error("SingleNullBlockCoordSys::SingleNullBlockCoordSys(): Invalid block_type encountered");
          }
-
       cout << endl;
    }
 }
-
 
 void
 SingleNullBlockCoordSys::getCellCenterRealCoords()
 {
 #if CFG_DIM==2
    POL::Box box_pol = restrictToPoloidal(m_domain.domainBox());
-
    m_rpc_coarsen_ratio = 8*POL::IntVect::Unit;
    for (int n=0; n<POL_DIM; ++n) {
       if (box_pol.size(n) < 64) m_rpc_coarsen_ratio[n] = 1;
    }
-
    box_pol.coarsen(m_rpc_coarsen_ratio);
-
    m_realPoloidalCoords.define(box_pol, POL_DIM);
-
    POL::RealVect rpc_dx = restrictToPoloidal(m_dx) * m_rpc_coarsen_ratio;
-
    POL::RealVect offset_pol = 0.5*POL::RealVect::Unit;
    offset_pol *= rpc_dx;
-
    for (POL::BoxIterator bit(box_pol); bit.ok(); ++bit) {
       POL::IntVect iv = bit();
       POL::RealVect xi = rpc_dx*iv + offset_pol;
@@ -234,21 +245,15 @@ SingleNullBlockCoordSys::getCellCenterRealCoords()
 #endif
 #if CFG_DIM==3
    Box box = m_domain.domainBox();
-
    m_rc_coarsen_ratio = 8*IntVect::Unit;
    for (int n=0; n<SpaceDim; ++n) {
       if (box.size(n) < 64) m_rc_coarsen_ratio[n] = 1;
    }
-
    box.coarsen(m_rc_coarsen_ratio);
-
    m_realCoords.define(box, SpaceDim);
-
    RealVect rc_dx = m_dx * m_rc_coarsen_ratio;
-
    RealVect offset = 0.5*RealVect::Unit;
    offset *= rc_dx;
-
    for (BoxIterator bit(box); bit.ok(); ++bit) {
       IntVect iv = bit();
       RealVect xi = rc_dx*iv + offset;
@@ -265,16 +270,16 @@ SingleNullBlockCoordSys::getCellCenterRealCoords()
 bool
 SingleNullBlockCoordSys::blockNameIsValid( const string& a_block_name ) const
 {
-   return (a_block_name == "mcore" && m_poloidal_index == MCORE) ||
-          (a_block_name == "lcore" && m_poloidal_index == LCORE) ||
-          (a_block_name == "rcore" && m_poloidal_index == RCORE) ||
-          (a_block_name == "mcsol" && m_poloidal_index == MCSOL) ||
-          (a_block_name == "lcsol" && m_poloidal_index == LCSOL) ||
-          (a_block_name == "rcsol" && m_poloidal_index == RCSOL) ||
-          (a_block_name == "lpf"   && m_poloidal_index == LPF) ||
-          (a_block_name == "rpf"   && m_poloidal_index == RPF) ||
-          (a_block_name == "lsol"  && m_poloidal_index == LSOL) ||
-          (a_block_name == "rsol"  && m_poloidal_index == RSOL);
+   return (a_block_name == "mcore" && m_poloidal_block == MCORE) ||
+      (a_block_name == "lcore" && m_poloidal_block == LCORE) ||
+      (a_block_name == "rcore" && m_poloidal_block == RCORE) ||
+      (a_block_name == "mcsol" && m_poloidal_block == MCSOL) ||
+      (a_block_name == "lcsol" && m_poloidal_block == LCSOL) ||
+      (a_block_name == "rcsol" && m_poloidal_block == RCSOL) ||
+      (a_block_name == "lpf"   && m_poloidal_block == LPF) ||
+      (a_block_name == "rpf"   && m_poloidal_block == RPF) ||
+      (a_block_name == "lsol"  && m_poloidal_block == LSOL) ||
+      (a_block_name == "rsol"  && m_poloidal_block == RSOL);
 }
 
 
@@ -286,12 +291,11 @@ SingleNullBlockCoordSys::readFiles( ParmParse& a_pp )
    int n_radial_points, n_poloidal_points;
    int n_radial_extend, n_poloidal_extend;
    int num_block_elements;
-   ifstream inFile;
 
+   ifstream inFile;
 #ifdef CH_MPI
    if (procID() == 0) {
 #endif
-
       string geometry_file;
       if ( a_pp.contains("geometry_file")) {
          a_pp.get("geometry_file", geometry_file);
@@ -299,28 +303,20 @@ SingleNullBlockCoordSys::readFiles( ParmParse& a_pp )
       else {
          MayDay::Error("SingleNullBlockCoordSys::init(): No geometry mapping file specified");
       }
-
       inFile.open( geometry_file.c_str() );
-
       if (!inFile) {
          cout << "Unable to open geometry mapping file" << endl;
          exit(1);
       }
-
       cout << "Reading geometry mapping file" << endl;
-
       bool found_block = false;
       string block_name;
-
       while ( (inFile >> block_name) ) {
-
          inFile >> n_radial_points;
          inFile >> n_radial_extend;
          inFile >> n_poloidal_points;
          inFile >> n_poloidal_extend;
-
          num_block_elements = (n_radial_points + 2*n_radial_extend) * (n_poloidal_points + 2*n_poloidal_extend);
-
          if ( blockNameIsValid(block_name) ) {
             found_block = true;
             break;
@@ -345,28 +341,21 @@ SingleNullBlockCoordSys::readFiles( ParmParse& a_pp )
    MPI_Bcast(&n_radial_extend, 1, MPI_INT, 0, MPI_COMM_WORLD);
    MPI_Bcast(&n_poloidal_points, 1, MPI_INT, 0, MPI_COMM_WORLD);
    MPI_Bcast(&n_poloidal_extend, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
 #endif // end if MPI
 
    POL::IntVect mapping_block_size;
    mapping_block_size[0] = n_radial_points   + 2*n_radial_extend;
    mapping_block_size[1] = n_poloidal_points + 2*n_poloidal_extend;
-
    num_block_elements = mapping_block_size[0] * mapping_block_size[1];
-
    double *input_values = new double[4*num_block_elements];
 
 #ifdef CH_MPI
    if (procID() == 0) {
 #endif
-
       for (int i=0; i<4*num_block_elements; ++i) {
          inFile >> input_values[i];
       }
-
       inFile.close();
-
-      cout << "Done reading geometry mapping file" << endl;
 
 #ifdef CH_MPI
    }
@@ -407,12 +396,19 @@ SingleNullBlockCoordSys::readFiles( ParmParse& a_pp )
       a_pp.get("interpolation_method", interp_method);
    }
 
+#if CFG_DIM==3
+   // Since the mapping is only defined using bspline interpolation for now (and maybe forever),
+   // we need to restrict the poloidal interpolation to bspline also for consistency
+   if ( interp_method != "bspline" ) {
+      MayDay::Error("SingleNullBlockCoordSys::readFiles(): interp_method is limited to bspline in 3D for now");
+   }
+#endif
+
    POL::Box interp_box(POL::IntVect::Zero,mapping_block_size-POL::IntVect::Unit);
 
    POL::FArrayBox interp_node_coords(interp_box, SpaceDim);
 
    // Create an interpolator for the cylindrical coordinates
-
    POL::FArrayBox RZ_data(interp_box, POL_DIM);
 
    POL::BoxIterator bit(interp_box);
@@ -427,9 +423,7 @@ SingleNullBlockCoordSys::readFiles( ParmParse& a_pp )
       interp_node_coords(iv,1) = theta_pts[iv[1] - interp_box.smallEnd(1)];
    }
 
-#if CFG_DIM==2
    m_poloidal_util->setRZInterp(a_pp, interp_method, interp_node_coords, RZ_data);
-#endif
 #if CFG_DIM==3
    setInterp(a_pp, interp_node_coords, RZ_data);
 #endif
@@ -480,7 +474,7 @@ SingleNullBlockCoordSys::definePoints( const ParmParse&     a_pp,
                                        double &             a_dtheta,
                                        double *             a_theta_pts ) const
 {
-   if ( m_poloidal_index == LCORE || m_poloidal_index == LCSOL ) {
+   if ( m_poloidal_block == LCORE || m_poloidal_block == LCSOL ) {
       if ( a_pp.contains("core_mapping_truncate") ) {
          a_pp.get("core_mapping_truncate", a_block_poloidal);
          CH_assert(a_block_poloidal <= a_mapping_block_size[1]);
@@ -494,7 +488,7 @@ SingleNullBlockCoordSys::definePoints( const ParmParse&     a_pp,
          a_theta_pts[i-1] = a_theta_pts[i] - a_dtheta;
       }
    }
-   else if ( m_poloidal_index == RCORE || m_poloidal_index == RCSOL ) {
+   else if ( m_poloidal_block == RCORE || m_poloidal_block == RCSOL ) {
       if ( a_pp.contains("core_mapping_truncate") ) {
          a_pp.get("core_mapping_truncate", a_block_poloidal);
          CH_assert(a_block_poloidal <= a_mapping_block_size[1]);
@@ -507,7 +501,7 @@ SingleNullBlockCoordSys::definePoints( const ParmParse&     a_pp,
          a_theta_pts[i] = a_theta_pts[i-1] + a_dtheta;
       }
    }
-   else if ( m_poloidal_index == LPF || m_poloidal_index == LSOL ) {
+   else if ( m_poloidal_block == LPF || m_poloidal_block == LSOL ) {
       if ( a_pp.contains("pf_mapping_truncate") ) {
          a_pp.get("pf_mapping_truncate", a_block_poloidal);
          CH_assert(a_block_poloidal <= a_mapping_block_size[1]);
@@ -520,7 +514,7 @@ SingleNullBlockCoordSys::definePoints( const ParmParse&     a_pp,
          a_theta_pts[i] = a_theta_pts[i-1] + a_dtheta;
       }
    }
-   else if ( m_poloidal_index == RPF || m_poloidal_index == RSOL ) {
+   else if ( m_poloidal_block == RPF || m_poloidal_block == RSOL ) {
       if ( a_pp.contains("pf_mapping_truncate") ) {
          a_pp.get("pf_mapping_truncate", a_block_poloidal);
          CH_assert(a_block_poloidal <= a_mapping_block_size[1]);
@@ -534,7 +528,7 @@ SingleNullBlockCoordSys::definePoints( const ParmParse&     a_pp,
          a_theta_pts[i-1] = a_theta_pts[i] - a_dtheta;
       }
    }
-   else if ( m_poloidal_index == MCORE || m_poloidal_index == MCSOL ) {
+   else if ( m_poloidal_block == MCORE || m_poloidal_block == MCSOL ) {
       a_dtheta *= (double)a_block_full_poloidal / (double)a_block_poloidal;
 
       a_theta_pts[a_mapping_block_size[1]-1] =
@@ -561,26 +555,26 @@ SingleNullBlockCoordSys::realCoord( const RealVect& a_Xi ) const
    X[1] = m_poloidal_util->interpolate(POL::SingleNullPoloidalUtil::Z_VAR, POL::Interp::FUNCTION, Xi_pol);
 #endif
 #if CFG_DIM==3
-   double R   = m_interp->interpolate(0, Interp3D::FUNCTION, a_Xi);
-   double Phi = m_interp->interpolate(1, Interp3D::FUNCTION, a_Xi);
-   double Z   = m_interp->interpolate(2, Interp3D::FUNCTION, a_Xi);
+    double R   = m_interp->interpolate(0, Interp3D::FUNCTION, a_Xi);
+    double Phi = m_interp->interpolate(1, Interp3D::FUNCTION, a_Xi) - m_toroidal_mapped_offset;
+    double Z   = m_interp->interpolate(2, Interp3D::FUNCTION, a_Xi);
 
-   if ( m_phys_coord_type == CYLINDRICAL ) {
-      D_TERM(X[0] = R;,
-             X[1] = Phi;,
-             X[2] = Z;)
-   }
-   else if ( m_phys_coord_type == CARTESIAN ) {
-      D_TERM(X[0] = R*cos(Phi);,
-             X[1] = R*sin(Phi);,
-             X[2] = Z;)
-         }
-   else {
-      MayDay::Error("SingleNullBlockCoordSys::realCoord(): unrecognized m_phys_coord_type");
-   }
+    if ( m_phys_coord_type == CYLINDRICAL ) {
+       D_TERM(X[0] = R;,
+              X[1] = Phi;,
+              X[2] = Z;)
+          }
+    else if ( m_phys_coord_type == CARTESIAN ) {
+       D_TERM(X[0] = R*cos(Phi);,
+              X[1] = R*sin(Phi);,
+              X[2] = Z;)
+          }
+    else {
+       MayDay::Error("SingleNullBlockCoordSys::realCoord(): unrecognized m_phys_coord_type");
+    }
 #endif
 
-   return X;
+    return X;
 }
 
 
@@ -589,7 +583,7 @@ RealVect
 SingleNullBlockCoordSys::mappedCoord( const RealVect& a_X ) const
 {
 #ifdef PLOT_INVERSE_POINTS
-   fprintf(m_ipt_file[m_poloidal_index], "%20.12e %20.12e\n", a_X[0], a_X[1]);
+   fprintf(m_ipt_file[m_poloidal_block], "%20.12e %20.12e\n", a_X[0], a_X[1]);
 #endif
 
    /*
@@ -663,22 +657,23 @@ SingleNullBlockCoordSys::mappedCoord( const RealVect& a_X ) const
    double Z = a_X[2];
    
    if ( m_phys_coord_type == CYLINDRICAL ) {
-      Phi = xi_initial[1] = a_X[TOROIDAL_DIR];
+      Phi = a_X[TOROIDAL_DIR];
    }
    else if ( m_phys_coord_type == CARTESIAN ) {
-      Phi = xi_initial[1] = atan2(a_X[1],a_X[0]);
+      Phi = atan2(a_X[1],a_X[0]);
    }
    else {
       MayDay::Error("SingleNullBlockCoordSys::mappedCoord(): unrecognized m_phys_coord_type");
    }
+   xi_initial[1] = Phi + m_toroidal_mapped_offset;
 
    RealVect xi = mappedCoordNewton(RealVect(R,Phi,Z), xi_initial, iv_closest);
 
    double Phi_lo = lowerMappedCoordinate(TOROIDAL_DIR) - m_toroidal_ghosts*m_dx[TOROIDAL_DIR];
    double Phi_hi = upperMappedCoordinate(TOROIDAL_DIR) + m_toroidal_ghosts*m_dx[TOROIDAL_DIR];
-   double toroidal_width = upperMappedCoordinate(TOROIDAL_DIR) - lowerMappedCoordinate(TOROIDAL_DIR);
 
    if ( m_phys_coord_type == CARTESIAN ) {
+#if 0
       // The toroidal angle above lies between -pi and pi; shift it into the mapped variable range
       if ( xi[1] < Phi_lo ) {
          xi[1] += 2.*Pi;
@@ -688,6 +683,12 @@ SingleNullBlockCoordSys::mappedCoord( const RealVect& a_X ) const
          xi[1] -= 2.*Pi;
          CH_assert(xi[1] >= Phi_lo && xi[1] <= Phi_hi);
       }
+#else
+      //      if ( xi[1] < Phi_lo || xi[1] > Phi_hi ) {
+      //         cout << m_poloidal_block << " " << m_toroidal_sector << " " << xi[1] << " " 
+      //       <<lowerMappedCoordinate(TOROIDAL_DIR) << " " << upperMappedCoordinate(TOROIDAL_DIR) << endl;
+      //      }
+#endif
    }
    
    return xi;
@@ -712,7 +713,7 @@ SingleNullBlockCoordSys::dXdXi( const RealVect&  a_Xi,
       Real dXdxi;
       
       double R   = m_interp->interpolate(0, Interp3D::FUNCTION, a_Xi);
-      double Phi = m_interp->interpolate(1, Interp3D::FUNCTION, a_Xi);
+      double Phi = m_interp->interpolate(1, Interp3D::FUNCTION, a_Xi) - m_toroidal_mapped_offset;
 
       if ( m_phys_coord_type == CARTESIAN ) {
          if ( a_dirX == 0 ) {
@@ -731,7 +732,7 @@ SingleNullBlockCoordSys::dXdXi( const RealVect&  a_Xi,
                dXdxi = m_interp->interpolate(0, Interp3D::X_DERIVATIVE, a_Xi) * sin(Phi);
             }
             else if ( a_dirXi == 1 ) {
-               dXdxi = m_interp->interpolate(0, Interp3D::Y_DERIVATIVE, a_Xi) + R * cos(Phi);
+               dXdxi = m_interp->interpolate(0, Interp3D::Y_DERIVATIVE, a_Xi) * sin(Phi) + R * cos(Phi);
             }
             else {
                dXdxi = m_interp->interpolate(0, Interp3D::Z_DERIVATIVE, a_Xi) * sin(Phi);
@@ -843,15 +844,18 @@ SingleNullBlockCoordSys::getMagneticFlux( const FArrayBox&  a_physical_coordinat
       POL::FArrayBox physical_coordinates_pol(restrictToPoloidal(a_physical_coordinates.box()), SpaceDim);
       restrictPhysCoordsToPoloidal(a_physical_coordinates, physical_coordinates_pol);
 
-      POL::FArrayBox magnetic_flux_pol(restrictToPoloidal(a_magnetic_flux.box()), 1);
+      const Box& box = a_magnetic_flux.box();
 
-      m_poloidal_util->getMagneticFluxFromDCT(physical_coordinates_pol, magnetic_flux_pol);
+      POL::FArrayBox magnetic_flux_pol(restrictToPoloidal(box), 1);
 
-      spreadToroidal(magnetic_flux_pol, a_magnetic_flux);
+      for (int i=box.smallEnd(TOROIDAL_DIR); i<=box.bigEnd(TOROIDAL_DIR); ++i) {
+         restrictPhysCoordsToPoloidal(a_physical_coordinates, i, physical_coordinates_pol);
+
+         m_poloidal_util->getMagneticFluxFromDCT(physical_coordinates_pol, magnetic_flux_pol);
+
+         injectToroidal(magnetic_flux_pol, i, a_magnetic_flux);
+      }
 #endif
-   }
-   else {
-      MayDay::Error("SingleNullBlockCoordSys::getMagneticFlux() only implemented for DCT field option");
    }
 }
 
@@ -1049,37 +1053,26 @@ SingleNullBlockCoordSys::computeFieldData( const int  a_dir,
    if ( m_spectral_field ) {
 
       POL::FArrayBox RZ_pol(restrictToPoloidal(X.box()), POL_DIM);
-      restrictPhysCoordsToPoloidal(X, RZ_pol);
-      
-      m_poloidal_util->computeFieldDataSpectral(RZ_pol, a_dir, BField_pol, BFieldMag_pol, BFieldDir_pol, gradBFieldMag_pol,
-                                                 curlBFieldDir_pol, BFieldDirdotcurlBFieldDir_pol, a_derived_data_only);
+
+      for (int toroidal_index=box.smallEnd(TOROIDAL_DIR); toroidal_index<=box.bigEnd(TOROIDAL_DIR); ++toroidal_index) {
+         restrictPhysCoordsToPoloidal(X, toroidal_index, RZ_pol);
+
+         m_poloidal_util->computeFieldDataSpectral(RZ_pol, a_dir, BField_pol, BFieldMag_pol, BFieldDir_pol, gradBFieldMag_pol,
+                                                   curlBFieldDir_pol, BFieldDirdotcurlBFieldDir_pol, a_derived_data_only);
+
+         if( !a_derived_data_only ) {
+            injectToroidal(BField_pol, toroidal_index, a_BField);
+         }
+         injectToroidal(BFieldMag_pol, toroidal_index, a_BFieldMag);
+         injectToroidal(BFieldDir_pol, toroidal_index, a_BFieldDir);
+         injectToroidal(gradBFieldMag_pol, toroidal_index, a_gradBFieldMag);
+         injectToroidal(curlBFieldDir_pol, toroidal_index, a_curlBFieldDir);
+         injectToroidal(BFieldDirdotcurlBFieldDir_pol, toroidal_index, a_BFieldDirdotcurlBFieldDir);
+      }
    }
    else {
-
-      FArrayBox Xi(box,SpaceDim);
-      if (a_dir>=0 && a_dir<SpaceDim) {
-         getFaceCenteredMappedCoords(a_dir, Xi);
-      }
-      else {
-         getCellCenteredMappedCoords(Xi);
-      }
-
-      POL::FArrayBox Xi_pol(restrictToPoloidal(Xi.box()), POL_DIM);
-      restrictMappedCoordsToPoloidal(Xi, Xi_pol);
-
-      m_poloidal_util->computeFieldDataFromMappingFile(Xi_pol, a_dir, BField_pol, BFieldMag_pol,
-                                                        BFieldDir_pol, gradBFieldMag_pol, curlBFieldDir_pol,
-                                                        BFieldDirdotcurlBFieldDir_pol, a_derived_data_only );
+      MayDay::Error("SingleNullBlockCoordSys::computeFieldData(): Only implemented in 3D for spectral field option");
    }
-
-   if( !a_derived_data_only ) {
-      spreadToroidal(BField_pol, a_BField);
-   }
-   spreadToroidal(BFieldMag_pol, a_BFieldMag);
-   spreadToroidal(BFieldDir_pol, a_BFieldDir);
-   spreadToroidal(gradBFieldMag_pol, a_gradBFieldMag);
-   spreadToroidal(curlBFieldDir_pol, a_curlBFieldDir);
-   spreadToroidal(BFieldDirdotcurlBFieldDir_pol, a_BFieldDirdotcurlBFieldDir);
 
    if ( m_phys_coord_type == CARTESIAN ) {
 
@@ -1127,37 +1120,58 @@ SingleNullBlockCoordSys::getNodalFieldData(FArrayBox& a_points,
 
       Box box = a_points.box();
       POL::Box box_pol = restrictToPoloidal(box);
-      
       POL::FArrayBox RZ(box_pol, POL_DIM);
+      
+#if CFG_DIM==2
+
       for (POL::BoxIterator bit(box_pol); bit.ok(); ++bit) {
          POL::IntVect iv_pol = bit();
-#if CFG_DIM==2
-         IntVect iv = iv_pol;
-#endif
-#if CFG_DIM==3
-         IntVect iv(iv_pol[0], box.smallEnd(TOROIDAL_DIR), iv_pol[1]);
-#endif
       
          RealVect xi;
          for (int n=0; n<SpaceDim; ++n) {
-            xi[n] = a_points(iv,n);
+            xi[n] = a_points(iv_pol,n);
          }
          
-         POL::RealVect X_pol = restrictPhysCoordToPoloidal(realCoord(xi));
+         POL::RealVect X_pol = realCoord(xi);
          for (int n=0; n<POL_DIM; ++n) {
             RZ(iv_pol,n) = X_pol[n];
          }
       }
 
+      m_poloidal_util->getNodalFieldData(RZ, a_A, a_b, a_Bmag);
+
+#elif CFG_DIM==3
+
       POL::FArrayBox A_pol(restrictToPoloidal(a_A.box()),a_A.nComp());
       POL::FArrayBox b_pol(restrictToPoloidal(a_b.box()),a_b.nComp());
       POL::FArrayBox Bmag_pol(restrictToPoloidal(a_Bmag.box()),a_Bmag.nComp());
+      
+      // Loop over poloidal planes
+      for (int toroidal_index=box.smallEnd(TOROIDAL_DIR); toroidal_index<=box.bigEnd(TOROIDAL_DIR); ++toroidal_index) {
 
-      m_poloidal_util->getNodalFieldData(RZ, A_pol, b_pol, Bmag_pol);
+         for (POL::BoxIterator bit(box_pol); bit.ok(); ++bit) {
+            POL::IntVect iv_pol = bit();
+            IntVect iv(iv_pol[0],toroidal_index,iv_pol[1]);
 
-      spreadToroidal(A_pol, a_A);
-      spreadToroidal(b_pol, a_b);
-      spreadToroidal(Bmag_pol, a_Bmag);
+            RealVect xi;
+            for (int n=0; n<SpaceDim; ++n) {
+               xi[n] = a_points(iv,n);
+            }
+         
+            POL::RealVect X_pol = restrictPhysCoordToPoloidal(realCoord(xi));
+            for (int n=0; n<POL_DIM; ++n) {
+               RZ(iv_pol,n) = X_pol[n];
+            }
+
+            m_poloidal_util->getNodalFieldData(RZ, A_pol, b_pol, Bmag_pol);
+
+            injectToroidal(A_pol, toroidal_index, a_A);
+            injectToroidal(b_pol, toroidal_index, a_b);
+            injectToroidal(Bmag_pol, toroidal_index, a_Bmag);
+         }
+      }
+#endif
+
    }
    else {
       MayDay::Error("SingleNullBlockCoordSys::getNodalFieldData(): Only implemented for DCT field option");
@@ -1173,7 +1187,7 @@ SingleNullBlockCoordSys::setInterp( const ParmParse&       a_pp,
 {
    // Make an index space for the interpolation points by expanding the poloidal index
    // space in the toroidal direction.  In the new toroidal direction, the middle n_toroidal
-   // points span the valid block.  There are an addition m_toroidal_ghosts points in the
+   // points span the valid block.  There are an additional m_toroidal_ghosts points in the
    // lower and upper toroidal directions to provide a ghost cell region.
 
    const POL::Box& box_pol = a_interp_node_coords_pol.box();
@@ -1192,74 +1206,216 @@ SingleNullBlockCoordSys::setInterp( const ParmParse&       a_pp,
    
    if ( m_field_aligned_mapping ) {
 
-      // On the just constructed index space, the node coordinates are obtained by starting
-      // from the physical (cylindrical) coordinates corresponding to the indices on the
-      // lower toroidal block face:.
+      // The following code generates a 3D grid from a poloidal grid by tracing field lines.
+      // Since this can be expensive (depending upon the grid size and requested ray tracing
+      // step size), we provide an option to store and re-read this data.
 
-      Box start_box(IntVect(lo[0],0,lo[1]), IntVect(hi[0],0,hi[1]));
-      for (BoxIterator bit(start_box); bit.ok(); ++bit) {
-         IntVect iv = bit();
-         POL::IntVect iv_pol = restrictToPoloidal(iv);
-
-         interp_node_coords(iv,0) = a_interp_node_coords_pol(iv_pol,0);
-         interp_node_coords(iv,1) = lowerMappedCoordinate(TOROIDAL_DIR);
-         interp_node_coords(iv,2) = a_interp_node_coords_pol(iv_pol,1);
-
-         interp_node_data(iv,0) = a_RZ_data(iv_pol,0);
-         interp_node_data(iv,1) = lowerMappedCoordinate(TOROIDAL_DIR);
-         interp_node_data(iv,2) = a_RZ_data(iv_pol,1);
+      bool read_3D_mapping_data = false;
+      if ( a_pp.contains("read_3D_mapping_data")) {
+         a_pp.get("read_3D_mapping_data", read_3D_mapping_data);
       }
 
-      // The remaining node coordinates are obtained by tracing the field starting
-      // from the coordinates just set.  Since we are using a BoxIterator, which
-      // iterates in a positive index direction, we need to do this in two steps,
-      // corresponding to the indices less than and greater than the indices
-      // defining the base of the ray tracing.
-
-      Box lower_box(IntVect(lo[0],-m_toroidal_ghosts,lo[1]), IntVect(hi[0],-1,hi[1]));
-      for (BoxIterator bit(lower_box); bit.ok(); ++bit) {
-         IntVect iv = bit();
-         iv[1] = - (m_toroidal_ghosts + iv[1] + 1);
-
-         POL::IntVect iv_pol = restrictToPoloidal(iv);
-         interp_node_coords(iv,0) = a_interp_node_coords_pol(iv_pol,0);
-         interp_node_coords(iv,1) = lowerMappedCoordinate(TOROIDAL_DIR) + iv[1]*toroidal_node_spacing;
-         interp_node_coords(iv,2) = a_interp_node_coords_pol(iv_pol,1);
-
-         RealVect X_old;
-         IntVect iv_old = iv; iv_old[1]++;
-         for (int n=0; n<3; ++n) {
-            X_old[n] = interp_node_data(iv_old,n);
-         }
-
-         RealVect X_new = traceField(X_old, -toroidal_node_spacing);
-
-         for (int n=0; n<3; ++n) {
-            interp_node_data(iv,n) = X_new[n];
-         }
+      string file_name;
+      if ( a_pp.contains("3D_mapping_data_file")) {
+         a_pp.get("3D_mapping_data_file", file_name);
       }
 
-      Box upper_box(IntVect(lo[0],1,lo[1]), IntVect(hi[0],n_toroidal+m_toroidal_ghosts-1,hi[1]));
-      for (BoxIterator bit(upper_box); bit.ok(); ++bit) {
-         IntVect iv = bit();
-
-         POL::IntVect iv_pol = restrictToPoloidal(iv);
-         interp_node_coords(iv,0) = a_interp_node_coords_pol(iv_pol,0);
-         interp_node_coords(iv,1) = lowerMappedCoordinate(TOROIDAL_DIR) + iv[1]*toroidal_node_spacing;
-         interp_node_coords(iv,2) = a_interp_node_coords_pol(iv_pol,1);
-
-         RealVect X_old;
-         IntVect iv_old = iv; iv_old[1]--;
-         for (int n=0; n<3; ++n) {
-            X_old[n] = interp_node_data(iv_old,n);
-         }
-
-         RealVect X_new = traceField(X_old, toroidal_node_spacing);
-
-         for (int n=0; n<3; ++n) {
-            interp_node_data(iv,n) = X_new[n];
-         }
+      if ( read_3D_mapping_data && file_name.empty() ) {
+         MayDay::Error("SingleNullBlockCoordSys::setInterp(): No 3D mapping data file specified");
       }
+
+      fstream file_stream;
+
+      if ( !read_3D_mapping_data ) {
+      
+         if ( procID()==0 ) {
+            cout << "Constructing 3D mapping data for " << blockName(m_poloidal_block)
+                 << " in toroidal sector " << m_toroidal_sector << endl;
+         }
+
+         bool centered_poloidal_mapping = true;
+         if ( a_pp.contains("centered_poloidal_mapping")) {
+            a_pp.get("centered_poloidal_mapping", centered_poloidal_mapping);
+         }
+
+         int base_index;
+         double base_coord;
+         if ( centered_poloidal_mapping ) {
+            CH_assert( (n_toroidal-1)%2 == 0 );  // n_toroidal is assumed to be odd for this option
+            base_index = (n_toroidal-1)/2 + 1;
+            base_coord = 0.5 * (lowerMappedCoordinate(TOROIDAL_DIR) + upperMappedCoordinate(TOROIDAL_DIR));
+         }
+         else {
+            base_index = 0;
+            base_coord = lowerMappedCoordinate(TOROIDAL_DIR);
+         }
+
+         // On the index space constructed above, the node coordinates are obtained by starting
+         // from the physical (cylindrical) coordinates at the toroidal center of the block if
+         // centered_poloidal_mapping = true; otherwise, the lower toroidal block face.
+
+         Box start_box(IntVect(lo[0],base_index,lo[1]), IntVect(hi[0],base_index,hi[1]));
+         for (BoxIterator bit(start_box); bit.ok(); ++bit) {
+            IntVect iv = bit();
+            POL::IntVect iv_pol = restrictToPoloidal(iv);
+
+            interp_node_coords(iv,0) = a_interp_node_coords_pol(iv_pol,0);
+            interp_node_coords(iv,1) = base_coord;
+            interp_node_coords(iv,2) = a_interp_node_coords_pol(iv_pol,1);
+
+            interp_node_data(iv,0) = a_RZ_data(iv_pol,0);
+            interp_node_data(iv,1) = base_coord;
+            interp_node_data(iv,2) = a_RZ_data(iv_pol,1);
+         }
+
+         // The remaining node coordinates are obtained by tracing the field starting
+         // from the coordinates just set.  Since we are using a BoxIterator, which
+         // iterates in a positive index direction, we need to do this in two steps,
+         // corresponding to the indices less than and greater than the indices
+         // defining the base of the ray tracing.
+
+         Box lower_box(IntVect(lo[0],-m_toroidal_ghosts,lo[1]), IntVect(hi[0],base_index-1,hi[1]));
+         for (BoxIterator bit(lower_box); bit.ok(); ++bit) {
+            IntVect iv = bit();
+            iv[1] = - (m_toroidal_ghosts + iv[1] + 1) + base_index;
+
+            POL::IntVect iv_pol = restrictToPoloidal(iv);
+            interp_node_coords(iv,0) = a_interp_node_coords_pol(iv_pol,0);
+            interp_node_coords(iv,1) = base_coord + (iv[1] - base_index)*toroidal_node_spacing;
+            interp_node_coords(iv,2) = a_interp_node_coords_pol(iv_pol,1);
+
+            RealVect X_old;
+            IntVect iv_old = iv; iv_old[1]++;
+            for (int n=0; n<3; ++n) {
+               X_old[n] = interp_node_data(iv_old,n);
+            }
+
+            RealVect X_new = traceField(X_old, -toroidal_node_spacing);
+
+            for (int n=0; n<3; ++n) {
+               interp_node_data(iv,n) = X_new[n];
+            }
+         }
+
+         Box upper_box(IntVect(lo[0],base_index+1,lo[1]), IntVect(hi[0],n_toroidal+m_toroidal_ghosts-1,hi[1]));
+         for (BoxIterator bit(upper_box); bit.ok(); ++bit) {
+            IntVect iv = bit();
+
+            POL::IntVect iv_pol = restrictToPoloidal(iv);
+            interp_node_coords(iv,0) = a_interp_node_coords_pol(iv_pol,0);
+            interp_node_coords(iv,1) = base_coord + (iv[1] - base_index)*toroidal_node_spacing;
+            interp_node_coords(iv,2) = a_interp_node_coords_pol(iv_pol,1);
+
+            RealVect X_old;
+            IntVect iv_old = iv; iv_old[1]--;
+            for (int n=0; n<3; ++n) {
+               X_old[n] = interp_node_data(iv_old,n);
+            }
+
+            RealVect X_new = traceField(X_old, toroidal_node_spacing);
+
+            for (int n=0; n<3; ++n) {
+               interp_node_data(iv,n) = X_new[n];
+            }
+         }
+
+#ifdef CH_MPI
+         if ( procID() == 0 ) {
+#endif
+            if ( !file_name.empty() ) {
+
+               file_stream.open(file_name.c_str(), ios::app);
+
+               cout << "Adding 3D mapping data to file " << file_name << endl << endl;
+               
+               file_stream.write((char*)&m_poloidal_block, sizeof(int));
+               file_stream.write((char*)&m_toroidal_sector, sizeof(int));
+               int data_length = 6 * box.numPts();
+               file_stream.write((char*)&data_length, sizeof(int));
+
+               for (BoxIterator bit(box); bit.ok(); ++bit) {
+                  IntVect iv = bit();
+
+                  for (int n=0; n<3; ++n) {
+                     file_stream.write((char*)&interp_node_coords(iv,n), sizeof(double));
+                     file_stream.write((char*)&interp_node_data(iv,n), sizeof(double));
+                  }
+               }         
+
+               file_stream.close();
+            }
+#ifdef CH_MPI
+         }
+#endif
+
+      }
+      else {
+
+         file_stream.open(file_name.c_str(), ios::in);
+
+         unsigned buffer_length = 6 * box.numPts();
+         double* buffer = new double[buffer_length];
+
+#ifdef CH_MPI
+         if ( procID() == 0 ) {
+#endif
+            bool found_data = false;
+            
+            while( !file_stream.eof() ) {
+               int poloidal_block;
+               file_stream.read((char*)&poloidal_block, sizeof(int));
+
+               int toroidal_sector;
+               file_stream.read((char*)&toroidal_sector, sizeof(int));
+
+               int data_length;
+               file_stream.read((char*)&data_length, sizeof(int));
+
+               if ( poloidal_block == m_poloidal_block &&
+                    toroidal_sector == m_toroidal_sector ) {
+
+                  if ( data_length != buffer_length ) {
+                     MayDay::Error("SingleNullBlockCoordSys::setInterp(): interpolation data for block is wrong size");
+                  }
+
+                  found_data = true;
+                  break;
+               }
+               else {
+                  // Skip the rest of this block
+                  file_stream.seekg(data_length * sizeof(double), ios::cur);
+               }
+            }
+
+            if ( !found_data ) {
+               MayDay::Error("SingleNullBlockCoordSys::setInterp(): interpolation data for block was not found");
+            }
+            
+            cout << "Reading interpolation data from file " << file_name << " for "
+                 << blockName(m_poloidal_block) << " in toroidal sector " << m_toroidal_sector << endl << endl;
+
+            file_stream.read((char*)buffer, buffer_length * sizeof(double));
+
+            file_stream.close();
+
+#ifdef CH_MPI
+         }
+
+         MPI_Bcast(buffer, buffer_length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+#endif
+
+         double* buffer_ptr = buffer;
+         for (BoxIterator bit(box); bit.ok(); ++bit) {
+            IntVect iv = bit();
+
+            for (int n=0; n<3; ++n) {
+               interp_node_coords(iv,n) = *buffer_ptr++;
+               interp_node_data(iv,n)   = *buffer_ptr++;
+            }
+         }
+
+         delete [] buffer;
+      }      
    }
    else {
 
@@ -1361,7 +1517,7 @@ SingleNullBlockCoordSys::mappedCoordNewton( const RealVect&  a_X,
    POL::RealVect residual;
 
    double R   = m_interp->interpolate(0, Interp3D::FUNCTION, xi);
-   double Phi = xi[1];
+   //   double Phi = xi[1];
    double Z   = m_interp->interpolate(2, Interp3D::FUNCTION, xi);
    double R1  = m_interp->interpolate(0, Interp3D::X_DERIVATIVE, xi);
    double R2  = m_interp->interpolate(0, Interp3D::Y_DERIVATIVE, xi);
@@ -1402,7 +1558,7 @@ SingleNullBlockCoordSys::mappedCoordNewton( const RealVect&  a_X,
       RealVect xi_proposed = xi + delta;
 
       R   = m_interp->interpolate(0, Interp3D::FUNCTION, xi_proposed);
-      Phi = xi_proposed[1];
+      //      Phi = xi_proposed[1];
       Z   = m_interp->interpolate(2, Interp3D::FUNCTION, xi_proposed);
       R1  = m_interp->interpolate(0, Interp3D::X_DERIVATIVE, xi_proposed);
       R2  = m_interp->interpolate(0, Interp3D::Y_DERIVATIVE, xi_proposed);
@@ -1438,7 +1594,7 @@ SingleNullBlockCoordSys::mappedCoordNewton( const RealVect&  a_X,
          xi_proposed = xi + delta;
 
          R   = m_interp->interpolate(0, Interp3D::FUNCTION, xi_proposed);
-         Phi = xi_proposed[1];
+         //         Phi = xi_proposed[1];
          Z   = m_interp->interpolate(2, Interp3D::FUNCTION, xi_proposed);
          R1  = m_interp->interpolate(0, Interp3D::X_DERIVATIVE, xi_proposed);
          R2  = m_interp->interpolate(0, Interp3D::Y_DERIVATIVE, xi_proposed);
@@ -1473,7 +1629,7 @@ SingleNullBlockCoordSys::mappedCoordNewton( const RealVect&  a_X,
 
 #ifdef REPORT_NEWTON_FAILURE
    if ( !converged && num_iters >= max_iter && procID()==0) {
-      cout << "On block (" << m_poloidal_index << "," << m_toroidal_index << "): Newton solve did not converge at " 
+      cout << "On block (" << m_poloidal_block << "," << m_toroidal_sector << "): Newton solve did not converge at " 
            << a_X << ", a_xi_initial = " << a_xi_initial << ", iv_init = " << a_iv_initial << ", Fnorm = " << Fnorm << endl;
       for (int i=0; i<num_iters; ++i) {
          cout << i << " xi = " << xi_saved[i] << ", Fnorm = " << Fnorm_saved[i] << " " << residual_saved[i] << endl;
@@ -1485,6 +1641,137 @@ SingleNullBlockCoordSys::mappedCoordNewton( const RealVect&  a_X,
    return xi;
 }
 #endif
+
+inline double sgn(double val) {
+   return val >=0.? 1.: -1.;
+}
+
+bool
+SingleNullBlockCoordSys::containsPoloidalPoint( const POL::RealVect& a_X,
+                                                const bool           a_verbose ) const
+{
+   // Determine if the physical point a_X (in (R,Z) coordinates) is contained in the block
+
+   double xi_0_lo = lowerMappedCoordinate(RADIAL_DIR); 
+   double xi_0_hi = upperMappedCoordinate(RADIAL_DIR);
+   double xi_1_lo = lowerMappedCoordinate(POLOIDAL_DIR);
+   double xi_1_hi = upperMappedCoordinate(POLOIDAL_DIR);
+   
+   // Calculation of the winding number involves tracing the block boundary
+   // taking discrete steps.  We use the mapping grid size, arbitrarily
+   // multiplied by 10, to set the step size.  The block boundaries are pretty
+   // smooth, but if any problems arise requiring more resolution, the
+   // multiplier can be increased here.
+   POL::IntVect mapping_dims = m_poloidal_util->getMappingDims();
+   int multiplier = 10;
+
+   POL::IntVect nsteps = multiplier * mapping_dims;
+
+   double inc_0 = (xi_0_hi - xi_0_lo) / nsteps[0];
+   double inc_1 = (xi_1_hi - xi_1_lo) / nsteps[1];
+
+   double theta_total = 0.;
+
+   POL::RealVect xi(xi_0_lo,xi_1_lo);
+   POL::RealVect old_ray;
+   old_ray[0] = m_poloidal_util->interpolate(POL::SingleNullPoloidalUtil::R_VAR, POL::Interp::FUNCTION, xi) - a_X[0];
+   old_ray[1] = m_poloidal_util->interpolate(POL::SingleNullPoloidalUtil::Z_VAR, POL::Interp::FUNCTION, xi) - a_X[1];
+   double len = old_ray.vectorLength();
+   if (len == 0.) {
+      return true;
+   }
+   else {
+      old_ray /= len;
+   }
+
+   // Bottom
+   for (int i=0; i<nsteps[0]; ++i) {
+      xi[0] += inc_0;
+      POL::RealVect new_ray;
+      new_ray[0] = m_poloidal_util->interpolate(POL::SingleNullPoloidalUtil::R_VAR, POL::Interp::FUNCTION, xi) - a_X[0];
+      new_ray[1] = m_poloidal_util->interpolate(POL::SingleNullPoloidalUtil::Z_VAR, POL::Interp::FUNCTION, xi) - a_X[1];
+      len = new_ray.vectorLength();
+      if (len == 0.) {
+         return true;
+      }
+      else {
+         new_ray /= len;
+      }
+      double product = new_ray.dotProduct(old_ray);
+      if ( fabs(product) < 1. ) {
+         theta_total += acos(product) * sgn(old_ray[0]*new_ray[1] - old_ray[1]*new_ray[0]);
+      }
+      if ( a_verbose ) cout << "bottom " << i << " " << theta_total << endl;
+      old_ray = new_ray;
+   }
+
+   // Right
+   for (int i=0; i<nsteps[1]; ++i) {
+      xi[1] += inc_1;
+      POL::RealVect new_ray;
+      new_ray[0] = m_poloidal_util->interpolate(POL::SingleNullPoloidalUtil::R_VAR, POL::Interp::FUNCTION, xi) - a_X[0];
+      new_ray[1] = m_poloidal_util->interpolate(POL::SingleNullPoloidalUtil::Z_VAR, POL::Interp::FUNCTION, xi) - a_X[1];
+      len = new_ray.vectorLength();
+      if (len == 0.) {
+         return true;
+      }
+      else {
+         new_ray /= len;
+      }
+      double product = new_ray.dotProduct(old_ray);
+      if ( fabs(product) < 1. ) {
+         theta_total += acos(product) * sgn(old_ray[0]*new_ray[1] - old_ray[1]*new_ray[0]);
+      }
+      if ( a_verbose ) cout << "right " << i << " " << theta_total << endl;
+      old_ray = new_ray;
+   }
+
+   // Top
+   for (int i=0; i<nsteps[0]; ++i) {
+      xi[0] -= inc_0;
+      POL::RealVect new_ray;
+      new_ray[0] = m_poloidal_util->interpolate(POL::SingleNullPoloidalUtil::R_VAR, POL::Interp::FUNCTION, xi) - a_X[0];
+      new_ray[1] = m_poloidal_util->interpolate(POL::SingleNullPoloidalUtil::Z_VAR, POL::Interp::FUNCTION, xi) - a_X[1];
+      len = new_ray.vectorLength();
+      if (len == 0.) {
+         return true;
+      }
+      else {
+         new_ray /= len;
+      }
+      double product = new_ray.dotProduct(old_ray);
+      if ( fabs(product) < 1. ) {
+         theta_total += acos(product) * sgn(old_ray[0]*new_ray[1] - old_ray[1]*new_ray[0]);
+      }
+      if ( a_verbose ) cout << "top " << i << " " << theta_total << endl;
+      old_ray = new_ray;
+   }
+
+   // Left
+   for (int i=0; i<nsteps[1]; ++i) {
+      xi[1] -= inc_1;
+      POL::RealVect new_ray;
+      new_ray[0] = m_poloidal_util->interpolate(POL::SingleNullPoloidalUtil::R_VAR, POL::Interp::FUNCTION, xi) - a_X[0];
+      new_ray[1] = m_poloidal_util->interpolate(POL::SingleNullPoloidalUtil::Z_VAR, POL::Interp::FUNCTION, xi) - a_X[1];
+      len = new_ray.vectorLength();
+      if (len == 0.) {
+         return true;
+      }
+      else {
+         new_ray /= len;
+      }
+      double product = new_ray.dotProduct(old_ray);
+      if ( fabs(product) < 1. ) {
+         theta_total += acos(product) * sgn(old_ray[0]*new_ray[1] - old_ray[1]*new_ray[0]);
+      }
+      if ( a_verbose ) cout << "left " << i << " " << theta_total << endl;
+      old_ray = new_ray;
+   }
+
+   theta_total += 1.e-2;  // Accomodate a little roundoff
+
+   return theta_total >= 2.*Pi;
+}
 
 
 void
@@ -1658,6 +1945,36 @@ SingleNullBlockCoordSys::restrictPhysCoordsToPoloidal( const FArrayBox&  a_coord
 
 
 void
+SingleNullBlockCoordSys::restrictPhysCoordsToPoloidal( const FArrayBox&  a_coords,
+                                                       const int         a_toroidal_index,
+                                                       POL::FArrayBox&   a_coords_pol ) const
+{
+#if CFG_DIM==2
+   a_coords_pol.copy(a_coords);
+#endif
+#if CFG_DIM==3
+   const Box& box = a_coords.box();
+   const POL::Box& box_pol = a_coords_pol.box();
+
+   for (POL::BoxIterator bit(box_pol); bit.ok(); ++bit) {
+      POL::IntVect iv_pol = bit();
+      IntVect iv(iv_pol[0],a_toroidal_index,iv_pol[1]);
+
+      RealVect X;
+      for (int n=0; n<CFG_DIM; ++n) {
+         X[n] = a_coords(iv,n);
+      }
+
+      POL::RealVect X_pol = restrictPhysCoordToPoloidal(X);
+      for (int n=0; n<POL_DIM; ++n) {
+         a_coords_pol(iv_pol,n) = X_pol[n];
+      }
+   }
+#endif
+}
+
+
+void
 SingleNullBlockCoordSys::restrictMappedCoordsToPoloidal( const FArrayBox&  a_coords,
                                                          POL::FArrayBox&   a_coords_pol ) const
 {
@@ -1693,16 +2010,17 @@ SingleNullBlockCoordSys::injectToroidal( const POL::RealVect  a_v ) const
 
 
 void
-SingleNullBlockCoordSys::spreadToroidal( const POL::FArrayBox&  a_fab_pol,
+SingleNullBlockCoordSys::injectToroidal( const POL::FArrayBox&  a_fab_pol,
+                                         const int              a_toroidal_index,
                                          FArrayBox&             a_fab ) const
 {
 #if CFG_DIM==2
    a_fab.copy(a_fab_pol);
 #endif
 #if CFG_DIM==3
-   for (BoxIterator bit(a_fab.box()); bit.ok(); ++bit) {
-      IntVect iv = bit();
-      POL::IntVect iv_pol = restrictToPoloidal(iv);
+   for (POL::BoxIterator bit(a_fab_pol.box()); bit.ok(); ++bit) {
+      POL::IntVect iv_pol = bit();
+      IntVect iv(iv_pol[0], a_toroidal_index, iv_pol[1]);
       
       for (int n=0; n<a_fab_pol.nComp(); ++n) {
          a_fab(iv,n) = a_fab_pol(iv_pol,n);

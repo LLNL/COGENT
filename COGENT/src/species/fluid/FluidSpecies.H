@@ -2,6 +2,8 @@
 #define _FLUID_SPECIES_H_
 
 #include "CFGVars.H"
+#include "NodeFArrayBox.H"
+#include "EdgeDataBox.H"
 
 #include "NamespaceHeader.H"
 
@@ -96,6 +98,13 @@ class FluidSpecies
        */
       virtual void temperature( LevelData<FArrayBox>& temperature ) const;
 
+
+      void interpFaceVarToCell( LevelData<FArrayBox>&  a_cell_var,
+                          const string&                a_face_var_name ) const;
+      
+      void interpEdgeVarToCell( LevelData<FArrayBox>&  a_cell_var,
+                          const string&                a_edge_var_name ) const;
+
       /// Returns true if the species is name.
       /**
        */
@@ -136,9 +145,12 @@ class FluidSpecies
       Real maxValue() const;
       Real minValue() const;
 
-      int m_evolve_momentumDensity_virtual=0;
-      int m_evolve_magneticField_virtual=0;
-      int m_evolve_momentumDensity=0, m_evolve_energyDensity=0;
+      int m_evolve_momentumDensity=0, m_evolve_momentumDensity_virtual=0; 
+      int m_evolve_energyDensity=0;
+      int m_evolve_magneticField=0, m_evolve_magneticField_virtual=0;
+      int m_evolve_electricField=0, m_evolve_electricField_virtual=0;
+      int m_evolve_currentDensity=0, m_evolve_currentDensity_virtual=0;
+      
       Real m_gamma = 5.0/3.0;
 
 private:

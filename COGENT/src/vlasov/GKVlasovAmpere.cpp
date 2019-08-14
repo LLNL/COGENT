@@ -265,11 +265,14 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                        a_rhs_species,
                                         a_E_field.getCellCenteredField(),
                                         injected_E_field );
     
-   LevelData<FluxBox> velocity( dbl, SpaceDim, IntVect::Unit );
-   a_soln_species.computeVelocity( velocity, injected_E_field, a_velocity_option);
+   IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
+   if ( !m_velocity.isDefined()) {
+      m_velocity.define( dbl, SpaceDim, ghostVect );
+   }
+   a_soln_species.computeVelocity( m_velocity, injected_E_field, a_velocity_option, a_time);
     
    LevelData<FluxBox> flux( dbl, SpaceDim, IntVect::Unit );
-   computeFlux( soln_dfn, velocity, flux, geometry );
+   computeFlux( soln_dfn, m_velocity, flux, geometry );
     
    LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
    const bool OMIT_NT(false);
@@ -277,7 +280,7 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                        a_rhs_species,
 
 #ifdef TEST_ZERO_DIVERGENCE
    LevelData<FArrayBox> velocity_divergence(dbl, 1, IntVect::Zero);
-   geometry.mappedGridDivergence( velocity_divergence, velocity, OMIT_NT );
+   geometry.mappedGridDivergence( velocity_divergence, m_velocity, OMIT_NT );
 #endif
 
    const RefCountedPtr<PhaseGeom>& geometry_ptr( a_rhs_species.phaseSpaceGeometryPtr() );

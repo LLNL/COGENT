@@ -6,6 +6,7 @@
 #include "LoHiSide.H"
 #include "FArrayBox.H"
 #include "FluxBox.H"
+#include "EdgeDataBox.H"
 
 #include "NamespaceHeader.H"
 
@@ -15,7 +16,8 @@ namespace FourthOrderBC {
                       const Box&               a_boundary_box,
                       const FluxBox&           a_this_face_vel,
                       const int&               a_dir,
-                      const Side::LoHiSide&    a_side );
+                      const Side::LoHiSide&    a_side,
+                      const int&               a_extrapolated_bc );
 
    void setInflowOutflowBC( FArrayBox&               a_this_soln,
                             const Box&               a_boundary_box,
@@ -24,6 +26,12 @@ namespace FourthOrderBC {
                             const FluxBox&           a_this_face_vel,
                             const int&               a_dir,
                             const Side::LoHiSide&    a_side );
+
+   void setBC( FArrayBox&       a_this_soln,
+         const Box&             a_boundary_box,
+         const std::string&     a_bc_type,
+         const int&             a_dir,
+         const Side::LoHiSide&  a_side );
    
    void setFluxBc( FluxBox&           a_dst,
              const Box&               a_fill_box,
@@ -32,6 +40,11 @@ namespace FourthOrderBC {
              const int                a_dir,
              const Side::LoHiSide&    a_side );
 
+   void setEdgeBC( EdgeDataBox&       a_dst,
+             const Box&               a_fill_box,
+             const std::string&       a_bc_type,
+             const int                a_dir,
+             const Side::LoHiSide&    a_side );
 
    void setNeumannBC( FArrayBox&               a_this_soln,
                       const IntVect&           a_ghosts,

@@ -490,7 +490,6 @@ void MagBlockCoordSys::getPointwiseMajorRadius( FluxBox& a_R ) const
 }
 
 
-
 void MagBlockCoordSys::getCellCentereddXdxi( FArrayBox& a_dXdxi ) const
 {
    CH_TIME("MagBlockCoordSys::getCellCentereddXdxi()");
@@ -504,9 +503,9 @@ void MagBlockCoordSys::getCellCentereddXdxi( FArrayBox& a_dXdxi ) const
 }
 
 
-
 void MagBlockCoordSys::getFaceCentereddXdxi( FluxBox& a_dXdxi ) const
 {
+   CH_TIME("MagBlockCoordSys::getFaceCentereddXdxi()");
    CH_assert(a_dXdxi.nComp() == SpaceDim*SpaceDim);
 
    for (int dir=0; dir<SpaceDim; ++dir) {
@@ -515,6 +514,23 @@ void MagBlockCoordSys::getFaceCentereddXdxi( FluxBox& a_dXdxi ) const
 
       FArrayBox xi(box,SpaceDim);
       getFaceCenteredMappedCoords(dir, xi);
+
+      compute_dXdXi(this_dXdxi, xi, box);
+   }
+}
+
+
+void MagBlockCoordSys::getEdgeCentereddXdxi( EdgeDataBox& a_dXdxi ) const
+{
+   CH_TIME("MagBlockCoordSys::getEdgeCentereddXdxi()");
+   CH_assert(a_dXdxi.nComp() == SpaceDim*SpaceDim);
+
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      FArrayBox& this_dXdxi = a_dXdxi[dir];
+      const Box& box = this_dXdxi.box();
+
+      FArrayBox xi(box,SpaceDim);
+      getEdgeCenteredMappedCoords(dir, xi);
 
       compute_dXdXi(this_dXdxi, xi, box);
    }
@@ -815,6 +831,28 @@ void MagBlockCoordSys::pointwiseJ(FArrayBox& a_J,
   }
 }
 
+void MagBlockCoordSys::pointwiseJ( FluxBox& a_J ) const
+{
+   CH_assert(a_J.nComp() == 1);
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      FArrayBox& J_on_dir( a_J[dir] );
+      FArrayBox Xi( a_J.box(),SpaceDim );
+      getFaceCenteredMappedCoords( dir,Xi );
+      pointwiseJ(J_on_dir, Xi, a_J.box());
+   }
+}
+
+void MagBlockCoordSys::pointwiseJ( EdgeDataBox& a_J ) const
+{
+   CH_assert(a_J.nComp() == 1);
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      FArrayBox& J_on_dir( a_J[dir] );
+      FArrayBox Xi( a_J.box(),SpaceDim );
+      getEdgeCenteredMappedCoords( dir,Xi );
+      pointwiseJ(J_on_dir, Xi, a_J.box());
+   }
+}
+
 
 
 void MagBlockCoordSys::getPointwisePoloidalJ( FArrayBox& a_poloidal_J ) const
@@ -864,7 +902,6 @@ void MagBlockCoordSys::getPointwisePoloidalJ( FArrayBox& a_poloidal_J ) const
 }
 
 
-
 void
 MagBlockCoordSys::getNodeCenteredMappedCoords( FArrayBox& a_xi ) const
 {
@@ -872,7 +909,6 @@ MagBlockCoordSys::getNodeCenteredMappedCoords( FArrayBox& a_xi ) const
                                    CHF_CONST_REALVECT(m_dx),
                                    CHF_FRA(a_xi));
 }
-
 
 
 void
@@ -884,12 +920,22 @@ MagBlockCoordSys::getCellCenteredMappedCoords( FArrayBox& a_xi ) const
 }
 
 
-
 void
 MagBlockCoordSys::getFaceCenteredMappedCoords( const int a_dir,
                                                FArrayBox&  a_xi ) const
 {
   FORT_GET_FC_MAPPED_COORDS(CHF_BOX(a_xi.box()),
+                            CHF_CONST_INT(a_dir),
+                            CHF_CONST_REALVECT(m_dx),
+                            CHF_FRA(a_xi));
+}
+
+
+void
+MagBlockCoordSys::getEdgeCenteredMappedCoords( const int a_dir,
+                                               FArrayBox&  a_xi ) const
+{
+  FORT_GET_EC_MAPPED_COORDS(CHF_BOX(a_xi.box()),
                             CHF_CONST_INT(a_dir),
                             CHF_CONST_REALVECT(m_dx),
                             CHF_FRA(a_xi));
@@ -939,6 +985,27 @@ MagBlockCoordSys::getFaceCenteredRealCoords( const int a_dir, FArrayBox& a_x ) c
    const Box& box( a_x.box() );
    FArrayBox xi_array( box, SpaceDim );
    getFaceCenteredMappedCoords( a_dir, xi_array );
+
+   for (BoxIterator bit( box ); bit.ok(); ++bit) {
+      IntVect iv( bit() );
+      RealVect xi;
+      for (int dir(0); dir<SpaceDim; ++dir) {
+         xi[dir] = xi_array( iv, dir );
+      }
+      RealVect real_loc( realCoord( xi ) );
+      for (int dir(0); dir<SpaceDim; ++dir) {
+         a_x( iv, dir ) = real_loc[dir];
+      }
+   }
+}
+
+
+void
+MagBlockCoordSys::getEdgeCenteredRealCoords( const int a_dir, FArrayBox& a_x ) const
+{
+   const Box& box( a_x.box() );
+   FArrayBox xi_array( box, SpaceDim );
+   getEdgeCenteredMappedCoords( a_dir, xi_array );
 
    for (BoxIterator bit( box ); bit.ok(); ++bit) {
       IntVect iv( bit() );

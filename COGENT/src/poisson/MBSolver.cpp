@@ -238,8 +238,9 @@ void
 MBSolver::getUnstructuredCouplings( int                                 a_radius,
                                     LayoutData< BaseFab<IntVectSet> >&  a_unstructured_couplings ) const
 {
-   if ( m_coord_sys_ptr->numBlocks() > 1 ) {
-  
+
+  if ( m_coord_sys_ptr->numBlocks() > 1 || ((MagGeom&)m_geometry).shearedMBGeom()) {
+
       LayoutData< Vector< BaseFab<IntVectSet>* > > all_couplings;
 
       const LayoutData< IntVectSet >& ghostCells = m_mblex_potential_Ptr->ghostCells();

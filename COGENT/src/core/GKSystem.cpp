@@ -390,15 +390,7 @@ GKSystem::getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids 
     for (int n=0; n<boxes.size(); n++) {
       bounding_box = minBox(bounding_box, boxes[n]);
     }
-#if CFG_DIM==3
-    bool is_periodic[CFG_DIM];
-    is_periodic[RADIAL_DIR] = false;
-    is_periodic[TOROIDAL_DIR] = true;
-    is_periodic[POLOIDAL_DIR] = false;
-    prob_domain = CFG::ProblemDomain(bounding_box, is_periodic);
-#else
     prob_domain = CFG::ProblemDomain(bounding_box);
-#endif
   }
 
   else {
@@ -1389,6 +1381,8 @@ void GKSystem::writeCheckpointFile( HDF5Handle&  a_handle,
                                     const double a_cur_time,
                                     const double a_cur_dt )
 {
+  CH_TIME("GKSystem::writeCheckpointFile");
+
    pout() << "writing checkpoint file" << endl;
 
    MPI_Barrier(MPI_COMM_WORLD);

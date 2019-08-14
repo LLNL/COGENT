@@ -10,6 +10,7 @@
 #include "PhaseGrid.H"
 #include "BlockRegister.H"
 #include "SpaceUtils.H"
+#include "EdgeDataBox.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -81,8 +82,7 @@ public:
    void updateVelocities( const LevelData<FluxBox>& Efield,
                           LevelData<FluxBox>&       velocity,
                           const int                 option,
-                          const bool                gyrokinetic, 
-                          const bool                apply_axisymmetric_correction = false) const;
+                          const bool                gyrokinetic) const;
 
    void computeGKVelocities( const LevelData<FluxBox>& Efield,
                              LevelData<FluxBox>&       velocity_grown,
@@ -374,7 +374,7 @@ public:
 
    void getCellVolumes( LevelData<FArrayBox>& volume ) const;
 
-   void fillInternalGhosts( LevelData<FArrayBox>& a_data, int a_maxdim = SpaceDim ) const;
+   void fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt = false ) const;
    
    void exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const;
 
@@ -421,10 +421,14 @@ public:
 
    void injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>& src,
                                     LevelData<FluxBox>&                 dst ) const;
+   
+   void injectConfigurationToPhase( const CFG::LevelData<CFG::EdgeDataBox>& src,
+                                    LevelData<EdgeDataBox>&                 dst ) const;
 
    void injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>&   src,
                                     const CFG::LevelData<CFG::FArrayBox>& src_cell,
-                                    LevelData<FluxBox>&                   dst ) const;
+                                    LevelData<FluxBox>&                   dst,
+                                    const bool&                           a_perform_exchange = true) const;
 
    void injectConfigurationToPhase( const CFG::FArrayBox& src,
                                     FArrayBox&            dst ) const;
@@ -591,7 +595,7 @@ public:
 
    void plotVParPoloidalData(const string                file_name,
                              const int                   radial_index,
-                             const int                   toroidal_index,
+                             const int                   toroidal_sector,
                              const int                   mu_index,
                              const LevelData<FArrayBox>& data,
                              const double&               time) const;
@@ -714,6 +718,8 @@ private:
 
    ProblemDomain m_domain;
 
+   DisjointBoxLayout m_vpmu_flattened_dbl;
+   
    LevelData<FluxBox> *   m_configuration_metrics;
    LevelData<FluxBox> *   m_configuration_metrics_pointwise;
    LevelData<FArrayBox> * m_configuration_poloidal_J;
@@ -748,6 +754,9 @@ private:
    LevelData<FArrayBox> m_BStarParallel;
    LevelData<FArrayBox> m_BStarParallel_cell_averaged;
 
+   mutable LevelData<FluxBox> m_tanGradF;
+   mutable LevelData<FluxBox> m_dotTanGrads;
+
    MultiBlockLevelExchangeAverage* m_mblexPtr;
    BlockRegister* m_exchange_transverse_block_register;
 
@@ -765,17 +774,20 @@ private:
    double m_charge_state;
    
 #if CFG_DIM == 3
-   
    void getShearedGhostBoxLayout();
    void interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const;
    
    BoxLayout m_shearedGhostBLLoEnd;
    BoxLayout m_shearedGhostBLHiEnd;
-
 #endif   
    LevelData<FArrayBox> * m_sheared_remapped_index;
    LevelData<FArrayBox> * m_sheared_interp_stencil;
-   
+   LevelData<FArrayBox> * m_sheared_interp_stencil_offsets;
+
+   Copier m_exchangeCopier;
+   int m_exchange_ghosts;
+   bool m_optimized_copier;
+  
    mutable GyroaverageOperator const *m_gyroavg_op;
    bool m_is_gyrokinetic;
 

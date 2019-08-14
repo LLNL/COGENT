@@ -9,7 +9,7 @@ const std::string SNCoreCoordSys::pp_name = "sncore";
 
 SNCoreCoordSys::SNCoreCoordSys( ParmParse& a_pp_grid,
                                 ParmParse& a_pp_geom )
-   : m_num_toroidal_blocks(1)
+   : m_num_toroidal_sectors(1)
 {
    readGridParams( a_pp_grid );
 
@@ -30,7 +30,7 @@ SNCoreCoordSys::SNCoreCoordSys( ParmParse&                a_pp_geom,
                                 const SingleNullCoordSys& a_single_null_coord_sys,
                                 const DisjointBoxLayout&  a_single_null_dbl,
                                 DisjointBoxLayout&        a_dbl )
-   : m_num_toroidal_blocks(1)
+   : m_num_toroidal_sectors(1)
 {
    m_numcells_core_radial    = a_single_null_coord_sys.numCellsCoreRadial();
    m_numcells_mcore_poloidal = a_single_null_coord_sys.numCellsMcorePoloidal();
@@ -116,7 +116,7 @@ SNCoreCoordSys::define( ParmParse& a_pp_geom )
 {
    m_num_poloidal_blocks = m_original_two_blocks? 2: SNCoreBlockCoordSys::NUM_SNCORE_BLOCKS;
 
-   int num_blocks = m_num_poloidal_blocks * m_num_toroidal_blocks;
+   int num_blocks = m_num_poloidal_blocks * m_num_toroidal_sectors;
 
    Vector<Box> domain_boxes(num_blocks);
    for ( int block_number=0; block_number<num_blocks; ++block_number ) {
@@ -155,20 +155,21 @@ SNCoreCoordSys::define( ParmParse& a_pp_geom )
    }
 
 #if CFG_DIM==3
-   is_periodic[TOROIDAL_DIR] = true;
    dx[TOROIDAL_DIR] = m_toroidal_width / (double)m_numcells_toroidal;
 #endif
 
-   for ( int block_number=0, toroidal_index=0; toroidal_index<m_num_toroidal_blocks; ++toroidal_index ) {
-      for ( int poloidal_index=0; poloidal_index<m_num_poloidal_blocks; ++poloidal_index, ++block_number ) {
+   for ( int block_number=0, toroidal_sector=0; toroidal_sector<m_num_toroidal_sectors; ++toroidal_sector ) {
+      for ( int poloidal_block=0; poloidal_block<m_num_poloidal_blocks; ++poloidal_block, ++block_number ) {
          if (!m_model_geometry) {
             SNCoreBlockCoordSys* geom
-               = new SNCoreBlockCoordSys( a_pp_geom, ProblemDomain(domain_boxes[block_number], is_periodic), dx, block_number, 0 );
+               = new SNCoreBlockCoordSys( a_pp_geom, ProblemDomain(domain_boxes[block_number], is_periodic),
+                                          dx, poloidal_block, toroidal_sector, TOROIDAL_BLOCK_SEP  );
             geom->readFiles(a_pp_geom);
             m_coord_vec.push_back(geom);
          }
          else {
-            MagBlockCoordSys* geom = new SNCoreBlockCoordSysModel( a_pp_geom, ProblemDomain(domain_boxes[block_number], is_periodic), dx, block_number, 0 );
+            MagBlockCoordSys* geom = new SNCoreBlockCoordSysModel( a_pp_geom, ProblemDomain(domain_boxes[block_number], is_periodic),
+                                                                   dx, poloidal_block, toroidal_sector, TOROIDAL_BLOCK_SEP);
             m_coord_vec.push_back(geom);
          }
       }
@@ -222,8 +223,8 @@ SNCoreCoordSys::defineBoundaries2()
 
    int bc_tag = 0;
 
-   for ( int block_number=0, toroidal_index=0; toroidal_index<m_num_toroidal_blocks; ++toroidal_index ) {
-      for ( int poloidal_index=0; poloidal_index<m_num_poloidal_blocks; ++poloidal_index, ++block_number ) {
+   for ( int block_number=0, toroidal_sector=0; toroidal_sector<m_num_toroidal_sectors; ++toroidal_sector ) {
+      for ( int poloidal_block=0; poloidal_block<m_num_poloidal_blocks; ++poloidal_block, ++block_number ) {
 
          IndicesTransformation it;
          IntVect shift;
@@ -232,11 +233,11 @@ SNCoreCoordSys::defineBoundaries2()
          int block_type;
          if (m_model_geometry) {
             const SNCoreBlockCoordSysModel* coord_sys = (const SNCoreBlockCoordSysModel*)m_coordSysVect[block_number];
-            block_type = coord_sys->poloidalIndex();
+            block_type = coord_sys->poloidalBlock();
          }
          else {
             const SNCoreBlockCoordSysModel* coord_sys = (const SNCoreBlockCoordSysModel*)m_coordSysVect[block_number];
-            block_type = coord_sys->poloidalIndex();
+            block_type = coord_sys->poloidalBlock();
          }
 
          if( block_type == SNCoreBlockCoordSys::LCORE ) {
@@ -289,8 +290,8 @@ SNCoreCoordSys::defineBoundaries3()
 
    int bc_tag = 0;
 
-   for ( int block_number=0, toroidal_index=0; toroidal_index<m_num_toroidal_blocks; ++toroidal_index ) {
-      for ( int poloidal_index=0; poloidal_index<m_num_poloidal_blocks; ++poloidal_index, ++block_number ) {
+   for ( int block_number=0, toroidal_sector=0; toroidal_sector<m_num_toroidal_sectors; ++toroidal_sector ) {
+      for ( int poloidal_block=0; poloidal_block<m_num_poloidal_blocks; ++poloidal_block, ++block_number ) {
 
          IndicesTransformation it;
          IntVect shift;
@@ -299,11 +300,11 @@ SNCoreCoordSys::defineBoundaries3()
          int block_type;
          if (m_model_geometry) {
             const SNCoreBlockCoordSysModel* coord_sys = (const SNCoreBlockCoordSysModel*)m_coordSysVect[block_number];
-            block_type = coord_sys->poloidalIndex();
+            block_type = coord_sys->poloidalBlock();
          }
          else {
             const SNCoreBlockCoordSysModel* coord_sys = (const SNCoreBlockCoordSysModel*)m_coordSysVect[block_number];
-            block_type = coord_sys->poloidalIndex();
+            block_type = coord_sys->poloidalBlock();
          }
 
          if( block_type == SNCoreBlockCoordSys::MCORE ) {
@@ -947,7 +948,7 @@ SNCoreCoordSys::lo_mapped_index( int a_block_number ) const
    }
 
 #if CFG_DIM==3
-   int num_block_toroidal_cells = m_numcells_toroidal / m_num_toroidal_blocks;
+   int num_block_toroidal_cells = m_numcells_toroidal / m_num_toroidal_sectors;
   
    index[TOROIDAL_DIR] = toroidalBlockNumber(a_block_number) * (num_block_toroidal_cells + TOROIDAL_BLOCK_SEP);
 #endif
@@ -1006,7 +1007,7 @@ SNCoreCoordSys::hi_mapped_index( int a_block_number ) const
    }
 
 #if CFG_DIM==3
-   int num_block_toroidal_cells = m_numcells_toroidal / m_num_toroidal_blocks;
+   int num_block_toroidal_cells = m_numcells_toroidal / m_num_toroidal_sectors;
   
    index[TOROIDAL_DIR] = toroidalBlockNumber(a_block_number) * (num_block_toroidal_cells + TOROIDAL_BLOCK_SEP)
                          + num_block_toroidal_cells - 1;
@@ -1063,7 +1064,7 @@ SNCoreCoordSys::readGridParams( ParmParse& a_pp )
       // poloidal direction so that it can be located symmetrically about
       // zero in index space.  This assumption can be removed if needed.
       if ( m_numcells_mcore_poloidal%2 != 0 ) {
-         MayDay::Error("Number of mcore cells in poloidal direction must be even");
+         MayDay::Error("SNCoreCoordSys::readGridParams(): Number of mcore cells in poloidal direction must be even");
       }
 
       a_pp.queryarr( "decomp.mcore.configuration", decomp_mcore, 0, SpaceDim );
@@ -1080,7 +1081,7 @@ SNCoreCoordSys::readGridParams( ParmParse& a_pp )
 
       m_numcells_core_radial = numcells_core[RADIAL_DIR];
       if ( numcells_core[POLOIDAL_DIR]%2 != 0 ) {
-         MayDay::Error("Number of core cells in poloidal direction must be even");
+         MayDay::Error("SNCoreCoordSys::readGridParams(): Number of core cells in poloidal direction must be even");
       }
       else {
          m_numcells_lcore_poloidal = numcells_core[POLOIDAL_DIR]/2;
@@ -1112,7 +1113,7 @@ SNCoreCoordSys::readGridParams( ParmParse& a_pp )
          decomp_rcore[dir] = decomp_core[dir];
       }
       if ( decomp_core[POLOIDAL_DIR]%2 != 0 ) {
-         MayDay::Error("Core decomposition in poloidal direction must be even");
+         MayDay::Error("SNCoreCoordSys::readGridParams(): Core decomposition in poloidal direction must be even");
       }
       else {
          decomp_lcore[POLOIDAL_DIR] /= 2;
@@ -1151,26 +1152,47 @@ SNCoreCoordSys::readGridParams( ParmParse& a_pp )
 
    if ( !m_original_two_blocks ) {
       if ( m_numcells_core_radial % decomp_mcore[RADIAL_DIR] != 0 ) {
-         MayDay::Error("Radial decomposition does not divide number of cells in MCORE");
+         MayDay::Error("SNCoreCoordSys::readGridParams(): Radial decomposition does not divide number of cells in MCORE");
       }
       if ( m_numcells_mcore_poloidal % decomp_mcore[POLOIDAL_DIR] != 0 ) {
-         MayDay::Error("Poloidal decomposition does not divide number of cells in MCORE");
+         MayDay::Error("SNCoreCoordSys::readGridParams(): Poloidal decomposition does not divide number of cells in MCORE");
       }
    }
 
    if ( m_numcells_core_radial % decomp_lcore[RADIAL_DIR] != 0 ) {
-      MayDay::Error("Radial decomposition does not divide number of cells in LCORE");
+      MayDay::Error("SNCoreCoordSys::readGridParams(): Radial decomposition does not divide number of cells in LCORE");
    }
    if ( m_numcells_lcore_poloidal % decomp_lcore[POLOIDAL_DIR] != 0 ) {
-      MayDay::Error("Poloidal decomposition does not divide number of cells in LCORE");
+      MayDay::Error("SNCoreCoordSys::readGridParams(): Poloidal decomposition does not divide number of cells in LCORE");
    }
 
    if ( m_numcells_core_radial % decomp_rcore[RADIAL_DIR] != 0 ) {
-      MayDay::Error("Radial decomposition does not divide number of cells in RCORE");
+      MayDay::Error("SNCoreCoordSys::readGridParams(): Radial decomposition does not divide number of cells in RCORE");
    }
    if ( m_numcells_rcore_poloidal % decomp_rcore[POLOIDAL_DIR] != 0 ) {
-      MayDay::Error("Poloidal decomposition does not divide number of cells in RCORE");
+      MayDay::Error("SNCoreCoordSys::readGridParams(): Poloidal decomposition does not divide number of cells in RCORE");
    }
+
+#if CFG_DIM==3
+   if ( decomp_mcore[TOROIDAL_DIR] % m_num_toroidal_sectors != 0 ) {
+      MayDay::Error("SNCoreCoordSys::readGridParams(): Toroidal decomposition is not a multiple of the number of toroidal sectors in MCORE");
+   }
+   else {
+      decomp_mcore[TOROIDAL_DIR] /= m_num_toroidal_sectors;
+   }
+   if ( decomp_lcore[TOROIDAL_DIR] % m_num_toroidal_sectors != 0 ) {
+      MayDay::Error("SNCoreCoordSys::readGridParams(): Toroidal decomposition is not a multiple of the number of toroidal sectors in LCORE");
+   }
+   else {
+      decomp_lcore[TOROIDAL_DIR] /= m_num_toroidal_sectors;
+   }
+   if ( decomp_rcore[TOROIDAL_DIR] % m_num_toroidal_sectors != 0 ) {
+      MayDay::Error("SNCoreCoordSys::readGridParams(): Toroidal decomposition is not a multiple of the number of toroidal sectors in RCORE");
+   }
+   else {
+      decomp_rcore[TOROIDAL_DIR] /= m_num_toroidal_sectors;
+   }
+#endif
 
    for (int dir=0; dir<SpaceDim; ++dir) {
       m_decomp_mcore[dir] = decomp_mcore[dir];
@@ -1181,11 +1203,13 @@ SNCoreCoordSys::readGridParams( ParmParse& a_pp )
 
 #if CFG_DIM == 3
 void
-SNCoreCoordSys::toroidalBlockRemapping(IntVect& a_ivDst,
-                                       Vector<Real>& a_interpStecil,
-                                       const RealVect& a_xiSrc,
-                                       const int a_nSrc,
-                                       const Side::LoHiSide& a_side) const
+SNCoreCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
+                                        int&                   a_nDst,
+                                        Vector<Real>&          a_interpStecil,
+                                        Vector<int>&           a_interpStecilOffsets,
+                                        const RealVect&        a_xiSrc,
+                                        const int              a_nSrc,
+                                        const Side::LoHiSide&  a_side ) const
 {
    MayDay::Error("SNCoreCoordSys::toroidalBlockRemapping is not implemented!!!");
 }

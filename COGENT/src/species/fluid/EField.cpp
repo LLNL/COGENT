@@ -148,8 +148,52 @@ void EField::computeEField( const PS::GKState&                a_state,
          E_field_face[dit].setVal(0.);
       }
    }
+   
+   // Compute injected E-field
+   computeInjectedField(m_injected_E_field, a_kinetic_species, E_field_face, E_field_cell);
 }
 
+
+void EField::computeInjectedField(PS::LevelData<PS::FluxBox>& a_injected_E_field,
+				  const PS::KineticSpeciesPtrVect& a_kinetic_species,
+				  const LevelData<FluxBox>& a_E_field_face,
+				  const LevelData<FArrayBox>& a_E_field_cell)
+{
+  if (a_kinetic_species.size() > 0 ) {
+      const PS::PhaseGeom& phaseGeom( a_kinetic_species[0]->phaseSpaceGeometry() );
+
+      phaseGeom.injectConfigurationToPhase(a_E_field_face,
+                                              a_E_field_cell,
+                                              a_injected_E_field);
+      
+#if 0
+      //Use this code after we figure out the metrics exchange 
+      if (!phaseGeom.secondOrder()) {
+         phaseGeom.injectConfigurationToPhase(a_E_field_face,
+                                              a_E_field_cell,
+                                              a_injected_E_field);
+      }
+      else {
+         //Strip ghost since they are not needed for 2nd order
+	 //Work with assertions in field calculations later 
+         const MagGeom& mag_geom = configurationSpaceGeometry();
+         const DisjointBoxLayout& grids = mag_geom.gridsFull();
+         LevelData<FArrayBox> E_cell_tmp(grids, 3, IntVect::Zero);
+         LevelData<FluxBox> E_face_tmp(grids, 3, IntVect::Zero);
+         for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
+            E_cell_tmp[dit].copy(a_E_field_cell[dit]);
+            E_face_tmp[dit].copy(a_E_field_face[dit]);
+         }
+
+         phaseGeom.injectConfigurationToPhase(E_face_tmp,
+                                              E_cell_tmp,
+                                              a_injected_E_field,
+                                              false );
+
+      }
+#endif
+   }
+}
 
 void EField::setCoreBC( const double   a_core_inner_bv,
                         const double   a_core_outer_bv,
@@ -353,6 +397,8 @@ void
 EField::applyHarmonicFiltering(LevelData<FArrayBox>& a_phi,
                                const int& a_dir) const
 {
+  CH_TIME("EField::applyHarmonicFiltering");
+  
    Real pi = Constants::PI;
    const DisjointBoxLayout& grids = a_phi.getBoxes();
    

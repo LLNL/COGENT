@@ -63,8 +63,8 @@ PhaseGeom::PhaseGeom( ParmParse&                              a_parm_parse,
                       int                                     a_ghosts,
                       double                                  a_larmor_number )
    : MultiBlockLevelGeom(a_coord_sys, a_grids->disjointBoxLayout(), a_ghosts, Interval(CFG_DIM,SpaceDim-1), Vector<int>(VEL_DIM,0)),
-     m_ghostVect(4*IntVect::Unit),
-     //m_ghostVect(2*IntVect::Unit), // JRA
+     //m_ghostVect(4*IntVect::Unit),
+     m_ghostVect(a_ghosts*IntVect::Unit),
      m_mag_geom(a_mag_geom),
      m_vel_coords(a_vel_coords),
      m_phase_coords(a_coord_sys),
@@ -126,6 +126,20 @@ PhaseGeom::PhaseGeom( ParmParse&                              a_parm_parse,
       m_second_order = false;
    }
 
+   if (psm.contains("optimized_copier")) {
+      psm.get("optimized_copier", m_optimized_copier);
+   }
+   else {
+      m_optimized_copier = false;
+   }
+   
+   if (psm.contains("exchange_ghosts")) {
+      psm.get("exchange_ghosts", m_exchange_ghosts);
+   }
+   else {
+      m_exchange_ghosts = 2;
+   }
+   
    define();
 }
 
@@ -145,6 +159,7 @@ PhaseGeom::PhaseGeom( const PhaseGeom&                        a_phase_geom,
      m_phase_coords(a_coord_sys),
      m_phase_grid(a_phase_geom.m_phase_grid),
      m_domain(a_phase_geom.m_domain),
+     m_vpmu_flattened_dbl(a_phase_geom.m_vpmu_flattened_dbl),
      m_configuration_metrics(a_phase_geom.m_configuration_metrics),
      m_configuration_metrics_pointwise(a_phase_geom.m_configuration_metrics_pointwise),
      m_configuration_poloidal_J(a_phase_geom.m_configuration_poloidal_J),
@@ -176,8 +191,13 @@ PhaseGeom::PhaseGeom( const PhaseGeom&                        a_phase_geom,
      m_larmor_number(a_phase_geom.m_larmor_number),
      m_sheared_remapped_index(a_phase_geom.m_sheared_remapped_index),
      m_sheared_interp_stencil(a_phase_geom.m_sheared_interp_stencil),
+     m_sheared_interp_stencil_offsets(a_phase_geom.m_sheared_interp_stencil_offsets),
+     m_optimized_copier(a_phase_geom.m_optimized_copier),
+     m_exchangeCopier(a_phase_geom.m_exchangeCopier),
+     m_exchange_ghosts(a_phase_geom.m_exchange_ghosts),
      m_gyroavg_op(NULL),
      m_is_gyrokinetic(a_is_gyrokinetic)
+
 {
    defineSpeciesState(a_mass, a_charge);
 }
@@ -197,6 +217,15 @@ PhaseGeom::define()
    CFG::IntVect cfg_ghostVect(config_restrict(m_ghostVect));
    VEL::IntVect vel_ghostVect(vel_restrict(m_ghostVect));
 
+   /*
+    Create injected phase space dbl by flattening phase space grid
+    in the mu and vpar direction (we save injected dbl for speed)
+    */
+   
+   DisjointBoxLayout mu_flattened_dbl;
+   adjCellLo(mu_flattened_dbl, m_gridsFull, MU_DIR, -1);
+   adjCellLo(m_vpmu_flattened_dbl, mu_flattened_dbl, VPARALLEL_DIR, -1);
+   
    /*
     *  Get the configuration space data and inject into phase space
     */
@@ -328,6 +357,13 @@ PhaseGeom::define()
       m_mblexPtr = NULL;
       m_exchange_transverse_block_register = NULL;
    }
+
+   // Set trim copier that omits corner exchanges
+   if (m_second_order) {
+      IntVect ghostVect = m_exchange_ghosts * IntVect::Unit;
+      m_exchangeCopier.define(m_gridsFull, m_gridsFull, ghostVect, true);
+      m_exchangeCopier.trimEdges(m_gridsFull, ghostVect);
+   }
 }
 
 
@@ -402,6 +438,7 @@ PhaseGeom::defineSpeciesState( double a_mass,
 
    m_sheared_remapped_index = NULL;
    m_sheared_interp_stencil = NULL;
+   m_sheared_interp_stencil_offsets = NULL;
 
 #if CFG_DIM ==3
    if (m_mag_geom->shearedMBGeom()) {
@@ -412,6 +449,10 @@ PhaseGeom::defineSpeciesState( double a_mass,
       m_sheared_interp_stencil = new LevelData<FArrayBox>;
       const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedInterpStencil = m_mag_geom->getShearedInterpStencil();
       injectConfigurationToPhase(cfg_ShearedInterpStencil, *m_sheared_interp_stencil);
+
+      m_sheared_interp_stencil_offsets = new LevelData<FArrayBox>;
+      const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedInterpStencilOffsets = m_mag_geom->getShearedInterpStencilOffsets();
+      injectConfigurationToPhase(cfg_ShearedInterpStencilOffsets, *m_sheared_interp_stencil_offsets);
 
       getShearedGhostBoxLayout();
    }
@@ -431,6 +472,7 @@ PhaseGeom::~PhaseGeom()
 
       if (m_sheared_remapped_index) delete m_sheared_remapped_index;
       if (m_sheared_interp_stencil) delete m_sheared_interp_stencil;
+      if (m_sheared_interp_stencil_offsets) delete m_sheared_interp_stencil_offsets;
 
       m_speciesDefined = false;
    }
@@ -465,14 +507,17 @@ void
 PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
                              LevelData<FluxBox>&       a_velocity,
                              const int                 a_option,
-                             const bool                a_gyrokinetic,
-                             const bool                a_apply_axisymmetric_correction ) const
+                             const bool                a_gyrokinetic ) const
 {
-   // This function expects a_Efield to contain the face-centered field including
-   // one layer of transverse cell faces on all block boundaries.
-   CH_assert(a_velocity.ghostVect() == IntVect::Unit);
-   CH_assert(config_restrict(a_Efield.ghostVect()) == CFG::IntVect::Unit);
-   CH_assert(vel_restrict(a_Efield.ghostVect()) == VEL::IntVect::Zero);
+   CH_TIME("PhaseGeom::updateVelocities");
+
+   if ( !m_second_order ) {
+      // This function expects a_Efield to contain the face-centered field including
+      // one layer of transverse cell faces on all block boundaries.
+      CH_assert(a_velocity.ghostVect() == IntVect::Unit);
+      CH_assert(config_restrict(a_Efield.ghostVect()) == CFG::IntVect::Unit);
+      CH_assert(vel_restrict(a_Efield.ghostVect()) == VEL::IntVect::Zero);
+   }
 
    if (m_velocity_type == "gyrokinetic" || m_velocity_type == "ExB") {
       computeGKVelocities(a_Efield, a_velocity, a_gyrokinetic, a_option);
@@ -481,21 +526,6 @@ PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
       computeTestVelocities(a_velocity);
    }
 
-   //Corrects for the extra R factor added to the metric coefficients (e.g., cellVoll)
-   //for the purposes of 4h order. The model ("analytic") geometry does
-   //not have that extra factor.
-   if ( a_apply_axisymmetric_correction) {
-      applyAxisymmetricCorrection(a_velocity);
-   }
-
-   if ( !m_second_order ) {
-
-      // Convert face-centered values to face averages on valid cell faces.
-      // The values on ghost cell faces remain second-order.
-      fourthOrderAverage(a_velocity);
-   }
-
-   a_velocity.exchange();
 }
 
 
@@ -506,6 +536,8 @@ PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
                                 const bool                a_gyrokinetic,
                                 const int                 a_option ) const
 {
+   CH_TIME("PhaseGeom::computeGKVelocities");
+
    const CFG::IntVect& velocity_cfg_ghosts = config_restrict(a_velocity.ghostVect());
    CH_assert(config_restrict(a_Efield.ghostVect()) >= velocity_cfg_ghosts);
    CH_assert(config_restrict(m_BFace->ghostVect()) >= velocity_cfg_ghosts);
@@ -530,7 +562,7 @@ PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
       RealVect dx = block_coord_sys.dx();
-      
+
       //use field alignment presently turns off parallel streaming and EXB drift on radial faces (assumes no Epol!!!)
       const CFG::MagBlockCoordSys& mag_block_coord_sys = getMagBlockCoordSys(grids[dit]);
       int use_field_alignment = mag_block_coord_sys.isFieldAligned()? 1: 0;
@@ -766,7 +798,7 @@ PhaseGeom::updateMappedVelocities( const LevelData<FluxBox>& a_Efield,
    // N.B.: this is only second-order
 
    CH_START(t_update_velocities);
-   updateVelocities(a_Efield, a_velocity, FULL_VELOCITY, false, false);
+   updateVelocities(a_Efield, a_velocity, FULL_VELOCITY, false);
    CH_STOP(t_update_velocities);
 
    CH_START(t_mult_n_transpose);
@@ -1082,6 +1114,8 @@ PhaseGeom::computeMetricTermProductAverage( LevelData<FluxBox>&       a_Product,
                                             const LevelData<FluxBox>& a_F,
                                             bool                      a_fourthOrder ) const
 {
+   CH_TIME("PhaseGeom::computeMetricTermProductAverage");
+
    CH_assert( !a_fourthOrder || a_F.ghostVect() >= IntVect::Unit );
 
    // Determine whether only face normals are being computed
@@ -1107,17 +1141,19 @@ PhaseGeom::computeMetricTermProductAverage( LevelData<FluxBox>&       a_Product,
    int nGradFTerms_vel = VEL_DIM*VEL_DIM*(VEL_DIM-1);
    int nGradFTerms = Max(nGradFTerms_cfg,nGradFTerms_vel);
 
-   LevelData<FluxBox> tanGradF(grids,
-                               nGradFTerms,
-                               grownGhost2);
+   if ( !m_tanGradF.isDefined() || (grownGhost2 != m_tanGradF.ghostVect()) ) {
+      m_tanGradF.define(grids, nGradFTerms, grownGhost2);
+   }
 
-   LevelData<FluxBox> dotTanGrads(a_Product.getBoxes(),
-                                  a_Product.nComp(),
-                                  grownGhost2);
-
+   if ( !m_dotTanGrads.isDefined()
+       ||(grownGhost2 != m_dotTanGrads.ghostVect())
+       ||(a_Product.nComp() != m_dotTanGrads.nComp()) ) {
+      m_dotTanGrads.define(a_Product.getBoxes(), a_Product.nComp(), grownGhost2);
+   }
+   
    if (a_fourthOrder) {
       // compute tangential gradients of F
-      computeTangentialGradSpecial(tanGradF, a_F);
+      computeTangentialGradSpecial(m_tanGradF, a_F);
    }
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -1134,8 +1170,8 @@ PhaseGeom::computeMetricTermProductAverage( LevelData<FluxBox>&       a_Product,
       const FluxBox& thisGradN_cfg = (*m_configuration_tangrad_metrics)[dit];
       const FluxBox& thisGradN_vel = (*m_velocity_tangrad_metrics)[dit];
 
-      FluxBox& thisGradF = tanGradF[dit];
-      FluxBox& thisDotGrad = dotTanGrads[dit];
+      FluxBox& thisGradF = m_tanGradF[dit];
+      FluxBox& thisDotGrad = m_dotTanGrads[dit];
 
       for (int dir=0; dir<SpaceDim; dir++) {
          bool configuration_dir = dir < CFG_DIM;
@@ -1353,6 +1389,8 @@ PhaseGeom::mappedGridDivergence(LevelData<FArrayBox>&     a_divF,
                                 const LevelData<FluxBox>& a_F,
                                 const bool                a_omit_NT) const
 {
+   CH_TIME("PhaseGeom::mappedGridDivergence");
+
    // We only need enough ghost cells to compute the divergence,
    // even though the input flux may have more.
    CH_assert(a_F.ghostVect() >= a_divF.ghostVect());
@@ -2019,15 +2057,33 @@ void PhaseGeom::zeroBoundaryFlux( const int           a_dir,
 
 
 void
-PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, int a_maxdim ) const
+PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt ) const
 {
    CH_TIMERS("PhaseGeom::fillInternalGhosts");
    CH_TIMER("exchangeExtraBlockGhosts", t_exchange_extrablock_ghosts);
+   CH_TIMER("exchange_ghosts", t_exchange_ghosts);
 
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
    const IntVect& nghost = a_data.ghostVect();
 
-   a_data.exchange();
+   CH_START(t_exchange_ghosts);
+
+   if (m_optimized_copier) {
+      if (!m_second_order || !a_opt) {
+         a_data.exchange();
+      }
+      else {
+         if (a_data.ghostVect() != m_exchange_ghosts * IntVect::Unit) {
+            MayDay::Error("PhaseGeom::fillInternalGhosts: ghosts of  exchangeCopier and dfn should agree! Need to set exchange_ghost");
+         }
+         a_data.exchange(m_exchangeCopier);
+      }
+   }
+   else {
+      a_data.exchange();
+   }
+   
+   CH_STOP(t_exchange_ghosts);
 
    if (m_mblexPtr && !(m_mag_geom->extrablockExchange()) && !m_mag_geom->shearedMBGeom()) {
       if (nghost < m_ghostVect) {
@@ -2063,6 +2119,13 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, int a_maxdim ) cons
       exchangeExtraBlockGhosts(a_data);
       CH_STOP(t_exchange_extrablock_ghosts);
       a_data.exchange();
+
+#if CFG_DIM==3
+      if ( a_data.ghostVect()[TOROIDAL_DIR] > 0 && m_mag_geom->shearedMBGeom() ) {
+         interpolateFromShearedGhosts(a_data);
+         a_data.exchange();
+      }
+#endif
    }
 
 #if CFG_DIM == 3
@@ -2070,12 +2133,12 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, int a_maxdim ) cons
      if (a_data.ghostVect()[TOROIDAL_DIR] > 0) {
        interpolateFromShearedGhosts(a_data);
      }
-      a_data.exchange();
-
       //NB: we will need to add some code below
       //to handle corner ghosts,for high-order calculations
+      if (!m_second_order) a_data.exchange();
    }
 #endif
+
    return;
 }
 
@@ -2096,7 +2159,6 @@ PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
      if (ghost_vect[dir] > max_ghost) max_ghost = ghost_vect[dir];
    }
 
-
    if ( m_coordSysPtr->numBlocks() > 1 && max_ghost > 0) {
       
       const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
@@ -2106,13 +2168,14 @@ PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
       BlockRegister blockRegister(m_phase_coords, grids, max_ghost);
       
       for (DataIterator dit(grids); dit.ok(); ++dit) {
-         for (int dir = 0; dir < SpaceDim; dir++) {
+         for (int dir = 0; dir < CFG_DIM; dir++) {
             IntVect grow_vect = ghost_vect;
             grow_vect[dir] = 0;
             int nghost = ghost_vect[dir];
             for (SideIterator sit; sit.ok(); ++sit) {
                Side::LoHiSide side = sit();
                if (blockRegister.hasInterface(dit(), dir, side)) {
+#if 1 
                   Box fill_box = adjCellBox(grids[dit], dir, side, 1);
                   fill_box.grow(grow_vect);
                   FArrayBox temp(fill_box, ncomp*nghost);
@@ -2122,6 +2185,14 @@ PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
                   }
                   temp.shiftHalf(dir, (2*nghost-1)*sign(side));
                   blockRegister.storeAux(temp, dit(), dir, side);
+#else
+                  Box fill_box = adjCellBox(grids[dit], dir, side, -nghost);
+                  fill_box.grow(grow_vect);
+                  FArrayBox temp(fill_box, ncomp);
+                  temp.copy(a_data[dit],0,0,ncomp);
+                  temp.shiftHalf(dir, sign(side));
+                  blockRegister.storeAux(temp, dit(), dir, side);
+#endif
                }
             }
          }
@@ -2129,13 +2200,14 @@ PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
       blockRegister.close();
       
       for (DataIterator dit(grids); dit.ok(); ++dit) {
-         for (int dir = 0; dir < SpaceDim; dir++) {
+         for (int dir = 0; dir < CFG_DIM; dir++) {
             IntVect grow_vect = ghost_vect;
             grow_vect[dir] = 0;
             int nghost = ghost_vect[dir];
             for (SideIterator sit; sit.ok(); ++sit) {
                Side::LoHiSide side = sit();
                if (blockRegister.hasInterface(dit(), dir, side)) {
+#if 1
                   Box fill_box = adjCellBox(grids[dit], dir, side, -1);
                   fill_box.grow(grow_vect);
                   FArrayBox temp(fill_box, ncomp*nghost);
@@ -2147,6 +2219,16 @@ PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
                      temp.shift(dir, sign(side));
                      a_data[dit].copy(temp,n*ncomp,0,ncomp);
                   }
+#else
+                  Box fill_box = adjCellBox(grids[dit], dir, side, nghost);
+                  fill_box.grow(grow_vect);
+                  FArrayBox temp(fill_box, ncomp);
+                  temp.shiftHalf(dir, -sign(side));
+                  blockRegister.getAux(temp, dit(),
+                                       dir, side, side);
+                  temp.shiftHalf(dir, sign(side));
+                  a_data[dit].copy(temp,0,0,ncomp);
+#endif
                }
             } // iterate over dimensions
          } // iterate over sides
@@ -2159,7 +2241,6 @@ PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
 void
 PhaseGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
 {
-   
    int sheared_interp_order = m_mag_geom->shearedInterpOrder();
    
    int nComp = a_data.nComp();
@@ -2168,21 +2249,44 @@ PhaseGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
                        a_data.ghostVect()[TOROIDAL_DIR] : m_mag_geom->shearedGhosts();
    
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
-   
-   
+
    for (SideIterator sit; sit.ok(); ++sit) {
       Side::LoHiSide side = sit();
       
       BoxLayoutData<FArrayBox> ghosts;
       
+      Copier copier;
+      const ProblemDomain& domain = grids.physDomain();
+      
+      IntVect included_ghosts = IntVect::Zero;
+      if (m_mag_geom->extrablockExchange()) {
+         included_ghosts[POLOIDAL_DIR] = a_data.ghostVect()[POLOIDAL_DIR];
+      }
+
       //store ghosts
       if (side == Side::LoHiSide::Lo) {
          ghosts.define(m_shearedGhostBLLoEnd, nComp);
+
+         copier.define(m_shearedGhostBLLoEnd,
+                       grids,
+                       domain,
+                       included_ghosts,
+                       false,
+                       IntVect::Zero);
       }
       else {
          ghosts.define(m_shearedGhostBLHiEnd, nComp);
+
+         copier.define(m_shearedGhostBLHiEnd,
+                       grids,
+                       domain,
+                       included_ghosts,
+                       false,
+                       IntVect::Zero);
       }
-      a_data.copyTo(ghosts);
+      copier.reverse();
+
+      a_data.copyTo(ghosts, copier);
       
       //iterate over boxes, fill the ghosts at the block boundaries
       for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
@@ -2200,8 +2304,7 @@ PhaseGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
             
             Box bndryBox = adjCellBox(base_box, mb_dir, side, ghost_mb_dir);
             
-            BoxIterator bit(bndryBox);
-            for (bit.begin();bit.ok();++bit) {
+            for (BoxIterator bit(bndryBox);bit.ok();++bit) {
                const IntVect& iv = bit();
                
                const Box& injected_box = (*m_sheared_remapped_index)[dit].box();
@@ -2214,18 +2317,22 @@ PhaseGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
                for (int dir=0; dir<CFG_DIM; ++dir) {
                   iv_ghost[dir] = (*m_sheared_remapped_index)[dit](iv_inj,dir);
                }
-               
+
                //interpolate ghost data
                for (int comp=0; comp<nComp; ++comp) {
                   double ghost_val = 0.0;
                   for (int n=0; n<sheared_interp_order + 1; ++n) {
                      IntVect iv_tmp(iv_ghost);
-                     iv_tmp[POLOIDAL_DIR] += n - sheared_interp_order/2;
+		     if (!m_mag_geom->extrablockExchange()) {
+		       iv_tmp[POLOIDAL_DIR] += n - sheared_interp_order/2;
+		     }
+		     else {
+		       iv_tmp[POLOIDAL_DIR] += (int)(*m_sheared_interp_stencil_offsets)[dit](iv_inj,n);
+		     }
                      ghost_val += ghosts[dit](iv_tmp,comp) * (*m_sheared_interp_stencil)[dit](iv_inj,n);
                   }
                   
                   a_data[dit](iv,comp) = ghost_val;
-                  
                }
             }
          }
@@ -2288,8 +2395,8 @@ PhaseGeom::getShearedGhostBoxLayout()
             for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
                if ((grids[dit]).contains(base_box)) {
                   for (int dir=0; dir<CFG_DIM; ++dir) {
-                    iv_lo_loc[dir] = int((*m_sheared_remapped_index)[dit].min(bndryBox_reduced,dir));
-                    iv_hi_loc[dir] = int((*m_sheared_remapped_index)[dit].max(bndryBox_reduced,dir));
+                     iv_lo_loc[dir] = (*m_sheared_remapped_index)[dit].min(bndryBox_reduced,dir);
+                     iv_hi_loc[dir] = (*m_sheared_remapped_index)[dit].max(bndryBox_reduced,dir);
                   }
                }
             }
@@ -2313,6 +2420,7 @@ PhaseGeom::getShearedGhostBoxLayout()
             if (side == Side::LoHiSide::Lo) {
                Box& new_box = *const_cast<Box*>(&((*m_shearedGhostBLLoEnd.rawPtr())[ivec].box));
                new_box = remapped_box;
+
             }
             else {
                Box& new_box = *const_cast<Box*>(&((*m_shearedGhostBLHiEnd.rawPtr())[ivec].box));
@@ -2330,7 +2438,6 @@ PhaseGeom::getShearedGhostBoxLayout()
    
    m_shearedGhostBLLoEnd.closeNoSort();
    m_shearedGhostBLHiEnd.closeNoSort();
-   
 }
 
 #endif
@@ -2353,6 +2460,9 @@ void
 PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& a_src,
                                        LevelData<FArrayBox>&                 a_dst ) const
 {
+
+   CH_TIME("PhaseGeom::injectConfigurationToPhase");
+
    if (a_dst.isDefined()) {
       MayDay::Error("PhaseBlockCoordSys: a_dst LevelData passed to injectConfigurationToPhase is already defined");
    }
@@ -2365,14 +2475,6 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& a_s
 
    IntVect ghostVect = config_inject(a_src.ghostVect());
 
-   // flatten phase space grid in the mu direction
-   DisjointBoxLayout mu_flattened_dbl;
-   adjCellLo(mu_flattened_dbl, m_gridsFull, MU_DIR, -1);
-
-   // then flatten it in the vparallel coordinate
-   DisjointBoxLayout vpmu_flattened_dbl;
-   adjCellLo(vpmu_flattened_dbl, mu_flattened_dbl, VPARALLEL_DIR, -1);
-
    // create CP1 injection of CFG src data
    CP1::LevelData<CP1::FArrayBox> CP1_temp;
    injectLevelData(CP1_temp, a_src, slice_vp);
@@ -2382,7 +2484,7 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& a_s
    injectLevelData(vpmu_flattened_dst, CP1_temp, slice_mu);
 
    // define destination
-   a_dst.define(vpmu_flattened_dbl, a_src.nComp(), ghostVect);
+   a_dst.define(m_vpmu_flattened_dbl, a_src.nComp(), ghostVect);
 
    Vector<int> spreadingDirs;
    spreadingDirs.push_back(VPARALLEL_DIR);
@@ -2396,7 +2498,7 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& a_s
        = ((const PhaseBlockCoordSys&)(*m_coordSysPtr->getCoordSys(block))).domain();
 
      SpreadingCopier spreadCopier(vpmu_flattened_dst.getBoxes(),
-                                  vpmu_flattened_dbl,
+                                  m_vpmu_flattened_dbl,
                                   thisMappingDomain,
                                   ghostVect,
                                   spreadingDirs);
@@ -2427,14 +2529,6 @@ PhaseGeom::injectConfigurationToPhaseNoExchange(  const CFG::LevelData<CFG::FArr
 
    IntVect ghostVect = config_inject(a_src.ghostVect());
 
-   // flatten phase space grid in the mu direction
-   DisjointBoxLayout mu_flattened_dbl;
-   adjCellLo(mu_flattened_dbl, m_gridsFull, MU_DIR, -1);
-
-   // then flatten it in the vparallel coordinate
-   DisjointBoxLayout vpmu_flattened_dbl;
-   adjCellLo(vpmu_flattened_dbl, mu_flattened_dbl, VPARALLEL_DIR, -1);
-
    // create CP1 injection of CFG src data
    CP1::LevelData<CP1::FArrayBox> CP1_temp;
    injectLevelData(CP1_temp, a_src, slice_vp);
@@ -2444,7 +2538,7 @@ PhaseGeom::injectConfigurationToPhaseNoExchange(  const CFG::LevelData<CFG::FArr
    injectLevelData(vpmu_flattened_dst, CP1_temp, slice_mu);
 
    // define destination
-   a_dst.define(vpmu_flattened_dbl, a_src.nComp(), ghostVect);
+   a_dst.define(m_vpmu_flattened_dbl, a_src.nComp(), ghostVect);
 
    Vector<int> spreadingDirs;
    spreadingDirs.push_back(VPARALLEL_DIR);
@@ -2458,7 +2552,7 @@ PhaseGeom::injectConfigurationToPhaseNoExchange(  const CFG::LevelData<CFG::FArr
        = ((const PhaseBlockCoordSys&)(*m_coordSysPtr->getCoordSys(block))).domain();
 
      SpreadingCopier spreadCopier(vpmu_flattened_dst.getBoxes(),
-                                  vpmu_flattened_dbl,
+                                  m_vpmu_flattened_dbl,
                                   thisMappingDomain,
                                   ghostVect,
                                   spreadingDirs);
@@ -2476,6 +2570,8 @@ void
 PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>& a_src,
                                        LevelData<FluxBox>&                 a_dst ) const
 {
+   CH_TIME("PhaseGeom::injectConfigurationToPhase");
+
    if (a_dst.isDefined()) {
       MayDay::Error("PhaseBlockCoordSys: a_dst LevelData passed to injectConfigurationToPhase is already defined");
    }
@@ -2485,14 +2581,6 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>& a_src
    const SliceSpec slice_mu(MU_DIR,domainBox.smallEnd(MU_DIR));
 
    IntVect ghostVect = config_inject(a_src.ghostVect());
-
-   // flatten phase space grid in the mu direction
-   DisjointBoxLayout mu_flattened_dbl;
-   adjCellLo(mu_flattened_dbl, m_gridsFull, MU_DIR, -1);
-
-   // then flatten it in the vparallel coordinate
-   DisjointBoxLayout vpmu_flattened_dbl;
-   adjCellLo(vpmu_flattened_dbl, mu_flattened_dbl, VPARALLEL_DIR, -1);
 
    // create CP1 injection of CFG src data
    CP1::LevelData<CP1::FluxBox> CP1_temp;
@@ -2542,7 +2630,7 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>& a_src
    }
 
    // define destination
-   a_dst.define(vpmu_flattened_dbl, a_src.nComp(), ghostVect);
+   a_dst.define(m_vpmu_flattened_dbl, a_src.nComp(), ghostVect);
 
    Vector<int> spreadingDirs;
    spreadingDirs.push_back(VPARALLEL_DIR);
@@ -2556,7 +2644,7 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>& a_src
        = ((const PhaseBlockCoordSys&)(*m_coordSysPtr->getCoordSys(block))).domain();
 
      SpreadingCopier spreadCopier(vpmu_flattened_dst.getBoxes(),
-                                  vpmu_flattened_dbl,
+                                  m_vpmu_flattened_dbl,
                                   thisMappingDomain,
                                   ghostVect,
                                   spreadingDirs);
@@ -2576,21 +2664,18 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>& a_src
 void
 PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>&   a_src,
                                        const CFG::LevelData<CFG::FArrayBox>& a_src_cell,
-                                       LevelData<FluxBox>&                   a_dst ) const
+                                       LevelData<FluxBox>&                   a_dst,
+                                       const bool&                           a_perform_exchange) const
 {
+   CH_TIMERS("PhaseGeom::injectConfigurationToPhase");
+   CH_TIMER("define_spreading_copier",t_define_spreading_copier);
+   CH_TIMER("define_dst",t_define_dst);
+
    const Box& domainBox = m_domain.domainBox();
    const CP1::SliceSpec slice_vp(VPARALLEL_DIR,domainBox.smallEnd(VPARALLEL_DIR));
    const SliceSpec slice_mu(MU_DIR,domainBox.smallEnd(MU_DIR));
 
    IntVect ghostVect = config_inject(a_src.ghostVect());
-
-   // flatten phase space grid in the mu direction
-   DisjointBoxLayout mu_flattened_dbl;
-   adjCellLo(mu_flattened_dbl, m_gridsFull, MU_DIR, -1);
-
-   // then flatten it in the vparallel coordinate
-   DisjointBoxLayout vpmu_flattened_dbl;
-   adjCellLo(vpmu_flattened_dbl, mu_flattened_dbl, VPARALLEL_DIR, -1);
 
    // create CP1 injection of CFG src data
    CP1::LevelData<CP1::FluxBox> CP1_temp;
@@ -2619,7 +2704,9 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>&   a_s
    }
 
    // define destination
-   a_dst.define(vpmu_flattened_dbl, a_src.nComp(), ghostVect);
+   CH_START(t_define_dst);
+   a_dst.define(m_vpmu_flattened_dbl, a_src.nComp(), ghostVect);
+   CH_STOP(t_define_dst);
 
    Vector<int> spreadingDirs;
    spreadingDirs.push_back(VPARALLEL_DIR);
@@ -2632,11 +2719,13 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>&   a_s
      const ProblemDomain& thisMappingDomain
        = ((const PhaseBlockCoordSys&)(*m_coordSysPtr->getCoordSys(block))).domain();
 
+     CH_START(t_define_spreading_copier);
      SpreadingCopier spreadCopier(vpmu_flattened_dst.getBoxes(),
-                                  vpmu_flattened_dbl,
+                                  m_vpmu_flattened_dbl,
                                   thisMappingDomain,
                                   ghostVect,
                                   spreadingDirs);
+     CH_STOP(t_define_spreading_copier);
 
      // spread injected data in the vp and mu directions
      vpmu_flattened_dst.copyTo(vpmu_flattened_dst.interval(),
@@ -2644,8 +2733,9 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FluxBox>&   a_s
                                spreadCopier,
                                spreadOp);
    }
-
-   a_dst.exchange();
+   if (a_perform_exchange) {
+     a_dst.exchange();
+   }
 }
 
 
@@ -2678,6 +2768,8 @@ void
 PhaseGeom::injectConfigurationToPhase( const CFG::FluxBox& a_src,
                                        FluxBox&            a_dst ) const
 {
+  CH_TIME("PhaseGeom::injectConfigurationToPhase(box)");
+
    const Box& domainBox = m_domain.domainBox();
    const CP1::SliceSpec slice_vp(VPARALLEL_DIR,domainBox.smallEnd(VPARALLEL_DIR));
    const SliceSpec slice_mu(MU_DIR,domainBox.smallEnd(MU_DIR));
@@ -3662,7 +3754,7 @@ PhaseGeom::plotVelocityData( const string                           a_file_name,
 void
 PhaseGeom::plotVParPoloidalData( const string                a_file_name,
                                  const int                   a_radial_index,
-                                 const int                   a_toroidal_index,
+                                 const int                   a_toroidal_sector,
                                  const int                   a_mu_index,
                                  const LevelData<FArrayBox>& a_data,
                                  const double&               a_time ) const
@@ -3680,7 +3772,7 @@ PhaseGeom::plotVParPoloidalData( const string                a_file_name,
 
   // Slice in the toroidal direction at the specified toroidal coordinate
 
-  CP1::SliceSpec slice_y(TOROIDAL_DIR, a_toroidal_index);
+  CP1::SliceSpec slice_y(TOROIDAL_DIR, a_toroidal_sector);
   CFG::LevelData<CFG::FArrayBox> muy_sliced_data;
   sliceLevelData(muy_sliced_data, mu_sliced_data, slice_y);
 

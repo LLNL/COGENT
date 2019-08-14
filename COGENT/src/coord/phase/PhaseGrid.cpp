@@ -49,7 +49,6 @@ PhaseGrid::PhaseGrid(const Vector<ProblemDomain>&      a_domains,
 
          for (int dir=0; dir<PDIM; ++dir) {
             if (box_size[dir] < 4) {
-            //if (box_size[dir] < 2) { // JRA
                MayDay::Error( "Phase space box is less than 4 cells wide" );
             }
          }
@@ -107,13 +106,8 @@ PhaseGrid::PhaseGrid(const Vector<ProblemDomain>&      a_domains,
       for (int n=0; n<phase_boxes.size(); n++) {
          bounding_box = minBox(bounding_box, phase_boxes[n]);
       }
-#if CH_SPACEDIM==4
+
       prob_domain = ProblemDomain(bounding_box);
-#endif
-#if CH_SPACEDIM==5
-      bool is_periodic[] = {false, true, false, false, false};
-      prob_domain = ProblemDomain(bounding_box, is_periodic);
-#endif
    }
    else {
       MayDay::Error("Invalid magnetic geometry type");
@@ -122,19 +116,7 @@ PhaseGrid::PhaseGrid(const Vector<ProblemDomain>&      a_domains,
    m_dbl.define(phase_boxes, procMap, prob_domain);
    m_dbl.close();
 
-   getVelocitySlices(m_dbl, m_local_config_boxes, m_local_velocity_slices);
-
-#if 0
-   for (int i=0; i<m_local_velocity_slices.size(); ++i) {
-      cout << procID() << " " << m_local_config_boxes[i] << ": ";
-      List<VEL::Box>& this_list = m_local_velocity_slices[i];
-      ListIterator<VEL::Box> it(this_list);
-      for (it.begin(); it.ok(); ++it) {
-         cout << " " << it();
-      }
-      cout << endl;
-   }
-#endif
+   getVelocitySlicesAndPIDs(m_dbl, m_local_config_boxes, m_local_velocity_slices, m_local_pids);
 }
 
 
@@ -330,18 +312,21 @@ PhaseGrid::assignPhaseDecompositionToProcs(const Vector<Box>& a_phase_boxes,
 
 
 void
-PhaseGrid::getVelocitySlices(const DisjointBoxLayout&  a_dbl,
-                             const Vector<CFG::Box>&   a_config_boxes,
-                             Vector< List<VEL::Box> >& a_velocity_slices) const
+PhaseGrid::getVelocitySlicesAndPIDs(const DisjointBoxLayout&  a_dbl,
+                                    const Vector<CFG::Box>&   a_config_boxes,
+                                    Vector< Vector<VEL::Box> >& a_velocity_slices,
+                                    Vector< Vector<int> >&    a_pids ) const
 {
    int num_config_boxes = a_config_boxes.size();
 
    a_velocity_slices.resize(num_config_boxes);
+   a_pids.resize(num_config_boxes);
 
    for (int i=0; i<num_config_boxes; ++i) {
       const CFG::Box& config_box = a_config_boxes[i];
 
-      List<VEL::Box> this_list;
+      Vector<VEL::Box> this_list;
+      Vector<int> this_pids;
 
       for (DataIterator dit(a_dbl); dit.ok(); ++dit) {
          const Box& box = a_dbl[dit];
@@ -352,11 +337,13 @@ PhaseGrid::getVelocitySlices(const DisjointBoxLayout&  a_dbl,
          if (cbox == config_box) {
             VEL::Box vbox;
             projectPhaseToVelocity(box, vbox);
-            this_list.add(vbox);
+            this_list.push_back(vbox);
+            this_pids.push_back(a_dbl.procID(dit()));
          }
       }
 
       a_velocity_slices[i] = this_list;
+      a_pids[i] = this_pids;
    }
 }
 

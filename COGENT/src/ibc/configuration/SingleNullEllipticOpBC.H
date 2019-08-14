@@ -18,6 +18,7 @@ public:
 
    SingleNullEllipticOpBC( const std::string&  name,
                            ParmParse&          pp,
+                           const int&          poloidal_blocks_per_sector,
                            const int&          verbosity );
 
    virtual ~SingleNullEllipticOpBC() {};
@@ -73,6 +74,8 @@ public:
    RefCountedPtr<GridFunction> getOuterDivertorFunction() {return m_bc_function[POLOIDAL_OUTER_DIV];}
    const RefCountedPtr<GridFunction> getOuterDivertorFunction() const {return m_bc_function[POLOIDAL_OUTER_DIV];}
 
+   void setPoloidalBlocksPerSector(const int& poloidal_blocks_per_sector) {m_poloidal_blocks_per_sector = poloidal_blocks_per_sector;}
+
 private:
 
    // prohibit copying
@@ -84,6 +87,7 @@ private:
    inline void parseParameters( ParmParse& a_pp );
 
    std::string m_name;
+   int m_poloidal_blocks_per_sector;
    int m_verbosity;
 
    enum {INVALID=-1,

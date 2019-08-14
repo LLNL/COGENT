@@ -189,6 +189,7 @@ void LogRectConfigurationBC::apply( FluidSpecies&  a_species_comp,
       setAllBcType( m_all_bdry_layouts );    
       m_all_bdry_defined = true;
    }
+   setAllBcType( m_all_bdry_layouts );    
 
    const LevelData<FluxBox>& velocity= a_species_comp.velocity();
    FluidBCUtils::setInflowOutflowBC( u,
@@ -221,6 +222,7 @@ void LogRectConfigurationBC::applyFluxBC(const FluidSpecies&  a_species_comp,
                                               grids,
                                               coord_sys,
                                               ghost_vect );
+      //setAllBcType( m_all_bdry_layouts_flux );    
       m_all_bdry_layouts_flux_defined = true;
    }
 
@@ -244,14 +246,17 @@ void LogRectConfigurationBC::applyEdgeBC(const FluidSpecies&  a_species_comp,
    
    const DisjointBoxLayout& grids( a_dst.disjointBoxLayout() );
    const IntVect& ghost_vect( IntVect::Unit );
+   //const IntVect& ghost_vect( a_dst.ghostVect() );
    
    if(m_all_bdry_layouts_edge_defined==false) {
       FluidBCUtils::defineBoundaryBoxLayouts( m_all_bdry_layouts_edge,
                                               grids,
                                               coord_sys,
                                               ghost_vect );
+      //setAllBcType( m_all_bdry_layouts_edge );    
       m_all_bdry_layouts_edge_defined = true;
    }
+   setAllBcType( m_all_bdry_layouts_edge );    
 
    FluidBCUtils::setEdgeBC( a_dst,
                             m_all_bdry_layouts_edge,
@@ -260,6 +265,67 @@ void LogRectConfigurationBC::applyEdgeBC(const FluidSpecies&  a_species_comp,
                             a_src );
    
 }
+
+void LogRectConfigurationBC::setEdgeBC( const FluidSpecies&  a_species_comp,
+                                        LevelData<EdgeDataBox>& a_dst,
+                                        const LevelData<EdgeDataBox>& a_src,
+                                        const Real&    a_time )
+{
+   CH_TIME("LogRectConfigurationBC::setEdgeBC");
+   
+   const MagGeom& geometry( a_species_comp.configurationSpaceGeometry() );
+   const LogRectCoordSys& coord_sys( dynamic_cast<const LogRectCoordSys&>( *geometry.getCoordSys()) );
+   
+   const DisjointBoxLayout& grids( a_dst.disjointBoxLayout() );
+   const IntVect& ghost_vect( IntVect::Unit );
+   
+   if(m_all_bdry_layouts_edge_defined==false) {
+      FluidBCUtils::defineBoundaryBoxLayouts( m_all_bdry_layouts_edge,
+                                              grids,
+                                              coord_sys,
+                                              ghost_vect );
+      //setAllBcType( m_all_bdry_layouts_edge );    
+      m_all_bdry_layouts_edge_defined = true;
+   }
+   setAllBcType( m_all_bdry_layouts_edge );    
+
+   FluidBCUtils::setEdgeBC( a_dst,
+                            m_all_bdry_layouts_edge,
+                            coord_sys,
+                            a_src );
+   
+}
+
+void LogRectConfigurationBC::applyBC( const FluidSpecies&          a_species_comp,
+                                            LevelData<FArrayBox>&  a_dst,
+                                      const Real                   a_time )
+{
+   CH_TIME("LogRectConfigurationBC::applyBC()");
+
+   const MagGeom& geometry( a_species_comp.configurationSpaceGeometry() );
+   const LogRectCoordSys& coord_sys( dynamic_cast<const LogRectCoordSys&>( *geometry.getCoordSys()) );
+
+   const DisjointBoxLayout& grids( a_dst.disjointBoxLayout() );
+   const IntVect& ghost_vect( a_dst.ghostVect() );
+
+   if(m_all_bdry_defined==false) {
+      FluidBCUtils::defineBoundaryBoxLayouts( m_all_bdry_layouts,
+                                              grids,
+                                              coord_sys,
+                                              ghost_vect );
+   
+      setAllBcType( m_all_bdry_layouts );    
+      m_all_bdry_defined = true;
+   }
+   setAllBcType( m_all_bdry_layouts );    
+   
+   FluidBCUtils::setBC( a_dst,
+                        m_all_bdry_layouts,
+                        m_all_bc_type,
+                        coord_sys );
+
+}
+
 
 inline
 void LogRectConfigurationBC::setAllBcType( const BoundaryBoxLayoutPtrVect&  a_bdry_layout )

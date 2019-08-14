@@ -1,8 +1,8 @@
 #include "SingleNullEllipticOpBC.H"
 #include "SingleNullBlockCoordSys.H"
 #include "GridFunctionLibrary.H"
-#include "MagGeom.H"
 #include "Directions.H"
+#include "MagGeom.H"
 
 #include "NamespaceHeader.H"
 
@@ -18,9 +18,11 @@ SingleNullEllipticOpBC::SingleNullEllipticOpBC()
 
 SingleNullEllipticOpBC::SingleNullEllipticOpBC( const std::string&  a_name,
                                                 ParmParse&          a_pp,
+                                                const int&          a_poloidal_blocks_per_sector,
                                                 const int&          a_verbosity )
    : EllipticOpBC(NUM_BOUNDARIES),
      m_name(a_name),
+     m_poloidal_blocks_per_sector(a_poloidal_blocks_per_sector),
      m_verbosity(a_verbosity)
 {
    setNames();
@@ -56,7 +58,7 @@ SingleNullEllipticOpBC::setBCType( const int  a_block_number,
 {
    CH_assert(a_side == 0 || a_side == 1);
 
-   switch( a_block_number )
+   switch( a_block_number % m_poloidal_blocks_per_sector )
       {
       case SingleNullBlockCoordSys::MCORE:
       case SingleNullBlockCoordSys::LCORE:
@@ -166,7 +168,7 @@ SingleNullEllipticOpBC::getBCType( const int  a_block_number,
    CH_assert(a_side == 0 || a_side == 1);
    int bc_type = UNDEFINED;
 
-   switch( a_block_number )
+   switch( a_block_number % m_poloidal_blocks_per_sector )
       {
       case SingleNullBlockCoordSys::MCORE:
       case SingleNullBlockCoordSys::LCORE:
@@ -279,7 +281,7 @@ SingleNullEllipticOpBC::setBCValue( const int     a_block_number,
 {
    CH_assert(a_side == 0 || a_side == 1);
 
-   switch( a_block_number )
+   switch( a_block_number % m_poloidal_blocks_per_sector )
       {
       case SingleNullBlockCoordSys::MCORE:
       case SingleNullBlockCoordSys::LCORE:
@@ -390,7 +392,7 @@ SingleNullEllipticOpBC::getBCValue( const int  a_block_number,
    CH_assert(a_side == 0 || a_side == 1);
    double bc_value = BASEFAB_REAL_SETVAL;
 
-   switch( a_block_number )
+   switch( a_block_number % m_poloidal_blocks_per_sector )
       {
       case SingleNullBlockCoordSys::MCORE:
       case SingleNullBlockCoordSys::LCORE:
@@ -503,7 +505,7 @@ SingleNullEllipticOpBC::setBCFunction( const int                           a_blo
 {
    CH_assert(a_side == 0 || a_side == 1);
 
-   switch( a_block_number )
+   switch( a_block_number % m_poloidal_blocks_per_sector )
       {
       case SingleNullBlockCoordSys::MCORE:
       case SingleNullBlockCoordSys::LCORE:
@@ -614,7 +616,7 @@ SingleNullEllipticOpBC::getBCFunction( const int  a_block_number,
    CH_assert(a_side == 0 || a_side == 1);
    RefCountedPtr<GridFunction> function;
 
-   switch( a_block_number )
+   switch( a_block_number % m_poloidal_blocks_per_sector )
       {
       case SingleNullBlockCoordSys::MCORE:
       case SingleNullBlockCoordSys::LCORE:
@@ -730,7 +732,7 @@ SingleNullEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
    const MagCoordSys* mag_coord_sys = ((MagGeom&)a_geom).getCoordSys();
    int block_number = mag_coord_sys->whichBlock(a_coord_sys_box);
 
-   switch( block_number )
+   switch( block_number % m_poloidal_blocks_per_sector )
       {
       case SingleNullBlockCoordSys::MCORE:
       case SingleNullBlockCoordSys::LCORE:
@@ -851,7 +853,7 @@ SingleNullEllipticOpBC::apply( const MultiBlockLevelGeom&  a_geom,
       const MultiBlockCoordSys& coord_sys( *(a_geom.coordSysPtr()) );
       const int block_number( coord_sys.whichBlock( a_coord_sys_box ) );
       FArrayBox dummy;
-      function->assign(a_phi, a_geom, dummy, dummy, block_number, a_time, false);
+      function->assign(a_phi, a_geom, dummy, dummy, block_number % m_poloidal_blocks_per_sector, a_time, false);
    }
    else {
       a_phi.setVal(value);

@@ -72,11 +72,13 @@ public:
     and the  second-order interpolation stencil.
     */
 
-   virtual void toroidalBlockRemapping(IntVect& a_ivDst,
-                                       Vector<Real>& a_interpStecil,
-                                       const RealVect& a_xiSrc,
-                                       const int a_nSrc,
-                                       const Side::LoHiSide& a_side) const = 0;
+   virtual void toroidalBlockRemapping( IntVect&               ivDst,
+                                        int&                   nDst,
+                                        Vector<Real>&          interpStecil,
+                                        Vector<int>&           interpStecilOffsets,
+                                        const RealVect&        xiSrc,
+                                        const int              nSrc,
+                                        const Side::LoHiSide&  side ) const = 0;
 
 #endif
 

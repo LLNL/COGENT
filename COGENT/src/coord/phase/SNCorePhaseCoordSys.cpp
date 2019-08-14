@@ -41,17 +41,17 @@ SNCorePhaseCoordSys::defineBoundaries2()
    int bc_tag = 0;  // define this later
 
    int num_poloidal_blocks = ((RefCountedPtr<CFG::SNCoreCoordSys>)m_mag_coords)->numPoloidalBlocks();
-   int num_toroidal_blocks = ((RefCountedPtr<CFG::SNCoreCoordSys>)m_mag_coords)->numToroidalBlocks();
+   int num_toroidal_sectors = ((RefCountedPtr<CFG::SNCoreCoordSys>)m_mag_coords)->numToroidalSectors();
 
-   for ( int block_number=0, toroidal_index=0; toroidal_index<num_toroidal_blocks; ++toroidal_index ) {
-      for ( int poloidal_index=0; poloidal_index<num_poloidal_blocks; ++poloidal_index, ++block_number ) {
+   for ( int block_number=0, toroidal_sector=0; toroidal_sector<num_toroidal_sectors; ++toroidal_sector ) {
+      for ( int poloidal_block=0; poloidal_block<num_poloidal_blocks; ++poloidal_block, ++block_number ) {
 
          IndicesTransformation it;
          IntVect shift;
          Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block_number];
          const CFG::SNCoreBlockCoordSys* mag_block_coord_sys
             = (const CFG::SNCoreBlockCoordSys*)m_mag_coords->getCoordSys(block_number);
-         int block_type = mag_block_coord_sys->poloidalIndex();
+         int block_type = mag_block_coord_sys->poloidalBlock();
 
          if( block_type == CFG::SNCoreBlockCoordSys::LCORE ) {
 
@@ -88,7 +88,7 @@ SNCorePhaseCoordSys::defineBoundaries2()
          }
 
 #if CFG_DIM==3
-         if ( num_toroidal_blocks == 1 ) {  // Assuming periodic coupling
+         if ( num_toroidal_sectors == 1 ) {  // Assuming periodic coupling
             shift = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
             it.defineFromTranslation( shift );
             blockBoundaries[TOROIDAL_DIR].define( it, block_number );
@@ -128,17 +128,17 @@ SNCorePhaseCoordSys::defineBoundaries3()
    int bc_tag = 0;  // define this later
 
    int num_poloidal_blocks = ((RefCountedPtr<CFG::SNCoreCoordSys>)m_mag_coords)->numPoloidalBlocks();
-   int num_toroidal_blocks = ((RefCountedPtr<CFG::SNCoreCoordSys>)m_mag_coords)->numToroidalBlocks();
+   int num_toroidal_sectors = ((RefCountedPtr<CFG::SNCoreCoordSys>)m_mag_coords)->numToroidalSectors();
 
-   for ( int block_number=0, toroidal_index=0; toroidal_index<num_toroidal_blocks; ++toroidal_index ) {
-      for ( int poloidal_index=0; poloidal_index<num_poloidal_blocks; ++poloidal_index, ++block_number ) {
+   for ( int block_number=0, toroidal_sector=0; toroidal_sector<num_toroidal_sectors; ++toroidal_sector ) {
+      for ( int poloidal_block=0; poloidal_block<num_poloidal_blocks; ++poloidal_block, ++block_number ) {
 
          IndicesTransformation it;
          IntVect shift;
          Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block_number];
          const CFG::SingleNullBlockCoordSys* mag_block_coord_sys
             = (const CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block_number);
-         int block_type = mag_block_coord_sys->poloidalIndex();
+         int block_type = mag_block_coord_sys->poloidalBlock();
 
          if( block_type == CFG::SNCoreBlockCoordSys::MCORE ) {
 
@@ -186,7 +186,7 @@ SNCorePhaseCoordSys::defineBoundaries3()
          }
 
 #if CFG_DIM==3
-         if ( num_toroidal_blocks == 1 ) {  // Assuming periodic coupling
+         if ( num_toroidal_sectors == 1 ) {  // Assuming periodic coupling
             shift = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
             it.defineFromTranslation( shift );
             blockBoundaries[TOROIDAL_DIR].define( it, block_number );
@@ -287,7 +287,7 @@ SNCorePhaseCoordSys::getDecomposition( int a_block ) const
 {
    IntVect decomp;
 
-   switch (a_block)
+   switch ( poloidalBlock(a_block) )
       {
       case CFG::SNCoreBlockCoordSys::MCORE:
          decomp = m_decomp_mcore;
@@ -327,7 +327,7 @@ SNCorePhaseCoordSys::getDecompositionParams( ParmParse& a_pp )
          decomp_rcore[dir] = decomp_core[dir];
       }
       if ( decomp_core[POLOIDAL_DIR]%2 != 0) {
-         MayDay::Error("SingleNullPhaseCoordSys::getDecompositionParams(): Poloidal core decomposition must be even");
+         MayDay::Error("SNCorePhaseCoordSys::getDecompositionParams(): Poloidal core decomposition must be even");
       }
       else {
          decomp_lcore[POLOIDAL_DIR] /= 2;
@@ -355,6 +355,29 @@ SNCorePhaseCoordSys::getDecompositionParams( ParmParse& a_pp )
       for (int i=0; i<SpaceDim; i++) cout << decomp_rcore[i] << " ";
       cout << endl;
    }
+
+#if CFG_DIM==3
+   int num_toroidal_sectors = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->numToroidalSectors();
+
+   if ( decomp_mcore[TOROIDAL_DIR] % num_toroidal_sectors != 0 ) {
+      MayDay::Error("SNCorePhaseCoordSys::getDecompositionParams(): Toroidal decomposition is not a multiple of the number of toroidal sectors in MCORE");
+   }
+   else {
+      decomp_mcore[TOROIDAL_DIR] /= num_toroidal_sectors;
+   }
+   if ( decomp_lcore[TOROIDAL_DIR] % num_toroidal_sectors != 0 ) {
+      MayDay::Error("SNCorePhaseCoordSys::getDecompositionParams(): Toroidal decomposition is not a multiple of the number of toroidal sectors in LCORE");
+   }
+   else {
+      decomp_lcore[TOROIDAL_DIR] /= num_toroidal_sectors;
+   }
+   if ( decomp_rcore[TOROIDAL_DIR] % num_toroidal_sectors != 0 ) {
+      MayDay::Error("SNCorePhaseCoordSys::getDecompositionParams(): Toroidal decomposition is not a multiple of the number of toroidal sectors in RCORE");
+   }
+   else {
+      decomp_rcore[TOROIDAL_DIR] /= num_toroidal_sectors;
+   }
+#endif
 
    for (int dir=0; dir<SpaceDim; ++dir) {
       m_decomp_mcore[dir] = decomp_mcore[dir];

@@ -962,6 +962,9 @@ MBHypreSolver::AMG( const HYPRE_SStructMatrix&  a_matrix,
                     const bool                  a_verbose,
                     const HYPRE_SStructVector&  a_x ) const
 {
+   CH_TIMERS("MBHypreSolver::AMG");
+   CH_TIMER("AMG_solve",t_AMG_solve);
+
    HYPRE_Solver          par_solver;
    HYPRE_ParCSRMatrix    par_A;
    HYPRE_ParVector       par_b;
@@ -987,8 +990,12 @@ MBHypreSolver::AMG( const HYPRE_SStructMatrix&  a_matrix,
    //   HYPRE_BoomerAMGSetCycleNumSweeps(par_solver, 1, 2);  // 1 sweep on up cycle
    //   HYPRE_BoomerAMGSetCycleNumSweeps(par_solver, 1, 3);  // 1 sweeps on coarsest level
 
+   CH_START(t_AMG_solve);
+
    HYPRE_BoomerAMGSetup(par_solver, par_A, par_b, par_x);
    HYPRE_BoomerAMGSolve(par_solver, par_A, par_b, par_x);
+
+   CH_STOP(t_AMG_solve);
 
    int num_iterations;
    HYPRE_BoomerAMGGetNumIterations(par_solver, &num_iterations);

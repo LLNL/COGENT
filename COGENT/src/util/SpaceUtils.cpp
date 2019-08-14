@@ -34,7 +34,7 @@ SpaceUtils::upWindToFaces( FluxBox&      this_face_phi,
                      const std::string&  a_method )
 {
    CH_TIME("SpaceUtils::upWindToFaces()");
-   CH_assert( a_method=="c2" || 
+   CH_assert( a_method=="c2" ||
               a_method=="TVD1st" || a_method=="TVDvanleer" ||
               a_method=="TVDminmod"  || a_method=="TVDsuperbee" ||
               a_method=="uw1" || a_method=="uw3" || a_method=="uw5" ||
@@ -132,6 +132,98 @@ SpaceUtils::upWindToFaces( FluxBox&      this_face_phi,
       }
    } // end loop over directions
 
+}
+
+void
+SpaceUtils::interpToFaces( LevelData<FluxBox>&    a_face_phi,
+                     const LevelData<FArrayBox>&  a_cell_phi,
+                     const LevelData<FArrayBox>&  a_cell_fun,
+                     const LevelData<FluxBox>&    a_norm_vel,
+                     const std::string&           a_method )
+{
+   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit );
+
+   const DisjointBoxLayout& grids( a_face_phi.getBoxes() );
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      FluxBox& this_face_phi( a_face_phi[dit] );
+      const FArrayBox& this_cell_phi( a_cell_phi[dit] );
+      const FArrayBox& this_cell_fun( a_cell_fun[dit] );
+      const FluxBox& this_norm_vel( a_norm_vel[dit] );
+      const Box& this_dbl_box( grids[dit] ); // this box has no ghost cells
+      interpToFaces( this_face_phi, this_cell_phi, this_cell_fun, this_norm_vel, this_dbl_box, a_method );
+       
+   } 
+   a_face_phi.exchange();
+}
+
+void
+SpaceUtils::interpToFaces( FluxBox&      this_face_phi,
+                     const FArrayBox&    this_cell_phi,
+                     const FArrayBox&    this_cell_fun,
+                     const FluxBox&      a_norm_vel,
+                     const Box&          a_dbl_box,
+                     const std::string&  a_method )
+{
+   CH_TIME("SpaceUtils::interpToFaces()");
+   CH_assert( a_method=="c2" || a_method == "uw1" || 
+              a_method=="uw1c21st" || a_method=="uw1c2vanleer" || 
+              a_method== "uw1c2minmod" || a_method == "uw1c2superbee" ||  
+              a_method=="uw1c2vanAlbada1" || a_method=="uw1c2vanAlbada2" );
+   int this_limiter;
+   if(a_method=="uw1c21st")      this_limiter=0;
+   if(a_method=="uw1c2vanleer")  this_limiter=1;
+   if(a_method=="uw1c2minmod")   this_limiter=2;
+   if(a_method=="uw1c2superbee") this_limiter=3;
+   if(a_method=="uw1c2vanAlbada1") this_limiter=4;
+   if(a_method=="uw1c2vanAlbada2") this_limiter=5;
+
+   int normVelcomp = 0;
+   for (int dir(0); dir<SpaceDim; dir++) {
+         
+      if(a_norm_vel.nComp()==SpaceDim) normVelcomp = dir; 
+
+      Box face_box( a_dbl_box ); 
+    
+      // for 4th order, need extra face in mapped-grid,
+      // transverse diection to handle 4th-order products  
+      for (int tdir(0); tdir<SpaceDim; tdir++) {
+         if (tdir!=dir) {
+            const int TRANSVERSE_GROW(1);
+            face_box.grow( tdir, TRANSVERSE_GROW );
+         }
+      }
+      
+      face_box.surroundingNodes( dir );
+      face_box.grow( dir, 1 );
+
+      //  now compute limited face values
+         
+      FArrayBox& this_face_phi_dir( this_face_phi[dir] );
+      const FArrayBox& this_norm_vel_dir( a_norm_vel[dir] );
+      if(a_method=="c2") {
+         FORT_C2FACE( CHF_FRA( this_face_phi_dir ),
+                      CHF_CONST_FRA( this_cell_phi ),
+                      CHF_BOX( face_box ),
+                      CHF_CONST_INT( dir ) );
+      } else
+      if(a_method=="uw1") {
+         FORT_UW1FACE( CHF_FRA( this_face_phi_dir ),
+                       CHF_CONST_FRA( this_cell_phi ),
+                       CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
+                       CHF_BOX( face_box ),
+                       CHF_CONST_INT( dir ) );
+      } 
+      else {
+         FORT_UW1C2FACE( CHF_FRA( this_face_phi_dir ),
+                         CHF_CONST_FRA( this_cell_phi ),
+                         CHF_CONST_FRA( this_cell_fun ),
+                         CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
+                         CHF_BOX( face_box ),
+                         CHF_CONST_INT( this_limiter ),
+                         CHF_CONST_INT( dir ) );
+      }
+   }
 }
 
 void
@@ -236,20 +328,16 @@ SpaceUtils::interpCellToEdges( LevelData<EdgeDataBox>&   a_edge_phi,
    // opposed to FluxBox which has extra value in dir direction. 
 
    const DisjointBoxLayout& grids( a_edge_phi.getBoxes() );
-   LevelData<EdgeDataBox> normal_vel( grids, 1, IntVect::Unit );
    int normVelcomp = 0;
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       
       const FArrayBox& this_cell_phi( a_cell_phi[dit] );
-      FArrayBox this_unit_smooth(this_cell_phi.box(),SpaceDim);
-      this_unit_smooth.setVal(1.0);  
 
       EdgeDataBox& this_edge_phi( a_edge_phi[dit] );
       for (int dir(0); dir<SpaceDim; dir++) {
          
          if(a_norm_vel.nComp()==SpaceDim) normVelcomp = dir; 
-         normal_vel[dit].copy(a_norm_vel[dit],normVelcomp,0,1);
 
          //int dir_edge = (dir + 1) % SpaceDim;
          //cout << "dir = " << dir << endl;
@@ -257,7 +345,7 @@ SpaceUtils::interpCellToEdges( LevelData<EdgeDataBox>&   a_edge_phi,
          
          FArrayBox& this_edge_phi_dir( this_edge_phi[dir] );
          const Box& edge_box = this_edge_phi_dir.box();
-         const FArrayBox& this_norm_vel_dir( normal_vel[dit][dir] );
+         const FArrayBox& this_norm_vel_dir( a_norm_vel[dit][dir] );
          if(a_method=="c2") {
          FORT_C2EDGE( CHF_FRA( this_edge_phi_dir ),
                       CHF_CONST_FRA( this_cell_phi ),
@@ -293,6 +381,8 @@ SpaceUtils::interpCellToEdges( LevelData<EdgeDataBox>&   a_edge_phi,
                          CHF_CONST_INT( dir ) );
          }
          if(a_method=="weno5") {
+         FArrayBox this_unit_smooth(this_cell_phi.box(),SpaceDim);
+         this_unit_smooth.setVal(1.0);  
          FORT_WENO5FACE( CHF_FRA( this_edge_phi_dir ),
                          CHF_CONST_FRA( this_cell_phi ),
                          CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
@@ -337,7 +427,8 @@ SpaceUtils::interpEdgesToCell( LevelData<FArrayBox>&    a_cell_phi,
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       
       FArrayBox& this_cell_phi( a_cell_phi[dit] );
-      Box cell_box( grids[dit] );
+      //Box cell_box( grids[dit] ); // has no ghosts
+      Box cell_box( this_cell_phi.box() ); // has ghosts
       for (int dir(0); dir<SpaceDim; dir++) {
          const FArrayBox& this_edge_phi_dir( a_edge_phi[dit][dir] );
          if(a_method=="c2") {
@@ -345,6 +436,37 @@ SpaceUtils::interpEdgesToCell( LevelData<FArrayBox>&    a_cell_phi,
                          CHF_CONST_INT( dir ),
                          CHF_CONST_FRA1( this_edge_phi_dir,0 ),
                          CHF_FRA1( this_cell_phi,dir ) );
+         }
+      }
+
+   }
+   a_cell_phi.exchange();
+
+}
+
+void
+SpaceUtils::interpFacesToCell( LevelData<FArrayBox>&  a_cell_phi,
+                         const LevelData<FluxBox>&    a_face_phi,
+                         const std::string&           a_method )
+{
+   CH_TIME("SpaceUtils::interpFacesToCell()");
+   CH_assert( a_cell_phi.nComp()==SpaceDim );
+   //CH_assert( a_edge_phi.ghostVect()>=a_cell_phi.ghostVect() );
+   CH_assert( a_method=="c2" );
+   
+   const DisjointBoxLayout& grids( a_face_phi.getBoxes() );
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      FArrayBox& this_cell_phi( a_cell_phi[dit] );
+      Box cell_box( grids[dit] );
+      for (int dir(0); dir<SpaceDim; dir++) {
+         const FArrayBox& this_face_phi_dir( a_face_phi[dit][dir] );
+         if(a_method=="c2") {
+            FORT_C2FACETOCELL( CHF_BOX( cell_box ),
+                               CHF_CONST_INT( dir ),
+                               CHF_CONST_FRA1( this_face_phi_dir,0 ),
+                               CHF_FRA1( this_cell_phi,dir ) );
          }
       }
 
@@ -866,5 +988,19 @@ SpaceUtils::copyAndFillGhostCellsSimple(  LevelData<FArrayBox>&       a_var_wg,
   /* done - hopefully! */
   return;
 }
+
+#if 1
+void
+SpaceUtils::copy(  FArrayBox& a_dst,
+		   const FArrayBox& a_src )
+{
+  CH_assert(a_dst.nComp() == a_src.nComp());
+  CH_assert(a_src.box().contains(a_dst.box()));
+  FORT_COPY(CHF_BOX(a_dst.box()), 
+	    CHF_FRA( a_dst ),
+	    CHF_CONST_FRA( a_src ));
+
+}
+#endif
 
 #include "NamespaceFooter.H"

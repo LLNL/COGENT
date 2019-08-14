@@ -40,8 +40,6 @@ void GKOps::define( const GKState& a_state,
    m_dt = a_dt;
    m_phase_geometry = a_state.geometry();
    CH_assert( m_phase_geometry != NULL );
-   //m_ghost_vect = m_phase_geometry[0].ghostVect(); // JRAgv
-   //cout << "GKOps::m_ghost_vect = " << m_ghost_vect << endl;
 
    /* default IMEX partitioning:
     * Explicit: Vlasov, Neutrals
@@ -117,6 +115,8 @@ void GKOps::define( const GKState& a_state,
      }
    }
 
+   getKineticSpeciesGhostVect(m_kinetic_ghost_vect);
+
    m_is_defined = true;
 }
 
@@ -162,21 +162,22 @@ void GKOps::initializeElectricField( const GKState& a_state_phys,
 
    // Get pointers to the primary electric field and one used internally by implicitOpImEx
    string field_type;
+   CFG::IntVect ghostVect = (m_phase_geometry->secondOrder()) ? CFG::IntVect::Zero : CFG::IntVect::Unit;
    if ( m_ampere_law ) {
       field_type = "EFieldAmpere";
-      m_E_field          = new CFG::EFieldAmpere("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
-      m_E_field_ImOpImEx = new CFG::EFieldAmpere("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
+      m_E_field          = new CFG::EFieldAmpere("", "EField", m_phase_geometry->magGeom(), ghostVect);
+      m_E_field_ImOpImEx = new CFG::EFieldAmpere("", "EField", m_phase_geometry->magGeom(), ghostVect);
 
    }
    else if ( m_consistent_potential_bcs ) {
       field_type = "EFieldSelfConsistentBC";
-      m_E_field          = new CFG::EFieldSelfConsistentBC("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
-      m_E_field_ImOpImEx = new CFG::EFieldSelfConsistentBC("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
+      m_E_field          = new CFG::EFieldSelfConsistentBC("", "EField", m_phase_geometry->magGeom(), ghostVect);
+      m_E_field_ImOpImEx = new CFG::EFieldSelfConsistentBC("", "EField", m_phase_geometry->magGeom(), ghostVect);
    }
    else {
       field_type = "EField";
-      m_E_field          = new CFG::EField("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
-      m_E_field_ImOpImEx = new CFG::EField("", "EField", m_phase_geometry->magGeom(), CFG::IntVect::Unit);
+      m_E_field          = new CFG::EField("", "EField", m_phase_geometry->magGeom(), ghostVect);
+      m_E_field_ImOpImEx = new CFG::EField("", "EField", m_phase_geometry->magGeom(), ghostVect);
    }
 
    m_E_field->define( m_units->larmorNumber(),
@@ -317,6 +318,19 @@ Real GKOps::stableDtImEx( const GKState& a_state, const int a_step_number )
    return dt_stable;
 }
 
+
+void GKOps::getKineticSpeciesGhostVect(IntVect& a_ghost_vect)
+{
+   // This should return ghost vect size required for a given model
+   // Add similar operators to other classes (collisions, transport) later
+   
+   if (m_vlasov) a_ghost_vect = m_vlasov->getSpeciesGhostVect();
+
+   // Presently overwrite with m_ghost_vect for the 4th-order, improve later  
+   a_ghost_vect = m_ghost_vect;
+}
+
+
 void GKOps::preTimeStep (const int       a_step, 
                          const Real      a_time, 
                          const GKState&  a_state_comp, 
@@ -325,7 +339,7 @@ void GKOps::preTimeStep (const int       a_step,
    CH_TIME("GKOps::preTimeStep()");
    if(!m_zero_efield) {
       updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time);
-      setElectricField( a_state_comp, a_step, m_phi, *m_E_field, m_injected_E_field );
+      setElectricField( a_state_comp, a_step, m_phi, *m_E_field );
    }
 
    const KineticSpeciesPtrVect& soln_comp( a_state_comp.dataKinetic() );
@@ -334,10 +348,10 @@ void GKOps::preTimeStep (const int       a_step,
 
    /* compute dt for each physics */
 
-   if ( m_vlasov ) {
-      m_dt_vlasov_expl = m_vlasov->computeDtExplicitTI(*m_E_field, soln_comp);
-      m_dt_vlasov_imex = m_vlasov->computeDtImExTI(*m_E_field, soln_comp);
-      m_time_scale_vlasov = m_vlasov->computeTimeScale(*m_E_field, soln_comp );
+   if ( m_vlasov && m_vlasov->computeCfl()) {
+      m_dt_vlasov_expl = m_vlasov->computeDtExplicitTI(*m_E_field, soln_comp, a_time);
+      m_dt_vlasov_imex = m_vlasov->computeDtImExTI(*m_E_field, soln_comp, a_time);
+      m_time_scale_vlasov = m_vlasov->computeTimeScale(*m_E_field, soln_comp, a_time);
    }
    else {
       m_dt_vlasov_expl = -1;
@@ -378,6 +392,7 @@ void GKOps::postTimeStep( const int       a_step,
                           const Real      a_time,
                           const GKState&  a_state )
 {
+   CH_TIME("GKOps::postTimeStep");
    if ( m_state_includes_potential ) {
       const CFG::FluidSpeciesPtrVect& fluids( a_state.dataFluid() );
       const CFG::LevelData<CFG::FArrayBox>& phi = fluids[a_state.getFluidComponent("potential")]->cell_var("potential");
@@ -420,7 +435,7 @@ void GKOps::postTimeStage( const int       a_step,
    // has already been calculated to compute the velocity used in the
    // time step estimate.
    if (a_stage && !m_zero_efield) {
-      setElectricField( a_state_comp, a_step, m_phi, *m_E_field, m_injected_E_field );
+      setElectricField( a_state_comp, a_step, m_phi, *m_E_field );
    }
 
    const KineticSpeciesPtrVect& soln( a_state_comp.dataKinetic() );
@@ -615,10 +630,9 @@ void GKOps::implicitOpImEx( GKRHSData&      a_rhs,
    CH_TIME("GKOps::implicitOpImEx");
 
    CFG::LevelData<CFG::FArrayBox> phi( m_phase_geometry->magGeom().gridsFull(), 1, 4*CFG::IntVect::Unit );
-   LevelData<FluxBox> injected_E_field;
 
    if(!m_zero_efield) {
-      setElectricField( a_state_comp, -1, phi, *m_E_field_ImOpImEx, injected_E_field );
+      setElectricField( a_state_comp, -1, phi, *m_E_field_ImOpImEx );
    }
 
    a_rhs.zero();
@@ -917,8 +931,7 @@ inline
 void GKOps::setElectricField( const GKState&                   a_state_comp,
                               const int                        a_step,
                               CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                              CFG::EField&                     a_E_field,
-                              LevelData<FluxBox>&              a_injected_E_field ) const
+                              CFG::EField&                     a_E_field ) const
 {
    CH_TIME("GKOps::setElectricField");
  
@@ -936,7 +949,7 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
    KineticSpeciesPtrVect kinetic_species_phys;
    kinetic_species_phys.resize(num_kinetic_species);
    for (int species(0); species<num_kinetic_species; species++) {
-      kinetic_species_phys[species] = a_kinetic_species[species]->clone( m_ghost_vect );
+      kinetic_species_phys[species] = a_kinetic_species[species]->clone( m_kinetic_ghost_vect );
    }
 
    divideJ( a_kinetic_species, kinetic_species_phys );
@@ -971,9 +984,6 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
                             compute_potential,
                             false );
 
-   m_phase_geometry->injectConfigurationToPhase( a_E_field.getFaceCenteredField(),
-                                                 a_E_field.getCellCenteredField(),
-                                                 a_injected_E_field );
 }
 
 
@@ -986,7 +996,7 @@ void GKOps::createPhysicalSpeciesVector( KineticSpeciesPtrVect&        a_species
    
    a_species_phys.resize( a_species_comp.size() );
    for (int s(0); s<a_species_comp.size(); s++) {
-      a_species_phys[s] = a_species_comp[s]->clone( m_ghost_vect );
+      a_species_phys[s] = a_species_comp[s]->clone( m_kinetic_ghost_vect );
       LevelData<FArrayBox>& dfn_phys( a_species_phys[s]->distributionFunction() );
       const PhaseGeom& geometry( a_species_comp[s]->phaseSpaceGeometry() );
       geometry.divideJonValid( dfn_phys );
@@ -994,7 +1004,7 @@ void GKOps::createPhysicalSpeciesVector( KineticSpeciesPtrVect&        a_species
 
    m_boundary_conditions->fillGhostCells( a_species_phys,
                                           m_phi,
-                                          m_injected_E_field,
+                                          m_E_field->getInjectedField(),
                                           a_time );
 }
 

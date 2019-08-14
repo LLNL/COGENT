@@ -57,7 +57,7 @@ TwoFieldNeutralsOp::TwoFieldNeutralsOp(const string&   a_pp_str,
    ParmParse ppdiff_bc( prefixBC.c_str() );
    m_diffusion_bc = elliptic_op_bc_factory.create(name,
                                                   ppdiff_bc,
-                                                  a_geometry.getCoordSys()->type(),
+                                                  *(a_geometry.getCoordSys()),
                                                   false );
 
    // Construct viscosity elliptic operator
@@ -71,7 +71,7 @@ TwoFieldNeutralsOp::TwoFieldNeutralsOp(const string&   a_pp_str,
    ParmParse ppvisc_bc( prefixBC.c_str() );
    m_viscosity_bc = elliptic_op_bc_factory.create(name,
                                                   ppvisc_bc,
-                                                  a_geometry.getCoordSys()->type(),
+                                                  *(a_geometry.getCoordSys()),
                                                   false );
    
    // Get initial conditions for cell variables and define boundary conditions instance

@@ -149,6 +149,8 @@ computeCompFaceFluxes( LevelData<FluxBox>& a_uTimesV,
                        const LevelData<FluxBox>& a_v,
                        bool a_useFourthOrder)
 {
+  CH_TIME("computeCompFaceFluxes");
+
    // Compute the SpaceDim-by-nComp face-averaged fluxes in computational
    // space, where a_v is the SpaceDim-dimensional velocity vector and
    // a_u is the nComp-dim state vector

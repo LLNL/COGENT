@@ -37,7 +37,11 @@ class LogRectConfigurationBC
        */
       virtual void apply( FluidSpecies&  species_comp,
                           const Real&    time );
-
+       
+      virtual void applyBC( const FluidSpecies&          species_comp,
+                                  LevelData<FArrayBox>&  a_dst,
+                            const Real                   time );
+      
       virtual void applyFluxBC( const FluidSpecies&       a_species_comp,
                                 LevelData<FluxBox>& a_dst,
                           const LevelData<FluxBox>& a_src,
@@ -47,6 +51,12 @@ class LogRectConfigurationBC
                                 LevelData<EdgeDataBox>& a_dst,
                           const LevelData<EdgeDataBox>& a_src,
                           const Real&               a_time );
+      
+      virtual void setEdgeBC( const FluidSpecies&       a_species_comp,
+                              LevelData<EdgeDataBox>& a_dst,
+                        const LevelData<EdgeDataBox>& a_src,
+                        const Real&               a_time );
+
 
 
 

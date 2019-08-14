@@ -160,6 +160,8 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
                                LevelData<FluxBox>&         a_mapped_coefficients,
                                LevelData<FluxBox>&         a_unmapped_coefficients )
 {
+   CH_TIME("GKPoisson::computeCoefficients");
+
    const DisjointBoxLayout& grids( m_geometry.grids() );
    
    LevelData<FluxBox> density_sum_face( grids, 1, 2*IntVect::Unit );

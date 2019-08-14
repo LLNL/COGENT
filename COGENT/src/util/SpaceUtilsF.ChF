@@ -365,7 +365,7 @@ c.......assign face value
       end
 
 c --------------------------------------------------------------
-c  average face values based linear, 1rd-order upwind
+c  average face values based linear, 1st-order upwind
 c
 c  facePhi <=> face-centered phi value
 c  cellPhi  => cell-centered phi
@@ -409,6 +409,109 @@ c  -------------------------------------------------------------
 
 c.......assign face value
         facePhi(CHF_IX[i;j;k;l;m],n) = val
+
+        CHF_ENDDO
+      enddo
+
+      return
+      end
+
+c --------------------------------------------------------------
+c  average face values based linear, 1st-order upwind
+c  and c2 with flux limiter
+c
+c  facePhi <=> face-centered phi value
+c  cellPhi  => cell-centered phi
+c  faceVel  => normal velocity on faces
+c  faceBox  =>
+c  idir     =>
+c  -------------------------------------------------------------
+      subroutine UW1C2FACE( CHF_FRA[facePhi],
+     &                      CHF_CONST_FRA[cellPhi],
+     &                      CHF_CONST_FRA[cellFun],
+     &                      CHF_CONST_FRA1[faceVel],
+     &                      CHF_BOX[faceBox],
+     &                      CHF_CONST_INT[limType],
+     &                      CHF_CONST_INT[idir] )
+
+
+      integer n, ncell, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val, valUW1, valC2, numer, denom, rlim, lim0, lim1, limiter
+
+      limiter = 1.0
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3);
+      mm = CHF_ID(idir, 4)]
+
+      do n=0, (CHF_NCOMP[facePhi]-1)
+        
+        if(CHF_NCOMP[facePhi].lt.CHF_NCOMP[cellPhi]) then
+           ncell = idir
+        else 
+           ncell = n
+        endif
+
+        CHF_MULTIDO[faceBox;i;j;k;l;m]
+
+           numer = cellFun(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],ncell)
+     &           - cellFun(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],ncell)
+           denom = cellFun(CHF_IX[i;j;k;l;m],ncell)
+     &           - cellFun(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],ncell)
+
+           if( denom.eq.zero ) then 
+              rlim = 1000.0
+           else          
+              rlim = numer/denom
+           end if
+
+           if( limType.eq.0 ) then
+c.............no limiter => uw1 scheme
+              limiter = 0.0
+           else if( limType.eq.1) then
+c.............van Leer limiter
+              limiter = (rlim + abs(rlim))/(1.0 + abs(rlim))
+           else if( limType.eq.2) then
+c.............minmod limiter
+              limiter = min(1.0,rlim)
+           else if( limType.eq.3) then
+c.............superbee limiter
+              lim0 = min(rlim,2.0)
+              lim1 = min(2.0*rlim,1.0)
+              limiter = max(lim0,lim1)
+           else if( limType.eq.4) then
+c.............van Albada 1 limiter
+              limiter = (rlim*rlim + rlim)/(rlim*rlim + 1.0)
+           else if( limType.eq.5) then
+c.............van Albada 2 limiter
+              limiter = (2.0*rlim)/(rlim*rlim + 1.0)
+           else
+c............. no upwind => c2 scheme
+              limiter = 1.0
+           end if
+           limiter = max(0.0,limiter)
+ 
+c           if( limiter.lt.zero .or. limiter.gt.one ) then
+c        print*, "rlim    = ", rlim
+c        print*, "limiter = ", limiter
+c           end if
+c        print*, "limType  = ", limType
+
+           valC2 = half*( cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],ncell)
+     &           +        cellPhi(CHF_IX[i;j;k;l;m],ncell) )
+
+           if( faceVel(CHF_IX[i;j;k;l;m]).gt.zero ) then
+              valUW1 = cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],ncell)
+           else
+              valUW1 = cellPhi(CHF_IX[i;j;k;l;m],ncell)
+           end if
+
+c.......assign face value
+           facePhi(CHF_IX[i;j;k;l;m],n) = valUW1 + limiter*(valC2 - valUW1);
 
         CHF_ENDDO
       enddo
@@ -611,6 +714,39 @@ c.......assign face value
 
       return
       end
+
+c ----------------------------------------------------------
+c  interp face center value to cell center using C2 method
+c
+c  -------------------------------------------------------------
+      subroutine C2FACETOCELL(CHF_BOX[cellBox],
+     &                        CHF_CONST_INT[dir],
+     &                        CHF_CONST_FRA1[facePhi],
+     &                        CHF_FRA1[cellPhi])
+
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val
+
+      CHF_DTERM[
+      ii = CHF_ID(dir, 0);
+      jj = CHF_ID(dir, 1);
+      kk = CHF_ID(dir, 2);
+      ll = CHF_ID(dir, 3);
+      mm = CHF_ID(dir, 4)]
+
+      CHF_MULTIDO[cellBox;i;j;k;l;m]
+
+         val = facePhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm])
+     &       + facePhi(CHF_IX[i;j;k;l;m])
+
+         cellPhi(CHF_IX[i;j;k;l;m]) = val * half
+
+      CHF_ENDDO
+
+      return
+      end
+
 
 c ----------------------------------------------------------
 c  interp cell edge values to cell center using C2 method
@@ -1194,3 +1330,24 @@ c     to avoid  "may be uninitialized warnings"
       return
       end
 
+      subroutine copy(
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA[dst],
+     &     CHF_CONST_FRA[src]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n], comp
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+
+         do comp = 0, CHF_NCOMP[dst]-1
+
+           dst(CHF_IX[i;j;k;l;m;n],comp) = src(CHF_IX[i;j;k;l;m;n],comp)
+
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end

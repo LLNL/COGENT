@@ -66,6 +66,7 @@ private:
    IntVect m_decomposition;
 
    int m_mb_dir;
+   string m_mag_geom_type;
 };
 
 

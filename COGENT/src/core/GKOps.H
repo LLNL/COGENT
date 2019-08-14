@@ -196,7 +196,7 @@ public:
       m_dt_scale(1.0),
       m_is_defined(false),
       m_ghost_vect(4*IntVect::Unit),
-      //m_ghost_vect(2*IntVect::Unit), // JRAgv
+      m_kinetic_ghost_vect(4*IntVect::Unit),
       m_cfg_nghosts(2*CFG::IntVect::Unit),
       m_fixed_efield(false),
       m_zero_efield(false), // JRA
@@ -261,8 +261,7 @@ public:
    void setElectricField( const GKState&                   state_comp,
                           const int                        step,
                           CFG::LevelData<CFG::FArrayBox>&  phi,
-                          CFG::EField&                     E_field,
-                          LevelData<FluxBox>&              injected_E_field ) const;
+                          CFG::EField&                     E_field) const;
 
    inline bool trivialSolutionOp() const { return m_trivial_solution_op; }
 
@@ -592,6 +591,12 @@ public:
      return m_gyroavg_ops;
    }
 
+   /// Return kinetic species ghost vect size require for methods used.
+   /**
+    * Private method to return kinetic species ghost vect.
+    */
+   void getKineticSpeciesGhostVect(IntVect& ghost_vect);
+   
 private:
    
    /// Parse parameters.
@@ -661,7 +666,7 @@ private:
                              const opType                         op_type,
                              const bool                           recompute_kinetic_terms,
                              const Real&                          time);
-   
+
    /// Compute the signed charge densities
    /**
     * Compute the signed charge densities
@@ -701,7 +706,6 @@ private:
 
    CFG::EField*                   m_E_field;
    CFG::EField*                   m_E_field_ImOpImEx;
-   LevelData<FluxBox>             m_injected_E_field;
    CFG::LevelData<CFG::FArrayBox> m_phi;
 
    CFG::BoltzmannElectron*        m_boltzmann_electron;
@@ -719,6 +723,7 @@ private:
    bool m_is_defined;
    
    IntVect                        m_ghost_vect;
+   IntVect                        m_kinetic_ghost_vect;
    const CFG::IntVect             m_cfg_nghosts;
       
    bool                           m_consistent_potential_bcs;

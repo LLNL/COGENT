@@ -49,11 +49,11 @@ public:
 
    virtual void defineEllipticOpBC( EllipticOpBC& bc ) const;
 
-   int blockType(int a_block) const {return ((SingleNullBlockCoordSys*)m_coordSysVect[a_block])->poloidalIndex();}
+   int blockType(int a_block) const {return ((SingleNullBlockCoordSys*)m_coordSysVect[a_block])->poloidalBlock();}
 
    int numPoloidalBlocks() const {return m_num_poloidal_blocks;}
 
-   int numToroidalBlocks() const {return m_num_toroidal_blocks;}
+   int numToroidalSectors() const {return m_num_toroidal_sectors;}
 
    int numCellsCoreRadial() const {return m_numcells_core_radial;}
 
@@ -86,11 +86,21 @@ public:
    virtual std::string type() const { return "SingleNull"; }
 
 #if CFG_DIM==3
-   virtual void toroidalBlockRemapping(IntVect&               ivDst,
-                                       Vector<Real>&          interpStecil,
-                                       const RealVect&        xiSrc,
-                                       const int              nSrc,
-                                       const Side::LoHiSide&  side) const;
+   virtual void toroidalBlockRemapping( IntVect&               ivDst,
+                                        int&                   nDst,
+                                        Vector<Real>&          interpStecil,
+                                        Vector<int>&           interpStecilOffsets,
+                                        const RealVect&        xiSrc,
+                                        const int              nSrc,
+                                        const Side::LoHiSide&  side) const;
+
+   void getInterpolationCoefficients(Vector<Real>&    coeff,
+                                     Vector<int>&     offsets,
+                                     const RealVect&  xi0_dst,
+                                     const IntVect&   iv0_dst,
+                                     const RealVect&  dx_dst,
+                                     const int        order) const;
+
 #endif
 
    virtual Vector<RealVect> displacements(const Vector<RealVect>&   dstCoords,
@@ -101,6 +111,9 @@ public:
    int poloidalBlockNumber(const int block_number) const {return block_number % m_num_poloidal_blocks;}
 
    int toroidalBlockNumber(const int block_number) const {return block_number / m_num_poloidal_blocks;}
+
+   int blockNumber(const int poloidal_block_number, const int toroidal_block_number) const 
+              {return m_num_poloidal_blocks * toroidal_block_number + poloidal_block_number;}
 
 #if CFG_DIM==3
    double toroidalWidth() const {return m_toroidal_width;}
@@ -128,9 +141,8 @@ protected:
                           const int                 nghost );
 
 
-   void readGridParams( ParmParse& a_pp );
-
-   void readGeomParams( ParmParse& a_pp );
+   void readParams( ParmParse& a_pp_grid,
+                    ParmParse& a_pp_geom );
 
    void printInvalidPointDiagnostics( const int                      nSrc,
                                       const RealVect&                xiSrc,
@@ -176,7 +188,7 @@ protected:
    IntVect m_decomp_rsol;
 
    int m_num_poloidal_blocks;
-   int m_num_toroidal_blocks;
+   int m_num_toroidal_sectors;
 
    double m_xpoint_radius;
    double m_toroidal_width;

@@ -69,6 +69,34 @@ void GridFunction::assign(LevelData<FluxBox>&         a_data,
 }
 
 
+void GridFunction::assign(LevelData<EdgeDataBox>&     a_data,
+                          const MultiBlockLevelGeom&  a_geometry,
+                          const Real&                 a_time,
+                          const bool&                 a_face_averages ) const
+{
+   checkGeometryValidity( a_geometry );
+
+   const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
+   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
+   
+   const LevelData<EdgeDataBox>& real_coords =  ((MagGeom&)a_geometry).getEdgeCenteredRealCoords();
+   const LevelData<FluxBox>& normalized_flux =  ((MagGeom&)a_geometry).getNormalizedMagneticFluxFace();
+   
+   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
+      const int block_number( coord_sys.whichBlock( grids[dit] ) );
+      //if (a_face_averages && !((MagGeom&)a_geometry).secondOrder()) {
+      //   setFaceAverages( a_data[dit], a_geometry, real_coords[dit], normalized_flux[dit], block_number );
+      //}
+      //else {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            setPointwise( a_data[dit][dir], a_geometry, real_coords[dit][dir], normalized_flux[dit][dir], block_number );
+         }
+      //}
+   }
+   a_data.exchange();
+}
+
+
 void GridFunction::assign(FArrayBox&                  a_data,
                           const MultiBlockLevelGeom&  a_geometry,
                           const FArrayBox&            a_real_coords,

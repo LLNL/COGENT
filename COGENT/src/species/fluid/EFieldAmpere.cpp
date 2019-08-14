@@ -156,6 +156,8 @@ void EFieldAmpere::computeEField( const PS::GKState&                a_state,
          E_field_face[dit].setVal(0.);
       }
    }
+   // Compute injected E-field
+   computeInjectedField(m_injected_E_field, a_kinetic_species, E_field_face, E_field_cell);
 }
 
 
