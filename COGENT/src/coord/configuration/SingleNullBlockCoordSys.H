@@ -8,6 +8,7 @@
 
 #if CFG_DIM==3
 #include "BSplineInterp3D.H"
+#include "LevelData.H"
 #endif
 
 #define POL_NAMESPACE D2
@@ -125,7 +126,18 @@ class SingleNullBlockCoordSys
       RealVect mappedCoordNewton( const RealVect&  X,
                                   const RealVect&  xi_initial,
                                   const IntVect&   iv_initial ) const;
+   
+      void getPoloidalDisjointBoxLayout(DisjointBoxLayout&   a_grids,
+                                        Vector<Box>&         a_boxes,
+                                        int&                 a_decomp_num,
+                                        const Box&           a_box) const;
 
+      void assembleDecomposedData(FArrayBox&                    a_interp_node_data,
+                                  FArrayBox&                    a_interp_node_coords,
+                                  const LevelData<FArrayBox>&   a_interp_node_data_decomp,
+                                  const LevelData<FArrayBox>&   a_interp_node_coords_decomp,
+                                  const Vector<Box>&            a_grid_boxes,
+                                  const int&                    a_decomp_num ) const;
 #endif
 
       bool containsPoloidalPoint( const POL::RealVect& X, const bool verbose ) const;
@@ -149,6 +161,9 @@ class SingleNullBlockCoordSys
    
       virtual void getNodalFieldData(FArrayBox& points, FArrayBox& A, FArrayBox& b, FArrayBox& Bmag) const;
 
+      ///Return toroidal coordinates
+      void getToroidalCoords(FArrayBox& coords) const;
+  
       //Computes normalized magnetic flux
       virtual void getNormMagneticFlux( const FArrayBox& a_physical_coordinates,
                                         FArrayBox&       a_magnetic_flux ) const;
@@ -176,6 +191,8 @@ class SingleNullBlockCoordSys
       bool truncated() const {return m_poloidally_truncated;}
 
       bool isValid(const RealVect& xi, const bool omit_toroidal ) const;
+   
+      bool isFieldAlignedMapping() const {return m_field_aligned_mapping;}
 
       virtual string geometryType() const {return "SingleNull";}
    
@@ -270,12 +287,10 @@ class SingleNullBlockCoordSys
 #endif
 
       int m_toroidal_ghosts;   // Number of mapped ghost cells in the toroidal direction
+      int m_toroidal_mapping_refinement; //Refinemnt of mapping in toroidal dir relative to grid
    
       // Field tracing parameters; field lines are traced until they hit a prescribed poloidal plane.
-      double m_field_trace_step;       // Ray tracing step size (<1.); decreasing this improves the tracing accuracy,
-                                       // but increases the cost due to more field evaluations
-      int    m_field_trace_max_iters;  // Tolerance used to determine whether the poloidal plane has been reached
-      double m_field_trace_tol;        // Maximum number of steps allowed to reach the poloidal plane
+      int m_field_trace_step_num;     //Number of steps in toroidal dir used to ray trace field between poloidal planes
 };
 
 #include "NamespaceFooter.H"

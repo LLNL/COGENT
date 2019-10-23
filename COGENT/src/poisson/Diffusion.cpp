@@ -43,6 +43,9 @@ Diffusion::Diffusion( const ParmParse&  a_pp,
    m_preconditioner      = new MBHypreSolver(a_geom, preconditioner_order, m_mblx_ptr);
    m_imex_preconditioner = new MBHypreSolver(a_geom, preconditioner_order, m_mblx_ptr);
 #endif
+
+   m_preconditioner->setMethodParams(m_precond_method, m_precond_precond_method);
+   m_imex_preconditioner->setMethodParams(m_precond_method, m_precond_precond_method);
 }
       
 
@@ -120,9 +123,9 @@ Diffusion::setPreconditionerConvergenceParams( const double a_tol,
                                                const double a_precond_tol,
                                                const int    a_precond_max_iter )
 {
-   m_preconditioner->setParams(m_precond_method, a_tol, a_max_iter, m_precond_verbose,
-                               m_precond_precond_method, a_precond_tol, a_precond_max_iter,
-                               m_precond_precond_verbose);
+   m_preconditioner->setConvergenceParams(a_tol, a_max_iter, m_precond_verbose,
+                                          a_precond_tol, a_precond_max_iter,
+                                          m_precond_precond_verbose);
 }
 
 
@@ -132,9 +135,9 @@ Diffusion::setImExPreconditionerConvergenceParams( const double a_tol,
                                                    const double a_precond_tol,
                                                    const int    a_precond_max_iter )
 {
-   m_imex_preconditioner->setParams(m_precond_method, a_tol, a_max_iter, m_precond_verbose,
-                                    m_precond_precond_method, a_precond_tol, a_precond_max_iter,
-                                    m_precond_precond_verbose);
+   m_imex_preconditioner->setConvergenceParams(a_tol, a_max_iter, m_precond_verbose,
+                                               a_precond_tol, a_precond_max_iter,
+                                               m_precond_precond_verbose);
 }
 
 

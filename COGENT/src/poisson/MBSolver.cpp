@@ -60,6 +60,18 @@ MBSolver::MBSolver( const MultiBlockLevelGeom&      a_geom,
    else {
       m_mblex_defined_locally = false;
    }
+
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      m_flux_average[dir] = true;
+   }
+
+#if CFG_DIM==3
+   if ( ((MagGeom&)m_geometry).shearedMBGeom() ) {
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         m_flux_average[dir] = false;
+      }
+   }
+#endif
 }
       
 
@@ -128,12 +140,14 @@ MBSolver::averageAtBlockBoundaries(LevelData<FluxBox>& a_data) const
 
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          for (int idir = 0; idir < SpaceDim; idir++) {
-            for (SideIterator sit; sit.ok(); ++sit) {
-               Side::LoHiSide side = sit();
-               if (blockRegister.hasInterface(dit(), idir, side)) {
-                  FArrayBox flux_comp(a_data[dit][idir].box(), a_data.nComp());
-                  flux_comp.copy(a_data[dit][idir]);
-                  blockRegister.storeFlux(flux_comp, dit(), idir, side);
+            if ( m_flux_average[idir] ) {
+               for (SideIterator sit; sit.ok(); ++sit) {
+                  Side::LoHiSide side = sit();
+                  if (blockRegister.hasInterface(dit(), idir, side)) {
+                     FArrayBox flux_comp(a_data[dit][idir].box(), a_data.nComp());
+                     flux_comp.copy(a_data[dit][idir]);
+                     blockRegister.storeFlux(flux_comp, dit(), idir, side);
+                  }
                }
             }
          }
@@ -149,7 +163,7 @@ MBSolver::averageAtBlockBoundaries(LevelData<FluxBox>& a_data) const
          for (SideIterator sit; sit.ok(); ++sit) {
             Side::LoHiSide side = sit();
             for (int idir = 0; idir < SpaceDim; idir++) {
-               if (blockRegister.hasInterface(dit(), idir, side)) {
+               if ( m_flux_average[idir] && blockRegister.hasInterface(dit(), idir, side) ) {
                   // maybe better if this is done inside BlockRegister
                   const BlockBoundary& bb = boundaries[block_number][faceID];
                   int reorientFace = bb.reorientFace(idir);
@@ -323,24 +337,26 @@ MBSolver::getUnstructuredCouplings( int                                 a_radius
          IntVectSet dst_ivs = getInterBlockCoupledCells(dst_block_number, a_radius, grids[dit]);
 
          for (int dir = 0; dir < SpaceDim; dir++) {
-            BaseFab<IntVectSet>& this_coupling_dir = *this_coupling[dir];
-            BaseFab<SparseCoupling> data(surroundingNodes(grids[dit], dir), 1);
+            if ( m_flux_average[dir] ) {
+               BaseFab<IntVectSet>& this_coupling_dir = *this_coupling[dir];
+               BaseFab<SparseCoupling> data(surroundingNodes(grids[dit], dir), 1);
 
-            for (SideIterator sit; sit.ok(); ++sit) {
-               Side::LoHiSide side = sit();
-               if (blockRegister.hasInterface(dit(), dir, side)) {
+               for (SideIterator sit; sit.ok(); ++sit) {
+                  Side::LoHiSide side = sit();
+                  if (blockRegister.hasInterface(dit(), dir, side)) {
 
-                  for (IVSIterator it(dst_ivs); it.ok(); ++it) {
-                     IntVect iv = it();
-                     iv.shift(dir,side);
+                     for (IVSIterator it(dst_ivs); it.ok(); ++it) {
+                        IntVect iv = it();
+                        iv.shift(dir,side);
 
-                     IntVectSet& unstructured_ivs = this_coupling_dir(iv);
-                     for (IVSIterator sivsit(unstructured_ivs); sivsit.ok(); ++sivsit) {
-                        data(iv).add( sivsit(), 0. );
+                        IntVectSet& unstructured_ivs = this_coupling_dir(iv);
+                        for (IVSIterator sivsit(unstructured_ivs); sivsit.ok(); ++sivsit) {
+                           data(iv).add( sivsit(), 0. );
+                        }
                      }
-                  }
 
-                  blockRegister.store(data, dit(), dir, side);
+                     blockRegister.store(data, dit(), dir, side);
+                  }
                }
             }
          }
@@ -354,19 +370,21 @@ MBSolver::getUnstructuredCouplings( int                                 a_radius
          for (SideIterator sit; sit.ok(); ++sit) {
             Side::LoHiSide side = sit();
             for (int idir = 0; idir < SpaceDim; idir++) {
-               BaseFab<IntVectSet>& this_coupling_dir = *this_coupling[idir];
-               if (blockRegister.hasInterface(dit(), idir, side)) {
-                  Box faceBox = adjCellBox(baseBox, idir, side, 1);
-                  // if Lo, then shift +1; if Hi, then shift -1
-                  faceBox.shiftHalf(idir, -sign(side));
-                  BaseFab<SparseCoupling> otherFab(faceBox, 1);
-                  blockRegister.fill(otherFab, dit(), idir, side, side);
-                  BoxIterator bit(faceBox);
-                  for (bit.begin(); bit.ok(); ++bit) {
-                     IntVect iv = bit();
-                     SparseCoupling& coupling = otherFab(iv,0);
-                     for (SparseCouplingIterator it(coupling); it.ok(); ++it) {
-                        this_coupling_dir(iv) |= coupling[it()];
+               if ( m_flux_average[idir] ) {
+                  BaseFab<IntVectSet>& this_coupling_dir = *this_coupling[idir];
+                  if (blockRegister.hasInterface(dit(), idir, side)) {
+                     Box faceBox = adjCellBox(baseBox, idir, side, 1);
+                     // if Lo, then shift +1; if Hi, then shift -1
+                     faceBox.shiftHalf(idir, -sign(side));
+                     BaseFab<SparseCoupling> otherFab(faceBox, 1);
+                     blockRegister.fill(otherFab, dit(), idir, side, side);
+                     BoxIterator bit(faceBox);
+                     for (bit.begin(); bit.ok(); ++bit) {
+                        IntVect iv = bit();
+                        SparseCoupling& coupling = otherFab(iv,0);
+                        for (SparseCouplingIterator it(coupling); it.ok(); ++it) {
+                           this_coupling_dir(iv) |= coupling[it()];
+                        }
                      }
                   }
                }
@@ -818,7 +836,7 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
 
          // Fill internal ghosts
          if ( m_coord_sys_ptr->numBlocks() > 1 ) {
-            m_mblex_potential_Ptr->interpGhosts(tmp);
+            ((MagGeom&)m_geometry).fillInternalGhosts(tmp);
          }
          tmp.exchange();
 
@@ -981,26 +999,24 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
       }
    }
 
-   LevelData<FArrayBox> matvec(grids, 1, IntVect::Zero);
-   multiplyMatrix(solution, matvec);
-
-   plot("matvec", matvec, 0.);
    plot("operator_eval", operator_eval, 0.);
 
+   LevelData<FArrayBox> matvec(grids, 1, IntVect::Zero);
+   multiplyMatrix(solution, matvec);
+   plot("matvec", matvec, 0.);
+
+   LevelData<FArrayBox> diff(grids, 1, IntVect::Zero);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      matvec[dit] -= a_rhs_from_bc[dit];
+      diff[dit].copy(matvec[dit]);
+      diff[dit] -= a_rhs_from_bc[dit];
+      diff[dit] -= operator_eval[dit];
    }
+   plot("diff", diff, 0.);
 
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      matvec[dit] -= operator_eval[dit];
-   }
-
-   plot("diff", matvec, 0.);
-
-   double diff = L2Norm(matvec);
+   double diff_norm = L2Norm(diff);
 
    if (procID()==0) {
-      cout << "Matrix diff = " << diff << " (using random input)" << endl;
+      cout << "Matrix diff = " << diff_norm << " (using random input)" << endl;
    }
 }
 

@@ -63,6 +63,8 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
    m_preconditioner = new MBHypreSolver(a_geom, discretization_order, m_mblx_ptr);
 #endif
    
+   m_preconditioner->setMethodParams(m_precond_method, m_precond_precond_method);
+
    if (a_pp.contains("charge_exchange_coefficient")) {
       GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
       std::string grid_function_name;
@@ -452,9 +454,9 @@ GKPoisson::setPreconditionerConvergenceParams( const double a_tol,
                                                const double a_precond_tol,
                                                const int    a_precond_max_iter )
 {
-   m_preconditioner->setParams(m_precond_method, a_tol, a_max_iter, m_precond_verbose,
-                               m_precond_precond_method, a_precond_tol, a_precond_max_iter,
-                               m_precond_precond_verbose);
+   m_preconditioner->setConvergenceParams(a_tol, a_max_iter, m_precond_verbose,
+                                          a_precond_tol, a_precond_max_iter,
+                                          m_precond_precond_verbose);
 }
 
 

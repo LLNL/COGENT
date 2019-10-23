@@ -337,7 +337,6 @@ class KineticSpecies
       MomentOp& m_moment_op;
       mutable DisjointBoxLayout m_ghost_dbl;
       mutable LevelData<FluxBox> m_velocity;
-      mutable Real m_time;
       mutable int m_velocity_option;
    
       GyroaverageOperator const *m_gyroavg_op;

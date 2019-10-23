@@ -8,6 +8,7 @@
 #include "ExplicitStageFunction.H"
 #include "ExplicitStageJacobian.H"
 #include "NewtonSolver.H"
+#include "Checkpoints.H"
 
 #define _TI_RK_ "rk"
 
@@ -153,7 +154,6 @@ private:
     Real        m_dt;
     Real        m_epsJFNK;
     int         m_cur_step, m_count;
-    bool        m_step_const_coef;
 
     ExplicitStageFunction<Vector,Ops>  *m_Efunction;
     ExplicitStageJacobian<Vector,Ops>  *m_EJacobian;
@@ -168,7 +168,6 @@ void TiRK<Vector,Ops>::define( ParmParse& a_pp,
 {
   m_dt = a_dt;
   m_epsJFNK = 1e-6;
-  m_step_const_coef = false;
   
   /* set Butcher coefficients */
   if (a_name == "1fe") {
@@ -308,8 +307,6 @@ void TiRK<Vector,Ops>::define( ParmParse& a_pp,
 
   m_count = 0;
 
-  a_pp.query("step_const_coef", m_step_const_coef); 
-
   /* done */
   m_is_Defined = true;
   if (!procID()) cout << "Time integration method: rk (" << m_name << ")\n" ;
@@ -367,11 +364,7 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
     Real stage_time = m_time+m_c[i]*m_dt;
 
     if (m_Operators.trivialSolutionOp()) {
-      if ( m_step_const_coef && i==0 ) {
-         // Initialize the coefficients for the right-hand side operators,
-         // which are assumed to be constant over the step
-         m_Operators.preOpEval(a_Y,m_time,true,true);
-      }
+
       m_YStage.copy(a_Y);
       for (j=0; j<i; j++) m_YStage.increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
 
@@ -384,28 +377,16 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
        * subsequent stages - m_YStage from previous stage */
       m_EJacobian->updatePreCondMat(m_YStage);
   
-      if ( m_step_const_coef ) {
-         if ( i==0 ) {
-            // Initialize the coefficients for both the solution and right-hand side
-            // operators, which are assumed to be constant over the step
-            m_Operators.preOpEval(a_Y,stage_time,true,true);
-         }
-         else {
-            m_Operators.preOpEval(a_Y,stage_time,false,false);
-         }
-      }
-      else {
-         m_Operators.preSolutionOpEval(a_Y,stage_time,true);
-      }
+      m_Operators.preSolutionOpEval(a_Y,m_time,chkpt_ti_advance_1);
       m_Operators.solutionOp(m_R,stage_time,a_Y);
       for (j=0; j<i; j++) m_R.increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
   
-      m_ExplicitStageSolver.solve(m_YStage,m_R,!m_step_const_coef);
+      m_ExplicitStageSolver.solve(m_YStage,m_R);
 
     }
 
     m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage,i);
-    m_Operators.preOpEval(m_YStage,stage_time,true,!m_step_const_coef);
+    m_Operators.preOpEval(m_YStage,stage_time,chkpt_ti_advance_2);
     m_Operators.explicitOp(m_rhsStage[i],stage_time,m_YStage);
   }
 
@@ -422,13 +403,13 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
     m_EJacobian->setStageTime(m_time+m_dt);
     m_EJacobian->updatePreCondMat(a_Y);
 
-    m_Operators.preSolutionOpEval(a_Y,(m_time+m_dt),!m_step_const_coef);
+    m_Operators.preSolutionOpEval(a_Y,(m_time+m_dt),chkpt_ti_advance_3);
     m_Operators.solutionOp(m_R,(m_time+m_dt),a_Y);
     for (i = 0; i < m_nstages; i++) {
       m_R.increment(m_rhsStage[i],(m_dt*m_b[i]));
     }
 
-    m_ExplicitStageSolver.solve(a_Y,m_R,!m_step_const_coef);
+    m_ExplicitStageSolver.solve(a_Y,m_R);
 
   }
 

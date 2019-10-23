@@ -2,6 +2,7 @@
 #define _ExplicitStageJacobian_H_
 
 #include "PreconditionerLibrary.H"
+#include "Checkpoints.H"
 
 #include "NamespaceHeader.H"
 
@@ -187,7 +188,7 @@ void ExplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y)
     }
 
     m_Z.copy(m_Y0); m_Z.increment(a_y,eps);
-    m_ops->preOpEval(m_Z,m_stage_time,false,false); // JRA
+    m_ops->preOpEval(m_Z,m_stage_time,chkpt_stage_jac);
     m_ops->solutionOp(m_M,m_stage_time,m_Z);
 
     a_F.copy(m_M); 

@@ -209,6 +209,8 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
       m_precond_Qsolver = new MBHypreSolver(a_geom, precond_order, m_mblex_ptr);
 #endif
 
+      m_precond_Qsolver->setMethodParams(m_precond_method, m_precond_precond_method);
+
       // Defaults; overridden if present in ParmParse object
       string method = "AMG";
       double tol = 0.;
@@ -225,8 +227,7 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
       ParmParse pp_Qsolver_precond( ((string)pp_Qsolver.prefix() + ".precond").c_str() );
       parseMethodAndParams( pp_Qsolver_precond, precond_method, precond_tol, precond_max_iter, precond_verbose);
 
-      m_precond_Qsolver->setParams(method, tol, max_iter, verbose, precond_method,
-                                   precond_tol, precond_max_iter, precond_verbose);
+      m_precond_Qsolver->setConvergenceParams(tol, max_iter, verbose, precond_tol, precond_max_iter, precond_verbose);
    }
 
    m_boltzmann_prefactor.define(m_flux_surface.grids(), 1, IntVect::Zero);

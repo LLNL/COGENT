@@ -2320,19 +2320,30 @@ PhaseGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
 
                //interpolate ghost data
                for (int comp=0; comp<nComp; ++comp) {
-                  double ghost_val = 0.0;
-                  for (int n=0; n<sheared_interp_order + 1; ++n) {
-                     IntVect iv_tmp(iv_ghost);
-		     if (!m_mag_geom->extrablockExchange()) {
-		       iv_tmp[POLOIDAL_DIR] += n - sheared_interp_order/2;
-		     }
-		     else {
-		       iv_tmp[POLOIDAL_DIR] += (int)(*m_sheared_interp_stencil_offsets)[dit](iv_inj,n);
-		     }
-                     ghost_val += ghosts[dit](iv_tmp,comp) * (*m_sheared_interp_stencil)[dit](iv_inj,n);
-                  }
                   
-                  a_data[dit](iv,comp) = ghost_val;
+                  double ghost_val = 0.0;
+                  
+                  // Get the coefficient that also designates whether the ghost cell is
+                  //(a) fully emerged inside the saw-tooth BC (fac>1); physical BC handles that.
+                  //(b) partially emerged in the saw-tooth (0<fac<1)
+                  //(c) belongs to the poloidal interior (fac < 0)
+                  
+                  Real fac = (*m_sheared_interp_stencil)[dit](iv_inj,sheared_interp_order + 1);
+                  
+                  if (fac < 1.0) {
+                     for (int n=0; n<sheared_interp_order + 1; ++n) {
+                        IntVect iv_offset(iv_ghost);
+                        iv_offset[POLOIDAL_DIR] += (int)(*m_sheared_interp_stencil_offsets)[dit](iv_inj,n);
+                        ghost_val += ghosts[dit](iv_offset,comp) * (*m_sheared_interp_stencil)[dit](iv_inj,n);
+                     }
+                     
+                     if (fac < 0.) {
+                        a_data[dit](iv,comp) = ghost_val;
+                     }
+                     else {
+                        a_data[dit](iv,comp) = fac*a_data[dit](iv,comp) + (1.0-fac) * ghost_val;
+                     }
+                  }
                }
             }
          }
@@ -2412,8 +2423,11 @@ PhaseGeom::getShearedGhostBoxLayout()
                hiEnd_remapped[dir] = iv_hi[dir];
             }
             
-            loEnd_remapped[POLOIDAL_DIR] -= sheared_interp_order/2;
-            hiEnd_remapped[POLOIDAL_DIR] += sheared_interp_order/2;
+            // For the case of core-geometry the offset is only m_sheared_interp_order/2
+            // However, the saw-tooth BCs requires larger offset near poloidal boundaries
+            // If affects the performance, treat core and SN geom separately
+            loEnd_remapped[POLOIDAL_DIR] -= (sheared_interp_order + 1) ;
+            hiEnd_remapped[POLOIDAL_DIR] += (sheared_interp_order + 1);
             
             Box remapped_box(loEnd_remapped, hiEnd_remapped);
             

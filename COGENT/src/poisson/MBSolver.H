@@ -149,6 +149,7 @@ protected:
    int m_discretization_order;
 
    bool m_mblex_defined_locally;
+   bool m_flux_average[SpaceDim];
 };
 
 

@@ -1,5 +1,5 @@
 #include "GKSystemBC.H"
-
+#include "SingleNullPhaseCoordSys.H"
 #include "KineticSpeciesBCFactory.H"
 
 #undef CH_SPACEDIM
@@ -102,6 +102,8 @@ void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&           
    CH_TIMER("apply_bc", t_apply_bc);
    for (int s(0); s<a_species.size(); s++) {
 
+      // It is important to fill internal ghosts prior to physical
+      // as they amay be reqired for co-dim ghost evaluation 
       CH_START(t_execute_exchanges);
       KineticSpecies& species_physical( *(a_species[s]) );
       executeInternalExchanges( species_physical );
@@ -115,6 +117,15 @@ void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&           
       KineticSpeciesBC& ksbc( kineticSpeciesBC( species_physical.name() ) );
       ksbc.apply( species_physical, a_phi, m_mapped_velocity, a_time );
       CH_STOP(t_apply_bc);
+
+      // For the case of a SN sheared geoemtry need to
+      // refill internal ghosts again to handle the saw-tooth BCs
+      const MultiBlockCoordSys& coord_sys( *(m_phase_geometry.coordSysPtr()) );
+      const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
+      if (mag_geom.shearedMBGeom() && (typeid(coord_sys) == typeid(SingleNullPhaseCoordSys))) {
+	executeInternalExchanges( species_physical );
+      }
+      
    }
 }
 

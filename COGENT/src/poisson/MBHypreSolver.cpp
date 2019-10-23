@@ -16,8 +16,11 @@ MBHypreSolver::MBHypreSolver( const MultiBlockLevelGeom&      a_geom,
                               const int                       a_discretization_order,
                               MultiBlockLevelExchangeCenter*  a_mblex_ptr)
    : MBSolver(a_geom, a_discretization_order, a_mblex_ptr),
+     m_method_params_set(false),
+     m_convergence_params_set(false),
      m_hypre_allocated(false),
-     m_A(NULL)
+     m_A(NULL),
+     m_AMG_solver_allocated(false)
 {
    createHypreData();
 }
@@ -115,25 +118,33 @@ MBHypreSolver::multiplyMatrix( const LevelData<FArrayBox>&  a_in,
 
 
 void
-MBHypreSolver::setParams( const string& a_method,
-                          const double  a_method_tol,
-                          const int     a_method_max_iter,
-                          const bool    a_method_verbose,
-                          const string& a_precond_method,
-                          const double  a_precond_tol,
-                          const int     a_precond_max_iter,
-                          const bool    a_precond_verbose )
+MBHypreSolver::setMethodParams( const string& a_method,
+                                const string& a_precond_method )
 {
    m_method           = a_method;
+   m_precond_method   = a_precond_method;
+
+   m_method_params_set = true;
+}
+
+
+
+void
+MBHypreSolver::setConvergenceParams( const double  a_method_tol,
+                                     const int     a_method_max_iter,
+                                     const bool    a_method_verbose,
+                                     const double  a_precond_tol,
+                                     const int     a_precond_max_iter,
+                                     const bool    a_precond_verbose )
+{
    m_method_tol       = a_method_tol;
    m_method_max_iter  = a_method_max_iter;
    m_method_verbose   = a_method_verbose;
-   m_precond_method   = a_precond_method;
    m_precond_tol      = a_precond_tol;
    m_precond_max_iter = a_precond_max_iter;
    m_precond_verbose  = a_precond_verbose;
 
-   m_params_set = true;
+   m_convergence_params_set = true;
 }
 
 
@@ -143,8 +154,8 @@ MBHypreSolver::solve( const LevelData<FArrayBox>&  a_rhs,
                       LevelData<FArrayBox>&        a_solution,
                       bool                         a_homogeneous_bcs )
 {
-   if ( !m_params_set ) {
-      MayDay::Error("MBHypreSolver::solve(): solver parameters have not been set");
+   if ( !m_convergence_params_set ) {
+      MayDay::Error("MBHypreSolver::solve(): solver convergence parameters have not been set");
    }
 
    if ( a_homogeneous_bcs ) {
@@ -209,6 +220,10 @@ MBHypreSolver::constructMatrixGeneral( LevelData<FArrayBox>&  a_alpha_coefficien
    constructHypreMatrix(a_alpha_coefficient, a_tensor_coefficient, a_beta_coefficient, a_bc,
                         m_A_graph, m_A_stencil_values, m_A_diagonal_offset, m_A_unstructured_coupling,
                         fourth_order, m_A, m_rhs_from_bc);
+
+   if ( m_method == "AMG" ) {
+      AMGSetup(m_A);
+   }
 }
 
 
@@ -380,6 +395,7 @@ void
 MBHypreSolver::destroyHypreData()
 {
    if (m_hypre_allocated) {
+      if (m_AMG_solver_allocated) HYPRE_BoomerAMGDestroy(m_par_AMG_solver);
       if (m_A) {
          HYPRE_SStructMatrixDestroy(m_A);
          m_A = NULL;
@@ -558,7 +574,7 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
                      // Halve the contributions on face contained in block interfaces to effect averaging
                      double fac;
                      if ( (at_lo_block_interface && side == Side::LoHiSide::Lo) || (at_hi_block_interface && side == Side::LoHiSide::Hi) ) {
-                        fac = 0.5;
+                        fac = m_flux_average[dir]? 0.5: 1.0;
                         iv_face = iv;
                         iv_face.shift(dir,side);
                      }
@@ -657,10 +673,12 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
 
             // Store the contributions at block interfaces
             for (int dir = 0; dir < SpaceDim; dir++) {
-               for (SideIterator sit; sit.ok(); ++sit) {
-                  Side::LoHiSide side = sit();
-                  if (blockRegister.hasInterface(dit(), dir, side)) {
-                     blockRegister.store(data[dir], dit(), dir, side);
+               if ( m_flux_average[dir] ) {
+                  for (SideIterator sit; sit.ok(); ++sit) {
+                     Side::LoHiSide side = sit();
+                     if (blockRegister.hasInterface(dit(), dir, side)) {
+                        blockRegister.store(data[dir], dit(), dir, side);
+                     }
                   }
                }
             }
@@ -682,7 +700,7 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
          for (SideIterator sit; sit.ok(); ++sit) {
             Side::LoHiSide side = sit();
             for (int dir = 0; dir < SpaceDim; dir++) {
-               if (blockRegister.hasInterface(dit(), dir, side)) {
+               if ( m_flux_average[dir] && blockRegister.hasInterface(dit(), dir, side) ) {
                   Box faceBox = adjCellBox(grids[dit], dir, side, 1);
                   // if Lo, then shift +1; if Hi, then shift -1
                   faceBox.shiftHalf(dir, -sign(side));
@@ -955,17 +973,50 @@ MBHypreSolver::extrapGhosts( const EllipticOpBC&   a_bc,
 
 
 void
+MBHypreSolver::AMGSetup( const HYPRE_SStructMatrix& a_matrix )
+{
+   CH_TIME("MBHypreSolver::AMGSetup");
+
+   if ( m_AMG_solver_allocated ) {
+      HYPRE_BoomerAMGDestroy(m_par_AMG_solver);
+   }
+   
+   HYPRE_BoomerAMGCreate(&m_par_AMG_solver);
+   m_AMG_solver_allocated = true;
+
+   // Algorithm options
+   HYPRE_BoomerAMGSetStrongThreshold(m_par_AMG_solver, 0.25);
+   HYPRE_BoomerAMGSetCoarsenType(m_par_AMG_solver, 6);  // Falgout coarsening
+   //   HYPRE_BoomerAMGSetRelaxType(m_par_AMG_solver, 3);  // hybrid Gauss-Seidel
+   //   HYPRE_BoomerAMGSetCycleRelaxType(m_par_AMG_solver, 3, 3);  // hybrid Gauss-Seidel on coarsest level
+   //   HYPRE_BoomerAMGSetCycleRelaxType(m_par_AMG_solver, 9, 3);  // Gaussian elimination on coarsest level
+   //   HYPRE_BoomerAMGSetCycleType(m_par_AMG_solver, 1);  // V = 1, W = 2
+   //   HYPRE_BoomerAMGSetCycleNumSweeps(m_par_AMG_solver, 1, 1);  // 1 sweep on down cycle
+   //   HYPRE_BoomerAMGSetCycleNumSweeps(m_par_AMG_solver, 1, 2);  // 1 sweep on up cycle
+   //   HYPRE_BoomerAMGSetCycleNumSweeps(m_par_AMG_solver, 1, 3);  // 1 sweeps on coarsest level
+
+   HYPRE_ParCSRMatrix par_A;
+   HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
+
+   HYPRE_ParVector par_b;  // not used, but needs to be passed to HYPRE_BoomerAMGSetup
+   HYPRE_ParVector par_x;  // not used, but needs to be passed to HYPRE_BoomerAMGSetup
+
+   HYPRE_BoomerAMGSetup(m_par_AMG_solver, par_A, par_b, par_x);
+}
+
+
+
+void
 MBHypreSolver::AMG( const HYPRE_SStructMatrix&  a_matrix,
                     const HYPRE_SStructVector&  a_b,
                     const double                a_tol,
                     const int                   a_max_iter,
                     const bool                  a_verbose,
-                    const HYPRE_SStructVector&  a_x ) const
+                    const HYPRE_SStructVector&  a_x )
 {
    CH_TIMERS("MBHypreSolver::AMG");
    CH_TIMER("AMG_solve",t_AMG_solve);
 
-   HYPRE_Solver          par_solver;
    HYPRE_ParCSRMatrix    par_A;
    HYPRE_ParVector       par_b;
    HYPRE_ParVector       par_x;
@@ -974,38 +1025,21 @@ MBHypreSolver::AMG( const HYPRE_SStructMatrix&  a_matrix,
    HYPRE_SStructVectorGetObject(a_b, (void **) &par_b);
    HYPRE_SStructVectorGetObject(a_x, (void **) &par_x);
 
-   HYPRE_BoomerAMGCreate(&par_solver);
-   HYPRE_BoomerAMGSetTol(par_solver, a_tol);
-   HYPRE_BoomerAMGSetMaxIter(par_solver, a_max_iter);
-   HYPRE_BoomerAMGSetPrintLevel(par_solver, 0);
-
-   // Algorithm options
-   HYPRE_BoomerAMGSetStrongThreshold(par_solver, 0.25);
-   HYPRE_BoomerAMGSetCoarsenType(par_solver, 6);  // Falgout coarsening
-   //   HYPRE_BoomerAMGSetRelaxType(par_solver, 3);  // hybrid Gauss-Seidel
-   //   HYPRE_BoomerAMGSetCycleRelaxType(par_solver, 3, 3);  // hybrid Gauss-Seidel on coarsest level
-   //   HYPRE_BoomerAMGSetCycleRelaxType(par_solver, 9, 3);  // Gaussian elimination on coarsest level
-   //   HYPRE_BoomerAMGSetCycleType(par_solver, 1);  // V = 1, W = 2
-   //   HYPRE_BoomerAMGSetCycleNumSweeps(par_solver, 1, 1);  // 1 sweep on down cycle
-   //   HYPRE_BoomerAMGSetCycleNumSweeps(par_solver, 1, 2);  // 1 sweep on up cycle
-   //   HYPRE_BoomerAMGSetCycleNumSweeps(par_solver, 1, 3);  // 1 sweeps on coarsest level
+   HYPRE_BoomerAMGSetTol(m_par_AMG_solver, a_tol);
+   HYPRE_BoomerAMGSetMaxIter(m_par_AMG_solver, a_max_iter);
+   HYPRE_BoomerAMGSetPrintLevel(m_par_AMG_solver, 0);
 
    CH_START(t_AMG_solve);
-
-   HYPRE_BoomerAMGSetup(par_solver, par_A, par_b, par_x);
-   HYPRE_BoomerAMGSolve(par_solver, par_A, par_b, par_x);
-
+   HYPRE_BoomerAMGSolve(m_par_AMG_solver, par_A, par_b, par_x);
    CH_STOP(t_AMG_solve);
 
    int num_iterations;
-   HYPRE_BoomerAMGGetNumIterations(par_solver, &num_iterations);
+   HYPRE_BoomerAMGGetNumIterations(m_par_AMG_solver, &num_iterations);
    double final_res_norm;
-   HYPRE_BoomerAMGGetFinalRelativeResidualNorm(par_solver, &final_res_norm);
+   HYPRE_BoomerAMGGetFinalRelativeResidualNorm(m_par_AMG_solver, &final_res_norm);
    if (a_verbose && procID()==0) {
       cout << "        --> AMG solver residual = " << final_res_norm << " after " << num_iterations << " iterations" << endl;
    }
-
-   HYPRE_BoomerAMGDestroy(par_solver);
 
    if (m_hypre_object_type == HYPRE_PARCSR) {
       HYPRE_SStructVectorGather(a_x);

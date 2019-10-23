@@ -30,7 +30,7 @@ public:
   /**
    *  @param[in] pp the input database.
    */
-  VorticityOp( const std::string& a_pp_str,
+  VorticityOp( const ParmParse&   a_pp,
                const MagGeom&     a_geometry,
                const double       a_larmor,
                const int          a_verbosity );
@@ -148,7 +148,12 @@ public:
                                             const PS::KineticSpeciesPtrVect&  species,
                                             const LevelData<FArrayBox>&       ion_charge_density,
                                             const Real&                       time);
-   
+
+   void computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&             a_div_Jperp,
+						 const LevelData<FArrayBox>&       a_ion_charge_density,
+						 const Real&                       a_time);
+
+  
    void computeReynoldsStressTerm( LevelData<FArrayBox>&             div_ExB_times_vorticity,
                                    const LevelData<FArrayBox>&       vorticity,
                                    const EField&                     E_field) const;
@@ -167,11 +172,11 @@ static const char* pp_name;
 
 private:
 
-   //Computes ion mass density
+   /// Computes ion mass density
    void computeIonMassDensity( LevelData<FArrayBox>&             mass_density,
                                const PS::KineticSpeciesPtrVect&  species ) const;
 
-   //Computes ion charge density
+   /// Computes ion charge density
    void computeIonChargeDensity( LevelData<FArrayBox>&            ion_charge_density,
                                 const PS::KineticSpeciesPtrVect&  species ) const;
 
@@ -180,12 +185,20 @@ private:
                    EllipticOpBC&  bc ) const ;
 
    void setZero( LevelData<FArrayBox>& data ) const;
+
+
+   /// Parse parameters.
+   void parseParameters( const ParmParse& pp );
    
+   /// Print parameters.
+   void printParameters();
+
+  
    int m_verbosity;
    const MagGeom& m_geometry;
    double m_larmor;
    bool m_par_cond_op_coefs_defined;
-
+  
    GKPoisson*    m_parallel_current_divergence_op;
    GKPoisson*    m_par_cond_op;
    GKPoisson*    m_imex_pc_op;
@@ -203,13 +216,18 @@ private:
 
    LevelData<FArrayBox> m_volume;
    LevelData<FArrayBox> m_negativeDivJpar;
-   LevelData<FArrayBox> m_divJperp;
-   LevelData<FArrayBox> m_divJperp_mag;
+   LevelData<FArrayBox> m_divJperp_mag_i;
+   LevelData<FArrayBox> m_divJperp_mag_e;
    LevelData<FluxBox> m_face_bXE_integrals;
    LevelData<FArrayBox> m_ion_charge_density;
    LevelData<FArrayBox> m_ion_mass_density;
+   LevelData<FArrayBox> m_electron_temperature;
 
    bool m_sigma_div_e_coefs_set;
+   bool	m_reynolds_stress;
+   bool m_ExB_current_model;
+
+   RefCountedPtr<GridFunction> m_electron_temperature_func;
 };
 
 

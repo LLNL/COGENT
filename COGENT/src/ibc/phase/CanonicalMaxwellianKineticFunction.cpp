@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <typeinfo>
+#include <array>
 
 #include "DataIterator.H"
 #include "Directions.H"
@@ -174,7 +175,8 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
    CH_TIMER("getCellCenteredRealCoords", t_get_real_coords);
 
 #if CFG_DIM == 3
-   if (typeid(a_mag_coord_sys) != typeid(CFG::ToroidalBlockCoordSys)) {
+   if (typeid(a_mag_coord_sys) != typeid(CFG::ToroidalBlockCoordSys) &&
+       typeid(a_mag_coord_sys) != typeid(CFG::SingleNullBlockCoordSys)) {
       const std::string msg( "CanonicalMaxwellianKineticFunction: only toroidal geometry implementation exists ");
       MayDay::Error( msg.c_str() );
    }
@@ -202,19 +204,55 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
 
 #if CFG_DIM == 3
    
-   CFG::FArrayBox cfg_toroidal_coords( cfg_box, CFG_DIM );
-   ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getToroidalCoords( cfg_toroidal_coords );
-
+   Real R0;          //Major radius coordinate of the magnetic axis
+   Real RBtor;       //R*Btor constant factor
+   Real psi_mid;     //Magnetic flux (unnormalized) at the midpoint
+   Real dpsidr_mid;  //dpsi/dr at the midpoint
+   
    FArrayBox toroidal_coords_inj;
-   a_phase_coord_sys.injectConfigurationToPhase(cfg_toroidal_coords, toroidal_coords_inj);
+   
+   if (typeid(a_mag_coord_sys) == typeid(CFG::ToroidalBlockCoordSys)) {
+      CFG::FArrayBox cfg_toroidal_coords( cfg_box, CFG_DIM );
+      ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getToroidalCoords( cfg_toroidal_coords );
+      
+      a_phase_coord_sys.injectConfigurationToPhase(cfg_toroidal_coords, toroidal_coords_inj);
 
-   Real RBtor = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getRBtoroidal();
-   Real R0 = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).centralMajorRadius();
-   Real r_p = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getAvMinorRad();
-   Real psi_p = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getMagneticFlux(r_p);
-   Real dpsidr_p = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).dpsidr(r_p);
-   Real q_p = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getSafetyFactor(r_p/R0);
+      if (m_r_mid < 0) {
+         m_r_mid = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getAvMinorRad();
+      }
+      
+      RBtor = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getRBtoroidal();
+      R0 = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).centralMajorRadius();
+      psi_mid = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getMagneticFlux(m_r_mid);
+      dpsidr_mid = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).dpsidr(m_r_mid);
+      
+      //Presently not used; but might be useful for some other models
+      Real q_mid = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getSafetyFactor(m_r_mid/R0);
+   }
 
+   else if (typeid(a_mag_coord_sys) == typeid(CFG::SingleNullBlockCoordSys)) {
+      CFG::FArrayBox cfg_toroidal_coords( cfg_box, CFG_DIM );
+      ((const CFG::SingleNullBlockCoordSys&)a_mag_coord_sys).getToroidalCoords( cfg_toroidal_coords );
+      
+      a_phase_coord_sys.injectConfigurationToPhase(cfg_toroidal_coords, toroidal_coords_inj);
+      
+      if (m_r_mid < 0) {
+         const std::string msg( "CanonicalMaxwellian:: midpoint_minor_radius must be specified for SN geometry ");
+         MayDay::Error( msg.c_str() );
+      }
+      
+      RBtor = ((const CFG::SingleNullBlockCoordSys&)a_mag_coord_sys).getRBtoroidal();
+      CFG::RealVect axis = ((const CFG::SingleNullBlockCoordSys&)a_mag_coord_sys).getMagAxis();
+      R0 = axis[RADIAL_DIR];
+      
+      CFG::RealVect X_mid(axis[RADIAL_DIR]+m_r_mid,0,axis[POLOIDAL_DIR]);
+      array<double,3> B_mid = ((const CFG::SingleNullBlockCoordSys&)a_mag_coord_sys).computeBField(X_mid);
+      Real Bpol = sqrt(pow(B_mid[RADIAL_DIR],2)+pow(B_mid[POLOIDAL_DIR],2));
+      psi_mid = ((const CFG::SingleNullBlockCoordSys&)a_mag_coord_sys).getMagneticFlux(X_mid);
+      dpsidr_mid = X_mid[RADIAL_DIR] * Bpol;
+   }
+   
+   
    Real larmor_number = (m_zero_larmor) ? 0.0 : a_larmor_number;
 
    //NB:For convenience the input for kappa is always in 1/R0 units,
@@ -229,10 +267,9 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
                               CHF_CONST_FRA1(magnetic_flux_inj,0),
                               CHF_CONST_REAL(RBtor),
                               CHF_CONST_REAL(R0),
-                              CHF_CONST_REAL(dpsidr_p),
-                              CHF_CONST_REAL(psi_p),
-                              CHF_CONST_REAL(r_p),
-                              CHF_CONST_REAL(q_p),
+                              CHF_CONST_REAL(dpsidr_mid),
+                              CHF_CONST_REAL(psi_mid),
+                              CHF_CONST_REAL(m_r_mid),
                               CHF_CONST_VR(m_density_parm),
                               CHF_CONST_VR(m_temperature_parm),
                               CHF_CONST_VR(m_perturbation_parm),
@@ -264,6 +301,14 @@ void CanonicalMaxwellianKineticFunction::parseParameters( ParmParse& a_pp )
    a_pp.query( "functional_option", m_profile_option);
    a_pp.query( "zero_larmor", m_zero_larmor); 
   
+   if (a_pp.contains("midpoint_minor_radius")) {
+      a_pp.get("midpoint_minor_radius", m_r_mid);
+   }
+   else {
+      m_r_mid = -1.0;
+   }
+      
+   
    int num_parm;
    if (m_profile_option == 1) {
       num_parm = 4;

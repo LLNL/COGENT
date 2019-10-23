@@ -184,6 +184,17 @@ public:
    
    bool computeCfl() const {return m_compute_cfl;}
 
+   inline void implicitSpecies(std::vector<std::string>& a_names) const
+   {
+     a_names.clear();
+     std::map<std::string, tiType>::const_iterator it;
+     for (it = m_ti_type.begin(); it != m_ti_type.end(); ++it) {
+       if (it->second == _implicit_) {
+         a_names.push_back(it->first);
+       }
+     }
+   }
+
 protected:
 
    void computeFlux( const LevelData<FArrayBox>& dist_fn,
@@ -250,6 +261,7 @@ protected:
    bool m_subtract_maxwellian;
    bool m_update_maxwellian;
    bool m_compute_cfl;
+   bool m_first_call;
    
    LevelData<FArrayBox> m_F0;
    LevelData<FluxBox> m_flux;

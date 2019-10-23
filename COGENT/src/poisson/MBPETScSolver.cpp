@@ -14,6 +14,8 @@ MBPETScSolver::MBPETScSolver( const MultiBlockLevelGeom&      a_geom,
                               const int                       a_discretization_order,
                               MultiBlockLevelExchangeCenter*  a_mblex_ptr )
    : MBSolver(a_geom, a_discretization_order, a_mblex_ptr),
+     m_method_params_set(false),
+     m_convergence_params_set(false),
      m_petsc_allocated(false),
      m_amg_solver_allocated(false),
      m_gmres_solver_allocated(false)
@@ -49,25 +51,33 @@ MBPETScSolver::multiplyMatrix( const LevelData<FArrayBox>& a_in,
 
 
 void
-MBPETScSolver::setParams( const string& a_method,
-                          const double  a_method_tol,
-                          const int     a_method_max_iter,
-                          const bool    a_method_verbose,
-                          const string& a_precond_method,
-                          const double  a_precond_tol,
-                          const int     a_precond_max_iter,
-                          const bool    a_precond_verbose )
+MBPETScSolver::setMethodParams( const string& a_method,
+                                const string& a_precond_method )
 {
    m_method           = a_method;
+   m_precond_method   = a_precond_method;
+
+   m_method_params_set = true;
+}
+
+
+
+void
+MBPETScSolver::setConvergenceParams( const double  a_method_tol,
+                                     const int     a_method_max_iter,
+                                     const bool    a_method_verbose,
+                                     const double  a_precond_tol,
+                                     const int     a_precond_max_iter,
+                                     const bool    a_precond_verbose )
+{
    m_method_tol       = a_method_tol;
    m_method_max_iter  = a_method_max_iter;
    m_method_verbose   = a_method_verbose;
-   m_precond_method   = a_precond_method;
    m_precond_tol      = a_precond_tol;
    m_precond_max_iter = a_precond_max_iter;
    m_precond_verbose  = a_precond_verbose;
 
-   m_params_set = true;
+   m_convergence_params_set = true;
 }
 
 

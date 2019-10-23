@@ -43,14 +43,15 @@ public:
 
    virtual void dumpMatrix(const string& file_name) const;
 
-   void setParams( const string& method,
-                   const double  method_tol,
-                   const int     method_max_iter,
-                   const bool    method_verbose,
-                   const string& precond_method,
-                   const double  precond_tol,
-                   const int     precond_max_iter,
-                   const bool    precond_verbose );
+   void setMethodParams( const string& method,
+                         const string& precond_method );
+
+   void setConvergenceParams( const double  method_tol,
+                              const int     method_max_iter,
+                              const bool    method_verbose,
+                              const double  precond_tol,
+                              const int     precond_max_iter,
+                              const bool    precond_verbose );
 
    static const std::string pp_name;
 
@@ -99,12 +100,14 @@ protected:
                               HYPRE_SStructMatrix&                matrix,
                               LevelData<FArrayBox>&               rhs_from_bc ) const;
 
+   void AMGSetup( const HYPRE_SStructMatrix& matrix );
+
    void AMG( const HYPRE_SStructMatrix&  matrix,
              const HYPRE_SStructVector&  b,
              const double                tol,
              const int                   max_iter,
              const bool                  verbose,
-             const HYPRE_SStructVector&  x ) const;
+             const HYPRE_SStructVector&  x );
 
    void AMG_preconditioned_GMRES( const HYPRE_SStructMatrix&  matrix,
                                   const HYPRE_SStructMatrix&  precond,
@@ -134,7 +137,8 @@ protected:
    int m_precond_max_iter;
    bool m_precond_verbose;
 
-   bool m_params_set;
+   bool m_method_params_set;
+   bool m_convergence_params_set;
 
    // Hypre data structures
 
@@ -151,6 +155,9 @@ protected:
    int m_A_diagonal_offset;
 
    LayoutData< BaseFab<IntVectSet> > m_A_unstructured_coupling;
+
+   HYPRE_Solver m_par_AMG_solver;
+   bool m_AMG_solver_allocated;
 };
 
 

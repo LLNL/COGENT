@@ -3,6 +3,7 @@
 
 #include "Function.H"
 #include "ImplicitStageJacobian.H"
+#include "Checkpoints.H"
 
 #include "NamespaceHeader.H"
 
@@ -13,7 +14,7 @@ class ImplicitStageFunction: public Function<T,Ops>
     ImplicitStageFunction<T,Ops>() {m_is_Defined = false; m_shift = 0; }
     ~ImplicitStageFunction<T,Ops>() {}
 
-   void evalFunction(T& a_F, const T& a_Y, const T& a_b, int a_its, bool a_update_fluid_ops);
+   void evalFunction(T& a_F, const T& a_Y, const T& a_b, int a_its );
     void define(const T& a_state, Ops& a_ops);
 
     inline void setShift        (Real a_shift )       { m_shift = a_shift;    }
@@ -49,18 +50,18 @@ void ImplicitStageFunction<T,Ops>::define(const T& a_state, Ops& a_ops)
  *  R    is the right-hand-side
 */
 template <class T, class Ops>
-void ImplicitStageFunction<T,Ops>::evalFunction(T& a_F, const T& a_Y, const T& a_b, int a_its, bool a_update_fluid_ops)
+void ImplicitStageFunction<T,Ops>::evalFunction(  T&        a_F, 
+                                                  const T&  a_Y, 
+                                                  const T&  a_b, 
+                                                  int       a_its )
 {
   CH_TIME("ImplicitStageFunction::evalFunction()");
   CH_assert(isDefined());
 
-  bool update_kinetic_phys = false;
-  a_update_fluid_ops = false;
-  if ( a_its==0 ) {
-    update_kinetic_phys = true;
-    a_update_fluid_ops = true;
-  }
-  m_ops->preOpEval(a_Y,m_StageTime,update_kinetic_phys,a_update_fluid_ops);
+  m_ops->preOpEval( a_Y, 
+                    m_StageTime, 
+                    (a_its == 0 ? chkpt_stage_func_0 : chkpt_stage_func_n) );
+
   if (m_ops->trivialSolutionOp()){
     m_W.copy(a_Y);
   } else{

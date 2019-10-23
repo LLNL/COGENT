@@ -76,7 +76,6 @@ c
      &     CHF_CONST_REAL[dpsidr_p],
      &     CHF_CONST_REAL[psi_p],
      &     CHF_CONST_REAL[r_p],
-     &     CHF_CONST_REAL[q_p],
      &     CHF_CONST_VR[n],
      &     CHF_CONST_VR[T],
      &     CHF_CONST_VR[mode_coeff],

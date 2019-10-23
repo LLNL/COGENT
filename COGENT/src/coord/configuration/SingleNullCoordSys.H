@@ -101,12 +101,26 @@ public:
                                      const RealVect&  dx_dst,
                                      const int        order) const;
 
+  Real getInterpMappedPoloidalCoord(const RealVect& X,
+				    const RealVect& X_dst_pol_cent,
+				    const RealVect& X_dst_pol_hi,
+				    const RealVect& X_dst_pol_lo,
+				    const RealVect& xi_dst_cent,
+				    const RealVect& dx) const;
+
+  void applyToroidalPeriodicity(RealVect& a_x) const;
+
+
 #endif
 
    virtual Vector<RealVect> displacements(const Vector<RealVect>&   dstCoords,
                                           const Vector<int>&        dstBlocks,
                                           const RealVect&           srcCoords,
                                           int                       srcBlock) const;
+
+   bool sameMagFluxSurf(const int& pol_block_src,
+			int&       pol_block) const;
+
 
    int poloidalBlockNumber(const int block_number) const {return block_number % m_num_poloidal_blocks;}
 

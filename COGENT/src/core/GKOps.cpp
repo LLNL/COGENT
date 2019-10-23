@@ -19,19 +19,6 @@
 #include "NamespaceHeader.H"
 
 
-#if 0
-#ifdef USE_ARK4
-void GKOps::define( const GKState& a_state,
-                    const Real a_dt,
-                    const Real a_dt_scale )
-{
-   m_dt_scale = a_dt_scale;
-   define( a_state, a_dt );
-}
-#endif
-#endif
-
-
 void GKOps::define( const GKState& a_state,
                     const Real     a_dt )
 {
@@ -384,6 +371,8 @@ void GKOps::preTimeStep (const int       a_step,
       m_time_scale_neutrals = m_neutrals->computeTimeScale( soln_phys );
    }
 
+   preOpEval(a_state_comp, a_time, chkpt_pre_time_step);
+   return;
 }
 
 
@@ -454,70 +443,169 @@ void GKOps::postTimeStage( const int       a_step,
 }
 
 
-void GKOps::preSolutionOpEval( const GKState&  a_state,
-                               const Real      a_time,
-                               const bool      a_update_fluid_ops )
+void GKOps::preSolutionOpEval( const GKState&     a_state,
+                               const Real         a_time,
+                               const Checkpoint&  a_chkpt )
 {
-   CH_TIMERS("GKOps::preSolutionOpEval");
-   CH_TIMER("createPhysicalSpeciesVector",t_create_phys_vector);
-   CH_TIMER("fluidpreOpEval",t_fluid_preop_eval);
+  CH_assert(!trivialSolutionOp());
+  CH_TIMERS("GKOps::preSolutionOpEval");
+  CH_TIMER("createPhysicalSpeciesVector",t_create_phys_vector);
+  CH_TIMER("fluidpreOpEval",t_fluid_preop_eval);
 
-   // The purpose of this function is to enable the calculation of data prior to
-   // calling solutionOp().  Presently, it is used to precompute the physical
-   // kinetic species from the computational kinetic species, which is somewhat
-   // expensive due to the need to fill ghost cells.  By caching the result of this
-   // calculation, it can be reused in function evaluations in which it is known that
-   // the distribution function hasn't changed between function calls, or we don't care
-   // if it did, e.g., for an approximate preconditioner operator evaluation.
-   // Dependence on class state like this is dangerous, but necessary for performance.
-   
-   CH_START(t_create_phys_vector);
-   createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
-   CH_STOP(t_create_phys_vector);
-   
-   updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
+  // The purpose of this function is to enable the calculation of data prior to
+  // calling solutionOp().  Presently, it is used to precompute the physical
+  // kinetic species from the computational kinetic species, which is somewhat
+  // expensive due to the need to fill ghost cells.  By caching the result of this
+  // calculation, it can be reused in function evaluations in which it is known that
+  // the distribution function hasn't changed between function calls, or we don't care
+  // if it did, e.g., for an approximate preconditioner operator evaluation.
+  // Dependence on class state like this is dangerous, but necessary for performance.
+ 
+  if (a_chkpt == chkpt_ti_advance_1) {
 
-   if ( a_update_fluid_ops ) {
-      CH_START(t_fluid_preop_eval);
-      m_fluidOp->preSolutionOpEval(m_kinetic_species_phys, a_state.dataFluid(), a_state.dataScalar(), *m_E_field, a_time);
-      CH_STOP(t_fluid_preop_eval);
-   }
-}
+    /* in time step, before stage calculation */
 
+    updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
 
-void GKOps::preOpEval( const GKState&  a_state,
-                       const Real      a_time,
-                       const bool      a_update_kinetic_phys,
-                       const bool      a_update_fluid_ops )
-{
-   CH_TIMERS("GKOps::preOpEval");
-   CH_TIMER("createPhysicalSpeciesVector",t_create_phys_vector);
-   CH_TIMER("fluidpreOpEval",t_fluid_preop_eval);
+    if (!m_step_const_coef) {
 
-   // The purpose of this function is to enable the calculation of data prior to
-   // calling the operator evaluation class members (e.g., explicitOp, explicitOpImEx,
-   // implicitOpImEx, etc.).  Presently, it is used to precompute the physical
-   // kinetic species from the computational kinetic species, which is somewhat
-   // expensive due to the need to divide by J and fill ghost cells.  By caching
-   // the result of this calculation, it can be reused in function evaluations
-   // in which it is known that the distribution function hasn't changed between
-   // function calls, or we don't care if it did, e.g., for an approximate preconditioner
-   // operator evaluation.  Dependence on class state like this is dangerous,
-   // but necessary for performance.
-
-   if ( a_update_kinetic_phys ) {
       CH_START(t_create_phys_vector);
       createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
       CH_STOP(t_create_phys_vector);
-   }
-
-   updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
-
-   if ( a_update_fluid_ops ) {
+  
       CH_START(t_fluid_preop_eval);
-      m_fluidOp->preOpEval(m_kinetic_species_phys, a_state.dataFluid(), a_state.dataScalar(), *m_E_field, a_time);
+      m_fluidOp->preSolutionOpEval(m_kinetic_species_phys, a_state.dataFluid(), a_state.dataScalar(), *m_E_field, a_time);
       CH_STOP(t_fluid_preop_eval);
-   }
+
+    }
+
+  } else if (a_chkpt == chkpt_ti_advance_3) {
+
+    /* in time step, before step completion */
+
+    CH_START(t_create_phys_vector);
+    createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
+    CH_STOP(t_create_phys_vector);
+  
+    updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
+
+    if (!m_step_const_coef) {
+
+      CH_START(t_fluid_preop_eval);
+      m_fluidOp->preSolutionOpEval(m_kinetic_species_phys, a_state.dataFluid(), a_state.dataScalar(), *m_E_field, a_time);
+      CH_STOP(t_fluid_preop_eval);
+
+    }
+
+  } else {
+
+    /* this function should not be called from any other location in the code */
+    MayDay::Error("GKOps::preSolutionOpEval() - invalid value for a_chkpt");
+
+  }
+
+  return;
+}
+
+
+void GKOps::preOpEval( const GKState&     a_state,
+                       const Real         a_time,
+                       const Checkpoint&  a_chkpt )
+{
+  CH_TIMERS("GKOps::preOpEval");
+  CH_TIMER("createPhysicalSpeciesVector",t_create_phys_vector);
+  CH_TIMER("fluidpreOpEval",t_fluid_preop_eval);
+
+  // The purpose of this function is to enable the calculation of data prior to
+  // calling the operator evaluation class members (e.g., explicitOp, explicitOpImEx,
+  // implicitOpImEx, etc.).  Presently, it is used to precompute the physical
+  // kinetic species from the computational kinetic species, which is somewhat
+  // expensive due to the need to divide by J and fill ghost cells.  By caching
+  // the result of this calculation, it can be reused in function evaluations
+  // in which it is known that the distribution function hasn't changed between
+  // function calls, or we don't care if it did, e.g., for an approximate preconditioner
+  // operator evaluation.  Dependence on class state like this is dangerous,
+  // but necessary for performance.
+  
+  bool  update_kinetic_phys,
+        update_fluid_phys,
+        compute_fluid_pre_op;
+
+  std::vector<std::string> implicit_vlasov_species(0);
+  if (m_vlasov) m_vlasov->implicitSpecies(implicit_vlasov_species);
+  bool is_vlasov_implicit = (implicit_vlasov_species.size() > 0);
+
+  if (a_chkpt == chkpt_pre_time_step) {
+
+    /* pre-timestep */
+
+    if (m_step_const_coef) {
+      update_kinetic_phys   = true;
+      update_fluid_phys     = true;
+      compute_fluid_pre_op  = true;
+    } else {
+      update_kinetic_phys   = false;
+      update_fluid_phys     = false;
+      compute_fluid_pre_op  = false;
+    }
+
+  } else if (a_chkpt == chkpt_ti_advance_2) {
+
+    /* in time step, after stage calculation */
+
+    update_kinetic_phys   = true;
+    update_fluid_phys     = true;
+    compute_fluid_pre_op  = !m_step_const_coef;
+
+  } else if (a_chkpt == chkpt_stage_func_0) {
+
+    /* stage function evaluation for first Newton iteration */
+
+    update_kinetic_phys   = true;
+    update_fluid_phys     = true;
+    compute_fluid_pre_op  = !m_step_const_coef;
+
+  } else if (a_chkpt == chkpt_stage_func_n) {
+
+    /* stage function evaluation for Newton iteration > 1 */
+
+    update_kinetic_phys   = is_vlasov_implicit;
+    update_fluid_phys     = true;
+    compute_fluid_pre_op  = false;
+
+  } else if (a_chkpt == chkpt_stage_jac) {
+
+    /* stage Jacobian evaluation */
+
+    update_kinetic_phys   = is_vlasov_implicit;
+    update_fluid_phys     = true;
+    compute_fluid_pre_op  = false;
+
+  } else {
+
+    /* this function should not be called from any other location in the code */
+    MayDay::Error("GKOps::preOpEval() - invalid value for a_chkpt");
+
+  }
+
+  if ( update_kinetic_phys ) {
+    CH_START(t_create_phys_vector);
+    createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
+    CH_STOP(t_create_phys_vector);
+  }
+
+  if (update_fluid_phys) {
+    updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
+  }
+
+  if (compute_fluid_pre_op) {
+    CH_assert(update_kinetic_phys);
+    CH_START(t_fluid_preop_eval);
+    m_fluidOp->preOpEval(m_kinetic_species_phys, a_state.dataFluid(), a_state.dataScalar(), *m_E_field, a_time);
+    CH_STOP(t_fluid_preop_eval);
+  }
+
+  return;
 }
 
 
@@ -672,7 +760,7 @@ void GKOps::solutionPC( GKRHSData&     a_rhs,
 
    a_rhs.zero();
 
-   applyKineticSpeciesSolutionOperator(a_rhs.dataKinetic(), m_kinetic_species_phys, a_time);
+   applyKineticSpeciesSolutionOperator(a_rhs.dataKinetic(), a_state.dataKinetic(), a_time);
      
    updatePhysicalSpeciesVector( a_state.dataFluid(), a_time); // needed?
    
@@ -1474,6 +1562,8 @@ void GKOps::parseParameters( ParmParse& a_ppgksys )
    }
 
    a_ppgksys.query( "gksystem.enforce_quasineutrality", m_enforce_quasineutrality );
+
+   a_ppgksys.query("step_const_coef", m_step_const_coef);
 }
 
 
@@ -1514,16 +1604,16 @@ void GKOps::plotEField( const std::string& a_filename,
    // Plot the psi and theta projections of the physical field
 
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   CFG::LevelData<CFG::FluxBox> Efield( mag_geom.gridsFull(), CFG_DIM, CFG::IntVect::Unit);
+   const CFG::DisjointBoxLayout& grids = mag_geom.gridsFull();
+   CFG::LevelData<CFG::FluxBox> Efield( grids, CFG_DIM, CFG::IntVect::Unit);
 
 #if 1
 #if CFG_DIM==2
    m_E_field->computePoloidalField( m_phi, Efield );
-      const CFG::DisjointBoxLayout& grids = mag_geom.gridsFull();
-      for (CFG::DataIterator dit(Efield.dataIterator()); dit.ok(); ++dit) {
-        CFG::FluxBox& this_Efield = Efield[dit];
-        mag_geom.getBlockCoordSys(grids[dit]).computePsiThetaProjections(this_Efield);
-      }
+   for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
+      CFG::FluxBox& this_Efield = Efield[dit];
+      mag_geom.getBlockCoordSys(grids[dit]).computePsiThetaProjections(this_Efield);
+   }
 #endif
 #if CFG_DIM==3
    m_E_field->computeField( m_phi, Efield );
@@ -1534,10 +1624,18 @@ void GKOps::plotEField( const std::string& a_filename,
       
    if ( m_ampere_law ) {
       CFG::LevelData<CFG::FArrayBox>& E_field = m_E_field->getCellCenteredField();
-      phase_geometry.plotConfigurationData( a_filename.c_str(), E_field, a_time );
+      CFG::LevelData<CFG::FArrayBox> E_field_no_ghosts(grids, CFG_DIM, CFG::IntVect::Zero);
+      for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
+         E_field_no_ghosts[dit].copy(E_field[dit], grids[dit]);
+      }
+      phase_geometry.plotConfigurationData( a_filename.c_str(), E_field_no_ghosts, a_time );
    }
    else {
-      phase_geometry.plotConfigurationData( a_filename.c_str(), Efield, a_time );
+      CFG::LevelData<CFG::FluxBox> E_field_no_ghosts(grids, CFG_DIM, CFG::IntVect::Zero);
+      for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
+         E_field_no_ghosts[dit].copy(Efield[dit], grids[dit]);
+      }
+      phase_geometry.plotConfigurationData( a_filename.c_str(), E_field_no_ghosts, a_time );
    }
 }
 

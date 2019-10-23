@@ -8,7 +8,7 @@ class Function
 {
   public:
     virtual ~Function() {;}
-    virtual void evalFunction(T&, const T&, const T&, int, bool) = 0;
+    virtual void evalFunction(T&, const T&, const T&, int) = 0;
     virtual void define(const T&, Ops&) = 0;
 };
 

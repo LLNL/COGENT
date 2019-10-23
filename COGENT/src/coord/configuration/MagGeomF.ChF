@@ -518,6 +518,7 @@ c     local variables
      &     CHF_BOX[box],
      &     CHF_CONST_FRA[E],
      &     CHF_CONST_FRA[B],
+     &     CHF_CONST_FRA1[Bmag],
      &     CHF_FRA[ExB])
 c     local variables
       integer CHF_DDECL[i;j;k]
@@ -527,7 +528,11 @@ c     local variables
        ExB(CHF_IX[i;j;k],0) = E(CHF_IX[i;j;k],1)*B(CHF_IX[i;j;k],2) - E(CHF_IX[i;j;k],2)*B(CHF_IX[i;j;k],1)
        ExB(CHF_IX[i;j;k],1) = E(CHF_IX[i;j;k],2)*B(CHF_IX[i;j;k],0) - E(CHF_IX[i;j;k],0)*B(CHF_IX[i;j;k],2)
        ExB(CHF_IX[i;j;k],2) = E(CHF_IX[i;j;k],0)*B(CHF_IX[i;j;k],1) - E(CHF_IX[i;j;k],1)*B(CHF_IX[i;j;k],0)
-      
+
+       ExB(CHF_IX[i;j;k],0) = ExB(CHF_IX[i;j;k],0) / Bmag(CHF_IX[i;j;k])**2
+       ExB(CHF_IX[i;j;k],1) = ExB(CHF_IX[i;j;k],1) / Bmag(CHF_IX[i;j;k])**2
+       ExB(CHF_IX[i;j;k],2) = ExB(CHF_IX[i;j;k],2) / Bmag(CHF_IX[i;j;k])**2
+
       CHF_ENDDO
 
       return

@@ -128,7 +128,7 @@ c        vpar_dot
             Bstar_dot_G = Bstar_dot_G + Bstar(n) * G(n)
 
             if (include_gradB_par_force .eq. 0) then
-              Bstar_dot_G = Bstar_dot_G - B(n) * half * mu * this_gradB(n)   
+              Bstar_dot_G = Bstar_dot_G - this_Bvec(n) * half * mu * this_gradB(n)   
             endif
 
          enddo

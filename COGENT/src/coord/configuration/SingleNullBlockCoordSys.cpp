@@ -5,6 +5,8 @@
 #include "SingleNullBlockCoordSys.H"
 #include "Directions.H"
 
+#include "inspect.H"
+
 #undef REPORT_NEWTON_FAILURE
 
 #include "NamespaceHeader.H"
@@ -26,9 +28,8 @@ SingleNullBlockCoordSys::SingleNullBlockCoordSys( ParmParse&            a_parm_p
       m_poloidally_truncated(false),
       m_phys_coord_type(CARTESIAN),
       m_toroidal_ghosts(4),
-      m_field_trace_step(0.1),
-      m_field_trace_max_iters(100),
-      m_field_trace_tol(1.e-4)
+      m_toroidal_mapping_refinement(2),
+      m_field_trace_step_num(10)
  {
  #ifdef PLOT_INVERSE_POINTS
     char file_name[80];
@@ -652,14 +653,16 @@ SingleNullBlockCoordSys::mappedCoord( const RealVect& a_X ) const
       }
    }
 
-   double R = sqrt(a_X[0]*a_X[0] + a_X[1]*a_X[1]);
+   double R;
    double Phi;
    double Z = a_X[2];
    
    if ( m_phys_coord_type == CYLINDRICAL ) {
+      R = a_X[RADIAL_DIR];
       Phi = a_X[TOROIDAL_DIR];
    }
    else if ( m_phys_coord_type == CARTESIAN ) {
+      R = sqrt(a_X[0]*a_X[0] + a_X[1]*a_X[1]);
       Phi = atan2(a_X[1],a_X[0]);
    }
    else {
@@ -1194,9 +1197,10 @@ SingleNullBlockCoordSys::setInterp( const ParmParse&       a_pp,
    POL::IntVect lo = box_pol.smallEnd();
    POL::IntVect hi = box_pol.bigEnd();
 
-   int n_toroidal = m_domain.domainBox().size(TOROIDAL_DIR) + 1;
+   int n_toroidal = m_toroidal_mapping_refinement * m_domain.domainBox().size(TOROIDAL_DIR) + 1;
+   int toroidal_ghosts = m_toroidal_mapping_refinement * m_toroidal_ghosts;
    
-   Box box(IntVect(lo[0],-m_toroidal_ghosts,lo[1]), IntVect(hi[0],n_toroidal+m_toroidal_ghosts-1,hi[1]));
+   Box box(IntVect(lo[0],-toroidal_ghosts,lo[1]), IntVect(hi[0],n_toroidal+toroidal_ghosts-1,hi[1]));
 
    FArrayBox interp_node_coords(box,3);
    FArrayBox interp_node_data(box,3);
@@ -1274,52 +1278,88 @@ SingleNullBlockCoordSys::setInterp( const ParmParse&       a_pp,
          // corresponding to the indices less than and greater than the indices
          // defining the base of the ray tracing.
 
-         Box lower_box(IntVect(lo[0],-m_toroidal_ghosts,lo[1]), IntVect(hi[0],base_index-1,hi[1]));
-         for (BoxIterator bit(lower_box); bit.ok(); ++bit) {
-            IntVect iv = bit();
-            iv[1] = - (m_toroidal_ghosts + iv[1] + 1) + base_index;
+         // To speed-up ray tracing we decompose the poloidal cross-section
+         DisjointBoxLayout grids;
+         Vector<Box> grid_boxes;
+         int decomp_num;
+         getPoloidalDisjointBoxLayout(grids, grid_boxes, decomp_num, box);
+         
+         LevelData<FArrayBox> interp_node_data_decomp(grids, 3);
+         LevelData<FArrayBox> interp_node_coords_decomp(grids, 3);
+         
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            interp_node_data_decomp[dit].copy(interp_node_data, grids[dit]);
+            interp_node_coords_decomp[dit].copy(interp_node_coords, grids[dit]);
+         }
 
-            POL::IntVect iv_pol = restrictToPoloidal(iv);
-            interp_node_coords(iv,0) = a_interp_node_coords_pol(iv_pol,0);
-            interp_node_coords(iv,1) = base_coord + (iv[1] - base_index)*toroidal_node_spacing;
-            interp_node_coords(iv,2) = a_interp_node_coords_pol(iv_pol,1);
+         Box lower_box(IntVect(lo[0],-toroidal_ghosts,lo[1]), IntVect(hi[0],base_index-1,hi[1]));
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
 
-            RealVect X_old;
-            IntVect iv_old = iv; iv_old[1]++;
-            for (int n=0; n<3; ++n) {
-               X_old[n] = interp_node_data(iv_old,n);
-            }
+            Box this_lower_box = grids[dit];
+            this_lower_box &= lower_box;
+            
+            FArrayBox& this_interp_node_data = interp_node_data_decomp[dit];
+            FArrayBox& this_interp_node_coords = interp_node_coords_decomp[dit];
+            
+            for (BoxIterator bit(this_lower_box); bit.ok(); ++bit) {
+               IntVect iv = bit();
+               iv[1] = - (toroidal_ghosts + iv[1] + 1) + base_index;
 
-            RealVect X_new = traceField(X_old, -toroidal_node_spacing);
+               POL::IntVect iv_pol = restrictToPoloidal(iv);
+               this_interp_node_coords(iv,0) = a_interp_node_coords_pol(iv_pol,0);
+               this_interp_node_coords(iv,1) = base_coord + (iv[1] - base_index)*toroidal_node_spacing;
+               this_interp_node_coords(iv,2) = a_interp_node_coords_pol(iv_pol,1);
 
-            for (int n=0; n<3; ++n) {
-               interp_node_data(iv,n) = X_new[n];
+               RealVect X_old;
+               IntVect iv_old = iv; iv_old[1]++;
+               for (int n=0; n<3; ++n) {
+                  X_old[n] = this_interp_node_data(iv_old,n);
+               }
+
+               RealVect X_new = traceField(X_old, -toroidal_node_spacing);
+
+               for (int n=0; n<3; ++n) {
+                  this_interp_node_data(iv,n) = X_new[n];
+               }
             }
          }
 
-         Box upper_box(IntVect(lo[0],base_index+1,lo[1]), IntVect(hi[0],n_toroidal+m_toroidal_ghosts-1,hi[1]));
-         for (BoxIterator bit(upper_box); bit.ok(); ++bit) {
-            IntVect iv = bit();
+         Box upper_box(IntVect(lo[0],base_index+1,lo[1]), IntVect(hi[0],n_toroidal+toroidal_ghosts-1,hi[1]));
 
-            POL::IntVect iv_pol = restrictToPoloidal(iv);
-            interp_node_coords(iv,0) = a_interp_node_coords_pol(iv_pol,0);
-            interp_node_coords(iv,1) = base_coord + (iv[1] - base_index)*toroidal_node_spacing;
-            interp_node_coords(iv,2) = a_interp_node_coords_pol(iv_pol,1);
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
 
-            RealVect X_old;
-            IntVect iv_old = iv; iv_old[1]--;
-            for (int n=0; n<3; ++n) {
-               X_old[n] = interp_node_data(iv_old,n);
-            }
+            Box this_upper_box = grids[dit];
+            this_upper_box &= upper_box;
+            
+            FArrayBox& this_interp_node_data = interp_node_data_decomp[dit];
+            FArrayBox& this_interp_node_coords = interp_node_coords_decomp[dit];
 
-            RealVect X_new = traceField(X_old, toroidal_node_spacing);
+            for (BoxIterator bit(this_upper_box); bit.ok(); ++bit) {
+               IntVect iv = bit();
 
-            for (int n=0; n<3; ++n) {
-               interp_node_data(iv,n) = X_new[n];
+               POL::IntVect iv_pol = restrictToPoloidal(iv);
+               this_interp_node_coords(iv,0) = a_interp_node_coords_pol(iv_pol,0);
+               this_interp_node_coords(iv,1) = base_coord + (iv[1] - base_index)*toroidal_node_spacing;
+               this_interp_node_coords(iv,2) = a_interp_node_coords_pol(iv_pol,1);
+
+               RealVect X_old;
+               IntVect iv_old = iv; iv_old[1]--;
+               for (int n=0; n<3; ++n) {
+                  X_old[n] = this_interp_node_data(iv_old,n);
+               }
+
+               RealVect X_new = traceField(X_old, toroidal_node_spacing);
+
+               for (int n=0; n<3; ++n) {
+                  this_interp_node_data(iv,n) = X_new[n];
+               }
             }
          }
 
 #ifdef CH_MPI
+         
+         assembleDecomposedData(interp_node_data, interp_node_coords, interp_node_data_decomp, interp_node_coords_decomp, grid_boxes, decomp_num);
+         
          if ( procID() == 0 ) {
 #endif
             if ( !file_name.empty() ) {
@@ -1436,23 +1476,19 @@ SingleNullBlockCoordSys::setInterp( const ParmParse&       a_pp,
    m_interp = new BSplineInterp3D(a_pp, interp_node_coords, interp_node_data);
 }
 
-
 RealVect
 SingleNullBlockCoordSys::traceField( const RealVect&  a_X,
                                      const double&    a_toroidal_increment ) const
 {
-   CH_assert(m_field_trace_step <= 1.);
-   double step = a_toroidal_increment * m_field_trace_step;
-   double target = a_X[TOROIDAL_DIR] + a_toroidal_increment;
-   RealVect X = a_X;
-   bool converged = false;
    
-   // Get the field unit vector
-   array<double,3> b = m_poloidal_util->computeBUnit(restrictToPoloidal(X));
+   double step = a_toroidal_increment / double(m_field_trace_step_num);
+   RealVect X = a_X;
+   RealVect dX;
+   
+   for (int n=0; n<m_field_trace_step_num; n++) {
 
-   int num_iter = 0;
-
-   while ( !converged && num_iter < m_field_trace_max_iters ) {
+      // Get the field unit vector
+      array<double,3> b = m_poloidal_util->computeBUnit(restrictToPoloidal(X));
 
       // Set the tracing direction
       RealVect direction;
@@ -1461,35 +1497,172 @@ SingleNullBlockCoordSys::traceField( const RealVect&  a_X,
       }
       if ( b[TOROIDAL_DIR] < 0. ) direction *= -1.;
 
-      RealVect trial_X = X;
-      trial_X += step*direction;
-
-      if ( fabs(trial_X[TOROIDAL_DIR] - target) < m_field_trace_tol ) {
-         converged = true;
-         X = trial_X;
-      }
-      else if ( a_toroidal_increment > 0. && trial_X[TOROIDAL_DIR] > target ) {
-         // overshot: trim the step and try again
-         step *= 0.5;
-      }
-      else if ( a_toroidal_increment < 0. && trial_X[TOROIDAL_DIR] < target ) {
-         // overshot: trim the step and try again
-         step *= 0.5;
-      }
-      else {
-         // keep going
-         X = trial_X;
-         b = m_poloidal_util->computeBUnit(restrictToPoloidal(X));
-      }
-
-      num_iter++;
-   }
-
-   if ( !converged ) {
-      MayDay::Error("SingleNullBlockCoordSys::traceField() failed to converge");
+      // Get the step increment
+      dX[TOROIDAL_DIR] = step;
+      dX[RADIAL_DIR] = direction[RADIAL_DIR]/direction[TOROIDAL_DIR] * step * X[RADIAL_DIR];
+      dX[POLOIDAL_DIR] = direction[POLOIDAL_DIR]/direction[TOROIDAL_DIR] * step * X[RADIAL_DIR];
+      
+      X += dX;
    }
 
    return X;
+}
+
+void
+SingleNullBlockCoordSys::getPoloidalDisjointBoxLayout(DisjointBoxLayout&   a_grids,
+                                                      Vector<Box>&         a_boxes,
+                                                      int&                 a_decomp_num,
+                                                      const Box&           a_box) const
+{
+
+   int n_proc = numProc();
+
+   int n_rad = a_box.size(RADIAL_DIR);
+   int n_pol = a_box.size(POLOIDAL_DIR);
+
+
+   // The actual number of cells per
+   // direction we will end up using
+   int n_loc_rad;
+   int n_loc_pol;
+
+   // Assumption for what we would like to have
+   // for number of cells per direction
+   int n_opt = 4;
+   CH_assert(n_rad >= n_opt && n_pol >= n_opt);
+   
+   // Too many processors available (hope for that situation, since
+   // we often have extra procs for velocity space)
+   if ((n_rad / n_opt) * (n_pol / n_opt) <= n_proc) {
+      n_loc_rad = n_opt;
+      n_loc_pol = n_opt;
+   }
+   
+   // Too few processors available (the approach below is a strating point; not
+   // very effective as we may end up not using about half of available proc)
+   else {
+      int num_iter = int(floor(log2(double(n_proc))));
+      int num_iter_rad;
+      //Begin with dividing radial direction
+      for(int n = 0; n < num_iter+1; n++) {
+	 int test = int(floor(n_rad/pow(2,n)));
+         if (test < n_opt) {
+	    n_loc_rad = int(floor(n_rad/pow(2,n-1)));
+            num_iter_rad = n-1;
+            break;
+         }
+	 num_iter_rad = n;
+	 n_loc_rad = int(floor(n_rad/pow(2,n)));
+      }
+
+      //Now divide poloidal direction
+      n_loc_pol = n_pol;
+      for(int n = 0; n < num_iter - num_iter_rad + 1; n++) {
+ 	 int test = int(floor(n_pol/pow(2,n)));
+         if (test  < n_opt) {
+	    n_loc_pol = int(floor(n_pol/pow(2,n-1)));
+            break;
+         }
+      }
+   }
+
+   Vector<int> proc_ids;
+
+   IntVect domain_hi_end = a_box.bigEnd();
+   IntVect domain_lo_end = a_box.smallEnd();
+
+   int n_rad_dec = n_rad / n_loc_rad;
+   int n_pol_dec = n_pol / n_loc_pol;
+   
+   a_decomp_num = n_rad_dec * n_pol_dec;
+   
+   for(int j = 0; j < n_pol_dec; j++) {
+      for(int i = 0; i < n_rad_dec; i++) {
+
+         int rad_ind_lo = (domain_lo_end[RADIAL_DIR] + i * n_loc_rad);
+         int rad_ind_hi = (domain_lo_end[RADIAL_DIR] + (i+1) * n_loc_rad - 1);
+            
+         if (i == n_rad_dec - 1) {
+            rad_ind_hi = domain_hi_end[RADIAL_DIR];
+         }
+
+         int pol_ind_lo = (domain_lo_end[POLOIDAL_DIR] + j * n_loc_pol);
+         int pol_ind_hi = (domain_lo_end[POLOIDAL_DIR] + (j+1) * n_loc_pol - 1);
+            
+         if (j == n_pol_dec - 1) {
+            pol_ind_hi = domain_hi_end[POLOIDAL_DIR];
+         }
+            
+         IntVect lo_end(rad_ind_lo, domain_lo_end[TOROIDAL_DIR], pol_ind_lo);
+         IntVect hi_end(rad_ind_hi, domain_hi_end[TOROIDAL_DIR], pol_ind_hi);
+            
+         Box box(lo_end, hi_end);
+         int procID = j * n_rad_dec + i;
+
+         a_boxes.push_back( box );
+         proc_ids.push_back( procID );
+      }
+   }
+   
+   a_grids.define( a_boxes, proc_ids );
+
+}
+
+void
+SingleNullBlockCoordSys::assembleDecomposedData(FArrayBox&                    a_interp_node_data,
+                                                FArrayBox&                    a_interp_node_coords,
+                                                const LevelData<FArrayBox>&   a_interp_node_data_decomp,
+                                                const LevelData<FArrayBox>&   a_interp_node_coords_decomp,
+                                                const Vector<Box>&            a_grid_boxes,
+                                                const int&                    a_decomp_num ) const
+{
+   // We assume that each proc contains only one box (we created grids that way)
+   // Also, the processor IDs assigned to grids correspond to 0 .. a_decomp_num-1
+   
+   FArrayBox this_interp_node_data;
+   FArrayBox this_interp_node_coords;
+   
+   Vector<FArrayBox> all_interp_node_data(numProc());
+   Vector<FArrayBox> all_interp_node_coords(numProc());
+   
+   // Fill local data
+   for (int ivec = 0; ivec < numProc(); ivec++) {
+      if (procID() == ivec && ivec < a_decomp_num) {
+         this_interp_node_data.define(a_grid_boxes[ivec], 3);
+         this_interp_node_coords.define(a_grid_boxes[ivec], 3);
+         
+         // Iterate over boxes of decomposed object to find the box needed
+         for (DataIterator dit( a_interp_node_data_decomp.dataIterator() ); dit.ok(); ++dit) {
+            if (a_interp_node_data_decomp[dit].box() == a_grid_boxes[ivec]) {
+               this_interp_node_data.copy(a_interp_node_data_decomp[dit]);
+               this_interp_node_coords.copy(a_interp_node_coords_decomp[dit]);
+	       //inspect(this_interp_node_data);
+	    }
+         }
+      }
+      else {
+         if (procID() == ivec) {
+            // Or perhas should use the empty constructor to create invalid FArrayBox
+            Box empty_box;
+            this_interp_node_data.define(empty_box,1);
+            this_interp_node_coords.define(empty_box, 1);
+         }
+      }
+   }
+   
+   // Gather data across all processors and put it onto all processors
+   for (int ivec = 0; ivec < numProc(); ivec++) {
+      gather(all_interp_node_data, this_interp_node_data, ivec);
+      gather(all_interp_node_coords, this_interp_node_coords, ivec);
+   }
+   
+   // Create global interpolation FArrayBox objects on all procs
+   for (int ivec = 0; ivec < a_decomp_num; ivec++) {
+      a_interp_node_data.copy(all_interp_node_data[ivec], a_grid_boxes[ivec]);
+      a_interp_node_coords.copy(all_interp_node_coords[ivec], a_grid_boxes[ivec]);
+   }
+
+   inspect(a_interp_node_data);
 }
 
 
@@ -1819,6 +1992,29 @@ SingleNullBlockCoordSys::convertCylindricalToCartesian( const FArrayBox&  a_cart
       }
    }
 #endif
+}
+
+void SingleNullBlockCoordSys::getToroidalCoords(FArrayBox& a_coords) const
+{
+  Box box = a_coords.box();
+
+  FArrayBox X(box,SpaceDim);
+  getCellCenteredRealCoords(X);
+
+  RealVect coord;
+  for (BoxIterator bit(box); bit.ok(); ++bit) {
+    IntVect iv = bit();
+
+    for (int dir=0; dir<SpaceDim; ++dir) {       
+      coord[dir] = X(iv,dir);
+    }
+
+    convertCartesianToToroidal(coord);
+
+    for (int dir=0; dir<SpaceDim; ++dir) {
+      a_coords(iv,dir) = coord[dir];
+    }
+  }
 }
 
 void SingleNullBlockCoordSys::convertCartesianToToroidal(RealVect& a_coord) const

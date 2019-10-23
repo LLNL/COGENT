@@ -405,8 +405,8 @@ LogRectCoordSys::spreadRadially( LevelData<FluxBox>& a_data ) const
 void
 LogRectCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
                                          int&                   a_nDst,
-                                         Vector<Real>&          a_interpStecil,
-                                         Vector<int>&           a_interpStecilOffsets,
+                                         Vector<Real>&          a_interpStencil,
+                                         Vector<int>&           a_interpStencilOffsets,
                                          const RealVect&        a_xiSrc,
                                          const int              a_nSrc,
                                          const Side::LoHiSide&  a_side ) const
@@ -498,9 +498,16 @@ LogRectCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
       a_ivDst[dir] = iv0_dst[dir];
    }
    
-   //Get interpolation coefficients
    int order = 3;
-   getInterpolationCoefficients(a_interpStecil, xi0_dst, iv0_dst, dx_dst, order);
+
+   //Set offsets (this gets more complicated
+   //for SN  when poloidal BC's are involved)
+   a_interpStencilOffsets[0] = -1.;
+   a_interpStencilOffsets[1] =  0.;
+   a_interpStencilOffsets[2] =  1.;
+
+   //Get interpolation coefficients
+   getInterpolationCoefficients(a_interpStencil, xi0_dst, iv0_dst, dx_dst, order);
 
 }
 

@@ -2844,6 +2844,7 @@ MagGeom::computeEXBDrift( const LevelData<FluxBox>& a_E_field,
       
       const FluxBox& this_E_field = a_E_field[dit];
       const FluxBox& this_B_field = m_BField_fc[dit];
+      const FluxBox& this_B_mag = m_BFieldMag_fc[dit];
       
       for (int dir=0; dir<SpaceDim; ++dir) {
          
@@ -2852,11 +2853,11 @@ MagGeom::computeEXBDrift( const LevelData<FluxBox>& a_E_field,
          FORT_COMPUTE_EXB_DRIFT(CHF_BOX(this_ExB_drift_dir.box()),
                                 CHF_CONST_FRA(this_E_field[dir]),
                                 CHF_CONST_FRA(this_B_field[dir]),
+				CHF_CONST_FRA1(this_B_mag[dir],0),
                                 CHF_FRA(this_ExB_drift_dir));
       }
    }
 }
-
 
 #if 0
 void
@@ -4431,19 +4432,30 @@ MagGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
 
                //interpolate ghost data
                for (int comp=0; comp<nComp; ++comp) {
+                  
                   double ghost_val = 0.0;
-                  for (int n=0; n<m_sheared_interp_order + 1; ++n) {
-                     IntVect iv_tmp(iv_ghost);
-		     if (!m_extrablock_exchange) {
-		       iv_tmp[POLOIDAL_DIR] += n - m_sheared_interp_order/2;
-		     }
-		     else {
-		       iv_tmp[POLOIDAL_DIR] += (int)(m_sheared_interp_stencil_offsets)[dit](iv,n);
-		     }
-                     ghost_val += ghosts[dit](iv_tmp,comp) * m_sheared_interp_stencil[dit](iv,n);
+                  
+                  // Get the coefficient that also designates whether the ghost cell is
+                  //(a) fully emerged inside the saw-tooth BC (fac>1); physical BC handles that.
+                  //(b) partially emerged in the saw-tooth (0<fac<1)
+                  //(c) belongs to the poloidal interior (fac < 0)
+                  
+                  Real fac = m_sheared_interp_stencil[dit](iv,m_sheared_interp_order + 1);
+                  
+                  if (fac < 1.0) {
+                     for (int n=0; n<m_sheared_interp_order + 1; ++n) {
+                        IntVect iv_offset(iv_ghost);
+                        iv_offset[POLOIDAL_DIR] += (int)(m_sheared_interp_stencil_offsets)[dit](iv,n);
+                        ghost_val += ghosts[dit](iv_offset,comp) * m_sheared_interp_stencil[dit](iv,n);
+                     }
+                  
+                     if (fac < 0.) {
+                        a_data[dit](iv,comp) = ghost_val;
+                     }
+                     else {
+                        a_data[dit](iv,comp) = fac*a_data[dit](iv,comp) + (1.0-fac) * ghost_val;
+                     }
                   }
-               
-                  a_data[dit](iv,comp) = ghost_val;
                }
             }
          }
@@ -4461,9 +4473,12 @@ MagGeom::initializeShearedMBGeom(const DisjointBoxLayout& a_grids)
    //   IntVect ghostVect(0,m_sheared_ghosts,0);
    IntVect ghostVect(1,m_sheared_ghosts,1);
    m_sheared_remapped_index.define(a_grids, SpaceDim, ghostVect);
-   m_sheared_interp_stencil.define(a_grids, m_sheared_interp_order + 1, ghostVect);
-   m_sheared_interp_stencil_offsets.define(a_grids, m_sheared_interp_order + 1, ghostVect);
    
+   m_sheared_interp_stencil_offsets.define(a_grids, m_sheared_interp_order + 1, ghostVect);
+
+   // Interpolation stenticil has one extra component to store info for saw-tooth boundary
+   m_sheared_interp_stencil.define(a_grids, m_sheared_interp_order + 2, ghostVect);
+
    for (SideIterator sit; sit.ok(); ++sit) {
       Side::LoHiSide side = sit();
       getMagShearInterpCoeff(m_sheared_remapped_index,
@@ -4534,8 +4549,11 @@ MagGeom::getShearedGhostBoxLayout()
                hiEnd_remapped[dir] = iv_hi[dir];
             }
             
-            loEnd_remapped[POLOIDAL_DIR] -= m_sheared_interp_order/2;
-            hiEnd_remapped[POLOIDAL_DIR] += m_sheared_interp_order/2;
+            // For the case of core-geometry the offset is only m_sheared_interp_order/2
+            // However, the saw-tooth BCs requires larger offset near poloidal boundaries
+            // If affects the performance, treat core and SN geom separately
+            loEnd_remapped[POLOIDAL_DIR] -= (m_sheared_interp_order + 1);
+            hiEnd_remapped[POLOIDAL_DIR] += (m_sheared_interp_order + 1);
             
             Box remapped_box(loEnd_remapped, hiEnd_remapped);
             
@@ -4617,7 +4635,7 @@ MagGeom::getMagShearInterpCoeff(LevelData<FArrayBox>& a_remapped_iv,
             IntVect ivDst;
          
             //Second-order interpolation stencil
-            Vector<Real> interpStencil(m_sheared_interp_order + 1, 0);
+            Vector<Real> interpStencil(m_sheared_interp_order + 2, -1.0);
             Vector<int> interpStencilOffsets(m_sheared_interp_order + 1, 0);
          
             //Compute ivDst and interpStencil
@@ -4632,6 +4650,9 @@ MagGeom::getMagShearInterpCoeff(LevelData<FArrayBox>& a_remapped_iv,
          
             for (int n=0; n<interpStencil.size(); ++n) {
                a_interp_stencil[dit](iv,n) = interpStencil[n];
+            }
+            
+            for (int n=0; n<interpStencilOffsets.size(); ++n) {
                a_interp_stencil_offsets[dit](iv,n) = interpStencilOffsets[n];
             }
 

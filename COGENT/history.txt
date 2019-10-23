@@ -1,4 +1,54 @@
 ------------------------------------------------------------------------
+r1576 | mdorf | 2019-10-19 11:51:09 -0700 (Sat, 19 Oct 2019) | 1 line
+
+Fixed a bug in the ExB calculation used by old-velocity model in Vorticity.cpp
+------------------------------------------------------------------------
+r1575 | mdorf | 2019-10-15 11:46:56 -0700 (Tue, 15 Oct 2019) | 1 line
+
+Improved vorticity model to support 5D and old GK-velocity options
+------------------------------------------------------------------------
+r1574 | mdorr | 2019-10-15 08:57:53 -0700 (Tue, 15 Oct 2019) | 3 lines
+
+Moving the AMG setup in MBHypreSolver from just before the solve to just after the matrix construction to eliminate the unnecessary recomputation when the matrix doesn't change.  Also split the specification of solver methods and convergence parameters in both MBHypreSolver and MBPETScSolver.  This resulted in minor modifications of everything that derives from EllipticOp.
+
+
+------------------------------------------------------------------------
+r1573 | debo | 2019-09-26 15:02:07 -0700 (Thu, 26 Sep 2019) | 1 line
+
+Cleaned up (somewhat) the logic behind optimizing various function calls during time integration so that it is all in one place, and time integration and solver functions are clean; also fixed the reason that prevented implicit integration of Vlasov terms
+------------------------------------------------------------------------
+r1572 | mdorr | 2019-09-25 16:21:04 -0700 (Wed, 25 Sep 2019) | 3 lines
+
+Fixing bug in blockRemapping() for the eight block case affecting the determination of the valid block containing points near the X point.
+
+
+------------------------------------------------------------------------
+r1571 | mdorr | 2019-09-18 11:22:34 -0700 (Wed, 18 Sep 2019) | 3 lines
+
+Correcting check on number of poloidal blocks.  Previously, the total number of blocks was used, which is now the number of poloidal blocks times the number of toroidal sectors.
+
+
+------------------------------------------------------------------------
+r1570 | mdorr | 2019-09-18 11:01:43 -0700 (Wed, 18 Sep 2019) | 3 lines
+
+Turning off block boundary flux averaging for sheared geometries.
+
+
+------------------------------------------------------------------------
+r1569 | mdorf | 2019-09-12 19:12:39 -0700 (Thu, 12 Sep 2019) | 1 line
+
+Substantial revisons of multiblock single-null capability
+------------------------------------------------------------------------
+r1568 | mdorr | 2019-09-12 16:30:18 -0700 (Thu, 12 Sep 2019) | 3 lines
+
+Removing ghost cells from efield plots.
+
+
+------------------------------------------------------------------------
+r1567 | debo | 2019-08-14 14:43:56 -0700 (Wed, 14 Aug 2019) | 1 line
+
+Bugfix in solutionPC() - need to copy computational state, not physical; implemented a default PC for Vlasov that does nothing; removed a useless line
+------------------------------------------------------------------------
 r1566 | angus1 | 2019-08-13 11:57:28 -0700 (Tue, 13 Aug 2019) | 1 line
 
 adding edge and face vars to FluidSpecies class

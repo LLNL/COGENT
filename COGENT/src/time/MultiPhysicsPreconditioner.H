@@ -180,7 +180,6 @@ void MultiPhysicsPreconditioner<T,Ops>::apply(T&        a_x,
     for (int i=0; i<m_block_pc.size(); i++) {
   
       Preconditioner<T,Ops> *pc(m_block_pc[i]);
-      //      const DOFList& dof_list(m_dof_list[i]);
   
       if (i == 0) {
 

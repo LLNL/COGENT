@@ -30,8 +30,7 @@ KineticSpecies::KineticSpecies(
     m_moment_op( MomentOp::instance() ),
     m_gyroavg_op(NULL),
     m_is_gyrokinetic(a_is_gyrokinetic),
-    m_velocity_option(PhaseGeom::FULL_VELOCITY),
-    m_time(-1.0)
+    m_velocity_option(PhaseGeom::FULL_VELOCITY)
 {
     int ghost = (m_geometry->secondOrder()) ? 0 : 1;
     const DisjointBoxLayout& dbl = m_geometry->gridsFull();
@@ -46,9 +45,7 @@ KineticSpecies::KineticSpecies( const KineticSpecies& a_foo )
     m_charge( a_foo.m_charge ),
     m_moment_op( MomentOp::instance() ),
     m_is_gyrokinetic( a_foo.m_is_gyrokinetic ),
-    m_velocity_option(a_foo.m_velocity_option),
-    m_time(a_foo.m_time)
-    
+    m_velocity_option(a_foo.m_velocity_option)
 {
    gyroaverageOp(a_foo.gyroaverageOp());
    m_dist_func.define( a_foo.m_dist_func );
@@ -583,11 +580,10 @@ void KineticSpecies::computeVelocity(LevelData<FluxBox>&       a_velocity,
    CH_assert(a_velocity.ghostVect() <= m_velocity.ghostVect());
    CH_assert(a_velocity.nComp() == m_velocity.nComp());
    
-   if ((m_time != a_time) || (m_velocity_option != a_velocity_option)) {
+//   if (m_velocity_option != a_velocity_option) {
        m_geometry->updateVelocities( a_E_field, m_velocity, a_velocity_option, isGyrokinetic() );
-       m_time = a_time;
-       m_velocity_option = a_velocity_option;
-   }
+//       m_velocity_option = a_velocity_option;
+//   }
 
    CH_START(t_copy_velocity_fort);
    for (DataIterator dit(m_velocity.dataIterator()); dit.ok(); ++dit) {

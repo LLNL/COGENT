@@ -16,6 +16,7 @@
 #include "GKVector.H"
 #include "GKScalarOp.H"
 #include "GyroaverageOperatorFactory.H"
+#include "Checkpoints.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -202,6 +203,7 @@ public:
       m_zero_efield(false), // JRA
       m_transport_model_on(false),     
       m_enforce_quasineutrality(false),
+      m_step_const_coef(false),
       m_history(false),
       m_hist_freq(1),
       m_last_hist(0),
@@ -265,23 +267,22 @@ public:
 
    inline bool trivialSolutionOp() const { return m_trivial_solution_op; }
 
-   void preOpEval( const GKState&, const Real, const bool, const bool);
-   inline void preOpEval(const GKVector&  a_state,
-                         const Real       a_time,
-                         const bool       a_update_kinetic_phys,
-                         const bool       a_update_fluid_ops)
+   void preOpEval( const GKState&, const Real, const Checkpoint&);
+   inline void preOpEval(const GKVector&    a_state,
+                         const Real         a_time,
+                         const Checkpoint&  a_chkpt )
    {
       m_Y.copyFrom(a_state.data());
-      preOpEval(m_Y,a_time,a_update_kinetic_phys,a_update_fluid_ops);
+      preOpEval(m_Y, a_time, a_chkpt);
    }
 
-   void preSolutionOpEval( const GKState&, const Real, const bool);
-   inline void preSolutionOpEval(const GKVector&  a_state,
-                                 const Real       a_time,
-                                 const bool       a_update_fluid_ops)
+   void preSolutionOpEval( const GKState&, const Real, const Checkpoint&);
+   inline void preSolutionOpEval(const GKVector&    a_state,
+                                 const Real         a_time,
+                                 const Checkpoint&  a_chkpt )
    {
       m_Y.copyFrom(a_state.data());
-      preSolutionOpEval(m_Y,a_time,a_update_fluid_ops);
+      preSolutionOpEval(m_Y, a_time, a_chkpt);
    }
 
    void explicitOp( GKRHSData&, const Real, const GKState&);
@@ -596,6 +597,8 @@ public:
     * Private method to return kinetic species ghost vect.
     */
    void getKineticSpeciesGhostVect(IntVect& ghost_vect);
+
+   inline bool stepConstCoef() const { return m_step_const_coef; }
    
 private:
    
@@ -748,6 +751,7 @@ private:
 
    bool m_state_includes_potential;
    bool m_trivial_solution_op;
+   bool m_step_const_coef;
 
    bool m_history;   // whether to write out histories
    int m_hist_freq;  // how often to write out field history

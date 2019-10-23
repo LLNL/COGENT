@@ -155,6 +155,8 @@ class CanonicalMaxwellianKineticFunction : public KineticFunction
       Vector<Real> m_density_parm;
       Vector<Real> m_temperature_parm;
       Vector<Real> m_perturbation_parm;
+   
+      mutable Real m_r_mid;
 };
 
 #include "NamespaceFooter.H"

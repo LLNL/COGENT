@@ -30,6 +30,8 @@ Poisson::Poisson( const ParmParse& a_pp,
       m_preconditioner = new MBHypreSolver(a_geom, discretization_order, m_mblx_ptr);
 #endif
 
+   m_preconditioner->setMethodParams(m_precond_method, m_precond_precond_method);
+
    // We give the mapped coefficients one ghost cell layer so that the
    // usual second-order centered difference formula can be used to compute
    // the transverse gradients needed for the fourth-order formulas even
@@ -114,9 +116,9 @@ Poisson::setPreconditionerConvergenceParams( const double a_tol,
                                              const double a_precond_tol,
                                              const int    a_precond_max_iter )
 {
-   m_preconditioner->setParams(m_precond_method, a_tol, a_max_iter, m_precond_verbose,
-                               m_precond_precond_method, a_precond_tol, a_precond_max_iter,
-                               m_precond_precond_verbose);
+   m_preconditioner->setConvergenceParams(a_tol, a_max_iter, m_precond_verbose,
+                                          a_precond_tol, a_precond_max_iter,
+                                          m_precond_precond_verbose);
 }
 
 

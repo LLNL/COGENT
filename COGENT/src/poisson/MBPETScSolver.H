@@ -41,14 +41,15 @@ public:
 
    virtual void dumpMatrix(const string& file_name) const;
 
-   void setParams( const string& method,
-                   const double  method_tol,
-                   const int     method_max_iter,
-                   const bool    method_verbose,
-                   const string& precond_method,
-                   const double  precond_tol,
-                   const int     precond_max_iter,
-                   const bool    precond_verbose );
+   void setMethodParams( const string& method,
+                         const string& precond_method );
+
+   void setConvergenceParams( const double  method_tol,
+                              const int     method_max_iter,
+                              const bool    method_verbose,
+                              const double  precond_tol,
+                              const int     precond_max_iter,
+                              const bool    precond_verbose );
 
 protected:
 
@@ -143,7 +144,8 @@ protected:
    int m_precond_max_iter;
    bool m_precond_verbose;
 
-   bool m_params_set;
+   bool m_method_params_set;
+   bool m_convergence_params_set;
 
    // PETSc data structures
    Mat m_A;
