@@ -136,13 +136,15 @@ public:
 protected:
 
    void computeIonChargeDensity( LevelData<FArrayBox>&             ion_charge_density,
-                                 const PS::KineticSpeciesPtrVect&  species ) const;
+                                 const PS::KineticSpeciesPtrVect&  species) const;
 
-   void computeIonMassDensity( LevelData<FArrayBox>&             mass_density,
-                               const PS::KineticSpeciesPtrVect&  species ) const;
+   void computePolarizationMassDensity(LevelData<FArrayBox>&             mass_density,
+                                       const PS::KineticSpeciesPtrVect&  kinetic_species,
+                                       const FluidSpeciesPtrVect&        fluid_species) const;
 
    void computeTotalChargeDensity( LevelData<FArrayBox>&             charge_density,
-                                   const PS::KineticSpeciesPtrVect&  species ) const;
+                                   const PS::KineticSpeciesPtrVect&  kinetic_species,
+                                   const FluidSpeciesPtrVect&        fluid_species) const;
 
    void computeIonParallelCurrentDensity( LevelData<FArrayBox>&             ion_current_density,
                                           const PS::KineticSpeciesPtrVect&  species ) const;
@@ -161,6 +163,8 @@ protected:
    bool m_defined;
    bool m_apply_harm_filtering;
    int m_harm_filtering_dir;
+   bool m_include_pol_dens_i;
+   bool m_include_pol_dens_e;
    
 private:
    void parseParameters( ParmParse& pp);

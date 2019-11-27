@@ -159,6 +159,8 @@ class MaxwellianKineticFunction : public KineticFunction
       RefCountedPtr<CFG::GridFunction> m_ic_vparallel;
       RefCountedPtr<CFG::GridFunction> m_ic_temperature;
       RefCountedPtr<CFG::GridFunction> m_ic_density;
+   
+      bool m_enforce_input_density_profile;
 };
 
 #include "NamespaceFooter.H"

@@ -80,7 +80,7 @@ void EFieldAmpere::computeEField( const PS::GKState&                a_state,
          // Update the potential and field, if not fixed_efield
 
          LevelData<FArrayBox> ion_mass_density( grids, 1, IntVect::Zero );
-         computeIonMassDensity( ion_mass_density, a_kinetic_species );
+         computePolarizationMassDensity( ion_mass_density, a_kinetic_species, a_fluid_species );
 
          const Vector<Real>& scalar_data = a_scalars[a_state.getScalarComponent("Er_boundary")]->data();
          double Er_lo = scalar_data[0];
@@ -112,7 +112,7 @@ void EFieldAmpere::computeEField( const PS::GKState&                a_state,
             if (m_boltzmann_electron == NULL) {
 
                LevelData<FArrayBox> gkPoissonRHS( grids, 1, IntVect::Zero );
-               computeTotalChargeDensity( gkPoissonRHS, a_kinetic_species );
+               computeTotalChargeDensity( gkPoissonRHS, a_kinetic_species, a_fluid_species );
 
                m_poisson->computePotential( a_phi, gkPoissonRHS );
             }

@@ -11,6 +11,7 @@
 #include "BlockRegister.H"
 #include "SpaceUtils.H"
 #include "EdgeDataBox.H"
+#include "CoDimCopyManager.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -153,8 +154,6 @@ public:
    void mappedGridDivergence(LevelData<FArrayBox>&     divF,
                              const LevelData<FluxBox>& F,
                              const bool                omit_NT) const;
-
-   void zeroBoundaryFlux( const int dir, LevelData<FluxBox>& a_flux ) const;
 
    inline
    void unmapGradient(  const LevelData<FArrayBox>&  a_mapped_grad, 
@@ -377,6 +376,8 @@ public:
    void fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt = false ) const;
    
    void exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const;
+
+   void exchangeExtraBlockGhosts( LevelData<FArrayBox>& data, const int codim, const IntVect& include_dir ) const;
 
    const LevelData<FArrayBox>& getBFieldMagnitude() const {return *m_BMagCell;}
 
@@ -731,6 +732,7 @@ private:
    LevelData<FluxBox> *   m_velocity_metrics;
    LevelData<FluxBox> *   m_velocity_tangrad_metrics;
    LevelData<FArrayBox> * m_velocity_volumes;
+
    LevelData<FArrayBox> * m_velocity_J;
    LevelData<FluxBox> *   m_velocity_face_areas;
 
@@ -784,6 +786,19 @@ private:
    LevelData<FArrayBox> * m_sheared_interp_stencil;
    LevelData<FArrayBox> * m_sheared_interp_stencil_offsets;
 
+   // Cached data supporting extrablock exchanges
+   struct EBE_Data
+   {
+      BoxLayout             ghostLayout;
+      LayoutData<DataIndex> index_map;
+      LayoutData<IntVect>   shift_map;
+      IntVect               ghost_vect;
+      IntVect               include_dir;
+      Copier                copier;
+   };
+   mutable EBE_Data* m_ebe_data[3];
+   mutable CoDimCopyManager<FArrayBox>* m_ebe_copy_manager;
+   
    Copier m_exchangeCopier;
    int m_exchange_ghosts;
    bool m_optimized_copier;
@@ -791,6 +806,14 @@ private:
    mutable GyroaverageOperator const *m_gyroavg_op;
    bool m_is_gyrokinetic;
 
+   void getExtrablockExchangeLayout( const int                 codim,
+                                     const DisjointBoxLayout&  grids,
+                                     const IntVect&            ghost_vect,
+                                     const IntVect&            include_dir,
+                                     BoxLayout&                ghosts_layout,
+                                     LayoutData<DataIndex>&    index_map,
+                                     LayoutData<IntVect>&      shift_map ) const;
+  
    void unmapGradient(  const LevelData<FArrayBox>&, 
                         LevelData<FArrayBox>&,
                         const int ) const;

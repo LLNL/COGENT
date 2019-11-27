@@ -131,6 +131,41 @@ c     local variables
 
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
+c    COMPUTE VISCOSITY ENERGY FLUX
+
+      subroutine eval_visc_energy_flux(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[Vel],
+     &     CHF_CONST_FRA[Pix],
+     &     CHF_CONST_FRA[Piy],
+     &     CHF_FRA[UPi]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision Vx0, Vy0
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+      if (CH_SPACEDIM==3) then
+
+      else
+
+        Vx0  = Vel(CHF_AUTOIX[i],0)
+        Vy0  = Vel(CHF_AUTOIX[i],1)
+
+        UPi(CHF_AUTOIX[i],0) = Vx0*Pix(CHF_AUTOIX[i],0) + Vy0*Pix(CHF_AUTOIX[i],1)
+        UPi(CHF_AUTOIX[i],1) = Vx0*Piy(CHF_AUTOIX[i],0) + Vy0*Piy(CHF_AUTOIX[i],1)
+
+      endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
 c    COMPUTE CELL CENTER FLUXES
 
       subroutine cell_center_fluxes(
@@ -274,76 +309,11 @@ c        print*, "J    = ", J(CHF_AUTOIX[i])
 
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
-
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
 c    EASY WAY TO LOOK AT WHAT IS IN FARRAYBOX
-
-      subroutine inspect_farraybox(
-     &     CHF_BOX[gridbox],
-     &     CHF_CONST_FRA1[FA0],
-     &     )
-
-c     local variables
-      integer CHF_AUTODECL[i]
-      double precision F00
-
-      CHF_AUTOMULTIDO[gridbox;i]
-
-        F00  = FA0(CHF_AUTOIX[i]) 
-c        print*, "shape(F0)   = ", shape(F0)
-        print*, "CHF_AUTOIX[i]    = ", CHF_AUTOIX[i]
-        print*, "F00    = ", F00
-
-      CHF_ENDDO
-
-      return
-      end
 
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
 c    EASY WAY TO LOOK AT WHAT IS IN FLUXBOX / EDGEBOX
-
-      subroutine inspect_fluxbox(
-     &     CHF_BOX[gridbox],
-     &     CHF_CONST_FRA[Flux],
-     &     CHF_CONST_INT[dir]
-     &     )
-
-c     local variables
-      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
-      double precision F00, F01, F10, F11, F2, F3
-      integer n0, n1
-c      integer, dimension (3) :: shapeF
-
-      CHF_DTERM[
-      ii = CHF_ID(dir, 0);
-      jj = CHF_ID(dir, 1);
-      kk = CHF_ID(dir, 2)]
-c      shapeF = shape(Flux)
-c      print*, "shape(Flux)  = ", shapeF
-
-      do n=0, (CHF_NCOMP[Flux]-1)
-        print*, "component    = ", n
-c         do j=0, (shapeF(2)-1) 
-c            do i=0, (shapeF(1)-1)
-
-      CHF_MULTIDO[gridbox;i;j;k]
-
-c        print*, "component    = ", n
-c        shapeF = reshape(shapeF,shape(Flux))
-c        print*, "shapeF(dir+1)  = ", shapeF(dir+1)
-        print*, "CHF_IX[i;j]  = ", CHF_IX[i;j;k]
-        print*, "Flux    = ", Flux(CHF_IX[i;j;k],n)
-c        print*, "Flux    = ", Flux(CHF_IX[ii;jj;kk],n)
-
-      CHF_ENDDO
-c            enddo
-c         enddo
-      enddo
-  
-      return
-      end
 
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 

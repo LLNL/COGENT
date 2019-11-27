@@ -185,7 +185,7 @@ void ImplicitStageJacobian<T,Ops>::residual(
 template <class T, class Ops>
 void ImplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y)
 {
-  CH_TIME("ImplicitStageJacobian::apllyOp()");
+  CH_TIME("ImplicitStageJacobian::applyOp()");
   Real normY = a_y.computeNorm(2);
   if (normY < 1e-15) a_F.zero();
   else {

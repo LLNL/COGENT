@@ -302,7 +302,8 @@ FFLAGS := \
 $(subst FALSE,,$(subst TRUE,$(fdbgflags),$(DEBUG)))\
 $(subst FALSE,,$(subst TRUE,$(foptflags),$(subst HIGH,$(foptflags),$(OPT))))\
 $(fcomflags)\
-$(subst FALSE,,$(subst TRUE,$(fprofflags),$(PROFILE)))
+$(subst FALSE,,$(subst TRUE,$(fprofflags),$(PROFILE)))\
+$(subst FALSE,,$(subst TRUE,-DCH_MPI,$(MPI)))
 
 LDFLAGS := \
 $(subst FALSE,,$(subst TRUE,$(lddbgflags),$(DEBUG)))\

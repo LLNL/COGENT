@@ -64,6 +64,10 @@ public:
 
    virtual std::string type() const = 0;
 
+   virtual bool containsPhysicalBoundary( int                    block_number,
+                                          int                    dir,
+                                          const Side::LoHiSide&  side ) const;
+
 #if CFG_DIM ==3
    /// toroidal block mapping conversion function
    /** Given a_xiSrc in mapped space of block a_nSrc,

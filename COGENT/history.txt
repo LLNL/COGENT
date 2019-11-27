@@ -1,4 +1,70 @@
 ------------------------------------------------------------------------
+r1588 | mdorr | 2019-11-21 14:25:34 -0800 (Thu, 21 Nov 2019) | 3 lines
+
+Removing a diagnostic inadvertently left on in the previous commit.
+
+
+------------------------------------------------------------------------
+r1587 | mdorr | 2019-11-21 14:09:52 -0800 (Thu, 21 Nov 2019) | 3 lines
+
+Adding the ability to specify EllipticOp boundary conditions on only a part of a block boundary (e.g., single null sawteeth).
+
+
+------------------------------------------------------------------------
+r1586 | angus1 | 2019-11-21 11:11:58 -0800 (Thu, 21 Nov 2019) | 1 line
+
+updating sample input decks that use ideal mhd module
+------------------------------------------------------------------------
+r1585 | angus1 | 2019-11-21 10:09:59 -0800 (Thu, 21 Nov 2019) | 1 line
+
+added general viscosity term to ideal mhd module
+------------------------------------------------------------------------
+r1584 | angus1 | 2019-11-21 07:36:54 -0800 (Thu, 21 Nov 2019) | 1 line
+
+refactoring getting/setting metric members in MagGeom class... and added some functionality for stress tensor calculations
+------------------------------------------------------------------------
+r1583 | mdorr | 2019-11-18 15:04:10 -0800 (Mon, 18 Nov 2019) | 3 lines
+
+In fillInternalGhosts() (both MagGeom and PhaseGeom), moving interpFromShearedGhosts ahead of the corner copies.
+
+
+------------------------------------------------------------------------
+r1582 | mdorr | 2019-11-17 16:39:19 -0800 (Sun, 17 Nov 2019) | 7 lines
+
+Added new virtual members containsPhysicalBoundary(int block_number, int dir, Side::LoHiSide side) to MagCoordSys and PhaseCoordSys.  Modified BCUtils::isPhysicalBoundary() to make calls to these new functions instead of the previous BlockBoundary::isDomain() function it used before.  For the sheared geometry case, SingleNullPhaseCoordSys::containsPhysicalBoundary returns true when called in the toroidal direction, even though those boundaries are again set as block interfaces.  Changed the single null toroidal block boundaries back to block interfaces (i.e., periodic shifts in the case of one block).
+
+Cleanup up some residual stuff that should have been done related to the new extrablock exchange of the previous commit.
+
+Removed the no longer used vlasov/MappedAdvectionOp.H
+
+
+------------------------------------------------------------------------
+r1581 | mdorr | 2019-11-14 17:45:12 -0800 (Thu, 14 Nov 2019) | 3 lines
+
+Adding a new version of extrablockExchange that does not use BlockRegisters.  The old version is still there for now, but the new version is the default.
+
+
+------------------------------------------------------------------------
+r1580 | debo | 2019-11-11 17:28:36 -0800 (Mon, 11 Nov 2019) | 1 line
+
+In multifluidphysicsPC, if there is just one component, just apply it and save on some unnecessary operations
+------------------------------------------------------------------------
+r1579 | mdorr | 2019-11-10 11:10:56 -0800 (Sun, 10 Nov 2019) | 3 lines
+
+Replacing all CornerCopiers with the new codim-by-codim approach controlled by CoDimCopyManager.
+
+
+------------------------------------------------------------------------
+r1578 | mdorf | 2019-11-02 16:10:02 -0700 (Sat, 02 Nov 2019) | 1 line
+
+Added full fluid model (to support LHDI simulations). Extended Efield class to accumulate charge and mass from both kinetic and fluid species. Extended initial Maxwellian capability to enforce density to the input profile
+------------------------------------------------------------------------
+r1577 | mdorr | 2019-10-30 14:43:43 -0700 (Wed, 30 Oct 2019) | 3 lines
+
+Fixing the doubling of stencil weights on the boundaries of blocks treated as interblock interfaces in directions that are also declared periodic.  This is only relevant to single block cases.
+
+
+------------------------------------------------------------------------
 r1576 | mdorf | 2019-10-19 11:51:09 -0700 (Sat, 19 Oct 2019) | 1 line
 
 Fixed a bug in the ExB calculation used by old-velocity model in Vorticity.cpp

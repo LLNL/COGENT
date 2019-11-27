@@ -43,7 +43,8 @@ using namespace CH_MultiDim;
 
 MaxwellianKineticFunction::MaxwellianKineticFunction( ParmParse& a_pp,
                                                       const int& a_verbosity )
-   : m_verbosity(a_verbosity)
+   : m_verbosity(a_verbosity),
+     m_enforce_input_density_profile(false)
 {
    parseParameters( a_pp );
 }
@@ -119,6 +120,31 @@ void MaxwellianKineticFunction::assign( KineticSpecies& a_species,
    if ( !(geometry.secondOrder()) )  {
       KineticFunctionUtils::convertToCellAverage( geometry, dfn );
    }
+   
+   // This slightly changes dfn to exactly match
+   // the density profile in the input; this works only if mult and
+   // divide J on valid are exact inversion of each other (which
+   // may not be the case for a high-order). Presently only applied in
+   // the valid cells, perhaps extend to ghost region later.
+   if (m_enforce_input_density_profile)
+   {
+      const CFG::MultiBlockLevelGeom& mag_geometry( geometry.magGeom() );
+      const CFG::DisjointBoxLayout& mag_grids( mag_geometry.grids() );
+
+      CFG::LevelData<CFG::FArrayBox> density_moment(mag_grids,1,CFG::IntVect::Zero);
+      a_species.numberDensity(density_moment);
+
+      LevelData<FArrayBox> density_moment_inj;
+      geometry.injectConfigurationToPhase( density_moment, density_moment_inj );
+
+      for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
+         FORT_ENFORCE_INPUT_DENS_PROF(CHF_FRA(dfn[dit]),
+				      CHF_BOX(grids[dit]),
+                                      CHF_CONST_FRA1(density_moment_inj[dit],0),
+                                      CHF_CONST_FRA1(injected_density[dit],0));
+      }
+   }
+   
    geometry.multJonValid( dfn );
    dfn.exchange();
 }
@@ -229,7 +255,9 @@ void MaxwellianKineticFunction::parseParameters( ParmParse& a_pp )
    else {
        m_ic_vparallel = RefCountedPtr<CFG::GridFunction>( new CFG::Constant( 0.0, m_verbosity ) );
    }
-    
+   
+   a_pp.query("enforce_input_density_profile", m_enforce_input_density_profile);
+   
    if (m_verbosity) {
       printParameters();
    }

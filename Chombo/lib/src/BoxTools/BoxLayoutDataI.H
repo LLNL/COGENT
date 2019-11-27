@@ -20,8 +20,9 @@
 #include "memtrack.H"
 #include "Misc.H"
 #include "CH_Timer.H"
-#include "NamespaceHeader.H"
 #include "BaseFabMacros.H"
+#include "NamespaceHeader.H"
+
 
 using std::sort;
 

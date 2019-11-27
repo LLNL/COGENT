@@ -4,7 +4,7 @@
 //#include "upwindSchemesF_F.H"
 
 #include "NamespaceHeader.H"
-
+      
 void
 SpaceUtils::upWindToFaces( LevelData<FluxBox>&    a_face_phi,
                      const LevelData<FArrayBox>&  a_cell_phi,
@@ -23,7 +23,8 @@ SpaceUtils::upWindToFaces( LevelData<FluxBox>&    a_face_phi,
       upWindToFaces( this_face_phi, this_cell_phi, this_norm_vel, this_dbl_box, a_method );
        
    } 
-   a_face_phi.exchange();
+   //a_face_phi.exchange();
+
 }
 
 void
@@ -154,7 +155,7 @@ SpaceUtils::interpToFaces( LevelData<FluxBox>&    a_face_phi,
       interpToFaces( this_face_phi, this_cell_phi, this_cell_fun, this_norm_vel, this_dbl_box, a_method );
        
    } 
-   a_face_phi.exchange();
+   //a_face_phi.exchange();
 }
 
 void
@@ -247,7 +248,7 @@ SpaceUtils::interpToFacesWENO( LevelData<FluxBox>&   a_face_phi,
       interpToFacesWENO( this_face_phi, this_cell_phi, this_norm_vel, this_smooth, this_dbl_box, a_method );
       
    } // end loop over grids
-   a_face_phi.exchange();
+   //a_face_phi.exchange();
 }
 
 void
@@ -408,7 +409,7 @@ SpaceUtils::interpCellToEdges( LevelData<EdgeDataBox>&   a_edge_phi,
          }
       } // end loop over directions
    } // end loop over grids
-   a_edge_phi.exchange();
+   //a_edge_phi.exchange();
 
 }
 
@@ -440,7 +441,7 @@ SpaceUtils::interpEdgesToCell( LevelData<FArrayBox>&    a_cell_phi,
       }
 
    }
-   a_cell_phi.exchange();
+   //a_cell_phi.exchange();
 
 }
 
@@ -471,7 +472,7 @@ SpaceUtils::interpFacesToCell( LevelData<FArrayBox>&  a_cell_phi,
       }
 
    }
-   a_cell_phi.exchange();
+   //a_cell_phi.exchange();
 
 }
 
@@ -987,6 +988,66 @@ SpaceUtils::copyAndFillGhostCellsSimple(  LevelData<FArrayBox>&       a_var_wg,
 
   /* done - hopefully! */
   return;
+}
+
+void 
+SpaceUtils::inspectFArrayBox(const LevelData<FArrayBox>&  a_F0,
+                             const int                    a_comp)
+{
+   CH_assert(a_comp<a_F0.nComp());
+   const DisjointBoxLayout& grids( a_F0.getBoxes() );
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      const FArrayBox& F0_on_patch = a_F0[dit];   
+      const Box& thisbox = F0_on_patch.box();
+
+      FORT_INSPECT_FARRAYBOX( CHF_BOX(thisbox), 
+                              CHF_CONST_FRA1(F0_on_patch,a_comp) );
+   }
+}
+
+void 
+SpaceUtils::inspectFluxBox(const LevelData<FluxBox>&  a_Flux,
+                           const int                  a_dir)
+{
+   const DisjointBoxLayout& grids( a_Flux.getBoxes() );
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      const FluxBox& Flux_on_patch = a_Flux[dit]; 
+      //const Box& thisbox = Flux_on_patch.box();
+
+      //Box face_box( Flux_on_patch.box());
+      //face_box.surroundingNodes( a_dir );
+      //face_box.grow( a_dir, 1 );
+
+      const FArrayBox& Flux_on_dir = Flux_on_patch[a_dir]; 
+      const Box& thisbox = Flux_on_dir.box();
+
+      FORT_INSPECT_FLUXBOX( CHF_BOX(thisbox), 
+                            CHF_CONST_FRA(Flux_on_dir),
+                            CHF_CONST_INT(a_dir) );
+   }
+}
+
+void 
+SpaceUtils::inspectEdgeDataBox(const LevelData<EdgeDataBox>&  a_Edge,
+                               const int                      a_dir)
+{
+   const DisjointBoxLayout& grids( a_Edge.getBoxes() );
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      const EdgeDataBox& Edge_on_patch = a_Edge[dit]; 
+      const Box& thisbox = Edge_on_patch.box();
+
+      const FArrayBox& Edge_on_dir = Edge_on_patch[a_dir]; 
+
+      FORT_INSPECT_FLUXBOX( CHF_BOX(thisbox), 
+                            CHF_CONST_FRA(Edge_on_dir),
+                            CHF_CONST_INT(a_dir) );
+   }
 }
 
 #if 1

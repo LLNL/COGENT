@@ -489,6 +489,48 @@ c        print*, "glsq  = ", glsq
       return
       end
 
+c    COMPUTE STRAIN TENSOR FOR 2D CASE
+
+      subroutine eval_strain_tensor_comps(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[divV],
+     &     CHF_CONST_FRA[gradVx],
+     &     CHF_CONST_FRA[gradVy],
+     &     CHF_FRA[Wx],
+     &     CHF_FRA[Wy]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision divV0
+      double precision gradVxx, gradVxy
+      double precision gradVyx, gradVyy
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+      if (CH_SPACEDIM==3) then
+
+      else
+
+        gradVxx = gradVx(CHF_AUTOIX[i],0)
+        gradVxy = gradVx(CHF_AUTOIX[i],1)
+        gradVyx = gradVy(CHF_AUTOIX[i],0)
+        gradVyy = gradVy(CHF_AUTOIX[i],1)
+        divV0  = divV(CHF_AUTOIX[i])
+
+        Wx(CHF_AUTOIX[i],0) = gradVxx + gradVxx - two/three*divV0
+        Wx(CHF_AUTOIX[i],1) = gradVxy + gradVyx
+        Wy(CHF_AUTOIX[i],0) = gradVyx + gradVxy
+        Wy(CHF_AUTOIX[i],1) = gradVyy + gradVyy - two/three*divV0
+
+      endif
+
+      CHF_ENDDO
+    
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       subroutine compute_face_transverse_E(
      &     CHF_BOX[box],

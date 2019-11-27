@@ -44,13 +44,13 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
 
    int discretization_order = 2;
 
-   if ( a_geom.extrablockExchange() ) {
-      m_mblx_ptr = new MagFluxAlignedMBLEXCenter;
-      m_mblx_ptr->define(&a_geom, discretization_order, discretization_order);
+   if ( a_geom.shearedMBGeom() ) {
+      m_mblx_ptr = new ToroidalBlockLevelExchangeCenter(a_geom, discretization_order, discretization_order);
    }
    else {
-      if ( a_geom.shearedMBGeom() ) {
-         m_mblx_ptr = new ToroidalBlockLevelExchangeCenter(a_geom, discretization_order, discretization_order);
+      if ( a_geom.extrablockExchange() ) {
+         m_mblx_ptr = new MagFluxAlignedMBLEXCenter;
+         m_mblx_ptr->define(&a_geom, discretization_order, discretization_order);
       }
       else {
          m_mblx_ptr = NULL;

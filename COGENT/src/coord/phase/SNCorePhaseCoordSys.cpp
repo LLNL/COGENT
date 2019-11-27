@@ -427,4 +427,47 @@ SNCorePhaseCoordSys::displacements(const Vector<RealVect>&   a_dstCoords,
 }
 
 
+bool
+SNCorePhaseCoordSys::containsPhysicalBoundary( int                    a_block_number,
+                                               int                    a_dir,
+                                               const Side::LoHiSide&  a_side ) const
+{
+   bool contains_boundary = false;
+
+#if CFG_DIM==2
+   contains_boundary = PhaseCoordSys::containsPhysicalBoundary(a_block_number, a_dir, a_side);
+#endif
+
+#if CFG_DIM==3
+   if ( a_dir == TOROIDAL_DIR ) {
+
+      bool sheared_geom;
+      if ( ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->isModelGeom() ) {
+         const CFG::SNCoreBlockCoordSysModel* mag_coord_sys = (const CFG::SNCoreBlockCoordSysModel*)m_coordSysVect[a_block_number];
+         sheared_geom = mag_coord_sys->isFieldAlignedMapping();
+      }
+      else {
+         const CFG::SNCoreBlockCoordSys* mag_coord_sys = (const CFG::SNCoreBlockCoordSys*)m_coordSysVect[a_block_number];
+         sheared_geom = mag_coord_sys->isFieldAlignedMapping();
+      }
+
+      if ( sheared_geom ) {
+         // Set all toroidal block interfaces to physical boundaries;
+         // This is done to deal with saw-tooth divertor BCs
+         // Internal part of the block interface is handled by fillInternalGhosts
+         contains_boundary = true;
+      }
+      else {
+         contains_boundary = PhaseCoordSys::containsPhysicalBoundary(a_block_number, a_dir, a_side);
+      }
+   }
+   else {
+      contains_boundary = PhaseCoordSys::containsPhysicalBoundary(a_block_number, a_dir, a_side);
+   }
+#endif
+   
+   return contains_boundary;
+}
+
+
 #include "NamespaceFooter.H"

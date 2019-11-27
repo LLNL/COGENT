@@ -16,6 +16,9 @@
 #include <string>
 #include <vector>
 
+//#include "SPACE.H"
+//#include "FluidOpF_F.H"
+
 #include "NamespaceHeader.H"
 namespace PS = PS_NAMESPACE; 
 
@@ -113,7 +116,7 @@ class GKFluidOp
       bool trivialSolutionOp( const FluidSpeciesPtrVect& fluid_species );
 
       void initialize( FluidSpeciesPtrVect&  fluid_species,
-                       Real                  time );
+                       const Real            time );
 
       void fillGhostCells( FluidSpeciesPtrVect&  fluid_species,
                            const double          time );

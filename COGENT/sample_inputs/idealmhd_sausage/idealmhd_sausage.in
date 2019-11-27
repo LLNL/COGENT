@@ -11,35 +11,37 @@ gksystem.hdf_fluids = true
 # Time Stepping Definitions
 #####################################################
 #simulation.max_step            = 2
-simulation.max_step            = 8000000
-simulation.max_time            = 20.0
+simulation.max_step            = 235650
+simulation.max_time            = 10.0
 #simulation.max_dt_grow         = .1
 simulation.initial_dt_fraction = 1.0
-simulation.cfl_number          = 0.5
-#simulation.fixed_dt            = 0.0038
-simulation.checkpoint_interval = 10000
+simulation.cfl_number          = 0.7
+#simulation.fixed_dt            = 0.00084872
+simulation.checkpoint_interval = 100000
 simulation.checkpoint_prefix   = "chk"
 #simulation.restart_file = "chk3200.4d.hdf5"
 #simulation.plot_interval       = 80
-simulation.plot_time_interval  = 4.0
+simulation.plot_time_interval  = 1.0
 simulation.plot_prefix         = "plt"
 
-gksystem.ti_class = "rk"
-gksystem.ti_method = "2"
-#gksystem.ti_class = "ark"
-#gksystem.ti_method = "2c"
-#ark_jacobian.with_pc = true
-#ark_pc.type = "multiphysicsPC"
+#gksystem.ti_class = "rk"
+#gksystem.ti_method = "2"
+gksystem.ti_class = "ark"
+gksystem.ti_method = "2c"
+ark_jacobian.with_pc = true
+ark_pc.type = "multiphysicsPC"
+ark_newton.rtol = 1.0e-6
+ark_gmres.rtol = 1.0e-6
 
 #####################################################
 # Computational Grid Definitions
 #####################################################
-gksystem.num_cells   = 400 64 4 4 
+gksystem.num_cells   = 800 128 4 4 
 gksystem.is_periodic = 0  1  0  0
 
-gksystem.configuration_decomp = 20 1
+gksystem.configuration_decomp = 50 2
 gksystem.velocity_decomp      =      1 1
-gksystem.phase_decomp         = 20 1 1 1
+gksystem.phase_decomp         = 50 2 1 1
 
 #####################################################
 # Units Definitions
@@ -75,12 +77,6 @@ phase_space_mapping.velocity_type = "gyrokinetic"
 phase_space_mapping.second_order = true
 
 #####################################################
-# Vlasov Operator Definitions
-#####################################################
-gkvlasov.verbose = true
-gkvlasov.face_avg_type = uw3
-
-#####################################################
 # Poisson Operator Definitions
 #####################################################
 gksystem.fixed_efield = true
@@ -99,38 +95,33 @@ fluid_species.1.momentumDensity = 1
 fluid_species.1.energyDensity = 1
 fluid_species.1.magneticField_virtual = 1
 
-fluid_model.neutrals.D_perp = "Dshape"
-fluid_model.neutrals.D_par = "Dshape"
 #fluid_model.neutrals.advScheme = "uw1"
 fluid_model.neutrals.advScheme = "quick"
 #fluid_model.neutrals.advScheme = "c2"
 #fluid_model.neutrals.advScheme = "weno5"
 #fluid_model.neutrals.advScheme = "TVDminmod"
+fluid_model.neutrals.tauMax = 1.0e-2
+fluid_model.neutrals.implicitMhd = 0
+fluid_model.neutrals.implicitViscosity = 0
 
 #####################################################
 # Initial Condition Definitions
 #####################################################
 IC.potential.function = "zero_grid_func"
-IC.hydrogen.function = "maxwellian_phase_func" 
-IC.electron.function = "maxwellian_electron_phase_func"
 IC.neutrals.density.function = "neutrals_IC"
-IC.neutrals.momentumDensity_x.function = "zero_grid_func"
-IC.neutrals.momentumDensity_y.function = "momDeny_IC"
+IC.neutrals.momentumDensity_0.function = "zero_grid_func"
+IC.neutrals.momentumDensity_1.function = "momDeny_IC"
 IC.neutrals.energyDensity.function = "energyDensity_IC"
 IC.neutrals.magneticField_virtual.function = "By_IC"
 
 #####################################################
 # Boundary Condition Definitions
 #####################################################
-BC.potential.radial_lower.type = "dirichlet"
-BC.potential.radial_upper.type = "dirichlet"
-#BC.potential.poloidal_lower.type = "neumann"
-#BC.potential.poloidal_upper.type = "neumann"
+BC.mom0_visc.radial_lower.type = "dirichlet"
+BC.mom0_visc.radial_upper.type = "dirichlet"
 
-BC.neutrals_diffusion.radial_lower.type = "neumann"
-BC.neutrals_diffusion.radial_upper.type = "neumann"
-#BC.neutrals_diffusion.poloidal_lower.type = "neumann"
-#BC.neutrals_diffusion.poloidal_upper.type = "neumann"
+BC.mom1_visc.radial_lower.type = "neumann"
+BC.mom1_visc.radial_upper.type = "neumann"
 
 BC.neutrals.density.radial_lower.function = "zero_grid_func"
 BC.neutrals.density.radial_upper.function = "zero_grid_func"
@@ -169,35 +160,32 @@ BC.neutrals.magneticField_virtual.radial_upper.type = "neumannJ"
 #BC.neutrals.magneticField_virtual.poloidal_upper.type = "neumann"
 
 #####################################################
-# Collisions Definitions
-#####################################################
-#CLS.electron.cls_freq = 20.5
-#CLS.electron.cls_freq = 0.0
-#CLS.electron.conserve_momentum  = false
-#CLS.electron.conserve_particle = true
-#CLS.electron.ref_function = "maxwellian_electron_phase_func"
-#CLS.electron.ref_temperature = "T0_grid_func"
+## Preconditioner Solver Definitions
+######################################################
+mom0_visc.linear_solver.precond.method = "AMG"
+mom0_visc.linear_solver.precond.max_iter = 20
+mom0_visc.linear_solver.precond.tol = 1.e-6
+mom0_visc.linear_solver.precond.verbose = true
+mom0_visc.second_order = true
+
+mom1_visc.linear_solver.precond.method = "AMG"
+mom1_visc.linear_solver.precond.max_iter = 20
+mom1_visc.linear_solver.precond.tol = 1.e-6
+mom1_visc.linear_solver.precond.verbose = true
+mom1_visc.second_order = true
 
 #####################################################
 # Grid Function Definitions
 #####################################################
-grid_function_library.number = 6
+grid_function_library.number = 5
 grid_function_library.verbosity = 1
-grid_function_library.list = "zero_grid_func" "momDeny_IC" "neutrals_IC" "energyDensity_IC" "By_IC" "Dshape"
+grid_function_library.list = "zero_grid_func" "momDeny_IC" "neutrals_IC" "energyDensity_IC" "By_IC"
 
 grid_function_library.zero_grid_func.type = "zero" 
 
-#computational coordinate X runs 0 to 2pi. physical coordinate runs 0 to L.
-#For exponentially decreasing density, one should use exp(-(x-pi)/(2*pi*delta/L)) 
-
-#grid_function_library.neutrals_IC.type = "localized"
-#grid_function_library.neutrals_IC.amplitude = 1.0
-#grid_function_library.neutrals_IC.location = 0.5 0.5
-#grid_function_library.neutrals_IC.width = 0.14142 0.14142
-#grid_function_library.neutrals_IC.floor = 0.00
-
 grid_function_library.momDeny_IC.type = "arbitrary"
 grid_function_library.momDeny_IC.coordinate_type = "physical"
+#grid_function_library.momDeny_IC.function = "0.1*x/(1+x^2)^2"
 grid_function_library.momDeny_IC.function = "0.0*x/(1+x^2)^2"
 
 grid_function_library.neutrals_IC.type = "arbitrary"
@@ -212,5 +200,3 @@ grid_function_library.By_IC.type = "arbitrary"
 grid_function_library.By_IC.coordinate_type = "physical"
 grid_function_library.By_IC.function = "sqrt(2)*x/(1+x^2)"
 
-grid_function_library.Dshape.type = "arbitrary"
-grid_function_library.Dshape.function = "0.00" #"(1.0+sin(x/2.0)*sin(x/2.0))*(1+0.001*cos(2*y))"

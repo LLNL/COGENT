@@ -83,6 +83,7 @@ public:
    inline
    void initializeState( GKState& a_state, const int a_cur_step, const Real a_time )
    {
+      CH_TIME("GKOps::initializeState()");
       if ( a_cur_step > 0 && m_old_vorticity_model ) {
          // If restarting the old vorticity model, then the potential has already been set
          m_initial_conditions->initializeSystem( a_state, a_time );
@@ -200,7 +201,7 @@ public:
       m_kinetic_ghost_vect(4*IntVect::Unit),
       m_cfg_nghosts(2*CFG::IntVect::Unit),
       m_fixed_efield(false),
-      m_zero_efield(false), // JRA
+      m_zero_efield(false),
       m_transport_model_on(false),     
       m_enforce_quasineutrality(false),
       m_step_const_coef(false),
@@ -734,7 +735,7 @@ private:
    bool                           m_ampere_law;
    bool                           m_ampere_cold_electrons;
    bool                           m_fixed_efield;
-   bool                           m_zero_efield; // JRA
+   bool                           m_zero_efield;
    bool                           m_transport_model_on;
    bool                           m_neutrals_model_on;
    bool                           m_enforce_quasineutrality;

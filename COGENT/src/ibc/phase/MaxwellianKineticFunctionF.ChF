@@ -166,3 +166,38 @@ c        Legend: 0 - amplitude, 1 - radial width, 2 - (n), 3 - (m)
       return
       end
 
+      subroutine enforce_input_dens_prof(
+     &     CHF_FRA[f],
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[dens_moment],
+     &     CHF_CONST_FRA1[dens_prof]
+     &     )
+c     Sets distribution function for 2D temperature and density
+      integer CHF_DDECL[i;j;k;l;m],n
+      REAL_T denloc_mom, denloc_prof
+      REAL_T fac
+c
+
+c
+      do n=0,CHF_NCOMP[f]-1
+      CHF_MULTIDO[box;i;j;k;l;m]
+c
+#if CH_SPACEDIM==4
+         denloc_mom    = dens_moment(i,j,CHF_LBOUND[dens_moment;2],CHF_LBOUND[dens_moment;3])
+         denloc_prof    = dens_prof(i,j,CHF_LBOUND[dens_prof;2],CHF_LBOUND[dens_prof;3])
+#else
+         denloc_mom    = dens_moment(i,j,k,CHF_LBOUND[dens_moment;3],CHF_LBOUND[dens_moment;4])
+         denloc_prof    = dens_prof(i,j,k,CHF_LBOUND[dens_prof;3],CHF_LBOUND[dens_prof;4])
+#endif
+
+         fac    = denloc_prof/denloc_mom
+c
+ 
+         f(CHF_IX[i;j;k;l;m],n) = fac * f(CHF_IX[i;j;k;l;m],n)
+c
+      CHF_ENDDO
+      enddo
+c
+      return
+      end
+

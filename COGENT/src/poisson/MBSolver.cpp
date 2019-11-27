@@ -639,14 +639,17 @@ MBSolver::constructBoundaryStencils( const bool                        a_fourth_
          for (SideIterator sit; sit.ok(); ++sit) {
             Side::LoHiSide side = sit();
 
-            if (this_block_boundaries[dir + side*SpaceDim].isDomainBoundary()) {
+            Vector<Box> boundary_boxes = ((MagGeom&)m_geometry).getBoundaryBoxes(block_number, dir, side);
+
+            for ( int n=0; n<boundary_boxes.size(); ++n ) {
 
                codim1_stencil.resize(++num_codim1_neighbors);
 
-               Box box = bdryBox(domain_box, dir, side, 1);
+               Box box = boundary_boxes[n];
                FArrayBox bv(box,1);
 
-	       Box box_tmp = adjCellBox(domain_box, dir, side, -1);
+	       Box box_tmp = box;
+               box_tmp.shiftHalf(dir,-sign(side));
                FluxBox bv_tmp(box_tmp,1);
 
                RefCountedPtr<GridFunction> bc_func = a_bc.getBCFunction(block_number, dir, side );
@@ -685,36 +688,98 @@ MBSolver::constructBoundaryStencils( const bool                        a_fourth_
 
                Box codim1_box = codim1_stencil[num_codim1_neighbors-1].box();
 
+               CH_assert(order%2 == 0);
+               int width = order/2;
+
                for (int tdir=0; tdir < SpaceDim; ++tdir) {
                   if ( tdir != dir ) {
                      for (SideIterator sit2; sit2.ok(); ++sit2) {
                         Side::LoHiSide side2 = sit2();
 
-                        bool transverse_boundary = this_block_boundaries[tdir + side2*SpaceDim].isDomainBoundary();
+                        // Determine if the codim2 stencil we are about to create overlaps a physical boundary in the tdir direction on side2
 
-                        codim2_stencil.resize(++num_codim2_neighbors);
+                        Vector<Box> transverse_boundary_boxes = ((MagGeom&)m_geometry).getBoundaryBoxes(block_number, tdir, side2);
 
-                        codim2_stencil[num_codim2_neighbors-1].
-                           define(codim1_box, dx, dir, side, tdir, side2, order, transverse_boundary);
+                        bool transverse_boundary = transverse_boundary_boxes.size() > 0;
 
-                        // Check to see if the new codim2 box overlaps another block
+                        if ( transverse_boundary ) {
 
-                        const Box& new_codim2_box = codim2_stencil[num_codim2_neighbors-1].box();
+                           Box grown_codim1_box = codim1_box;
+                           grown_codim1_box.grow(tdir,width);
 
-                        for (int block_number2=0; block_number2<num_blocks; ++block_number2) {
-                           if (block_number2 != block_number) {
-                              const Box& domain_box2 = mapping_blocks[block_number2];
+                           for (int n=0; n<transverse_boundary_boxes.size(); ++n) {
 
-                              Box overlap = new_codim2_box & domain_box2;
-                              if ( overlap == new_codim2_box ) {
-                                 // Codim2 box is contained in a valid block, so delete it
+                              Box restricted_codim1_box = codim1_box;
+                              bool this_transverse_boundary = false;
 
-                                 codim2_stencil.resize(--num_codim2_neighbors);
+                              Box tbox = transverse_boundary_boxes[n];
+                              tbox.shiftHalf(tdir,sign(side2));
+                              tbox.grow(dir,width);
+                              Box overlap = tbox & grown_codim1_box;
+                              if ( overlap.ok() ) {
+                                 for (int tdir2=0; tdir2<SpaceDim; ++tdir2) {
+                                    if ( tdir2 != tdir ) {
+                                       restricted_codim1_box.setSmall(tdir2, overlap.smallEnd(tdir2));
+                                       restricted_codim1_box.setBig(tdir2, overlap.bigEnd(tdir2));
+                                    }
+                                 }
+                                 this_transverse_boundary = true;
                               }
-                              else if ( overlap.ok() ) {
-                                 // Codim2 box partially overlaps a valid block.  Need to exit and figure out
-                                 // what to do about it.
-                                 MayDay::Error("MBSolver::constructBoundaryStencils(): codim2 box partially overlaps a valid block");
+
+                              codim2_stencil.resize(++num_codim2_neighbors);
+
+                              codim2_stencil[num_codim2_neighbors-1].
+                                 define(restricted_codim1_box, dx, dir, side, tdir, side2, order, this_transverse_boundary);
+
+                              // Check to see if the new codim2 box overlaps another block
+
+                              const Box& new_codim2_box = codim2_stencil[num_codim2_neighbors-1].box();
+
+                              for (int block_number2=0; block_number2<num_blocks; ++block_number2) {
+                                 if (block_number2 != block_number) {
+                                    const Box& domain_box2 = mapping_blocks[block_number2];
+
+                                    Box overlap = new_codim2_box & domain_box2;
+                                    if ( overlap == new_codim2_box ) {
+                                       // Codim2 box is contained in a valid block, so delete it
+
+                                       codim2_stencil.resize(--num_codim2_neighbors);
+                                    }
+                                    else if ( overlap.ok() ) {
+                                       // Codim2 box partially overlaps a valid block.  Need to exit and figure out
+                                       // what to do about it.
+                                       MayDay::Error("MBSolver::constructBoundaryStencils(): codim2 box partially overlaps a valid block");
+                                    }
+                                 }
+                              }
+                           }
+                        }
+                        else {
+
+                           codim2_stencil.resize(++num_codim2_neighbors);
+
+                           codim2_stencil[num_codim2_neighbors-1].
+                              define(codim1_box, dx, dir, side, tdir, side2, order, transverse_boundary);
+
+                           // Check to see if the new codim2 box overlaps another block
+
+                           const Box& new_codim2_box = codim2_stencil[num_codim2_neighbors-1].box();
+
+                           for (int block_number2=0; block_number2<num_blocks; ++block_number2) {
+                              if (block_number2 != block_number) {
+                                 const Box& domain_box2 = mapping_blocks[block_number2];
+
+                                 Box overlap = new_codim2_box & domain_box2;
+                                 if ( overlap == new_codim2_box ) {
+                                    // Codim2 box is contained in a valid block, so delete it
+
+                                    codim2_stencil.resize(--num_codim2_neighbors);
+                                 }
+                                 else if ( overlap.ok() ) {
+                                    // Codim2 box partially overlaps a valid block.  Need to exit and figure out
+                                    // what to do about it.
+                                    MayDay::Error("MBSolver::constructBoundaryStencils(): codim2 box partially overlaps a valid block");
+                                 }
                               }
                            }
                         }

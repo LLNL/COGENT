@@ -75,6 +75,9 @@ public:
       return ( a_type.compare( this->type() )==0 );
    }
 
+   virtual bool containsPhysicalBoundary( int                    block_number,
+                                          int                    dir,
+                                          const Side::LoHiSide&  side ) const;
 private:
 
    void defineBoundaries8();

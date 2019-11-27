@@ -21,7 +21,9 @@ void EField::define( const double                      a_larmor,
 
    m_boltzmann_electron = a_boltzmann_electron;
    m_fixed_efield       = a_fixed_efield;
-
+   m_include_pol_dens_i = true;
+   m_include_pol_dens_e = false;
+   
    const MagGeom& mag_geom = configurationSpaceGeometry();
    const DisjointBoxLayout& grids = mag_geom.gridsFull();
 
@@ -77,18 +79,16 @@ void EField::computeEField( const PS::GKState&                a_state,
          bool single_null = typeid(*(mag_geom.getCoordSys())) == typeid(SingleNullCoordSys);
 
          // Update the potential and field, if not fixed_efield
-
-         LevelData<FArrayBox> ion_mass_density( grids, 1, IntVect::Zero );
-         computeIonMassDensity( ion_mass_density, a_kinetic_species );
-
-         m_poisson->setOperatorCoefficients( ion_mass_density, a_bc, true );
-
          if ( a_update_potential ) {
 
+            LevelData<FArrayBox> ion_mass_density( grids, 1, IntVect::Zero );
+            computePolarizationMassDensity( ion_mass_density, a_kinetic_species, a_fluid_species );
+            m_poisson->setOperatorCoefficients( ion_mass_density, a_bc, true );
+            
             if (m_boltzmann_electron == NULL) {
             
                LevelData<FArrayBox> total_charge_density( grids, 1, IntVect::Zero );
-               computeTotalChargeDensity( total_charge_density, a_kinetic_species );
+               computeTotalChargeDensity( total_charge_density, a_kinetic_species, a_fluid_species );
                m_poisson->computePotential( a_phi, total_charge_density );
             }
             else {
@@ -276,7 +276,7 @@ void EField::computeQuasiNeutralElectronDensity( LevelData<FArrayBox>&        a_
 
 
 void EField::computeIonChargeDensity( LevelData<FArrayBox>&             a_ion_charge_density,
-                                      const PS::KineticSpeciesPtrVect&  a_species ) const
+                                      const PS::KineticSpeciesPtrVect&  a_species) const
 {
    // Container for individual species charge density
    const MagGeom& mag_geom = configurationSpaceGeometry();
@@ -287,6 +287,7 @@ void EField::computeIonChargeDensity( LevelData<FArrayBox>&             a_ion_ch
       a_ion_charge_density[dit].setVal(0.);
    }
 
+   // Accumulate contribution from kinetic species; add fluid species contribution later
    for (int species(0); species<a_species.size(); species++) {
 
       const PS::KineticSpecies& this_species( *(a_species[species]) );
@@ -307,8 +308,9 @@ void EField::computeIonChargeDensity( LevelData<FArrayBox>&             a_ion_ch
 }
 
 
-void EField::computeIonMassDensity( LevelData<FArrayBox>&             a_mass_density,
-                                    const PS::KineticSpeciesPtrVect&  a_species ) const
+void EField::computePolarizationMassDensity(LevelData<FArrayBox>&             a_mass_density,
+                                            const PS::KineticSpeciesPtrVect&  a_kinetic_species,
+                                            const FluidSpeciesPtrVect&        a_fluid_species) const
 {
    // Container for individual species charge density
    const MagGeom& mag_geom = configurationSpaceGeometry();
@@ -318,11 +320,13 @@ void EField::computeIonMassDensity( LevelData<FArrayBox>&             a_mass_den
    for (DataIterator dit(mag_grids); dit.ok(); ++dit) {
       a_mass_density[dit].setVal(0.);
    }
-
-   for (int species(0); species<a_species.size(); species++) {
+   
+   // Accumulate contribution from kinetic species
+   for (int species(0); species<a_kinetic_species.size(); species++) {
          
-      const PS::KineticSpecies& this_species( *(a_species[species]) );
-      if ( this_species.charge() < 0.0 ) continue;
+      const PS::KineticSpecies& this_species( *(a_kinetic_species[species]) );
+      if (( !m_include_pol_dens_e && this_species.charge() < 0.0 ) ||
+          ( !m_include_pol_dens_i && this_species.charge() > 0.0 )) continue;
 
       // Compute the charge density for this species
       this_species.massDensity( species_mass_density );
@@ -332,11 +336,30 @@ void EField::computeIonMassDensity( LevelData<FArrayBox>&             a_mass_den
          a_mass_density[dit].plus( species_mass_density[dit] );
       }
    }
+
+   // Accumulate contribution from fluid species
+   for (int species(0); species<a_fluid_species.size(); species++) {
+      if (typeid(*(a_fluid_species[species])) == typeid(FluidSpecies)) {
+         
+         const FluidSpecies& this_species( static_cast<FluidSpecies&>(*(a_fluid_species[species])) );
+         if (( !m_include_pol_dens_e && this_species.charge() < 0.0 ) ||
+             ( !m_include_pol_dens_i && this_species.charge() > 0.0 )) continue;
+      
+         // Compute the charge density for this species
+         this_species.massDensity( species_mass_density );
+      
+         DataIterator dit( a_mass_density.dataIterator() );
+         for (dit.begin(); dit.ok(); ++dit) {
+            a_mass_density[dit].plus( species_mass_density[dit] );
+         }
+      }
+   }
 }
 
 
 void EField::computeTotalChargeDensity( LevelData<FArrayBox>&             a_charge_density,
-                                        const PS::KineticSpeciesPtrVect&  a_species ) const
+                                        const PS::KineticSpeciesPtrVect&  a_kinetic_species,
+                                        const FluidSpeciesPtrVect&        a_fluid_species) const
 {
    // Container for individual species charge density
    const MagGeom& mag_geom = configurationSpaceGeometry();
@@ -347,8 +370,9 @@ void EField::computeTotalChargeDensity( LevelData<FArrayBox>&             a_char
       a_charge_density[dit].setVal(0.);
    }
 
-   for (int species(0); species<a_species.size(); species++) {
-      const PS::KineticSpecies& this_species( *(a_species[species]) );
+   // Accumulate contribution from kinetic species
+   for (int species(0); species<a_kinetic_species.size(); species++) {
+      const PS::KineticSpecies& this_species( *(a_kinetic_species[species]) );
 
       // Compute the charge density for this species
       if (this_species.isGyrokinetic()) {
@@ -360,6 +384,20 @@ void EField::computeTotalChargeDensity( LevelData<FArrayBox>&             a_char
       DataIterator dit( a_charge_density.dataIterator() );
       for (dit.begin(); dit.ok(); ++dit) {
          a_charge_density[dit].plus( species_charge_density[dit] );
+      }
+   }
+
+   // Accumulate constribution from fluid species
+   for (int species(0); species<a_fluid_species.size(); species++) {
+
+      if (typeid(*(a_fluid_species[species])) == typeid(FluidSpecies)) {
+         const FluidSpecies& this_species( static_cast<FluidSpecies&>(*(a_fluid_species[species])) );
+         this_species.chargeDensity( species_charge_density );
+      
+         DataIterator dit( a_charge_density.dataIterator() );
+         for (dit.begin(); dit.ok(); ++dit) {
+            a_charge_density[dit].plus( species_charge_density[dit] );
+         }
       }
    }
 }
@@ -437,6 +475,9 @@ EField::applyHarmonicFiltering(LevelData<FArrayBox>& a_phi,
 void
 EField::parseParameters( ParmParse& a_pp)
 {
+  a_pp.query( "include_ion_polarization_density", m_include_pol_dens_i);
+  a_pp.query( "include_electron_polarization_density", m_include_pol_dens_e);
+   
   if (a_pp.contains("harmonic_filtering")) {
     a_pp.get("harmonic_filtering", m_apply_harm_filtering);
   }

@@ -169,57 +169,66 @@ void MultiPhysicsPreconditioner<T,Ops>::apply(T&        a_x,
   /* default: identity matrix as preconditioner */
   a_x = a_b; 
 
-  if (m_im) {
+  if (m_block_pc.size() > 1) {
 
-    CH_assert(m_shift > 0);
-
-    /* On the RHS, apply the block preconditioners
-     * in a general way (no assumptions of overlap)*/
-
-    T z(a_x); /* work vector */
-    for (int i=0; i<m_block_pc.size(); i++) {
+    if (m_im) {
   
-      Preconditioner<T,Ops> *pc(m_block_pc[i]);
+      CH_assert(m_shift > 0);
   
-      if (i == 0) {
-
-        a_x = a_b;
-        a_x.scale(1.0/m_shift);
-
+      /* On the RHS, apply the block preconditioners
+       * in a general way (no assumptions of overlap)*/
+  
+      T z(a_x); /* work vector */
+      for (int i=0; i<m_block_pc.size(); i++) {
+    
+        Preconditioner<T,Ops> *pc(m_block_pc[i]);
+    
+        if (i == 0) {
+  
+          a_x = a_b;
+          a_x.scale(1.0/m_shift);
+  
+          z = a_b;
+          z.scale(1.0/m_shift);
+          m_ops->solveSolutionPC(a_x, z);
+  
+          pc->apply(a_x, a_b);
+  
+        } else {
+  
+          z = a_x;
+          m_ops->solutionPC(z, m_time, a_x);
+          z.scale(m_shift);
+  
+          pc->apply(a_x, z);
+  
+        }
+    
+      }
+  
+    } else {
+  
+      /* On the LHS, assume nontrivial solution 
+       * operators are nonoverlapping */
+  
+      T z(a_x);
+      for (int i=0; i<m_block_pc.size(); i++) {
+        
+        Preconditioner<T,Ops> *pc(m_block_pc[i]);
+        const DOFList& dof_list(m_dof_list[i]);
+        
         z = a_b;
-        z.scale(1.0/m_shift);
-        m_ops->solveSolutionPC(a_x, z);
-
-        pc->apply(a_x, a_b);
-
-      } else {
-
-        z = a_x;
-        m_ops->solutionPC(z, m_time, a_x);
-        z.scale(m_shift);
-
-        pc->apply(a_x, z);
-
+        pc->apply(z, a_b);
+        
+        a_x.copy(z, dof_list);
       }
   
     }
 
-  } else {
+  } else if (m_block_pc.size() == 1) {
 
-    /* On the LHS, assume nontrivial solution 
-     * operators are nonoverlapping */
-
-    T z(a_x);
-    for (int i=0; i<m_block_pc.size(); i++) {
-      
-      Preconditioner<T,Ops> *pc(m_block_pc[i]);
-      const DOFList& dof_list(m_dof_list[i]);
-      
-      z = a_b;
-      pc->apply(z, a_b);
-      
-      a_x.copy(z, dof_list);
-    }
+    Preconditioner<T,Ops> *pc(m_block_pc[0]);
+    pc->apply(a_x, a_b);
 
   }
 

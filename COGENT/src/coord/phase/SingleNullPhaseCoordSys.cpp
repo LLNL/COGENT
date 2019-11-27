@@ -5,8 +5,10 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "SingleNullBlockCoordSys.H"
+#include "SingleNullBlockCoordSysModel.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
+
 
 #include "NamespaceHeader.H"
 
@@ -231,52 +233,38 @@ SingleNullPhaseCoordSys::defineBoundaries8()
 
 #if CFG_DIM==3
 
-	 //Need to extend to include model sn geometry
-	 bool sheared_geom = mag_block_coord_sys -> isFieldAlignedMapping();
-
-         if (!sheared_geom) {
-	   if ( num_toroidal_sectors == 1 ) {  // Assuming periodic coupling
-	     shift = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
-	     it.defineFromTranslation( shift );
-	     blockBoundaries[TOROIDAL_DIR].define( it, block_number );
-	     it.defineFromTranslation( -shift );
-	     blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number );
-	   }
-	   else {
-	     // Lower face coupling
-	     if ( toroidal_sector > 0 ) {  // Couple to the block on the lower boundary
+         if ( num_toroidal_sectors == 1 ) {  // Assuming periodic coupling
+            shift = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+            it.defineFromTranslation( shift );
+            blockBoundaries[TOROIDAL_DIR].define( it, block_number );
+            it.defineFromTranslation( -shift );
+            blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number );
+         }
+         else {
+            // Lower face coupling
+            if ( toroidal_sector > 0 ) {  // Couple to the block on the lower boundary
                shift = -TOROIDAL_BLOCK_SEP * BASISV(TOROIDAL_DIR);
                it.defineFromTranslation( shift );
                blockBoundaries[TOROIDAL_DIR].define( it, block_number - num_poloidal_blocks);
-	     }
-	     else {  // First toroidal block: couple it to the last one
+            }
+            else {  // First toroidal block: couple it to the last one
                shift = (num_toroidal_sectors * (TOROIDAL_BLOCK_SEP + m_mappingBlocks[block_number].size(TOROIDAL_DIR)) - TOROIDAL_BLOCK_SEP) * BASISV(TOROIDAL_DIR);
                it.defineFromTranslation( shift );
                blockBoundaries[TOROIDAL_DIR].define( it, block_number + num_poloidal_blocks * (num_toroidal_sectors-1));
-	     }
+            }
 
-	     // Upper face coupling
-	     if ( toroidal_sector < num_toroidal_sectors-1 ) {  // Couple to the block on the upper toroidal boundary
+            // Upper face coupling
+            if ( toroidal_sector < num_toroidal_sectors-1 ) {  // Couple to the block on the upper toroidal boundary
                shift = TOROIDAL_BLOCK_SEP * BASISV(TOROIDAL_DIR);
                it.defineFromTranslation( shift );
                blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number + num_poloidal_blocks);
-	     }
-	     else {  // Last toroidal block: couple it to the first one
+            }
+            else {  // Last toroidal block: couple it to the first one
                shift = -(num_toroidal_sectors * (TOROIDAL_BLOCK_SEP + m_mappingBlocks[block_number].size(TOROIDAL_DIR)) - TOROIDAL_BLOCK_SEP) * BASISV(TOROIDAL_DIR);
                it.defineFromTranslation( shift );
                blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number - num_poloidal_blocks * (num_toroidal_sectors-1));
-	     }
-	   }
-	 }
-
-	 // Set all toroidal block interfaces to physical boundaries;
-         // This is done to deal with saw-tooth divertor BCs
-         // Internal part of the block interface is handled by fillInternalGhosts
-	 else {
-	   blockBoundaries[TOROIDAL_DIR].define(bc_tag);
-	   blockBoundaries[TOROIDAL_DIR+SpaceDim].define(bc_tag);
-	 }
-	   
+            }
+         }
 #endif
 
          // Block boundaries in the velocity directions are always physical
@@ -285,8 +273,9 @@ SingleNullPhaseCoordSys::defineBoundaries8()
          blockBoundaries[MU_DIR].define(bc_tag);
          blockBoundaries[MU_DIR+SpaceDim].define(bc_tag);
       }
-   }
 
+   }
+   
    m_gotBoundaries = true;
 }
 
@@ -894,6 +883,51 @@ SingleNullPhaseCoordSys::displacements(const Vector<RealVect>&   a_dstCoords,
 #endif
 
    return disps;
+}
+
+
+bool
+SingleNullPhaseCoordSys::containsPhysicalBoundary( int                    a_block_number,
+                                                   int                    a_dir,
+                                                   const Side::LoHiSide&  a_side ) const
+{
+   bool contains_boundary = false;
+
+#if CFG_DIM==2
+   contains_boundary = PhaseCoordSys::containsPhysicalBoundary(a_block_number, a_dir, a_side);
+#endif
+
+#if CFG_DIM==3
+   if ( a_dir == TOROIDAL_DIR ) {
+
+      bool sheared_geom;
+      if ( ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->isModelGeom() ) {
+         const CFG::SingleNullBlockCoordSysModel* mag_block_coord_sys
+            = (const CFG::SingleNullBlockCoordSysModel*)m_mag_coords->getCoordSys(a_block_number);
+         sheared_geom = mag_block_coord_sys->isFieldAlignedMapping();
+      }
+      else {
+         const CFG::SingleNullBlockCoordSys* mag_block_coord_sys
+            = (const CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(a_block_number);
+         sheared_geom = mag_block_coord_sys->isFieldAlignedMapping();
+      }
+
+      if ( sheared_geom ) {
+         // Set all toroidal block interfaces to physical boundaries;
+         // This is done to deal with saw-tooth divertor BCs
+         // Internal part of the block interface is handled by fillInternalGhosts
+         contains_boundary = true;
+      }
+      else {
+         contains_boundary = PhaseCoordSys::containsPhysicalBoundary(a_block_number, a_dir, a_side);
+      }
+   }
+   else {
+      contains_boundary = PhaseCoordSys::containsPhysicalBoundary(a_block_number, a_dir, a_side);
+   }
+#endif
+   
+   return contains_boundary;
 }
 
 

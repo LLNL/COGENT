@@ -15,6 +15,8 @@
 #include <tuple>
 #include "IntVect.H"
 
+#include "NamespaceHeader.H"
+
 #if CXXSTD>=14
 namespace shape
 {
@@ -335,5 +337,7 @@ inline auto make_MD_array(T* a_data, Is... a_lens) noexcept
 
 }  // namespace shape
 #endif
+
+#include "NamespaceFooter.H"
 
 #endif  /* ! defined _SHAPEARRAY_H_ */

@@ -285,13 +285,17 @@ MBHypreSolver::createHypreData()
 
       if (num_blocks == 1) {
 
-         const ProblemDomain& domain = m_geometry.gridsFull().physDomain();
+         const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys_ptr->boundaries();
 
+         const ProblemDomain& domain = m_geometry.gridsFull().physDomain();
          IntVect periodic = domain.size();
+         int block_number = 0;
 
          for (int dir=0; dir<SpaceDim; dir++) {
             bool this_dir_periodic = domain.isPeriodic(dir);
-            if ( !this_dir_periodic ) {
+            if ( !this_dir_periodic || 
+                 (block_boundaries[block_number][dir].isInterface() && m_mblex_potential_Ptr != NULL) ||
+                 (block_boundaries[block_number][dir + SpaceDim].isInterface() && m_mblex_potential_Ptr != NULL) ) {
                periodic[dir] = 0;
             }
             else {
@@ -304,14 +308,13 @@ MBHypreSolver::createHypreData()
                }
                if (ncells != 1) {
                   if (procID()==0) {
-                     MayDay::Error( "GKPoisson: Periodic direction must be a power of 2!" );
+                     MayDay::Error( "MBHypreSolver::createHypreData(): Periodic direction must be a power of 2!" );
                   }
                }
             }
-
-            int block = 0;
-            HYPRE_SStructGridSetPeriodic(m_grid, block, periodic.dataPtr());
          }
+
+         HYPRE_SStructGridSetPeriodic(m_grid, block_number, periodic.dataPtr());
       }
 
       int num_ghost[] = {radius, radius, radius, radius, radius, radius};
@@ -655,7 +658,7 @@ MBHypreSolver::addUnstructuredMatrixEntries( const LevelData<FArrayBox>&        
                                     cout << iv << " " << stencil_box_iv << " " << givsit() << endl;
                                  }
 
-                                    // If we've landed here, then stencil_box_iv is neither a valid cell nor an extrablock
+                                 // If we've landed here, then stencil_box_iv is neither a valid cell nor an extrablock
                                  // ghost cell (relative to the center cell iv).  The only remaining possibility is that
                                  // it's a ghost cell at a codim = 1 or codim = 2 physical boundary, in which case 
                                  // the stencil modification to account for boundary conditions should have zeroed

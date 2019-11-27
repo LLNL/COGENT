@@ -8,6 +8,12 @@
 #include "Vector.H"
 #include "MultiBlockCoordSys.H"
 
+#if CH_SPACEDIM==CFG_DIM
+#include "MagCoordSys.H"
+#elif CH_SPACEDIM==CFG_DIM+2
+#include "PhaseCoordSys.H"
+#endif
+
 #include "NamespaceHeader.H"
 
 namespace BCUtils {
@@ -34,18 +40,24 @@ namespace BCUtils {
       return blocks[block];
    }
 
-
    inline
    bool isPhysicalBoundary( const MultiBlockCoordSys& a_coord_sys,
                             const Box&                a_box,
                             const int&                a_dir,
                             const Side::LoHiSide&     a_side )
    {
+      int block_number = a_coord_sys.whichBlock(a_box);
+
+#if CH_SPACEDIM==CFG_DIM
+      return static_cast<const MagCoordSys&>(a_coord_sys).containsPhysicalBoundary(block_number, a_dir, a_side);
+#elif CH_SPACEDIM==CFG_DIM+2
+      return static_cast<const PhaseCoordSys&>(a_coord_sys).containsPhysicalBoundary(block_number, a_dir, a_side);
+#else
       const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries( a_coord_sys.boundaries() );
-      const int block( a_coord_sys.whichBlock( a_box ) );
-      const int index( a_side * SpaceDim + a_dir );
-      return boundaries[block][index].isDomainBoundary();
+      return boundaries[block_number][a_side * SpaceDim + a_dir].isDomainBoundary();
+#endif
    }
+
 
    inline
    bool touchesPhysicalBoundary( const MultiBlockCoordSys& a_coord_sys,

@@ -202,6 +202,8 @@ class SingleNullBlockCoordSys
 
       virtual string blockName( int poloidal_block ) const;
 
+      bool poloidalMappingIsCentered() const {return m_centered_poloidal_mapping;}
+
       enum SingleNullBlockType {LCORE,RCORE,LCSOL,RCSOL,LSOL,RSOL,LPF,RPF,MCORE,MCSOL,NUM_POLOIDAL_BLOCKS};
 
       enum PhysCoordType {CYLINDRICAL, CARTESIAN};
@@ -273,6 +275,7 @@ class SingleNullBlockCoordSys
    private:
    
       bool m_poloidally_truncated;
+      bool m_centered_poloidal_mapping;
 
       PhysCoordType m_phys_coord_type;
    

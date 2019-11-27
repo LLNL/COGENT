@@ -12,7 +12,7 @@
 #include "NamespaceHeader.H"
 
 namespace SpaceUtils {
-
+      
   void computeLaxSplitting( LevelData<FArrayBox>&,
                             LevelData<FArrayBox>&,
                       const LevelData<FArrayBox>&,
@@ -134,6 +134,16 @@ namespace SpaceUtils {
   
   void copyAndFillGhostCellsSimple( LevelData<FArrayBox>&, 
                                     const LevelData<FArrayBox>& );
+  
+  void inspectFArrayBox( const LevelData<FArrayBox>&,
+                         const int                   );
+  
+  void inspectFluxBox( const LevelData<FluxBox>&,
+                       const int                 );
+  
+  void inspectEdgeDataBox( const LevelData<EdgeDataBox>&,
+                           const int                     );
+
 
   void copy( FArrayBox&,
 	     const FArrayBox& );

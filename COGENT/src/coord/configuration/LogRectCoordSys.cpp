@@ -93,13 +93,12 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
   // Define the boundary conditions for divergence cleaning (whether or not they're used)
   // Does not check for periodicity. FIX IF NEEDED.
   for (int block = 0; block < m_num_blocks; block++) {
-    Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block];
     const MagBlockCoordSys& coord_sys( *(MagBlockCoordSys*)getCoordSys(block) );
     const ProblemDomain& domain( coord_sys.domain() );
 
     for (int dir=0; dir<SpaceDim; ++dir) {
       for (int side=0; side<2; ++side) {
-        if ( blockBoundaries[dir + side*SpaceDim].isDomainBoundary() && !domain.isPeriodic(dir)) {
+         if ( containsPhysicalBoundary(block, dir, (side==0? Side::LoHiSide::Lo: Side::LoHiSide::Hi) ) && !domain.isPeriodic(dir)) {
           double bc_value = 0.;
           int bc_type = EllipticOpBC::DIRICHLET;     // Homogeneous Dirichlet
           m_divergence_cleaning_bc.setBCType(block, dir, side, bc_type);

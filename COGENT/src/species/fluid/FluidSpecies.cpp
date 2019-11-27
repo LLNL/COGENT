@@ -147,6 +147,8 @@ void FluidSpecies::chargeDensity( LevelData<FArrayBox>& a_rho ) const
 
 void FluidSpecies::velocity_virtual( LevelData<FArrayBox>& a_velocity ) const
 {
+   CH_TIME("FluidSpecies::velocity_virtual()");
+   
    if(m_evolve_momentumDensity_virtual==1 ) {
       DisjointBoxLayout dbl( cell_var("momentumDensity_virtual").disjointBoxLayout() );
       CH_assert( dbl.compatible( a_velocity.disjointBoxLayout() ) );
@@ -168,6 +170,8 @@ void FluidSpecies::velocity_virtual( LevelData<FArrayBox>& a_velocity ) const
 
 void FluidSpecies::meanEnergy( LevelData<FArrayBox>& a_meanEnergy ) const
 {
+   CH_TIME("FluidSpecies::meanEnergy()");
+   
    DisjointBoxLayout dbl( cell_var(0).disjointBoxLayout() );
    CH_assert( dbl.compatible( a_meanEnergy.disjointBoxLayout() ) );
    for (DataIterator dit( a_meanEnergy.dataIterator()); dit.ok(); ++dit ) {
@@ -204,6 +208,8 @@ void FluidSpecies::meanEnergy( LevelData<FArrayBox>& a_meanEnergy ) const
 
 void FluidSpecies::pressure( LevelData<FArrayBox>& a_pressure ) const
 {
+   CH_TIME("FluidSpecies::pressure()");
+
    if( m_evolve_energyDensity==1 ) {
       DisjointBoxLayout dbl( cell_var("energyDensity").disjointBoxLayout() );
       CH_assert( dbl.compatible( a_pressure.disjointBoxLayout() ) );
@@ -228,6 +234,8 @@ void FluidSpecies::pressure( LevelData<FArrayBox>& a_pressure ) const
 
 void FluidSpecies::Bpressure( LevelData<FArrayBox>& a_Bpressure ) const
 {
+   CH_TIME("FluidSpecies::Bpressure()");
+   
    if( m_evolve_magneticField_virtual ) {
       DisjointBoxLayout dbl( cell_var("magneticField_virtual").disjointBoxLayout() );
       CH_assert( dbl.compatible( a_Bpressure.disjointBoxLayout() ) );
@@ -253,6 +261,8 @@ void FluidSpecies::temperature( LevelData<FArrayBox>& a_temperature ) const
 
 void FluidSpecies::velocity( LevelData<FArrayBox>& a_velocity ) const
 {
+   CH_TIME("FluidSpecies::velocity()");
+   
    if(m_evolve_momentumDensity) {
       DisjointBoxLayout dbl( cell_var("momentumDensity").disjointBoxLayout() );
       CH_assert( dbl.compatible( a_velocity.disjointBoxLayout() ) );

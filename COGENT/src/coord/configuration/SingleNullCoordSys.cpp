@@ -94,11 +94,9 @@ SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
    // Define the boundary conditions for divergence cleaning (whether or not they're used)
    m_divergence_cleaning_bc.setPoloidalBlocksPerSector(numPoloidalBlocks());
    for (int block = 0; block < num_blocks; block++) {
-      Tuple<BlockBoundary, 2*SpaceDim>& blockBoundaries = m_boundaries[block];
-
       for (int dir=0; dir<SpaceDim; ++dir) {
          for (int side=0; side<2; ++side) {
-            if ( blockBoundaries[dir + side*SpaceDim].isDomainBoundary() ) {
+            if ( containsPhysicalBoundary(block, dir, (side==0? Side::LoHiSide::Lo: Side::LoHiSide::Hi)) ) {
                double bc_value = 0.;
                int bc_type = EllipticOpBC::DIRICHLET;     // Homogeneous Dirichlet
                int poloidal_block = poloidalBlockNumber(block);
@@ -313,64 +311,43 @@ SingleNullCoordSys::defineBoundaries8()
 
 #if CFG_DIM==3
          
-         bool sheared_geom;
-         
-         if ( m_model_geometry ) {
-            const SingleNullBlockCoordSysModel* coord_sys = (const SingleNullBlockCoordSysModel*)m_coordSysVect[block_number];
-            sheared_geom = coord_sys->isFieldAlignedMapping();
+         // Set toroidal block boundaries
+
+         if ( m_num_toroidal_sectors == 1 ) {  // Assuming periodic coupling
+            shift = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+
+            it.defineFromTranslation( shift );
+            blockBoundaries[TOROIDAL_DIR].define( it, block_number );
+            it.defineFromTranslation( -shift );
+            blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number );
          }
          else {
-            const SingleNullBlockCoordSys* coord_sys = (const SingleNullBlockCoordSys*)m_coordSysVect[block_number];
-            sheared_geom = coord_sys->isFieldAlignedMapping();
-         }
-         
-         if (!sheared_geom) {
-         
-            if ( m_num_toroidal_sectors == 1 ) {  // Assuming periodic coupling
-               shift = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
-
+            // Lower face coupling
+            if ( toroidal_sector > 0 ) {  // Couple to the block on the lower boundary
+               shift = -TOROIDAL_BLOCK_SEP * BASISV(TOROIDAL_DIR);
                it.defineFromTranslation( shift );
-               blockBoundaries[TOROIDAL_DIR].define( it, block_number );
-               it.defineFromTranslation( -shift );
-               blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number );
+               blockBoundaries[TOROIDAL_DIR].define( it, block_number - m_num_poloidal_blocks);
             }
-            else {
-               // Lower face coupling
-               if ( toroidal_sector > 0 ) {  // Couple to the block on the lower boundary
-                  shift = -TOROIDAL_BLOCK_SEP * BASISV(TOROIDAL_DIR);
-                  it.defineFromTranslation( shift );
-                  blockBoundaries[TOROIDAL_DIR].define( it, block_number - m_num_poloidal_blocks);
-               }
-               else {  // First toroidal block: couple it to the last one
-                  shift = (m_num_toroidal_sectors * (TOROIDAL_BLOCK_SEP + m_mappingBlocks[block_number].size(TOROIDAL_DIR))
-                           - TOROIDAL_BLOCK_SEP) * BASISV(TOROIDAL_DIR);
-                  it.defineFromTranslation( shift );
-                  blockBoundaries[TOROIDAL_DIR].define( it, block_number + m_num_poloidal_blocks * (m_num_toroidal_sectors-1));
-               }
+            else {  // First toroidal block: couple it to the last one
+               shift = (m_num_toroidal_sectors * (TOROIDAL_BLOCK_SEP + m_mappingBlocks[block_number].size(TOROIDAL_DIR))
+                        - TOROIDAL_BLOCK_SEP) * BASISV(TOROIDAL_DIR);
+               it.defineFromTranslation( shift );
+               blockBoundaries[TOROIDAL_DIR].define( it, block_number + m_num_poloidal_blocks * (m_num_toroidal_sectors-1));
+            }
 
-               // Upper face coupling
-               if ( toroidal_sector < m_num_toroidal_sectors-1 ) {  // Couple to the block on the upper toroidal boundary
-                  shift = TOROIDAL_BLOCK_SEP * BASISV(TOROIDAL_DIR);
-                  it.defineFromTranslation( shift );
-                  blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number + m_num_poloidal_blocks);
-               }
-               else {  // Last toroidal block: couple it to the first one
-                  shift = -(m_num_toroidal_sectors * (TOROIDAL_BLOCK_SEP + m_mappingBlocks[block_number].size(TOROIDAL_DIR))
-                            - TOROIDAL_BLOCK_SEP) * BASISV(TOROIDAL_DIR);
-                  it.defineFromTranslation( shift );
-                  blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number - m_num_poloidal_blocks * (m_num_toroidal_sectors-1));
-               }
+            // Upper face coupling
+            if ( toroidal_sector < m_num_toroidal_sectors-1 ) {  // Couple to the block on the upper toroidal boundary
+               shift = TOROIDAL_BLOCK_SEP * BASISV(TOROIDAL_DIR);
+               it.defineFromTranslation( shift );
+               blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number + m_num_poloidal_blocks);
+            }
+            else {  // Last toroidal block: couple it to the first one
+               shift = -(m_num_toroidal_sectors * (TOROIDAL_BLOCK_SEP + m_mappingBlocks[block_number].size(TOROIDAL_DIR))
+                         - TOROIDAL_BLOCK_SEP) * BASISV(TOROIDAL_DIR);
+               it.defineFromTranslation( shift );
+               blockBoundaries[TOROIDAL_DIR+SpaceDim].define( it, block_number - m_num_poloidal_blocks * (m_num_toroidal_sectors-1));
             }
          }
-         
-         // Set all toroidal block interfaces to physical boundaries;
-         // This is done to deal with saw-tooth divertor BCs
-         // Internal part of the block interface is handled by fillInternalGhosts
-         else {
-            blockBoundaries[TOROIDAL_DIR].define(bc_tag);
-            blockBoundaries[TOROIDAL_DIR+SpaceDim].define(bc_tag);
-         }
-         
 #endif
       }
    }
@@ -568,6 +545,9 @@ SingleNullCoordSys::defineBoundaries10()
          }
 
 #if CFG_DIM==3
+
+         // Set toroidal block boundaries
+
          if ( m_num_toroidal_sectors == 1 ) {  // Assuming periodic coupling
             shift = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
             it.defineFromTranslation( shift );
@@ -837,51 +817,14 @@ SingleNullCoordSys::blockRemapping8(RealVect&       a_xi_valid,
 
                int n_valid_poloidal_new = n_valid_poloidal;
 
-               switch ( n_valid_poloidal )
-                  {
-                  case SingleNullBlockCoordSys::LCORE:
-                     if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::LCSOL;
-                     }
+               for (int poloidal_block=0; poloidal_block<numPoloidalBlocks(); ++poloidal_block) {
+                  const SingleNullBlockCoordSys* cs = (SingleNullBlockCoordSys*)getCoordSys(poloidal_block);
+
+                  if ( cs->containsPoloidalPoint(X_pol, false) ) {
+                     n_valid_poloidal_new = poloidal_block;
                      break;
-                  case SingleNullBlockCoordSys::LCSOL:
-                     if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::LCORE;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::RCORE:
-                     if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::RCSOL;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::RCSOL:
-                     if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::RCORE;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::LPF:
-                     if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::LSOL;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::LSOL:
-                     if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::LPF;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::RPF:
-                     if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::RSOL;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::RSOL:
-                     if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::RPF;
-                     }
-                     break;
-                  default:
-                     MayDay::Error("SingleNullCoordSys::blockRemapping(): bad block number");
                   }
+               }
 
 #if 1
                if (n_valid_poloidal_new != n_valid_poloidal) {
@@ -1193,63 +1136,14 @@ SingleNullCoordSys::blockRemapping10( RealVect&       a_xi_valid,
 
                int n_valid_poloidal_new = n_valid_poloidal;
 
-               switch ( n_valid_poloidal )
-                  {
-#if 0
-                  case SingleNullBlockCoordSys::MCORE:
-                     if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::MCSOL;
-                     }
+               for (int poloidal_block=0; poloidal_block<numPoloidalBlocks(); ++poloidal_block) {
+                  const SingleNullBlockCoordSys* cs = (SingleNullBlockCoordSys*)getCoordSys(poloidal_block);
+
+                  if ( cs->containsPoloidalPoint(X_pol, false) ) {
+                     n_valid_poloidal_new = poloidal_block;
                      break;
-                  case SingleNullBlockCoordSys::MCSOL:
-                     if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::MCORE;
-                     }
-                     break;
-#endif
-                  case SingleNullBlockCoordSys::LCORE:
-                     if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::LCSOL;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::LCSOL:
-                     if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::LCORE;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::RCORE:
-                     if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::RCSOL;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::RCSOL:
-                     if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::RCORE;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::LPF:
-                     if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::LSOL;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::LSOL:
-                     if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::LPF;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::RPF:
-                     if (a_xi_valid[RADIAL_DIR] > valid_cs->upperMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::RSOL;
-                     }
-                     break;
-                  case SingleNullBlockCoordSys::RSOL:
-                     if (a_xi_valid[RADIAL_DIR] < valid_cs->lowerMappedCoordinate(RADIAL_DIR)) {
-                        n_valid_poloidal_new = SingleNullBlockCoordSys::RPF;
-                     }
-                     break;
-                  default:
-                     MayDay::Error("SingleNullCoordSys::blockRemapping(): bad block number");
                   }
+               }
 
 #if 1
                if (n_valid_poloidal_new != n_valid_poloidal) {
@@ -3268,7 +3162,7 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    Box dst_domain_box = dst_coord_sys->domain().domainBox();
    
    if ( a_ivDst[POLOIDAL_DIR] <= dst_domain_box.smallEnd(POLOIDAL_DIR) &&
-       boundaries[a_nDst][POLOIDAL_DIR].isDomainBoundary() ) {
+        containsPhysicalBoundary(a_nDst, POLOIDAL_DIR, Side::LoHiSide::Lo) ) {
       int shift = dst_domain_box.smallEnd(POLOIDAL_DIR) - a_ivDst[POLOIDAL_DIR] + 1;
       for (int n=0; n<3; ++n) {
          a_interpStencilOffsets[n] += shift;
@@ -3302,7 +3196,7 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    }
 
    if ( a_ivDst[POLOIDAL_DIR] >= dst_domain_box.bigEnd(POLOIDAL_DIR) &&
-       boundaries[a_nDst][POLOIDAL_DIR+SpaceDim].isDomainBoundary() ) {
+        containsPhysicalBoundary(a_nDst, POLOIDAL_DIR, Side::LoHiSide::Hi) ) {
       int shift = a_ivDst[POLOIDAL_DIR] - dst_domain_box.bigEnd(POLOIDAL_DIR) + 1;
       for (int n=0; n<3; ++n) {
          a_interpStencilOffsets[n] -= shift;
@@ -3584,5 +3478,50 @@ SingleNullCoordSys::sameMagFluxSurf(const int& a_pol_block_src,
    
   return result;
 }
+
+
+bool
+SingleNullCoordSys::containsPhysicalBoundary( int                    a_block_number,
+                                              int                    a_dir,
+                                              const Side::LoHiSide&  a_side ) const
+{
+   bool contains_boundary = false;
+
+#if CFG_DIM==2
+   contains_boundary = MagCoordSys::containsPhysicalBoundary(a_block_number, a_dir, a_side);
+#endif
+
+#if CFG_DIM==3
+   if ( a_dir == TOROIDAL_DIR ) {
+
+      bool sheared_geom;
+         
+      if ( m_model_geometry ) {
+         const SingleNullBlockCoordSysModel* mag_coord_sys = (const SingleNullBlockCoordSysModel*)m_coordSysVect[a_block_number];
+         sheared_geom = mag_coord_sys->isFieldAlignedMapping();
+      }
+      else {
+         const SingleNullBlockCoordSys* mag_coord_sys = (const SingleNullBlockCoordSys*)m_coordSysVect[a_block_number];
+         sheared_geom = mag_coord_sys->isFieldAlignedMapping();
+      }
+
+      if ( sheared_geom ) {
+         // Set all toroidal block interfaces to physical boundaries;
+         // This is done to deal with saw-tooth divertor BCs
+         // Internal part of the block interface is handled by fillInternalGhosts
+         contains_boundary = true;
+      }
+      else {
+         contains_boundary = MagCoordSys::containsPhysicalBoundary(a_block_number, a_dir, a_side);
+      }
+   }
+   else {
+      contains_boundary = MagCoordSys::containsPhysicalBoundary(a_block_number, a_dir, a_side);
+   }
+#endif
+   
+   return contains_boundary;
+}
+
 
 #include "NamespaceFooter.H"

@@ -37,5 +37,24 @@ PhaseCoordSys::~PhaseCoordSys()
 }
 
 
+bool
+PhaseCoordSys::containsPhysicalBoundary( int                    a_block_number,
+                                         int                    a_dir,
+                                         const Side::LoHiSide&  a_side ) const
+{
+   const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = m_boundaries[a_block_number];
+
+   bool contains_boundary = false;
+
+   if ( a_side == Side::LoHiSide::Lo ) {
+      contains_boundary = this_block_boundaries[a_dir].isDomainBoundary();
+   }
+   else if ( a_side == Side::LoHiSide::Hi ) {
+      contains_boundary = this_block_boundaries[a_dir+SpaceDim].isDomainBoundary();
+   }
+
+   return contains_boundary;
+}
+
 
 #include "NamespaceFooter.H"

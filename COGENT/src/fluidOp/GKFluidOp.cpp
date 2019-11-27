@@ -2,11 +2,11 @@
 #include "OneFieldOp.H"
 #include "BurgersOp.H"
 #include "IdealMhdOp.H"
+#include "FullFluidOp.H"
 #include "TwoFieldNeutralsOp.H"
 #include "NullFluidOp.H"
 #include "VorticityOp.H"
 #include "AmpereErAverageOp.H"
-//#include "FluidOpF_F.H"
 
 #include <float.h>
 #include <sstream>
@@ -55,6 +55,9 @@ GKFluidOp::GKFluidOp( const MagGeom&  a_geometry,
             }
             else if (op_type == "IdealMhdOp") {
                model = new IdealMhdOp( prefix, species_name, a_geometry, m_verbose );
+            }
+            else if (op_type == "FullFluidOp") {
+               model = new FullFluidOp( prefix, species_name, a_geometry, m_verbose );
             }
             else if (op_type == "TwoFieldNeutralsOp") {
                model = new TwoFieldNeutralsOp( prefix, species_name, a_geometry, m_verbose );
@@ -327,8 +330,9 @@ bool GKFluidOp::trivialSolutionOp( const FluidSpeciesPtrVect& a_fluid_species )
 
 
 void GKFluidOp::initialize( FluidSpeciesPtrVect&  a_fluid_species,
-                            Real                  a_time )
+                            const Real            a_time )
 {
+   CH_TIME("GKFluidOp::initialize()");
    for (int species(0); species<a_fluid_species.size(); species++) {
       //      FluidSpecies& fluid_species( static_cast<FluidSpecies&>(*(a_fluid_species[species])) );
       CFGVars& fluid_species = *(a_fluid_species[species]);

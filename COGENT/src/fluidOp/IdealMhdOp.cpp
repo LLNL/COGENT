@@ -31,15 +31,15 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
                         const int       a_verbosity )
    : m_verbosity(a_verbosity),
      m_geometry(a_geometry),
-     m_is_time_implicit(true),
+     //m_is_time_implicit(true),
+     m_implicitMhd(false),
+     m_implicitViscosity(false),
+     m_tauMax(0.0),
      m_advScheme("c2"),
      m_species_name(a_species_name),
      m_courant_time_step(DBL_MAX),
      m_opt_string(a_pp_str),
-     m_my_pc_idx(-1),
-     m_D_rad(NULL),
-     m_D_par(NULL),
-     m_D_perp(NULL)
+     m_my_pc_idx(-1)
 
 {
    ParmParse pp(a_pp_str.c_str());
@@ -48,18 +48,6 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
       printParameters();
    }
 
-   const std::string name("neutrals_diffusion");
-   const std::string prefix( "BC." + name );
-   ParmParse ppsp( prefix.c_str() );
-
-   m_diffusion_op = new Diffusion(ppsp, a_geometry);
-
-   EllipticOpBCFactory elliptic_op_bc_factory;
-   m_bc = elliptic_op_bc_factory.create( name,
-                                         ppsp,
-                                         *(a_geometry.getCoordSys()),
-                                         false );
-   
    //  get initial conditions for cell variables and define boundary conditions instance
    //
    const std::string icsn( "IC." + a_species_name);
@@ -78,16 +66,50 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
    // set IC and create BC for momentum density
    //
    variable_name = "momentumDensity";
-   CH_assert( ppic.contains("momentumDensity_x.function") );
-   CH_assert( ppic.contains("momentumDensity_y.function") );
-   parseInitialConditions(a_species_name, "momentumDensity_x");
-   parseInitialConditions(a_species_name, "momentumDensity_y");
-   if (ppic.contains("momentumDensity_z.function")) {
-      parseInitialConditions(a_species_name, "momentumDensity_z");
+   CH_assert( ppic.contains("momentumDensity_0.function") );
+   CH_assert( ppic.contains("momentumDensity_1.function") );
+   parseInitialConditions(a_species_name, "momentumDensity_0");
+   parseInitialConditions(a_species_name, "momentumDensity_1");
+   if (ppic.contains("momentumDensity_2.function")) {
+      parseInitialConditions(a_species_name, "momentumDensity_2");
    }
    m_fluid_bc.push_back( fluid_var_bc_factory.create(a_species_name, variable_name, 
                          a_geometry.getCoordSys()->type(), false) );
  
+
+   
+   // construct elliptic operators for viscosity
+   //
+   std::string name, prefix, prefix_BC;
+   EllipticOpBCFactory elliptic_op_bc_factory;
+   
+
+   name = "mom0_visc";
+   prefix = name;
+   ParmParse ppVisc_mom0( prefix.c_str() );
+   m_diffusionOp_mom0 = new Diffusion(ppVisc_mom0, a_geometry);
+   //
+   prefix_BC = "BC." + name;
+   ParmParse ppVisc_mom0_BC( prefix_BC.c_str() );
+   m_bc_mom0 = elliptic_op_bc_factory.create( name, ppVisc_mom0_BC,
+                                              *(a_geometry.getCoordSys()), false );
+   
+   
+   name = "mom1_visc";
+   prefix = name;
+   ParmParse ppVisc_mom1( prefix.c_str() );
+   m_diffusionOp_mom1 = new Diffusion(ppVisc_mom1, a_geometry);
+   //
+   prefix_BC = "BC." + name;
+   ParmParse ppVisc_mom1_BC( prefix_BC.c_str() );
+   m_bc_mom1 = elliptic_op_bc_factory.create( name, ppVisc_mom1_BC,
+                                              *(a_geometry.getCoordSys()), false );
+   
+
+   //
+   ///////////////////////
+
+
    // set IC and create BC for energy density
    //
    variable_name = "energyDensity";
@@ -119,7 +141,6 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
       ghostVect = 4*IntVect::Unit;
    }
    defineLevelDatas( grids, ghostVect );
-   //cout << "JRA: IdealMHDOp: ghostVect = " << ghostVect << endl;
 
 }
 
@@ -132,72 +153,23 @@ IdealMhdOp::~IdealMhdOp()
       delete (*it);
    }
    m_fluid_bc.clear();
-   delete m_bc;
-   delete m_diffusion_op;
-}
-
-
-void IdealMhdOp::accumulateRHS(  FluidSpeciesPtrVect&               a_rhs,
-                              const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
-                              const FluidSpeciesPtrVect&         a_fluid_species,
-                              const PS::ScalarPtrVect&           a_scalars,
-                              const EField&                      a_E_field,
-                              const int                          a_fluidVecComp,
-                              const Real                         a_time)
-{
-   // Get fluid rhs
-   FluidSpecies& rhs_fluid( static_cast<FluidSpecies&>(*(a_rhs[a_fluidVecComp])) );
-   LevelData<FArrayBox>& rhs_data( rhs_fluid.cell_var(0) );
-   LevelData<FArrayBox>& rhs_data1( rhs_fluid.cell_var(1) );
-
-   // Get fluid soln
-   const FluidSpecies& soln_fluid( static_cast<FluidSpecies&>(*(a_fluid_species[a_fluidVecComp])) );
-   const LevelData<FArrayBox>& soln_data( soln_fluid.cell_var(0) );
-   const LevelData<FArrayBox>& soln_data1( soln_fluid.cell_var(1) );
-
-   const DisjointBoxLayout& grids( rhs_data.getBoxes() );
-   
-   LevelData<FluxBox> D_tensor(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
-   LevelData<FluxBox> D_tensor_mapped(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
-   computeDiffusionCoefficients(D_tensor, D_tensor_mapped, a_time);
-   
-   LevelData<FArrayBox> flux_div, flux_div1;
-   flux_div.define(rhs_data);
-   flux_div1.define(rhs_data1);
-
-   m_diffusion_op->setOperatorCoefficients(D_tensor, D_tensor_mapped, *m_bc);
-   m_diffusion_op->computeFluxDivergence( soln_data, flux_div, false, false);
-   m_diffusion_op->computeFluxDivergence( soln_data1, flux_div1, false, false);
-
-   // The preceding call computes a negated physical flux divergence cell average.
-   // Since this function is being used to define the right-hand side of an evolution
-   // equation for a mapped unknown (i.e., containing a J factor), we therefore need
-   // to multiply by J.  We also flip the sign.
-   m_geometry.multJonValid(flux_div);
-   m_geometry.multJonValid(flux_div1);
-   
-   for (DataIterator dit( flux_div.dataIterator() ); dit.ok(); ++dit) {
-      rhs_data[dit]  -= flux_div[dit];
-      rhs_data1[dit] -= flux_div1[dit];
-   }
+   delete m_bc_mom0; 
+   delete m_bc_mom1; 
+   delete m_diffusionOp_mom0; 
+   delete m_diffusionOp_mom1; 
 
 }
 
 
-void IdealMhdOp::accumulateExplicitRHS( FluidSpeciesPtrVect&         a_rhs,
-                                  const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
-                                  const FluidSpeciesPtrVect&         a_fluid_species,
-                                  const PS::ScalarPtrVect&           a_scalars,
-                                  const EField&                      a_E_field,
-                                  const int                          a_fluidVecComp,
-                                  const Real                         a_time)
+void IdealMhdOp::accumulateMhdRHS( FluidSpecies&  a_rhs_fluid,
+                             const FluidSpecies&  a_soln_fluid,
+                             const Real           a_time )
 {
-   CH_TIME("IdealMhdOp::accumulateExplicitRHS()");
-
+   CH_TIME("IdealMhdOp::accumulateMhdRHS()");
+   
    // Get RHS fluid species
    //
-   FluidSpecies& rhs_fluid( static_cast<FluidSpecies&>(*(a_rhs[a_fluidVecComp])) );
-   LevelData<FArrayBox>& rhs_data( rhs_fluid.cell_var(0) );
+   LevelData<FArrayBox>& rhs_data( a_rhs_fluid.cell_var(0) );
    const DisjointBoxLayout& grids( rhs_data.getBoxes() );
    //const IntVect& ghostVect( rhs_data.ghostVect() ); // caution, this is zero
    //cout << "JRA: rhs.ghostVect" << ghostVect << endl;   
@@ -205,37 +177,75 @@ void IdealMhdOp::accumulateExplicitRHS( FluidSpeciesPtrVect&         a_rhs,
 
    // Get solution fluid species
    //
-   const FluidSpecies& soln_fluid( static_cast<FluidSpecies&>(*(a_fluid_species[a_fluidVecComp])) );
-   const LevelData<FArrayBox>& soln_data( soln_fluid.cell_var(0) );
+   //const LevelData<FArrayBox>& soln_data( a_soln_fluid.cell_var(0) );
    //const IntVect& ghostVect( soln_data.ghostVect() );
    //cout << "JRA: soln_data.ghostVect() = " << ghostVect << endl;   
    
    //CH_assert(soln_fluid.m_evolve_massDensity==1);
-   CH_assert(soln_fluid.m_evolve_momentumDensity==1);
-   CH_assert(soln_fluid.m_evolve_energyDensity==1);
+   CH_assert(a_soln_fluid.m_evolve_momentumDensity==1);
+   CH_assert(a_soln_fluid.m_evolve_energyDensity==1);
    
-   setCellCenterValues( soln_fluid );
+   setCellCenterValues( a_soln_fluid );
 
-   setCellCenterFluxes( soln_fluid );
+   setCellCenterFluxes( a_soln_fluid );
    
    // compute flux-freezing speed at cell-center for each direction
    // Cspeed_i = |NTVdotqihat| + |N_i|sqrt(gamma*P/N); i = q0, q1, q2
    //
-   const double gamma = soln_fluid.m_gamma;
+   const double gamma = a_soln_fluid.m_gamma;
    setCspeed( m_rhoDen_cc, gamma );
-   SpaceUtils::upWindToFaces(m_CspeedR_norm, m_Cspeed_cc, m_CspeedR_norm, "c2"); // 3rd arg not used for "c2"
+   SpaceUtils::upWindToFaces(m_CspeedR_norm, m_Cspeed_cc, m_CspeedR_norm, "c2");
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       m_CspeedL_norm[dit].copy(m_CspeedR_norm[dit],m_CspeedL_norm[dit].box());
       m_CspeedL_norm[dit].negate();
    }
    
-   setMagneticFieldTerms( soln_fluid );
+   setMagneticFieldTerms( a_soln_fluid );
 
-   setFaceCenteredFluxes( soln_fluid );
+   setFaceCenteredFluxes( a_soln_fluid );
 
-   enforceFluxBCs( rhs_fluid, soln_fluid, a_time );
+   enforceFluxBCs( a_rhs_fluid, a_soln_fluid, a_time );
 
-   updateRHSs( rhs_fluid, soln_fluid );
+   updateRHSs( a_rhs_fluid, a_soln_fluid );
+    
+}
+
+void IdealMhdOp::accumulateViscRHS( FluidSpecies&  a_rhs_fluid,
+                              const FluidSpecies&  a_soln_fluid,
+                              const int            a_accumulateMom,
+                              const int            a_accumulateEne )
+{
+   CH_TIME("IdealMhdOp::accumulateViscRHS()");
+   
+   setCellCenterValues( a_soln_fluid ); 
+ 
+   setViscosityCoefficient( m_etaVisc, m_etaVisc_cf, a_soln_fluid );
+ 
+   updateRHSs_visc( a_rhs_fluid, a_soln_fluid, a_accumulateMom, a_accumulateEne );
+
+}
+
+void IdealMhdOp::accumulateExplicitRHS( FluidSpeciesPtrVect&        a_rhs,
+                                  const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
+                                  const FluidSpeciesPtrVect&        a_fluid_species,
+                                  const PS::ScalarPtrVect&          a_scalars,
+                                  const EField&                     a_E_field,
+                                  const int                         a_fluidVecComp,
+                                  const Real                        a_time )
+{
+   CH_TIME("IdealMhdOp::accumulateExplicitRHS()");
+   
+   FluidSpecies& rhs_fluid( static_cast<FluidSpecies&>(*(a_rhs[a_fluidVecComp])) );
+   const FluidSpecies& soln_fluid( static_cast<FluidSpecies&>(*(a_fluid_species[a_fluidVecComp])) );
+      
+   if(!m_implicitMhd) {
+      accumulateMhdRHS( rhs_fluid, soln_fluid, a_time );
+      if(m_tauMax>0.0) {
+         int accumulateMom = 1;
+         if(m_implicitViscosity) accumulateMom = 0;
+         accumulateViscRHS( rhs_fluid, soln_fluid, accumulateMom, 1 );
+      }
+   }
 
 }
 
@@ -248,13 +258,22 @@ void IdealMhdOp::accumulateImplicitRHS( FluidSpeciesPtrVect&        a_rhs,
                                   const int                         a_fluidVecComp,
                                   const Real                        a_time )
 {
-  // JRA, turning diffusion off for now
-  //
-  //if (m_is_time_implicit) {
-  //  accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
-  //}
-}
+   CH_TIME("IdealMhdOp::accumulateImplicitRHS()");
 
+   FluidSpecies& rhs_fluid( static_cast<FluidSpecies&>(*(a_rhs[a_fluidVecComp])) );
+   const FluidSpecies& soln_fluid( static_cast<FluidSpecies&>(*(a_fluid_species[a_fluidVecComp])) );
+
+   if(m_implicitMhd) {
+      accumulateMhdRHS( rhs_fluid, soln_fluid, a_time );
+   }
+   if(m_tauMax>0.0 && m_implicitViscosity) {
+      int accumulateMom = 1;
+      int accumulateEne = 0;
+      if(m_implicitMhd) accumulateEne = 1;
+      accumulateViscRHS( rhs_fluid, soln_fluid, accumulateMom, accumulateEne );
+   }
+   
+}
 
 void IdealMhdOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
                                  std::vector<PS::DOFList>&                                 a_dof_list,
@@ -267,7 +286,7 @@ void IdealMhdOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS:
                                  const PS::GlobalDOFFluidSpecies&                          a_global_dofs,
                                  int                                                       a_species_idx )
 {
-  if (a_im && m_is_time_implicit) {
+  if (a_im && (m_implicitViscosity || m_implicitMhd)) {
     CH_assert(a_pc.size() == a_dof_list.size());
   
     if (!procID()) {
@@ -323,13 +342,13 @@ void IdealMhdOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS:
                               const bool                                                a_im,
                               const int                                                 a_species_idx )
 {
-  if (a_im && m_is_time_implicit) {
+  if (a_im && (m_implicitViscosity || m_implicitMhd)) {
     CH_assert(m_my_pc_idx >= 0);
     CH_assert(a_pc.size() > m_my_pc_idx);
   
     if (!procID()) {
       std::cout << "    ==> Updating " << _FLUID_OP_PC_ << " preconditioner " 
-                << " for IdealMhIdealMhdf fluid species " << a_species_idx << ".\n";
+                << " for IdealMhd fluid species " << a_species_idx << ".\n";
     }
   
     PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps> *pc 
@@ -350,197 +369,170 @@ void IdealMhdOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
    CH_TIME("IdealMhdOp::updatePCImEx()");
    
    const DisjointBoxLayout& grids( m_geometry.grids() );
-   LevelData<FArrayBox> shift(grids, 1, IntVect::Zero);
-   for (DataIterator dit(shift.dataIterator()); dit.ok(); ++dit) {
-      shift[dit].setVal(a_shift);
-   }
 
-   m_diffusion_op->updateImExPreconditioner( shift, *m_bc );
+   // Get computational fluid species data
+   //
+   const FluidSpecies& fluid_species = static_cast<const FluidSpecies&>(*a_fluid_species[a_component]);
+   const LevelData<FArrayBox>& Jrho( fluid_species.cell_var("density") );
+   m_alpha_PC = a_shift;   
+
+   for (DataIterator dit(m_shift_PC.dataIterator()); dit.ok(); ++dit) {
+      m_Jrho_PC[dit].copy(Jrho[dit]);
+      m_shift_PC[dit].setVal(m_alpha_PC);
+      m_shift_PC[dit].mult(m_Jrho_PC[dit]);
+   }
+   m_geometry.divideJonValid(m_shift_PC);
+
+   m_diffusionOp_mom0->updateImExPreconditioner( m_shift_PC, *m_bc_mom0 );
+   m_diffusionOp_mom1->updateImExPreconditioner( m_shift_PC, *m_bc_mom1 );
+   //SpaceUtils::inspectFArrayBox(m_pressure,0);
+   
+   // Create elliptic coefficients
+   // Need to update m_etaVisc_cf ? careful, m_pressure above is mapped
+   //
+   const double a_dummy_time=0.0;
+   computeDiffusionCoefficients(m_ellip_coeff, m_ellip_coeff_mapped, m_etaVisc_cf, a_dummy_time);
+   m_diffusionOp_mom0->setOperatorCoefficients(m_ellip_coeff, m_ellip_coeff_mapped, *m_bc_mom0);
+   m_diffusionOp_mom1->setOperatorCoefficients(m_ellip_coeff, m_ellip_coeff_mapped, *m_bc_mom1);
+   //SpaceUtils::inspectFluxBox(m_ellip_coeff,1);
+   //m_geometry.plotFaceData( "m_ellip_coeff_mapped", m_ellip_coeff_mapped, a_dummy_time);
+   
 }
 
 
-void IdealMhdOp::solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species_solution,
-                           const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
-                           const FluidSpeciesPtrVect&        a_fluid_species_rhs,
-                           const int                         a_component )
+void IdealMhdOp::solvePCImEx( FluidSpeciesPtrVect&        a_fluid_species_solution,
+                        const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
+                        const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                        const int                         a_component )
 {
    CH_TIME("IdealMhdOp::solvePCImEx()");
-   if (!m_is_time_implicit) {
-     MayDay::Error("Error in IdealMhdOp::solvePCImEx(): m_is_time_implicit is false. This function shouldn't have been called at all!");
-   }
-   const FluidSpecies& rhs_species = static_cast<const FluidSpecies&>(*a_fluid_species_rhs[a_component]);
-   LevelData<FArrayBox> r_phys;
-   r_phys.define(rhs_species.cell_var(0));
-
-   // Convert the right-hand side to physical space
-   m_geometry.divideJonValid(r_phys);
+   const DisjointBoxLayout& grids( m_geometry.grids() );
    
-   FluidSpecies& sol_species = static_cast<FluidSpecies&>(*a_fluid_species_solution[a_component]);
-   LevelData<FArrayBox>& z = sol_species.cell_var(0);
+   // This function computes solution to the preconditioned problem.
+   // treating Fi(y) as linear operator, the equation solved here is
+   // alpha*y - Fi(y) = RHS, y is mapped state vector
+   //
+   // momentum density and energy density have implicit parts
+   // 
 
-   for (DataIterator dit(z.dataIterator()); dit.ok(); ++dit) {
-      z[dit].setVal(0.);
+   if (!m_implicitViscosity) {
+     MayDay::Error("Error in IdealMhdOp::solvePCImEx(): m_implicitViscosity is false." 
+                   "This function shouldn't have been called at all!");
    }
 
+   // Get RHS data for each implicit variable
+   //
+   const FluidSpecies& rhs_species = static_cast<const FluidSpecies&>(*a_fluid_species_rhs[a_component]);
+   const LevelData<FArrayBox>& rhs_mom( rhs_species.cell_var("momentumDensity") );
+ 
+   // Get initial solution state for each implicit variable (y)
+   //
+   FluidSpecies& soln_species = static_cast<FluidSpecies&>(*a_fluid_species_solution[a_component]);
+   LevelData<FArrayBox>& z_mom = soln_species.cell_var("momentumDensity");
+
+   // solve modified linear precondition problem for momentum:
+   // alpha*rho*z_mom - nabla\cdot(D*nabla(z_mom)) = rhs_mom/J
+   // with 
+   // z_mom = y_mom/J/rho (velocity) 
+   //
+   LevelData<FArrayBox> rhs_mom0_phys(grids, 1, IntVect::Zero);
+   LevelData<FArrayBox> rhs_mom1_phys(grids, 1, IntVect::Zero);
+   LevelData<FArrayBox> z_mom0(grids, 1, IntVect::Zero);
+   LevelData<FArrayBox> z_mom1(grids, 1, IntVect::Zero);
+
+   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      rhs_mom0_phys[dit].copy(rhs_mom[dit],0,0,1);
+      rhs_mom1_phys[dit].copy(rhs_mom[dit],1,0,1);
+      z_mom0[dit].copy(z_mom[dit],0,0,1);
+      z_mom0[dit].divide(m_Jrho_PC[dit],0,0,1);
+      z_mom0[dit] /= m_alpha_PC;
+      z_mom1[dit].copy(z_mom[dit],1,0,1);
+      z_mom1[dit].divide(m_Jrho_PC[dit],0,0,1);
+      z_mom1[dit] /= m_alpha_PC; // initial guess is alpha*y = rhs
+   }
+   m_geometry.divideJonValid(rhs_mom0_phys);
+   m_geometry.divideJonValid(rhs_mom1_phys);
+
+   // Get convergence parameters for diffusion MBSolver
+   //
    double tol = 0.;
    double max_iter = 1;
    double precond_tol = 0.;
    double precond_max_iter = 1;
-   m_diffusion_op->setImExPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
 
-   m_diffusion_op->solveImExPreconditioner(r_phys, z);
+   // Solve for z_mom0
+   //
+   tol = m_diffusionOp_mom0->getPrecondTol();
+   max_iter = m_diffusionOp_mom0->getPrecondMaxIter();
+   m_diffusionOp_mom0->setImExPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
+   m_diffusionOp_mom0->solveImExPreconditioner(rhs_mom0_phys, z_mom0);
 
-   // Convert the solution to mapped space
-   m_geometry.multJonValid(z);
+   // Solve for z_mom1
+   //
+   tol = m_diffusionOp_mom1->getPrecondTol();
+   max_iter = m_diffusionOp_mom1->getPrecondMaxIter();
+   m_diffusionOp_mom1->setImExPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
+   m_diffusionOp_mom1->solveImExPreconditioner(rhs_mom1_phys, z_mom1);
+   
+   // Convert the elliptic solutions back to the state vector components
+   //
+   for(DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      z_mom[dit].copy(z_mom0[dit],0,0,1);
+      z_mom[dit].mult(m_Jrho_PC[dit],0,0,1);
+      z_mom[dit].copy(z_mom1[dit],0,1,1);
+      z_mom[dit].mult(m_Jrho_PC[dit],0,1,1);
+   }
+
+ 
 }
 
 
-void IdealMhdOp::computeDiffusionCoefficients(LevelData<FluxBox>& a_D_tensor,
-                                           LevelData<FluxBox>& a_D_tensor_mapped,
-                                           const Real          a_time) const
+void IdealMhdOp::computeDiffusionCoefficients( LevelData<FluxBox>&  a_ellip_coeff,
+                                               LevelData<FluxBox>&  a_ellip_coeff_mapped,
+                                         const LevelData<FluxBox>&  a_D_fc,
+                                         const Real                 a_time) const
 {
-   const DisjointBoxLayout& grids( m_geometry.grids() );
-   
-   LevelData<FluxBox> D_tmp(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
-   LevelData<FluxBox> D_tmp_mapped(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
-   
-   //Parallel and perpendicular tensor coefficeints
+   CH_TIME("IdealMhdOp::computeDiffusionCoefficients()");
+  
+   // compute isotropic diffusion coefficient needed for elliptic solver
+   // D = 4/3*etaVisc*I
+   //
+
+   // parallel and perpendicular tensor coefficients
+   //
    const LevelData<FluxBox>& perp_coeff = m_geometry.getEllipticOpPerpCoeff();
-   const LevelData<FluxBox>& par_coeff = m_geometry.getEllipticOpParCoeff();
+   const LevelData<FluxBox>& par_coeff  = m_geometry.getEllipticOpParCoeff();
    const LevelData<FluxBox>& perp_coeff_mapped = m_geometry.getEllipticOpPerpCoeffMapped();
    const LevelData<FluxBox>& par_coeff_mapped  = m_geometry.getEllipticOpParCoeffMapped();
    
-   //Temporary to hold scalar diffusion coefficients
-   LevelData<FArrayBox> D_cell(grids, 1, 4*IntVect::Unit);
-   LevelData<FluxBox> D_face(grids, 1, 2*IntVect::Unit);
-
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-     a_D_tensor[dit].setVal(0.0);
-     a_D_tensor_mapped[dit].setVal(0.0);
-   }   
-
-   //Add perpendicular diffusion term, if any
-   if (m_D_perp != NULL) {
-      m_D_perp->assign( D_cell, m_geometry, a_time);
-      m_geometry.fillInternalGhosts( D_cell );
-      fourthOrderCellToFaceCenters(D_face, D_cell);
-      
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         D_tmp[dit].copy(perp_coeff[dit]);
-         D_tmp_mapped[dit].copy(perp_coeff_mapped[dit]);
-         for (int dir = 0; dir < SpaceDim; dir++) {
-            for (int n = 0; n < SpaceDim*SpaceDim; n++) {
-               D_tmp[dit][dir].mult(D_face[dit][dir],0,n,1);
-               D_tmp_mapped[dit][dir].mult(D_face[dit][dir],0,n,1);
-            }
-         }
-         a_D_tensor[dit]+=D_tmp[dit];
-         a_D_tensor_mapped[dit]+=D_tmp_mapped[dit];
-      }
-   }
    
-   //Add parallel diffusion term, if any
-   if (m_D_par != NULL) {
-      m_D_par->assign( D_cell, m_geometry, a_time);
-      m_geometry.fillInternalGhosts( D_cell );
-      fourthOrderCellToFaceCenters(D_face, D_cell);
-      
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         D_tmp[dit].copy(par_coeff[dit]);
-         D_tmp_mapped[dit].copy(par_coeff_mapped[dit]);
-         for (int dir = 0; dir < SpaceDim; dir++) {
-            for (int n = 0; n < SpaceDim*SpaceDim; n++) {
-               D_tmp[dit][dir].mult(D_face[dit][dir],0,n,1);
-               D_tmp_mapped[dit][dir].mult(D_face[dit][dir],0,n,1);
-            }
-         }
-         a_D_tensor[dit]+=D_tmp[dit];
-         a_D_tensor_mapped[dit]+=D_tmp_mapped[dit];
-      }
-   }
-   
-   //Add radial diffusion term, if any
-   if (m_D_rad != NULL) {
-      m_D_rad->assign( D_cell, m_geometry, a_time);
-      m_geometry.fillInternalGhosts( D_cell );
-      fourthOrderCellToFaceCenters(D_face, D_cell);
-      
-      m_geometry.getEllipticOpRadCoeff(D_tmp);
-      m_geometry.getEllipticOpRadCoeffMapped(D_tmp_mapped);
-      
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         for (int dir = 0; dir < SpaceDim; dir++) {
-            for (int n = 0; n < SpaceDim*SpaceDim; n++) {
-               D_tmp[dit][dir].mult(D_face[dit][dir],0,n,1);
-               D_tmp_mapped[dit][dir].mult(D_face[dit][dir],0,n,1);
-            }
-         }
-         a_D_tensor[dit]+=D_tmp[dit];
-         a_D_tensor_mapped[dit]+=D_tmp_mapped[dit];
-      }
-   }
-}
-
-void IdealMhdOp::inspectFArrayBox(const LevelData<FArrayBox>& a_F0,
-                               const int                   a_comp) const
-{
-   CH_assert(a_comp<a_F0.nComp());
+   // multiply identity tensor by diffusion coefficient
+   //
    const DisjointBoxLayout& grids( m_geometry.grids() );
-   
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      
-      const FArrayBox& F0_on_patch = a_F0[dit];   
-      const Box& thisbox = F0_on_patch.box();
-
-      FORT_INSPECT_FARRAYBOX( CHF_BOX(thisbox), 
-                              CHF_CONST_FRA1(F0_on_patch,a_comp) );
+      a_ellip_coeff[dit].copy(perp_coeff[dit]);
+      a_ellip_coeff[dit] += par_coeff[dit];
+      a_ellip_coeff_mapped[dit].copy(perp_coeff_mapped[dit]);
+      a_ellip_coeff_mapped[dit] += par_coeff_mapped[dit];
+      for (int dir = 0; dir < SpaceDim; dir++) {
+         for (int n = 0; n < SpaceDim*SpaceDim; n++) {
+            a_ellip_coeff[dit][dir].mult(a_D_fc[dit][dir],0,n,1);
+            a_ellip_coeff_mapped[dit][dir].mult(a_D_fc[dit][dir],0,n,1);
+         }
+      }
+      a_ellip_coeff[dit] *= 4.0/3.0;
+      a_ellip_coeff_mapped[dit] *= 4.0/3.0;
    }
-}
 
-void IdealMhdOp::inspectFluxBox(const LevelData<FluxBox>& a_Flux,
-                             const int                 a_dir) const
-{
-   const DisjointBoxLayout& grids( m_geometry.grids() );
-   
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      
-      const FluxBox& Flux_on_patch = a_Flux[dit]; 
-      const Box& thisbox = Flux_on_patch.box();
 
-      //Box face_box( Flux_on_patch.box());
-      //face_box.surroundingNodes( a_dir );
-      //face_box.grow( a_dir, 1 );
-
-      const FArrayBox& Flux_on_dir = Flux_on_patch[a_dir]; 
-
-      FORT_INSPECT_FLUXBOX( CHF_BOX(thisbox), 
-                            CHF_CONST_FRA(Flux_on_dir),
-                            CHF_CONST_INT(a_dir) );
-   }
-}
-
-void IdealMhdOp::inspectEdgeDataBox(const LevelData<EdgeDataBox>& a_Edge,
-                                    const int                     a_dir) const
-{
-   const DisjointBoxLayout& grids( m_geometry.grids() );
-   
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      
-      const EdgeDataBox& Edge_on_patch = a_Edge[dit]; 
-      const Box& thisbox = Edge_on_patch.box();
-
-      const FArrayBox& Edge_on_dir = Edge_on_patch[a_dir]; 
-
-      FORT_INSPECT_FLUXBOX( CHF_BOX(thisbox), 
-                            CHF_CONST_FRA(Edge_on_dir),
-                            CHF_CONST_INT(a_dir) );
-   }
 }
 
 void IdealMhdOp::convertPhysFluxToMappedFlux(LevelData<FArrayBox>& a_mapped_flux,
                                        const LevelData<FArrayBox>& a_physical_flux,
                                        const LevelData<FArrayBox>& a_N) const
 {
+   CH_TIME("IdealMhdOp::convertPhysFluxToMappedFlux()");
+   
    const DisjointBoxLayout& grids( m_geometry.grids() );
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -662,7 +654,7 @@ void IdealMhdOp::computeNTFfaceArea( LevelData<FluxBox>&    a_Flux_norm,
          //cout << "faceArea[1] " << faceArea[1] << endl;
       }
    }
-   a_Flux_norm.exchange();
+   //a_Flux_norm.exchange();
  
 }
 
@@ -697,6 +689,7 @@ void IdealMhdOp::computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
       FArrayBox VB_contr_cc(cell_box, a_V_phys_cc.nComp());
       FArrayBox JB_contr_cc(cell_box, a_B_contr_cc.nComp());
       convertPhysFluxToMappedFlux(VB_contr_cc,a_V_phys_cc[dit],m_Nmatrix[dit]);
+      //m_geometry.convertPhysToContravar(VB_contra_cc,0);
       for (int n=0; n<SpaceDim; n++) {
          VB_contr_cc.mult(a_B_contr_cc[dit],cell_box,cell_box,0,n,1);
       }
@@ -767,28 +760,18 @@ void IdealMhdOp::fillGhostCells( FluidSpecies&  a_species_phys,
 
 void IdealMhdOp::parseParameters( ParmParse& a_pp )
 {
-   a_pp.query( "time_implicit", m_is_time_implicit);
+   a_pp.query( "implicitViscosity", m_implicitViscosity);
+   a_pp.query( "implicitMhd", m_implicitMhd);
 
    GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
    std::string grid_function_name;
    
-   if (a_pp.contains("D_rad")) {
-     a_pp.get("D_rad", grid_function_name );
-     m_D_rad = grid_library->find( grid_function_name );
-   }
-
-   if (a_pp.contains("D_perp")) {
-      a_pp.get("D_perp", grid_function_name );
-      m_D_perp = grid_library->find( grid_function_name );
-   }
-
-   if (a_pp.contains("D_par")) {
-      a_pp.get("D_par", grid_function_name );
-      m_D_par = grid_library->find( grid_function_name );
-   }
-
    if (a_pp.contains("advScheme")) {
       a_pp.get("advScheme", m_advScheme );
+   }
+   
+   if (a_pp.contains("tauMax")) {
+      a_pp.get("tauMax", m_tauMax );
    }
    
 }
@@ -798,8 +781,10 @@ void IdealMhdOp::printParameters()
 {
    if (procID()==0) {
       std::cout << "IdealMhdOp parameters:" << std::endl;
-      std::cout << " time_implicit  =  " << m_is_time_implicit << std::endl;
       std::cout << " advScheme  =  " << m_advScheme << std::endl;
+      std::cout << " tauMax     =  " << m_tauMax << std::endl;
+      std::cout << " implicitMhd  =  " << m_implicitMhd << std::endl;
+      std::cout << " implicitVisosity  =  " << m_implicitViscosity << std::endl;
    }
 }
 
@@ -877,9 +862,32 @@ void IdealMhdOp::setCspeed( const LevelData<FArrayBox>&  a_density,
 
 }
 
+Real IdealMhdOp::computeDtImExTI( const FluidSpeciesPtrVect&  a_fluid_species )
+{
+   CH_TIME("Real IdealMhdOp::computeDtImExTI()");   
+   
+   double thisdt=DBL_MAX;
+   if(m_courant_time_step==DBL_MAX) {
+      thisdt = computeDtMhd( a_fluid_species );
+      return thisdt;
+   }
+   else {
+      return m_courant_time_step;
+   }
+
+}
+
 Real IdealMhdOp::computeDtExplicitTI( const FluidSpeciesPtrVect&  a_fluid_species )
 {
-   CH_TIME("Real IdealMhdOp::computeDtExplicitTI()");   
+   CH_TIME("Real IdealMhdOp::computeDtExplicit()");   
+   double thisdt=DBL_MAX;
+   thisdt = computeDtMhd( a_fluid_species );
+   return thisdt;
+}
+
+Real IdealMhdOp::computeDtMhd( const FluidSpeciesPtrVect&  a_fluid_species )
+{
+   CH_TIME("Real IdealMhdOp::computeDtMhd()");   
    // get physical values for m_species_name and calculate freezing speed
    // Cspeed_i = |NTVdotqihat| + |N_i|sqrt(gamma*P/N); i = q0, q1, q2
    //
@@ -931,17 +939,17 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
    //
    m_Jacobian.define(a_grids, 1, a_ghostVect);
    m_Nmatrix.define(a_grids, SpaceDim*SpaceDim, a_ghostVect);
-   m_X_phys.define(a_grids, SpaceDim, a_ghostVect);
+   m_Xphys.define(a_grids, SpaceDim, a_ghostVect);
    m_g_y.define(a_grids, 1, a_ghostVect); // used only when solving virtual B
    m_cellVol.define(a_grids, 1, IntVect::Zero);
    double twoPi = 2.0*Pi;
    //double mapVol;
-   m_geometry.getXphys(m_X_phys);
+   m_geometry.getXphys(m_Xphys);
    for (DataIterator dit(a_grids); dit.ok(); ++dit) {
       const MagBlockCoordSys& coord_sys = m_geometry.getBlockCoordSys(a_grids[dit]);
       m_twoDaxisymm = coord_sys.isAxisymmetric();
       if(m_twoDaxisymm) { // g_y is covariant basis vector in virtual direction
-         m_g_y[dit].copy(m_X_phys[dit],0,0,1);
+         m_g_y[dit].copy(m_Xphys[dit],0,0,1);
          m_g_y[dit] *= twoPi;
       } 
       else { 
@@ -951,10 +959,32 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
    m_geometry.getJ(m_Jacobian);
    m_geometry.getN(m_Nmatrix);
    m_geometry.getCellVolumes(m_cellVol);
-   //inspectFArrayBox(Nmatrix,0);
-   //inspectFArrayBox(Jacobian,0);
-   //inspectFArrayBox(m_X_phys,0);
-      
+   
+   // containers for viscosity tensor
+   //
+   m_etaVisc.define(a_grids, 1, a_ghostVect);
+   m_momVisc_source.define(a_grids, 1, IntVect::Zero);
+   m_etaVisc_cf.define(a_grids, 1, 1*IntVect::Unit);
+   m_m0JaFluxVisc_cf.define(a_grids, SpaceDim, 1*IntVect::Unit);
+   m_m1JaFluxVisc_cf.define(a_grids, SpaceDim, 1*IntVect::Unit);
+   m_enJaFluxVisc_cf.define(a_grids, SpaceDim, 1*IntVect::Unit);
+   m_m0JaFluxVisc_norm.define(a_grids, 1, 1*IntVect::Unit);
+   m_m1JaFluxVisc_norm.define(a_grids, 1, 1*IntVect::Unit);
+   m_momJaFluxVisc_norm.define(a_grids, SpaceDim, 1*IntVect::Unit);
+   m_enJaFluxVisc_norm.define(a_grids, 1, 1*IntVect::Unit);
+   for (DataIterator dit(a_grids); dit.ok(); ++dit) {
+      m_momVisc_source[dit].setVal(0.0);
+   }
+   
+   // preconditioner stuff
+   //
+   m_Jrho_PC.define(a_grids, 1, IntVect::Zero);
+   m_shift_PC.define(a_grids, 1, IntVect::Zero);
+   m_ellip_coeff.define(a_grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+   m_ellip_coeff_mapped.define(a_grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+   
+   // cell center vars
+   //
    m_rhoDen_cc.define(a_grids, 1, a_ghostVect);
    m_momDen_cc.define(a_grids, SpaceDim, a_ghostVect);
    m_eneDen_cc.define(a_grids, 1, a_ghostVect);
@@ -964,6 +994,7 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
    m_pressure.define(a_grids, 1, a_ghostVect);
    m_Bpressure.define(a_grids, 1, a_ghostVect);
    m_velocity.define(a_grids, SpaceDim, a_ghostVect);
+   m_velocity_cf.define(a_grids, SpaceDim, a_ghostVect);
    m_velocity_virtual.define(a_grids, 1, a_ghostVect);
    //
    m_rhoFlux_cc.define(a_grids, SpaceDim, a_ghostVect);
@@ -1041,6 +1072,9 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
       m_EdgeBC_zeros[dit].setVal(0.0,1);
       m_FluxBC_zeros[dit].setVal(0.0);
    }
+   
+   m_dummyDiv.define(a_grids, 1, IntVect::Zero);
+   m_dummyDiv_mom.define(a_grids, SpaceDim, IntVect::Zero);
 
 }
 
@@ -1072,10 +1106,6 @@ void IdealMhdOp::setCellCenterValues( const FluidSpecies&  a_soln_fluid )
          m_magField_virtual_cc[dit].copy( soln_magField_virtual[dit] );
       }
    }  
-   //inspectFArrayBox(m_momDen_cc,0);
-   //inspectFArrayBox(m_momDen_cc,1);
-   //inspectFArrayBox(m_velocity,0);
-   //inspectFArrayBox(m_velocity,1);
    
    // set physical derived variables for fluid species
    //
@@ -1083,7 +1113,6 @@ void IdealMhdOp::setCellCenterValues( const FluidSpecies&  a_soln_fluid )
    a_soln_fluid.Bpressure(m_Bpressure);
    a_soln_fluid.velocity(m_velocity);                 // in-plane velocity vector
    a_soln_fluid.velocity_virtual(m_velocity_virtual); // out-of-plane velocity vector
-   //inspectFArrayBox(m_Bpressure,0);
 }   
 
 void IdealMhdOp::setCellCenterFluxes( const FluidSpecies&  a_soln_fluid )
@@ -1201,7 +1230,6 @@ void IdealMhdOp::setMagneticFieldTerms( const FluidSpecies&  a_soln_fluid )
       m_geometry.convertPhysToCovar(m_J0_cc,1); // actually Jacobian times physical curl(B) at cell center
       //m_geometry.plotCellData( "m_By_covar_cc", m_By_covar_cc, a_time);
       //m_geometry.plotCellData( "m_J0_cc", m_J0_cc, a_time);
-      //inspectFArrayBox(m_magField_virtual_cc,0);
 
       // calculate source terms for energy density and momentum density equations
       //
@@ -1343,11 +1371,224 @@ void IdealMhdOp::enforceFluxBCs( FluidSpecies&  a_rhs_fluid,
          }
       }
    }
-   //inspectEdgeDataBox(m_E0_ce,1);
-   //inspectFluxBox(m_rhoFlux_norm,0);
-   //inspectFluxBox(m_momFlux_norm,0);
-   //inspectFluxBox(m_enFlux_norm,0);
+
 }   
+
+void IdealMhdOp::setViscosityCoefficient( LevelData<FArrayBox>&  a_etaVisc,
+                                          LevelData<FluxBox>&    a_etaVisc_cf,
+                                    const FluidSpecies&  a_soln_fluid )
+{
+   CH_TIME("IdealMhdOp::setViscosityCoefficient()");
+
+   const DisjointBoxLayout& grids( m_rhoDen_cc.getBoxes() );
+
+   // set the ion viscosity coefficients
+   //
+   const double factor = 0.96*0.5; // 1/2 for only ion pressure
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      a_etaVisc[dit].copy(m_pressure[dit]);
+      a_etaVisc[dit].mult(factor*m_tauMax);
+      //a_etaVisc[dit].setVal(factor*m_tauMax);
+   }
+   SpaceUtils::upWindToFaces(a_etaVisc_cf,a_etaVisc,a_etaVisc_cf,"c2"); 
+   
+
+   // Create elliptic coefficients
+   //
+   /*
+   LevelData<FluxBox> ellip_coeff(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+   LevelData<FluxBox> ellip_coeff_mapped(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+   const double a_dummy_time=0.0;
+   computeDiffusionCoefficients(ellip_coeff, ellip_coeff_mapped, a_etaVisc_cf, a_dummy_time);
+   m_diffusionOp_mom0->setOperatorCoefficients(ellip_coeff, ellip_coeff_mapped, *m_bc_mom0);
+   m_diffusionOp_mom1->setOperatorCoefficients(ellip_coeff, ellip_coeff_mapped, *m_bc_mom1);
+   //SpaceUtils::inspectFluxBox(ellip_coeff,1);
+   //m_geometry.plotFaceData( "ellip_coeff_mapped", ellip_coeff_mapped, a_dummy_time);
+   //SpaceUtils::inspectFluxBox(ellip_coeff_mapped,1);
+   */
+
+}
+
+void IdealMhdOp::computeViscSourceAxisymm( LevelData<FArrayBox>&  a_Wthth,
+                                     const LevelData<FArrayBox>&  a_velocity_phys,
+                                     const LevelData<FluxBox>&    a_velocity_phys_cf )
+{
+   CH_TIME("IdealMhdOp::computeViscSourceAxisymm()");
+
+   // calculate div stress tensor source terms at cell center
+   // Wthth = 2*Vr/r - 2/3*divV
+   // Wthr  = d(Vth)/dr + d(Vr)/dtheta/r
+   //
+   
+   //   compute divergence of physical velocity field
+   //
+   const DisjointBoxLayout& grids( a_Wthth.getBoxes() );
+   LevelData<FluxBox> velocity_norm(grids, 1, IntVect::Unit);
+   //m_geometry.applyAxisymmetricCorrection( a_velocity_phys_cf );
+   m_geometry.computeMetricTermProductAverage( velocity_norm, a_velocity_phys_cf, 0 );
+   m_geometry.mappedGridDivergenceFromFluxNorms( velocity_norm, m_dummyDiv );
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      m_dummyDiv[dit].divide(m_cellVol[dit]);
+   }
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      a_Wthth[dit].copy(a_velocity_phys[dit],0,0,1);
+      a_Wthth[dit].divide(m_Xphys[dit],0,0,1);
+      a_Wthth[dit].mult(2.0);
+      m_dummyDiv[dit].mult(-2.0/3.0);
+      a_Wthth[dit].plus(m_dummyDiv[dit],0,0,1);
+   }
+
+}
+
+void IdealMhdOp::computeViscosityEnergyFlux( LevelData<FluxBox>&    a_UJaPi_Flux_phys,
+                                       const LevelData<FluxBox>&    a_JaPix_Flux_phys,
+                                       const LevelData<FluxBox>&    a_JaPiy_Flux_phys,
+                                       const LevelData<FluxBox>&    a_velocity_phys_cf )
+{
+   CH_TIME("IdealMhdOp::computeViscosityEnergyFlux()");
+
+   // calculate physical viscosity fluxes for total energy equation
+   // on each face (multiplied by Jacobian)
+   //
+   // Ja*Flux_0 = U0*JaPi00 + U1*JaPi10
+   // Ja*Flux_1 = U0*JaPi01 + U1*JaPi11
+   //
+
+   const DisjointBoxLayout& grids( a_velocity_phys_cf.getBoxes() );
+   //SpaceUtils::upWindToFaces(m_velocity_cf, a_velocity_phys, m_velocity_cf, "c2");
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+
+      for (int dir=0; dir<SpaceDim; ++dir) {
+
+         const FArrayBox& vel_on_dir   = a_velocity_phys_cf[dit][dir];
+         const FArrayBox& JaPix_on_dir = a_JaPix_Flux_phys[dit][dir];
+         const FArrayBox& JaPiy_on_dir = a_JaPiy_Flux_phys[dit][dir];
+               FArrayBox& UJaPi_on_dir = a_UJaPi_Flux_phys[dit][dir];
+
+         const Box& thisbox = UJaPi_on_dir.box();
+         FORT_EVAL_VISC_ENERGY_FLUX( CHF_BOX(thisbox),
+                                     CHF_CONST_FRA(vel_on_dir),
+                                     CHF_CONST_FRA(JaPix_on_dir),
+                                     CHF_CONST_FRA(JaPiy_on_dir),
+                                     CHF_FRA(UJaPi_on_dir) );
+
+      }
+
+   }
+
+}
+
+void IdealMhdOp::updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
+                            const FluidSpecies&  a_soln_fluid,
+                            const int            a_accumulateMom,
+                            const int            a_accumulateEne )
+{
+   CH_TIME("IdealMhdOp::updateRHSs_visc()");
+
+   const DisjointBoxLayout& grids( m_rhoDen_cc.getBoxes() );
+
+   // compute physical viscosity fluxes on cell faces
+   // for each momentum equation (multiplied by Jacobian)
+   // where viscosity tensor is Pi = -etaVis*W with 
+   // rate of strain tensor W defined as
+   // W = \nabla(V) + (\nabla(V))^T - 2/3*I\nabla\cdot V
+   //
+   //  
+   m_geometry.computeJaPhysStrainFlux( m_m0JaFluxVisc_cf,
+                                       m_m1JaFluxVisc_cf,
+                                       m_velocity );
+      
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const Box& cell_box( m_etaVisc_cf[dit].box() );
+      for (int n=0; n<SpaceDim; ++n) {
+         m_m0JaFluxVisc_cf[dit].mult( m_etaVisc_cf[dit],cell_box,0,n,1 ); 
+         m_m1JaFluxVisc_cf[dit].mult( m_etaVisc_cf[dit],cell_box,0,n,1 ); 
+      }
+      m_m0JaFluxVisc_cf[dit].negate(); 
+      m_m1JaFluxVisc_cf[dit].negate(); 
+   }
+
+   // calculate viscosity flux for energy density equation
+   // and source term for momentum flux for axisymmetric
+   //
+   SpaceUtils::upWindToFaces(m_velocity_cf, m_velocity, m_velocity_cf, "c2");
+   if(m_twoDaxisymm) {
+      computeViscSourceAxisymm( m_momVisc_source, m_velocity, m_velocity_cf );
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_momVisc_source[dit].mult( m_etaVisc[dit] ); 
+         m_momVisc_source[dit].negate(); 
+      }
+   } 
+   
+   computeViscosityEnergyFlux( m_enJaFluxVisc_cf,
+                               m_m0JaFluxVisc_cf,
+                               m_m1JaFluxVisc_cf,
+                               m_velocity_cf );
+
+   //   update RHSs for momentum equation
+   //
+   if(a_accumulateMom) {
+
+      // convert physical Ja*Flux to contravar and mult by faceArea
+      // (Result is same as applying N^T*Flux*faceArea as is done by 
+      // computeMetricTermProductAverage), which is not done here 
+      // since Flux is already multiplied by Jacobian
+      //
+      m_geometry.applyAxisymmetricCorrection( m_m0JaFluxVisc_cf );
+      m_geometry.applyAxisymmetricCorrection( m_m1JaFluxVisc_cf );
+      m_geometry.computedxidXProductAverage(m_m0JaFluxVisc_norm, m_m0JaFluxVisc_cf, 0);
+      m_geometry.computedxidXProductAverage(m_m1JaFluxVisc_norm, m_m1JaFluxVisc_cf, 0);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_momJaFluxVisc_norm[dit].copy( m_m0JaFluxVisc_norm[dit],0,0,1 ); 
+         m_momJaFluxVisc_norm[dit].copy( m_m1JaFluxVisc_norm[dit],0,1,1 );
+      }
+   
+      LevelData<FArrayBox>& rhs_mom( a_rhs_fluid.cell_var("momentumDensity") );
+      m_geometry.mappedGridDivergenceFromFluxNorms(m_momJaFluxVisc_norm, m_dummyDiv_mom);
+      for (DataIterator dit(rhs_mom.dataIterator()); dit.ok(); ++dit) {
+         for (int n=0; n<SpaceDim; ++n) {
+            m_dummyDiv_mom[dit].divide(m_cellVol[dit],0,n,1);
+            m_dummyDiv_mom[dit].mult(m_Jacobian[dit],0,n,1);
+            if(n==0 && m_twoDaxisymm) {
+               FArrayBox JaPiyyOverR(grids[dit], 1);
+               JaPiyyOverR.copy(m_momVisc_source[dit]);
+               JaPiyyOverR.mult(m_Jacobian[dit]); // Jacobian = Ja = 2*pi*R_phys * J_RZ
+               JaPiyyOverR.divide(m_Xphys[dit],0,0,1);
+               m_dummyDiv_mom[dit].minus(JaPiyyOverR,0,0,1);
+            }
+         }
+         //rhs_mom[dit].minus(m_dummyDiv_mom[dit],1,1,1);
+         rhs_mom[dit].minus(m_dummyDiv_mom[dit]);
+      }
+   
+   }   
+
+   //   update RHSs for energy density equation
+   //
+   if(a_accumulateEne) {
+
+      // convert physical Ja*Flux to contravar and mult by faceArea
+      // (Result is same as applying N^T*Flux*faceArea as is done by 
+      // computeMetricTermProductAverage), which is not done here 
+      // since Flux is already multiplied by Jacobian
+      //
+      m_geometry.applyAxisymmetricCorrection( m_enJaFluxVisc_cf );
+      m_geometry.computedxidXProductAverage(m_enJaFluxVisc_norm, m_enJaFluxVisc_cf, 0);
+
+      LevelData<FArrayBox>& rhs_ene( a_rhs_fluid.cell_var("energyDensity") );
+      m_geometry.mappedGridDivergenceFromFluxNorms(m_enJaFluxVisc_norm, m_dummyDiv);
+      for (DataIterator dit(rhs_ene.dataIterator()); dit.ok(); ++dit) {
+         m_dummyDiv[dit].divide(m_cellVol[dit]);
+         m_dummyDiv[dit].mult(m_Jacobian[dit]);
+         rhs_ene[dit].minus( m_dummyDiv[dit] );
+      }
+
+   }
+
+}
+
 
 void IdealMhdOp::updateRHSs( FluidSpecies&  a_rhs_fluid,
                        const FluidSpecies&  a_soln_fluid ) 
@@ -1361,22 +1602,20 @@ void IdealMhdOp::updateRHSs( FluidSpecies&  a_rhs_fluid,
 
    // update RHS for mass density
    //
-   LevelData<FArrayBox>& rhs_data( a_rhs_fluid.cell_var(0) );
-   for (DataIterator dit(rhs_data.dataIterator()); dit.ok(); ++dit) {
-      FArrayBox div_rhoFlux(grids[dit], 1);
-      m_geometry.mappedGridDivergenceFromFluxNorms(m_rhoFlux_norm[dit], div_rhoFlux);
-      div_rhoFlux /= m_cellVol[dit];
-      div_rhoFlux.mult(m_Jacobian[dit]);
-      rhs_data[dit].minus(div_rhoFlux);
+   LevelData<FArrayBox>& rhs_rho( a_rhs_fluid.cell_var(0) );
+   m_geometry.mappedGridDivergenceFromFluxNorms(m_rhoFlux_norm, m_dummyDiv);
+   for (DataIterator dit(rhs_rho.dataIterator()); dit.ok(); ++dit) {
+      m_dummyDiv[dit].divide(m_cellVol[dit]);
+      m_dummyDiv[dit].mult(m_Jacobian[dit]);
+      rhs_rho[dit].minus(m_dummyDiv[dit]);
    }
   
    // update RHS for momentum density
    // 
-   LevelData<FArrayBox>& rhs_data2( a_rhs_fluid.cell_var("momentumDensity") );
-   for (DataIterator dit(rhs_data2.dataIterator()); dit.ok(); ++dit) {
-      FArrayBox div_momFlux(grids[dit], SpaceDim);
-      m_geometry.mappedGridDivergenceFromFluxNorms(m_momFlux_norm[dit], div_momFlux);
-      for (int n=0; n<div_momFlux.nComp(); ++n) {
+   LevelData<FArrayBox>& rhs_mom( a_rhs_fluid.cell_var("momentumDensity") );
+   m_geometry.mappedGridDivergenceFromFluxNorms(m_momFlux_norm, m_dummyDiv_mom);
+   for (DataIterator dit(rhs_mom.dataIterator()); dit.ok(); ++dit) {
+      for (int n=0; n<SpaceDim; ++n) {
          if(n==0 && m_twoDaxisymm) {
             //if(a_soln_fluid.m_evolve_magneticField_virtual) {
             //   m_pressure[dit].minus(m_Bpressure[dit],0,0,1);
@@ -1387,59 +1626,67 @@ void IdealMhdOp::updateRHSs( FluidSpecies&  a_rhs_fluid,
             pdivIdent_Z.copy( m_div_IdentFlux_Z[dit] );
             pdivIdent_R.mult(m_pressure[dit],0,0,1);
             pdivIdent_Z.mult(m_pressure[dit],0,0,1);
-            div_momFlux.minus(pdivIdent_R,0,0,1);
-            div_momFlux.minus(pdivIdent_Z,0,1,1);
+            m_dummyDiv_mom[dit].minus(pdivIdent_R,0,0,1);
+            m_dummyDiv_mom[dit].minus(pdivIdent_Z,0,1,1);
          }
-         div_momFlux.divide(m_cellVol[dit],0,n,1);
-         div_momFlux.mult(m_Jacobian[dit],0,n,1);
+         m_dummyDiv_mom[dit].divide(m_cellVol[dit],0,n,1);
+         m_dummyDiv_mom[dit].mult(m_Jacobian[dit],0,n,1);
       }
-      //div_momFlux.setVal(0.0,0); // JRA, no mr update
-      rhs_data2[dit].minus(div_momFlux);
+      //m_dummyDiv_mom[dit].setVal(0.0,0); // JRA, no mr update
+      rhs_mom[dit].minus(m_dummyDiv_mom[dit]);
       if(m_twoDaxisymm && a_soln_fluid.m_evolve_momentumDensity_virtual) {
          FArrayBox JaRhoVthsqOverR(grids[dit], 1);
          JaRhoVthsqOverR.copy(m_momDen_virtual_cc[dit]);
          JaRhoVthsqOverR.mult(m_velocity_virtual[dit]);
          JaRhoVthsqOverR.mult(m_Jacobian[dit]); // Jacobian = Ja = 2*pi*R_phys * J_RZ
-         JaRhoVthsqOverR.divide(m_X_phys[dit],0,0,1);
-         rhs_data2[dit].plus(JaRhoVthsqOverR,0,0,1);            
+         JaRhoVthsqOverR.divide(m_Xphys[dit],0,0,1);
+         rhs_mom[dit].plus(JaRhoVthsqOverR,0,0,1);            
       }
       if(a_soln_fluid.m_evolve_magneticField_virtual) {
-         rhs_data2[dit].plus(m_JJcrossB[dit]);
+         rhs_mom[dit].plus(m_JJcrossB[dit]);
       }
    }
-   //inspectFluxBox(m_momFlux_norm,0);
    
    // update RHS for energy density
    //
-   LevelData<FArrayBox>& rhs_data3( a_rhs_fluid.cell_var("energyDensity") );
-   for (DataIterator dit(rhs_data3.dataIterator()); dit.ok(); ++dit) {
-      FArrayBox div_enFlux(grids[dit], 1);
-      m_geometry.mappedGridDivergenceFromFluxNorms(m_enFlux_norm[dit], div_enFlux);
-      div_enFlux /= m_cellVol[dit];
-      div_enFlux.mult(m_Jacobian[dit]);
-      rhs_data3[dit].minus( div_enFlux );
+   LevelData<FArrayBox>& rhs_ene( a_rhs_fluid.cell_var("energyDensity") );
+   m_geometry.mappedGridDivergenceFromFluxNorms(m_enFlux_norm, m_dummyDiv);
+   for (DataIterator dit(rhs_ene.dataIterator()); dit.ok(); ++dit) {
+      m_dummyDiv[dit].divide(m_cellVol[dit]);
+      m_dummyDiv[dit].mult(m_Jacobian[dit]);
+      rhs_ene[dit].minus( m_dummyDiv[dit] );
       if(a_soln_fluid.m_evolve_magneticField_virtual) {
-         rhs_data3[dit].plus(m_JJdotE[dit]);
+         rhs_ene[dit].plus(m_JJdotE[dit]);
       }
    }
-   
+  
+   /*
+   LevelData<FluxBox> constFlux(grids, 1, 0*IntVect::Unit); 
+   LevelData<FArrayBox> div_constFlux(grids, 1, 0*IntVect::Unit); 
+   for (DataIterator dit(rhs_data3.dataIterator()); dit.ok(); ++dit) {
+      constFlux[dit].setVal(1.0);
+   }
+   m_geometry.multJonFaces(constFlux);
+   m_geometry.mappedGridDivergenceFromFluxNorms(constFlux, div_constFlux);
+   */
+
    // update RHS for momentum density in virtual direction
    //
    if(a_soln_fluid.m_evolve_momentumDensity_virtual){
-      LevelData<FArrayBox>& rhs_data4( a_rhs_fluid.cell_var("momentumDensity_virtual") );
-      for (DataIterator dit(rhs_data4.dataIterator()); dit.ok(); ++dit) {
+      LevelData<FArrayBox>& rhs_momV( a_rhs_fluid.cell_var("momentumDensity_virtual") );
+      for (DataIterator dit(rhs_momV.dataIterator()); dit.ok(); ++dit) {
          FArrayBox div_mvFlux(grids[dit], 1);
          m_geometry.mappedGridDivergenceFromFluxNorms(m_mvFlux_norm[dit], div_mvFlux);
          div_mvFlux /= m_cellVol[dit];
          div_mvFlux.mult(m_Jacobian[dit]);
-         rhs_data4[dit].minus( div_mvFlux );
+         rhs_momV[dit].minus( div_mvFlux );
          if(m_twoDaxisymm) {
             FArrayBox JaRhoVthVrOverR(grids[dit], 1);
             JaRhoVthVrOverR.copy(m_momDen_virtual_cc[dit]);
             JaRhoVthVrOverR.mult(m_velocity[dit],0,0,1);
             JaRhoVthVrOverR.mult(m_Jacobian[dit]); // Jacobian = Ja = 2*pi*R_phys * J_RZ
-            JaRhoVthVrOverR.divide(m_X_phys[dit],0,0,1);
-            rhs_data4[dit].minus(JaRhoVthVrOverR,0,0,1);            
+            JaRhoVthVrOverR.divide(m_Xphys[dit],0,0,1);
+            rhs_momV[dit].minus(JaRhoVthVrOverR,0,0,1);            
          }
       }
    }
@@ -1447,12 +1694,94 @@ void IdealMhdOp::updateRHSs( FluidSpecies&  a_rhs_fluid,
    // update RHS for virtual magnetic field
    //
    if(a_soln_fluid.m_evolve_magneticField_virtual){
-      LevelData<FArrayBox>& rhs_data5( a_rhs_fluid.cell_var("magneticField_virtual") );
+      LevelData<FArrayBox>& rhs_magV( a_rhs_fluid.cell_var("magneticField_virtual") );
       for (DataIterator dit(grids); dit.ok(); ++dit) {
-         rhs_data5[dit].minus( m_curlE0[dit] );
+         rhs_magV[dit].minus( m_curlE0[dit] );
       }
    }
 
 }   
+
+void IdealMhdOp::initialize( CFGVars&    a_species, 
+                             const Real  a_time )
+{
+   CH_TIME("IdealMhdOp::initialize()");
+   
+   // initilize cell center variables
+   //
+   for (int n=0; n<a_species.num_cell_vars(); ++n) {
+
+      const int num_comps = a_species.cell_var(n).nComp();
+      if (num_comps>1) {
+         string this_cell_var_comp_name;
+         for (int m=0; m<num_comps; m++) {
+            if(m==0) this_cell_var_comp_name = a_species.cell_var_name(n)+"_0";
+            if(m==1) this_cell_var_comp_name = a_species.cell_var_name(n)+"_1";
+            if(m==2) this_cell_var_comp_name = a_species.cell_var_name(n)+"_2";
+            const GridFunction& fsic( fluidSpeciesIC( this_cell_var_comp_name ) );
+            LevelData<FArrayBox> this_cell_var_comp( a_species.cell_var(n).getBoxes(), 1,
+                                                     a_species.cell_var(n).ghostVect() );
+            fsic.assign( this_cell_var_comp, a_species.configurationSpaceGeometry(), a_time );
+            LevelData<FArrayBox>& cell_var_ref( a_species.cell_var(n) );
+            for (DataIterator dit( this_cell_var_comp.dataIterator() ); dit.ok(); ++dit) {
+               cell_var_ref[dit].copy(this_cell_var_comp[dit],0,m,1);
+            }
+         }
+      }
+      else {
+         const GridFunction& fsic( fluidSpeciesIC( a_species.cell_var_name(n) ) );
+         fsic.assign( a_species.cell_var(n), a_species.configurationSpaceGeometry(), a_time );
+      }
+
+   }
+   
+   // initilize face center variables
+   //
+   for (int n=0; n<a_species.num_face_vars(); ++n) {
+      string this_face_var_comp_name;
+      for(int m=0; m<SpaceDim; ++m) {
+         if(m==0) this_face_var_comp_name = a_species.face_var_name(n)+"_0";
+         if(m==1) this_face_var_comp_name = a_species.face_var_name(n)+"_1";
+         if(m==2) this_face_var_comp_name = a_species.face_var_name(n)+"_2";
+         const GridFunction& fsic( fluidSpeciesIC( this_face_var_comp_name ) );
+         LevelData<FluxBox> this_face_var_comp( a_species.face_var(n).getBoxes(), 1,
+                                                a_species.face_var(n).ghostVect() );
+         fsic.assign( this_face_var_comp, a_species.configurationSpaceGeometry(), a_time );
+         LevelData<FluxBox>& face_var_ref( a_species.face_var(n) );
+         for (DataIterator dit( this_face_var_comp.dataIterator() ); dit.ok(); ++dit) {
+            face_var_ref[dit].copy(this_face_var_comp[dit],m,0,0,1);
+         }
+      }
+   }
+
+   // initilize edge center variables
+   // 
+   for (int n=0; n<a_species.num_edge_vars(); ++n) { // initialize covar on faces from phys on cell
+      string this_edge_var_comp_name;
+      LevelData<FArrayBox> this_edge_var_on_cell( a_species.edge_var(n).getBoxes(), SpaceDim,
+                                                  a_species.edge_var(n).ghostVect() );
+      for(int m=0; m<SpaceDim; ++m) {
+         if(m==0) this_edge_var_comp_name = a_species.edge_var_name(n)+"_0";
+         if(m==1) this_edge_var_comp_name = a_species.edge_var_name(n)+"_1";
+         if(m==2) this_edge_var_comp_name = a_species.edge_var_name(n)+"_2";
+         const GridFunction& fsic( fluidSpeciesIC( this_edge_var_comp_name ) );
+         LevelData<FArrayBox> this_edge_var_on_cell_comp( a_species.edge_var(n).getBoxes(), 1,
+                                                          a_species.edge_var(n).ghostVect() );
+         fsic.assign( this_edge_var_on_cell_comp, a_species.configurationSpaceGeometry(), a_time );
+         for (DataIterator dit( this_edge_var_on_cell_comp.dataIterator() ); dit.ok(); ++dit) {
+            this_edge_var_on_cell[dit].copy(this_edge_var_on_cell_comp[dit],0,m,1);
+         }
+      }
+      const MagGeom& geometry = a_species.configurationSpaceGeometry();
+      geometry.convertPhysToCovar(this_edge_var_on_cell,0);
+      SpaceUtils::interpCellToEdges(a_species.edge_var(n),this_edge_var_on_cell,a_species.edge_var(n),"c2");
+   }
+
+   //cout << "JRA: initial profiles from IdealMhdOp ? " << endl;
+   if ( typeid(a_species) == typeid(FluidSpecies&) ) {
+      (static_cast<FluidSpecies&>(a_species)).convertFromPhysical(); // this just multiplies by Jacobian
+   }
+
+}
 
 #include "NamespaceFooter.H"

@@ -45,7 +45,7 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
      m_enforce_step_floor(false),
      m_max_grid_size(0),
      m_ghostVect(4*IntVect::Unit),
-     //m_ghostVect(2*IntVect::Unit), // JRAgv
+     //m_ghostVect(2*IntVect::Unit),
      m_ti_class("rk"),
      m_ti_method("4"),
      m_gk_ops(NULL),

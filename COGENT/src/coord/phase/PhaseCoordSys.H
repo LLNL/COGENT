@@ -59,6 +59,9 @@ public:
 
    virtual bool isType( const std::string& name ) const = 0;
 
+   virtual bool containsPhysicalBoundary( int                    block_number,
+                                          int                    dir,
+                                          const Side::LoHiSide&  side ) const;
 protected:
 
    const RefCountedPtr<CFG::MagCoordSys> m_mag_coords;

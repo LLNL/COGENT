@@ -1,5 +1,5 @@
-#ifndef  _IDEALMHDOP_H_
-#define  _IDEALMHDOP_H_
+#ifndef  _FULLFLUIDOP_H_
+#define  _FULLFLUIDOP_H_
 
 #include "FluidOpInterface.H"
 #include "FluidVarBC.H"
@@ -11,33 +11,21 @@
 #include "NamespaceHeader.H"
 
 /**
- * multi-dim ideal MHD equation operator class.
+ * multi-dim fluid equations operator class.
  *
  * d(rho)/dt + div(mom) = 0
- * d(mom)/dt + div(mom*u + IP + pi) = JxB
- * d(ene)/dt + div((ene+P)*u + u*pi) = JdotE
- * dB/dt     + cur(E) = 0
+ * d(mom)/dt + div(u*mom) = - grad(P) + q * n * E
+ * d(ene)/dt + div(u*(ene+P)) = q*n*u*E
  *
  * rho = M*n, M is mass n is density
- * mom_x = rho*ux
- * mom_y = rho*uy
- * mom_z = rho*uz
- * ene = 0.5*rho*u^2 + P/(g-1)
- * g = 1+2/degFree is adiabatic coefficient
+ * mom_x = ux*rho
+ * mom_y = uy*rho
+ * mom_z = uz*rho
+ * ene = 0.5*n*M*u^2 + P/(g-1)
  *
- * mu0*J = curl(B)
- * E = uxB
- *
- * pi is viscosity tensor
- * pi = -eta*W (W is rate of strain tensor)
- * W = grad(u) + grad(u)^T - 2/3I*div(u)
- *
- * using Braginskii convention for tensors
- * divpi_j = d(pi_jk)/dx_k
- * u*pi_k = u_j*pi_jk
  *
 */
-class IdealMhdOp
+class FullFluidOp
    : public FluidOpInterface
 {
 public:
@@ -46,15 +34,15 @@ public:
   /**
    *  @param[in] pp the input database.
    */
-  IdealMhdOp( const string&   pp_str,
-             const string&   species_name,
-             const MagGeom&  geometry,
-             const int       verbosity );
+  FullFluidOp(const string&   pp_str,
+              const string&   species_name,
+              const MagGeom&  geometry,
+              const int       verbosity );
 
   /// Destructor.
   /**
    */
-  virtual ~IdealMhdOp();
+  virtual ~FullFluidOp();
 
    /// Evaluates the RHS.
    /**
@@ -123,10 +111,6 @@ public:
    {
       return new FluidSpecies(a_pp_prefix, a_name, a_geometry, a_ghost_vect);
    }
-   
-   virtual void initialize( CFGVars&      a_species,
-                            const double  a_time );
-
 
    virtual void fillGhostCells( FluidSpecies&  species_phys,
                                 const double   time );
@@ -135,11 +119,8 @@ public:
    /**
     * Computes and returns an estimate of the maximum stable time step.
     */
-   Real computeDtExplicitTI( const FluidSpeciesPtrVect&  fluid_species );
-   Real computeDtImExTI( const FluidSpeciesPtrVect&  fluid_species );
-   
-   Real computeDtMhd( const FluidSpeciesPtrVect&  fluid_species );
-   
+   //Real computeDtExplicitTI( const FluidSpeciesPtrVect&  fluid_species );
+  
    
    static const char* pp_name;
 
@@ -148,61 +129,34 @@ private:
    int m_verbosity;
    double m_courant_time_step;
    const MagGeom& m_geometry;
-   int m_implicitMhd, m_implicitViscosity;
+   int m_is_time_implicit;
    std::string m_advScheme;
    std::string m_species_name;
 
    std::string m_opt_string;
    int m_my_pc_idx;
       
-   // allocate contains for metric stuff to transform from phys to mapped
+   // Allocate containers for metric stuff to transform from phys to mapped
    // (eventually these will be removed as function are moved to magGeom.cp)
    LevelData<FArrayBox> m_Jacobian;
-   LevelData<FArrayBox> m_dXdxi;
-   LevelData<FArrayBox> m_dxidX;
    LevelData<FArrayBox> m_Nmatrix;
-   LevelData<FArrayBox> m_Xphys;
+   LevelData<FArrayBox> m_X_phys;
    LevelData<FArrayBox> m_g_y; // used only when solving virtual B
    LevelData<FArrayBox> m_cellVol;
    bool m_twoDaxisymm;
    
-   // allocate containers for species fluid variables
-   //
-   LevelData<FArrayBox> m_Jrho_PC;
-   LevelData<FArrayBox> m_shift_PC;
-   double m_alpha_PC;
-   LevelData<FluxBox> m_ellip_coeff, m_ellip_coeff_mapped;
-   
+   // Allocate containers for species fluid variables
    LevelData<FArrayBox> m_rhoDen_cc;
    LevelData<FArrayBox> m_momDen_cc;
    LevelData<FArrayBox> m_eneDen_cc;
    LevelData<FArrayBox> m_momDen_virtual_cc;
-   LevelData<FArrayBox> m_magField_virtual_cc;
    
-   // allocate containers for derived variables
-   //
+   // Allocate containers for derived variables
    LevelData<FArrayBox> m_pressure;
-   LevelData<FArrayBox> m_Bpressure;
    LevelData<FArrayBox> m_velocity;
-   LevelData<FluxBox> m_velocity_cf;
    LevelData<FArrayBox> m_velocity_virtual;
    
-   // allocate containers for viscosity tensor
-   //
-   double m_tauMax;
-   LevelData<FArrayBox> m_etaVisc;
-   LevelData<FArrayBox> m_momVisc_source;
-   LevelData<FluxBox> m_etaVisc_cf;
-   LevelData<FluxBox> m_m0JaFluxVisc_cf;
-   LevelData<FluxBox> m_m1JaFluxVisc_cf;
-   LevelData<FluxBox> m_enJaFluxVisc_cf;
-   LevelData<FluxBox> m_m0JaFluxVisc_norm;
-   LevelData<FluxBox> m_m1JaFluxVisc_norm;
-   LevelData<FluxBox> m_momJaFluxVisc_norm;
-   LevelData<FluxBox> m_enJaFluxVisc_norm;
-
-   // allocate containers for fluid variable fluxes at cell center
-   //
+   // Allocate containers for fluid variable fluxes at cell center
    LevelData<FArrayBox> m_rhoFlux_cc;
    LevelData<FArrayBox> m_mxFlux_cc;
    LevelData<FArrayBox> m_myFlux_cc;
@@ -210,14 +164,12 @@ private:
    LevelData<FArrayBox> m_enFlux_cc;
    LevelData<FArrayBox> m_mvFlux_cc;
    
-   // allocate containers for Cspeed
-   //
+   // Allocate containers for Cspeed
    LevelData<FArrayBox>  m_Cspeed_cc;
    LevelData<FluxBox> m_CspeedL_norm;
    LevelData<FluxBox> m_CspeedR_norm;
    
-   // allocate containers for normal fluxes on faces
-   //
+   // Allocate containers for normal fluxes on faces
    LevelData<FluxBox> m_rhoFlux_norm;
    LevelData<FluxBox> m_mxFlux_norm;
    LevelData<FluxBox> m_myFlux_norm;
@@ -228,30 +180,14 @@ private:
    LevelData<FArrayBox> m_div_IdentFlux_R;
    LevelData<FArrayBox> m_div_IdentFlux_Z;
    
-   // allocate containers for magnetic field stuff
-   //
-   //LevelData<NodeFArrayBox> virtualEleField;
-   LevelData<EdgeDataBox>  m_E0_ce;
-   LevelData<EdgeDataBox>  m_J0_ce;
-   LevelData<FArrayBox>  m_J0_cc;
-   LevelData<FArrayBox>  m_E0_cc;
-   LevelData<FArrayBox>  m_curlE0;
-   LevelData<FArrayBox>  m_By_contr_cc;
-   LevelData<FArrayBox>  m_By_covar_cc;
-   LevelData<FArrayBox>  m_JJdotE; // Jacobian*J\cdotE
-   LevelData<FArrayBox>  m_JJcrossB; // Jacobian*J\timesB
-   
-   // allocate containers for stuff used to enforce flux BCs
-   //
+   // Allocate containers for stuff used to enforce flux BCs
    LevelData<FluxBox> m_rhoFlux_ce;
    LevelData<FluxBox> m_mxFlux_ce;
    LevelData<FluxBox> m_myFlux_ce;
    LevelData<FluxBox> m_mzFlux_ce;
    LevelData<FluxBox> m_enFlux_ce;
    LevelData<FluxBox> m_mvFlux_ce;
-   //
-   LevelData<EdgeDataBox> m_EdgeBC_zeros;
-   LevelData<FluxBox> m_FluxBC_zeros;
+
    LevelData<FluxBox> m_rhoFluxBC_norm;
    LevelData<FluxBox> m_mxFluxBC_norm;
    LevelData<FluxBox> m_myFluxBC_norm;
@@ -259,9 +195,6 @@ private:
    LevelData<FluxBox> m_enFluxBC_norm;
    LevelData<FluxBox> m_mvFluxBC_norm;
    LevelData<FluxBox> m_momFluxBC_norm;
-   //
-   LevelData<FArrayBox> m_dummyDiv;
-   LevelData<FArrayBox> m_dummyDiv_mom;
 
    /// Parse parameters.
    /**
@@ -279,56 +212,38 @@ private:
     */
    void printParameters();
    
-   Diffusion*        m_diffusionOp_mom0;
-   Diffusion*        m_diffusionOp_mom1; 
-   EllipticOpBC*     m_bc_mom0;
-   EllipticOpBC*     m_bc_mom1;
-   //FluidVarBC*       m_fluid_variable_bc;
+   Diffusion*        m_diffusion_op;
+   EllipticOpBC*     m_bc;
    std::vector<FluidVarBC*>  m_fluid_bc;
   
-   RefCountedPtr<GridFunction> m_D_rad;
-   RefCountedPtr<GridFunction> m_D_par;
-   RefCountedPtr<GridFunction> m_D_perp;
-   RefCountedPtr<GridFunction> m_electron_dens;
-   RefCountedPtr<GridFunction> m_electron_temp;
+   virtual void accumulateRHS(FluidSpeciesPtrVect&               rhs,
+                              const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
+                              const FluidSpeciesPtrVect&         fluid_species,
+                              const PS::ScalarPtrVect&           scalars,
+                              const EField&                      E_field,
+                              const int                          component,
+                              const Real                         time);
+   
+   
+   void convertPhysFluxToMappedFlux(LevelData<FArrayBox>&       a_mapped_flux,
+                                    const LevelData<FArrayBox>& a_physical_flux,
+                                    const LevelData<FArrayBox>& a_N) const;
+   
+   void convertPhysFluxToMappedFlux(FArrayBox&       a_mapped_flux,
+                                    const FArrayBox& a_physical_flux,
+                                    const FArrayBox& a_N) const;
 
-   void accumulateMhdRHS( FluidSpecies&  a_rhs_fluid,
-                    const FluidSpecies&  a_soln_fluid,
-                    const Real           a_time );
+   void computeNTFfaceArea(LevelData<FluxBox>&          a_Flux_norm,
+                           const LevelData<FArrayBox>&  a_Flux_cc_mapped,
+                           const LevelData<FArrayBox>&  a_Jf_cc,
+                           const LevelData<FArrayBox>&  a_Cspeed_cc,
+                           const LevelData<FluxBox>&    a_CspeedR_norm,
+                           const LevelData<FluxBox>&    a_CspeedL_norm ) const;
    
-   void accumulateViscRHS( FluidSpecies&  a_rhs_fluid,
-                     const FluidSpecies&  a_soln_fluid,
-                     const int            a_accumulateMom,
-                     const int            a_accumulateEne );
-   
-   void computeDiffusionCoefficients( LevelData<FluxBox>&  a_ellip_coeff,
-                                      LevelData<FluxBox>&  a_ellip_coeff_mapped,
-                                const LevelData<FluxBox>&  a_D_fc,
-                                const Real                 a_time) const;
-   
-   void inspectEdgeDataBox(const LevelData<EdgeDataBox>& a_Edge,
-                           const int                 a_dir) const;
-   
-   
-   void convertPhysFluxToMappedFlux(LevelData<FArrayBox>& a_mapped_flux,
-                              const LevelData<FArrayBox>& a_physical_flux,
-                              const LevelData<FArrayBox>& a_N) const;
-   
-   void convertPhysFluxToMappedFlux( FArrayBox& a_mapped_flux,
-                               const FArrayBox& a_physical_flux,
-                               const FArrayBox& a_N) const;
-
-   void computeNTFfaceArea( LevelData<FluxBox>&    a_Flux_norm,
-                      const LevelData<FArrayBox>&  a_Flux_cc_mapped,
-                      const LevelData<FArrayBox>&  a_Jf_cc,
-                      const LevelData<FArrayBox>&  a_Cspeed_cc,
-                      const LevelData<FluxBox>&    a_CspeedR_norm,
-                      const LevelData<FluxBox>&    a_CspeedL_norm ) const;
-   
-   void computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
-                        const LevelData<FArrayBox>&    a_V_phys_cc,
-                        const LevelData<FArrayBox>&    a_B_contr_cc,
-                        const LevelData<FArrayBox>&    a_Cspeed_cc ) const;
+   void computeIdealEatEdges(LevelData<EdgeDataBox>&        a_Edge_covar,
+                             const LevelData<FArrayBox>&    a_V_phys_cc,
+                             const LevelData<FArrayBox>&    a_B_contr_cc,
+                             const LevelData<FArrayBox>&    a_Cspeed_cc ) const;
    
    void setCourantTimeStep(const LevelData<FArrayBox>& a_Cspeed);
 
@@ -347,26 +262,26 @@ private:
                   const FluidSpecies&  a_soln_fluid,
                   const Real           a_time );
    
-   void setViscosityCoefficient( LevelData<FArrayBox>&  a_etaVisc,
-                                 LevelData<FluxBox>&    a_etaVisc_cf,
-                           const FluidSpecies&          a_soln_fluid ); 
+   void updateRHSs(FluidSpecies&                  a_rhs_fluid,
+                   const FluidSpecies&            a_soln_fluid,
+                   const LevelData<FArrayBox>&    a_E_field,
+                   const Real&                    a_mass,
+                   const Real&                    a_charge );
    
-   void computeViscosityEnergyFlux( LevelData<FluxBox>&  a_UJaPi_Flux_phys,
-                              const LevelData<FluxBox>&  a_JaPix_Flux_phys,
-                              const LevelData<FluxBox>&  a_JaPiy_Flux_phys,
-                              const LevelData<FluxBox>&  a_velocity_phys );
+   void accumulateMomDensitySources(FArrayBox& a_rhs,
+                                    const FArrayBox& a_E_field,
+                                    const FArrayBox& a_rhoDen,
+                                    const FArrayBox& a_J,
+                                    const Real& a_mass,
+                                    const Real& a_charge) const;
    
-   void computeViscSourceAxisymm( LevelData<FArrayBox>&  a_Wthth,
-                            const LevelData<FArrayBox>&  a_velocity_phys,
-                            const LevelData<FluxBox>&    a_velocity_phys_cf );
-   
-   void updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
-                   const FluidSpecies&  a_soln_fluid,
-                   const int            a_accumulateMom,
-                   const int            a_accumulateEne );
-
-   void updateRHSs( FluidSpecies&  a_rhs_fluid,
-              const FluidSpecies&  a_soln_fluid );
+   void accumulateEnergyDensitySources(FArrayBox& a_rhs,
+                                       const FArrayBox& a_E_field,
+                                       const FArrayBox& a_rhoDen,
+                                       const FArrayBox& a_velocity,
+                                       const FArrayBox& a_J,
+                                       const Real& a_mass,
+                                       const Real& a_charge) const;
    
    void setCspeed( const LevelData<FArrayBox>&  a_density,
                    const double                 a_gamma );

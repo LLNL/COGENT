@@ -24,7 +24,6 @@
 // #endif is at bottom of file.
 
 #include "SPACE.H"
-#include "ShapeArray.H"
 #if CH_SPACEDIM > 3
 #include "BoxIterator.H"
 #endif
@@ -32,11 +31,6 @@
 #ifdef DOXYGEN
 #define CH_SPACEDIM  1
 #endif
-
-//--Forward declarations
-
-template <typename T>
-class BaseFab;
 
 //
 // CH_MULTIDIM stuff
@@ -2081,22 +2075,6 @@ class BaseFab;
  * MULTIDIMENSIONAL ARRAY MACROS
  *
  ******************************************************************************/
-
-#if CXXSTD>=14
-template <typename T>
-inline auto make_MD_array(BaseFab<T>& a_fab) noexcept
-{
-  return shape::ShapeArray<T, SpaceDim + 1, int>(
-    a_fab.dataPtr() + a_fab.box().index(IntVect::Zero), a_fab.box().size());
-}
-
-template <typename T>
-inline auto make_MD_array(const BaseFab<T>& a_fab) noexcept
-{
-  return shape::ShapeArray<const T, SpaceDim + 1, int>(
-    a_fab.dataPtr() + a_fab.box().index(IntVect::Zero), a_fab.box().size());
-}
-#endif
 
 /*--------------------------------------------------------------------*
  *  Macro to declare a multidimensional index (used in callee)

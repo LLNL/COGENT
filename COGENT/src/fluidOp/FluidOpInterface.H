@@ -144,18 +144,19 @@ class FluidOpInterface
                                             const MagGeom&      geometry,
                                             const IntVect&      ghost_vect ) const = 0;
 
-      virtual void initialize( CFGVars&       a_species,
-                               Real           a_time )
+      virtual void initialize( CFGVars&    a_species,
+                               const Real  a_time )
       {
+         CH_TIME("FluidOpInterface::initialize()");
          for (int n=0; n<a_species.num_cell_vars(); ++n) {
             
             const int num_comps = a_species.cell_var(n).nComp();
             if (num_comps>1) {
                string this_cell_var_comp_name;
                for (int m=0; m<num_comps; m++) {
-                  if(m==0) this_cell_var_comp_name = a_species.cell_var_name(n)+"_x";
-                  if(m==1) this_cell_var_comp_name = a_species.cell_var_name(n)+"_y";
-                  if(m==2) this_cell_var_comp_name = a_species.cell_var_name(n)+"_z";
+                  if(m==0) this_cell_var_comp_name = a_species.cell_var_name(n)+"_0";
+                  if(m==1) this_cell_var_comp_name = a_species.cell_var_name(n)+"_1";
+                  if(m==2) this_cell_var_comp_name = a_species.cell_var_name(n)+"_2";
                   const GridFunction& fsic( fluidSpeciesIC( this_cell_var_comp_name ) );
                   LevelData<FArrayBox> this_cell_var_comp( a_species.cell_var(n).getBoxes(), 1, 
                                                            a_species.cell_var(n).ghostVect() );

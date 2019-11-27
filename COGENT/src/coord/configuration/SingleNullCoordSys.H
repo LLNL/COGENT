@@ -85,6 +85,10 @@ public:
    
    virtual std::string type() const { return "SingleNull"; }
 
+   virtual bool containsPhysicalBoundary( int                    block_number,
+                                          int                    dir,
+                                          const Side::LoHiSide&  side ) const;
+
 #if CFG_DIM==3
    virtual void toroidalBlockRemapping( IntVect&               ivDst,
                                         int&                   nDst,

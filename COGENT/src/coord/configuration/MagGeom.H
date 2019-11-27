@@ -34,31 +34,58 @@ public:
 
   /*@}*/
 
-   void initializeMetricMembers( const DisjointBoxLayout& a_grids,
-                                 const IntVect&           a_ghostVect ) const;
-
    void getMetricTerms( LevelData<FluxBox>& N,
                         LevelData<FluxBox>& tanGradN ) const;
 
    void getMetricTerms( LevelData<FluxBox>& N) const;
    
+   void setMetricTerms( const DisjointBoxLayout&, 
+                        const IntVect&           ) const;
+   
    void getCellVolumes( LevelData<FArrayBox>& volume ) const;
+   
+   void setCellVolumes( const DisjointBoxLayout&, 
+                        const IntVect&           ) const;
 
    void getJ( LevelData<FArrayBox>& J ) const;
+   
+   void setJ( const DisjointBoxLayout&, 
+              const IntVect&           ) const;
 
    void getJ( LevelData<FluxBox>& J ) const;
    
+   void setJonFaces( const DisjointBoxLayout&, 
+                     const IntVect&           ) const;
+   
    void getJ( LevelData<EdgeDataBox>& J ) const;
+   
+   void setJonEdges( const DisjointBoxLayout&, 
+                     const IntVect&           ) const;
    
    void getN( LevelData<FArrayBox>& N ) const;
    
+   void setN( const DisjointBoxLayout&, 
+              const IntVect&           ) const;
+   
    void getdXdxi( LevelData<FArrayBox>& dXdxi ) const;
+   
+   void setdXdxiOnCells( const DisjointBoxLayout&, 
+                         const IntVect&           ) const;
    
    void getdXdxi( LevelData<FluxBox>& dXdxi ) const;
    
+   void setdXdxiOnFaces( const DisjointBoxLayout&, 
+                         const IntVect&           ) const;
+   
    void getdXdxi( LevelData<EdgeDataBox>& dXdxi ) const;
    
+   void setdXdxiOnEdges( const DisjointBoxLayout&, 
+                         const IntVect&           ) const;
+   
    void getXphys( LevelData<FArrayBox>& Xphys ) const;
+   
+   void setXphys( const DisjointBoxLayout&, 
+                  const IntVect&           ) const;
 
    void getPointwisePoloidalJ( LevelData<FArrayBox>& a_data ) const;
 
@@ -66,7 +93,13 @@ public:
 
    void getPointwiseNJInverse( LevelData<FluxBox>& NJinverse ) const;
    
+   void setPointwiseNJInverseOnFaces( const DisjointBoxLayout&, 
+                                      const IntVect&           ) const;
+   
    void getPointwiseNJInverse( LevelData<FArrayBox>& NJinverse ) const;
+   
+   void setPointwiseNJInverseOnCells( const DisjointBoxLayout&, 
+                                      const IntVect&           ) const;
 
    void multJonValid( LevelData<FArrayBox>& dfn ) const;
    
@@ -92,6 +125,10 @@ public:
    void computeMetricTermProductAverage( LevelData<FluxBox>&       product,
                                          const LevelData<FluxBox>& data,
                                          const bool                fourthOrder ) const;
+   
+   void computedxidXProductAverage( LevelData<FluxBox>&  product,
+                              const LevelData<FluxBox>&  data,
+                              const bool                 fourthOrder ) const;
 
    void computeMappedGridDivergence( const LevelData<FluxBox>& F,
                                      LevelData<FArrayBox>&     divergence,
@@ -124,7 +161,11 @@ public:
    
    void convertContravarToCovar( LevelData<EdgeDataBox>&  a_F,
                            const int                      a_inverse) const;
-
+   
+   void computeJaPhysStrainFlux( LevelData<FluxBox>&    a_JaW0_Flux_phys, 
+                                 LevelData<FluxBox>&    a_JaW1_Flux_phys,
+                           const LevelData<FArrayBox>&  a_velocity_phys ) const;
+   
    // Project the vector from phys directions to unit normal
    // coord sys with 0-component normal to the a_dir direction 
    // (or inverse)
@@ -223,6 +264,16 @@ public:
    
    void exchangeExtraBlockGhosts( LevelData<FArrayBox>& data ) const;
 
+   void exchangeExtraBlockGhosts( LevelData<FArrayBox>& data, const int codim, const IntVect& include_dir ) const;
+
+   void getExtrablockExchangeLayout( const int                 codim,
+                                     const DisjointBoxLayout&  grids,
+                                     const IntVect&            ghost_vect,
+                                     const IntVect&            include_dir,
+                                     BoxLayout&                ghosts_layout,
+                                     LayoutData<DataIndex>&    index_map,
+                                     LayoutData<IntVect>&      shift_map ) const;
+  
    void fillTransversePhysicalGhosts( LevelData<FArrayBox>& data ) const;
 
    void fillTransversePhysicalGhosts( LevelData<FluxBox>& data ) const;
@@ -322,6 +373,10 @@ public:
    void computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& phi,
                                                 LevelData<FluxBox>&          field,
                                                 const int                    order ) const;
+   
+   void computeMappedGradient( const LevelData<FArrayBox>&  phi,
+                                     LevelData<FluxBox>&    field,
+                               const int                    order ) const;
 
    bool shearedMBGeom() const {return m_sheared_mb_geom;}
   
@@ -336,8 +391,11 @@ public:
    const LevelData<FArrayBox>& getShearedInterpStencil() const {return m_sheared_interp_stencil;}
    const LevelData<FArrayBox>& getShearedInterpStencilOffsets() const {return m_sheared_interp_stencil_offsets;}
    void interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const;
+   Vector<Box> getToroidalBoundaryBoxes( const int block_number, const Side::LoHiSide& side ) const;
    
 #endif
+
+   Vector<Box> getBoundaryBoxes( const int block_number, const int dir, const Side::LoHiSide& side ) const;
 
    bool providesFlux() const {return m_coord_sys->providesFlux();}
    
@@ -449,7 +507,7 @@ private:
 
    MultiBlockLevelExchangeAverage* m_mblexPtr;
    BlockRegister* m_exchange_transverse_block_register;
-
+   
    LevelData<FArrayBox> m_BField_cc;
    LevelData<FArrayBox> m_BFieldMag_cc;
    LevelData<FArrayBox> m_BFieldDir_cc;
@@ -486,6 +544,8 @@ private:
    bool m_dealignment_corrections;
    bool m_model_flux_function; 
    bool m_second_order;
+   
+   //Copier m_exchangeCopier2nd;
 
    const string m_pp_prefix;
   

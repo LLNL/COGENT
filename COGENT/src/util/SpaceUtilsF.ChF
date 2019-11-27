@@ -1351,3 +1351,82 @@ c     local variables
 
       return
       end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    EASY WAY TO LOOK AT WHAT IS IN FARRAYBOX
+
+      subroutine inspect_farraybox(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[FA0],
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision F00
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+        F00  = FA0(CHF_AUTOIX[i]) 
+c        print*, "shape(F0)   = ", shape(F0)
+        print*, "CHF_AUTOIX[i]    = ", CHF_AUTOIX[i]
+        print*, "F00    = ", F00
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    EASY WAY TO LOOK AT WHAT IS IN FLUXBOX / EDGEBOX
+
+      subroutine inspect_fluxbox(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[Flux],
+     &     CHF_CONST_INT[dir]
+     &     )
+
+c     local variables
+      integer n, CHF_AUTODECL[i]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      double precision F00, F01, F10, F11, F2, F3
+      integer n0, n1
+c      integer, dimension (3) :: shapeF
+
+      CHF_DTERM[
+      ii = CHF_ID(dir, 0);
+      jj = CHF_ID(dir, 1);
+      kk = CHF_ID(dir, 2);
+      ll = CHF_ID(dir, 3);
+      mm = CHF_ID(dir, 4)]
+
+c      shapeF = shape(Flux)
+c      print*, "shape(Flux)  = ", shapeF
+
+      do n=0, (CHF_NCOMP[Flux]-1)
+        print*, "component    = ", n
+c         do j=0, (shapeF(2)-1) 
+c            do i=0, (shapeF(1)-1)
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+c        print*, "component    = ", n
+c        shapeF = reshape(shapeF,shape(Flux))
+c        print*, "shapeF(dir+1)  = ", shapeF(dir+1)
+        print*, "CHF_AUTOIX[i]  = ", CHF_AUTOIX[i]
+        print*, "Flux    = ", Flux(CHF_AUTOIX[i],n)
+c        print*, "Flux    = ", Flux(CHF_IX[ii;jj;kk],n)
+
+      CHF_ENDDO
+c            enddo
+c         enddo
+      enddo
+  
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+
+
