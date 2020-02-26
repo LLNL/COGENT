@@ -50,8 +50,8 @@ GKVlasov::GKVlasov( ParmParse&                      a_pp,
                     const Real                      a_larmor_number )
   : m_larmor_number(a_larmor_number),
     m_face_avg_type(INVALID),
-    m_first_call(true),
-    m_dt_dim_factor(1.0)
+    m_dt_dim_factor(1.0),
+    m_first_call(true)
 {
    if (a_pp.contains("limiter")) {
       if ( procID()==0 ) MayDay::Warning("GKVlasov: Use of input flag 'limiter' deprecated");
@@ -536,6 +536,8 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
                    const int                              a_velocity_option,
                    const Real                             a_time )
 {
+   CH_TIME("GKVlasov::evalRHS");
+   
    /*
      Evaluates the (negated) phase space divergence:
         rhs = - divergence_R ( R_dot soln ) - divergence_v ( v_dot soln )
@@ -546,57 +548,71 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
    const PhaseGeom& geometry( a_rhs_species.phaseSpaceGeometry() );
    const CFG::MagGeom& mag_geom = geometry.magGeom();
    
-   LevelData<FArrayBox> dfn_no_bstar(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
+   if ( !m_dfn_no_bstar.isDefined()) {
+     m_dfn_no_bstar.define( dbl, soln_dfn.nComp(), soln_dfn.ghostVect() );
+   }
    for (DataIterator dit(dbl); dit.ok(); ++dit) {
-      dfn_no_bstar[dit].copy(soln_dfn[dit]);
+      m_dfn_no_bstar[dit].copy(soln_dfn[dit]);
    }
-   geometry.divideBStarParallel(dfn_no_bstar);
-
-   LevelData<FluxBox> flux_normal( dbl, 1, IntVect::Unit );
-   LevelData<FluxBox> velocity_normal( dbl, 1, IntVect::Unit );
+   geometry.divideBStarParallel(m_dfn_no_bstar);
    
-   // Compute normal flux
-   if (!m_subtract_maxwellian) {
-      a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, a_velocity_option );
-      computeFluxNormal( dfn_no_bstar, velocity_normal, flux_normal, geometry );
-   }
-   else {
+   IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
 
-      LevelData<FArrayBox> maxwellian_dfn(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
-      LevelData<FArrayBox> delta_dfn(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
-      computeDeltaF(a_soln_species, dfn_no_bstar, delta_dfn, maxwellian_dfn);
+   if ( !m_velocity_normal.isDefined()) {
+     m_velocity_normal.define( dbl, SpaceDim, ghostVect );
+   }
+   
+   a_soln_species.computeMappedVelocityNormals( m_velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, a_velocity_option );
+   
+   if ( !m_flux_normal.isDefined()) {
+     m_flux_normal.define( dbl, SpaceDim, ghostVect );
+   }
+
+   // Compute normals of Vlasov_flux[dfn]
+   if (!m_subtract_maxwellian) {
+      computeFluxNormal( m_dfn_no_bstar, m_velocity_normal, m_flux_normal, geometry );
+   }
+
+   // Compute normals of Vlasov_flux[dfn-F0] + Vlasov_flux_high_order[F0]
+   else {
       
-      LevelData<FluxBox> flux_tmp( dbl, 1, IntVect::Unit );
-      a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, a_velocity_option );
-      computeFluxNormal( delta_dfn, velocity_normal, flux_tmp, geometry );
+      if (!m_maxwellian_dfn.isDefined()) {
+        m_maxwellian_dfn.define(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
+      }
+      if (!m_delta_dfn.isDefined()) {
+         m_delta_dfn.define(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
+      }
+      
+      computeDeltaF(a_soln_species, m_dfn_no_bstar, m_delta_dfn, m_maxwellian_dfn);
+      
+      if (!m_delta_flux.isDefined()) {
+         m_delta_flux.define( dbl, 1, ghostVect );
+      }
  
-      a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield,
+      computeFluxNormal( m_delta_dfn, m_velocity_normal, m_delta_flux, geometry );
+ 
+      a_soln_species.computeMappedVelocityNormals( m_velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield,
                                                    PhaseGeom::NO_ZERO_ORDER_TERMS );
 
-      if (!m_update_maxwellian) {
-	computeFluxNormal( m_F0, velocity_normal, flux_normal, geometry);
-      }
-      else {
-	computeFluxNormal( maxwellian_dfn, velocity_normal, flux_normal, geometry);
-      }
-
+      computeFluxNormal( m_maxwellian_dfn, m_velocity_normal, m_flux_normal, geometry);
+      
       for (DataIterator dit(dbl); dit.ok(); ++dit) {
-         flux_normal[dit] += flux_tmp[dit];
+         m_flux_normal[dit] += m_delta_flux[dit];
       }
 
    }
 
    // Enforce conservation
    if (!mag_geom.extrablockExchange()) {
-      geometry.averageAtBlockBoundaries(flux_normal);
+      geometry.averageAtBlockBoundaries(m_flux_normal);
    }
    
    LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
-   geometry.mappedGridDivergenceFromIntegratedFluxNormals( rhs_dfn, flux_normal );
+   geometry.mappedGridDivergenceFromIntegratedFluxNormals( rhs_dfn, m_flux_normal );
 
 #ifdef TEST_ZERO_DIVERGENCE
    LevelData<FArrayBox> velocity_divergence(dbl, 1, IntVect::Zero);
-   geometry.mappedGridDivergenceFromIntegratedFluxNormals( velocity_divergence, velocity_normal );
+   geometry.mappedGridDivergenceFromIntegratedFluxNormals( velocity_divergence, m_velocity_normal );
 #endif
 
    // Divide by cell volume and negate
@@ -859,7 +875,7 @@ GKVlasov::computeDtExplicitTI( const CFG::EField&            a_E_field,
          if ( !m_velocity.isDefined()) {
             m_velocity.define( dfn.getBoxes(), SpaceDim, ghostVect );
          }
-         species.computeMappedVelocity( m_velocity, injected_E_field, a_time );
+         species.computeMappedVelocity( m_velocity, injected_E_field, true, a_time );
 
          const Real UNIT_CFL(1.0);
          Real speciesDt( computeMappedDtSpecies( m_velocity, geometry, UNIT_CFL ) );
@@ -937,7 +953,7 @@ GKVlasov::computeDtImExTI( const CFG::EField&            a_E_field,
            if ( !m_velocity.isDefined()) {
              m_velocity.define( dfn.getBoxes(), SpaceDim, ghostVect );
            }
-           species.computeMappedVelocity( m_velocity, injected_E_field, a_time );
+           species.computeMappedVelocity( m_velocity, injected_E_field, true, a_time );
             
            const Real UNIT_CFL(1.0);
            Real speciesDt( computeMappedDtSpecies( m_velocity, geometry, UNIT_CFL ) );
@@ -997,7 +1013,7 @@ GKVlasov::computeTimeScale( const CFG::EField&           a_E_field,
          if ( !m_velocity.isDefined()) {
             m_velocity.define( dfn.getBoxes(), SpaceDim, ghostVect );
          }
-         species.computeMappedVelocity( m_velocity, injected_E_field, a_time );
+         species.computeMappedVelocity( m_velocity, injected_E_field, true, a_time );
          
          //      const Real UNIT_CFL(1.0);
          Real speciesDt( computeMappedTimeScaleSpecies( m_velocity, geometry) );

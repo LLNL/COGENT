@@ -100,9 +100,6 @@ c     local variables
          B(1) = RBtor / R
          B(2) = RB(CHF_IX[i;j;k],1) / R
 
-         B(0) = zero
-         B(2) = zero
-
          Bmagnitude = zero
          do n = 0, 2
             Bmagnitude = Bmagnitude + B(n)**2

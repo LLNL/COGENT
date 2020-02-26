@@ -30,12 +30,17 @@ class BlockMapping
    void getArcLengthMapping(Vector<RealVect*> & mapping,
                             double& block_length, const int block_id) const;
 
-   Vector<Real> getMagFieldData(const RealVect& a_physical_coordinate ) const;
+   Vector<Real> getMagFieldData(const RealVect& physical_coordinate ) const;
    
-   double getMagneticFluxFromDCT(const RealVect& a_physical_coordinate ) const;
+   double getMagneticFluxFromDCT(const RealVect& physical_coordinate ) const;
 
-   RealVect findCriticalPoint(const RealVect& a_init_guess,
-                              const double    a_init_step) const;
+   RealVect findCriticalPoint(const RealVect& init_guess,
+                              const double    init_step) const;
+   
+   void getMinimalCellSize(Real&             size,
+                           RealVect&         location,
+                           const FArrayBox&  coords,
+                           const int         dir) const;
    
    int m_block_number;
    RealVect m_Xpoint, m_magAxis;
@@ -61,6 +66,8 @@ class BlockMapping
   
    void getNormFluxCoordinates(FArrayBox&       flux_coords) const;
    
+   double getPoloidalArcLength(const int       pol_index,
+                               const string&   option) const;
    
    void getRadialGridLine(FArrayBox& radialGridLine,
                           const Vector<RealVect*> & mapping,
@@ -68,6 +75,10 @@ class BlockMapping
    
    void extrapolateGrid(FArrayBox& physical_coordinates, const Box& box_extrp) const;
 
+   void radialRayTracing( RealVect&       X,
+                          const double    psi_norm,
+                          const double    arc_length,
+                          const RealVect& cut_dir) const;
    
    void pushToFluxSurface(RealVect& X, const double psi_norm) const;
    

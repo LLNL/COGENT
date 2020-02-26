@@ -44,12 +44,11 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
      m_enforce_step_positivity(false),
      m_enforce_step_floor(false),
      m_max_grid_size(0),
-     m_ghostVect(4*IntVect::Unit),
-     //m_ghostVect(2*IntVect::Unit),
+     m_kinetic_ghosts(4),
+     m_fluid_ghosts(4),
      m_ti_class("rk"),
      m_ti_method("4"),
      m_gk_ops(NULL),
-     m_state_comp( GKState(m_ghostVect) ),
      m_hdf_potential(false),
      m_hdf_potential_non_zonal(false),
      m_hdf_efield(false),
@@ -238,6 +237,7 @@ VEL::ProblemDomain GKSystem::getVelocityDomain() const
 
 void GKSystem::createConfigurationSpace()
 {
+  CH_TIME("GKSystem::createConfigurationSpace");
   string mag_geom_prefix = string("gksystem.magnetic_geometry_mapping");
 
   if ( m_mag_geom_type == "SingleNull" ) {
@@ -288,11 +288,7 @@ void GKSystem::createConfigurationSpace()
 
   ParmParse pp_mag_geom( mag_geom_prefix.c_str() );
 
-  int ghosts = 0;
-  for (int n=0; n<CFG_DIM; ++n) {
-    if (m_ghostVect[n] > ghosts) ghosts = m_ghostVect[n];
-  }
-
+  int ghosts = (m_kinetic_ghosts > m_fluid_ghosts) ? m_kinetic_ghosts : m_fluid_ghosts;
   m_mag_geom = RefCountedPtr<CFG::MagGeom>(new CFG::MagGeom(pp_mag_geom, m_mag_geom_coords, grids, ghosts));
 
   if (procID()==0) cout << "Done constructing magnetic geometry" << endl;
@@ -419,6 +415,7 @@ GKSystem::getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids 
 void
 GKSystem::createVelocitySpace()
 {
+   CH_TIME("GKSystem::createVelocitySpace");
    const VEL::ProblemDomain& domain = getVelocityDomain();
 
    VEL::DisjointBoxLayout grids;
@@ -520,6 +517,7 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
 {
   // Build a vector of ProblemDomains, one per configuration space block
 
+  CH_TIME("GKSystem::createPhaseSpace");
   const VEL::ProblemDomain& vel_domain = getVelocityDomain();
 
   for (int block=0; block<m_mag_geom_coords->numBlocks(); ++block) {
@@ -589,29 +587,26 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
 
   m_phase_grid = RefCountedPtr<PhaseGrid>(new PhaseGrid(m_domains, decomps, m_mag_geom_type));
 
-  if (m_verbosity>0) {
-     m_phase_grid->print(m_ghostVect);
-  }
-
   // Construct the phase space geometry
-  int ghosts = 0;
-  for (int n=0; n<SpaceDim; ++n) {
-    if (m_ghostVect[n] > ghosts) ghosts = m_ghostVect[n];
-  }
 
+  if (m_verbosity>0) {
+     m_phase_grid->print(m_kinetic_ghosts*IntVect::Unit);
+  }
+   
   m_phase_geom =
      RefCountedPtr<PhaseGeom>( new PhaseGeom( a_ppgksys,
                                               m_phase_coords,
                                               m_phase_grid,
                                               m_mag_geom,
                                               m_velocity_coords,
-                                              ghosts,
+                                              m_kinetic_ghosts,
                                               m_units->larmorNumber() ) );
 }
 
 inline
 void GKSystem::createState()
 {
+   CH_TIME("GKSystem::createState");
    KineticSpeciesPtrVect kinetic_species;
    createKineticSpecies( kinetic_species );
 
@@ -623,7 +618,13 @@ void GKSystem::createState()
 
    // Define the computational state object by cloning from the argument vectors.  Ghost cells are added
    // for the kinetic and fluid species.
-   m_state_comp.define( kinetic_species, fluid_species, scalars, m_phase_geom );
+   
+   m_state_comp.define( kinetic_species,
+                        fluid_species,
+                        scalars,
+                        m_phase_geom,
+                        m_kinetic_ghosts * IntVect::Unit,
+                        m_fluid_ghosts * CFG::IntVect::Unit );
 
    // Define the physical state object by cloning from the argument vectors.  No ghost cells are included, since
    // this state object is generally used for output.
@@ -811,11 +812,6 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
 
    if ( m_verbosity && procID() == 0 ) {
       cout << "Adding species and constructing gyrocenter coordinates..." << endl;
-   }
-
-   int ghosts = 0;
-   for (int n=0; n<SpaceDim; ++n) {
-      if (m_ghostVect[n] > ghosts) ghosts = m_ghostVect[n];
    }
 
    bool more_kinetic_species = true;
@@ -1710,6 +1706,13 @@ inline void GKSystem::printParameters() const
 
 void GKSystem::parseParameters( ParmParse&         a_ppgksys )
 {
+   
+   // Get kinetic ghost layer width
+   a_ppgksys.query( "kinetic_ghost_width", m_kinetic_ghosts );
+
+   // Get fluid ghost layer width
+   a_ppgksys.query( "fluid_ghost_width", m_fluid_ghosts );
+   
    // Get magnetic geometry type
    a_ppgksys.get( "magnetic_geometry_mapping", m_mag_geom_type );
 

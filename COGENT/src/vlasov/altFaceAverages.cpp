@@ -73,8 +73,10 @@ AltFaceAverages::computeFaceAverages(LevelData<FluxBox>&         a_face_phi,
                }
             }
          }
+	 
+	 // This will turn cell-centered box into
+	 //face-centered box in the direction dir
          face_box.surroundingNodes( dir );
-         if (!a_geom.secondOrder()) face_box.grow( dir, 1 );
 
          // now compute limited face value
          FArrayBox& this_face_phi_dir( this_face_phi[dir] );

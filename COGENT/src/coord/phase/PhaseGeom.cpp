@@ -62,7 +62,6 @@ PhaseGeom::PhaseGeom( ParmParse&                              a_parm_parse,
                       int                                     a_ghosts,
                       double                                  a_larmor_number )
    : MultiBlockLevelGeom(a_coord_sys, a_grids->disjointBoxLayout(), a_ghosts, Interval(CFG_DIM,SpaceDim-1), Vector<int>(VEL_DIM,0)),
-     //m_ghostVect(4*IntVect::Unit),
      m_ghostVect(a_ghosts*IntVect::Unit),
      m_mag_geom(a_mag_geom),
      m_vel_coords(a_vel_coords),
@@ -136,7 +135,7 @@ PhaseGeom::PhaseGeom( ParmParse&                              a_parm_parse,
       psm.get("exchange_ghosts", m_exchange_ghosts);
    }
    else {
-      m_exchange_ghosts = 2;
+      m_exchange_ghosts = a_ghosts;
    }
    
    define();
@@ -206,7 +205,9 @@ PhaseGeom::PhaseGeom( const PhaseGeom&                        a_phase_geom,
 void
 PhaseGeom::define()
 {
-   /*
+  CH_TIME("PhaseGeom::define");
+  
+  /*
     *  Inject the configuration and velocity space metrics, as well as the magnetic field
     *  quantities at cell and face centers, so that we have them on the phase space domain
     *  decomposition.  Since these quantities never change but are used frequently, we
@@ -247,10 +248,7 @@ PhaseGeom::define()
    m_configuration_volumes = new LevelData<FArrayBox>;
    injectConfigurationToPhase(cfg_volume, *m_configuration_volumes);
 
-   // Include an extra ghost cell layer since functions using this data will
-   // sometimes be using it with the fourth order product/quotient formula
-   CFG::LevelData<CFG::FArrayBox> cfg_J(cfg_grids, 1,
-                                        cfg_ghostVect + CFG::IntVect::Unit);
+   CFG::LevelData<CFG::FArrayBox> cfg_J(cfg_grids, 1, cfg_ghostVect);
    m_mag_geom->getJ(cfg_J);
    m_configuration_J = new LevelData<FArrayBox>;
    injectConfigurationToPhase(cfg_J, *m_configuration_J);
@@ -370,12 +368,17 @@ void
 PhaseGeom::defineSpeciesState( double a_mass,
                                double a_charge_state )
 {
+   CH_TIMERS("PhaseGeom::defineSpeciesState");
+   CH_TIMER("construct_shearedMB_objects",t_construct_shearedMB_objects);
+   CH_TIMER("construct_metrics",t_construct_metrics);
+     
    m_mass = a_mass;
    m_charge_state = a_charge_state;
    
    /*
     *  Get the velocity space data and inject into phase space
     */
+   CH_START(t_construct_metrics);
    VEL::IntVect vel_ghostVect(vel_restrict(m_ghostVect));
    const VEL::DisjointBoxLayout& vel_grids = m_vel_coords->grids();
    int vel_NumN = VEL_DIM * VEL_DIM;
@@ -395,10 +398,7 @@ PhaseGeom::defineSpeciesState( double a_mass,
    m_velocity_volumes = new LevelData<FArrayBox>;
    injectVelocityToPhase(vel_volume, *m_velocity_volumes);
    
-   // Include an extra ghost cell layer since functions using this data will
-   // sometimes be using it with the fourth order product/quotient formula
-   VEL::LevelData<VEL::FArrayBox> vel_J(vel_grids, 1,
-                                        vel_ghostVect + VEL::IntVect::Unit);
+   VEL::LevelData<VEL::FArrayBox> vel_J(vel_grids, 1, vel_ghostVect);
    m_vel_coords->getJ(vel_J);
    m_velocity_J = new LevelData<FArrayBox>;
    injectVelocityToPhase(vel_J, *m_velocity_J);
@@ -407,6 +407,7 @@ PhaseGeom::defineSpeciesState( double a_mass,
    m_vel_coords->getFaceAreas(vel_face_areas);
    m_velocity_face_areas = new LevelData<FluxBox>;
    injectVelocityToPhase(vel_face_areas, *m_velocity_face_areas);
+   CH_STOP(t_construct_metrics);
    
    // Compute and cache the physical cell centers.  We need to do this here in case
    // velocity renormalization is being used.
@@ -439,12 +440,8 @@ PhaseGeom::defineSpeciesState( double a_mass,
    m_sheared_interp_stencil = NULL;
    m_sheared_interp_stencil_offsets = NULL;
 
-   for (int i=0; i<3; ++i) {
-      m_ebe_data[i] = NULL;
-   }
-   m_ebe_copy_manager = NULL;
-
 #if CFG_DIM ==3
+   CH_START(t_construct_shearedMB_objects);
    if (m_mag_geom->shearedMBGeom()) {
       m_sheared_remapped_index = new LevelData<FArrayBox>;
       const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedRemappedIndex = m_mag_geom->getShearedRemappedIndex();
@@ -460,6 +457,7 @@ PhaseGeom::defineSpeciesState( double a_mass,
 
       getShearedGhostBoxLayout();
    }
+   CH_STOP(t_construct_shearedMB_objects);
 #endif
 }
 
@@ -474,14 +472,26 @@ PhaseGeom::~PhaseGeom()
       delete m_velocity_tangrad_metrics;
       delete m_velocity_metrics;
 
-      if (m_ebe_copy_manager) delete m_ebe_copy_manager;
-      for (int i=0; i<3; ++i) {
-         if (m_ebe_data[i]) delete m_ebe_data[i];
-      }
-
       if (m_sheared_remapped_index) delete m_sheared_remapped_index;
       if (m_sheared_interp_stencil) delete m_sheared_interp_stencil;
       if (m_sheared_interp_stencil_offsets) delete m_sheared_interp_stencil_offsets;
+
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         for (int codim=1; codim<=PHASE_MAX_EBE_CODIM; ++codim) {
+            list<EBE_Data*>& this_ebe_data_cache = m_ebe_data_cache[dir][codim-1];
+            list<EBE_Data*>::iterator it;
+            for (it = this_ebe_data_cache.begin(); it != this_ebe_data_cache.end(); ++it) {
+               if(*it) delete *it;
+            }
+            this_ebe_data_cache.clear();
+         }
+      }
+
+      list<CoDimCopyManager<FArrayBox>*>::iterator it;
+      for (it = m_ebe_copy_manager_cache.begin(); it != m_ebe_copy_manager_cache.end(); ++it) {
+         CoDimCopyManager<FArrayBox>* this_ebe_copy_manager = *it;
+      }
+      m_ebe_copy_manager_cache.clear();
 
       m_speciesDefined = false;
    }
@@ -525,7 +535,9 @@ PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
       // one layer of transverse cell faces on all block boundaries.
       CH_assert(a_velocity.ghostVect() == IntVect::Unit);
       CH_assert(config_restrict(a_Efield.ghostVect()) == CFG::IntVect::Unit);
-      CH_assert(vel_restrict(a_Efield.ghostVect()) == VEL::IntVect::Zero);
+      if (!a_gyrokinetic) {
+        CH_assert(vel_restrict(a_Efield.ghostVect()) == VEL::IntVect::Zero);
+      }
    }
 
    if (m_velocity_type == "gyrokinetic" || m_velocity_type == "ExB") {
@@ -1094,6 +1106,8 @@ PhaseGeom::computeBStar(bool                        a_no_drifts,
                         LevelData<FArrayBox>&       a_BStar,
                         LevelData<FArrayBox>&       a_BStarParallel) const
 {
+   CH_TIME("PhaseGeom::computeBStar");
+  
    double prefactor = a_no_drifts? 0.: a_larmor_number * a_mass / a_charge_state;
 
    const DisjointBoxLayout& grids = a_BStar.disjointBoxLayout();
@@ -1408,6 +1422,7 @@ PhaseGeom::mappedGridDivergence(LevelData<FArrayBox>&     a_divF,
                                            a_divF.ghostVect());
 
    const DisjointBoxLayout& grids = a_divF.disjointBoxLayout();
+
    DataIterator dit = grids.dataIterator();
 
    if ( a_omit_NT ) {
@@ -1558,6 +1573,8 @@ PhaseGeom::fillTransverseGhosts( LevelData<FluxBox>& a_data,
 void
 PhaseGeom::averageAtBlockBoundaries(LevelData<FluxBox>& a_data) const
 {
+   CH_TIME("PhaseGeom::averageAtBlockBoundaries");
+   
    if ( m_coordSysPtr->numBlocks() > 1 && !m_mag_geom->shearedMBGeom()) {
 
       const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
@@ -1677,14 +1694,64 @@ PhaseGeom::exchangeTransverseAtBlockBoundaries(LevelData<FluxBox>& a_data) const
 void
 PhaseGeom::setCellCenteredRealCoords()
 {
+   CH_TIME("PhaseGeom::setCellCenteredRealCoords");
    m_cell_centered_real_coords = new LevelData<FArrayBox>(m_gridsFull, SpaceDim, m_ghostVect);
+   
+   const CFG::MagGeom& mag_geom = magGeom();
+   const CFG::LevelData<CFG::FArrayBox>& cfg_real_coords = mag_geom.getCellCenteredRealCoords();
+   
+   LevelData<FArrayBox> cfg_real_coords_inj;
+   injectConfigurationToPhase(cfg_real_coords, cfg_real_coords_inj);
+   
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      
+      const Box& box_inj = cfg_real_coords_inj[dit].box();
+      int vp_index = box_inj.smallEnd(VPARALLEL_DIR);
+      int mu_index = box_inj.smallEnd(MU_DIR);
+      
+      const Box& box = (*m_cell_centered_real_coords)[dit].box();
 
+      FArrayBox xi_array( box, SpaceDim );
+      const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(m_gridsFull[dit]);
+      block_coord_sys.getCellCenteredMappedCoords( xi_array );
+
+      BoxIterator bit(box);
+      
+      for (bit.begin(); bit.ok(); ++bit) {
+         IntVect iv = bit();
+
+         VEL::RealVect vel_coord_mapped;
+         for (int dir=0; dir<VEL_DIM; ++dir) {
+            vel_coord_mapped[dir] = xi_array(iv,CFG_DIM + dir);
+         }
+         
+         // Presently, v_coord_real is the same as v_coord_mapped
+         // but do it generally for possible future use
+         VEL::RealVect vel_coord_real;
+         vel_coord_real = m_vel_coords->realCoord( vel_coord_mapped );
+
+         IntVect iv_inj = iv;
+         iv_inj[VPARALLEL_DIR] = vp_index;
+         iv_inj[MU_DIR] = mu_index;
+
+         for (int dir=0; dir<CFG_DIM; dir++) {
+	   (*m_cell_centered_real_coords)[dit](iv,dir) = cfg_real_coords_inj[dit](iv_inj,dir);
+         }
+
+         for (int dir=0; dir<VEL_DIM; dir++) {
+            (*m_cell_centered_real_coords)[dit](iv,CFG_DIM+dir) = vel_coord_real[dir];
+         }
+      }
+   }
+
+#if 0
+   //Old method, which did not used cashed cfg_coords (therefore was slow)
    for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
       const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(m_gridsFull[dit]);
       block_coord_sys.getCellCenteredRealCoords((*m_cell_centered_real_coords)[dit]);
    }
+#endif
 }
-
 
 void
 PhaseGeom::setNormalizedMagneticFlux()
@@ -2027,7 +2094,6 @@ PhaseGeom::multFaceAreas( LevelData<FluxBox>& a_data ) const
    }
 }
 
-
 void
 PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt ) const
 {
@@ -2078,46 +2144,45 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt ) 
 
       a_data.exchange();
 
-      CoDimCopyManager<FArrayBox> manager(grids, grids, a_data.ghostVect(), true);
-      manager.manageExchanges(a_data);
+      fillCorners(a_data, a_data.ghostVect(), SpaceDim);
    }
    else if ( m_mag_geom->extrablockExchange() ) {
 
       CH_START(t_exchange_extrablock_ghosts);
 #ifdef NEW_EXTRABLOCK_EXCHANGE
-      IntVect include_dir = IntVect::Unit;
+      IntVect boundary_dirs = IntVect::Unit;
+      IntVect exchange_dirs = IntVect::Unit;
 #if CFG_DIM == 3
-      if ( m_mag_geom->shearedMBGeom() ) {
+      if ( m_mag_geom->shearedMBGeom() && m_mag_geom->fieldAlignedMapping() ) {
          // Don't fill extrablock ghosts in the toroidal direction, since this will be
          // handled by interpolateFromShearedGhosts() below
-         include_dir[TOROIDAL_DIR] = 0;
+         boundary_dirs[TOROIDAL_DIR] = 0;
       }
 #endif
 
       // Fill the codim ghost cells
-      for (int codim=1; codim<=CFG_DIM; ++codim) {
-         exchangeExtraBlockGhosts(a_data, codim, include_dir);
+      for (int codim=1; codim<=PHASE_MAX_EBE_CODIM; ++codim) {
+         exchangeExtraBlockGhosts(a_data, codim, boundary_dirs, exchange_dirs);
       }
 
 #if CFG_DIM==3
       CH_START(t_interpolate_sheared);
-      if ( nghost[TOROIDAL_DIR] > 0 && m_mag_geom->shearedMBGeom() ) {
-         // Fill the toroidal extrablock ghosts
+      if ( nghost[TOROIDAL_DIR] > 0 && m_mag_geom->shearedMBGeom() && m_mag_geom->fieldAlignedMapping() ) {
+         // Fill the codim 1 extrablock ghost cells at the toroidal block boundaries
          interpolateFromShearedGhosts(a_data);
+
+         // Fill the codim 2 and 3 extrablock ghost cells at the toroidal block boundaries
+         IntVect toroidal_dir_only = BASISV(TOROIDAL_DIR);
+         IntVect no_toroidal_exchange = IntVect::Unit - toroidal_dir_only;
+
+         for (int codim=1; codim<=PHASE_MAX_EBE_CODIM; ++codim) {
+            exchangeExtraBlockGhosts(a_data, codim, toroidal_dir_only, no_toroidal_exchange);
+         }
       }
       CH_STOP(t_interpolate_sheared);
 #endif
 
-      // Fill the corner ghosts using a cached CoDimCopyManager
-      if ( m_ebe_copy_manager == NULL ) {
-         m_ebe_copy_manager = new CoDimCopyManager<FArrayBox>(m_gridsFull, m_gridsFull, nghost, true, CFG_DIM);
-      }
-      else if ( nghost != m_ebe_copy_manager->ghostVect()
-                || !m_gridsFull.compatible(m_ebe_copy_manager->srcGrids()) 
-                || !m_gridsFull.compatible(m_ebe_copy_manager->destGrids()) ) {
-         MayDay::Error("PhaseGeom::fillInternalGhosts(): Cached m_ebe_copy_manager is incompatible");
-      }
-      m_ebe_copy_manager->manageExchanges(a_data);
+      fillCorners(a_data, nghost, CFG_DIM);
 #else
       exchangeExtraBlockGhosts(a_data);
 
@@ -2130,12 +2195,20 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt ) 
    else if ( m_mag_geom->shearedMBGeom() ) {
 
       if (nghost[TOROIDAL_DIR] > 0) {
-       interpolateFromShearedGhosts(a_data);
-     }
+         // Fill the codim 1 extrablock ghost cells at the toroidal block boundaries
+         interpolateFromShearedGhosts(a_data);
+
+         // Fill the codim 2 and 3 extrablock ghost cells at the toroidal block boundaries
+         IntVect toroidal_dir_only = BASISV(TOROIDAL_DIR);
+         IntVect no_toroidal_exchange = IntVect::Unit - toroidal_dir_only;
+
+         for (int codim=1; codim<=PHASE_MAX_EBE_CODIM; ++codim) {
+            exchangeExtraBlockGhosts(a_data, codim, toroidal_dir_only, no_toroidal_exchange);
+         }
+      }
    }
 #endif
 }
-
 
 void
 PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
@@ -2235,77 +2308,93 @@ PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
 void
 PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data,
                                      const int             a_codim,
-                                     const IntVect&        a_include_dir ) const
+                                     const IntVect&        a_boundary_dirs,
+                                     const IntVect&        a_exchange_dirs ) const
 {
    CH_TIME("PhaseGeom::exchangeExtraBlockGhosts_w_codim");
-   CH_assert(a_codim>=1 && a_codim<=3);
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+   const ProblemDomain domain;  // dummy
 
-   EBE_Data*& ebe_data_ptr = m_ebe_data[a_codim-1];
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      if ( a_boundary_dirs[dir] != 0 ) {
 
-   if ( ebe_data_ptr == NULL ) {
+         EBE_Data* ebe_data_ptr = NULL;
+         list<EBE_Data*>& this_ebe_data_cache = m_ebe_data_cache[dir][a_codim-1];
+         list<EBE_Data*>::iterator it;
+         for (it = this_ebe_data_cache.begin(); it != this_ebe_data_cache.end(); ++it) {
+            EBE_Data* this_ebe_data_ptr = *it;
+            if ( this_ebe_data_ptr->ghost_vect == a_data.ghostVect() &&
+                 this_ebe_data_ptr->exchange_dirs == a_exchange_dirs ) {
+               ebe_data_ptr = this_ebe_data_ptr;
+               break;
+            }
+         }
 
-      ebe_data_ptr = new EBE_Data;
-      ebe_data_ptr->ghost_vect = a_data.ghostVect();
-      ebe_data_ptr->include_dir = a_include_dir;
+         if ( ebe_data_ptr == NULL ) {
+            // Construct a new object to cache extrablock exchange data.  The object stores
+            // the information used to construct the stored BoxLayout and Copier so that
+            // it can be later checked before attempting to re-use the cached object.
+            ebe_data_ptr = new EBE_Data;
+            ebe_data_ptr->ghost_vect = a_data.ghostVect();
+            ebe_data_ptr->exchange_dirs = a_exchange_dirs;
 
-      // Get box layout for extrablock ghost cells
-      getExtrablockExchangeLayout(a_codim,
-                                  m_gridsFull,
-                                  ebe_data_ptr->ghost_vect,
-                                  ebe_data_ptr->include_dir,
-                                  ebe_data_ptr->ghostLayout,
-                                  ebe_data_ptr->index_map,
-                                  ebe_data_ptr->shift_map);
+            // Get box layout for extrablock ghost cells
+            getExtrablockExchangeLayout(dir,
+                                        a_codim,
+                                        grids,
+                                        ebe_data_ptr->ghost_vect,
+                                        ebe_data_ptr->exchange_dirs,
+                                        ebe_data_ptr->ghostLayout,
+                                        ebe_data_ptr->index_map,
+                                        ebe_data_ptr->shift_map);
 
-      if ( a_codim > 1 ) {
-         const ProblemDomain domain;
-      
-         ebe_data_ptr->copier.define(ebe_data_ptr->ghostLayout,
-                                     m_gridsFull,
-                                     domain,
-                                     ebe_data_ptr->ghost_vect,
-                                     false,
-                                     IntVect::Zero);
-         ebe_data_ptr->copier.reverse();
+            // Need to zero out the transverse ghosts to avoid requiring corner
+            // ghost cell consistency (e.g., through the use of a CornerCopier).
+            // This is the reason we are doing the extrablock exchange separately
+            // in each direction.
+            IntVect nghost = a_data.ghostVect()[dir] * BASISV(dir);
+
+            ebe_data_ptr->copier.define(ebe_data_ptr->ghostLayout,
+                                        grids,
+                                        domain,
+                                        nghost,
+                                        false,
+                                        IntVect::Zero);
+            ebe_data_ptr->copier.reverse();
+
+            this_ebe_data_cache.push_back(ebe_data_ptr);
+         }
+
+         BoxLayoutData<FArrayBox> ghost_data(ebe_data_ptr->ghostLayout, a_data.nComp());
+
+         a_data.copyTo(ghost_data, ebe_data_ptr->copier);
+
+         // Finally fill the ghosts of a_data from the data in the shifted ghost_data BoxLayoutData
+         for (DataIterator dit(ebe_data_ptr->ghostLayout.dataIterator()); dit.ok(); ++dit) {
+
+            FArrayBox this_ghosts(Interval(0,ghost_data.nComp()-1), ghost_data[dit]);
+            this_ghosts.shift(-ebe_data_ptr->shift_map[dit]);
+
+            CH_assert( (a_data[ebe_data_ptr->index_map[dit]].box()).contains(this_ghosts.box()));
+
+            a_data[ebe_data_ptr->index_map[dit]].copy(this_ghosts);
+         }
       }
-   }
-   else if ( a_data.ghostVect() != ebe_data_ptr->ghost_vect ) {
-      MayDay::Error("PhaseGeom::exchangeExtraBlockGhosts(): Cached m_ebe_data object used with a different ghost vector");
-   }
-   
-   // Fill extrablock ghost cells
-   BoxLayoutData<FArrayBox> ghost_data(ebe_data_ptr->ghostLayout, a_data.nComp());
-
-   if ( a_codim == 1 ) {
-      a_data.copyTo(ghost_data);
-   }
-   else {
-      a_data.copyTo(ghost_data, ebe_data_ptr->copier);
-   }
-   
-   // Fill ghosts of a_data
-   for (DataIterator dit(ebe_data_ptr->ghostLayout.dataIterator()); dit.ok(); ++dit) {
-
-      FArrayBox this_ghosts(Interval(0,ghost_data.nComp()-1), ghost_data[dit]);
-      this_ghosts.shift(-ebe_data_ptr->shift_map[dit]);
-
-      CH_assert( (a_data[ebe_data_ptr->index_map[dit]].box()).contains(this_ghosts.box()));
-      
-      a_data[ebe_data_ptr->index_map[dit]].copy(this_ghosts);
    }
 }
 
 
 void
-PhaseGeom::getExtrablockExchangeLayout( const int                 a_codim,
+PhaseGeom::getExtrablockExchangeLayout( const int                 a_dir,
+                                        const int                 a_codim,
                                         const DisjointBoxLayout&  a_grids,
                                         const IntVect&            a_ghost_vect,
-                                        const IntVect&            a_include_dir,
+                                        const IntVect&            a_exchange_dirs,
                                         BoxLayout&                a_ghosts_layout,
                                         LayoutData<DataIndex>&    a_index_map,
                                         LayoutData<IntVect>&      a_shift_map ) const
 {
-   CH_TIME("PhaseGeom::getExtrablockExchangeLayout");
+   CH_TIME("MagGeom::getExtrablockExchangeLayout");
    CH_assert(a_codim>=1 && a_codim<=3);
 
    // Define BoxLayout and the iterator map for extrablock ghost cells
@@ -2326,98 +2415,107 @@ PhaseGeom::getExtrablockExchangeLayout( const int                 a_codim,
       const ProblemDomain& domain = block_coords.domain();
       const Box& domain_box = domain.domainBox();
 
-      for (int dir1=0; dir1<SpaceDim; ++dir1) {
-         if ( a_include_dir[dir1] != 0 ) {
-            for (SideIterator sit1; sit1.ok(); ++sit1) {
-               Side::LoHiSide side1 = sit1();
+      int dir1 = a_dir;
+      for (SideIterator sit1; sit1.ok(); ++sit1) {
+         Side::LoHiSide side1 = sit1();
            
-               if (((side1 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir1) == domain_box.smallEnd(dir1))
-                    || (side1 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir1) == domain_box.bigEnd(dir1)))
-                   && !(this_block_boundaries[dir1 + side1*SpaceDim].isDomainBoundary())) {
+         if (((side1 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir1) == domain_box.smallEnd(dir1))
+              || (side1 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir1) == domain_box.bigEnd(dir1)))
+             && !(this_block_boundaries[dir1 + side1*SpaceDim].isDomainBoundary())) {
             
-                  Box codim_1_ghostBox = adjCellBox(a_grids[lit], dir1, side1, a_ghost_vect[dir1]);
+            Box codim_1_ghostBox = adjCellBox(a_grids[lit], dir1, side1, a_ghost_vect[dir1]);
 
-                  IntVect translation1 = this_block_boundaries[dir1 + side1*SpaceDim].getTransformation().getTranslation();
+            IntVect translation1 = IntVect::Zero;
+            if ( a_exchange_dirs[dir1] != 0 ) {
+               translation1 += this_block_boundaries[dir1 + side1*SpaceDim].getTransformation().getTranslation();
+            }
 
-                  if ( a_codim == 1 ) {
-                     codim_1_ghostBox.shift(translation1);
+            if ( a_codim == 1 ) {
+               if ( a_exchange_dirs[dir1] != 0 ) {
+                  codim_1_ghostBox.shift(translation1);
 
-                     bool local_add_box = (a_grids.procID(lit()) == procID())
-                        && local_data_map.insert( dataMapType( make_tuple(codim_1_ghostBox,translation1), lit() )).second;
+                  bool local_add_box = (a_grids.procID(lit()) == procID())
+                     && local_data_map.insert( dataMapType( make_tuple(codim_1_ghostBox,translation1), lit() )).second;
 
-                     bool add_box;
+                  bool add_box;
 #ifdef CH_MPI
-                     MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
+                  MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
 #else
-                     add_box = local_add_box;
+                  add_box = local_add_box;
 #endif
-
-                     if ( add_box ) {
-                        boxes.push_back( codim_1_ghostBox );
-                        proc_ids.push_back( a_grids.procID( lit() ) );
-                     }
+                  if ( add_box ) {
+                     boxes.push_back( codim_1_ghostBox );
+                     proc_ids.push_back( a_grids.procID( lit() ) );
                   }
-                  else {
-                     for (int dir2=0; dir2<SpaceDim; ++dir2) {
-                        if ( a_include_dir[dir2] != 0 && dir2 != dir1 ) {
-                           for (SideIterator sit2; sit2.ok(); ++sit2) {
-                              Side::LoHiSide side2 = sit2();
+               }
+            }
+            else {
+               for (int dir2=0; dir2<SpaceDim; ++dir2) {
+                  if ( dir2 != dir1 ) {
+                     for (SideIterator sit2; sit2.ok(); ++sit2) {
+                        Side::LoHiSide side2 = sit2();
                                  
-                              if (((side2 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir2) == domain_box.smallEnd(dir2))
-                                   || (side2 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir2) == domain_box.bigEnd(dir2)))
-                                  && !(this_block_boundaries[dir2 + side2*SpaceDim].isDomainBoundary())) {
+                        if (((side2 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir2) == domain_box.smallEnd(dir2))
+                             || (side2 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir2) == domain_box.bigEnd(dir2)))
+                            && !(this_block_boundaries[dir2 + side2*SpaceDim].isDomainBoundary())) {
                                     
-                                 Box codim_2_ghostBox = adjCellBox(codim_1_ghostBox, dir2, side2, a_ghost_vect[dir2]);
+                           Box codim_2_ghostBox = adjCellBox(codim_1_ghostBox, dir2, side2, a_ghost_vect[dir2]);
                                     
-                                 IntVect translation2 = this_block_boundaries[dir2 + side2*SpaceDim].getTransformation().getTranslation() + translation1;
+                           IntVect translation2 = translation1;
+                           if ( a_exchange_dirs[dir2] != 0 ) {
+                              translation2 += this_block_boundaries[dir2 + side2*SpaceDim].getTransformation().getTranslation();
+                           }
 
-                                 if ( a_codim == 2 ) {
-                                    codim_2_ghostBox.shift(translation2);
+                           if ( a_codim == 2 ) {
+                              if ( a_exchange_dirs[dir2] != 0 ) {
+                                 codim_2_ghostBox.shift(translation2);
                   
-                                    bool local_add_box = (a_grids.procID(lit()) == procID())
-                                       && local_data_map.insert( dataMapType( make_tuple(codim_2_ghostBox,translation2), lit() )).second;
+                                 bool local_add_box = (a_grids.procID(lit()) == procID())
+                                    && local_data_map.insert( dataMapType( make_tuple(codim_2_ghostBox,translation2), lit() )).second;
 
-                                    bool add_box;
+                                 bool add_box;
 #ifdef CH_MPI
-                                    MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
+                                 MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
 #else
-                                    add_box = local_add_box;
+                                 add_box = local_add_box;
 #endif
-                                    if ( add_box ) {
-                                       boxes.push_back( codim_2_ghostBox );
-                                       proc_ids.push_back( a_grids.procID( lit() ) );
-                                    }
+                                 if ( add_box ) {
+                                    boxes.push_back( codim_2_ghostBox );
+                                    proc_ids.push_back( a_grids.procID( lit() ) );
                                  }
-                                 else {
+                              }
+                           }
+                           else {
 
-                                    for (int dir3=0; dir3<SpaceDim; ++dir3) {
-                                       if ( a_include_dir[dir3] != 0 && dir3 != dir1 && dir3 != dir2 ) {
-                                          for (SideIterator sit3; sit3.ok(); ++sit3) {
-                                             Side::LoHiSide side3 = sit3();
+                              for (int dir3=0; dir3<SpaceDim; ++dir3) {
+                                 if ( dir3 != dir1 && dir3 != dir2 ) {
+                                    for (SideIterator sit3; sit3.ok(); ++sit3) {
+                                       Side::LoHiSide side3 = sit3();
             
-                                             if (((side3 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir3) == domain_box.smallEnd(dir3))
-                                                  || (side3 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir3) == domain_box.bigEnd(dir3)))
-                                                 && !(this_block_boundaries[dir3 + side3*SpaceDim].isDomainBoundary())) {
+                                       if (((side3 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir3) == domain_box.smallEnd(dir3))
+                                            || (side3 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir3) == domain_box.bigEnd(dir3)))
+                                           && !(this_block_boundaries[dir3 + side3*SpaceDim].isDomainBoundary())
+                                           && a_exchange_dirs[dir3] != 0 ) {
                                              
-                                                Box codim_3_ghostBox = adjCellBox(codim_2_ghostBox, dir3, side3, a_ghost_vect[dir3]);
+                                          Box codim_3_ghostBox = adjCellBox(codim_2_ghostBox, dir3, side3, a_ghost_vect[dir3]);
 
-                                                IntVect translation3 = this_block_boundaries[dir3 + side3*SpaceDim].getTransformation().getTranslation() + translation2;
-                                                codim_3_ghostBox.shift(translation3);
+                                          IntVect translation3 = translation2;;
+                                          translation3 += this_block_boundaries[dir3 + side3*SpaceDim].getTransformation().getTranslation();
 
-                                                bool local_add_box = (a_grids.procID(lit()) == procID()) 
-                                                   && local_data_map.insert( dataMapType( make_tuple(codim_3_ghostBox,translation3), lit() )).second;
+                                          codim_3_ghostBox.shift(translation3);
 
-                                                bool add_box;
+                                          bool local_add_box = (a_grids.procID(lit()) == procID()) 
+                                             && local_data_map.insert( dataMapType( make_tuple(codim_3_ghostBox,translation3), lit() )).second;
+
+                                          bool add_box;
 #ifdef CH_MPI
-                                                MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
+                                          MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
 #else
-                                                add_box = local_add_box;
+                                          add_box = local_add_box;
 #endif
-                                                if ( add_box ) {
-                                                   boxes.push_back( codim_3_ghostBox );
-                                                   proc_ids.push_back( a_grids.procID( lit() ) );
-                                                }
-                                             }
+                                          if ( add_box ) {
+                                             boxes.push_back( codim_3_ghostBox );
+                                             proc_ids.push_back( a_grids.procID( lit() ) );
                                           }
                                        }
                                     }
@@ -2463,10 +2561,40 @@ PhaseGeom::getExtrablockExchangeLayout( const int                 a_codim,
 }
 
 
+void
+PhaseGeom::fillCorners( LevelData<FArrayBox>&  a_data,
+                        const IntVect&         a_nghosts,
+                        const int              a_max_codim ) const
+{
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+
+   CoDimCopyManager<FArrayBox>* ebe_copy_manager = NULL;
+   list<CoDimCopyManager<FArrayBox>*>::iterator it;
+   for (it = m_ebe_copy_manager_cache.begin(); it != m_ebe_copy_manager_cache.end(); ++it) {
+      CoDimCopyManager<FArrayBox>* this_ebe_copy_manager = *it;
+      if ( a_nghosts == this_ebe_copy_manager->ghostVect()
+           && grids.compatible(this_ebe_copy_manager->srcGrids())
+           && grids.compatible(this_ebe_copy_manager->destGrids()) ) {
+         ebe_copy_manager = this_ebe_copy_manager;
+         break;
+      }
+   }
+
+   if ( ebe_copy_manager == NULL ) {
+      ebe_copy_manager = new CoDimCopyManager<FArrayBox>(grids, grids, a_nghosts, true, a_max_codim);
+      m_ebe_copy_manager_cache.push_back(ebe_copy_manager);
+   }
+
+   ebe_copy_manager->manageExchanges(a_data);
+}
+
+
 #if CFG_DIM == 3
 void
 PhaseGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
 {
+   CH_TIME("PhaseGeom::interpolateFromShearedGhosts");
+  
    int sheared_interp_order = m_mag_geom->shearedInterpOrder();
    
    int nComp = a_data.nComp();
@@ -2563,7 +2691,8 @@ PhaseGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
                         ghost_val += ghosts[dit](iv_offset,comp) * (*m_sheared_interp_stencil)[dit](iv_inj,n);
                      }
                      
-                     if (fac < 0.) {
+                     //                     if (fac < 0.) {
+                     if (fac < 1.e-12) {  // 1.e-12 cutoff tolerates some roundoff when using a non-field-aligned mapping
                         a_data[dit](iv,comp) = ghost_val;
                      }
                      else {
@@ -4404,21 +4533,30 @@ PhaseGeom::computeMappedGradient( const LevelData<FArrayBox>& a_var,
     const ProblemDomain& domain = block_coord_sys.domain();
 
     for (int dir = 0; dir < SpaceDim; dir++) {
-      if (!domain.isPeriodic(dir)) {
-        IntVect grow_vec = nghosts*IntVect::Unit;
-        grow_vec[dir] = 0;
-        Box interior_box = grow(grids[dit], grow_vec);
-        Box domain_box = grow(domain.domainBox(), grow_vec);
-        SpaceUtils::extrapBoundaryGhostsForCC(  var_wghosts[dit], 
-                                                interior_box, 
-                                                domain_box, 
-                                                dir, 
-                                                a_order, 
-                                                boundaries[block_number]  );
+      for (SideIterator sit; sit.ok(); ++sit) {
+	Side::LoHiSide side = sit();
+
+	if (phase_coord_sys.containsPhysicalBoundary(block_number, dir, side)) {
+	  
+	  IntVect grow_vec = nghosts*IntVect::Unit;
+	  grow_vec[dir] = 0;
+	  Box interior_box = grow(grids[dit], grow_vec);
+	  Box domain_box = grow(domain.domainBox(), grow_vec);
+	  SpaceUtils::extrapBoundaryGhostsForCC(  var_wghosts[dit], 
+						  interior_box, 
+						  domain_box, 
+						  dir, 
+						  a_order, 
+						  sign(side) );
+	}
       }
     }
   }
 
+  if (m_mag_geom->mixedBoundaries()) {
+    fillInternalGhosts(var_wghosts);
+  }
+  
   computeMappedGradientWithGhosts(var_wghosts, a_grad_var, a_order, a_max_dim);
 
   return;
@@ -4455,21 +4593,30 @@ PhaseGeom::computeMappedGradient( const LevelData<FArrayBox>& a_var,
     const ProblemDomain& domain = block_coord_sys.domain();
 
     for (int dir = 0; dir < SpaceDim; dir++) {
-      if (!domain.isPeriodic(dir)) {
-        IntVect grow_vec = nghosts*IntVect::Unit;
-        grow_vec[dir] = 0;
-        Box interior_box = grow(grids[dit], grow_vec);
-        Box domain_box = grow(domain.domainBox(), grow_vec);
-        SpaceUtils::extrapBoundaryGhostsForFC(  var_wghosts[dit], 
-                                                interior_box, 
-                                                domain_box, 
-                                                dir, 
-                                                a_order, 
-                                                boundaries[block_number]  );
+      for (SideIterator sit; sit.ok(); ++sit) {
+        Side::LoHiSide side = sit();
+	
+        if (phase_coord_sys.containsPhysicalBoundary(block_number, dir, side)) {
+
+	  IntVect grow_vec = nghosts*IntVect::Unit;
+	  grow_vec[dir] = 0;
+	  Box interior_box = grow(grids[dit], grow_vec);
+	  Box domain_box = grow(domain.domainBox(), grow_vec);
+	  SpaceUtils::extrapBoundaryGhostsForFC(  var_wghosts[dit], 
+						  interior_box, 
+						  domain_box, 
+						  dir, 
+						  a_order, 
+						  sign(side)  );
+	}
       }
     }
   }
 
+  if (m_mag_geom->mixedBoundaries()) {
+    fillInternalGhosts(var_wghosts);
+  }
+  
   computeMappedGradientWithGhosts(var_wghosts, a_grad_var, a_order, a_max_dim);
 
   return;
@@ -4743,6 +4890,48 @@ PhaseGeom::fillTransversePhysicalGhosts( LevelData<FluxBox>& a_var, int a_max_di
   }
 
   return;
+}
+
+
+DisjointBoxLayout PhaseGeom::getGhostDBL(const LevelData<FArrayBox>& a_data) const
+{
+  CH_TIME("PhaseGeom::getGhostDBL");
+  CH_assert(a_data.isDefined());
+  const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+  const IntVect& ghosts = a_data.ghostVect();
+
+  DisjointBoxLayout ghost_dbl;
+  ghost_dbl.deepCopy(grids);
+
+  const PhaseCoordSys& phase_coord_sys = phaseCoordSys();
+  
+  for (int block=0; block<phase_coord_sys.numBlocks(); ++block) {
+    const PhaseBlockCoordSys& block_coord_sys = (const PhaseBlockCoordSys&)(*phase_coord_sys.getCoordSys(block));
+    const ProblemDomain& domain = block_coord_sys.domain();
+    const Box& domain_box = domain.domainBox();
+
+    for (int i=0; i<ghost_dbl.rawPtr()->size(); ++i) {
+      Box& new_box = *const_cast<Box*>(&((*ghost_dbl.rawPtr())[i].box));
+      Box original_box = new_box;
+
+      if ( domain_box.contains(original_box) ) {
+	for (int dir=0; dir<CFG_DIM; ++dir) {
+	  if ( !domain.isPeriodic(dir) ) {
+	    if ( original_box.smallEnd(dir) == domain_box.smallEnd(dir) ) {
+	      new_box.growLo(dir,ghosts[dir]);
+	    }
+	    if ( original_box.bigEnd(dir) == domain_box.bigEnd(dir) ) {
+	      new_box.growHi(dir,ghosts[dir]);
+	    }
+	  }
+	}
+      }
+    }
+  }
+
+  ghost_dbl.closeNoSort();
+  
+  return ghost_dbl;
 }
 
 

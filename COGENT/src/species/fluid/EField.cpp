@@ -45,6 +45,7 @@ void EField::define( const double                      a_larmor,
       ParmParse pp( GKPoisson::pp_name );
       parseParameters(pp);
       m_poisson = new GKPoisson( pp, mag_geom, a_larmor, a_debye );
+      dynamic_cast<GKPoisson*>(m_poisson)->setPhaseSpaceObjs(a_kinetic_species);
    }
 
    if ( a_support_divfree_phase_vel ) {
@@ -62,6 +63,7 @@ void EField::computeEField( const PS::GKState&                a_state,
                             LevelData<FArrayBox>&             a_phi,
                             EllipticOpBC&                     a_bc,
                             const bool                        a_update_potential,
+                            const bool                        a_inject_field,
                             const bool                        a_initial_time )
 {
    LevelData<FArrayBox>& E_field_cell = cell_var(0);
@@ -83,7 +85,7 @@ void EField::computeEField( const PS::GKState&                a_state,
 
             LevelData<FArrayBox> ion_mass_density( grids, 1, IntVect::Zero );
             computePolarizationMassDensity( ion_mass_density, a_kinetic_species, a_fluid_species );
-            m_poisson->setOperatorCoefficients( ion_mass_density, a_bc, true );
+            m_poisson->setOperatorCoefficients( a_kinetic_species, ion_mass_density, a_bc, true );
             
             if (m_boltzmann_electron == NULL) {
             
@@ -150,24 +152,27 @@ void EField::computeEField( const PS::GKState&                a_state,
    }
    
    // Compute injected E-field
-   computeInjectedField(m_injected_E_field, a_kinetic_species, E_field_face, E_field_cell);
+   if (a_inject_field) {
+      computeInjectedField(m_injected_E_field, a_kinetic_species, E_field_face, E_field_cell);
+   }
 }
 
 
 void EField::computeInjectedField(PS::LevelData<PS::FluxBox>& a_injected_E_field,
-				  const PS::KineticSpeciesPtrVect& a_kinetic_species,
-				  const LevelData<FluxBox>& a_E_field_face,
-				  const LevelData<FArrayBox>& a_E_field_cell)
+                                  const PS::KineticSpeciesPtrVect& a_kinetic_species,
+                                  const LevelData<FluxBox>& a_E_field_face,
+                                  const LevelData<FArrayBox>& a_E_field_cell)
 {
   if (a_kinetic_species.size() > 0 ) {
       const PS::PhaseGeom& phaseGeom( a_kinetic_species[0]->phaseSpaceGeometry() );
 
+#if 0
       phaseGeom.injectConfigurationToPhase(a_E_field_face,
                                               a_E_field_cell,
                                               a_injected_E_field);
       
-#if 0
-      //Use this code after we figure out the metrics exchange 
+#else
+      //This code provides some performance optimization
       if (!phaseGeom.secondOrder()) {
          phaseGeom.injectConfigurationToPhase(a_E_field_face,
                                               a_E_field_cell,

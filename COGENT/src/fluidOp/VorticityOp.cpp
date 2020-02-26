@@ -35,6 +35,7 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
      m_sigma_div_e_coefs_set(false),
      m_reynolds_stress(false),
      m_ExB_current_model(true),
+     m_include_pol_den_corrections(false),
      m_electron_temperature_func(NULL)
 {
    const std::string name("potential");
@@ -48,7 +49,7 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
    
    const std::string geomType = a_geometry.getCoordSys()->type();
    
-   bool subtract_fs_par_div = a_geometry.shearedMBGeom();
+   bool subtract_fs_par_div = (a_geometry.shearedMBGeom() && geomType != "SingleNull") ;
    
    m_parallel_current_divergence_op = new GKPoisson(pp_vorticity_op, a_geometry, a_larmor, 0.);
    m_parallel_current_divergence_op->m_model = "ParallelCurrent";
@@ -253,6 +254,22 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
      }
    }
 
+   // Add polarization density correction into electron pressure
+   if (m_include_pol_den_corrections) {
+      
+      // Compute negative vorticity
+      LevelData<FArrayBox> negative_vorticity(grids, 1, IntVect::Zero);
+      m_gyropoisson_op->computeFluxDivergence(sol_data, negative_vorticity, false);
+      
+      // Compute par_grad * sigma * par_grad of negative_vorticity
+      LevelData<FArrayBox> pol_dens_correction(grids, 1, IntVect::Zero);
+      //m_par_cond_op->computeFluxDivergence(negative_vorticity, pol_dens_correction, false, true);
+      m_parallel_current_divergence_op->computeFluxDivergence(negative_vorticity, pol_dens_correction, false, true);
+      
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         rhs_data[dit] -= pol_dens_correction[dit];
+      }
+   }
 }
 
 
@@ -925,7 +942,7 @@ void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_p
    // Compute the parallel current divergence
    computeIonChargeDensity(m_ion_charge_density, a_kinetic_species);
    m_parallel_current_divergence_op->m_dt_implicit = a_dt;
-   m_parallel_current_divergence_op->setOperatorCoefficients(m_ion_charge_density, *m_parallel_current_divergence_op_bcs, true);
+   m_parallel_current_divergence_op->setOperatorCoefficients(m_ion_charge_density, *m_parallel_current_divergence_op_bcs, false);
    m_parallel_current_divergence_op->computeFluxDivergence(m_ion_charge_density, m_negativeDivJpar, false, true);
       
    // Compute the perpendicular current divergence
@@ -978,6 +995,7 @@ void VorticityOp::parseParameters( const ParmParse& a_pp )
 {
    a_pp.query( "include_reynolds_stress", m_reynolds_stress);
    a_pp.query( "ExB_current_model", m_ExB_current_model );
+   a_pp.query( "include_pol_den_corrections", m_include_pol_den_corrections );
 
    if (a_pp.contains("electron_temperature")) {
       GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();

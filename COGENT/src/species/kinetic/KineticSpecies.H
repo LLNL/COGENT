@@ -242,7 +242,22 @@ class KineticSpecies
                             const LevelData<FluxBox>& E_field,
                             const int  velocity_option,
                             const Real& time,
-                            const bool  apply_axisymmetric_correction = true  ) const;
+                            const bool  apply_axisymmetric_correction = true  ) const
+      {
+        computeVelocity(  velocity,
+                          E_field,
+                          false,
+                          velocity_option,
+                          time,
+                          apply_axisymmetric_correction );
+      }
+
+      void computeVelocity( LevelData<FluxBox>& velocity,
+                            const LevelData<FluxBox>& E_field,
+                            const bool ignore_gyrokinetic,
+                            const int  velocity_option,
+                            const Real& time,
+                            const bool  apply_axisymmetric_correction ) const;
 
       void computeMappedVelocityNormals( LevelData<FluxBox>& velocity,
                                          const CFG::LevelData<CFG::FArrayBox>& E_field_cell,
@@ -252,6 +267,14 @@ class KineticSpecies
 
       void computeMappedVelocity( LevelData<FluxBox>& velocity,
                                   const LevelData<FluxBox>& E_field,
+                                  const Real& time) const
+      {
+        computeMappedVelocity(velocity, E_field, false, time);
+      }
+
+      void computeMappedVelocity( LevelData<FluxBox>& velocity,
+                                  const LevelData<FluxBox>& E_field,
+                                  const bool ignore_gyrokinetic,
                                   const Real& time) const;
 
       inline

@@ -24,6 +24,7 @@ void EFieldSelfConsistentBC::computeEField( const PS::GKState&                a_
                                             LevelData<FArrayBox>&             a_phi,
                                             EllipticOpBC&                     a_bc,
                                             const bool                        a_update_potential,
+                                            const bool                        a_inject_field,
                                             const bool                        a_initial_time )
 {
    LevelData<FArrayBox>& E_field_cell = cell_var(0);
@@ -139,7 +140,9 @@ void EFieldSelfConsistentBC::computeEField( const PS::GKState&                a_
    }
 
    // Compute injected E-field
-   computeInjectedField(m_injected_E_field, a_kinetic_species, E_field_face, E_field_cell);
+   if (a_inject_field) {
+      computeInjectedField(m_injected_E_field, a_kinetic_species, E_field_face, E_field_cell);
+   }
 }
 
 

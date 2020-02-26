@@ -21,19 +21,19 @@
 #include "NamespaceHeader.H" // has to be the last one
 
 Anomalous::Anomalous( const string& a_species_name, ParmParse& a_pptpm, const int a_verbosity )
-    : D_fluid(4,0),
-      D_kinet(4,0),
-      DN0(0),
-      model_only(false),
-      const_coeff(true),
-      moment_op( MomentOp::instance() ),
+    : m_D_fluid(4,0),
+      m_D_kinet(4,0),
+      m_DN0(0),
+      m_model_only(false),
+      m_const_coeff(true),
+      m_moment_op( MomentOp::instance() ),
       m_first_step(true),
       m_arbitrary_grid(true),
       m_simple_diffusion(false),
-      verbosity(0)
+      m_verbosity(0)
 {
 
-   verbosity = a_verbosity;
+   m_verbosity = a_verbosity;
    pptpm = a_pptpm;
    species_name = a_species_name;
 
@@ -59,12 +59,15 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
           + (vp^2/Vth^2-3/2)*(Dn2*nabla_psi(ln(n))+DT2*nabla_psi(ln(T)))
     D_psi = D0
   */
+
+      CH_TIME("Anomalous::evalTpmRHS");   
+   
       // parse the pptpm database for initial condition items for this species
       if ( m_first_step ) {ParseParameters();}
 
       // print parameters at the first time step
       const KineticSpecies& soln_species( *(soln[species]) );
-      if ((verbosity) && (m_first_step)) {printParameters(soln_species);}
+      if ((m_verbosity) && (m_first_step)) {printParameters(soln_species);}
 
       // get vlasov RHS for the current species
       //KineticSpecies& rhs_species( *(rhs[species]) );
@@ -82,45 +85,57 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
       const LevelData<FArrayBox>& inj_B = phase_geom.getBFieldMagnitude();
       const ProblemDomain& phase_domain = phase_geom.domain();
       const Box& domain_box = phase_domain.domainBox();
-      int num_r_cells = domain_box.size(0);
-      int num_mu_cells = domain_box.size(3);
+      int num_r_cells = domain_box.size(RADIAL_DIR);
+      int num_mu_cells = domain_box.size(MU_DIR);
+      bool second_order = phase_geom.secondOrder();
 
-      // copy const soln_fB (along wiht the boundary values) to a temporary
-      const IntVect ghostVect(4*IntVect::Unit);
-      LevelData<FArrayBox> fB(dbl, 1, ghostVect);
-      DataIterator sdit = fB.dataIterator();
-      for (sdit.begin(); sdit.ok(); ++sdit) {
-        fB[sdit].copy(soln_fB[sdit]);
+      // set phase ghost width
+      if (second_order) {
+         m_ghostVect = IntVect::Unit;
       }
-      fB.exchange();
+      else {
+         m_ghostVect = 2 * IntVect::Unit;
+      }
+      // set cfg ghost width
+      const CFG::IntVect cfg_ghostVect(phase_geom.config_restrict(m_ghostVect));
+      
+      // copy const soln_fB (along wiht the boundary values) to a temporary
+      if ( !m_fB.isDefined()) m_fB.define( dbl, 1, m_ghostVect );
+      DataIterator sdit = m_fB.dataIterator();
+      for (sdit.begin(); sdit.ok(); ++sdit) {
+        m_fB[sdit].copy(soln_fB[sdit]);
+      }
 
       // get density, mean parallel velocity, temperature, and fourth moment coefficient
-      const CFG::IntVect cfg_ghostVect(4*CFG::IntVect::Unit);
       CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, cfg_ghostVect);
       CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, cfg_ghostVect);
       CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
       CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, cfg_ghostVect);
       CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-      moment_op.compute(dens_cfg, soln_species, fB, DensityKernel());
-      moment_op.compute(Upar_cfg, soln_species, fB, ParallelMomKernel());
-      moment_op.compute(four_cfg, soln_species, fB, FourthMomentKernel());
-      moment_op.compute(perp_cfg, soln_species, fB, PerpEnergyKernel());
-      CFG::DataIterator cfg_dit = dens_cfg.dataIterator();
-      for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
-        Upar_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
-      }
-      moment_op.compute(temp_cfg, soln_species, fB, PressureKernel(Upar_cfg));
+   
+      if (!m_simple_diffusion) {
+         m_moment_op.compute(dens_cfg, soln_species, m_fB, DensityKernel());
+         m_moment_op.compute(Upar_cfg, soln_species, m_fB, ParallelMomKernel());
+         m_moment_op.compute(four_cfg, soln_species, m_fB, FourthMomentKernel());
+         m_moment_op.compute(perp_cfg, soln_species, m_fB, PerpEnergyKernel());
+         CFG::DataIterator cfg_dit = dens_cfg.dataIterator();
+         for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+            Upar_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
+         }
+         m_moment_op.compute(temp_cfg, soln_species, m_fB, PressureKernel(Upar_cfg));
 
-      for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
-        four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by pressure
-        perp_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by pressure
+         for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+            four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by pressure
+            perp_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by pressure
+         }
+         for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+            temp_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
+         }
+         for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+            four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by temperature
+         }
       }
-      for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
-        temp_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
-      }
-      for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
-        four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by temperature
-      }
+   
       LevelData<FArrayBox> density;
       LevelData<FArrayBox> Upar;
       LevelData<FArrayBox> temperature;
@@ -133,43 +148,40 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
       phase_geom.injectConfigurationToPhase(perp_cfg, perp_coef);
 
    
-      //get NJinverse and B-field data for dealigned grid calculations
-      CFG::LevelData<CFG::FluxBox> pointwiseNJinv_cfg(mag_geom.grids(), CFG_DIM*CFG_DIM, cfg_ghostVect);
-      mag_geom.getPointwiseNJInverse(pointwiseNJinv_cfg);
-      LevelData<FluxBox> inj_pointwiseNJinv;
-      phase_geom.injectConfigurationToPhase(pointwiseNJinv_cfg, inj_pointwiseNJinv);
-      const CFG::LevelData<CFG::FluxBox>& bunit_cfg = mag_geom.getFCBFieldDir();
-      LevelData<FluxBox> inj_bunit;
-      phase_geom.injectConfigurationToPhase(bunit_cfg, inj_bunit);
-   
-
       if (m_first_step) {
+
+         //get NJinverse and B-field data for dealigned grid calculations
+         CFG::LevelData<CFG::FluxBox> pointwiseNJinv_cfg(mag_geom.grids(), CFG_DIM*CFG_DIM, cfg_ghostVect);
+         mag_geom.getPointwiseNJInverse(pointwiseNJinv_cfg);
+         phase_geom.injectConfigurationToPhase(pointwiseNJinv_cfg, m_inj_pointwiseNJinv);
+         const CFG::LevelData<CFG::FluxBox>& bunit_cfg = mag_geom.getFCBFieldDir();
+         phase_geom.injectConfigurationToPhase(bunit_cfg, m_inj_bunit);
          
          // get face centered h_r, h_theta, and h_phi on each CFG_DIM face
-         //
-         m_lame_faces.define(dbl, 3, ghostVect);
+         m_lame_faces.define(dbl, 3, m_ghostVect - IntVect::Unit);
          getFaceCenteredLameCoefficients(m_lame_faces, phase_geom, dbl);
          
-
          // set spatial depedence of transport coefficients
-         // 
-         CFG::LevelData<CFG::FArrayBox> D_cfg( mag_geom.grids(), 5, cfg_ghostVect );
-         if (const_coeff) {
+         // because we are using forthOrderCellToFaceCenters (update to 2nd order later)
+         // we have to use a minimum of 2 ghost layers for the related quantities
+         CFG::LevelData<CFG::FArrayBox> D_cfg( mag_geom.grids(), 5, 2*CFG::IntVect::Unit );
+         CFG::DataIterator cfg_dit = D_cfg.dataIterator();
+         if (m_const_coeff) {
             for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
                for (int iD=0; iD<4; iD++) {
-                  D_cfg[cfg_dit].setVal(D_kinet[iD],iD);
+                  D_cfg[cfg_dit].setVal(m_D_kinet[iD],iD);
                }
-               D_cfg[cfg_dit].setVal(DN0,4);
+               D_cfg[cfg_dit].setVal(m_DN0,4);
             } 
          } 
          else {
             setTransportCoeffSpatialDependence( D_cfg, mag_geom, time);
          }
-         CFG::LevelData<CFG::FluxBox> D_cfg_faces(mag_geom.grids(), D_cfg.nComp(), cfg_ghostVect);
+         CFG::IntVect cfg_face_ghost = cfg_ghostVect - CFG::IntVect::Unit;
+         CFG::LevelData<CFG::FluxBox> D_cfg_faces(mag_geom.grids(), D_cfg.nComp(), cfg_face_ghost);
          fourthOrderCellToFaceCenters(D_cfg_faces, D_cfg);
-         phase_geom.injectConfigurationToPhase( D_cfg_faces, D_kinet_faces);
+         phase_geom.injectConfigurationToPhase( D_cfg_faces, m_D_kinet_faces);
          
-      
          // compute the preconditioner coeffficient for the implicit solver
          //
          m_precond_D.define(mag_geom.grids(), CFG_DIM * CFG_DIM, CFG::IntVect::Unit);
@@ -177,18 +189,17 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
   
       }
 
-
       // create cell-centered dfB/dmu
-      LevelData<FArrayBox> dfBdmu_cc(dbl, 1, 2*IntVect::Unit);
-      DataIterator dit0 = dfBdmu_cc.dataIterator();
+      if ( !m_dfBdmu_cc.isDefined()) m_dfBdmu_cc.define( dbl, 1, m_ghostVect );
+      DataIterator dit0 = m_dfBdmu_cc.dataIterator();
       for (dit0.begin(); dit0.ok(); ++dit0)
       {  
         // get phase space dx on this patch
         const PhaseBlockCoordSys& block_coord_sys = phase_geom.getBlockCoordSys(dbl[dit0]);
         const RealVect& phase_dx =  block_coord_sys.dx();
 
-        const FArrayBox& fB_on_patch = fB[dit0];
-        FArrayBox& dfBdmu_on_patch = dfBdmu_cc[dit0];
+        const FArrayBox& fB_on_patch = m_fB[dit0];
+        FArrayBox& dfBdmu_on_patch = m_dfBdmu_cc[dit0];
 
         FORT_DFBDMU_CELL_CENTER( CHF_BOX(dfBdmu_on_patch.box()),
                                  CHF_CONST_REALVECT(phase_dx),
@@ -196,20 +207,23 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
                                  CHF_CONST_FRA1(fB_on_patch,0),
                                  CHF_FRA1(dfBdmu_on_patch,0) );
       }
-      dfBdmu_cc.exchange(); 
+      
+      if (!second_order) {
+         m_dfBdmu_cc.exchange();
+      }
 
       // calculate face-averaged flux
-      LevelData<FluxBox> fluxNorm(dbl, 1, IntVect::Unit);
-      LevelData<FluxBox> flux(dbl, SpaceDim, IntVect::Unit);
+      if (!m_fluxNorm.isDefined()) m_fluxNorm.define(dbl, 1, m_ghostVect-IntVect::Unit);
+      if (!m_flux.isDefined()) m_flux.define(dbl, SpaceDim, m_ghostVect-IntVect::Unit);
       const int simpleDiff = m_simple_diffusion? 1: 0;
-      for (DataIterator dit( flux.dataIterator() ); dit.ok(); ++dit)
+      for (DataIterator dit( m_flux.dataIterator() ); dit.ok(); ++dit)
       {
         // get phase space dx on this patch
         const PhaseBlockCoordSys& block_coord_sys = phase_geom.getBlockCoordSys(dbl[dit]);
         const RealVect& phase_dx =  block_coord_sys.dx();
 
-        const FArrayBox& fB_on_patch = fB[dit];
-        const FArrayBox& dfBdmu_on_patch = dfBdmu_cc[dit];
+        const FArrayBox& fB_on_patch = m_fB[dit];
+        const FArrayBox& dfBdmu_on_patch = m_dfBdmu_cc[dit];
         const FArrayBox& B_on_patch  = inj_B[dit];
         const FArrayBox& N_on_patch  = density[dit];
         const FArrayBox& U_on_patch  = Upar[dit];
@@ -219,12 +233,12 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
          
         for (int dir=0; dir<SpaceDim; dir++)
         {
-          FArrayBox& thisfluxNorm = fluxNorm[dit][dir];
-          FArrayBox& thisflux = flux[dit][dir];
+          FArrayBox& thisfluxNorm = m_fluxNorm[dit][dir];
+          FArrayBox& thisflux = m_flux[dit][dir];
           const FArrayBox& lame_on_patch = m_lame_faces[dit][dir];
-          const FArrayBox& bunit_on_patch  = inj_bunit[dit][dir];
-          const FArrayBox& NJinv_on_patch = inj_pointwiseNJinv[dit][dir];
-          const FArrayBox& D_kinet_on_patch = D_kinet_faces[dit][dir];
+          const FArrayBox& bunit_on_patch  = m_inj_bunit[dit][dir];
+          const FArrayBox& NJinv_on_patch = m_inj_pointwiseNJinv[dit][dir];
+          const FArrayBox& D_kinet_on_patch = m_D_kinet_faces[dit][dir];
 
           if(!m_arbitrary_grid) {
             FORT_EVAL_ANOM_FLUX(CHF_CONST_INT(dir),
@@ -269,36 +283,37 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
       }
 
       // calculate div(flux)
-      LevelData<FArrayBox> rhs_transport;
-      rhs_transport.define(rhs_dfn);
+      if (!m_rhs_transport.isDefined()) m_rhs_transport.define(rhs_dfn);
       if (!m_arbitrary_grid) {
-         phase_geom.averageAtBlockBoundaries(fluxNorm);
-         phase_geom.mappedGridDivergenceFromFluxNormals(rhs_transport, fluxNorm);
+         phase_geom.averageAtBlockBoundaries(m_fluxNorm);
+         phase_geom.mappedGridDivergenceFromFluxNormals(m_rhs_transport, m_fluxNorm);
       }
       else {
          //cout << "arb grid check 1 " << endl;
-         phase_geom.applyAxisymmetricCorrection(flux);
-         phase_geom.averageAtBlockBoundaries(flux);
+         phase_geom.applyAxisymmetricCorrection(m_flux);
+	 // This averaging is likely unnesessary )at least to 2nd order)
+	 //(as it is also done as part of mappedGridDivergence calculation)
+         phase_geom.averageAtBlockBoundaries(m_flux);
          const bool OMIT_NT(false);
-         phase_geom.mappedGridDivergence( rhs_transport, flux, OMIT_NT );
-         for (DataIterator dit( rhs_transport.dataIterator() ); dit.ok(); ++dit) {
+         phase_geom.mappedGridDivergence( m_rhs_transport, m_flux, OMIT_NT );
+         for (DataIterator dit( m_rhs_transport.dataIterator() ); dit.ok(); ++dit) {
             const PhaseBlockCoordSys& block_coord_sys( phase_geom.getBlockCoordSys( dbl[dit] ) );
             double fac( 1.0 / block_coord_sys.getMappedCellVolume() );
-            rhs_transport[dit].mult( fac );
+            m_rhs_transport[dit].mult( fac );
          }
 
       }
    
       // add (or overwrite) transport RHS to Vlasov RHS
-      DataIterator rdit = rhs_transport.dataIterator();
+      DataIterator rdit = m_rhs_transport.dataIterator();
       for (rdit.begin(); rdit.ok(); ++rdit)
       {
-        if(model_only) {
-           rhs_dfn[rdit].copy(rhs_transport[rdit]);
+        if(m_model_only) {
+           rhs_dfn[rdit].copy(m_rhs_transport[rdit]);
         }
         else  {
            //cout << "model plus " << endl;
-           rhs_dfn[rdit].plus(rhs_transport[rdit]);
+           rhs_dfn[rdit].plus(m_rhs_transport[rdit]);
         }
       }
 
@@ -375,7 +390,7 @@ void Anomalous::setTransportCoeffSpatialDependence( CFG::LevelData<CFG::FArrayBo
 {
    CH_assert(a_D_kinet_cfg.nComp() == 5);
    CFG::DataIterator cfg_dit = a_D_kinet_cfg.dataIterator();
-   const CFG::IntVect cfg_ghostVect(4*CFG::IntVect::Unit);
+   const CFG::IntVect cfg_ghostVect(2*CFG::IntVect::Unit);
    CFG::LevelData<CFG::FArrayBox> D0_cfg, D1_cfg, D2_cfg, D3_cfg, DN_cfg;
    CFG::LevelData<CFG::FArrayBox> D0_fluid, D1_fluid, D2_fluid, D3_fluid;
    
@@ -442,17 +457,17 @@ void Anomalous::setTransportCoeffSpatialDependence( CFG::LevelData<CFG::FArrayBo
    //
    if (pptpm.contains("D_kinet")) { // spatial functions refer to kinetic transport coeffs
       for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
-         D0_cfg[cfg_dit].mult( D_kinet[0] );
-         D1_cfg[cfg_dit].mult( D_kinet[1] );
-         D2_cfg[cfg_dit].mult( D_kinet[2] );
-         D3_cfg[cfg_dit].mult( D_kinet[3] );
+         D0_cfg[cfg_dit].mult( m_D_kinet[0] );
+         D1_cfg[cfg_dit].mult( m_D_kinet[1] );
+         D2_cfg[cfg_dit].mult( m_D_kinet[2] );
+         D3_cfg[cfg_dit].mult( m_D_kinet[3] );
       }
    }
 
 
    // if spatial functions are for fluid coefficients, perform arithmetic
    //
-   if (pptpm.contains("D_fluid")) { // spatial functions refer to fluid transport coeffs
+   if (pptpm.contains("m_D_fluid")) { // spatial functions refer to fluid transport coeffs
       //CFG::LevelData<CFG::FArrayBox> D0_fluid, D1_fluid, D2_fluid, D3_fluid;
       //D0_fluid.define(D0_cfg);
       //D1_fluid.define(D1_cfg);
@@ -460,11 +475,11 @@ void Anomalous::setTransportCoeffSpatialDependence( CFG::LevelData<CFG::FArrayBo
       //D3_fluid.define(D3_cfg);
      
       for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
-         D0_fluid[cfg_dit].mult( D_fluid[0] );
-         D1_fluid[cfg_dit].mult( D_fluid[1] );
-         D2_fluid[cfg_dit].mult( D_fluid[2] );
-         D3_fluid[cfg_dit].mult( D_fluid[3] );
-         if (D_fluid[0]==0) {
+         D0_fluid[cfg_dit].mult( m_D_fluid[0] );
+         D1_fluid[cfg_dit].mult( m_D_fluid[1] );
+         D2_fluid[cfg_dit].mult( m_D_fluid[2] );
+         D3_fluid[cfg_dit].mult( m_D_fluid[3] );
+         if (m_D_fluid[0]==0) {
             D0_cfg[cfg_dit].copy( D3_fluid[cfg_dit].mult( 2.0/3.0 ) );
             D1_cfg[cfg_dit].copy( D1_fluid[cfg_dit].mult( -1.0 ) );
             D2_cfg[cfg_dit].copy( D2_fluid[cfg_dit].mult( -2.0/3.0 ) );
@@ -579,17 +594,17 @@ void Anomalous::ParseParameters()
 
 {
 
-   pptpm.query("model_only",model_only);
+   pptpm.query("model_only",m_model_only);
    pptpm.query("simple_diffusion",m_simple_diffusion);
-   pptpm.query("verbosity",verbosity);
-   CH_assert( verbosity == 0 || verbosity == 1);
+   pptpm.query("verbosity",m_verbosity);
+   CH_assert( m_verbosity == 0 || m_verbosity == 1);
    pptpm.query("arbitrary_grid",m_arbitrary_grid);
 
    
    if (pptpm.contains("const_coeff") ) {
-     pptpm.get("const_coeff", const_coeff);
+     pptpm.get("const_coeff", m_const_coeff);
 
-     if (!const_coeff) {
+     if (!m_const_coeff) {
  
        CFG::GridFunctionLibrary* grid_library = CFG::GridFunctionLibrary::getInstance();
        std::string grid_function_name;
@@ -623,33 +638,33 @@ void Anomalous::ParseParameters()
      MayDay::Error( "TRANSPORT MODEL BEING USED, BUT COEFFICIENTS NOT PROPERLY DEFINED" );
    }
    if (pptpm.contains("D_fluid")) {
-     pptpm.getarr("D_fluid",D_fluid,0,4);
+     pptpm.getarr("D_fluid",m_D_fluid,0,4);
      // convert fluid matrix components to kinetic coefficients
-     if (D_fluid[0]==0) {
-       D_kinet[0] = 2.0/3.0*D_fluid[3];
-       D_kinet[1] = -D_fluid[1];
-       D_kinet[2] = -2.0/3.0*D_fluid[2];
-       D_kinet[3] = D_fluid[1];
-       DN0 = D_kinet[0]; // this is free parameter used to insure D0 is not zero
+     if (m_D_fluid[0]==0) {
+       m_D_kinet[0] = 2.0/3.0*m_D_fluid[3];
+       m_D_kinet[1] = -m_D_fluid[1];
+       m_D_kinet[2] = -2.0/3.0*m_D_fluid[2];
+       m_D_kinet[3] = m_D_fluid[1];
+       m_DN0 = m_D_kinet[0]; // this is free parameter used to insure D0 is not zero
      }
      else {
-       D_kinet[0] = D_fluid[0];                                // D0
-       D_kinet[1] = -D_fluid[1];                               // DT0
-       D_kinet[2] = -2.0/3.0*D_fluid[2]+D_fluid[0];            // DN2
-       D_kinet[3] = -2.0/3.0*D_fluid[3]+D_fluid[0]+D_fluid[1]; // DT2
+       m_D_kinet[0] = m_D_fluid[0];                                // D0
+       m_D_kinet[1] = -m_D_fluid[1];                               // DT0
+       m_D_kinet[2] = -2.0/3.0*m_D_fluid[2]+m_D_fluid[0];            // DN2
+       m_D_kinet[3] = -2.0/3.0*m_D_fluid[3]+m_D_fluid[0]+m_D_fluid[1]; // DT2
      }
    }
    if (pptpm.contains("D_kinet")) {
-     pptpm.getarr("D_kinet",D_kinet,0,4);
+     pptpm.getarr("D_kinet",m_D_kinet,0,4);
      // convert kinetic matrix components to fluid coefficients
-     D_fluid[0] = D_kinet[0];                                  // DNN
-     D_fluid[1] = -D_kinet[1];                                 // DNT
-     D_fluid[2] = 3.0/2.0*(D_kinet[0]-D_kinet[2]);             // DTN
-     D_fluid[3] = 3.0/2.0*(D_kinet[0]-D_kinet[1]-D_kinet[3]);  // DTT
+     m_D_fluid[0] = m_D_kinet[0];                                  // DNN
+     m_D_fluid[1] = -m_D_kinet[1];                                 // DNT
+     m_D_fluid[2] = 3.0/2.0*(m_D_kinet[0]-m_D_kinet[2]);             // DTN
+     m_D_fluid[3] = 3.0/2.0*(m_D_kinet[0]-m_D_kinet[1]-m_D_kinet[3]);  // DTT
    }
 
    // make sure that Anomalous Diff. coeff. D0 is positive
-   if ( procID()==0 && (D_kinet[0] <= 0) ) {
+   if ( procID()==0 && (m_D_kinet[0] <= 0) ) {
      cout << "DIFFUSION COEFFICIENT D0 FOR SPECIES " << species_name << " IS <= ZERO " << endl;
      if (pptpm.contains("D_fluid")) {
        MayDay::Error( "FLUID COEFFICIENT D11 = D_fluid[0] MUST BE >= ZERO " );
@@ -679,7 +694,7 @@ inline void Anomalous::printParameters( const KineticSpecies& soln )
    std::string tpt_only_str("false");
    std::string tpt_arbitraryGrid_str("true");
    std::string tpt_simpleDiffusion_str("false");
-   if (model_only){ tpt_only_str = "true";}
+   if (m_model_only){ tpt_only_str = "true";}
    if (!m_arbitrary_grid){ tpt_arbitraryGrid_str = "false";}
    if (m_simple_diffusion){ tpt_simpleDiffusion_str = "true";}
 
@@ -689,11 +704,11 @@ inline void Anomalous::printParameters( const KineticSpecies& soln )
      cout << "tpt_only = " <<  tpt_only_str << endl;
      cout << "Arbitrary grid calculation  = " <<  tpt_arbitraryGrid_str << endl;
      cout << "simple diffusion model  = " <<  tpt_simpleDiffusion_str << endl;
-     cout << "Fluid Tranpsort Matrix:  " << " D11 = " << D_fluid[0] << ", D12 = " << D_fluid[1] << endl;
-     cout << "                         " << " D21 = " << D_fluid[2] << ", D22 = " << D_fluid[3] << endl;
-     cout << "Kinetic Diffusion Coef:  " << " D0  = " << D_kinet[0] << endl;
-     cout << "Kinetic Advection Coefs: " << " DN0 = " << DN0        << ", DT0  = " << D_kinet[1] << endl;
-     cout << "                         " << " DN2 = " << D_kinet[2] << ", DT2  = " << D_kinet[3] << endl;
+     cout << "Fluid Tranpsort Matrix:  " << " D11 = " << m_D_fluid[0] << ", D12 = " << m_D_fluid[1] << endl;
+     cout << "                         " << " D21 = " << m_D_fluid[2] << ", D22 = " << m_D_fluid[3] << endl;
+     cout << "Kinetic Diffusion Coef:  " << " D0  = " << m_D_kinet[0] << endl;
+     cout << "Kinetic Advection Coefs: " << " DN0 = " << m_DN0        << ", DT0  = " << m_D_kinet[1] << endl;
+     cout << "                         " << " DN2 = " << m_D_kinet[2] << ", DT2  = " << m_D_kinet[3] << endl;
      //cout << "Stable Diffusive time step           = " << dt_stable_diff << endl;
      //cout << "Stable Advective-Diffusive time step = " << dt_stable_adv_diff << endl;
      cout << "Stable time step < " << dt_stable << endl;
@@ -701,45 +716,144 @@ inline void Anomalous::printParameters( const KineticSpecies& soln )
    }
 }
 
-Real Anomalous::computeStableDt( const KineticSpecies& soln_species )
+Real Anomalous::computeStableDt( const KineticSpecies& a_soln_species )
 {
+   CH_TIMERS("Anomalous::computeStableDt");
+   CH_TIMER("MPI_AllReduce", t_MPI_AllReduce);
+   CH_TIMER("find_minMax", t_findMinMax);
+
    // get stuff to calculate stability parameters on time step and number of mu cells
-   //const KineticSpecies& soln_species( *(soln[0]) );
-   const LevelData<FArrayBox>& soln_fB = soln_species.distributionFunction();
+   //const KineticSpecies& a_soln_species( *(soln[0]) );
+   const LevelData<FArrayBox>& soln_fB = a_soln_species.distributionFunction();
    const DisjointBoxLayout& dbl = soln_fB.getBoxes();
-   const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
+   const PhaseGeom& phase_geom = a_soln_species.phaseSpaceGeometry();
+
+   // calculate cell-centered beta=U_psi^2/D_psi
+   if (!m_beta.isDefined())  m_beta.define(dbl, 1, IntVect::Zero);
+   
+   if (!m_simple_diffusion) {
+      computeBeta(m_beta, a_soln_species);
+   }
+   else {
+     for (DataIterator dit(dbl); dit.ok(); ++dit) {
+       m_beta[dit].setVal(1.0e-10);
+     }
+   }
+   
+   // get mapped dr (current mappings assume dr to be the same in all blocks)
+   const PhaseCoordSys& coord_sys = phase_geom.phaseCoordSys();
+   const PhaseBlockCoordSys& block_coord_sys = (const PhaseBlockCoordSys&)(*coord_sys.getCoordSys(0));
+   const RealVect& phase_dx =  block_coord_sys.dx();
+   Real dr = phase_dx[RADIAL_DIR];
+   
+   // get r lame coefficient
+   if (!m_hr.isDefined()) {
+     m_hr.define(dbl, 1, IntVect::Zero);
+     for (DataIterator dit(dbl); dit.ok(); ++dit) {
+       // get cell-centered h_r, h_theta, and h_phi on this patch
+       Box phase_box(dbl[dit]);
+       FArrayBox lame_cells(phase_box, 3);
+       getCellCenteredLameCoefficients(lame_cells, phase_geom, dbl[dit]);
+       m_hr[dit].copy(lame_cells,0,0);
+     }
+   }
+ 
+   // convert fluid matrix components to Anomalous coefficients
+   // const Real D2 = 2.0/3.0*D_fluid[2]-D_fluid[0];
+   //const Real D0 = 2.0/3.0*D_fluid[3]-D_fluid[1] - 7.0/2.0*D2;
+   //const Real D1 = 2.0/3.0*D_fluid[3]-D_fluid[1] + D_fluid[0] - four/three*D_fluid[2];
+   //const Real D3 = 3.0/2.0*D2 - D_fluid[1];
+   //const Real D4 = -2.0*D2;
+   //const Real D5 = -4.0/3.0*( 2.0/3.0*D_fluid[3]-D_fluid[1] );
+
+   // get the min value of hr and Dpsi and max values of Dpsi and Upsi
+   Real local_min_hr(1000);  // 1000 is just a starting point
+   Real local_max_beta(-1000);
+
+   CH_START(t_findMinMax);
+   for (DataIterator dit(dbl); dit.ok(); ++dit) {
+     Box box( dbl[dit] );
+     Real box_min_hr( m_hr[dit].min (box) );
+     Real box_max_beta( m_beta[dit].max (box) );
+     local_min_hr = Min( local_min_hr, box_min_hr );
+     local_max_beta = Max( local_max_beta, box_max_beta );
+   }
+   CH_STOP(t_findMinMax);
+   
+   CH_START(t_MPI_AllReduce);
+   Real min_hr( local_min_hr );
+   Real max_beta( local_max_beta );
+#ifdef CH_MPI
+   MPI_Allreduce( &local_min_hr, &min_hr, 1, MPI_CH_REAL, MPI_MIN, MPI_COMM_WORLD );
+   MPI_Allreduce( &local_max_beta, &max_beta, 1, MPI_CH_REAL, MPI_MAX, MPI_COMM_WORLD );
+#endif
+   CH_STOP(t_MPI_AllReduce);
+
+   // calculate min time step set by purely diffusive parts
+   // dt*sum_i( D_i/dx_i^2 ) << 1/2
+   const Real alpha_r = m_D_kinet[0]/(min_hr*min_hr*dr*dr);
+   const Real dt_stable_diff = 0.5/alpha_r;
+
+   // calculate min time step set by advective-diffusive
+   // dt*sum_i( U_i^2/D_i ) << 2
+   //const Real beta_r = max_Upsi*max_Upsi/min_Dpsi;
+   const Real dt_stable_adv_diff = 2.0/max_beta;
+   
+   // take mininum stable time step
+   Real stableDt = Min(dt_stable_diff, dt_stable_adv_diff);
+
+   // JRA prevent -nan return that occurs before first step and causes code not to run   
+   if(stableDt != stableDt) stableDt = 123456.7;
+
+   return stableDt;
+
+
+}
+
+void
+Anomalous::computeBeta(LevelData<FArrayBox>& a_beta,
+                       const KineticSpecies& a_soln_species )
+{
+   /*
+    Computes cell-centered beta=U_psi^2/D_psi
+    */
+   
+   // get stuff to calculate stability parameters on time step and number of mu cells
+   //const KineticSpecies& a_soln_species( *(soln[0]) );
+   const LevelData<FArrayBox>& soln_fB = a_soln_species.distributionFunction();
+   const DisjointBoxLayout& dbl = soln_fB.getBoxes();
+   const PhaseGeom& phase_geom = a_soln_species.phaseSpaceGeometry();
    const CFG::MultiBlockLevelGeom & mag_geom = phase_geom.magGeom();
    const LevelData<FArrayBox>& inj_B = phase_geom.getBFieldMagnitude();
-   double mass = soln_species.mass();
+   double mass = a_soln_species.mass();
    const ProblemDomain& phase_domain = phase_geom.domain();
    const Box& domain_box = phase_domain.domainBox();
    int num_r_cells = domain_box.size(0);
 
-   // copy const soln_fB to a temporary 
-   const IntVect ghostVect(4*IntVect::Unit);
-   LevelData<FArrayBox> fB(dbl, 1, ghostVect); 
-   DataIterator sdit = fB.dataIterator();
+   // copy const soln_fB (along wiht the boundary values) to a temporary
+   if ( !m_fB_beta.isDefined()) m_fB_beta.define( dbl, 1, IntVect::Unit );
+   DataIterator sdit = m_fB_beta.dataIterator();
    for (sdit.begin(); sdit.ok(); ++sdit) {
-     fB[sdit].copy(soln_fB[sdit]);
+     m_fB_beta[sdit].copy(soln_fB[sdit]);
    }
-   
+
    // get density, mean parallel velocity, temperature, and fourth moment coefficient
-   const CFG::IntVect cfg_ghostVect(4*CFG::IntVect::Unit);
+   CFG::IntVect	cfg_ghostVect =	CFG::IntVect::Unit;
    CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, cfg_ghostVect);
    CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, cfg_ghostVect);
    CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
    CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, cfg_ghostVect);
    CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
 
-   moment_op.compute(dens_cfg, soln_species, fB, DensityKernel());
-   moment_op.compute(Upar_cfg, soln_species, fB, ParallelMomKernel());
-   moment_op.compute(four_cfg, soln_species, fB, FourthMomentKernel());
-   moment_op.compute(perp_cfg, soln_species, fB, PerpEnergyKernel());
+   m_moment_op.compute(dens_cfg, a_soln_species, m_fB_beta, DensityKernel());
+   m_moment_op.compute(Upar_cfg, a_soln_species, m_fB_beta, ParallelMomKernel());
+   m_moment_op.compute(four_cfg, a_soln_species, m_fB_beta, FourthMomentKernel());
+   m_moment_op.compute(perp_cfg, a_soln_species, m_fB_beta, PerpEnergyKernel());
    CFG::DataIterator cfg_dit = dens_cfg.dataIterator();
    for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
      Upar_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
    }
-   moment_op.compute(temp_cfg, soln_species, fB, PressureKernel(Upar_cfg));
+   m_moment_op.compute(temp_cfg, a_soln_species, m_fB_beta, PressureKernel(Upar_cfg));
 
    for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
      four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by pressure
@@ -762,9 +876,7 @@ Real Anomalous::computeStableDt( const KineticSpecies& soln_species )
    phase_geom.injectConfigurationToPhase(four_cfg, fourth_coef);
    phase_geom.injectConfigurationToPhase(perp_cfg, perp_coef);
 
-   // calculate cell-centered beta=U_psi^2/D_psi
-   LevelData<FArrayBox> beta(dbl, 1, IntVect::Zero);
-   DataIterator bdit = beta.dataIterator();
+   DataIterator bdit = a_beta.dataIterator();
    for (bdit.begin(); bdit.ok(); ++bdit)
    {
      // get phase space dx on this patch
@@ -778,9 +890,9 @@ Real Anomalous::computeStableDt( const KineticSpecies& soln_species )
      const FArrayBox& C_on_patch  = fourth_coef[bdit];
      const FArrayBox& P_on_patch  = perp_coef[bdit];
 
-     FORT_EVAL_BETA( CHF_BOX(beta[bdit].box()),
+     FORT_EVAL_BETA( CHF_BOX(a_beta[bdit].box()),
                      CHF_CONST_REALVECT(phase_dx),
-                     CHF_CONST_VR(D_kinet),
+                     CHF_CONST_VR(m_D_kinet),
                      CHF_CONST_REAL(mass),
                      CHF_CONST_INT(num_r_cells),
                      CHF_CONST_FRA1(B_on_patch,0),
@@ -789,73 +901,8 @@ Real Anomalous::computeStableDt( const KineticSpecies& soln_species )
                      CHF_CONST_FRA1(T_on_patch,0),
                      CHF_CONST_FRA1(C_on_patch,0),
                      CHF_CONST_FRA1(P_on_patch,0),
-                     CHF_FRA1(beta[bdit],0) );
+                     CHF_FRA1(a_beta[bdit],0) );
    }
-
-   // get r lame coefficient
-   LevelData<FArrayBox> hr(dbl, 1, IntVect::Zero);
-   DataIterator dit= hr.dataIterator();
-   Real dr;
-   for (dit.begin(); dit.ok(); ++dit)
-   {
-     const PhaseBlockCoordSys& block_coord_sys = phase_geom.getBlockCoordSys(dbl[dit]);
-     const RealVect& phase_dx =  block_coord_sys.dx();
-     dr = phase_dx[0];
-
-     // get cell-centered h_r, h_theta, and h_phi on this patch
-     Box phase_box(dbl[dit]);
-     FArrayBox lame_cells(phase_box, 3);
-     getCellCenteredLameCoefficients(lame_cells, phase_geom, dbl[dit]);
-     hr[dit].copy(lame_cells,0,0);
-
-   }
-   hr.exchange();
-
-   // convert fluid matrix components to Anomalous coefficients
-   // const Real D2 = 2.0/3.0*D_fluid[2]-D_fluid[0];
-   //const Real D0 = 2.0/3.0*D_fluid[3]-D_fluid[1] - 7.0/2.0*D2;
-   //const Real D1 = 2.0/3.0*D_fluid[3]-D_fluid[1] + D_fluid[0] - four/three*D_fluid[2];
-   //const Real D3 = 3.0/2.0*D2 - D_fluid[1];
-   //const Real D4 = -2.0*D2;
-   //const Real D5 = -4.0/3.0*( 2.0/3.0*D_fluid[3]-D_fluid[1] );
-
-   // get the min value of hr and Dpsi and max values of Dpsi and Upsi
-   Real local_min_hr(1000);  // 1000 is just a starting point
-   Real local_max_beta(-1000);
-
-   for (dit.begin(); dit.ok(); ++dit)
-   {
-     Box box( dbl[dit] );
-     Real box_min_hr( hr[dit].min (box) );
-     Real box_max_beta( beta[dit].max (box) );
-     local_min_hr = Min( local_min_hr, box_min_hr );
-     local_max_beta = Max( local_max_beta, box_max_beta );
-   }
-
-   Real min_hr( local_min_hr );
-   Real max_beta( local_max_beta );
-#ifdef CH_MPI
-   MPI_Allreduce( &local_min_hr, &min_hr, 1, MPI_CH_REAL, MPI_MIN, MPI_COMM_WORLD );
-   MPI_Allreduce( &local_max_beta, &max_beta, 1, MPI_CH_REAL, MPI_MAX, MPI_COMM_WORLD );
-#endif
-
-   // calculate min time step set by purely diffusive parts
-   // dt*sum_i( D_i/dx_i^2 ) << 1/2
-   const Real alpha_r = D_kinet[0]/(min_hr*min_hr*dr*dr);
-   const Real dt_stable_diff = 0.5/alpha_r;
-
-   // calculate min time step set by advective-diffusive
-   // dt*sum_i( U_i^2/D_i ) << 2
-   //const Real beta_r = max_Upsi*max_Upsi/min_Dpsi;
-   const Real dt_stable_adv_diff = 2.0/max_beta;
-   
-   // take mininum stable time step
-   Real stableDt = Min(dt_stable_diff, dt_stable_adv_diff);
-
-   // JRA prevent -nan return that occurs before first step and causes code not to run   
-   if(stableDt != stableDt) stableDt = 123456.7;
-
-   return stableDt;
 
 }
 

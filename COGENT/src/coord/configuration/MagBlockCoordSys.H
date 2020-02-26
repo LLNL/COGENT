@@ -356,8 +356,19 @@ void
       bool isSubGridGeom() const {return m_subgrid_geometry;}
       IntVect getSubGridData() const {return m_N_mr;}
    
+      virtual bool isFieldAlignedMapping() const {return false;}
+
       virtual string geometryType () const = 0 ;
    
+      void setBoundaryBoxes( const int              dir,
+                             const Side::LoHiSide&  side,
+                             const Vector<Box>&     boxes )
+        {m_boundary_boxes[dir + side*SpaceDim] = boxes;}
+
+      const Vector<Box>& getBoundaryBoxes( const int              dir,
+                                           const Side::LoHiSide&  side ) const
+        {return m_boundary_boxes[dir + side*SpaceDim];}
+
    private:
    
       /// Inline method to compute difference of products needed for cofactors.
@@ -406,6 +417,8 @@ void
       bool m_verbose;
       bool m_subgrid_geometry;
       IntVect m_N_mr;
+
+      Vector<Box> m_boundary_boxes[2*SpaceDim];
 };
 
 

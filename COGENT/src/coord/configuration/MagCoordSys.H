@@ -20,7 +20,8 @@ public:
   /** Default constructor.
   */
    MagCoordSys()
-      : m_provides_flux(false) {;}
+      : m_provides_flux(false),
+        m_sheared_geometry(false) {;}
 
   ///
   /** Destructor.
@@ -68,6 +69,15 @@ public:
                                           int                    dir,
                                           const Side::LoHiSide&  side ) const;
 
+   virtual void setBoundaryBoxes();
+
+   const Vector<Box>& getBoundaryBoxes( const int              block_number,
+                                        const int              dir,
+                                        const Side::LoHiSide&  side )
+   {
+      return m_boundary_boxes[block_number*2*SpaceDim + dir + side*SpaceDim];
+   }
+
 #if CFG_DIM ==3
    /// toroidal block mapping conversion function
    /** Given a_xiSrc in mapped space of block a_nSrc,
@@ -91,6 +101,10 @@ public:
 protected:
 
    bool m_provides_flux;
+
+   bool m_sheared_geometry;
+
+   Vector<Vector<Box> > m_boundary_boxes;
 };
 
 

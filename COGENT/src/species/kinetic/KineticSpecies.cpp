@@ -28,9 +28,9 @@ KineticSpecies::KineticSpecies(
     m_mass( a_mass ),
     m_charge( a_charge ),
     m_moment_op( MomentOp::instance() ),
+    m_velocity_option(PhaseGeom::FULL_VELOCITY),
     m_gyroavg_op(NULL),
-    m_is_gyrokinetic(a_is_gyrokinetic),
-    m_velocity_option(PhaseGeom::FULL_VELOCITY)
+    m_is_gyrokinetic(a_is_gyrokinetic)
 {
     int ghost = (m_geometry->secondOrder()) ? 0 : 1;
     const DisjointBoxLayout& dbl = m_geometry->gridsFull();
@@ -44,8 +44,8 @@ KineticSpecies::KineticSpecies( const KineticSpecies& a_foo )
     m_mass( a_foo.m_mass ),
     m_charge( a_foo.m_charge ),
     m_moment_op( MomentOp::instance() ),
-    m_is_gyrokinetic( a_foo.m_is_gyrokinetic ),
-    m_velocity_option(a_foo.m_velocity_option)
+    m_velocity_option(a_foo.m_velocity_option),
+    m_is_gyrokinetic( a_foo.m_is_gyrokinetic )
 {
    gyroaverageOp(a_foo.gyroaverageOp());
    m_dist_func.define( a_foo.m_dist_func );
@@ -356,8 +356,7 @@ KineticSpecies::computeFSavgMaxwellian( LevelData<FArrayBox>&  a_F0 ) const
       fourthOrderCellExtrapAtDomainBdry(a_F0[dit], domain, dbl[dit]);
    }
    m_geometry->fillInternalGhosts(a_F0);
-   //NB: divideBstarParallel also includes fillInternalGhosts, 
-   //but we included one above, just for the clarity of the code
+
    m_geometry->divideBStarParallel( a_F0 );
 
 }
@@ -566,6 +565,7 @@ Real KineticSpecies::minValue() const
 
 void KineticSpecies::computeVelocity(LevelData<FluxBox>&       a_velocity,
                                      const LevelData<FluxBox>& a_E_field,
+                                     const bool                a_ignore_gyrokinetic,
                                      const int                 a_velocity_option,
                                      const Real&               a_time,
                                      const bool                a_apply_axisymmetric_correction) const
@@ -575,13 +575,11 @@ void KineticSpecies::computeVelocity(LevelData<FluxBox>&       a_velocity,
    //CH_TIMER("copy_velocity_chombo", t_copy_velocity_chombo);
    CH_TIMER("copy_velocity_fort", t_copy_velocity_fort);
 
-   const DisjointBoxLayout& dbl( m_dist_func.getBoxes() );
-
    CH_assert(a_velocity.ghostVect() <= m_velocity.ghostVect());
    CH_assert(a_velocity.nComp() == m_velocity.nComp());
    
 //   if (m_velocity_option != a_velocity_option) {
-       m_geometry->updateVelocities( a_E_field, m_velocity, a_velocity_option, isGyrokinetic() );
+       m_geometry->updateVelocities( a_E_field, m_velocity, a_velocity_option, (isGyrokinetic()&&(!a_ignore_gyrokinetic)) );
 //       m_velocity_option = a_velocity_option;
 //   }
 
@@ -637,13 +635,13 @@ void KineticSpecies::computeMappedVelocityNormals(LevelData<FluxBox>& a_velocity
 
 void KineticSpecies::computeMappedVelocity(LevelData<FluxBox>& a_velocity,
                                            const LevelData<FluxBox>& a_E_field,
+                                           const bool a_ignore_gyrokinetic,
                                            const Real&  a_time) const
 {
    
    CH_TIME("KineticSpecies::computeMappedVelocity");
 
-   const DisjointBoxLayout& dbl( m_dist_func.getBoxes() );
-   computeVelocity(a_velocity, a_E_field, PhaseGeom::FULL_VELOCITY, a_time, false);
+   computeVelocity(a_velocity, a_E_field, a_ignore_gyrokinetic, PhaseGeom::FULL_VELOCITY, a_time, false);
    m_geometry->multNTransposePointwise( a_velocity );
 
 }

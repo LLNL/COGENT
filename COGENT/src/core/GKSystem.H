@@ -260,7 +260,8 @@ class GKSystem
       std::vector<int>  m_num_cells;
       std::vector<int>  m_num_velocity_cells;
       std::vector<bool> m_is_periodic;
-      IntVect m_ghostVect;
+      int               m_kinetic_ghosts;
+      int               m_fluid_ghosts;
 
       std::vector<int> m_configuration_decomposition;
       std::vector<int> m_velocity_decomposition;

@@ -1,0 +1,82 @@
+#include "CONSTANTS.H"
+
+      subroutine set_logical_sheath_bc(
+     &     CHF_FRA1[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_FRA1[f_rflct],
+     &     CHF_CONST_FRA[vel],
+     &     CHF_CONST_FRA1[vn],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_real[charge],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+c     We assign f=0 if mass * vparallel^2 > q phi, and reflect if mass*vparallel^2 < q phi.
+c     Note reflection is done using the reflected distribution function f_rflct.
+
+
+c
+c     local variables
+c
+      integer i,j,k,l,m
+      integer isign
+      integer vn_jbdry, phi_jbdry
+      integer jbdry,jsrc,jsrc_offset
+      real  pot_energy_min
+c
+c     First construct jbdry, the index of the first cell just inside the boundary box.
+c
+      if (iside.eq.0) then
+        jbdry = CHF_UBOUND[bdrybox;1]
+      else
+        jbdry = CHF_LBOUND[bdrybox;1]
+      endif
+      isign = 2*iside-1
+      jsrc_offset = 2 * jbdry - isign
+c
+      CHF_MULTIDO[bdrybox;i;j;k;l;m]
+
+          vn_jbdry = jbdry - isign + iside
+          
+#if CH_SPACEDIM==4
+          if (isign*vn(i,vn_jbdry,k,l).le.zero) then
+
+c            Inflow from limiter: construct f by reflection if below potential boundary
+c            or set f = 0 otherwise
+             
+             phi_jbdry = jbdry - isign
+             pot_energy_min = -charge * phi(i,phi_jbdry,CHF_LBOUND[phi;2],CHF_LBOUND[phi;3])
+             if (mass * (vel(i,jbdry,k,l,0)**2).gt.pot_energy_min) then
+               f(i,j,k,l) = zero
+             else
+               jsrc = jsrc_offset - j
+               f(i,j,k,l) = f_rflct(i,jsrc,-k-1,l)
+             endif
+          
+          endif
+#else
+c     THIS SUBROUTINE ONLY COMPILES IN 5D, IT NEEDS TO BE REVISED LATER.
+          if (isign*vn(i,vn_jbdry,k,l,m).le.zero) then
+
+c            Inflow from limiter: construct f by reflection if below potential boundary
+c            or set f = 0 otherwise
+             
+             phi_jbdry = jbdry - isign
+             pot_energy_min = -charge * phi(i,phi_jbdry,k,CHF_LBOUND[phi;2],CHF_LBOUND[phi;3])
+             if (mass * (vel(i,jbdry,k,l,m,0)**2).gt.pot_energy_min) then
+               f(i,j,k,l,m) = zero
+             else
+               jsrc = jsrc_offset - j
+               f(i,j,k,l,m) = f_rflct(i,jsrc,k,-l-1,m)
+             endif
+          
+          endif
+
+#endif
+
+      CHF_ENDDO
+
+      return
+      end
+

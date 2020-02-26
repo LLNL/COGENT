@@ -75,7 +75,8 @@ void MomentOp::computeIntegrand( LevelData<FArrayBox>&       a_integrand,
                                  const LevelData<FArrayBox>& a_function,
                                  const Kernel&               a_kernel ) const
 {
-   const DisjointBoxLayout& ghost_dbl = a_kinetic_species.getGhostDBL();
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+   DisjointBoxLayout ghost_dbl = geometry.getGhostDBL(a_function);
    int func_ncomp = a_function.nComp();
    int kernel_ncomp = a_kernel.nComponents();
    a_integrand.define( ghost_dbl, func_ncomp*kernel_ncomp, IntVect::Zero);

@@ -104,108 +104,39 @@ ToroidalBlockLevelExchangeCenter::ToroidalBlockLevelExchangeCenter( const MagGeo
             }
             else if ( coord_sys_ptr->type() == "SingleNull" ) {
 
-               for (int n=0; n<order+1; ++n) {
+               int iv_remapped_valid_block = this_remapped_index(iv,SpaceDim);
+               CH_assert(iv_remapped_valid_block >= 0);
 
-                  IntVect iv_tmp(iv_remapped_center);
-                  iv_tmp[POLOIDAL_DIR] += (int)(sheared_interp_stencil_offsets)[dit](iv,n);
+               double sawtooth_interp_fac = this_interp_stencil(iv,order+1);
 
-                  // iv_tmp is a valid or ghost cell of some block.  Find it.
+               if ( sawtooth_interp_fac < 1. ) {
 
-                  int shifted_block;
+                  for (int n=0; n<order+1; ++n) {
 
-                  bool found_block = false;
-                  for (int block=0; block<coord_sys_ptr->numBlocks(); ++block) {
-                     const MagBlockCoordSys& block_coord_sys = a_geometry.getBlockCoordSys(block);
-                     Box grown_box = block_coord_sys.domain().domainBox();
-                     grown_box.grow(IntVect(num_ghosts,a_geometry.shearedGhosts(),num_ghosts));
+                     int offset = (int)(sheared_interp_stencil_offsets)[dit](iv,n);
+
+                     // Find the valid index and block corresponding to the offset iv_remapped_index
+
+                     IntVect iv_offset = iv_remapped_center;
+                     iv_offset[POLOIDAL_DIR] += offset;
+
+                     Vector<int> valid_blocks;
+                     Vector<IntVect> valid_cells;
+                     coord_sys->validBlocksCells(valid_blocks, valid_cells, iv_remapped_valid_block, iv_offset);
+
+                     CH_assert (valid_blocks.size() == 1 && valid_cells.size() == 1);
+                     int valid_block = valid_blocks[0];
+                     IntVect iv_valid = valid_cells[0];
+                     CH_assert(valid_block >= 0);
+
+                     double weight = this_interp_stencil(iv,n);
+                     if ( sawtooth_interp_fac >= 0. ) weight *= (1. - sawtooth_interp_fac);
                      
-                     if ( grown_box.contains(iv_tmp) ) {
-                        shifted_block = block;
-                        found_block = true;
-                        break;
-                     }
+                     // Construct the stencil entry and append it
+                     stencil_vect_ptr->push_back(MBStencilElement(iv_valid, valid_block, weight));
                   }
-                  if ( !found_block ) {
-                     MayDay::Error("ToroidalBlockLevelExchangeCenter::ToroidalBlockLevelExchangeCenter(): block not found");
-                  }
-
-                  // Next, find the block in which iv_tmp is valid.  We can utilize the MagBlockCoordSys::blockRemapping() function,
-                  // but this requires that we shift the toroidal mapped coordinate to obtain the point in the same poloidal plane
-                  // as the poloidal mapping used to create the block mapping (effectively tracing along a field line).
-
-                  const SingleNullBlockCoordSys& shifted_block_coord_sys = (const SingleNullBlockCoordSys&)a_geometry.getBlockCoordSys(shifted_block);
-                  CH_assert(shifted_block_coord_sys.isFieldAlignedMapping());  // See preceding comment
-                  const RealVect& shifted_dx = shifted_block_coord_sys.dx();
-                  double Phi_lo = shifted_block_coord_sys.lowerMappedCoordinate(TOROIDAL_DIR);
-                  double Phi_hi = shifted_block_coord_sys.upperMappedCoordinate(TOROIDAL_DIR);
-
-                  RealVect xi_shifted;
-                  for (int dir=0; dir<SpaceDim; ++dir) {
-                     if ( dir == TOROIDAL_DIR ) {
-                        if ( shifted_block_coord_sys.poloidalMappingIsCentered() ) {
-                           xi_shifted[TOROIDAL_DIR] = 0.5 * (Phi_lo + Phi_hi);
-                        }
-                        else {
-                           xi_shifted[TOROIDAL_DIR] = Phi_lo;
-                        }
-                     }
-                     else {
-                        xi_shifted[dir] = (iv_tmp[dir] + 0.5) * shifted_dx[dir];
-                     }
-                  }
-                     
-                  RealVect xi_valid;
-                  int valid_block;
-                  coord_sys_ptr->blockRemapping(xi_valid, valid_block, xi_shifted, shifted_block);
-
-                  // Now address the fact that the toroidal mapped component of iv_tmp was not really centered
-
-                  int iv_toroidal_offset;
-                  int num_poloidal_blocks = ((RefCountedPtr<SingleNullCoordSys>&)coord_sys_ptr)->numPoloidalBlocks();
-
-                  if ( iv_on_lo_toroidal_bndry ) {
-                     iv_toroidal_offset = (domain_box.smallEnd(TOROIDAL_DIR) - 1) - iv[TOROIDAL_DIR];
-                     valid_block -= num_poloidal_blocks;
-                     if ( valid_block < 0 ) {
-                        valid_block += coord_sys_ptr->numBlocks();
-                     }
-                  }
-                  else if ( iv_on_hi_toroidal_bndry ) {
-                     iv_toroidal_offset = iv[TOROIDAL_DIR] - (domain_box.bigEnd(TOROIDAL_DIR) + 1);
-                     valid_block += num_poloidal_blocks;
-                     if ( valid_block > coord_sys_ptr->numBlocks() - 1 ) {
-                        valid_block -= coord_sys_ptr->numBlocks();
-                     }
-                  }
-
-                  // We finally know the valid block containing iv_tmp, so get its valid index
-
-                  const MagBlockCoordSys& valid_block_coord_sys = a_geometry.getBlockCoordSys(valid_block);
-                  const Box& valid_domain_box = valid_block_coord_sys.domain().domainBox();
-                  const RealVect& valid_dx = valid_block_coord_sys.dx();
-
-                  IntVect iv_valid;
-                  for (int dir=0; dir<SpaceDim; ++dir) {
-                     if ( dir == TOROIDAL_DIR ) {
-                        if ( iv_on_lo_toroidal_bndry ) {
-                           iv_valid[dir] = valid_domain_box.bigEnd(TOROIDAL_DIR) - iv_toroidal_offset;
-                        }
-                        else if ( iv_on_hi_toroidal_bndry ) {
-                           iv_valid[dir] = valid_domain_box.smallEnd(TOROIDAL_DIR) + iv_toroidal_offset;
-                        }
-                     }
-                     else{
-                        iv_valid[dir] = floor(xi_valid[dir]/valid_dx[dir]);
-                     }
-                  }
-
-                  if ( !valid_domain_box.contains(iv_valid) ) {
-                     MayDay::Error("ToroidalBlockLevelExchangeCenter::ToroidalBlockLevelExchangeCenter(): iv_valid is not actually valid");
-                  }
-
-                  // Construct the stencil entry and append it
-                  stencil_vect_ptr->push_back(MBStencilElement(iv_valid, valid_block, this_interp_stencil(iv,n)));
                }
+
             }
             else {
                MayDay::Error("ToroidalBlockLevelExchangeCenter::ToroidalBlockLevelExchangeCenter(): unknown geometry type");

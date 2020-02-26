@@ -1,6 +1,7 @@
 #include "REAL.H"
 #include "LevelData.H"
 #include "FArrayBox.H"
+#include "EdgeDataBox.H"
 #include "DisjointBoxLayout.H"
 #include "DataIterator.H"
 
@@ -38,6 +39,25 @@ namespace GKUtils {
    }
    
    inline
+   int copyFromLevelData( Real* a_dst, const LevelData<EdgeDataBox>& a_src )
+   {  
+      int offset(0);
+      const DisjointBoxLayout& dbl( a_src.disjointBoxLayout() );
+      for (DataIterator dit( a_src.dataIterator() ); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            Box box = dbl[dit];
+            for (int adir=0; adir<SpaceDim; ++adir) {
+               if(adir!=dir) box = surroundingNodes(box,adir);
+            }
+            FArrayBox tmp( box, a_src.nComp(), ( a_dst + offset ) );
+            tmp.copy( a_src[dit][dir] );
+            offset += box.numPts() * a_src.nComp();
+         }
+      }
+      return offset;
+   }
+   
+   inline
    int copyToLevelData( LevelData<FArrayBox>& a_dst, const Real* a_src )
    {
       int offset(0);
@@ -58,6 +78,25 @@ namespace GKUtils {
       for (DataIterator dit( a_dst.dataIterator() ); dit.ok(); ++dit) {
          for (int dir=0; dir<SpaceDim; ++dir) {
             Box box = surroundingNodes(dbl[dit],dir);
+            FArrayBox tmp( box, a_dst.nComp(), const_cast<Real*>( a_src + offset ) );
+            a_dst[dit][dir].copy( tmp );
+            offset += box.numPts() * a_dst.nComp();
+         }
+      }
+      return offset;
+   }
+   
+   inline
+   int copyToLevelData( LevelData<EdgeDataBox>& a_dst, const Real* a_src )
+   {
+      int offset(0);
+      const DisjointBoxLayout& dbl( a_dst.disjointBoxLayout() );
+      for (DataIterator dit( a_dst.dataIterator() ); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            Box box = dbl[dit];
+            for (int adir=0; adir<SpaceDim; ++adir) {
+               if(adir!=dir) box = surroundingNodes(box,adir);
+            }
             FArrayBox tmp( box, a_dst.nComp(), const_cast<Real*>( a_src + offset ) );
             a_dst[dit][dir].copy( tmp );
             offset += box.numPts() * a_dst.nComp();
@@ -100,6 +139,27 @@ namespace GKUtils {
    }
    
    inline
+   int addToLevelData( LevelData<EdgeDataBox>& a_dst,
+                       Real* a_src,
+                       const Real& a_factor )
+   {
+      int offset(0);
+      const DisjointBoxLayout& dbl( a_dst.disjointBoxLayout() );
+      for (DataIterator dit( a_dst.dataIterator() ); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            Box box = dbl[dit];
+            for (int adir=0; adir<SpaceDim; ++adir) {
+               if(adir!=dir) box = surroundingNodes(box,adir);
+            }
+            FArrayBox tmp( box, a_dst.nComp(), ( a_src + offset ) );
+            a_dst[dit][dir].plus( tmp, a_factor );
+            offset += box.numPts() * a_dst.nComp();
+         }
+      }
+      return offset;
+   }
+   
+   inline
    void scaleLevelData( LevelData<FArrayBox>& a_dst, const Real& a_factor )
    {
       for (DataIterator dit( a_dst.dataIterator() ); dit.ok(); ++dit) {
@@ -112,6 +172,17 @@ namespace GKUtils {
    {
       for (DataIterator dit( a_dst.dataIterator() ); dit.ok(); ++dit) {
          a_dst[dit] *= a_factor;
+      }
+   }
+   
+   inline
+   void scaleLevelData( LevelData<EdgeDataBox>& a_dst, const Real& a_factor )
+   {
+      for (DataIterator dit( a_dst.dataIterator() ); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            FArrayBox& this_dst_dir = a_dst[dit][dir];
+            this_dst_dir *= a_factor;
+         }
       }
    }
    
@@ -149,6 +220,24 @@ namespace GKUtils {
       for (DataIterator dit( a_vec_a.dataIterator() ); dit.ok(); ++dit) {
          for (int dir=0; dir<SpaceDim; ++dir) {
             sum += a_vec_a[dit][dir].dotProduct( a_vec_b[dit][dir], surroundingNodes(dbl[dit],dir) );
+         }
+      }
+      return sum;
+   }
+   
+   inline
+   double innerProductLevelData( const LevelData<EdgeDataBox>& a_vec_a,
+                                 const LevelData<EdgeDataBox>& a_vec_b )
+   {
+      double sum(0.0);
+      const DisjointBoxLayout& dbl( a_vec_a.disjointBoxLayout() );
+      for (DataIterator dit( a_vec_a.dataIterator() ); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            Box box = dbl[dit];
+            for (int adir=0; adir<SpaceDim; ++adir) {
+               if(adir!=dir) box = surroundingNodes(box,adir);
+            }
+            sum += a_vec_a[dit][dir].dotProduct( a_vec_b[dit][dir], box );
          }
       }
       return sum;
@@ -222,6 +311,25 @@ namespace GKUtils {
       for (DataIterator dit( a_data.dataIterator() ); dit.ok(); ++dit) {
          for (int dir=0; dir<SpaceDim; ++dir) {
             accum += GKUtils::accumulate( a_data[dit][dir], surroundingNodes(grids[dit],dir), a_p, 0, n );
+         }
+      }
+      return accum;
+   }
+   
+   inline
+   double accumulateLevelData( const LevelData<EdgeDataBox>& a_data,
+                               const int a_p )
+   {
+      double accum(0.0);
+      const DisjointBoxLayout& grids( a_data.disjointBoxLayout() );
+      const int n( a_data.nComp() );
+      for (DataIterator dit( a_data.dataIterator() ); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            Box box = grids[dit];
+            for (int adir=0; adir<SpaceDim; ++adir) {
+               if(adir!=dir) box = surroundingNodes(box,adir);
+            }
+            accum += GKUtils::accumulate( a_data[dit][dir], box, a_p, 0, n );
          }
       }
       return accum;

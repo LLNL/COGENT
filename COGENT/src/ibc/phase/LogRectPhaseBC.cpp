@@ -6,11 +6,14 @@
 #include "LevelData.H"
 #include "PhaseGeom.H"
 #include "SPMD.H"
+#include "LogicalSheathBC.H"
 #include "PhaseBCUtils.H"
 
 #include <sstream>
 
 #include "EdgeToCell.H"
+
+#include "inspect.H"
 
 #include "FourthOrderBC.H.multidim"
 #include "CodimBC.H.multidim"
@@ -181,7 +184,9 @@ LogRectPhaseBC::LogRectPhaseBC( const std::string& a_name,
                                 const int& a_verbosity )
    : m_name(a_name),
      m_verbosity(a_verbosity),
-     m_all_bdry_defined(false)
+     m_pp(a_pp),
+     m_all_bdry_defined(false),
+     m_logical_sheath(false)
 {
    m_inflow_function.resize( NUM_INFLOW );
    m_bc_type.resize( NUM_INFLOW );
@@ -303,6 +308,10 @@ void LogRectPhaseBC::apply(KineticSpecies& a_species_comp,
    CH_START(t_set_codim_boundary_values);
    CodimBC::setCodimBoundaryValues( Bf, coord_sys );
    CH_STOP(t_set_codim_boundary_values);
+   
+   if (m_logical_sheath) {
+      applySheathBC(a_species_comp, a_phi, a_velocity);
+   }
 }
 
 inline
@@ -314,6 +323,37 @@ void LogRectPhaseBC::setAllBcType( const BoundaryBoxLayoutPtrVect&  a_bdry_layou
       const int& dir( bdry_layout.dir() );
       const Side::LoHiSide& side( bdry_layout.side() );
       m_all_bc_type[i] = getBcType(dir, side);
+   }
+}
+
+void LogRectPhaseBC::applySheathBC( KineticSpecies& a_species,
+                                    const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                    const LevelData<FluxBox>& a_velocity)
+{
+   int SHEATH_DIR = POLOIDAL_DIR;
+   
+   // Get coordinate system parameters
+   const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
+   const MultiBlockCoordSys& coord_sys( *(geometry.coordSysPtr()) );
+   const PhaseGrid& phase_grid = geometry.phaseGrid();
+   const DisjointBoxLayout& dbl = phase_grid.disjointBoxLayout();
+   
+   //For sheath BC calculations we only need one-cell-wide
+   //boundary storage, so define it here
+   BoundaryBoxLayoutPtrVect all_bdry_layouts;
+   PhaseBCUtils::defineBoundaryBoxLayouts(all_bdry_layouts,
+                                          dbl,
+                                          coord_sys,
+                                          IntVect::Unit );
+
+   // Loop over boundaries
+   for (int i(0); i<all_bdry_layouts.size(); i++) {
+      const BoundaryBoxLayout& bdry_layout( *(all_bdry_layouts[i]) );
+      const int& dir( bdry_layout.dir() );
+      if (dir == SHEATH_DIR) {
+         LogicalSheathBC sheathBC(bdry_layout, m_pp);
+         sheathBC.applyBC(a_species, a_velocity, a_phi);
+      }
    }
 }
 
@@ -413,6 +453,7 @@ void LogRectPhaseBC::parseParameters( ParmParse& a_pp )
       }
    }
    
+   a_pp.query("logical_sheath",m_logical_sheath);
  
    if (m_verbosity) {
       printParameters();

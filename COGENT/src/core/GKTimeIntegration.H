@@ -94,7 +94,36 @@ public:
       m_is_defined = true;
       m_vector_size = getVectorSize();
    }
-   
+
+   inline
+   void define( const KineticSpeciesPtrVect&    a_kinetic_species,
+                const CFG::FluidSpeciesPtrVect& a_fluid_species,
+                const ScalarPtrVect&            a_scalars,
+                const RefCountedPtr<PhaseGeom>& a_geometry,
+                const IntVect&                  a_kinetic_ghosts,
+                const CFG::IntVect&             a_fluid_ghosts)
+   {
+      m_kinetic_species.resize( a_kinetic_species.size() );
+      for (int s(0); s<a_kinetic_species.size(); s++) {
+         m_kinetic_species[s] = a_kinetic_species[s]->clone( a_kinetic_ghosts );
+      }
+
+      m_fluid_species.resize( a_fluid_species.size() );
+      for (int s(0); s<a_fluid_species.size(); s++) {
+         m_fluid_species[s] = a_fluid_species[s]->clone( a_fluid_ghosts );
+      }
+      
+      m_scalars.resize( a_scalars.size() );
+      for (int s(0); s<a_scalars.size(); s++) {
+         m_scalars[s] = a_scalars[s]->clone();
+      }
+
+      m_geometry = a_geometry;
+      CH_assert(!m_geometry.isNull());
+      m_is_defined = true;
+      m_vector_size = getVectorSize();
+   }
+  
 //   inline
 //   void define_ref( const KineticSpeciesPtrVect& a_species,
 //                const RefCountedPtr<PhaseGeom>& a_geometry )

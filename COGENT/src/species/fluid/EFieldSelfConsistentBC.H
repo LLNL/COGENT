@@ -40,6 +40,7 @@ public:
                                LevelData<FArrayBox>&             phi,
                                EllipticOpBC&                     bc,
                                const bool                        update_potential,
+                               const bool                        inject_field,
                                const bool                        initial_time );
 
    virtual

@@ -26,6 +26,7 @@ SingleNullBlockCoordSys::SingleNullBlockCoordSys( ParmParse&            a_parm_p
       m_poloidal_util(NULL),
       m_field_aligned_mapping(false),
       m_poloidally_truncated(false),
+      m_include_extrablock_mapping(true),
       m_phys_coord_type(CARTESIAN),
       m_toroidal_ghosts(4),
       m_toroidal_mapping_refinement(2),
@@ -48,6 +49,8 @@ SingleNullBlockCoordSys::SingleNullBlockCoordSys( ParmParse&            a_parm_p
     if (a_parm_parse.contains("field_aligned_mapping") && SpaceDim == 3) {
        a_parm_parse.get("field_aligned_mapping", m_field_aligned_mapping);
     }
+
+    a_parm_parse.query("include_extrablock_mapping", m_include_extrablock_mapping);
 
     // If a field coefficients file was specified in the input, use it
     // to define the field.  Otherwise, we read it from the mapping file.
@@ -369,7 +372,7 @@ SingleNullBlockCoordSys::readFiles( ParmParse& a_pp )
 
    double dr = ( upperMappedCoordinate(RADIAL_DIR)
                  - lowerMappedCoordinate(RADIAL_DIR) ) / num_radial_cells;
-
+   
    double *r_pts = new double[mapping_block_size[0]];
 
    r_pts[0] = lowerMappedCoordinate(RADIAL_DIR) - n_radial_extend*dr;
@@ -387,7 +390,7 @@ SingleNullBlockCoordSys::readFiles( ParmParse& a_pp )
    int block_full_poloidal = num_poloidal_cells;
    int block_poloidal = block_full_poloidal;
 
-   definePoints(a_pp, block_poloidal, block_full_poloidal, mapping_block_size, n_poloidal_extend, dtheta, theta_pts);
+   definePoints(a_pp, block_poloidal, block_full_poloidal, mapping_block_size, n_poloidal_extend, dtheta, theta_pts); 
 
    m_poloidally_truncated = (block_poloidal < block_full_poloidal);
 
@@ -406,8 +409,7 @@ SingleNullBlockCoordSys::readFiles( ParmParse& a_pp )
 #endif
 
    POL::Box interp_box(POL::IntVect::Zero,mapping_block_size-POL::IntVect::Unit);
-
-   POL::FArrayBox interp_node_coords(interp_box, SpaceDim);
+   POL::FArrayBox interp_node_coords(interp_box, POL_DIM);
 
    // Create an interpolator for the cylindrical coordinates
    POL::FArrayBox RZ_data(interp_box, POL_DIM);
@@ -424,11 +426,36 @@ SingleNullBlockCoordSys::readFiles( ParmParse& a_pp )
       interp_node_coords(iv,1) = theta_pts[iv[1] - interp_box.smallEnd(1)];
    }
 
-   m_poloidal_util->setRZInterp(a_pp, interp_method, interp_node_coords, RZ_data);
-#if CFG_DIM==3
-   setInterp(a_pp, interp_node_coords, RZ_data);
-#endif
+   if (!m_include_extrablock_mapping) {
 
+      POL::FArrayBox interp_node_coords_noGhost;
+      POL::FArrayBox RZ_data_noGhost;
+      removeExtraBlockGhosts(interp_node_coords_noGhost,
+                             RZ_data_noGhost,
+                             interp_node_coords,
+                             RZ_data,
+                             n_radial_extend,
+                             n_poloidal_extend);
+      
+      m_poloidal_util->setRZInterp(a_pp,
+                                   interp_method,
+                                   interp_node_coords_noGhost,
+                                   RZ_data_noGhost);
+#if CFG_DIM==3
+      setInterp(a_pp,
+                interp_node_coords_noGhost,
+                RZ_data_noGhost);
+#endif
+   }
+   
+   else {
+
+     m_poloidal_util->setRZInterp(a_pp, interp_method, interp_node_coords, RZ_data);
+#if CFG_DIM==3
+     setInterp(a_pp, interp_node_coords, RZ_data);
+#endif
+   }
+   
    if ( !m_spectral_field ) {
 
       if (procID() == 0) {
@@ -543,6 +570,62 @@ SingleNullBlockCoordSys::definePoints( const ParmParse&     a_pp,
    }
 }
 
+void
+SingleNullBlockCoordSys::removeExtraBlockGhosts( POL::FArrayBox& a_coords,
+                                                 POL::FArrayBox& a_data,
+                                           const POL::FArrayBox& a_coords_full,
+                                           const POL::FArrayBox& a_data_full,
+                                           const int             a_radial_extent,
+                                           const int             a_poloidal_extent  ) const
+{
+
+   //Strip extrablock ghost cells (but not physical ghosts) from the mapping data
+   
+   const POL::Box& box_full = a_data_full.box();
+   const POL::IntVect box_full_hi = box_full.bigEnd();
+   const POL::IntVect box_full_lo = box_full.smallEnd();
+   
+   POL::Box inter_box(box_full);
+   
+   if ( m_poloidal_block == LCORE || m_poloidal_block == RCORE || m_poloidal_block == MCORE) {
+      inter_box.setBig(0, box_full_hi[0] - a_radial_extent);
+      inter_box.setBig(1, box_full_hi[1] - a_poloidal_extent);
+      inter_box.setSmall(1, box_full_lo[1] + a_poloidal_extent);
+   }
+   
+   if ( m_poloidal_block == LCSOL || m_poloidal_block == RCSOL || m_poloidal_block == MCSOL) {
+      inter_box.setSmall(0, box_full_lo[0] + a_radial_extent);
+      inter_box.setBig(1, box_full_hi[1] - a_poloidal_extent);
+      inter_box.setSmall(1, box_full_lo[1] + a_poloidal_extent);
+   }
+
+   if ( m_poloidal_block == LSOL) {
+      inter_box.setSmall(0, box_full_lo[0] + a_radial_extent);
+      inter_box.setSmall(1, box_full_lo[1] + a_poloidal_extent);
+   }
+
+   if ( m_poloidal_block == RSOL) {
+      inter_box.setSmall(0, box_full_lo[0] + a_radial_extent);
+      inter_box.setBig(1, box_full_hi[1] - a_poloidal_extent);
+   }
+
+   if ( m_poloidal_block == LPF) {
+      inter_box.setBig(0, box_full_hi[0] - a_radial_extent);
+      inter_box.setSmall(1, box_full_lo[1] + a_poloidal_extent);
+   }
+
+   if ( m_poloidal_block == RPF) {
+      inter_box.setBig(0, box_full_hi[0] - a_radial_extent);
+      inter_box.setBig(1, box_full_hi[1] - a_poloidal_extent);
+   }
+
+   a_coords.define(inter_box,POL_DIM);
+   a_coords.copy(a_coords_full);
+   
+   a_data.define(inter_box, POL_DIM);
+   a_data.copy(a_data_full);
+   
+}
 
 RealVect
 SingleNullBlockCoordSys::realCoord( const RealVect& a_Xi ) const

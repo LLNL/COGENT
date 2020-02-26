@@ -65,6 +65,10 @@ void copyToArray( Real* a_dst,
          offset += CFG::GKUtils::copyFromLevelData( a_dst + offset,
                                                     a_fluid_species[s]->face_var(n) );
       }
+      for (int n=0; n<a_fluid_species[s]->num_edge_vars(); ++n) {
+         offset += CFG::GKUtils::copyFromLevelData( a_dst + offset,
+                                                    a_fluid_species[s]->edge_var(n) );
+      }
    }
    for (int s(0); s<a_scalars.size(); s++) {
       Vector<Real>& data = a_scalars[s]->data();
@@ -107,6 +111,10 @@ void copyFromArray( KineticSpeciesPtrVect&     a_kinetic_species,
       }
       for (int n=0; n<a_fluid_species[s]->num_face_vars(); ++n) {
          offset += CFG::GKUtils::copyToLevelData( a_fluid_species[s]->face_var(n),
+                                                  a_src + offset );
+      }
+      for (int n=0; n<a_fluid_species[s]->num_edge_vars(); ++n) {
+         offset += CFG::GKUtils::copyToLevelData( a_fluid_species[s]->edge_var(n),
                                                   a_src + offset );
       }
    }
@@ -157,6 +165,11 @@ void addFromArray( KineticSpeciesPtrVect&     a_kinetic_species,
                                                  a_src + offset,
                                                  a_factor );
       }
+      for (int n=0; n<a_fluid_species[s]->num_edge_vars(); ++n) {
+         offset += CFG::GKUtils::addToLevelData( a_fluid_species[s]->edge_var(n),
+                                                 a_src + offset,
+                                                 a_factor );
+      }
    }
    for (int s(0); s<a_scalars.size(); s++) {
       Vector<Real>& data = a_scalars[s]->data();
@@ -189,6 +202,9 @@ void scaleData( KineticSpeciesPtrVect&     a_kinetic_species,
       }
       for (int n=0; n<a_fluid_species[s]->num_face_vars(); ++n) {
          CFG::GKUtils::scaleLevelData( a_fluid_species[s]->face_var(n), a_factor );
+      }
+      for (int n=0; n<a_fluid_species[s]->num_edge_vars(); ++n) {
+         CFG::GKUtils::scaleLevelData( a_fluid_species[s]->edge_var(n), a_factor );
       }
    }
    for (int s(0); s<a_scalars.size(); s++) {
@@ -316,6 +332,10 @@ Real GKRHSData::dotProduct( const GKRHSData& a_vector )
          sum_local += CFG::GKUtils::innerProductLevelData(m_fluid_species[s]->face_var(n),
                                                           b_fluid_species[s]->face_var(n) );
       }
+      for (int n=0; n<m_fluid_species[s]->num_edge_vars(); ++n) {
+         sum_local += CFG::GKUtils::innerProductLevelData(m_fluid_species[s]->edge_var(n),
+                                                          b_fluid_species[s]->edge_var(n) );
+      }
    }
    
    const ScalarPtrVect& b_scalars( a_vector.dataScalar() );
@@ -356,6 +376,9 @@ Real normLp( const KineticSpeciesPtrVect&      a_kinetic_species,
       }
       for (int n=0; n<a_fluid_species[s]->num_face_vars(); ++n) {
          accum += CFG::GKUtils::accumulateLevelData( a_fluid_species[s]->face_var(n), a_p );
+      }
+      for (int n=0; n<a_fluid_species[s]->num_edge_vars(); ++n) {
+         accum += CFG::GKUtils::accumulateLevelData( a_fluid_species[s]->edge_var(n), a_p );
       }
    }
    for (int s(0); s<a_scalars.size(); s++) {

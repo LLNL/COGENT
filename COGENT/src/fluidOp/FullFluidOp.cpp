@@ -30,6 +30,9 @@ FullFluidOp::FullFluidOp( const string&   a_pp_str,
      m_geometry(a_geometry),
      m_is_time_implicit(true),
      m_advScheme("c2"),
+     m_isothermal(false),
+     m_const_mom_dens_x(false),
+     m_temperature_func(NULL),
      m_species_name(a_species_name),
      m_courant_time_step(DBL_MAX),
      m_opt_string(a_pp_str),
@@ -57,22 +60,23 @@ FullFluidOp::FullFluidOp( const string&   a_pp_str,
  
    // Set IC and create BC for momentum density
    variable_name = "momentumDensity";
-   CH_assert( ppic.contains("momentumDensity_x.function") );
-   CH_assert( ppic.contains("momentumDensity_y.function") );
-   parseInitialConditions(a_species_name, "momentumDensity_x");
-   parseInitialConditions(a_species_name, "momentumDensity_y");
-   if (ppic.contains("momentumDensity_z.function")) {
-      parseInitialConditions(a_species_name, "momentumDensity_z");
+   CH_assert( ppic.contains("momentumDensity_0.function") );
+   CH_assert( ppic.contains("momentumDensity_1.function") );
+   parseInitialConditions(a_species_name, "momentumDensity_0");
+   parseInitialConditions(a_species_name, "momentumDensity_1");
+   if (ppic.contains("momentumDensity_2.function")) {
+      parseInitialConditions(a_species_name, "momentumDensity_2");
    }
    m_fluid_bc.push_back( fluid_var_bc_factory.create(a_species_name, variable_name, 
                          a_geometry.getCoordSys()->type(), false) );
  
    // Set IC and create BC for energy density
-   variable_name = "energyDensity";
-   CH_assert( ppic.contains("energyDensity.function") );
-   parseInitialConditions(a_species_name, variable_name);
-   m_fluid_bc.push_back( fluid_var_bc_factory.create(a_species_name, variable_name, 
-                         a_geometry.getCoordSys()->type(), false) );
+   if (ppic.contains("energyDensity.function")) {
+     variable_name = "energyDensity";
+     parseInitialConditions(a_species_name, variable_name);
+     m_fluid_bc.push_back( fluid_var_bc_factory.create(a_species_name, variable_name, 
+			   a_geometry.getCoordSys()->type(), false) );
+   }
    
    // Set IC and create BC for the momentum in the "ignorable" direction (used for 2D)
    if (ppic.contains("momentumDensity_virtual.function")) {
@@ -89,8 +93,12 @@ FullFluidOp::FullFluidOp( const string&   a_pp_str,
       //CH_assert(m_geometry.m_num_ghosts>=3);
       ghostVect = 4*IntVect::Unit;
    }
+
    defineLevelDatas( grids, ghostVect );
 
+   if (m_isothermal) {
+     m_temperature_func->assign(m_temperature, m_geometry, 0.0);
+   }
 }
 
 
@@ -137,11 +145,9 @@ void FullFluidOp::accumulateExplicitRHS(FluidSpeciesPtrVect&               a_rhs
    // Get solution fluid species
    const FluidSpecies& soln_fluid( static_cast<FluidSpecies&>(*(a_fluid_species[a_fluidVecComp])) );
    //const LevelData<FArrayBox>& soln_data( soln_fluid.cell_var(0) );
-   
+
+   checkModelConsistency(soln_fluid);
   
-   CH_assert(soln_fluid.m_evolve_momentumDensity == 1);
-   CH_assert(soln_fluid.m_evolve_energyDensity == 1);
-   
    setCellCenterValues( soln_fluid );
 
    setCellCenterFluxes( soln_fluid );
@@ -423,6 +429,17 @@ void FullFluidOp::parseParameters( ParmParse& a_pp )
    if (a_pp.contains("advScheme")) {
       a_pp.get("advScheme", m_advScheme );
    }
+
+   a_pp.query( "isothermal", m_isothermal);
+
+   a_pp.query( "constant_momentum_density_x", m_const_mom_dens_x);
+     
+   if (m_isothermal) {
+      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
+      std::string grid_function_name;
+      a_pp.get("temperature", grid_function_name );
+      m_temperature_func = grid_library->find( grid_function_name );
+   }
    
 }
 
@@ -572,6 +589,8 @@ void FullFluidOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
    m_momDen_virtual_cc.define(a_grids, 1, a_ghostVect);
 
    m_pressure.define(a_grids, 1, a_ghostVect);
+   m_temperature.define(a_grids, 1, a_ghostVect);
+
    m_velocity.define(a_grids, SpaceDim, a_ghostVect);
    m_velocity_virtual.define(a_grids, 1, a_ghostVect);
 
@@ -640,16 +659,21 @@ void FullFluidOp::setCellCenterValues( const FluidSpecies&  a_soln_fluid )
    
    const LevelData<FArrayBox>& soln_rhoDen( a_soln_fluid.cell_var(0) );
    const LevelData<FArrayBox>& soln_momDen( a_soln_fluid.cell_var("momentumDensity") );
-   const LevelData<FArrayBox>& soln_eneDen( a_soln_fluid.cell_var("energyDensity") );
    
    // Set values for fluid variables
    const DisjointBoxLayout& grids( soln_rhoDen.getBoxes() );
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       m_rhoDen_cc[dit].copy( soln_rhoDen[dit], m_rhoDen_cc[dit].box() );
       m_momDen_cc[dit].copy( soln_momDen[dit], m_momDen_cc[dit].box() );
-      m_eneDen_cc[dit].copy( soln_eneDen[dit], m_eneDen_cc[dit].box() );
    }
 
+   if (a_soln_fluid.m_evolve_energyDensity) {
+     const LevelData<FArrayBox>& soln_eneDen( a_soln_fluid.cell_var("energyDensity") );
+     for (DataIterator dit(grids); dit.ok(); ++dit) {
+       m_eneDen_cc[dit].copy( soln_eneDen[dit], m_eneDen_cc[dit].box() );
+     }
+   }
+   
    if (a_soln_fluid.m_evolve_momentumDensity_virtual) {
       const LevelData<FArrayBox>& soln_momDen_virtual( a_soln_fluid.cell_var("momentumDensity_virtual") );
       for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -658,7 +682,18 @@ void FullFluidOp::setCellCenterValues( const FluidSpecies&  a_soln_fluid )
    }
 
    // Set physical derived variables for fluid species
-   a_soln_fluid.pressure(m_pressure);
+   if (m_isothermal) {
+     for (DataIterator dit(grids); dit.ok(); ++dit) {
+       m_pressure[dit].copy(soln_rhoDen[dit], m_pressure[dit].box());
+       m_pressure[dit].mult(m_temperature[dit]);
+       const Real mass = a_soln_fluid.mass();
+       m_pressure[dit].divide(mass);
+     }
+   }
+   else {
+     a_soln_fluid.pressure(m_pressure);
+   }
+
    a_soln_fluid.velocity(m_velocity);                 // in-plane velocity vector
    a_soln_fluid.velocity_virtual(m_velocity_virtual); // out-of-plane velocity vector
 }
@@ -711,7 +746,7 @@ void FullFluidOp::setCellCenterFluxes( const FluidSpecies&  a_soln_fluid )
       const FArrayBox& momDen_on_patch = m_momDen_cc[dit];   
       const FArrayBox& V_on_patch = m_velocity[dit];   
       const FArrayBox& P_on_patch = m_pressure[dit];   
-      const Box& cellbox = eneDen_on_patch.box();
+      const Box& cellbox = P_on_patch.box();
 
       FArrayBox& rhoFlux_on_patch = m_rhoFlux_cc[dit];
       FArrayBox& mxFlux_on_patch  = m_mxFlux_cc[dit];
@@ -762,11 +797,13 @@ void FullFluidOp::setFaceCenteredFluxes( const FluidSpecies&  a_soln_fluid )
       if(SpaceDim==3) m_momFlux_norm[dit].copy( m_mzFlux_norm[dit],0,2,1 );
    }
 
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      thisJf[dit].copy(m_eneDen_cc[dit]);
-      thisJf[dit].mult(m_Jacobian[dit],0,0,1);
+   if(a_soln_fluid.m_evolve_energyDensity) {
+     for (DataIterator dit(grids); dit.ok(); ++dit) {
+       thisJf[dit].copy(m_eneDen_cc[dit]);
+       thisJf[dit].mult(m_Jacobian[dit],0,0,1);
+     }
+     computeNTFfaceArea(m_enFlux_norm,m_enFlux_cc,thisJf,m_Cspeed_cc,m_CspeedR_norm,m_CspeedL_norm);
    }
-   computeNTFfaceArea(m_enFlux_norm,m_enFlux_cc,thisJf,m_Cspeed_cc,m_CspeedR_norm,m_CspeedL_norm);
    
    if(a_soln_fluid.m_evolve_momentumDensity_virtual) {
       for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -815,11 +852,13 @@ void FullFluidOp::enforceFluxBCs(FluidSpecies&  a_rhs_fluid,
    m_fluid_bc.at(this_cvc)->applyFluxBC( a_rhs_fluid, m_momFlux_norm, m_momFluxBC_norm, a_time );
   
    // Enforce flux BC for energy density flux
-   SpaceUtils::upWindToFaces( m_enFlux_ce, m_enFlux_cc, m_enFlux_ce, "c2" );
-   m_geometry.applyAxisymmetricCorrection( m_enFlux_ce );
-   m_geometry.computeMetricTermProductAverage( m_enFluxBC_norm, m_enFlux_ce, 0 );
-   this_cvc = a_soln_fluid.cell_var_component("energyDensity");
-   m_fluid_bc.at(this_cvc)->applyFluxBC( a_rhs_fluid, m_enFlux_norm, m_enFluxBC_norm, a_time );
+   if(a_soln_fluid.m_evolve_energyDensity) {
+     SpaceUtils::upWindToFaces( m_enFlux_ce, m_enFlux_cc, m_enFlux_ce, "c2" );
+     m_geometry.applyAxisymmetricCorrection( m_enFlux_ce );
+     m_geometry.computeMetricTermProductAverage( m_enFluxBC_norm, m_enFlux_ce, 0 );
+     this_cvc = a_soln_fluid.cell_var_component("energyDensity");
+     m_fluid_bc.at(this_cvc)->applyFluxBC( a_rhs_fluid, m_enFlux_norm, m_enFluxBC_norm, a_time );
+   }
 
    // Enforce flux BC for virtual momentum density flux
    if(a_soln_fluid.m_evolve_momentumDensity_virtual) {
@@ -891,17 +930,19 @@ void FullFluidOp::updateRHSs(FluidSpecies&                a_rhs_fluid,
    }
    
    // Update RHS for energy density
-   LevelData<FArrayBox>& rhs_data3( a_rhs_fluid.cell_var("energyDensity") );
-   for (DataIterator dit(rhs_data3.dataIterator()); dit.ok(); ++dit) {
-      FArrayBox div_enFlux(grids[dit], 1);
-      m_geometry.mappedGridDivergenceFromFluxNorms(m_enFlux_norm[dit], div_enFlux);
-      div_enFlux /= m_cellVol[dit];
-      div_enFlux.mult(m_Jacobian[dit]);
-      rhs_data3[dit].minus( div_enFlux );
+   if(a_soln_fluid.m_evolve_energyDensity){
+     LevelData<FArrayBox>& rhs_data3( a_rhs_fluid.cell_var("energyDensity") );
+     for (DataIterator dit(rhs_data3.dataIterator()); dit.ok(); ++dit) {
+       FArrayBox div_enFlux(grids[dit], 1);
+       m_geometry.mappedGridDivergenceFromFluxNorms(m_enFlux_norm[dit], div_enFlux);
+       div_enFlux /= m_cellVol[dit];
+       div_enFlux.mult(m_Jacobian[dit]);
+       rhs_data3[dit].minus( div_enFlux );
 
-      // Add source terms here (J*v*q*n*E)
-      accumulateEnergyDensitySources(rhs_data2[dit], a_E_field[dit], m_rhoDen_cc[dit],
-                                     m_velocity[dit], m_Jacobian[dit], a_mass, a_charge);
+       // Add source terms here (J*v*q*n*E)
+       accumulateEnergyDensitySources(rhs_data3[dit], a_E_field[dit], m_rhoDen_cc[dit],
+				      m_velocity[dit], m_Jacobian[dit], a_mass, a_charge);
+     }
    }
    
    // Update RHS for momentum density in virtual direction
@@ -954,6 +995,11 @@ void FullFluidOp::accumulateMomDensitySources(FArrayBox& a_rhs,
    
    // Add the source term to rhs
    a_rhs.plus(source);
+
+   //Experiment: set Vx to zero
+   if (m_const_mom_dens_x) {
+      a_rhs.setVal(0.,0);
+   }
 }
 
 void FullFluidOp::accumulateEnergyDensitySources(FArrayBox& a_rhs,
@@ -987,6 +1033,15 @@ void FullFluidOp::accumulateEnergyDensitySources(FArrayBox& a_rhs,
    
    // Add the source term to rhs
    a_rhs.plus(source);
+}
+
+void FullFluidOp::checkModelConsistency(const FluidSpecies& fluid_species) const
+{
+  CH_assert(fluid_species.m_evolve_momentumDensity == 1);
+  
+  if (m_isothermal && (fluid_species.m_evolve_energyDensity == 1) ) {
+    MayDay::Error("FullFluidOp:: evolving energy density is inconsistent with the use of the isothermal model");
+  }
 }
 
 #include "NamespaceFooter.H"

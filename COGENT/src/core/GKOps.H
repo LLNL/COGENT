@@ -84,7 +84,7 @@ public:
    void initializeState( GKState& a_state, const int a_cur_step, const Real a_time )
    {
       CH_TIME("GKOps::initializeState()");
-      if ( a_cur_step > 0 && m_old_vorticity_model ) {
+      if ( a_cur_step > 0 ) {
          // If restarting the old vorticity model, then the potential has already been set
          m_initial_conditions->initializeSystem( a_state, a_time );
       }
@@ -197,9 +197,8 @@ public:
       m_dt(0.0),
       m_dt_scale(1.0),
       m_is_defined(false),
-      m_ghost_vect(4*IntVect::Unit),
-      m_kinetic_ghost_vect(4*IntVect::Unit),
-      m_cfg_nghosts(2*CFG::IntVect::Unit),
+      m_kinetic_ghosts(4),
+      m_fluid_ghosts(4),
       m_fixed_efield(false),
       m_zero_efield(false),
       m_transport_model_on(false),     
@@ -264,7 +263,8 @@ public:
    void setElectricField( const GKState&                   state_comp,
                           const int                        step,
                           CFG::LevelData<CFG::FArrayBox>&  phi,
-                          CFG::EField&                     E_field) const;
+                          CFG::EField&                     E_field,
+                          const bool                       inject_field = true) const;
 
    inline bool trivialSolutionOp() const { return m_trivial_solution_op; }
 
@@ -593,12 +593,6 @@ public:
      return m_gyroavg_ops;
    }
 
-   /// Return kinetic species ghost vect size require for methods used.
-   /**
-    * Private method to return kinetic species ghost vect.
-    */
-   void getKineticSpeciesGhostVect(IntVect& ghost_vect);
-
    inline bool stepConstCoef() const { return m_step_const_coef; }
    
 private:
@@ -727,8 +721,8 @@ private:
    bool m_is_defined;
    
    IntVect                        m_ghost_vect;
-   IntVect                        m_kinetic_ghost_vect;
-   const CFG::IntVect             m_cfg_nghosts;
+   int                            m_kinetic_ghosts;
+   int                            m_fluid_ghosts;
       
    bool                           m_consistent_potential_bcs;
    bool                           m_ampere_post_step_update;

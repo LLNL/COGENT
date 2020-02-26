@@ -214,9 +214,21 @@ int main( int a_argc, char* a_argv[] )
          cout<< "Done computing block " << block_id << " coordinates" << endl;
       }
 
+      // Perform search of the minimal cell size
+      bool grid_diagnostics = true;
+      if (grid_diagnostics) {
+         for (int dir=0; dir<2; ++dir) {
+            Real size;
+            RealVect loc;
+            block_mapping.getMinimalCellSize(size, loc, physical_coordinates, dir);
+            if (procID()==0) {
+               cout<< "Minimal cell size in dir " << dir << " is " << size << " at location " << loc << endl;
+            }
+         }
+      }
+
    }
    
-
    /*
     Step 3: Output the grid
    */

@@ -1,3 +1,4 @@
+#include <math.h>
 #include "MBSolver.H"
 #include "MBSolverF_F.H"
 #include "MBStencilIterator.H"
@@ -1083,6 +1084,41 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
    if (procID()==0) {
       cout << "Matrix diff = " << diff_norm << " (using random input)" << endl;
    }
+
+   IntVect max_iv;
+   double local_max_diff = -DBL_MAX;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for (BoxIterator bit(grids[dit]); bit.ok(); ++bit) {
+         IntVect iv = bit();
+
+         if ( fabs(diff[dit](iv,0)) > local_max_diff ) {
+            local_max_diff = fabs(diff[dit](iv,0));
+            max_iv = iv;
+         }
+      }
+   }
+
+   double global_max_diff;
+#ifdef CH_MPI
+   MPI_Allreduce(&local_max_diff, &global_max_diff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#else
+   global_max_diff = local_max_diff;
+#endif
+
+#if 1
+   if ( global_max_diff == local_max_diff ) {
+      cout << "Max diff at " << max_iv << " = " << global_max_diff << endl;
+   }
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for (BoxIterator bit(grids[dit]); bit.ok(); ++bit) {
+         IntVect iv = bit();
+         if ( fabs(diff[dit](iv,0)) > 1.e-14)  cout << iv << " " << fabs(diff[dit](iv,0)) << endl;
+      }
+   }
+   MPI_Barrier(MPI_COMM_WORLD);
+   exit(1);
+#endif
 }
 
 

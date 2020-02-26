@@ -79,6 +79,7 @@ void CanonicalMaxwellianKineticFunction::assign( KineticSpecies& a_species,
    const DisjointBoxLayout& grids( dfn.disjointBoxLayout() );
 
    const LevelData<FArrayBox>& injected_B( geometry.getBFieldMagnitude() );
+   const LevelData<FArrayBox>& real_coords( geometry.getCellCenteredRealCoords() );
 
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       setPointValues( dfn[dit],
@@ -86,6 +87,7 @@ void CanonicalMaxwellianKineticFunction::assign( KineticSpecies& a_species,
                       geometry.getBlockCoordSys( grids[dit] ),
                       geometry.getMagBlockCoordSys( grids[dit] ),
                       injected_B[dit],
+                      real_coords[dit],
                       a_species.mass(),
                       a_species.charge(),
                       geometry.getLarmorNumber());
@@ -115,6 +117,7 @@ void CanonicalMaxwellianKineticFunction::assign( KineticSpecies& a_species,
    const DisjointBoxLayout& grids( dfn.disjointBoxLayout() );
 
    const LevelData<FArrayBox>& injected_B( geometry.getBFieldMagnitude() );
+   const LevelData<FArrayBox>& real_coords( geometry.getCellCenteredRealCoords() );
 
    // NB: This is a cheat - there's one too many cells at the (dir,side) face
    // of the boundary box, but it doesn't matter because one-sided difference
@@ -137,6 +140,7 @@ void CanonicalMaxwellianKineticFunction::assign( KineticSpecies& a_species,
                       phase_coord_sys,
                       mag_coord_sys,
                       injected_B[internal_dit],
+                      real_coords[internal_dit],
                       a_species.mass(),
                       a_species.charge(),
                       geometry.getLarmorNumber());
@@ -167,6 +171,7 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
                                                         const PhaseBlockCoordSys&     a_phase_coord_sys,
                                                         const CFG::MagBlockCoordSys&  a_mag_coord_sys,
                                                         const FArrayBox&              a_B,
+                                                        const FArrayBox&              a_cc_coords,
                                                         const Real&                   a_mass,
                                                         const Real&                   a_charge,
                                                         const Real&                   a_larmor_number ) const
@@ -199,7 +204,8 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
 
    CH_START(t_get_real_coords);
    FArrayBox cc_phase_coords( a_box, SpaceDim );
-   a_phase_coord_sys.getCellCenteredRealCoords( cc_phase_coords );
+   CH_assert((a_cc_coords.box()).contains(a_box));
+   cc_phase_coords.copy(a_cc_coords);
    CH_STOP(t_get_real_coords);
 
 #if CFG_DIM == 3

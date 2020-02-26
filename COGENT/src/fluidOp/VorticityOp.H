@@ -226,6 +226,7 @@ private:
    bool m_sigma_div_e_coefs_set;
    bool	m_reynolds_stress;
    bool m_ExB_current_model;
+   bool m_include_pol_den_corrections;
 
    RefCountedPtr<GridFunction> m_electron_temperature_func;
 };

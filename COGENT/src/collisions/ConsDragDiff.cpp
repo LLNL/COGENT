@@ -16,7 +16,7 @@ ConsDragDiff::ConsDragDiff( const string& a_species_name, const string& a_ppcls_
       cls_only(false),
       moment_op( MomentOp::instance() ),
       m_first_step(true),
-      m_time_implicit(true),
+      m_time_implicit(false),
       verbosity(0)
 {
    verbosity = a_verbosity;

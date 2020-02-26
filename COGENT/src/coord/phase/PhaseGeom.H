@@ -377,7 +377,14 @@ public:
    
    void exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const;
 
-   void exchangeExtraBlockGhosts( LevelData<FArrayBox>& data, const int codim, const IntVect& include_dir ) const;
+   void exchangeExtraBlockGhosts( LevelData<FArrayBox>& data,
+                                  const int             codim,
+                                  const IntVect&        boundary_dirs,
+                                  const IntVect&        exchange_dirs ) const;
+
+   void fillCorners( LevelData<FArrayBox>&  data,
+                     const IntVect&         nghosts,
+                     const int              max_codim ) const;
 
    const LevelData<FArrayBox>& getBFieldMagnitude() const {return *m_BMagCell;}
 
@@ -694,6 +701,8 @@ public:
      m_gyroavg_op->gyroaveragedEField(a_E, a_phi, a_order);
    }
 
+   DisjointBoxLayout getGhostDBL(const LevelData<FArrayBox>& a_data) const;
+  
 protected:
 
    void setCellCenteredRealCoords();
@@ -786,6 +795,8 @@ private:
    LevelData<FArrayBox> * m_sheared_interp_stencil;
    LevelData<FArrayBox> * m_sheared_interp_stencil_offsets;
 
+   #define PHASE_MAX_EBE_CODIM 3
+
    // Cached data supporting extrablock exchanges
    struct EBE_Data
    {
@@ -793,11 +804,11 @@ private:
       LayoutData<DataIndex> index_map;
       LayoutData<IntVect>   shift_map;
       IntVect               ghost_vect;
-      IntVect               include_dir;
+      IntVect               exchange_dirs;
       Copier                copier;
    };
-   mutable EBE_Data* m_ebe_data[3];
-   mutable CoDimCopyManager<FArrayBox>* m_ebe_copy_manager;
+   mutable list<EBE_Data*> m_ebe_data_cache[CH_SPACEDIM][PHASE_MAX_EBE_CODIM];
+   mutable list<CoDimCopyManager<FArrayBox>*> m_ebe_copy_manager_cache;   
    
    Copier m_exchangeCopier;
    int m_exchange_ghosts;
@@ -806,14 +817,15 @@ private:
    mutable GyroaverageOperator const *m_gyroavg_op;
    bool m_is_gyrokinetic;
 
-   void getExtrablockExchangeLayout( const int                 codim,
+   void getExtrablockExchangeLayout( const int                 dir,
+                                     const int                 codim,
                                      const DisjointBoxLayout&  grids,
                                      const IntVect&            ghost_vect,
-                                     const IntVect&            include_dir,
+                                     const IntVect&            exchange_dirs,
                                      BoxLayout&                ghosts_layout,
                                      LayoutData<DataIndex>&    index_map,
                                      LayoutData<IntVect>&      shift_map ) const;
-  
+
    void unmapGradient(  const LevelData<FArrayBox>&, 
                         LevelData<FArrayBox>&,
                         const int ) const;

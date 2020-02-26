@@ -109,6 +109,16 @@ SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
 
    //Checks if the grid cell sizes are continious across block boundaries (assumed for the model geoemtry)
    if ( m_model_geometry ) checkGridConsistency();
+
+   // Check for sheared geometry (by checking block 0)
+   if ( m_model_geometry ) {
+      const SingleNullBlockCoordSysModel* mag_coord_sys = (const SingleNullBlockCoordSysModel*)m_coordSysVect[0];
+      m_sheared_geometry = mag_coord_sys->isFieldAlignedMapping();
+   }
+   else {
+      const SingleNullBlockCoordSys* mag_coord_sys = (const SingleNullBlockCoordSys*)m_coordSysVect[0];
+      m_sheared_geometry = mag_coord_sys->isFieldAlignedMapping();
+   }
 }
 
 
@@ -2968,6 +2978,8 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
                                             const int              a_nSrc,
                                             const Side::LoHiSide&  a_side ) const
 {
+   CH_TIME("SingleNullCoordSys::toroidalBlockRemapping");
+   
    int src_toroidal_sector = toroidalBlockNumber(a_nSrc);
    
    // Determine the toroidal sector containing the input point, which is assumed to
@@ -2996,37 +3008,6 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    // corresponding mapped coordinate with respect to that block (which only differs from the
    // src mapped coordinate in the toroidal component).
    
-   int dst_poloidal_block = -1;
-
-#if 0
-   // Experimental
-   
-   RealVect X_cyl_dst;
-   X_cyl_dst[0] = X_src_pol[0];
-   X_cyl_dst[2] = X_src_pol[1];
-
-   for (int poloidal_block=0; poloidal_block<m_num_poloidal_blocks; ++poloidal_block) {
-      int block_number = blockNumber(poloidal_block, dst_toroidal_sector);
-      const SingleNullBlockCoordSys* coord_sys = (SingleNullBlockCoordSys*)getCoordSys(block_number);
-
-      if (a_side == Side::LoHiSide::Lo) {
-         X_cyl_dst[TOROIDAL_DIR] = coord_sys->upperMappedCoordinate(TOROIDAL_DIR) - delta_Phi_lo;
-      }
-      else if (a_side == Side::LoHiSide::Hi) {
-         X_cyl_dst[TOROIDAL_DIR] = coord_sys->lowerMappedCoordinate(TOROIDAL_DIR) + delta_Phi_hi;
-      }
-
-      POL::RealVect X_dst_base = coord_sys->restrictToPoloidal(coord_sys->
-              traceField(X_cyl_dst, coord_sys->lowerMappedCoordinate(TOROIDAL_DIR) - X_cyl_dst[TOROIDAL_DIR] ));
-            
-      bool verbose = false;
-      if ( coord_sys->containsPoloidalPoint(X_dst_base, verbose) ) {
-         dst_poloidal_block = poloidal_block;
-         break;
-      }
-   }
-#endif
-
    RealVect X_dst_cent;    //Physical coord of the dst cell center
    RealVect X_dst_pol_hi;  //Physical coord of the dst cell hi-poloidal face center
    RealVect X_dst_pol_lo;  //Physical coord of the dst cell lo-poloidal face center
@@ -3039,102 +3020,162 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    double R_X = sqrt(X[0]*X[0] + X[1]*X[1]);
    double Z_X = X[2];
 
-   if ( dst_poloidal_block == -1 ) {
-      // Figure out in which poloidal block a_xiSrc is valid by determining which poloidal plane it belongs
-      // to and then doing a brute force search of that plane for the closest cell center
+   // Figure out in which poloidal block a_xiSrc is valid by determining which poloidal plane it belongs
+   // to and then doing a brute force search of that plane for the closest cell center
 
-     double d_min = DBL_MAX;
-     int min_block;
+   double d_min = DBL_MAX;
+   int dst_poloidal_block;
+   int i_tor_saved;
      
-     for (int poloidal_block=0; poloidal_block<m_num_poloidal_blocks; ++poloidal_block) {
+   for (int poloidal_block=0; poloidal_block<m_num_poloidal_blocks; ++poloidal_block) {
 
-       int src_poloidal_block = poloidalBlockNumber(a_nSrc);
+      int src_poloidal_block = poloidalBlockNumber(a_nSrc);
 	
-       if (sameMagFluxSurf(src_poloidal_block, poloidal_block)) {
+      if (sameMagFluxSurf(src_poloidal_block, poloidal_block)) {
 
-          int block_number = blockNumber(poloidal_block, dst_toroidal_sector);
-          const SingleNullBlockCoordSys* coord_sys = (SingleNullBlockCoordSys*)getCoordSys(block_number);
-          const RealVect& dx = coord_sys->getMappedCellSize();
+         int block_number = blockNumber(poloidal_block, dst_toroidal_sector);
+         const SingleNullBlockCoordSys* coord_sys = (SingleNullBlockCoordSys*)getCoordSys(block_number);
+         const RealVect& dx = coord_sys->getMappedCellSize();
 
-          int i_tor;
-          if (a_side == Side::LoHiSide::Lo) {
-             xi_dst[TOROIDAL_DIR] = coord_sys->upperMappedCoordinate(TOROIDAL_DIR) - delta_Phi_lo;
-             i_tor = floor( (coord_sys->upperMappedCoordinate(TOROIDAL_DIR) - delta_Phi_lo) / dx[TOROIDAL_DIR] );
-          }
-          else if (a_side == Side::LoHiSide::Hi) {
-             xi_dst[TOROIDAL_DIR] = coord_sys->lowerMappedCoordinate(TOROIDAL_DIR) + delta_Phi_hi;
-             i_tor = floor( (coord_sys->lowerMappedCoordinate(TOROIDAL_DIR) + delta_Phi_hi) / dx[TOROIDAL_DIR] );
-          }
+         int i_tor;
+         if (a_side == Side::LoHiSide::Lo) {
+            xi_dst[TOROIDAL_DIR] = coord_sys->upperMappedCoordinate(TOROIDAL_DIR) - delta_Phi_lo;
+            i_tor = floor( (coord_sys->upperMappedCoordinate(TOROIDAL_DIR) - delta_Phi_lo) / dx[TOROIDAL_DIR] );
+         }
+         else if (a_side == Side::LoHiSide::Hi) {
+            xi_dst[TOROIDAL_DIR] = coord_sys->lowerMappedCoordinate(TOROIDAL_DIR) + delta_Phi_hi;
+            i_tor = floor( (coord_sys->lowerMappedCoordinate(TOROIDAL_DIR) + delta_Phi_hi) / dx[TOROIDAL_DIR] );
+         }
 
-          const Box& domain_box = coord_sys->domain().domainBox();
-          IntVect lo = domain_box.smallEnd();
-          IntVect hi = domain_box.bigEnd();
-          lo[TOROIDAL_DIR] = hi[TOROIDAL_DIR] = i_tor;
-          lo[RADIAL_DIR] = hi[RADIAL_DIR] = floor(a_xiSrc[RADIAL_DIR] / dx[RADIAL_DIR]);
+         const Box& domain_box = coord_sys->domain().domainBox();
+         IntVect lo = domain_box.smallEnd();
+         IntVect hi = domain_box.bigEnd();
+         lo[TOROIDAL_DIR] = hi[TOROIDAL_DIR] = i_tor;
+         lo[RADIAL_DIR] = hi[RADIAL_DIR] = floor(a_xiSrc[RADIAL_DIR] / dx[RADIAL_DIR]);
 	 
-          Box search_box(lo,hi);
-          CH_assert(search_box.ok());
-          FArrayBox phys_coords(search_box,SpaceDim);
-          coord_sys->getCellCenteredRealCoords(phys_coords);
+         Box search_box(lo,hi);
+         CH_assert(search_box.ok());
+         FArrayBox phys_coords(search_box,SpaceDim);
+         coord_sys->getCellCenteredRealCoords(phys_coords);
 
-          for (BoxIterator bit(search_box); bit.ok(); ++bit) {
-             IntVect iv = bit();
+         for (BoxIterator bit(search_box); bit.ok(); ++bit) {
+            IntVect iv = bit();
 	   
-             RealVect X_phys;
-             for (int n=0; n<SpaceDim; ++n) {
-                X_phys[n] = phys_coords(iv,n);
-             }
-             double this_R_diff = sqrt(X_phys[0]*X_phys[0] + X_phys[1]*X_phys[1]) - R_X;
-             double this_Z_diff = X_phys[2] - Z_X;
-             double d = sqrt(this_R_diff*this_R_diff + this_Z_diff*this_Z_diff);
-             if ( d < d_min ) {
-                d_min = d;
-                min_block = poloidal_block;
-                X_dst_cent = X_phys;
+            RealVect X_phys;
+            for (int n=0; n<SpaceDim; ++n) {
+               X_phys[n] = phys_coords(iv,n);
+            }
+            double this_R_diff = sqrt(X_phys[0]*X_phys[0] + X_phys[1]*X_phys[1]) - R_X;
+            double this_Z_diff = X_phys[2] - Z_X;
+            double d = sqrt(this_R_diff*this_R_diff + this_Z_diff*this_Z_diff);
+            if ( d < d_min ) {
+               d_min = d;
+               i_tor_saved = i_tor;
+               dst_poloidal_block = poloidal_block;
+               X_dst_cent = X_phys;
 
-                xi_dst_cent = xi_dst;
-                xi_dst_cent[POLOIDAL_DIR] = (iv[POLOIDAL_DIR] + 0.5)*dx[POLOIDAL_DIR];
+               xi_dst_cent = xi_dst;
+               xi_dst_cent[POLOIDAL_DIR] = (iv[POLOIDAL_DIR] + 0.5)*dx[POLOIDAL_DIR];
 	     
-                RealVect xi_dst_pol_hi(xi_dst);
-                xi_dst_pol_hi[POLOIDAL_DIR] = (iv[POLOIDAL_DIR] + 1.0)*dx[POLOIDAL_DIR];
-                X_dst_pol_hi = coord_sys -> realCoord(xi_dst_pol_hi);
+               RealVect xi_dst_pol_hi(xi_dst);
+               xi_dst_pol_hi[POLOIDAL_DIR] = (iv[POLOIDAL_DIR] + 1.0)*dx[POLOIDAL_DIR];
+               X_dst_pol_hi = coord_sys -> realCoord(xi_dst_pol_hi);
 
-                RealVect xi_dst_pol_lo(xi_dst);
-                xi_dst_pol_lo[POLOIDAL_DIR] = (iv[POLOIDAL_DIR] )*dx[POLOIDAL_DIR];
-                X_dst_pol_lo = coord_sys -> realCoord(xi_dst_pol_lo);
-             }
-          }
-       }
-     }
- 
-     dst_poloidal_block = min_block;
-
+               RealVect xi_dst_pol_lo(xi_dst);
+               xi_dst_pol_lo[POLOIDAL_DIR] = (iv[POLOIDAL_DIR] )*dx[POLOIDAL_DIR];
+               X_dst_pol_lo = coord_sys -> realCoord(xi_dst_pol_lo);
+            }
+         }
+      }
    }
-
+ 
    a_nDst = blockNumber(dst_poloidal_block, dst_toroidal_sector);
-   const SingleNullBlockCoordSys* dst_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nDst);
-   const RealVect& dx_dst = dst_coord_sys->getMappedCellSize();
+   const SingleNullBlockCoordSys* trial_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nDst);
+   const RealVect& trial_dx = trial_coord_sys->getMappedCellSize();
 
    // Get the poloidal mapped coordinate
    applyToroidalPeriodicity(X);
-   xi_dst[POLOIDAL_DIR] = getInterpMappedPoloidalCoord(X, X_dst_cent, X_dst_pol_hi, X_dst_pol_lo, xi_dst_cent, dx_dst);
+   xi_dst[POLOIDAL_DIR] = getInterpMappedPoloidalCoord(X, X_dst_cent, X_dst_pol_hi, X_dst_pol_lo, xi_dst_cent, trial_dx);
    
    // Get the global index of the dst cell center
    for (int dir=0; dir<SpaceDim; ++dir) {
-     a_ivDst[dir] = floor(xi_dst[dir]/dx_dst[dir]);
+     a_ivDst[dir] = floor(xi_dst[dir]/trial_dx[dir]);
    }
 
+   IntVect iv_saved = a_ivDst;
+   int nDst_saved = a_nDst;
+   RealVect saved_X_dst_cent = X_dst_cent;
+   
+   if ( fixPoloidalBlock( a_nDst, a_ivDst ) ) {
+
+      const SingleNullBlockCoordSys* coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nDst);
+      const RealVect& dx = coord_sys->getMappedCellSize();
+      const Box& domain_box = coord_sys->domain().domainBox();
+      IntVect lo = domain_box.smallEnd();
+      IntVect hi = domain_box.bigEnd();
+      lo[TOROIDAL_DIR] = hi[TOROIDAL_DIR] = i_tor_saved;
+      lo[RADIAL_DIR] = hi[RADIAL_DIR] = floor(a_xiSrc[RADIAL_DIR] / dx[RADIAL_DIR]);
+	 
+      Box search_box(lo,hi);
+      CH_assert(search_box.ok());
+      FArrayBox phys_coords(search_box,SpaceDim);
+      coord_sys->getCellCenteredRealCoords(phys_coords);
+
+      RealVect X_phys;
+      for (int n=0; n<SpaceDim; ++n) {
+         X_phys[n] = phys_coords(a_ivDst,n);
+      }
+
+      X_dst_cent = X_phys;
+
+      xi_dst_cent = xi_dst;
+      xi_dst_cent[POLOIDAL_DIR] = (a_ivDst[POLOIDAL_DIR] + 0.5)*dx[POLOIDAL_DIR];
+	     
+      RealVect xi_dst_pol_hi(xi_dst);
+      xi_dst_pol_hi[POLOIDAL_DIR] = (a_ivDst[POLOIDAL_DIR] + 1.0)*dx[POLOIDAL_DIR];
+      X_dst_pol_hi = coord_sys -> realCoord(xi_dst_pol_hi);
+
+      RealVect xi_dst_pol_lo(xi_dst);
+      xi_dst_pol_lo[POLOIDAL_DIR] = (a_ivDst[POLOIDAL_DIR] )*dx[POLOIDAL_DIR];
+      X_dst_pol_lo = coord_sys -> realCoord(xi_dst_pol_lo);
+
+      // Get the poloidal mapped coordinate
+      //      applyToroidalPeriodicity(X);
+      xi_dst[POLOIDAL_DIR] = getInterpMappedPoloidalCoord(X, X_dst_cent, X_dst_pol_hi, X_dst_pol_lo, xi_dst_cent, trial_dx);
+   
+#if 0
+      // Get the global index of the dst cell center
+      IntVect iv_test;
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         iv_test[dir] = floor(xi_dst[dir]/trial_dx[dir]);
+      }
+      
+      if ( iv_test != a_ivDst ) {
+         MayDay::Error("SingleNullCoordSys::toroidalBlockRemapping(): fixPoloidalBlock didn't work, need to investigate");
+      }
+
+#endif      
+   }
+   
+   const SingleNullBlockCoordSys* dst_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nDst);
+   const RealVect& dx_dst = dst_coord_sys->getMappedCellSize();
+   
    // If this warning comes out it means that the dst point is not really
    // within the cell we though it should be (from the closest center search)
    // This can potentially happen if the dst point is very near poloidal cell
    // boundary (and can potentially be in a different block, if near a block bndry).
    // All this is perhaps OK, since we should have sufficient number of ghost cell
    // in mapping and data available.
-   //if ( procID()==0 && a_ivDst != floor(xi_dst_cent[dir]/dx_dst[dir])) {
-   //   MayDay::Warning("SingleNullCoordSys::toroidalBlockRemapping: closest center search failed");
-   //}
+#if 0
+   IntVect iv_test;
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      iv_test[dir] = floor(xi_dst_cent[dir]/dx_dst[dir]);
+   }
+   if ( procID()==0 && a_ivDst != iv_test ) {
+      MayDay::Warning("SingleNullCoordSys::toroidalBlockRemapping: closest center search failed");
+   }
+#endif
 
-   
    /*
     Get interpolation coefficients (interpolation stencil) and offsets
     The last argument of interpolation_stencil controls saw tooth BC case
@@ -3192,7 +3233,6 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
       Real tooth_height_fac = X_hi_to_lo.dotProduct(X_bnd_to_low);
       int stenc_size = a_interpStecil.size();
       a_interpStecil[stenc_size-1] = tooth_height_fac / X_hi_to_lo.radSquared();
-      
    }
 
    if ( a_ivDst[POLOIDAL_DIR] >= dst_domain_box.bigEnd(POLOIDAL_DIR) &&
@@ -3233,6 +3273,30 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    int order = 3;
 
    getInterpolationCoefficients(a_interpStecil, a_interpStencilOffsets, xi_dst, a_ivDst, dx_dst, order);
+
+#if 0
+   if ( a_ivDst[POLOIDAL_DIR] <= dst_domain_box.smallEnd(POLOIDAL_DIR) &&
+        containsPhysicalBoundary(a_nDst, POLOIDAL_DIR, Side::LoHiSide::Lo) ||
+        a_ivDst[POLOIDAL_DIR] >= dst_domain_box.bigEnd(POLOIDAL_DIR) &&
+        containsPhysicalBoundary(a_nDst, POLOIDAL_DIR, Side::LoHiSide::Hi) ) {
+      for (int n=0; n<a_interpStecil.size(); ++n) a_interpStecil[n] = 0.;
+   }
+#endif
+
+#if 0
+   if ( a_ivDst[POLOIDAL_DIR] <= dst_domain_box.smallEnd(POLOIDAL_DIR) &&
+        containsPhysicalBoundary(a_nDst, POLOIDAL_DIR, Side::LoHiSide::Lo) ) {
+      cout << a_ivDst[POLOIDAL_DIR] << " " << dst_domain_box.smallEnd(POLOIDAL_DIR) << " " << a_interpStencilOffsets[0] << " " << a_interpStencilOffsets[1] << " " << a_interpStencilOffsets[2] << endl;
+   }
+#endif
+
+#if 0
+   if ( a_ivDst[POLOIDAL_DIR] >= dst_domain_box.bigEnd(POLOIDAL_DIR) &&
+        containsPhysicalBoundary(a_nDst, POLOIDAL_DIR, Side::LoHiSide::Hi) ) {
+      cout << a_ivDst[POLOIDAL_DIR] << " " << dst_domain_box.bigEnd(POLOIDAL_DIR) << " " << a_interpStencilOffsets[0] << " " << a_interpStencilOffsets[1] << " " << a_interpStencilOffsets[2] << endl;
+   }
+#endif
+
 }
 
 
@@ -3494,18 +3558,7 @@ SingleNullCoordSys::containsPhysicalBoundary( int                    a_block_num
 #if CFG_DIM==3
    if ( a_dir == TOROIDAL_DIR ) {
 
-      bool sheared_geom;
-         
-      if ( m_model_geometry ) {
-         const SingleNullBlockCoordSysModel* mag_coord_sys = (const SingleNullBlockCoordSysModel*)m_coordSysVect[a_block_number];
-         sheared_geom = mag_coord_sys->isFieldAlignedMapping();
-      }
-      else {
-         const SingleNullBlockCoordSys* mag_coord_sys = (const SingleNullBlockCoordSys*)m_coordSysVect[a_block_number];
-         sheared_geom = mag_coord_sys->isFieldAlignedMapping();
-      }
-
-      if ( sheared_geom ) {
+      if ( m_sheared_geometry ) {
          // Set all toroidal block interfaces to physical boundaries;
          // This is done to deal with saw-tooth divertor BCs
          // Internal part of the block interface is handled by fillInternalGhosts
@@ -3522,6 +3575,258 @@ SingleNullCoordSys::containsPhysicalBoundary( int                    a_block_num
    
    return contains_boundary;
 }
+
+
+#if CFG_DIM==3
+Vector<Box>
+SingleNullCoordSys::getToroidalBoundaryBoxes( const int              a_block_number,
+                                              const Side::LoHiSide&  a_side,
+                                              const int              a_shear_interp_order ) const
+{
+   CH_TIME("SingleNullCoordSys::getToroidalBoundaryBoxes");
+
+   const MagBlockCoordSys& block_coord_sys = *(getCoordSys(a_block_number));
+   const ProblemDomain& domain = block_coord_sys.domain();
+   const Box& domain_box = domain.domainBox();
+
+   int shear_dir = TOROIDAL_DIR;
+
+   Box bndryBox = adjCellBox(domain_box, shear_dir, a_side, 1);
+
+   FArrayBox mappedBndryCoord(bndryBox,SpaceDim);
+   block_coord_sys.getCellCenteredMappedCoords(mappedBndryCoord);
+         
+   RealVect dx = block_coord_sys.dx();
+
+   IntVectSet bndry_cells;
+
+   for ( BoxIterator bit(bndryBox); bit.ok(); ++bit ) {
+      const IntVect& iv = bit();
+
+      RealVect xiSrc;
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         xiSrc[dir] = mappedBndryCoord(iv,dir);
+      }
+            
+      IntVect iv_src;
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         iv_src[dir] = floor(xiSrc[dir]/dx[dir]);
+      }
+
+      int nDst;
+      IntVect ivDst;
+      Vector<Real> interpStencil(a_shear_interp_order + 2, 0);
+      Vector<int> interpStencilOffsets(a_shear_interp_order + 1, 0);
+
+      toroidalBlockRemapping(ivDst, nDst, interpStencil, interpStencilOffsets, xiSrc, a_block_number, a_side);
+
+      if ( interpStencil[a_shear_interp_order + 1] >= 0.5 ) {
+         bndry_cells |= iv;
+      }
+   }
+
+   // Convert the IntVectSet into a vector of boxes
+   Vector<Box> box_vector = bndry_cells.boxes();
+
+   // Coalesce the IntVectSet into boxes
+
+   Vector<Box> coalesced_box_vector;
+
+   if ( box_vector.size() > 0 ) {
+      Box accum_box = box_vector[0];
+
+      for (int n=1; n<box_vector.size(); ++n) {
+         Box new_box = accum_box;
+         new_box.minBox(box_vector[n]);
+
+         IntVectSet box_ivs(new_box);
+
+         // Check that the new box is full, i.e., bndry_cells
+         // contains all of the new box's IntVects
+         if ( bndry_cells.contains(box_ivs) ) {
+            // Keep accumulating and pushback if no more boxes
+            accum_box = new_box;
+            if ( n == box_vector.size()-1 ) {
+               coalesced_box_vector.push_back(bdryBox(accum_box,shear_dir,a_side,1));
+            }
+         }
+         else {
+            // Can't accumulate any more.  Push the current accumulation box
+            // and start a new one
+            coalesced_box_vector.push_back(bdryBox(accum_box,shear_dir,a_side,1));
+            accum_box = box_vector[n];
+         }
+      }
+   }
+
+   return coalesced_box_vector;
+}
+#endif
+
+
+void
+SingleNullCoordSys::setBoundaryBoxes()
+{
+   m_boundary_boxes.resize(numBlocks() * 2 * SpaceDim);
+
+#if CFG_DIM==3
+   int shear_dir = TOROIDAL_DIR;
+   int shear_interp_order = 2;
+#endif
+
+   for (int block_number=0; block_number<numBlocks(); ++block_number) {
+   
+      const MagBlockCoordSys& block_coord_sys = *(getCoordSys(block_number));
+      const ProblemDomain& domain = block_coord_sys.domain();
+      const Box& domain_box = domain.domainBox();
+
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         for (SideIterator sit; sit.ok(); ++sit) {
+            Side::LoHiSide side = sit();
+         
+            Vector<Box> boxes;
+
+#if CFG_DIM==3
+            if ( m_sheared_geometry && dir == shear_dir ) {
+               Vector<Box> toroidal_boxes = getToroidalBoundaryBoxes(block_number, side, shear_interp_order);
+
+               for (int n=0; n<toroidal_boxes.size(); ++n) {
+                  boxes.push_back(toroidal_boxes[n]);
+               }
+            }
+            else {
+               if ( m_boundaries[block_number][dir + side*SpaceDim].isDomainBoundary() ) {
+                  boxes.push_back(bdryBox(domain_box, dir, side, 1));
+               }
+            }
+#else
+            if ( m_boundaries[block_number][dir + side*SpaceDim].isDomainBoundary() ) {
+               boxes.push_back(bdryBox(domain_box, dir, side, 1));
+            }
+#endif
+
+            m_boundary_boxes[block_number*2*SpaceDim + dir + side*SpaceDim] = boxes;
+         }
+      }
+   }
+}
+
+#if CFG_DIM==3
+bool
+SingleNullCoordSys::fixPoloidalBlock( int&      a_num_block,
+                                      IntVect&  a_iv ) const
+{
+   const SingleNullBlockCoordSys* coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_num_block);
+   const ProblemDomain& domain = coord_sys->domain();
+   const Box& domain_box = domain.domainBox();
+
+   // Make sure a_iv at least lies within the radial and toroidal block boundaries
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      if ( dir != POLOIDAL_DIR ) {
+         if ( a_iv[dir] < domain_box.smallEnd(dir) || a_iv[dir] > domain_box.bigEnd(dir) ) {
+            MayDay::Error("SingleNullCoordSys::fixPoloidalBlock(): a_iv is outside the radial and/or toroidal boundary");
+
+         }
+      }
+   }
+
+   int poloidal_block = poloidalBlockNumber(a_num_block);
+   int toroidal_sector = toroidalBlockNumber(a_num_block);
+
+   int valid_poloidal_block = -1;
+   bool block_fixed = false;
+
+   if ( a_iv[POLOIDAL_DIR] < domain_box.smallEnd(POLOIDAL_DIR) ) {
+
+      switch( poloidal_block )
+         {
+         case SingleNullBlockCoordSys::LCORE:
+            valid_poloidal_block = SingleNullBlockCoordSys::RCORE;
+            break;
+         case SingleNullBlockCoordSys::RCORE:
+            valid_poloidal_block = SingleNullBlockCoordSys::LCORE;
+            break;
+         case SingleNullBlockCoordSys::LPF:
+            valid_poloidal_block = SingleNullBlockCoordSys::RPF;
+            break;
+         case SingleNullBlockCoordSys::RPF:
+            valid_poloidal_block = -1;
+            break;
+         case SingleNullBlockCoordSys::LSOL:
+            valid_poloidal_block = SingleNullBlockCoordSys::LCSOL;
+            break;
+         case SingleNullBlockCoordSys::LCSOL:
+            valid_poloidal_block = SingleNullBlockCoordSys::RCSOL;
+            break;
+         case SingleNullBlockCoordSys::RCSOL:
+            valid_poloidal_block = SingleNullBlockCoordSys::RSOL;
+            break;
+         case SingleNullBlockCoordSys::RSOL:
+            valid_poloidal_block = -1;
+            break;
+         default:
+            MayDay::Error("SingleNullCoordSys::checkNonPoloidalIndices(): Unrecogninzed block");
+         }
+
+      if ( valid_poloidal_block != -1 ) { 
+         a_num_block = blockNumber( valid_poloidal_block, toroidal_sector );
+
+         const SingleNullBlockCoordSys* valid_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_num_block);
+         const ProblemDomain& valid_domain = valid_coord_sys->domain();
+         const Box& valid_domain_box = valid_domain.domainBox();
+
+         a_iv[POLOIDAL_DIR] = valid_domain_box.bigEnd(POLOIDAL_DIR) - (domain_box.smallEnd(POLOIDAL_DIR) - a_iv[POLOIDAL_DIR]) + 1;
+         block_fixed = true;
+      }
+   }
+   else if ( a_iv[POLOIDAL_DIR] > domain_box.bigEnd(POLOIDAL_DIR) ) {
+
+      switch( poloidal_block )
+         {
+         case SingleNullBlockCoordSys::LCORE:
+            valid_poloidal_block = SingleNullBlockCoordSys::RCORE;
+            break;
+         case SingleNullBlockCoordSys::RCORE:
+            valid_poloidal_block = SingleNullBlockCoordSys::LCORE;
+            break;
+         case SingleNullBlockCoordSys::LPF:
+            valid_poloidal_block = -1;
+            break;
+         case SingleNullBlockCoordSys::RPF:
+            valid_poloidal_block = SingleNullBlockCoordSys::LPF;
+            break;
+         case SingleNullBlockCoordSys::LSOL:
+            valid_poloidal_block = -1;
+            break;
+         case SingleNullBlockCoordSys::LCSOL:
+            valid_poloidal_block = SingleNullBlockCoordSys::LSOL;
+            break;
+         case SingleNullBlockCoordSys::RCSOL:
+            valid_poloidal_block = SingleNullBlockCoordSys::LCSOL;
+            break;
+         case SingleNullBlockCoordSys::RSOL:
+            valid_poloidal_block = SingleNullBlockCoordSys::RCSOL;
+            break;
+         default:
+            MayDay::Error("SingleNullCoordSys::checkNonPoloidalIndices(): Unrecogninzed block");
+         }
+
+      if ( valid_poloidal_block != -1 ) { 
+         a_num_block = blockNumber( valid_poloidal_block, toroidal_sector );
+
+         const SingleNullBlockCoordSys* valid_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_num_block);
+         const ProblemDomain& valid_domain = valid_coord_sys->domain();
+         const Box& valid_domain_box = valid_domain.domainBox();
+
+         a_iv[POLOIDAL_DIR] = valid_domain_box.smallEnd(POLOIDAL_DIR) + (a_iv[POLOIDAL_DIR] - domain_box.bigEnd(POLOIDAL_DIR)) - 1;
+         block_fixed = true;
+      }
+   }
+
+   return block_fixed;
+}
+
+#endif
 
 
 #include "NamespaceFooter.H"

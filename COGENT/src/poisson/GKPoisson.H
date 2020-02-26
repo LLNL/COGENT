@@ -1,15 +1,6 @@
 #ifndef _GKPOISSON_H_
 #define _GKPOISSON_H_
 
-//#if CFG_DIM==2
-//#define PS_NAMESPACE D4
-//#define PDIM 4
-//#endif
-//#if CFG_DIM==3
-//#define PS_NAMESPACE D5
-//#define PDIM 5
-//#endif
-
 #include "EllipticOp.H"
 #include "MultiBlockLevelExchangeAverage.H"
 #ifdef with_petsc
@@ -23,8 +14,15 @@
 #include "GridFunction.H"
 #include "GridFunctionLibrary.H"
 
+#undef CH_SPACEDIM
+#define CH_SPACEDIM PDIM
+#include "KineticSpecies.H"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM CFG_DIM
+
 #include "NamespaceHeader.H"
-//namespace PS = PS_NAMESPACE;
+namespace PS = PS_NAMESPACE;
+namespace VEL = VEL_NAMESPACE;
 
 /// Gyrokintic Poisson operator class.
 /**
@@ -78,6 +76,11 @@ public:
                                          const EllipticOpBC&         bc,
                                          const bool                  update_preconditioner );
 
+   virtual void setOperatorCoefficients( const PS::KineticSpeciesPtrVect& kin_species,
+                                         const LevelData<FArrayBox>&      ni,
+                                         const EllipticOpBC&              bc,
+                                         const bool                       update_preconditioner );
+
    virtual void setOperatorCoefficients( const LevelData<FArrayBox>& ion_mass_density,
                                          const EllipticOpBC&         bc,
                                          const bool                  update_preconditioner,
@@ -89,6 +92,9 @@ public:
                              LevelData<FluxBox>& mapped_coefficients,
                              LevelData<FluxBox>& unmapped_coefficients );
 
+   void computeCoefficientsGK( LevelData<FluxBox>& mapped_coefficients_gk,
+                               LevelData<FluxBox>& unmapped_coefficients_gk );
+
    virtual void setPreconditionerConvergenceParams( const double tol,
                                                     const int    max_iter,
                                                     const double precond_tol,
@@ -98,7 +104,30 @@ public:
                                      LevelData<FArrayBox>&       out );
 
    virtual void multiplyCoefficients( LevelData<FluxBox>& data,
-                                      const bool mapped_coeff ) const;
+                                      const bool mapped_coeff ) const
+   {
+     multiplyCoefficients(  data, mapped_coeff, false);
+   }
+
+   virtual void multiplyCoefficients( LevelData<FluxBox>& data,
+                                      const bool mapped_coeff,
+                                      const bool apply_op ) const;
+
+   virtual void applyOp(  LevelData<FArrayBox>& out,
+                          const LevelData<FArrayBox>& in,
+                          bool homogeneous = false);
+
+   inline void setPhaseSpaceObjs( const PS::KineticSpeciesPtrVect& a_species)
+   {
+     if (a_species.size() > 0) {
+       m_species_vec = a_species;
+       m_phase_geom = &(a_species[0]->phaseSpaceGeometry());
+       const PS::LevelData<PS::FArrayBox>& dfn(a_species[0]->distributionFunction());
+       m_phase_grids = &(dfn.disjointBoxLayout());
+     } else {
+       CH_assert(m_include_FLR_effects == false);
+     }
+   }
 
    /// parseParameters function
    /**
@@ -146,13 +175,24 @@ protected:
    int m_density_interp_ghosts;
    
    LevelData<FluxBox> m_mapped_coefficients;
+   LevelData<FluxBox> m_mapped_coefficients_gk;
    LevelData<FluxBox> m_unmapped_coefficients;
+   LevelData<FluxBox> m_unmapped_coefficients_gk;
+   std::vector<PS::LevelData<PS::FArrayBox>* > m_FLR_integrand_factor;
    
    RefCountedPtr<GridFunction> m_electron_temperature;
    RefCountedPtr<GridFunction> m_charge_exchange_coeff;
    RefCountedPtr<GridFunction> m_parallel_conductivity;
 
    MultiBlockLevelExchangeCenter* m_mblx_ptr;
+
+   bool m_include_FLR_effects;
+   PS::KineticSpeciesPtrVect m_species_vec;
+   const PS::PhaseGeom* m_phase_geom;
+   const PS::DisjointBoxLayout* m_phase_grids;
+   const PS::MomentOp& m_moment_op;
+
+   void computeFLRIntegrandFactor();
 
 private:
    int m_verbosity;

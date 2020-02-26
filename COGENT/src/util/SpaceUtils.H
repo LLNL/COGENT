@@ -115,14 +115,14 @@ namespace SpaceUtils {
                                    const Box&, 
                                    const int, 
                                    const int, 
-                                   const Tuple<BlockBoundary, 2*SpaceDim>&);
+                                   const int);
   
   void extrapBoundaryGhostsForFC(  FArrayBox&, 
                                    const Box&, 
                                    const Box&, 
                                    const int, 
                                    const int, 
-                                   const Tuple<BlockBoundary, 2*SpaceDim>&);
+                                   const int);
 
   void secondOrderTransExtrapAtDomainBdry(  FArrayBox&,
                                             const int,

@@ -597,8 +597,7 @@ void GyroaverageOperator::gyroaveragedEField( LevelData<FArrayBox>&             
 
   /* define the Efield */
   if (a_E_field.isDefined()) a_E_field.clear();
-  IntVect gvec = IntVect::Zero;
-  for (int d=0; d<CFG_DIM; d++) gvec[d] = 1;
+  IntVect gvec = IntVect::Unit;
   a_E_field.define(m_grids, n_efield_comp, gvec);
 
   /* compute the gradient in configuration space */
@@ -639,8 +638,7 @@ void GyroaverageOperator::gyroaveragedEField( LevelData<FluxBox>&               
 
   /* define the Efield */
   if (a_E_field.isDefined()) a_E_field.clear();
-  IntVect gvec = IntVect::Zero;
-  for (int d=0; d<CFG_DIM; d++) gvec[d] = 1;
+  IntVect gvec = IntVect::Unit;
   a_E_field.define(m_grids, n_efield_comp, gvec);
 
   /* compute the gradient in configuration space */

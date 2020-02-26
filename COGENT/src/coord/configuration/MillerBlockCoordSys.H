@@ -162,6 +162,8 @@ class MillerBlockCoordSys
       // Object ParmParse name.
       static const std::string pp_name;
 
+      virtual bool isFieldAlignedMapping() const {return false;}
+
       virtual string geometryType() const {return "Miller";}
 
    protected:

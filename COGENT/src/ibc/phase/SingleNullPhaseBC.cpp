@@ -9,6 +9,7 @@
 #include "SingleNullPhaseCoordSys.H"
 #include "SPMD.H"
 #include "PhaseBCUtils.H"
+#include "LogicalSheathBC.H"
 
 #include <sstream>
 
@@ -238,6 +239,7 @@ SingleNullPhaseBC::SingleNullPhaseBC( const std::string& a_name,
                                       const int& a_verbosity )
    : m_name(a_name),
      m_verbosity(a_verbosity),
+     m_pp(a_pp),
      m_all_bdry_defined(false),
      m_logical_sheath(false)
 {
@@ -364,7 +366,7 @@ void SingleNullPhaseBC::apply( KineticSpecies& a_species_phys,
    CH_STOP(t_set_inflow_outflow_BC);
 
    if (m_logical_sheath) {
-       applyLogicalSheathBC(a_species_phys, m_all_bdry_layouts, a_velocity, a_phi, a_time);
+       applySheathBC(a_species_phys, a_phi, a_velocity);
    }
    
    CH_START(t_set_codim_boundary_values);
@@ -400,99 +402,34 @@ void SingleNullPhaseBC::setAllBcType( const BoundaryBoxLayoutPtrVect&  a_bdry_la
 }
 
 
-//Presently assumes that both plates are grounded (fix later to provide the actual phi bias)
-void SingleNullPhaseBC::applyLogicalSheathBC( KineticSpecies& a_species,
-                                              const BoundaryBoxLayoutPtrVect& a_bdry_layout,
-                                              const LevelData<FluxBox>& a_velocity,
-                                              const CFG::LevelData<CFG::FArrayBox>& a_phi,
-                                              const Real& a_time )
+void SingleNullPhaseBC::applySheathBC( KineticSpecies& a_species,
+                                       const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                       const LevelData<FluxBox>& a_velocity)
 {
+   // Get coordinate system parameters
+   const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
+   const MultiBlockCoordSys& coord_sys( *(geometry.coordSysPtr()) );
+   const PhaseGrid& phase_grid = geometry.phaseGrid();
+   const DisjointBoxLayout& dbl = phase_grid.disjointBoxLayout();
+   
+   //For sheath BC calculations we only need one-cell-wide
+   //boundary storage, so define it here
+   BoundaryBoxLayoutPtrVect all_bdry_layouts;
+   PhaseBCUtils::defineBoundaryBoxLayouts(all_bdry_layouts,
+                                          dbl,
+                                          coord_sys,
+                                          IntVect::Unit );
 
-   for (int i(0); i<a_bdry_layout.size(); i++) {
-      const BoundaryBoxLayout& bdry_layout( *(a_bdry_layout[i]) );
+   // Loop over boundaries
+   for (int i(0); i<all_bdry_layouts.size(); i++) {
+      const BoundaryBoxLayout& bdry_layout( *(all_bdry_layouts[i]) );
       const int& dir( bdry_layout.dir() );
-      const Side::LoHiSide& side( bdry_layout.side() );
- 
-      LevelData<FArrayBox>& soln( a_species.distributionFunction() );
-      const double mass = a_species.mass();
-      const double charge = a_species.charge();
-      
-      if (dir==POLOIDAL_DIR) {
-         
-         const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
-         
-         LevelData<FArrayBox> phi_injected;
-         geometry.injectConfigurationToPhase(a_phi, phi_injected);
-         
-         // Create valid-cell box that extends ghost_vect number of points away from the poloidal boundaries
-         const Box& domain_box = (geometry.domain()).domainBox();
-         const IntVect& ghost_vect( soln.ghostVect() );
-         const DisjointBoxLayout& dbl = soln.getBoxes();
-         
-         IntVect lo_end(domain_box.smallEnd());
-         IntVect hi_end(domain_box.bigEnd());
-
-         if (side == Side::Lo) hi_end[dir] = lo_end[dir] + ghost_vect[dir];
-         if (side == Side::Hi) lo_end[dir] = hi_end[dir] - ghost_vect[dir];
-         
-         Box refl_bnd_box(lo_end, hi_end);
-         
-         // Create the flipped data object we will need for reflecting particles (nominally, electrons)
-         //  below the potential barrier
-         int reflectDir = VPARALLEL_DIR;
-         int reflectCoord = 0;
-         Vector<Tuple<DataIndex, 2> > boxCorrelation;
-
-         DisjointBoxLayout flippedGrids;
-         getFlippedGrids(flippedGrids, boxCorrelation, dbl, refl_bnd_box, reflectDir, reflectCoord);
-         LevelData<FArrayBox> flippedData(flippedGrids, 1);
-         soln.copyTo(flippedData);
-
-         // Iterate over patches of flipped data, a small subset of the full data
-         DataIterator fdit = flippedData.dataIterator();
-         for (fdit.begin(); fdit.ok(); ++fdit) {
-            
-            // find the iterator value for the UNFLIPPED data corresponding to this flipped data
-            DataIndex regDataIndex;
-            for (int n=0; n<boxCorrelation.size(); n++)
-            {
-               if (boxCorrelation[n][1] == fdit() )
-               {
-                  regDataIndex = boxCorrelation[n][0];
-               }
-            }
-            
-            FArrayBox& this_dfn = soln[regDataIndex];
-            const Box& this_box = dbl[regDataIndex];
-            FArrayBox& this_phi = phi_injected[regDataIndex];
-
-            const FluxBox& this_vel = a_velocity[regDataIndex];
-                     
-            Box boundaryBox = adjCellBox(this_box, dir, side, ghost_vect[dir]);
-            
-            FArrayBox velocityRealCoords(boundaryBox, VEL_DIM);
-            const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(this_box);
-            block_coord_sys.getVelocityRealCoords(velocityRealCoords);
-            
-            const int SIDE(side);
-            FORT_SET_LOGICAL_SHEATH_BC(CHF_FRA1(this_dfn,0),
-                                       CHF_BOX(boundaryBox),
-                                       CHF_CONST_FRA1(flippedData[fdit],0),
-                                       CHF_CONST_FRA(velocityRealCoords),
-                                       CHF_CONST_FRA1(this_vel[dir],dir),
-                                       CHF_CONST_FRA1(this_phi,0),
-                                       CHF_CONST_REAL(mass),
-                                       CHF_CONST_REAL(charge),
-                                       CHF_CONST_INT(SIDE) );
-
-            
-         }
-
+      if (dir == POLOIDAL_DIR) {
+         LogicalSheathBC sheathBC(bdry_layout, m_pp);
+         sheathBC.applyBC(a_species, a_velocity, a_phi);
       }
-      
    }
 }
-
 
 void SingleNullPhaseBC::printParameters() const
 {

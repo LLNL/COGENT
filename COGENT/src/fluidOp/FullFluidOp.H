@@ -132,6 +132,8 @@ private:
    int m_is_time_implicit;
    std::string m_advScheme;
    std::string m_species_name;
+   bool m_isothermal;
+   bool m_const_mom_dens_x;
 
    std::string m_opt_string;
    int m_my_pc_idx;
@@ -153,6 +155,7 @@ private:
    
    // Allocate containers for derived variables
    LevelData<FArrayBox> m_pressure;
+   LevelData<FArrayBox> m_temperature;
    LevelData<FArrayBox> m_velocity;
    LevelData<FArrayBox> m_velocity_virtual;
    
@@ -286,7 +289,10 @@ private:
    void setCspeed( const LevelData<FArrayBox>&  a_density,
                    const double                 a_gamma );
    
+   void checkModelConsistency(const FluidSpecies& fluid_species) const;
+  
 
+   RefCountedPtr<GridFunction> m_temperature_func;
 };
 
 

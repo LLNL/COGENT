@@ -1,4 +1,113 @@
 ------------------------------------------------------------------------
+r1609 | mdorf | 2020-02-09 14:15:54 -0800 (Sun, 09 Feb 2020) | 1 line
+
+Added code infrustructure to support logical sheath BC development
+------------------------------------------------------------------------
+r1608 | mdorf | 2020-02-06 17:47:04 -0800 (Thu, 06 Feb 2020) | 1 line
+
+Refactoring of anomalous transport model and related infrastructure for the purposes of performance optimization
+------------------------------------------------------------------------
+r1607 | mdorf | 2020-02-04 17:10:14 -0800 (Tue, 04 Feb 2020) | 1 line
+
+Added diagnostics for minimal cell size; added a designated function to handle distribution (packing) of poloidal grid points
+------------------------------------------------------------------------
+r1606 | mdorf | 2020-01-27 12:50:03 -0800 (Mon, 27 Jan 2020) | 1 line
+
+Minor changes to Vlasov operator to improve performance for the case of divergence-free GK velocity
+------------------------------------------------------------------------
+r1605 | mdorf | 2020-01-27 11:43:32 -0800 (Mon, 27 Jan 2020) | 1 line
+
+Improved grid generator for efficient handling of a fine poloidal resolution in the X-point region
+------------------------------------------------------------------------
+r1604 | mdorr | 2020-01-25 12:46:02 -0800 (Sat, 25 Jan 2020) | 11 lines
+
+Adding boolean member to MagGeom and PhaseGeom to specify whether or not the geometry is being described using a field-aligned mapping (only applies for 3D single null for now).
+
+Modified fillInternalGhosts in MagGeom and PhaseGeom to fill toroidal extrablock ghosts using an extrablock exchange rather than interpolateFromShearedGhosts when a field-aligned mapped is not being used (and extrablock exchanges are specified).
+
+Adjusted the single null sawtooth interpolation to tolerate some roundoff error when a non-field aligned mapping is being used.
+
+Made a small efficiency improvement in getExtrablockGhostLayout in both MagGeom and PhaseGeom.
+
+
+
+
+------------------------------------------------------------------------
+r1603 | mdorr | 2020-01-22 16:37:25 -0800 (Wed, 22 Jan 2020) | 3 lines
+
+Fixing some bugs in the single null solver.
+
+
+------------------------------------------------------------------------
+r1602 | mdorf | 2020-01-22 11:34:53 -0800 (Wed, 22 Jan 2020) | 1 line
+
+Added an option to strip extrablock ghost cells from the mapping
+------------------------------------------------------------------------
+r1601 | mdorr | 2020-01-19 11:06:48 -0800 (Sun, 19 Jan 2020) | 9 lines
+
+Modified MagGeom::exchangeExtrablockGhosts() and PhaseGeom::exchangeExtrablockGhosts() to enable both the specification of the block boundaries as well as the exchange direction(s).  This enabled some clean up of the calculation of the interpolation stencil data computed at toroidal block boundaries needed for the construction of the multiblock preconditioners.
+
+SingleNullCoordSys::toroidalBlockRemapping() was modified to attempt to better handle the determination of the valid neighboring block cell corresponding to a toroidal extrablock ghost.
+
+ToroidalBlockLevelExchange was modified to also work with flux-aligned mappings single null mappings lacking smooth extension beyond block boundaries.
+
+Fixed a bug in the initialization of the potential upon restart that had been affecting the new vorticity model.
+
+
+------------------------------------------------------------------------
+r1600 | mdorf | 2020-01-16 12:54:59 -0800 (Thu, 16 Jan 2020) | 1 line
+
+Cleaned-up code related to default ghosts
+------------------------------------------------------------------------
+r1599 | mdorf | 2020-01-15 14:36:44 -0800 (Wed, 15 Jan 2020) | 1 line
+
+Updated EllipticOp and extrapBoundaryGhosts operations to be consistent with a 5D single-null multiblock sheared geometry. Also, some performance optimization stuff
+------------------------------------------------------------------------
+r1598 | mdorf | 2019-12-28 18:12:52 -0800 (Sat, 28 Dec 2019) | 1 line
+
+Added 5D ITG vorticity tests for annular geometry
+------------------------------------------------------------------------
+r1597 | mdorf | 2019-12-26 17:16:43 -0800 (Thu, 26 Dec 2019) | 1 line
+
+Added polarization density correction to the new vorticity model; also added an option for not injecting E-field each GMRES stage of the potential solve if we don't update coefficeints (i.e., do not update distribution function)
+------------------------------------------------------------------------
+r1596 | mdorf | 2019-12-20 12:13:34 -0800 (Fri, 20 Dec 2019) | 1 line
+
+Added an input file for a LHDI test
+------------------------------------------------------------------------
+r1595 | mdorf | 2019-12-20 12:08:19 -0800 (Fri, 20 Dec 2019) | 1 line
+
+Updated FullFluidOp model
+------------------------------------------------------------------------
+r1594 | debo | 2019-12-16 18:56:10 -0800 (Mon, 16 Dec 2019) | 1 line
+
+Implemented FLR effects in gyro-Poisson op - needs debugging
+------------------------------------------------------------------------
+r1593 | mdorr | 2019-12-16 11:14:28 -0800 (Mon, 16 Dec 2019) | 3 lines
+
+Adding the precomputation of physical boundary boxes and moving them to MagCoordSys.
+
+
+------------------------------------------------------------------------
+r1592 | debo | 2019-12-12 20:20:47 -0800 (Thu, 12 Dec 2019) | 1 line
+
+except for when called from evalRHS, computeVelocity ignores gyrokinetic-ness of species; also, gyroaveraged Efield needs a ghost point in mu
+------------------------------------------------------------------------
+r1591 | mdorr | 2019-12-11 12:14:17 -0800 (Wed, 11 Dec 2019) | 3 lines
+
+Removing a temporary modification accidentally commited in r1513.  This slightly affected the nodal field data evaluations in the divergence-free velocity option.  
+
+
+------------------------------------------------------------------------
+r1590 | angus1 | 2019-12-03 12:17:02 -0800 (Tue, 03 Dec 2019) | 1 line
+
+adding some functionality for handling time-evolving variables on cell faces and cell edges
+------------------------------------------------------------------------
+r1589 | ligocki | 2019-11-27 14:40:59 -0800 (Wed, 27 Nov 2019) | 2 lines
+
+Added an openMPI include directory...
+
+------------------------------------------------------------------------
 r1588 | mdorr | 2019-11-21 14:25:34 -0800 (Thu, 21 Nov 2019) | 3 lines
 
 Removing a diagnostic inadvertently left on in the previous commit.

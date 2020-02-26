@@ -220,6 +220,13 @@ public:
    virtual void multiplyCoefficients( LevelData<FluxBox>& data,
                                       const bool mapped_coeff ) const = 0;
 
+   virtual void multiplyCoefficients( LevelData<FluxBox>& data,
+                                      const bool mapped_coeff,
+                                      const bool apply_op )
+   {
+     multiplyCoefficients( data, mapped_coeff);
+   }
+
    // <---- End *this virtuals
 
    // ----> Begin LinOp virtuals

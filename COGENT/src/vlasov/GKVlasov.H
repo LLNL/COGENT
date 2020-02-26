@@ -264,8 +264,16 @@ protected:
    bool m_first_call;
    
    LevelData<FArrayBox> m_F0;
+   LevelData<FArrayBox> m_maxwellian_dfn;
+   LevelData<FArrayBox> m_delta_dfn;
+   LevelData<FArrayBox> m_dfn_no_bstar;
+
    LevelData<FluxBox> m_flux;
+   LevelData<FluxBox> m_flux_normal;
    LevelData<FluxBox> m_velocity;
+   LevelData<FluxBox> m_velocity_normal;
+   LevelData<FluxBox> m_delta_flux;
+   
    LevelData<FluxBox> m_face_dist;
    RefCountedPtr<KineticFunction> m_ref_func;
 

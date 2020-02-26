@@ -7,6 +7,7 @@
 #include "BlockRegister.H"
 #include "EllipticOpBC.H"
 #include "EdgeDataBox.H"
+#include "CoDimCopyManager.H"
 
 #include "BoundaryBoxLayout.H.multidim"
 #include "SpaceUtils.H"
@@ -264,16 +265,24 @@ public:
    
    void exchangeExtraBlockGhosts( LevelData<FArrayBox>& data ) const;
 
-   void exchangeExtraBlockGhosts( LevelData<FArrayBox>& data, const int codim, const IntVect& include_dir ) const;
+   void exchangeExtraBlockGhosts( LevelData<FArrayBox>& data,
+                                  const int codim,
+                                  const IntVect& boundary_dirs,
+                                  const IntVect& exchange_dirs ) const;
 
-   void getExtrablockExchangeLayout( const int                 codim,
+   void getExtrablockExchangeLayout( const int                 dir,
+                                     const int                 codim,
                                      const DisjointBoxLayout&  grids,
                                      const IntVect&            ghost_vect,
-                                     const IntVect&            include_dir,
+                                     const IntVect&            exchange_dirs,
                                      BoxLayout&                ghosts_layout,
                                      LayoutData<DataIndex>&    index_map,
                                      LayoutData<IntVect>&      shift_map ) const;
   
+   void fillCorners( LevelData<FArrayBox>&  a_data,
+                     const IntVect&         a_nghosts,
+                     const int              a_max_codim ) const;
+
    void fillTransversePhysicalGhosts( LevelData<FArrayBox>& data ) const;
 
    void fillTransversePhysicalGhosts( LevelData<FluxBox>& data ) const;
@@ -380,8 +389,12 @@ public:
 
    bool shearedMBGeom() const {return m_sheared_mb_geom;}
   
+   bool fieldAlignedMapping() const {return m_coord_sys->getCoordSys(0)->isFieldAlignedMapping();}
+  
    bool secondOrder() const {return m_second_order;}
 
+   bool mixedBoundaries() const;
+   
 #if CFG_DIM == 3
 
    int shearedInterpOrder() const {return m_sheared_interp_order;}
@@ -391,11 +404,13 @@ public:
    const LevelData<FArrayBox>& getShearedInterpStencil() const {return m_sheared_interp_stencil;}
    const LevelData<FArrayBox>& getShearedInterpStencilOffsets() const {return m_sheared_interp_stencil_offsets;}
    void interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const;
-   Vector<Box> getToroidalBoundaryBoxes( const int block_number, const Side::LoHiSide& side ) const;
    
 #endif
 
-   Vector<Box> getBoundaryBoxes( const int block_number, const int dir, const Side::LoHiSide& side ) const;
+   Vector<Box> getBoundaryBoxes( const int block_number, const int dir, const Side::LoHiSide& side ) const
+      {
+         return m_coord_sys->getBoundaryBoxes(block_number, dir, side);
+      }
 
    bool providesFlux() const {return m_coord_sys->providesFlux();}
    
@@ -572,6 +587,18 @@ private:
    
 #endif
    
+   // Cached data supporting extrablock exchanges
+   struct EBE_Data
+   {
+      BoxLayout             ghostLayout;
+      LayoutData<DataIndex> index_map;
+      LayoutData<IntVect>   shift_map;
+      IntVect               ghost_vect;
+      IntVect               exchange_dirs;
+      Copier                copier;
+   };
+   mutable list<EBE_Data*> m_ebe_data_cache[CH_SPACEDIM][CH_SPACEDIM];
+   mutable list<CoDimCopyManager<FArrayBox>*> m_ebe_copy_manager_cache;
 };
 
 

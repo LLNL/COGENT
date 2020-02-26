@@ -66,25 +66,31 @@ public:
    
 private:
 
-  Vector<Real> D_fluid;
-  Vector<Real> D_kinet;
-  double DN0;
+  Vector<Real> m_D_fluid;
+  Vector<Real> m_D_kinet;
+  double m_DN0;
   RefCountedPtr<CFG::GridFunction> m_shape_function;
   RefCountedPtr<CFG::GridFunction> m_shape_function_D0, m_shape_function_D1;
   RefCountedPtr<CFG::GridFunction> m_shape_function_D2, m_shape_function_D3;
-  bool model_only;
-  bool const_coeff;
-  MomentOp& moment_op;
+  bool m_model_only;
+  bool m_const_coeff;
+  MomentOp& m_moment_op;
   bool m_first_step;
   bool m_arbitrary_grid;
   bool m_simple_diffusion;
 
 
-  int verbosity;
+  int m_verbosity;
+  IntVect m_ghostVect;
   ParmParse pptpm;
   string species_name;
 
-  LevelData<FluxBox> m_lame_faces, D_kinet_faces;
+  LevelData<FArrayBox> m_fB, m_fB_beta, m_dfBdmu_cc, m_rhs_transport;
+  LevelData<FArrayBox> m_hr, m_beta;
+  LevelData<FluxBox> m_lame_faces, m_inj_bunit, m_inj_pointwiseNJinv;
+  LevelData<FluxBox> m_D_kinet_faces;
+  LevelData<FluxBox> m_flux, m_fluxNorm;
+
   CFG::LevelData<CFG::FluxBox> m_precond_D;
 
 
@@ -131,6 +137,9 @@ private:
                                   const CFG::MagGeom&                      a_phase_geom,
                                   const CFG::LevelData<CFG::FluxBox>&      a_D_faces );
  
+   /// Compute cell-centered beta = U_psi^2/D_psi
+   void computeBeta(LevelData<FArrayBox>& beta,
+                    const KineticSpecies& soln_species );
    
 };
 

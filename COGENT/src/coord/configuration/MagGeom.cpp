@@ -203,7 +203,6 @@ MagGeom::MagGeom(ParmParse&                         a_pp,
    //
    ///////////////////////////////////////////////////////////
 
-
    double mapping_error = maxMappingError();
    if (procID()==0) {
       cout << "Mapping error = " << mapping_error << endl;
@@ -219,6 +218,23 @@ MagGeom::~MagGeom()
 {
    if (m_exchange_transverse_block_register) delete m_exchange_transverse_block_register;
    if (m_mblexPtr) delete m_mblexPtr;
+
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      for (int codim=1; codim<=SpaceDim; ++codim) {
+         list<EBE_Data*>& this_ebe_data_cache = m_ebe_data_cache[dir][codim-1];
+         list<EBE_Data*>::iterator it;
+         for (it = this_ebe_data_cache.begin(); it != this_ebe_data_cache.end(); ++it) {
+            if(*it) delete *it;
+         }
+         this_ebe_data_cache.clear();
+      }
+   }
+
+   list<CoDimCopyManager<FArrayBox>*>::iterator it;
+   for (it = m_ebe_copy_manager_cache.begin(); it != m_ebe_copy_manager_cache.end(); ++it) {
+      if (*it) delete *it;
+   }
+   m_ebe_copy_manager_cache.clear();
 }
 
 void
@@ -2495,42 +2511,52 @@ MagGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
    
       if ( m_mblexPtr && !m_extrablock_exchange && !m_sheared_mb_geom ) {
 
-         const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
-         LevelData<FArrayBox> tmp(grids, a_data.nComp(), m_ghosts*IntVect::Unit);
+	if (nghosts < m_ghosts*IntVect::Unit) {
+	  // interpGhosts() can't seem to handle a smaller number of ghost cells than
+	  // where specified when creating the MBLevelExchange object.
+	  const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+	  LevelData<FArrayBox> tmp(grids, a_data.nComp(), m_ghosts*IntVect::Unit);
       
-         for (DataIterator dit(grids); dit.ok(); ++dit) {
+	  for (DataIterator dit(grids); dit.ok(); ++dit) {
             tmp[dit].copy(a_data[dit]);
-         }
+	  }
 
-         m_mblexPtr->interpGhosts(tmp);
+	  m_mblexPtr->interpGhosts(tmp);
 
-         for (DataIterator dit(grids); dit.ok(); ++dit) {
+	  for (DataIterator dit(grids); dit.ok(); ++dit) {
             a_data[dit].copy(tmp[dit]);
-         }
+	  }
+	}
+
+	else {
+	  m_mblexPtr->interpGhosts(a_data);
+	}
       
-         a_data.exchange();
+	a_data.exchange();
       }
+      
       else if ( m_extrablock_exchange ) {
 
          // Fill the internal ghosts
          a_data.exchange();
 
 #ifdef NEW_EXTRABLOCK_EXCHANGE
-         IntVect include_dir = IntVect::Unit;
+         IntVect boundary_dirs = IntVect::Unit;
+         IntVect exchange_dirs = IntVect::Unit;
 #if CFG_DIM == 3
-         if ( m_sheared_mb_geom ) {
+         if ( m_sheared_mb_geom && fieldAlignedMapping() ) {
             // Don't fill extrablock ghosts in the toroidal direction, since this will be
             // handled by interpolateFromShearedGhosts() below
-            include_dir[TOROIDAL_DIR] = 0;
+            boundary_dirs[TOROIDAL_DIR] = 0;
          }
 #endif
          // Fill the codim ghost cells
          for (int codim=1; codim<=SpaceDim; ++codim) {
-            exchangeExtraBlockGhosts(a_data, codim, include_dir);
+            exchangeExtraBlockGhosts(a_data, codim, boundary_dirs, exchange_dirs);
          }
 
 #if CFG_DIM==3
-         if ( m_sheared_mb_geom && nghosts[TOROIDAL_DIR] > 0 ) {
+         if ( m_sheared_mb_geom && nghosts[TOROIDAL_DIR] > 0 && fieldAlignedMapping() ) {
             // Fill the codim 1 extrablock ghost cells at the toroidal block boundaries
             interpolateFromShearedGhosts(a_data);
 
@@ -2538,42 +2564,44 @@ MagGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
             IntVect toroidal_dir_only = IntVect::Zero;
             toroidal_dir_only[TOROIDAL_DIR] = 1;
 
+            IntVect no_toroidal_exchange = IntVect::Unit;
+            no_toroidal_exchange[TOROIDAL_DIR] = 0;
+
             for (int codim=2; codim<=SpaceDim; ++codim) {
-               exchangeExtraBlockGhosts(a_data, codim, toroidal_dir_only);
+               exchangeExtraBlockGhosts(a_data, codim, toroidal_dir_only, no_toroidal_exchange);
             }
          }
 #endif
-
-         // Fill the corner ghost cells
-         const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
-         CoDimCopyManager<FArrayBox> manager(grids, grids, nghosts, true);
-         manager.manageExchanges(a_data);
+         fillCorners(a_data, nghosts, SpaceDim);
 #else
          exchangeExtraBlockGhosts(a_data);
 
          //Need to call again to fill corners
          exchangeExtraBlockGhosts(a_data);
 #endif      
-
-#if CFG_DIM==3
-         if ( m_sheared_mb_geom && nghosts[TOROIDAL_DIR] > 0 ) {
-            interpolateFromShearedGhosts(a_data);
-         }
-#endif
       }
 #if CFG_DIM ==3 
       else if ( m_sheared_mb_geom ) {
          if ( nghosts[TOROIDAL_DIR] > 0 ) {
+            // Fill the codim 1 extrablock ghost cells at the toroidal block boundaries
             interpolateFromShearedGhosts(a_data);
+
+            // Fill the codim 2 and 3 extrablock ghost cells at the toroidal block boundaries
+            IntVect toroidal_dir_only = IntVect::Zero;
+            toroidal_dir_only[TOROIDAL_DIR] = 1;
+
+            IntVect no_toroidal_exchange = IntVect::Unit;
+            no_toroidal_exchange[TOROIDAL_DIR] = 0;
+
+            for (int codim=2; codim<=SpaceDim; ++codim) {
+               exchangeExtraBlockGhosts(a_data, codim, toroidal_dir_only, no_toroidal_exchange);
+            }
          }
          a_data.exchange();
 
          //perform data exchange in corner ghost cells
          //might be needed for high-order calculations 
-         const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
-
-         CoDimCopyManager<FArrayBox> manager(grids, grids, nghosts, true);
-         manager.manageExchanges(a_data);
+         fillCorners(a_data, nghosts, SpaceDim);
       }
 #endif
       else {
@@ -2680,66 +2708,93 @@ MagGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
 void
 MagGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data,
                                    const int             a_codim,
-                                   const IntVect&        a_include_dir ) const
+                                   const IntVect&        a_boundary_dirs,
+                                   const IntVect&        a_exchange_dirs ) const
 {
+   CH_assert(a_codim>=1 && a_codim<=SpaceDim);
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+   const ProblemDomain domain;  // dummy
 
-   // Get box layout for extrablock ghost cells
-   BoxLayout ghostLayout;
-   LayoutData<DataIndex> index_map;
-   LayoutData<IntVect> shift_map;
-   getExtrablockExchangeLayout(a_codim,
-                               grids,
-                               a_data.ghostVect(),
-                               a_include_dir,
-                               ghostLayout,
-                               index_map,
-                               shift_map);
-   
-   // Fill extrablock ghost cells
-   BoxLayoutData<FArrayBox> ghost_data(ghostLayout, a_data.nComp());
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      if ( a_boundary_dirs[dir] != 0 ) {
 
-   if ( a_codim == 1 ) {
-      a_data.copyTo(ghost_data);
-   }
-   else {
-      Copier copier;
-      const ProblemDomain domain;
-      
-      copier.define(ghostLayout,
-                    grids,
-                    domain,
-                    a_data.ghostVect(),
-                    false,
-                    IntVect::Zero);
-      copier.reverse();
+         EBE_Data* ebe_data_ptr = NULL;
+         list<EBE_Data*>& this_ebe_data_cache = m_ebe_data_cache[dir][a_codim-1];
+         list<EBE_Data*>::iterator it;
+         for (it = this_ebe_data_cache.begin(); it != this_ebe_data_cache.end(); ++it) {
+            EBE_Data* this_ebe_data_ptr = *it;
+            if ( this_ebe_data_ptr->ghost_vect == a_data.ghostVect() &&
+                 this_ebe_data_ptr->exchange_dirs == a_exchange_dirs ) {
+               ebe_data_ptr = this_ebe_data_ptr;
+               break;
+            }
+         }
 
-      a_data.copyTo(ghost_data, copier);
-   }
-   
-   // Fill ghosts of a_data
-   for (DataIterator dit(ghostLayout.dataIterator()); dit.ok(); ++dit) {
+         if ( ebe_data_ptr == NULL ) {
+            // Construct a new object to cache extrablock exchange data.  The object stores
+            // the information used to construct the stored BoxLayout and Copier so that
+            // it can be later checked before attempting to re-use the cached object.
+            ebe_data_ptr = new EBE_Data;
+            ebe_data_ptr->ghost_vect = a_data.ghostVect();
+            ebe_data_ptr->exchange_dirs = a_exchange_dirs;
 
-      FArrayBox this_ghosts(Interval(0,ghost_data.nComp()-1), ghost_data[dit]);
-      this_ghosts.shift(-shift_map[dit]);
+            // Get box layout for extrablock ghost cells
+            getExtrablockExchangeLayout(dir,
+                                        a_codim,
+                                        grids,
+                                        ebe_data_ptr->ghost_vect,
+                                        ebe_data_ptr->exchange_dirs,
+                                        ebe_data_ptr->ghostLayout,
+                                        ebe_data_ptr->index_map,
+                                        ebe_data_ptr->shift_map);
 
-      CH_assert( (a_data[index_map[dit]].box()).contains(this_ghosts.box()));
-      
-      a_data[index_map[dit]].copy(this_ghosts);
+            // Need to zero out the transverse ghosts to avoid requiring corner
+            // ghost cell consistency (e.g., through the use of a CornerCopier).
+            // This is the reason we are doing the extrablock exchange separately
+            // in each direction.
+            IntVect nghost = a_data.ghostVect()[dir] * BASISV(dir);
+
+            ebe_data_ptr->copier.define(ebe_data_ptr->ghostLayout,
+                                        grids,
+                                        domain,
+                                        nghost,
+                                        false,
+                                        IntVect::Zero);
+            ebe_data_ptr->copier.reverse();
+
+            this_ebe_data_cache.push_back(ebe_data_ptr);
+         }
+
+         BoxLayoutData<FArrayBox> ghost_data(ebe_data_ptr->ghostLayout, a_data.nComp());
+
+         a_data.copyTo(ghost_data, ebe_data_ptr->copier);
+
+         // Finally fill the ghosts of a_data from the data in the shifted ghost_data BoxLayoutData
+         for (DataIterator dit(ebe_data_ptr->ghostLayout.dataIterator()); dit.ok(); ++dit) {
+
+            FArrayBox this_ghosts(Interval(0,ghost_data.nComp()-1), ghost_data[dit]);
+            this_ghosts.shift(-ebe_data_ptr->shift_map[dit]);
+
+            CH_assert( (a_data[ebe_data_ptr->index_map[dit]].box()).contains(this_ghosts.box()));
+
+            a_data[ebe_data_ptr->index_map[dit]].copy(this_ghosts);
+         }
+      }
    }
 }
 
 
 void
-MagGeom::getExtrablockExchangeLayout( const int                 a_codim,
+MagGeom::getExtrablockExchangeLayout( const int                 a_dir,
+                                      const int                 a_codim,
                                       const DisjointBoxLayout&  a_grids,
                                       const IntVect&            a_ghost_vect,
-                                      const IntVect&            a_include_dir,
+                                      const IntVect&            a_exchange_dirs,
                                       BoxLayout&                a_ghosts_layout,
                                       LayoutData<DataIndex>&    a_index_map,
                                       LayoutData<IntVect>&      a_shift_map ) const
 {
-   CH_TIME("PhaseGeom::getExtrablockExchangeLayout");
+   CH_TIME("MagGeom::getExtrablockExchangeLayout");
    CH_assert(a_codim>=1 && a_codim<=3);
 
    // Define BoxLayout and the iterator map for extrablock ghost cells
@@ -2760,98 +2815,107 @@ MagGeom::getExtrablockExchangeLayout( const int                 a_codim,
       const ProblemDomain& domain = block_coords.domain();
       const Box& domain_box = domain.domainBox();
 
-      for (int dir1=0; dir1<SpaceDim; ++dir1) {
-         if ( a_include_dir[dir1] != 0 ) {
-            for (SideIterator sit1; sit1.ok(); ++sit1) {
-               Side::LoHiSide side1 = sit1();
+      int dir1 = a_dir;
+      for (SideIterator sit1; sit1.ok(); ++sit1) {
+         Side::LoHiSide side1 = sit1();
            
-               if (((side1 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir1) == domain_box.smallEnd(dir1))
-                    || (side1 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir1) == domain_box.bigEnd(dir1)))
-                   && !(this_block_boundaries[dir1 + side1*SpaceDim].isDomainBoundary())) {
+         if (((side1 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir1) == domain_box.smallEnd(dir1))
+              || (side1 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir1) == domain_box.bigEnd(dir1)))
+             && !(this_block_boundaries[dir1 + side1*SpaceDim].isDomainBoundary())) {
             
-                  Box codim_1_ghostBox = adjCellBox(a_grids[lit], dir1, side1, a_ghost_vect[dir1]);
+            Box codim_1_ghostBox = adjCellBox(a_grids[lit], dir1, side1, a_ghost_vect[dir1]);
 
-                  IntVect translation1 = this_block_boundaries[dir1 + side1*SpaceDim].getTransformation().getTranslation();
+            IntVect translation1 = IntVect::Zero;
+            if ( a_exchange_dirs[dir1] != 0 ) {
+               translation1 += this_block_boundaries[dir1 + side1*SpaceDim].getTransformation().getTranslation();
+            }
 
-                  if ( a_codim == 1 ) {
-                     codim_1_ghostBox.shift(translation1);
+            if ( a_codim == 1 ) {
+               if ( a_exchange_dirs[dir1] != 0 ) {
+                  codim_1_ghostBox.shift(translation1);
 
-                     bool local_add_box = (a_grids.procID(lit()) == procID())
-                        && local_data_map.insert( dataMapType( make_tuple(codim_1_ghostBox,translation1), lit() )).second;
+                  bool local_add_box = (a_grids.procID(lit()) == procID())
+                     && local_data_map.insert( dataMapType( make_tuple(codim_1_ghostBox,translation1), lit() )).second;
 
-                     bool add_box;
+                  bool add_box;
 #ifdef CH_MPI
-                     MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
+                  MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
 #else
-                     add_box = local_add_box;
+                  add_box = local_add_box;
 #endif
-
-                     if ( add_box ) {
-                        boxes.push_back( codim_1_ghostBox );
-                        proc_ids.push_back( a_grids.procID( lit() ) );
-                     }
+                  if ( add_box ) {
+                     boxes.push_back( codim_1_ghostBox );
+                     proc_ids.push_back( a_grids.procID( lit() ) );
                   }
-                  else {
-                     for (int dir2=0; dir2<SpaceDim; ++dir2) {
-                        if ( a_include_dir[dir2] != 0 && dir2 != dir1 ) {
-                           for (SideIterator sit2; sit2.ok(); ++sit2) {
-                              Side::LoHiSide side2 = sit2();
+               }
+            }
+            else {
+               for (int dir2=0; dir2<SpaceDim; ++dir2) {
+                  if ( dir2 != dir1 ) {
+                     for (SideIterator sit2; sit2.ok(); ++sit2) {
+                        Side::LoHiSide side2 = sit2();
                                  
-                              if (((side2 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir2) == domain_box.smallEnd(dir2))
-                                   || (side2 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir2) == domain_box.bigEnd(dir2)))
-                                  && !(this_block_boundaries[dir2 + side2*SpaceDim].isDomainBoundary())) {
+                        if (((side2 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir2) == domain_box.smallEnd(dir2))
+                             || (side2 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir2) == domain_box.bigEnd(dir2)))
+                            && !(this_block_boundaries[dir2 + side2*SpaceDim].isDomainBoundary())) {
                                     
-                                 Box codim_2_ghostBox = adjCellBox(codim_1_ghostBox, dir2, side2, a_ghost_vect[dir2]);
+                           Box codim_2_ghostBox = adjCellBox(codim_1_ghostBox, dir2, side2, a_ghost_vect[dir2]);
                                     
-                                 IntVect translation2 = this_block_boundaries[dir2 + side2*SpaceDim].getTransformation().getTranslation() + translation1;
+                           IntVect translation2 = translation1;
+                           if ( a_exchange_dirs[dir2] != 0 ) {
+                              translation2 += this_block_boundaries[dir2 + side2*SpaceDim].getTransformation().getTranslation();
+                           }
 
-                                 if ( a_codim == 2 ) {
-                                    codim_2_ghostBox.shift(translation2);
+                           if ( a_codim == 2 ) {
+                              if ( a_exchange_dirs[dir2] != 0 ) {
+                                 codim_2_ghostBox.shift(translation2);
                   
-                                    bool local_add_box = (a_grids.procID(lit()) == procID())
-                                       && local_data_map.insert( dataMapType( make_tuple(codim_2_ghostBox,translation2), lit() )).second;
+                                 bool local_add_box = (a_grids.procID(lit()) == procID())
+                                    && local_data_map.insert( dataMapType( make_tuple(codim_2_ghostBox,translation2), lit() )).second;
 
-                                    bool add_box;
+                                 bool add_box;
 #ifdef CH_MPI
-                                    MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
+                                 MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
 #else
-                                    add_box = local_add_box;
+                                 add_box = local_add_box;
 #endif
-                                    if ( add_box ) {
-                                       boxes.push_back( codim_2_ghostBox );
-                                       proc_ids.push_back( a_grids.procID( lit() ) );
-                                    }
+                                 if ( add_box ) {
+                                    boxes.push_back( codim_2_ghostBox );
+                                    proc_ids.push_back( a_grids.procID( lit() ) );
                                  }
-                                 else {
+                              }
+                           }
+                           else {
 
-                                    for (int dir3=0; dir3<SpaceDim; ++dir3) {
-                                       if ( a_include_dir[dir3] != 0 && dir3 != dir1 && dir3 != dir2 ) {
-                                          for (SideIterator sit3; sit3.ok(); ++sit3) {
-                                             Side::LoHiSide side3 = sit3();
+                              for (int dir3=0; dir3<SpaceDim; ++dir3) {
+                                 if ( dir3 != dir1 && dir3 != dir2 ) {
+                                    for (SideIterator sit3; sit3.ok(); ++sit3) {
+                                       Side::LoHiSide side3 = sit3();
             
-                                             if (((side3 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir3) == domain_box.smallEnd(dir3))
-                                                  || (side3 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir3) == domain_box.bigEnd(dir3)))
-                                                 && !(this_block_boundaries[dir3 + side3*SpaceDim].isDomainBoundary())) {
+                                       if (((side3 == Side::LoHiSide::Lo && a_grids[lit].smallEnd(dir3) == domain_box.smallEnd(dir3))
+                                            || (side3 == Side::LoHiSide::Hi && a_grids[lit].bigEnd(dir3) == domain_box.bigEnd(dir3)))
+                                           && !(this_block_boundaries[dir3 + side3*SpaceDim].isDomainBoundary())
+                                           && a_exchange_dirs[dir3] != 0 ) {
                                              
-                                                Box codim_3_ghostBox = adjCellBox(codim_2_ghostBox, dir3, side3, a_ghost_vect[dir3]);
+                                          Box codim_3_ghostBox = adjCellBox(codim_2_ghostBox, dir3, side3, a_ghost_vect[dir3]);
 
-                                                IntVect translation3 = this_block_boundaries[dir3 + side3*SpaceDim].getTransformation().getTranslation() + translation2;
-                                                codim_3_ghostBox.shift(translation3);
+                                          IntVect translation3 = translation2;;
+                                          translation3 += this_block_boundaries[dir3 + side3*SpaceDim].getTransformation().getTranslation();
 
-                                                bool local_add_box = (a_grids.procID(lit()) == procID()) 
-                                                   && local_data_map.insert( dataMapType( make_tuple(codim_3_ghostBox,translation3), lit() )).second;
+                                          codim_3_ghostBox.shift(translation3);
 
-                                                bool add_box;
+                                          bool local_add_box = (a_grids.procID(lit()) == procID()) 
+                                             && local_data_map.insert( dataMapType( make_tuple(codim_3_ghostBox,translation3), lit() )).second;
+
+                                          bool add_box;
 #ifdef CH_MPI
-                                                MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
+                                          MPI_Allreduce(&local_add_box, &add_box, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
 #else
-                                                add_box = local_add_box;
+                                          add_box = local_add_box;
 #endif
-                                                if ( add_box ) {
-                                                   boxes.push_back( codim_3_ghostBox );
-                                                   proc_ids.push_back( a_grids.procID( lit() ) );
-                                                }
-                                             }
+                                          if ( add_box ) {
+                                             boxes.push_back( codim_3_ghostBox );
+                                             proc_ids.push_back( a_grids.procID( lit() ) );
                                           }
                                        }
                                     }
@@ -2894,6 +2958,35 @@ MagGeom::getExtrablockExchangeLayout( const int                 a_codim,
          }
       }
    }
+}
+
+
+void
+MagGeom::fillCorners( LevelData<FArrayBox>&  a_data,
+                      const IntVect&         a_nghosts,
+                      const int              a_max_codim ) const
+{
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+
+   CoDimCopyManager<FArrayBox>* ebe_copy_manager = NULL;
+   list<CoDimCopyManager<FArrayBox>*>::iterator it;
+   for (it = m_ebe_copy_manager_cache.begin(); it != m_ebe_copy_manager_cache.end(); ++it) {
+      CoDimCopyManager<FArrayBox>* this_ebe_copy_manager = *it;
+      if ( a_nghosts == this_ebe_copy_manager->ghostVect()
+           && grids.compatible(this_ebe_copy_manager->srcGrids())
+           && grids.compatible(this_ebe_copy_manager->destGrids()) ) {
+         ebe_copy_manager = this_ebe_copy_manager;
+         break;
+      }
+   }
+
+   if ( ebe_copy_manager == NULL ) {
+      ebe_copy_manager = new CoDimCopyManager<FArrayBox>(grids, grids, a_nghosts, true, a_max_codim);
+      m_ebe_copy_manager_cache.push_back(ebe_copy_manager);
+   }
+
+   // Fill the corner ghosts using a cached CoDimCopyManager
+   ebe_copy_manager->manageExchanges(a_data);
 }
 
 
@@ -5008,15 +5101,16 @@ MagGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
                   //(c) belongs to the poloidal interior (fac < 0)
                   
                   Real fac = m_sheared_interp_stencil[dit](iv,m_sheared_interp_order + 1);
-                  
+
                   if (fac < 1.0) {
                      for (int n=0; n<m_sheared_interp_order + 1; ++n) {
                         IntVect iv_offset(iv_ghost);
                         iv_offset[POLOIDAL_DIR] += (int)(m_sheared_interp_stencil_offsets)[dit](iv,n);
                         ghost_val += ghosts[dit](iv_offset,comp) * m_sheared_interp_stencil[dit](iv,n);
                      }
-                  
-                     if (fac < 0.) {
+
+                     //                     if (fac < 0.) {
+                     if (fac < 1.e-12) {  // 1.e-12 cutoff tolerates some roundoff when using a non-field-aligned mapping
                         a_data[dit](iv,comp) = ghost_val;
                      }
                      else {
@@ -5039,7 +5133,10 @@ MagGeom::initializeShearedMBGeom(const DisjointBoxLayout& a_grids)
    m_sheared_interp_order = 2;
    //   IntVect ghostVect(0,m_sheared_ghosts,0);
    IntVect ghostVect(1,m_sheared_ghosts,1);
-   m_sheared_remapped_index.define(a_grids, SpaceDim, ghostVect);
+
+   // The first SpaceDim components will contain the components of a remapped IntVect and the
+   // last component will contain its valid block number
+   m_sheared_remapped_index.define(a_grids, SpaceDim + 1, ghostVect);
    
    m_sheared_interp_stencil_offsets.define(a_grids, m_sheared_interp_order + 1, ghostVect);
 
@@ -5059,14 +5156,20 @@ MagGeom::initializeShearedMBGeom(const DisjointBoxLayout& a_grids)
    // We now fill the codim >=2 toroidal extrablock ghost cells which are needed by
    // ToroidalBlockLevelExchange in the MBSolvers.
 
-   IntVect toroidal_dir_only = IntVect::Zero;
-   toroidal_dir_only[TOROIDAL_DIR] = 1;
+   IntVect toroidal_dir_only = BASISV(TOROIDAL_DIR);
+   IntVect no_toroidal_exchange = IntVect::Unit - BASISV(TOROIDAL_DIR);;
 
    for (int codim=2; codim<=SpaceDim; ++codim) {
-      exchangeExtraBlockGhosts(m_sheared_remapped_index, codim, toroidal_dir_only);
-      exchangeExtraBlockGhosts(m_sheared_interp_stencil, codim, toroidal_dir_only);
-      exchangeExtraBlockGhosts(m_sheared_interp_stencil_offsets, codim, toroidal_dir_only);
+      exchangeExtraBlockGhosts(m_sheared_remapped_index, codim, toroidal_dir_only, no_toroidal_exchange);
+      exchangeExtraBlockGhosts(m_sheared_interp_stencil, codim, toroidal_dir_only, no_toroidal_exchange);
+      exchangeExtraBlockGhosts(m_sheared_interp_stencil_offsets, codim, toroidal_dir_only, no_toroidal_exchange);
    }
+
+   // Fill the corner ghosts
+   CoDimCopyManager<FArrayBox> manager(a_grids, a_grids, m_sheared_remapped_index.ghostVect(), true);
+   manager.manageExchanges(m_sheared_remapped_index);
+   manager.manageExchanges(m_sheared_interp_stencil);
+   manager.manageExchanges(m_sheared_interp_stencil_offsets);
 
    getShearedGhostBoxLayout();
 }
@@ -5183,9 +5286,6 @@ MagGeom::getMagShearInterpCoeff(LevelData<FArrayBox>& a_remapped_iv,
          
          Box bndryBox = adjCellBox(base_box, m_mb_dir, a_side, m_sheared_ghosts);
 
-         bndryBox.grow(POLOIDAL_DIR,1);
-         bndryBox.grow(RADIAL_DIR,1);
-         
          FArrayBox mappedBndryCoord(bndryBox,SpaceDim);
          coord_sys_src.getCellCenteredMappedCoords(mappedBndryCoord);
          
@@ -5226,6 +5326,7 @@ MagGeom::getMagShearInterpCoeff(LevelData<FArrayBox>& a_remapped_iv,
             for (int dir=0; dir<SpaceDim; ++dir) {
                a_remapped_iv[dit](iv,dir) = ivDst[dir];
             }
+            a_remapped_iv[dit](iv,SpaceDim) = nDst;
          
             for (int n=0; n<interpStencil.size(); ++n) {
                a_interp_stencil[dit](iv,n) = interpStencil[n];
@@ -5234,126 +5335,21 @@ MagGeom::getMagShearInterpCoeff(LevelData<FArrayBox>& a_remapped_iv,
             for (int n=0; n<interpStencilOffsets.size(); ++n) {
                a_interp_stencil_offsets[dit](iv,n) = interpStencilOffsets[n];
             }
-
          }
       }
    }
-}
-
-Vector<Box>
-MagGeom::getToroidalBoundaryBoxes( const int              a_block_number,
-                                   const Side::LoHiSide&  a_side ) const
-{
-   const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(a_block_number);
-   const ProblemDomain& domain = block_coord_sys.domain();
-   const Box& domain_box = domain.domainBox();
-      
-   Box bndryBox = adjCellBox(domain_box, m_mb_dir, a_side, 1);
-
-   FArrayBox mappedBndryCoord(bndryBox,SpaceDim);
-   block_coord_sys.getCellCenteredMappedCoords(mappedBndryCoord);
-         
-   RealVect dx = block_coord_sys.dx();
-
-   IntVectSet bndry_cells;
-
-   for ( BoxIterator bit(bndryBox); bit.ok(); ++bit ) {
-      const IntVect& iv = bit();
-
-      RealVect xiSrc;
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         xiSrc[dir] = mappedBndryCoord(iv,dir);
-      }
-            
-      IntVect iv_src;
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         iv_src[dir] = floor(xiSrc[dir]/dx[dir]);
-      }
-
-      int nDst;
-      IntVect ivDst;
-      Vector<Real> interpStencil(m_sheared_interp_order + 2, 0);
-      Vector<int> interpStencilOffsets(m_sheared_interp_order + 1, 0);
-
-      m_coord_sys->toroidalBlockRemapping(ivDst, nDst, interpStencil, interpStencilOffsets, xiSrc, a_block_number, a_side);
-
-      if ( interpStencil[m_sheared_interp_order + 1] >= 0.5 ) {
-         bndry_cells |= iv;
-      }
-   }
-
-   // Convert the IntVectSet into a vector of boxes
-   Vector<Box> box_vector = bndry_cells.boxes();
-
-   // Coalesce the IntVectSet into boxes
-
-   Vector<Box> coalesced_box_vector;
-
-   if ( box_vector.size() > 0 ) {
-      Box accum_box = box_vector[0];
-
-      for (int n=1; n<box_vector.size(); ++n) {
-         Box new_box = accum_box;
-         new_box.minBox(box_vector[n]);
-
-         IntVectSet box_ivs(new_box);
-
-         // Check that the new box is full, i.e., bndry_cells
-         // contains all of the new box's IntVects
-         if ( bndry_cells.contains(box_ivs) ) {
-            // Keep accumulating and pushback if no more boxes
-            accum_box = new_box;
-            if ( n == box_vector.size()-1 ) {
-               coalesced_box_vector.push_back(bdryBox(accum_box,m_mb_dir,a_side,1));
-            }
-         }
-         else {
-            // Can't accumulate any more.  Push the current accumulation box
-            // and start a new one
-            coalesced_box_vector.push_back(bdryBox(accum_box,m_mb_dir,a_side,1));
-            accum_box = box_vector[n];
-         }
-      }
-   }
-
-   return coalesced_box_vector;
 }
 
 #endif
 
-Vector<Box>
-MagGeom::getBoundaryBoxes( const int              a_block_number,
-                           const int              a_dir,
-                           const Side::LoHiSide&  a_side ) const
+bool
+MagGeom::mixedBoundaries() const
 {
-   const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(a_block_number);
-   const ProblemDomain& domain = block_coord_sys.domain();
-   const Box& domain_box = domain.domainBox();
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = m_coord_sys->boundaries();
+  const std::string geomType = m_coord_sys->type();
 
-   Vector<Box> boxes;
+  bool result =  m_sheared_mb_geom && geomType == "SingleNull" ;
 
-#if CFG_DIM==3
-   if ( m_sheared_mb_geom && a_dir == m_mb_dir ) {
-      Vector<Box> toroidal_boxes = getToroidalBoundaryBoxes(a_block_number, a_side);
-
-      for (int n=0; n<toroidal_boxes.size(); ++n) {
-         boxes.push_back(toroidal_boxes[n]);
-      }
-   }
-   else {
-      if ( boundaries[a_block_number][a_dir + a_side*SpaceDim].isDomainBoundary() ) {
-         boxes.push_back(bdryBox(domain_box, a_dir, a_side, 1));
-      }
-   }
-#else
-   if ( boundaries[a_block_number][a_dir + a_side*SpaceDim].isDomainBoundary() ) {
-      boxes.push_back(bdryBox(domain_box, a_dir, a_side, 1));
-   }
-#endif
-
-   return boxes;
-}
-
+  return result;
+} 
 
 #include "NamespaceFooter.H"

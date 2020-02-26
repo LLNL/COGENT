@@ -8,7 +8,8 @@ cd ..
 ./doconfig-$config
 
 cd src
-make -j 8
+
+make -j 8 INCLUDES=$ANAG_OPENMPI_INC
 make install
 cd ..
 

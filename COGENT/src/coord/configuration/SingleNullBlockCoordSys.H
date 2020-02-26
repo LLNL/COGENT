@@ -66,6 +66,7 @@ class SingleNullBlockCoordSys
                                  const int&           n_poloidal_extend,
                                  double &             dtheta,
                                  double *             theta_pts ) const;
+   
 
       /// Returns real coordinate.
       /**
@@ -192,7 +193,7 @@ class SingleNullBlockCoordSys
 
       bool isValid(const RealVect& xi, const bool omit_toroidal ) const;
    
-      bool isFieldAlignedMapping() const {return m_field_aligned_mapping;}
+      virtual bool isFieldAlignedMapping() const {return m_field_aligned_mapping;}
 
       virtual string geometryType() const {return "SingleNull";}
    
@@ -274,8 +275,16 @@ class SingleNullBlockCoordSys
    
    private:
    
+      void  removeExtraBlockGhosts(POL::FArrayBox&       coords,
+                                   POL::FArrayBox&       data,
+                                   const POL::FArrayBox& coords_full,
+                                   const POL::FArrayBox& data_full,
+                                   const int             radial_extent,
+                                   const int             poloidal_extent  ) const;
+   
       bool m_poloidally_truncated;
       bool m_centered_poloidal_mapping;
+      bool m_include_extrablock_mapping;
 
       PhysCoordType m_phys_coord_type;
    

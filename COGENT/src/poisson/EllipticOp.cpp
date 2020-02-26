@@ -372,18 +372,27 @@ EllipticOp::computeMapped3DField( const LevelData<FArrayBox>&  a_phi,
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
       const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
       const ProblemDomain& domain = block_coord_sys.domain();
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         if ( !domain.isPeriodic(dir) ) {
+      
+      for (int dir = 0; dir < SpaceDim; dir++) {
+	for (SideIterator sit; sit.ok(); ++sit) {
+          Side::LoHiSide side = sit();
+	  
+          if (mag_coord_sys->containsPhysicalBoundary(block_number, dir, side)) {
             IntVect grow_vec = 2*IntVect::Unit;
             grow_vec[dir] = 0;
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
-
-            SpaceUtils::extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
-         }
+	    
+            SpaceUtils::extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, sign(side));
+          }
+        }
       }
    }
 
+   if (m_geometry.mixedBoundaries()) {
+     fillInternalGhosts(phi_cell);
+   }
+   
    computeMapped3DFieldWithGhosts(phi_cell, a_field, order);
 }
 
@@ -419,18 +428,28 @@ EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
       const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
       const ProblemDomain& domain = block_coord_sys.domain();
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         if ( !domain.isPeriodic(dir) ) {
+
+      for (int dir = 0; dir < SpaceDim; dir++) {
+        for (SideIterator sit; sit.ok(); ++sit) {
+          Side::LoHiSide side = sit();
+
+          if (mag_coord_sys->containsPhysicalBoundary(block_number, dir, side)) {
             IntVect grow_vec = 2*IntVect::Unit;
             grow_vec[dir] = 0;
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
 
-            SpaceUtils::extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
-         }
+            SpaceUtils::extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, sign(side));
+          }
+	}
       }
    }
 
+   if (m_geometry.mixedBoundaries()) {
+     fillInternalGhosts(phi_cell);
+   }
+     
+   
    computeMappedPoloidalFieldWithGhosts(phi_cell, a_field, order);
 }
 
@@ -466,18 +485,27 @@ EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
       const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
       const ProblemDomain& domain = block_coord_sys.domain();
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         if ( !domain.isPeriodic(dir) ) {
+
+      for (int dir = 0; dir < SpaceDim; dir++) {
+        for (SideIterator sit; sit.ok(); ++sit) {
+          Side::LoHiSide side = sit();
+
+          if (mag_coord_sys->containsPhysicalBoundary(block_number, dir, side)) {
             IntVect grow_vec = phi_cell.ghostVect();
             grow_vec[dir] = 0;
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
-
-            SpaceUtils::extrapBoundaryGhostsForFC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
-         }
+      
+            SpaceUtils::extrapBoundaryGhostsForFC(phi_cell[dit], interior_box, domain_box, dir, order, sign(side));
+	  }
+	}
       }
    }
 
+   if (m_geometry.mixedBoundaries()) {
+     fillInternalGhosts(phi_cell);
+   }
+      
    computeMappedPoloidalFieldWithGhosts(phi_cell, a_field, order);
 }
 
@@ -513,16 +541,25 @@ EllipticOp::computeMapped3DField( const LevelData<FArrayBox>&  a_phi,
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
       const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
       const ProblemDomain& domain = block_coord_sys.domain();
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         if ( !domain.isPeriodic(dir) ) {
+
+      for (int dir = 0; dir < SpaceDim; dir++) {
+        for (SideIterator sit; sit.ok(); ++sit) {
+          Side::LoHiSide side = sit();
+
+          if (mag_coord_sys->containsPhysicalBoundary(block_number, dir, side)) {
             IntVect grow_vec = phi_cell.ghostVect();
             grow_vec[dir] = 0;
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
 
-            SpaceUtils::extrapBoundaryGhostsForFC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
-         }
+            SpaceUtils::extrapBoundaryGhostsForFC(phi_cell[dit], interior_box, domain_box, dir, order, sign(side));
+          }
+	}
       }
+   }
+
+   if (m_geometry.mixedBoundaries()) {
+     fillInternalGhosts(phi_cell);
    }
 
    computeMapped3DFieldWithGhosts(phi_cell, a_field, order);
@@ -631,7 +668,7 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
      }
 
      // Multiply the field by the unmapped, face-centered GKP coefficients
-     multiplyCoefficients(flux, false);
+     multiplyCoefficients(flux, false, true);
 
      m_geometry.fillTransversePhysicalGhosts(flux);
 
@@ -656,7 +693,7 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
      }
 
      // Multiply the field by the mapped, face-centered GKP coefficients
-     multiplyCoefficients(flux, true);
+     multiplyCoefficients(flux, true, true);
 
      m_geometry.fillTransversePhysicalGhosts(flux);
 
@@ -982,40 +1019,35 @@ EllipticOp::subtractFSAverParDiv( LevelData<FArrayBox>&      a_div,
 void
 EllipticOp::fillInternalGhosts( LevelData<FArrayBox>& a_phi ) const
 {
+  // Because mulliBlockExchange objects may have diferent (e.g. fewer) number of ghosts 
+  // this branch is called separately from its counterpart in m_geometry.fillInternalGhosts()
   if (m_mblex_potential_Ptr && !m_geometry.extrablockExchange() && !m_geometry.shearedMBGeom()) {
-      m_mblex_potential_Ptr->interpGhosts(a_phi);
-      a_phi.exchange();
-   }
-   
-   else if (m_geometry.extrablockExchange()) {
-      m_geometry.exchangeExtraBlockGhosts(a_phi);
-      a_phi.exchange();
+
+    const IntVect& nghost = a_phi.ghostVect();    
+
+    if (nghost < m_num_potential_ghosts * IntVect::Unit) {
+      // interpGhosts() can't seem to handle a smaller number of ghost cells than
+      // where specified when creating the MBLevelExchange object.
+      const DisjointBoxLayout& grids = m_geometry.grids();
+      LevelData<FArrayBox> tmp(grids, a_phi.nComp(), m_num_potential_ghosts * IntVect::Unit);
+      for (DataIterator dit(a_phi.dataIterator()); dit.ok(); ++dit) {
+	tmp[dit].copy(a_phi[dit]);
+      }
       
-      m_geometry.exchangeExtraBlockGhosts(a_phi);
-      a_phi.exchange();
-   }
+      m_mblex_potential_Ptr->interpGhosts(tmp);
+      for (DataIterator dit(a_phi.dataIterator()); dit.ok(); ++dit) {
+	a_phi[dit].copy(tmp[dit]);
+      }
+    }
+    else {
+      m_mblex_potential_Ptr->interpGhosts(a_phi);
+    }
+    a_phi.exchange();
+  }
 
-#if CFG_DIM ==3
-   else if (m_geometry.shearedMBGeom()) {
-     if (a_phi.ghostVect()[TOROIDAL_DIR] > 0) {
-       m_geometry.interpolateFromShearedGhosts(a_phi);
-     }
-     a_phi.exchange();
-
-     //Fill corner ghosts cells. This is needed for
-     //the computation of the E-field (tangential) 
-     //components that lie within the cell face
-     const IntVect& nghost = a_phi.ghostVect();
-     const DisjointBoxLayout& grids = a_phi.disjointBoxLayout();
-
-     CoDimCopyManager<FArrayBox> manager(grids, grids, a_phi.ghostVect(), true);
-     manager.manageExchanges(a_phi);
-   }
-#endif
-
-   else {
-      a_phi.exchange();
-   }
+  else {
+    m_geometry.fillInternalGhosts(a_phi);
+  }
 }
 
 void
@@ -1836,18 +1868,27 @@ EllipticOp::interpToNodes( const LevelData<FArrayBox>&  a_phi,
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
       const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
       const ProblemDomain& domain = block_coord_sys.domain();
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         if ( !domain.isPeriodic(dir) ) {
+
+      for (int dir = 0; dir < SpaceDim; dir++) {
+        for (SideIterator sit; sit.ok(); ++sit) {
+          Side::LoHiSide side = sit();
+
+          if (mag_coord_sys->containsPhysicalBoundary(block_number, dir, side)) {
             IntVect grow_vec = phi_cell.ghostVect();
             grow_vec[dir] = 0;
             Box interior_box = grow(grids[dit],grow_vec);
             Box domain_box = grow(domain.domainBox(),grow_vec);
 
-            SpaceUtils::extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, boundaries[block_number]);
-         }
+            SpaceUtils::extrapBoundaryGhostsForCC(phi_cell[dit], interior_box, domain_box, dir, order, sign(side));
+          }
+	}
       }
    }
-   
+
+   if (m_geometry.mixedBoundaries()) {
+     fillInternalGhosts(phi_cell);
+   }
+     
 #endif
    
    ParmParse pp;

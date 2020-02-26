@@ -110,7 +110,7 @@ void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&           
       CH_STOP(t_execute_exchanges);
 
       CH_START(t_compute_mapped_velocity);
-      species_physical.computeMappedVelocity( m_mapped_velocity, a_E_field, a_time );
+      species_physical.computeMappedVelocity( m_mapped_velocity, a_E_field, true, a_time );
       CH_STOP(t_compute_mapped_velocity);
 
       CH_START(t_apply_bc);
@@ -122,7 +122,7 @@ void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&           
       // refill internal ghosts again to handle the saw-tooth BCs
       const MultiBlockCoordSys& coord_sys( *(m_phase_geometry.coordSysPtr()) );
       const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
-      if (mag_geom.shearedMBGeom() && (typeid(coord_sys) == typeid(SingleNullPhaseCoordSys))) {
+      if (mag_geom.mixedBoundaries()) {
 	executeInternalExchanges( species_physical );
       }
       

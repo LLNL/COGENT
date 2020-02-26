@@ -99,13 +99,10 @@ class SingleNullPhaseBC
       /**
        */
    
+      void applySheathBC(KineticSpecies& a_species,
+                         const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                         const LevelData<FluxBox>& a_velocity);
    
-      void applyLogicalSheathBC( KineticSpecies& a_species,
-                                 const BoundaryBoxLayoutPtrVect& a_bdry_layout,
-                                 const LevelData<FluxBox>& a_velocity,
-                                 const CFG::LevelData<CFG::FArrayBox>& a_phi,
-                                 const Real& a_time );
-
       inline void parseParameters( ParmParse& a_pp );
 
       inline KineticFunction& radialInflowFunc( const Side::LoHiSide& a_side,
@@ -164,6 +161,7 @@ class SingleNullPhaseBC
       Vector<std::string> m_bdry_name;
       Vector<std::string> m_bc_type;
       bool m_all_bdry_defined;
+      ParmParse m_pp;
 };
 
 #include "NamespaceFooter.H"

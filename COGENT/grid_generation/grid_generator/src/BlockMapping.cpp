@@ -98,19 +98,10 @@ BlockMapping::getPhysicalCoordinates(FArrayBox& a_physical_coordinates,
    
    for (int pol_index=0; pol_index<box.size(1) - m_nExtrp; pol_index++) {
 
-      //Poloidal mesh packing is done here (uniform: length = dl * iv[POLOIDAL_DIR])
-      //Presently use "cosine profiling": packs points near bottom and top core cuts
-      double dl = m_lengthCORE/double(m_nthetaCORE);
-      double amplitude = 0.3;
-      double length = dl * pol_index * (1.0 - amplitude * cos(0.5*PI/double(n_theta) * pol_index));
-
-      if (m_block_number == LCORE || m_block_number == LCSOL) length = m_lengthCORE - length;
-
-      //Use constant-size cells (corresponding to the mimimal cell-size at Xpt) in the divertor legs
-      //because often-times the legs are short and we want to pack as many points there (without extrapolation) as we can
-      if (m_block_number > RCSOL) length = dl * pol_index * (1.0-amplitude);
-
-      //Get a radial grid line for a given arc length corrdinate
+      //Get poloidal coordinate (arc length)
+      double length = getPoloidalArcLength(pol_index, "cosine");
+      
+      //Get a radial grid line for the given arc length coordinate
       Box box_radial_line(IntVect(0,pol_index), IntVect(box.size(0)-1,pol_index));
       FArrayBox radialGridLine(box_radial_line,2);
       getRadialGridLine(radialGridLine, a_mapping, length);
@@ -123,7 +114,6 @@ BlockMapping::getPhysicalCoordinates(FArrayBox& a_physical_coordinates,
       extrapolateGrid(a_physical_coordinates,box_extrp);
    }
 }
-
 
 void BlockMapping::readFieldFromDCTFile(const string& a_file_name)
 {
@@ -634,6 +624,71 @@ double BlockMapping::getLinearMagneticFlux( const RealVect& a_physical_coordinat
 
 }
 
+double
+BlockMapping::getPoloidalArcLength(const int       a_pol_index,
+                                   const string&   a_option) const
+{
+   /*
+    Poloidal mesh packing is done here (e.g., uniform: length = dl * a_pol_index)
+    */
+    
+   double length;
+   double dl = m_lengthCORE/double(m_nthetaCORE);
+
+   //Define xi (mapped poloidal coordinate)
+   //lenght(xi=0)= 0 and lenght(xi=1)= m_lengthCORE/2
+   double xi = a_pol_index /double(m_nthetaCORE/2);
+   
+   /*
+    Uniform: uniform distribution of poloidal points
+   */
+   if (a_option == "uniform") {
+      length = xi * m_lengthCORE/2.0;
+   }
+
+   /*
+    Cosine: packs points closer (far apart) for positive (negative)
+    values of amplitude near X-point
+   */
+   else if (a_option == "cosine") {
+      double amplitude = 0.3;
+      
+      length = xi * m_lengthCORE/2.0 * (1.0 - amplitude * cos(0.5*PI*xi));
+      
+      //Use constant-size cells (corresponding to the mimimal cell-size at Xpt) in the divertor legs
+      //because often-times the legs are short and we want to pack as many points there (without extrapolation) as we can
+      if (m_block_number > RCSOL) {
+         length = xi * m_lengthCORE/2.0 * (1.0-amplitude);
+      }
+   }
+   
+   /*
+    Tanh: packs points closer (or far apart) near the X-point
+    relative to the rest of the core.
+    d(arcLenght) = d(lenght)/d(pol_index) = C1 * tanh(xi/C2) + C0
+    lengh = C0*x + C1*C2*Ln(Cosh(x/C2))
+    dxi_ratio = 1 + C1/C0 = dxi(xi=inf)/dxi(xi=0)
+   */
+   
+   else if (a_option == "tanh") {
+      double dxi_ratio = 0.25;
+      double C2 = 0.05;
+      double fac = 1.0 +(dxi_ratio-1.0)*C2*log(cosh(1.0/C2));
+      double C0 = m_lengthCORE/fac/2.0;
+      
+      length = C0*(xi+(dxi_ratio-1.0)*C2*log(cosh(xi/C2)));
+   }
+   
+   else {
+      MayDay::Error("getPoloidalArcLength: unknown option");
+   }
+   
+   //Correct for the derection of the poloidal-length increase (always increases away from Xptn)
+   if (m_block_number == LCORE || m_block_number == LCSOL) length = m_lengthCORE - length;
+   
+   return length;
+}
+
 void
 BlockMapping::getRadialGridLine(FArrayBox& a_radialGridLine,
                                 const Vector<RealVect*> & a_mapping,
@@ -696,8 +751,13 @@ BlockMapping::getRadialGridLine(FArrayBox& a_radialGridLine,
             cut_dir[0] = m_block_cut_dir(iv_cut,0);
             cut_dir[1] = m_block_cut_dir(iv_cut,1);
             
-	    double internal_arc_length(a_length);
-	    if (m_block_number == LCORE || m_block_number == LCSOL) internal_arc_length = m_lengthCORE - a_length;
+            double internal_arc_length(a_length);
+            if (m_block_number == LCORE || m_block_number == LCSOL) internal_arc_length = m_lengthCORE - a_length;
+            
+            //use ray tracing to bring the point closer to the next flux surface
+            //if immidiate linear pushToFluxSurface will not be good enough
+            radialRayTracing(point, psi_coords(iv,0), internal_arc_length, cut_dir);
+            
             RealVect increment_dir = getRadialDir(point, internal_arc_length, cut_dir);
             pushToFluxSurface(point,psi_coords(iv,0),increment_dir);
          }
@@ -709,7 +769,6 @@ BlockMapping::getRadialGridLine(FArrayBox& a_radialGridLine,
    }
    
 }
-
 
 RealVect
 BlockMapping::getCutCoords( const double a_psi ) const
@@ -928,7 +987,7 @@ BlockMapping::getRadialDir(const RealVect& a_X, const double a_length, const Rea
    sign /= fabs(sign);
    
 
-   //Computing the blending coefficient
+   //Compute the blending coefficient
    double blend_coeff_angle = (1.0 - tanh(sign * angle_dist / transition_angle))/2.0;
    double blend_coeff_dist = exp(-pow(a_length/m_trans_length,4));
    double blend_coeff = blend_coeff_angle * blend_coeff_dist;
@@ -1058,6 +1117,68 @@ BlockMapping::getPsiTang(const RealVect& a_X, const int a_block_number) const
 }
 
 void
+BlockMapping::radialRayTracing( RealVect&       a_X,
+                                const double    a_psi_norm,
+                                const double    a_arc_length,
+                                const RealVect& a_cut_dir) const
+{
+   
+   /*
+    If needed, push a_X in radial direction using ray-trace,
+    until it is close enough to a_psi_norm flux surface, such that
+    linear interpolation in pushToFluxSurface can be used.
+    This may be required in the X-point region.
+    */
+
+   double tol = 1.0e-5;
+   RealVect start_pt(a_X);
+   RealVect end_pt;
+   bool point_is_linearly_close = false;
+   int n_bisection = 0;
+   
+   while (!point_is_linearly_close) {
+      
+      double dpsi = a_psi_norm - getNormMagneticFlux(start_pt);
+
+      if (n_bisection > 0) {
+         dpsi = dpsi/pow(2,n_bisection);
+      }
+      
+      RealVect gradPsiNorm = getPsiNorm(start_pt,false);
+      double gradPsiNorm_mag = sqrt(pow(gradPsiNorm[0],2)+pow(gradPsiNorm[1],2));
+      RealVect gradPsiNorm_dir(gradPsiNorm);
+      gradPsiNorm_dir /= gradPsiNorm_mag;
+
+      RealVect start_dir = getRadialDir(start_pt, a_arc_length, a_cut_dir);
+      double cosine = vectProd(start_dir, gradPsiNorm_dir);
+      
+      end_pt[0] = start_pt[0] + (dpsi/cosine/gradPsiNorm_mag) * start_dir[0];
+      end_pt[1] = start_pt[1] + (dpsi/cosine/gradPsiNorm_mag) * start_dir[1];
+      
+      RealVect end_dir = getRadialDir(end_pt, a_arc_length, a_cut_dir);
+      
+      // close enought, so the linear interpolation in the following up
+      // call to pushToFluxSurface should have sufficient accuracy
+      if ( vectProd(start_dir,end_dir) > (1.0-tol) && n_bisection == 0 ) {
+         point_is_linearly_close = true;
+      }
+
+      // keep reducing the step in order to do linear ray-tracing
+      else if (vectProd(start_dir,end_dir) < (1.0-tol) ) {
+         n_bisection = n_bisection + 1;
+      }
+      
+      // push the point to the next position on the ray
+      else {
+         start_pt = end_pt;
+         n_bisection = 0;
+      }
+   }
+   
+   a_X = start_pt;
+}
+
+void
 BlockMapping::pushToFluxSurface(RealVect& a_X, const double a_psi_norm) const
 {
    /*
@@ -1074,18 +1195,77 @@ BlockMapping::pushToFluxSurface(RealVect& a_X, const double a_psi_norm) const
    bool residual_tolerance_satisfied(false);
    int iter=0;
 
+   RealVect X_tmp(a_X);
+   
+   // start with using fast Newton-like (but with fixed gradient) method
    while ( iter++ < m_max_iterations && !residual_tolerance_satisfied ) {
       
-      a_X[0] = a_X[0] + (dpsi/gradPsiNorm_mag) * gradPsiNorm_dir[0];
-      a_X[1] = a_X[1] + (dpsi/gradPsiNorm_mag) * gradPsiNorm_dir[1];
+      X_tmp[0] = X_tmp[0] + (dpsi/gradPsiNorm_mag) * gradPsiNorm_dir[0];
+      X_tmp[1] = X_tmp[1] + (dpsi/gradPsiNorm_mag) * gradPsiNorm_dir[1];
       
-      dpsi = a_psi_norm - getNormMagneticFlux(a_X);
+      dpsi = a_psi_norm - getNormMagneticFlux(X_tmp);
       
-      if ( fabs(dpsi)< m_tol ) residual_tolerance_satisfied = true;
-      if (iter == m_max_iterations - 1) {
-         cout<<"pushToFluxSurface_norm::max number of iter reached"<<endl;
+      if ( fabs(dpsi)< m_tol ) {
+         residual_tolerance_satisfied = true;
+         a_X = X_tmp;
       }
-      
+
+      // if fixed gradient method failed, switch to
+      // more robust, but slower bisection method
+      if (iter > 20) {
+         
+         //reset parameters
+         iter = 0;
+         RealVect tmp_lo_x = a_X;
+         RealVect tmp_hi_x = a_X;
+         RealVect half_x = a_X;
+
+         dpsi = a_psi_norm - getNormMagneticFlux(a_X);
+
+         double f_lo = getNormMagneticFlux(tmp_lo_x) - a_psi_norm;
+         double f_hi = f_lo;
+         double f_half = f_lo;
+         
+         // find f_hi that bounds the solution
+         while (f_hi * f_lo > 0) {
+            tmp_hi_x[0] = tmp_hi_x[0] + (dpsi/gradPsiNorm_mag) * gradPsiNorm_dir[0];
+            tmp_hi_x[1] = tmp_hi_x[1] + (dpsi/gradPsiNorm_mag) * gradPsiNorm_dir[1];
+            f_hi = getNormMagneticFlux(tmp_hi_x) - a_psi_norm;
+         }
+         
+         // find solution
+         while ( iter++ < m_max_iterations && !residual_tolerance_satisfied ) {
+            
+            f_lo = getNormMagneticFlux(tmp_lo_x) - a_psi_norm;
+            f_hi = getNormMagneticFlux(tmp_hi_x) - a_psi_norm;
+            
+            half_x = tmp_hi_x + tmp_lo_x;
+            half_x *= 0.5;
+
+            f_half = getNormMagneticFlux(half_x) - a_psi_norm;
+            
+            if (f_lo * f_half < 0) {
+               tmp_hi_x = half_x;
+            }
+            
+            else {
+               tmp_lo_x = half_x;
+            }
+            
+            RealVect dx(tmp_hi_x);
+            dx -= tmp_lo_x;
+            double dx_mag = sqrt(pow(dx[0],2) + pow(dx[1],2));
+            
+            if ( dx_mag < m_tol) {
+               residual_tolerance_satisfied = true;
+               a_X = half_x;
+            }
+            
+            if (iter>m_max_iterations) {
+              cout<<"pushToFluxSurface_norm::max number of iter reached"<<endl;
+            }
+         }
+      }
    }
 }
 
@@ -1107,20 +1287,77 @@ BlockMapping::pushToFluxSurface(RealVect& a_X, const double a_psi_norm, const Re
    
    bool residual_tolerance_satisfied(false);
    int iter=0;
-
+   RealVect X_tmp(a_X);
+   
    while ( iter++ < m_max_iterations && !residual_tolerance_satisfied ) {
                      
-      a_X[0] = a_X[0] + (dpsi/cosine/gradPsiNorm_mag) * a_dir[0];
-      a_X[1] = a_X[1] + (dpsi/cosine/gradPsiNorm_mag) * a_dir[1];
-                     
-      dpsi = a_psi_norm - getNormMagneticFlux(a_X);
-                     
-      if ( fabs(dpsi)< m_tol ) residual_tolerance_satisfied = true;
-      if (iter == m_max_iterations - 1) {
-         cout<<"pushToFluxSurface_dir::max number of iter reached"<<endl;
-      }
-                     
-   }
+         X_tmp[0] = X_tmp[0] + (dpsi/cosine/gradPsiNorm_mag) * a_dir[0];
+         X_tmp[1] = X_tmp[1] + (dpsi/cosine/gradPsiNorm_mag) * a_dir[1];
+         
+         dpsi = a_psi_norm - getNormMagneticFlux(X_tmp);
+         
+         if ( fabs(dpsi)< m_tol ) {
+            residual_tolerance_satisfied = true;
+            a_X = X_tmp;
+         }
+
+         // if fixed gradient method failed, switch to
+         // more robust, but slower bisection method
+         if (iter > 20) {
+            
+            //reset parameters
+            iter = 0;
+            RealVect tmp_lo_x = a_X;
+            RealVect tmp_hi_x = a_X;
+            RealVect half_x = a_X;
+
+            dpsi = a_psi_norm - getNormMagneticFlux(a_X);
+
+            double f_lo = getNormMagneticFlux(tmp_lo_x) - a_psi_norm;
+            double f_hi = f_lo;
+            double f_half = f_lo;
+            
+            // find f_hi that bounds the solution
+            while (f_hi * f_lo > 0) {
+               tmp_hi_x[0] = tmp_hi_x[0] + (dpsi/cosine/gradPsiNorm_mag) * a_dir[0];
+               tmp_hi_x[1] = tmp_hi_x[1] + (dpsi/cosine/gradPsiNorm_mag) * a_dir[1];
+               f_hi = getNormMagneticFlux(tmp_hi_x) - a_psi_norm;
+            }
+            
+            // find solution
+            while ( iter++ < m_max_iterations && !residual_tolerance_satisfied ) {
+               
+               f_lo = getNormMagneticFlux(tmp_lo_x) - a_psi_norm;
+               f_hi = getNormMagneticFlux(tmp_hi_x) - a_psi_norm;
+               
+               half_x = tmp_hi_x + tmp_lo_x;
+               half_x *= 0.5;
+
+               f_half = getNormMagneticFlux(half_x) - a_psi_norm;
+               
+               if (f_lo * f_half < 0) {
+                  tmp_hi_x = half_x;
+               }
+               
+               else {
+                  tmp_lo_x = half_x;
+               }
+               
+               RealVect dx(tmp_hi_x);
+               dx -= tmp_lo_x;
+               double dx_mag = sqrt(pow(dx[0],2) + pow(dx[1],2));
+               
+               if ( dx_mag < m_tol) {
+                  residual_tolerance_satisfied = true;
+                  a_X = half_x;
+               }
+               
+               if (iter>m_max_iterations) {
+                 cout<<"pushToFluxSurface_norm::max number of iter reached"<<endl;
+               }
+            }
+         }
+    }
 }
 
                   
@@ -1434,6 +1671,40 @@ BlockMapping::rotation(const RealVect& a_vec, const int a_dir) const
    return result;
 }
 
+
+void BlockMapping::getMinimalCellSize(Real&            a_size,
+                                      RealVect&        a_location,
+                                      const FArrayBox& a_coords,
+                                      const int        a_dir) const
+{
+   const Box& box = a_coords.box();
+   Box box_reduced(box);
+   
+   box_reduced.growHi(a_dir, -1);
+
+   a_size = DBL_MAX;
+   
+   for (BoxIterator bit(box_reduced);bit.ok();++bit) {
+      IntVect iv = bit();
+      IntVect iv_hi(iv);
+      iv_hi[a_dir] = iv[a_dir] + 1;
+      
+      RealVect x;
+      RealVect x_hi;
+     
+      for (int dir=0; dir<2; ++dir) {
+         x[dir] = a_coords(iv, dir);
+         x_hi[dir] = a_coords(iv_hi, dir);
+      }
+         
+      RealVect dx(x_hi);
+      dx -= x;
+      if (vectMag(dx) < a_size) {
+         a_size = vectMag(dx);
+         a_location = x;
+      }
+   }
+}
 
 /*
  ******************************************************************

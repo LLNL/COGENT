@@ -133,6 +133,7 @@ class CanonicalMaxwellianKineticFunction : public KineticFunction
                                  const PhaseBlockCoordSys&     a_phase_coord_sys,
                                  const CFG::MagBlockCoordSys&  a_mag_coord_sys,
                                  const FArrayBox&              a_B,
+				 const FArrayBox&              a_cc_coord,
                                  const Real&                   a_mass,
                                  const Real&                   a_charge,
                                  const Real&                   a_larmor_number ) const;

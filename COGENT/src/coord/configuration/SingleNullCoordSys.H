@@ -49,6 +49,8 @@ public:
 
    virtual void defineEllipticOpBC( EllipticOpBC& bc ) const;
 
+   virtual void setBoundaryBoxes();
+
    int blockType(int a_block) const {return ((SingleNullBlockCoordSys*)m_coordSysVect[a_block])->poloidalBlock();}
 
    int numPoloidalBlocks() const {return m_num_poloidal_blocks;}
@@ -105,16 +107,18 @@ public:
                                      const RealVect&  dx_dst,
                                      const int        order) const;
 
-  Real getInterpMappedPoloidalCoord(const RealVect& X,
-				    const RealVect& X_dst_pol_cent,
-				    const RealVect& X_dst_pol_hi,
-				    const RealVect& X_dst_pol_lo,
-				    const RealVect& xi_dst_cent,
-				    const RealVect& dx) const;
+   Real getInterpMappedPoloidalCoord(const RealVect& X,
+                                     const RealVect& X_dst_pol_cent,
+                                     const RealVect& X_dst_pol_hi,
+                                     const RealVect& X_dst_pol_lo,
+                                     const RealVect& xi_dst_cent,
+                                     const RealVect& dx) const;
 
-  void applyToroidalPeriodicity(RealVect& a_x) const;
+   void applyToroidalPeriodicity(RealVect& a_x) const;
 
-
+   Vector<Box> getToroidalBoundaryBoxes( const int              block_number,
+                                         const Side::LoHiSide&  side,
+                                         const int              shear_interp_order ) const;
 #endif
 
    virtual Vector<RealVect> displacements(const Vector<RealVect>&   dstCoords,
@@ -139,6 +143,11 @@ public:
    
 protected:
 
+#if CFG_DIM==3
+   bool fixPoloidalBlock( int&      num_block,
+                          IntVect&  iv ) const;
+#endif
+   
    void defineBoundaries8();
 
    void defineBoundaries10();
@@ -210,6 +219,7 @@ protected:
 
    double m_xpoint_radius;
    double m_toroidal_width;
+   int    m_shear_interp_order;
         
    double m_ray_angle[SingleNullBlockCoordSys::NUM_POLOIDAL_BLOCKS+1];
    POL::RealVect m_ray[SingleNullBlockCoordSys::NUM_POLOIDAL_BLOCKS];

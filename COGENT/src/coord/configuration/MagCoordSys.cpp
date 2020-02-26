@@ -19,6 +19,8 @@ MagCoordSys::defineCoordSystemsAndBoundaries( Vector<MagBlockCoordSys *>& a_geom
    m_gotBoundaries = true;
 
    initializeBlockTransformations();
+
+   setBoundaryBoxes();
 }
 
 
@@ -50,5 +52,39 @@ MagCoordSys::containsPhysicalBoundary( int                    a_block_number,
    return contains_boundary;
 }
    
+
+void
+MagCoordSys::setBoundaryBoxes()
+{
+   m_boundary_boxes.resize(numBlocks() * 2 * SpaceDim);
+
+   for (int block_number=0; block_number<numBlocks(); ++block_number) {
+   
+      const MagBlockCoordSys& block_coord_sys = *(getCoordSys(block_number));
+      const ProblemDomain& domain = block_coord_sys.domain();
+      const Box& domain_box = domain.domainBox();
+
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         for (SideIterator sit; sit.ok(); ++sit) {
+            Side::LoHiSide side = sit();
+         
+            Vector<Box> boxes;
+
+#if CFG_DIM==3
+            if ( m_boundaries[block_number][dir + side*SpaceDim].isDomainBoundary() ) {
+               boxes.push_back(bdryBox(domain_box, dir, side, 1));
+            }
+#else
+            if ( m_boundaries[block_number][dir + side*SpaceDim].isDomainBoundary() ) {
+               boxes.push_back(bdryBox(domain_box, dir, side, 1));
+            }
+#endif
+
+            m_boundary_boxes[block_number*2*SpaceDim + dir + side*SpaceDim] = boxes;
+         }
+      }
+   }
+}
+
 
 #include "NamespaceFooter.H"
