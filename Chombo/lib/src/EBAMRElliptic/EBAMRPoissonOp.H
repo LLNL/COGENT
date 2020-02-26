@@ -730,9 +730,8 @@ EBAMRPoissonOp(const EBLevelGrid &                  a_eblgFine,
 
   //for debugging other operators
   void slowGSRBColor(LevelData<EBCellFAB>&       a_phi,
-                     const LevelData<EBCellFAB>& a_lph,
-                     const LevelData<EBCellFAB>& a_rhs,
-                     const IntVect&              a_color);
+                     const LevelData<EBCellFAB>& a_res,
+                     int a_iredblack);
 
   //for debugging other operators
   void levelSlowRelax(LevelData<EBCellFAB>&       a_phi,

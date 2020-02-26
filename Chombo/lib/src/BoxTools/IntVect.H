@@ -755,6 +755,8 @@ void linearOut(void* const a_outBuf, const Vector<Vector<CH_XDIR::IntVect> >& a_
 
 
 //
+
+// garbage thinking here.  I've removed this function  (bvs)
 // Static initialization.  Gotta make sure there are no static object
 // definitions above here (except possibly stuff in headers).  Otherwise,
 // the danger is that some static object's constructor calls IntVect::Zero or
