@@ -3094,7 +3094,7 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    const RealVect& trial_dx = trial_coord_sys->getMappedCellSize();
 
    // Get the poloidal mapped coordinate
-   applyToroidalPeriodicity(X);
+   applyToroidalPeriodicity(X, a_side);
    xi_dst[POLOIDAL_DIR] = getInterpMappedPoloidalCoord(X, X_dst_cent, X_dst_pol_hi, X_dst_pol_lo, xi_dst_cent, trial_dx);
    
    // Get the global index of the dst cell center
@@ -3214,12 +3214,12 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
       RealVect xiSrc_lo_pol(a_xiSrc);
       xiSrc_lo_pol[POLOIDAL_DIR] -= 0.5 * dx_src[POLOIDAL_DIR];
       RealVect X_lo_pol = src_coord_sys->realCoord(xiSrc_lo_pol);
-      applyToroidalPeriodicity(X_lo_pol);
+      applyToroidalPeriodicity(X_lo_pol, a_side);
 
       RealVect xiSrc_hi_pol(a_xiSrc);
       xiSrc_hi_pol[POLOIDAL_DIR] += 0.5 * dx_src[POLOIDAL_DIR];
       RealVect X_hi_pol = src_coord_sys->realCoord(xiSrc_hi_pol);
-      applyToroidalPeriodicity(X_hi_pol);
+      applyToroidalPeriodicity(X_hi_pol, a_side);
 
       RealVect xi_dst_bnd(xi_dst);
       xi_dst_bnd[POLOIDAL_DIR] = dst_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR);
@@ -3247,12 +3247,12 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
       RealVect xiSrc_lo_pol(a_xiSrc);
       xiSrc_lo_pol[POLOIDAL_DIR] -= 0.5 * dx_src[POLOIDAL_DIR];
       RealVect X_lo_pol = src_coord_sys->realCoord(xiSrc_lo_pol);
-      applyToroidalPeriodicity(X_lo_pol);
+      applyToroidalPeriodicity(X_lo_pol, a_side);
 
       RealVect xiSrc_hi_pol(a_xiSrc);
       xiSrc_hi_pol[POLOIDAL_DIR] += 0.5 * dx_src[POLOIDAL_DIR];
       RealVect X_hi_pol = src_coord_sys->realCoord(xiSrc_hi_pol);
-      applyToroidalPeriodicity(X_hi_pol);
+      applyToroidalPeriodicity(X_hi_pol, a_side);
 
       RealVect xi_dst_bnd(xi_dst);
       xi_dst_bnd[POLOIDAL_DIR] = dst_coord_sys->upperMappedCoordinate(POLOIDAL_DIR);
@@ -3357,12 +3357,19 @@ SingleNullCoordSys::getInterpolationCoefficients( Vector<Real>&    a_coeff,
 }
 
 void
-SingleNullCoordSys::applyToroidalPeriodicity(RealVect& a_x) const
+SingleNullCoordSys::applyToroidalPeriodicity(RealVect& a_x,
+					     const Side::LoHiSide&  a_side) const
 {
 
   double phi_max = m_toroidal_width;
   double phi = atan2(a_x[1], a_x[0]);
   double r = sqrt(pow(a_x[0],2) + pow(a_x[1],2));
+
+  // Correct for atan2 limits, since valid
+  // toroidal angle runs from 0 to phi_max
+  if (a_side == Side::LoHiSide::Hi && phi < 0.) {
+    phi += 2. * Pi;
+  }
 
   if (phi < 0.0) {
     double phi_reflected = phi + phi_max;

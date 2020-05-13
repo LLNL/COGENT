@@ -212,6 +212,8 @@ void MomentOp::compute( CFG::LevelData<CFG::FArrayBox>& a_result,
                         const KineticSpecies&           a_kinetic_species,
                         const Kernel&                   a_kernel ) const
 {
+   CH_TIME("MomentOp::compute");
+     
    CH_assert(a_result.nComp()==a_kernel.nComponents()*a_kinetic_species.distributionFunction().nComp());
    const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
    CH_assert(a_result.ghostVect()<=geometry.config_restrict(a_kinetic_species.distributionFunction().ghostVect()));
@@ -261,6 +263,8 @@ void MomentOp::compute( CFG::LevelData<CFG::FArrayBox>&  a_result,
                         const LevelData<FArrayBox>&      a_function,
                         const Kernel&                    a_kernel ) const
 {
+   CH_TIME("MomentOp::compute");
+  
    CH_assert(a_result.nComp()==a_kernel.nComponents()*a_function.nComp());
    const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
    CH_assert(a_result.ghostVect()<=geometry.config_restrict(a_kinetic_species.distributionFunction().ghostVect()));

@@ -7,6 +7,8 @@
 #include "CollisionsF_F.H"
 #include "KineticFunctionLibrary.H"
 #include "ConstFact.H"
+#include "MomentOp.H"
+#include "Kernels.H"
 
 
 #include "NamespaceHeader.H" //Should be the last one
@@ -15,10 +17,12 @@
 
 Linearized::Linearized( const std::string& a_ppcls_str, const int a_verbosity )
     : m_verbosity(a_verbosity),
+      m_moment_op( MomentOp::instance() ),
       m_time_implicit(true),
       m_cls_freq(-1.0),
       m_conserve_momentum(true),
       m_conserve_energy(true),
+      m_second_order(false),
       m_first_step(true)
 {
    ParmParse ppcls(a_ppcls_str.c_str());
@@ -37,154 +41,148 @@ Linearized::~Linearized()
 void Linearized::evalClsRHS( KineticSpeciesPtrVect&       a_rhs,
                              const KineticSpeciesPtrVect& a_soln,
                              const int                    a_species,
+                             const int                    a_species_bkgr,
                              const Real                   a_time )
-// NB: a_soln is on the computational grid and has 4 ghost cells (passed here as Nans)
 {
+   CH_TIME("Linearized::evalClsRHS");
+  
    // Get solution distribution function (J*Bstar_par*dfn) for the current species
    const KineticSpecies& soln_species( *(a_soln[a_species]) );
    const LevelData<FArrayBox>& soln_dfn( soln_species.distributionFunction() );
    
-   // Create reference (J*Bstar_par*dfn_init) distribution
-   KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Unit, false ) );
-   m_ref_func->assign( *ref_species, a_time );
-   const LevelData<FArrayBox>& init_dfn( ref_species->distributionFunction() );
-
-   //Create reference temperature distribution
+   // Get phase geometry
    const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
+   const DisjointBoxLayout& grids( soln_dfn.getBoxes() );
+
    if (m_first_step) {
-    const CFG::MultiBlockLevelGeom& mag_geom( phase_geom.magGeom() );
-    CFG::LevelData<CFG::FArrayBox> ref_temperature( mag_geom.grids(), 1, CFG::IntVect::Zero );
-    m_ref_temp->assign( ref_temperature, mag_geom, a_time);
-    phase_geom.injectConfigurationToPhase( ref_temperature, m_temperature);
+      // Get reference (J*Bstar_par*dfn_init) distribution
+      KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Unit, false ) );
+      m_ref_func->assign( *ref_species, a_time );
+      const LevelData<FArrayBox>& ref_dfn( ref_species->distributionFunction() );
+      
+      if ( !m_F0.isDefined()) m_F0.define( grids, 1, IntVect::Zero );
+      for (DataIterator dit(m_F0.dataIterator()); dit.ok(); ++dit) {
+         m_F0[dit].copy(ref_dfn[dit]);
+      }
+      
+      // Get reference temeprature
+      const CFG::MagGeom& mag_geom( phase_geom.magGeom() );
+      CFG::LevelData<CFG::FArrayBox> ref_temperature( mag_geom.grids(), 1, CFG::IntVect::Zero );
+      m_ref_temp->assign( ref_temperature, mag_geom, a_time);
+      phase_geom.injectConfigurationToPhase( ref_temperature, m_temperature);
 
-    //Create reference density distribution distribution and self-consistent cls_freq
-    if (!m_fixed_cls_freq){
-      CFG::LevelData<CFG::FArrayBox> ref_density( mag_geom.grids(), 1, CFG::IntVect::Zero );
-      m_ref_dens->assign( ref_density, mag_geom, a_time);
+      //Create reference density distribution distribution and self-consistent cls_freq
+      if (!m_fixed_cls_freq){
+         CFG::LevelData<CFG::FArrayBox> ref_density( mag_geom.grids(), 1, CFG::IntVect::Zero );
+         m_ref_dens->assign( ref_density, mag_geom, a_time);
 
-      LevelData<FArrayBox> inj_density;
-      phase_geom.injectConfigurationToPhase( ref_density, inj_density);
+         LevelData<FArrayBox> inj_density;
+         phase_geom.injectConfigurationToPhase( ref_density, inj_density);
 
-      m_sc_cls_freq.define(soln_dfn.disjointBoxLayout(), 1, IntVect::Zero);
-      computeSelfConsistFreq(m_sc_cls_freq, inj_density, soln_species.mass(), soln_species.charge());
-    }
-
+         m_sc_cls_freq.define(soln_dfn.disjointBoxLayout(), 1, IntVect::Zero);
+         computeSelfConsistFreq(m_sc_cls_freq, inj_density, soln_species.mass(), soln_species.charge());
+      }
    }
 
    // Compute the difference from the reference (or initial) solution
-   const DisjointBoxLayout& grids( soln_dfn.getBoxes() );
    const int n_comp( soln_dfn.nComp() );
-   LevelData<FArrayBox> delta_dfn( grids, n_comp, IntVect::Zero );
-   
+   if ( !m_delta_dfn.isDefined()) m_delta_dfn.define( grids, n_comp, IntVect::Zero );
+
    for (DataIterator sdit(soln_dfn.dataIterator()); sdit.ok(); ++sdit) {
-      delta_dfn[sdit].copy( soln_dfn[sdit] );
-      delta_dfn[sdit].minus( init_dfn[sdit] );
+      m_delta_dfn[sdit].copy( soln_dfn[sdit] );
+      m_delta_dfn[sdit].minus( m_F0[sdit] );
    }
 
    //Covert delta_dfn to cell centers
-   convertToCellCenters(phase_geom, delta_dfn);
+   if (!m_second_order) convertToCellCenters(phase_geom, m_delta_dfn);
    
-
    // Calculate test-particle (TP) collisional RHS
    const double mass = soln_species.mass();
-   LevelData<FArrayBox> tp_rhs_coll(grids, n_comp, IntVect::Zero);
-   testPartCollRHS(tp_rhs_coll, delta_dfn, phase_geom, mass);
+   if ( !m_tp_rhs_coll.isDefined()) m_tp_rhs_coll.define( grids, n_comp, IntVect::Zero );
+   testPartCollRHS(m_tp_rhs_coll, m_delta_dfn, phase_geom, mass);
 
    // Add conservative terms (field-particle terms)
    KineticSpecies& rhs_species( *(a_rhs[a_species]) );
    if (enforceConservation()) {
       addConservativeTerms( rhs_species,
-                            soln_species,
-                            tp_rhs_coll,
-                            delta_dfn,
+                            m_tp_rhs_coll,
+                            m_delta_dfn,
                             a_time );
    }
 
    // Add test-particle collisional RHS to Vlasov RHS (rhs_dfn has no ghost cells)
    LevelData<FArrayBox>& rhs_dfn( rhs_species.distributionFunction() );
    for (DataIterator rdit(rhs_dfn.dataIterator()); rdit.ok(); ++rdit) {
-      if (m_fixed_cls_freq) {tp_rhs_coll[rdit].mult( m_cls_freq );}
-      else {tp_rhs_coll[rdit].mult( m_sc_cls_freq[rdit] );}
-      rhs_dfn[rdit].plus( tp_rhs_coll[rdit] );
+      if (m_fixed_cls_freq) {m_tp_rhs_coll[rdit].mult( m_cls_freq );}
+      else {m_tp_rhs_coll[rdit].mult( m_sc_cls_freq[rdit] );}
+      rhs_dfn[rdit].plus( m_tp_rhs_coll[rdit] );
    }  
 
    m_first_step = false;
 }
 
-void Linearized::addConservativeTerms( KineticSpecies& a_rhs_species,
-                                  const KineticSpecies& a_soln_species,
-                                  const LevelData<FArrayBox>& a_tp_rhs_coll,
-                                  const LevelData<FArrayBox>& a_delta_F,
-                                  const Real a_time )
+void Linearized::addConservativeTerms(KineticSpecies& a_rhs_species,
+                                      const LevelData<FArrayBox>& a_tp_rhs_coll,
+                                      const LevelData<FArrayBox>& a_delta_F,
+                                      const Real a_time )
 {
-   const LevelData<FArrayBox>& soln_dfn( a_soln_species.distributionFunction() );
-   const DisjointBoxLayout& grids( soln_dfn.getBoxes() );
-   const int n_comp( soln_dfn.nComp() );
+   CH_TIME("Linearized::addConservativeTerms");
+   
+   const PhaseGeom& phase_geom = a_rhs_species.phaseSpaceGeometry();
+   const CFG::MagGeom& mag_geom( phase_geom.magGeom() );
+   const DisjointBoxLayout& grids( a_tp_rhs_coll.getBoxes() );
 
-   //Create kernels for particle and energy conervative terms
-   LevelData<FArrayBox> kern_energ( grids, n_comp, IntVect::Zero );
-   LevelData<FArrayBox> kern_moment( grids, n_comp, IntVect::Zero );
-   const PhaseGeom& phase_geom( a_soln_species.phaseSpaceGeometry() );
-   const double mass( a_soln_species.mass() );
-   collKernels( kern_energ, kern_moment, a_tp_rhs_coll, phase_geom, mass );
-   
-   // Copy const rhs_dfn to a temporary
-   LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
-   LevelData<FArrayBox> rhs_copy( grids, n_comp, IntVect::Zero );
-   for (DataIterator rhsdit(rhs_copy.dataIterator()); rhsdit.ok(); ++rhsdit) {
-      rhs_copy[rhsdit].copy(rhs_dfn[rhsdit]);
+   // Compute energy restoring factor
+   CFG::LevelData<CFG::FArrayBox> zero_cfg( mag_geom.grids(), 1, CFG::IntVect::Zero);
+   CFG::DataIterator cfg_dit = zero_cfg.dataIterator();
+   for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+      zero_cfg[cfg_dit].setVal(0.);
    }
-     
-   //Calculate restoring terms using DensityOperator, which calculates dvpar*dmu integrals
-   const CFG::MultiBlockLevelGeom& mag_geom( phase_geom.magGeom() );
    CFG::LevelData<CFG::FArrayBox> energ_rest( mag_geom.grids(), 1, CFG::IntVect::Zero );
-   for (DataIterator rdit( rhs_dfn.dataIterator() ); rdit.ok(); ++rdit) {
-      rhs_dfn[rdit].copy( kern_energ[rdit] );
+   m_moment_op.compute(energ_rest, a_rhs_species, a_tp_rhs_coll, PressureKernel(zero_cfg));
+   for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+      energ_rest[cfg_dit].mult(3.0);
+      energ_rest[cfg_dit].divide(a_rhs_species.mass());
    }
-   a_rhs_species.numberDensity( energ_rest );
-   
+
+   // Compute momentum restoring factor
    CFG::LevelData<CFG::FArrayBox> moment_rest( mag_geom.grids(), 1, CFG::IntVect::Zero );
-   for (DataIterator rdit( rhs_dfn.dataIterator() ); rdit.ok(); ++rdit) {
-      rhs_dfn[rdit].copy( kern_moment[rdit] );
-   }
-   a_rhs_species.numberDensity( moment_rest );
-   
+   m_moment_op.compute(moment_rest, a_rhs_species, a_tp_rhs_coll, ParallelMomKernel());
+
    //Calculate normalizing factors
    if (m_first_step) {
 
-      LevelData<FArrayBox> kern_moment_norm( grids, n_comp, IntVect::Zero );
-      LevelData<FArrayBox> kern_energ_norm( grids, n_comp, IntVect::Zero );
-      evaluateNormKern( kern_moment_norm, kern_energ_norm, phase_geom, mass);
+      LevelData<FArrayBox> kern_moment_norm( grids, 1, IntVect::Zero );
+      LevelData<FArrayBox> kern_energ_norm( grids, 1, IntVect::Zero );
+      evaluateNormKern( kern_moment_norm, kern_energ_norm, phase_geom, a_rhs_species.mass() );
       
       m_norm_momentum.define( mag_geom.grids(), 1, CFG::IntVect::Zero );
       m_norm_energy.define( mag_geom.grids(), 1, CFG::IntVect::Zero );
       
-      for (DataIterator rdit( rhs_dfn.dataIterator() ); rdit.ok(); ++rdit) {
-         rhs_dfn[rdit].copy( kern_moment_norm[rdit] );
+      m_moment_op.compute(m_norm_energy, a_rhs_species, kern_energ_norm, PressureKernel(zero_cfg));
+      for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+         m_norm_energy[cfg_dit].mult(3.0);
+         m_norm_energy[cfg_dit].divide(a_rhs_species.mass());
       }
-      a_rhs_species.numberDensity( m_norm_momentum );
       
-      for (DataIterator rdit( rhs_dfn.dataIterator() ); rdit.ok(); ++rdit) {
-         rhs_dfn[rdit].copy( kern_energ_norm[rdit] );
-      }
-      a_rhs_species.numberDensity( m_norm_energy );
+      m_moment_op.compute(m_norm_momentum, a_rhs_species, kern_moment_norm, ParallelMomKernel());
    }
-   
+
    // Calculate field-particle (FP) collisional RHS
-   LevelData<FArrayBox> fp_rhs_coll( grids, n_comp, IntVect::Zero );
-   fieldPartCollRHS( fp_rhs_coll,
+   if (!m_fp_rhs_coll.isDefined()) m_fp_rhs_coll.define( grids, 1, IntVect::Zero );
+   fieldPartCollRHS( m_fp_rhs_coll,
                      a_delta_F,
                      phase_geom,
                      energ_rest,
                      moment_rest,
-                     mass );
-   
+                     a_rhs_species.mass() );
+
    // Add field-particle collisional RHS to Vlasov RHS
+   LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
    for (DataIterator rdit( rhs_dfn.dataIterator() ); rdit.ok(); ++rdit) {
-      rhs_dfn[rdit].copy( rhs_copy[rdit] );
-      if (m_fixed_cls_freq) {fp_rhs_coll[rdit].mult( m_cls_freq );}
-      else {fp_rhs_coll[rdit].mult( m_sc_cls_freq[rdit] );}
-      rhs_dfn[rdit].plus( fp_rhs_coll[rdit] );
+      if (m_fixed_cls_freq) {m_fp_rhs_coll[rdit].mult( m_cls_freq );}
+      else {m_fp_rhs_coll[rdit].mult( m_sc_cls_freq[rdit] );}
+      rhs_dfn[rdit].plus( m_fp_rhs_coll[rdit] );
    }
 }
 
@@ -194,6 +192,13 @@ void Linearized::testPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
                                  const double a_mass ) const
 {
 
+   /*
+      Computes collisions with a Maxwellian background
+    */
+
+   CH_TIMERS("Linearized::testPartCollRHS");
+   CH_TIMER("create_tmp_dfn",t_create_tmp_dfn);
+   
    // Get coordinate system parameters and injected B
    const DisjointBoxLayout& grids( a_rhs_coll.getBoxes() );
    const LevelData<FArrayBox>& injected_B = a_phase_geom.getBFieldMagnitude();
@@ -206,64 +211,76 @@ void Linearized::testPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
    const int num_vpar_cells = domain_box.size(0);
    const int num_mu_cells = domain_box.size(1);
 
-
-   //Create temporary delta_dfn with two extra layers of ghost cells
-   LevelData<FArrayBox> delta_dfn_tmp(a_delta_dfn.disjointBoxLayout(),
-                                a_delta_dfn.nComp(),
-                                a_delta_dfn.ghostVect()+2*IntVect::Unit);
-
-   for (DataIterator dit( a_rhs_coll.dataIterator() ); dit.ok(); ++dit) {
-      delta_dfn_tmp[dit].setVal(0.0);
-      delta_dfn_tmp[dit].copy(a_delta_dfn[dit],grids[dit]);
+   //Currently we only have 4th order implementation,
+   //which require at least two layers of ghosts
+   //see if we can optimize by growing only in v-space
+   CH_START(t_create_tmp_dfn);
+   IntVect ghostVect = IntVect::Zero;
+   for (int dir=CFG_DIM; dir<SpaceDim; dir++) {
+     ghostVect[dir] = 3;
    }
-   delta_dfn_tmp.exchange();
+   if ( !m_tmp_dfn_withGhosts.isDefined()) m_tmp_dfn_withGhosts.define( grids, 1, ghostVect );
 
-   //Create cell-centered collsion fluxes (0 comp - vpar_dir, 1 comp - mu_dir)
-   LevelData<FArrayBox> flux_cell(grids, 2, IntVect::Zero);
+   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
+      m_tmp_dfn_withGhosts[dit].setVal(0.);
+      m_tmp_dfn_withGhosts[dit].copy(a_delta_dfn[dit]);
+   }
+   m_tmp_dfn_withGhosts.exchange();
+   CH_STOP(t_create_tmp_dfn);
+
+   //Compute cell-centered collision fluxes (0 comp - vpar_dir, 1 comp - mu_dir)
+   ghostVect = IntVect::Zero;
+   for (int dir=CFG_DIM; dir<SpaceDim; dir++) {
+     // Because we use different approach to calcuation of face-centered fluxes
+     // for second-order, we need to have extra ghost layer here
+     if (m_second_order) ghostVect[dir] = 1;
+   }
+   if ( !m_flux_vmu_cc.isDefined()) m_flux_vmu_cc.define( grids, 2, ghostVect );
+   
    for (DataIterator dit( a_rhs_coll.dataIterator() ); dit.ok(); ++dit) {
-      FArrayBox& this_flux_cell = flux_cell[dit];
-      const FArrayBox& this_delta_dfn_tmp = delta_dfn_tmp[dit];
+      FArrayBox& this_flux_cc = m_flux_vmu_cc[dit];
+      const FArrayBox& this_delta_dfn_tmp = m_tmp_dfn_withGhosts[dit];
       const FArrayBox& this_b = injected_B[dit];
       
       //Compute Lorentz pitch-angle scattering term
       const FArrayBox& this_temperature = m_temperature[dit];
-      FORT_EVALUATE_TP_LORENTZ(CHF_FRA(this_flux_cell),
+      FORT_EVALUATE_TP_LORENTZ(CHF_FRA(this_flux_cc),
                                CHF_CONST_FRA1(this_delta_dfn_tmp,0),
                                CHF_CONST_FRA1(this_b,0),
                                CHF_CONST_FRA1(this_temperature,0),
-                               CHF_BOX(this_flux_cell.box()),
+                               CHF_BOX(this_flux_cc.box()),
                                CHF_CONST_REALVECT(vel_dx),
                                CHF_CONST_REAL(a_mass));
 
       //Add energy-diffusion part of the TP collisions
-      FORT_EVALUATE_TP_ENERG_DIFF(CHF_FRA(this_flux_cell),
+      FORT_EVALUATE_TP_ENERG_DIFF(CHF_FRA(this_flux_cc),
                                CHF_CONST_FRA1(this_delta_dfn_tmp,0),
                                CHF_CONST_FRA1(this_b,0),
                                CHF_CONST_FRA1(this_temperature,0),
-                               CHF_BOX(this_flux_cell.box()),
+                               CHF_BOX(this_flux_cc.box()),
                                CHF_CONST_REALVECT(vel_dx),
                                CHF_CONST_REAL(a_mass));
    }
 
    //Calculate collision flux cell-average
-   convertToCellAverage(a_phase_geom, flux_cell);
+   if (!m_second_order) convertToCellAverage(a_phase_geom, m_flux_vmu_cc);
 
-   //Calculate collision fluxes on cell faces 
-   LevelData<FluxBox> flux_face(grids, 2, IntVect::Zero);
-   convertToCellFaces(flux_face, flux_cell);
+   //Calculate collision fluxes on cell faces
+   if ( !m_flux_vmu.isDefined()) m_flux_vmu.define( grids, 2, IntVect::Zero );
+   convertToCellFaces(m_flux_vmu, m_flux_vmu_cc);
 
    //Create final (combined r , theta, mu, and v_par) rhs flux
-   LevelData<FluxBox> flux_rhs(grids, SpaceDim, IntVect::Zero);
-   for (DataIterator dit(flux_rhs.dataIterator() ); dit.ok(); ++dit) {
-      const FArrayBox& this_flux_cell = flux_cell[dit];
+   if ( !m_flux.isDefined()) m_flux.define( grids, SpaceDim, IntVect::Zero );
+   for (DataIterator dit(m_flux.dataIterator() ); dit.ok(); ++dit) {
+      const FArrayBox& this_flux_cc = m_flux_vmu_cc[dit];
 
-      FArrayBox tmp_flux_cell(grow(this_flux_cell.box(),1),2);
+      FArrayBox tmp_flux_cell(grow(this_flux_cc.box(),1),2);
       tmp_flux_cell.setVal(0.);
-      tmp_flux_cell.copy(this_flux_cell);
+      tmp_flux_cell.copy(this_flux_cc);
 
       for (int dir=0; dir<SpaceDim; dir++) {
-          FArrayBox& this_flux_rhs = flux_rhs[dit][dir];
-          FArrayBox& this_flux_face = flux_face[dit][dir];
+          FArrayBox& this_flux_rhs = m_flux[dit][dir];
+          FArrayBox& this_flux_face = m_flux_vmu[dit][dir];
           FORT_EVALUATE_COLL_FLUX_COMBINED(CHF_FRA(this_flux_rhs),
                                            CHF_CONST_INT(dir),
                                            CHF_BOX(this_flux_rhs.box()),
@@ -274,30 +291,36 @@ void Linearized::testPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
       }
    }
 
-   a_phase_geom.mappedGridDivergence(a_rhs_coll, flux_rhs, true);
+   a_phase_geom.mappedGridDivergence(a_rhs_coll, m_flux, true);
    for (DataIterator dit( a_rhs_coll.dataIterator() ); dit.ok(); ++dit) {
       const PhaseBlockCoordSys& block_coord_sys = a_phase_geom.getBlockCoordSys(grids[dit]);
       double fac = 1. / block_coord_sys.getMappedCellVolume();
       a_rhs_coll[dit].mult(fac);
     }
-
 }
 
-void Linearized::fieldPartCollRHS( LevelData<FArrayBox>& a_rhs_coll,
-                                const LevelData<FArrayBox>& a_delta_F,
-                                const PhaseGeom& a_phase_geom,
-                                const CFG::LevelData<CFG::FArrayBox>& a_rest_energy,
-                                const CFG::LevelData<CFG::FArrayBox>& a_rest_momentum,
-                                const double a_mass ) const
+void Linearized::fieldPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
+                                  const LevelData<FArrayBox>& a_delta_F,
+                                  const PhaseGeom& a_phase_geom,
+                                  const CFG::LevelData<CFG::FArrayBox>& a_rest_energy,
+                                  const CFG::LevelData<CFG::FArrayBox>& a_rest_momentum,
+                                  const double a_mass ) const
 {
+   CH_TIME("Linearized::fieldPartCollRHS");
+   
    const DisjointBoxLayout& grids( a_rhs_coll.getBoxes() );
    const int n_comp( a_rhs_coll.nComp() );
    const LevelData<FArrayBox>& B_injected( a_phase_geom.getBFieldMagnitude() );
+   const VEL::VelCoordSys& vel_coords = a_phase_geom.velSpaceCoordSys();
+   const VEL::ProblemDomain& vel_domain = vel_coords.domain();
+   const VEL::Box& domain_box = vel_domain.domainBox();
+   const VEL::RealVect& vel_dx = vel_coords.dx();
+   int num_vpar_cells = domain_box.size(0);
+   int num_mu_cells = domain_box.size(1);
+
 
    if (m_conserve_momentum) {
 
-     LevelData<FArrayBox> full_MR( grids, n_comp, IntVect::Zero );
- 
      LevelData<FArrayBox> inj_MRest;
      a_phase_geom.injectConfigurationToPhase( a_rest_momentum, inj_MRest );
 
@@ -308,67 +331,25 @@ void Linearized::fieldPartCollRHS( LevelData<FArrayBox>& a_rhs_coll,
         const PhaseBlockCoordSys& block_coord_sys( a_phase_geom.getBlockCoordSys(grids[dit]) );
 
         FArrayBox& this_RHS( a_rhs_coll[dit] );
-        FArrayBox& this_full_MR( full_MR[dit] );
-
         const FArrayBox& this_MRest( inj_MRest[dit] );
         const FArrayBox& this_MNorm( inj_MNorm[dit] );
       
         const FArrayBox& this_B( B_injected[dit] );
         const FArrayBox& this_Temp_Distr( m_temperature[dit] );
-      
-        const Box& box_B( this_B.box() );
-        const int vpB( box_B.smallEnd( VPARALLEL_DIR ) );
-        const int muB( box_B.smallEnd( MU_DIR ) );
-
-        const Box& box_MR( this_MRest.box() );
-        const int vpR( box_MR.smallEnd( VPARALLEL_DIR ) );
-        const int muR( box_MR.smallEnd( MU_DIR ) );
-
-        // Get the physical velocity coordinates (Vpar, mu) for this part
-        // of phase space; Vpar and Mu are defined at the cell centers
-        FArrayBox velocityRealCoords( this_RHS.box(), VEL_DIM );
-        block_coord_sys.getVelocityRealCoords( velocityRealCoords );
-      
-        //Iterate over the points inside the box, iv is a 4-component int vect
-        for (BoxIterator bit( this_full_MR.box() ); bit.ok(); ++bit) {
-           IntVect iv( bit() );
-           IntVect ivB( iv );
-           ivB[VPARALLEL_DIR] = vpB;
-           ivB[MU_DIR] = muB;
-         
-           double v_parallel( velocityRealCoords(iv,0) );
-           double mu( velocityRealCoords(iv,1) );
-           double v_perp_sq( mu * this_B(ivB) / a_mass );
-           double v_sq( v_parallel * v_parallel + v_perp_sq );
-           double v_th_sq( 2.0 * this_Temp_Distr(ivB,0) / a_mass );
-           double x_sq( v_sq / v_th_sq );
-           double exp_m_x_sq( exp( -x_sq ) );
-           double x( sqrt(v_sq / v_th_sq) );
-
-
-         //Calculate momentum restoring restoring term
-           IntVect ivR( iv );
-           ivR[VPARALLEL_DIR] = vpR;
-           ivR[MU_DIR] = muR;
-
-           this_full_MR(iv,0) = -( this_MRest(ivR) / this_MNorm(ivR) );
-           this_full_MR(iv,0) *= nu_s(x) * v_parallel * exp_m_x_sq;
-
-           this_RHS(iv,0) = this_full_MR(iv,0);
-      
-        } 
+        
+        FORT_EVALUATE_FULL_MR(CHF_BOX(this_RHS.box()),
+                              CHF_FRA1(this_RHS,0),
+                              CHF_CONST_FRA1(this_MRest,0),
+                              CHF_CONST_FRA1(this_MNorm,0),
+                              CHF_CONST_FRA1(this_Temp_Distr,0),
+                              CHF_CONST_FRA1(this_B,0),
+                              CHF_CONST_REALVECT(vel_dx),
+                              CHF_CONST_REAL(a_mass));
      }
    }
 
    //Add the energy-conservative term in the divergent form
-   if(m_conserve_energy) {
-
-     const VEL::VelCoordSys& vel_coords = a_phase_geom.velSpaceCoordSys();
-     const VEL::ProblemDomain& vel_domain = vel_coords.domain();
-     const VEL::Box& domain_box = vel_domain.domainBox();
-     const VEL::RealVect& vel_dx = vel_coords.dx();
-     int num_vpar_cells = domain_box.size(0);
-     int num_mu_cells = domain_box.size(1);
+   if (m_conserve_energy) {
 
      LevelData<FArrayBox> inj_ERest;
      a_phase_geom.injectConfigurationToPhase( a_rest_energy, inj_ERest );
@@ -376,47 +357,24 @@ void Linearized::fieldPartCollRHS( LevelData<FArrayBox>& a_rhs_coll,
      LevelData<FArrayBox> inj_ENorm;
      a_phase_geom.injectConfigurationToPhase( m_norm_energy, inj_ENorm );
 
-     LevelData<FluxBox> flux_full_ERest(grids, SpaceDim, IntVect::Zero);
-     LevelData<FArrayBox> rhs_ERest(grids, n_comp, IntVect::Zero);
+     if (!m_flux_full_ERest.isDefined()) m_flux_full_ERest.define(grids, SpaceDim, IntVect::Zero);
+     if (!m_rhs_ERest.isDefined()) m_rhs_ERest.define(grids, 1, IntVect::Zero);
 
-     for (DataIterator dit(flux_full_ERest.dataIterator() ); dit.ok(); ++dit) {
+     for (DataIterator dit(m_flux_full_ERest.dataIterator() ); dit.ok(); ++dit) {
         FArrayBox& this_ERest = inj_ERest[dit];
         FArrayBox& this_ENorm = inj_ENorm[dit];
         const FArrayBox& this_TempDistr = m_temperature[dit];
-        const FArrayBox& this_B= B_injected[dit];
-
-#if CFG_DIM==3
-        FArrayBox tmp_ERest(grow(this_ERest.box(),IntVect(1,1,1,0,0)),this_ERest.nComp());
-#else
-        FArrayBox tmp_ERest(grow(this_ERest.box(),IntVect(1,1,0,0)),this_ERest.nComp());
-#endif
-        tmp_ERest.setVal(0.);
-        tmp_ERest.copy(this_ERest);
-
-#if CFG_DIM==3
-        FArrayBox tmp_ENorm(grow(this_ENorm.box(),IntVect(1,1,1,0,0)),this_ENorm.nComp());
-#else
-        FArrayBox tmp_ENorm(grow(this_ENorm.box(),IntVect(1,1,0,0)),this_ENorm.nComp());
-#endif
-        tmp_ENorm.setVal(0.);
-        tmp_ENorm.copy(this_ENorm);
-
-#if CFG_DIM==3
-        FArrayBox tmp_TempDistr(grow(this_TempDistr.box(),IntVect(1,1,1,0,0)),this_TempDistr.nComp());
-#else
-        FArrayBox tmp_TempDistr(grow(this_TempDistr.box(),IntVect(1,1,0,0)),this_TempDistr.nComp());
-#endif
-        tmp_TempDistr.setVal(0.);
-        tmp_TempDistr.copy(this_TempDistr);
-
-        for (int dir=0; dir<SpaceDim; dir++) {
-           FArrayBox& thisFlux_FullERest = flux_full_ERest[dit][dir];
+        const FArrayBox& this_B = B_injected[dit];
+        
+        m_flux_full_ERest[dit].setVal(0.);
+        for (int dir=CFG_DIM; dir<SpaceDim; dir++) {
+           FArrayBox& thisFlux_FullERest = m_flux_full_ERest[dit][dir];
            FORT_EVALUATE_FULL_ER_FLUX(CHF_CONST_INT(dir),
                                       CHF_BOX(thisFlux_FullERest.box()),
                                       CHF_FRA(thisFlux_FullERest),
-                                      CHF_CONST_FRA1(tmp_ERest,0),
-                                      CHF_CONST_FRA1(tmp_ENorm,0),
-                                      CHF_CONST_FRA1(tmp_TempDistr,0),
+                                      CHF_CONST_FRA1(this_ERest,0),
+                                      CHF_CONST_FRA1(this_ENorm,0),
+                                      CHF_CONST_FRA1(this_TempDistr,0),
                                       CHF_CONST_FRA1(this_B,0),
                                       CHF_CONST_REALVECT(vel_dx),
                                       CHF_CONST_INT(num_vpar_cells),
@@ -426,70 +384,18 @@ void Linearized::fieldPartCollRHS( LevelData<FArrayBox>& a_rhs_coll,
      }
 
      // Calculate energy restoring term
-     a_phase_geom.mappedGridDivergence(rhs_ERest, flux_full_ERest, true);
-     DataIterator rdit = rhs_ERest.dataIterator();
-     for (DataIterator dit(rhs_ERest.dataIterator() ); dit.ok(); ++dit) {
+     a_phase_geom.mappedGridDivergence(m_rhs_ERest, m_flux_full_ERest, true);
+     for (DataIterator dit(m_rhs_ERest.dataIterator() ); dit.ok(); ++dit) {
         const PhaseBlockCoordSys& block_coord_sys = a_phase_geom.getBlockCoordSys(grids[dit]);
         double fac = 1. / block_coord_sys.getMappedCellVolume();
-        rhs_ERest[dit].mult(fac);
+        m_rhs_ERest[dit].mult(fac);
         if (m_conserve_momentum) { 
-            a_rhs_coll[dit].plus(rhs_ERest[rdit]); 
+            a_rhs_coll[dit].plus(m_rhs_ERest[dit]);
         }
         else { 
-            a_rhs_coll[dit].copy(rhs_ERest[rdit]); 
+            a_rhs_coll[dit].copy(m_rhs_ERest[dit]);
         }
-          
      }
-
-   }
-
-}
-
-void Linearized::collKernels( LevelData<FArrayBox>& a_kern_energ,
-                                    LevelData<FArrayBox>& a_kern_moment,
-                                    const LevelData<FArrayBox>& a_test_part_coll_RHS,
-                                    const PhaseGeom& a_phase_geom,
-                                    const double a_mass ) const
-
-{
-   const LevelData<FArrayBox>& B_injected( a_phase_geom.getBFieldMagnitude() );
-
-   const DisjointBoxLayout& grids( a_test_part_coll_RHS.getBoxes() );
-   const int n_comp( a_test_part_coll_RHS.nComp() );
-   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
-      const PhaseBlockCoordSys& block_coord_sys( a_phase_geom.getBlockCoordSys(grids[dit]) );
-
-      FArrayBox& this_KE( a_kern_energ[dit] );
-      FArrayBox& this_KM( a_kern_moment[dit] );
-      const FArrayBox& this_RHS( a_test_part_coll_RHS[dit] );
-      const FArrayBox& this_B( B_injected[dit] );
-
-      // Get the physical velocity coordinates for this part of phase space
-      const Box& box_kern( this_KE.box() );
-      FArrayBox velocityRealCoords( box_kern, VEL_DIM );
-      block_coord_sys.getVelocityRealCoords( velocityRealCoords );
-
-      const Box& box_B( this_B.box() );
-      const int vp_index( box_B.smallEnd( VPARALLEL_DIR ) );
-      const int mu_index( box_B.smallEnd( MU_DIR ) );
-      for (BoxIterator bit( box_kern ); bit.ok(); ++bit) {
-         IntVect iv( bit() );
-         IntVect ivB( iv );
-         ivB[VPARALLEL_DIR] = vp_index;
-         ivB[MU_DIR] = mu_index;
-         const double v_parallel( velocityRealCoords(iv,0) );
-         double mu( velocityRealCoords(iv,1) );
-         double v_perp_sq( mu * this_B(ivB) / a_mass );
-         double v_sq( v_parallel * v_parallel + v_perp_sq );
-
-         
-         // Calculate the contributions to the parallel velocity and
-         // number of particle moments created by the test-particle operator
-         for (int dfn_comp(0); dfn_comp<n_comp; ++dfn_comp) {
-            this_KE(iv,dfn_comp) = this_RHS(iv,dfn_comp) * v_sq;
-            this_KM(iv,dfn_comp) = this_RHS(iv,dfn_comp) * v_parallel;
-         }
-      }
    }
 }
 
@@ -498,7 +404,8 @@ void Linearized::evaluateNormKern( LevelData<FArrayBox>& a_kern_moment_norm,
                                    const PhaseGeom& a_phase_geom,
                                    const double a_mass ) const
 {
-
+   CH_TIME("Linearized::evaluateNormKern");
+   
    const LevelData<FArrayBox>& B_injected = a_phase_geom.getBFieldMagnitude();
    const DisjointBoxLayout& grids ( a_kern_moment_norm.disjointBoxLayout() );
 
@@ -514,23 +421,16 @@ void Linearized::evaluateNormKern( LevelData<FArrayBox>& a_kern_moment_norm,
    LevelData<FluxBox> flux_norm_ERest(grids, SpaceDim, IntVect::Zero);
    for (DataIterator dit(flux_norm_ERest.dataIterator() ); dit.ok(); ++dit) {
       const FArrayBox& this_TempDistr = m_temperature[dit];
-      const FArrayBox& this_B= B_injected[dit];
+      const FArrayBox& this_B = B_injected[dit];
 
-#if CFG_DIM==3
-      FArrayBox tmp_TempDistr(grow(this_TempDistr.box(),IntVect(1,1,1,0,0)),1);
-#else
-      FArrayBox tmp_TempDistr(grow(this_TempDistr.box(),IntVect(1,1,0,0)),1);
-#endif
-      tmp_TempDistr.setVal(0.);
-      tmp_TempDistr.copy(this_TempDistr);
-
+      flux_norm_ERest[dit].setVal(0.);
       for (int dir=0; dir<SpaceDim; dir++) {
          FArrayBox& this_flux_NormERest = flux_norm_ERest[dit][dir];
 
          FORT_EVALUATE_NORM_ER_FLUX(CHF_CONST_INT(dir),
                                     CHF_BOX(this_flux_NormERest.box()),
                                     CHF_FRA(this_flux_NormERest),
-                                    CHF_CONST_FRA1(tmp_TempDistr,0),
+                                    CHF_CONST_FRA1(this_TempDistr,0),
                                     CHF_CONST_FRA1(this_B,0),
                                     CHF_CONST_REALVECT(vel_dx),
                                     CHF_CONST_INT(num_vpar_cells),
@@ -550,38 +450,15 @@ void Linearized::evaluateNormKern( LevelData<FArrayBox>& a_kern_moment_norm,
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       const PhaseBlockCoordSys& block_coord_sys( a_phase_geom.getBlockCoordSys(grids[dit]) );
 
-      FArrayBox& this_EN( a_kern_energ_norm[dit] );
       FArrayBox& this_MN( a_kern_moment_norm[dit] );
-      const FArrayBox& this_temp_distr( m_temperature[dit] );
-      const FArrayBox& this_B( B_injected[dit] );
-
-      const Box& box_B( this_B.box() );
-      const Box& box_k( this_MN.box() );
-
-      const int vp_index( box_B.smallEnd( VPARALLEL_DIR ) );
-      const int mu_index( box_B.smallEnd( MU_DIR ) );
-
-      // Get the physical velocity coordinates for this part of phase space
-      FArrayBox velocityRealCoords( box_k, VEL_DIM );
-      block_coord_sys.getVelocityRealCoords( velocityRealCoords );
-
-      for (BoxIterator bit( velocityRealCoords.box() ); bit.ok(); ++bit) {
-          IntVect iv( bit() );
-          IntVect ivB( iv );
-          ivB[VPARALLEL_DIR] = vp_index;
-          ivB[MU_DIR] = mu_index;
-          double v_parallel( velocityRealCoords(iv,0) );
-          double v_par_sq( v_parallel * v_parallel );
-          double mu( velocityRealCoords(iv,1) );
-          double v_perp_sq( mu * this_B(ivB) / a_mass );
-          double v_sq( v_par_sq + v_perp_sq );
-          double v_th_sq( 2.0 * this_temp_distr(ivB,0) / a_mass );
-          double x_sq( v_sq / v_th_sq );
-          double x( sqrt(v_sq / v_th_sq) );
-         
-          this_EN(iv,0) = this_EN(iv,0) * v_sq ;
-          this_MN(iv,0) = nu_s(x) * v_par_sq * exp( -x_sq );
-      }
+      const FArrayBox& this_TempDistr = m_temperature[dit];
+      const FArrayBox& this_B = B_injected[dit];
+      FORT_EVALUATE_NORM_MR(CHF_BOX(this_MN.box()),
+                            CHF_FRA1(this_MN,0),
+                            CHF_CONST_FRA1(this_TempDistr,0),
+                            CHF_CONST_FRA1(this_B,0),
+                            CHF_CONST_REALVECT(vel_dx),
+                            CHF_CONST_REAL(a_mass));
    }
 }
 
@@ -708,35 +585,50 @@ void Linearized::convertToCellCenters(const PhaseGeom&  a_phase_geom,
 }
 
 void Linearized::convertToCellFaces(LevelData<FluxBox>& a_faceData,
-                                 const LevelData<FArrayBox>& a_cellData) const
+                                    const LevelData<FArrayBox>& a_cellData) const
 {
-   // Convert from cell centered values to cell averages.  We need to use
-   // a temporary with two extra ghost cells for the interpolation. The ghost cells at the domain 
-   // boundaries are filled with zeros for our purposes. Since, the boundary fluxes in the velocity directions 
-   // will be overwrited later, and the fluxes in the configuration domansions do not contribute to the RHS. 
+    // Convert from cell centered values to cell averages.  We need to use
+    // a temporary with two extra ghost cells for the interpolation. The ghost cells at the domain
+    // boundaries are filled with zeros for our purposes. Since, the boundary fluxes in the velocity directions
+    // will be overwrited later, and the fluxes in the configuration domansions do not contribute to the RHS.
 
-   LevelData<FArrayBox> dfn_tmp(a_cellData.disjointBoxLayout(),
-                                a_cellData.nComp(),
-                                a_cellData.ghostVect()+2*IntVect::Unit);
+    if (!m_second_order) {
+      LevelData<FArrayBox> dfn_tmp(a_cellData.disjointBoxLayout(),
+                                   a_cellData.nComp(),
+                                   a_cellData.ghostVect()+2*IntVect::Unit);
+      
+      const DisjointBoxLayout& grids = a_cellData.disjointBoxLayout();
 
-   const DisjointBoxLayout& grids = a_cellData.disjointBoxLayout();
-
-   DataIterator dit(grids.dataIterator());
-   for (dit.begin(); dit.ok(); ++dit) {
-      dfn_tmp[dit].setVal(0.0);
-      dfn_tmp[dit].copy(a_cellData[dit]);
-   }
-   dfn_tmp.exchange();
+      DataIterator dit(grids.dataIterator());
+      for (dit.begin(); dit.ok(); ++dit) {
+         dfn_tmp[dit].setVal(0.0);
+         dfn_tmp[dit].copy(a_cellData[dit]);
+      }
+      dfn_tmp.exchange();
+      
+      fourthOrderCellToFace(a_faceData, dfn_tmp);
+    }
    
-   fourthOrderCellToFace(a_faceData, dfn_tmp);
+    else {
+       const DisjointBoxLayout& grids = a_cellData.disjointBoxLayout();
+       DataIterator dit(grids.dataIterator());
+       for (dit.begin(); dit.ok(); ++dit) {
+          a_faceData[dit].setVal(0.);
+          for (int dir=CFG_DIM; dir<SpaceDim; dir++) {
+             FORT_SECOND_ORDER_CELL_TO_FACE(CHF_CONST_FRA(a_cellData[dit]),
+                                            CHF_FRA(a_faceData[dit][dir]),
+                                            CHF_BOX(a_faceData[dit][dir].box()),
+                                            CHF_CONST_INT(dir));
+          }
+       }
+    }
 }
-
-
 
 inline
 void Linearized::parseParameters( ParmParse& a_ppcls )
 {
    a_ppcls.query("time_implicit", m_time_implicit);
+   a_ppcls.query("second_order", m_second_order);
    a_ppcls.query("cls_freq",m_cls_freq);
    a_ppcls.query("conserve_momentum",m_conserve_momentum);
    a_ppcls.query("conserve_energy",m_conserve_energy);
@@ -764,7 +656,8 @@ void Linearized::printParameters()
       std::cout << "  cls_freq  =  " << m_cls_freq
                 << ", conserve_momentum = " << m_conserve_momentum 
                 << ", conserve_energy = " << m_conserve_energy 
-                << ", implicit in time = " << m_time_implicit 
+                << ", implicit in time = " << m_time_implicit
+                << ", Second order = " << m_second_order
                 << std::endl;
       std::cout << "  Reference Function:" << std::endl;
       m_ref_func->printParameters();

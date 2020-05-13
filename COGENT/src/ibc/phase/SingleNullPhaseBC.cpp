@@ -425,7 +425,7 @@ void SingleNullPhaseBC::applySheathBC( KineticSpecies& a_species,
       const BoundaryBoxLayout& bdry_layout( *(all_bdry_layouts[i]) );
       const int& dir( bdry_layout.dir() );
       if (dir == POLOIDAL_DIR) {
-         LogicalSheathBC sheathBC(bdry_layout, m_pp);
+         LogicalSheathBC sheathBC(all_bdry_layouts[i], m_pp);
          sheathBC.applyBC(a_species, a_velocity, a_phi);
       }
    }

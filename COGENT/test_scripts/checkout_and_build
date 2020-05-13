@@ -41,7 +41,7 @@ MPICC=mpicc
 CXX=g++
 CC=gcc
 FC=gfortran
-HYPRE_DIR=hypre-2.9.0b
+HYPRE_DIR=hypre
 HDF5_SERIAL_DIR=/usr/tce/packages/hdf5/hdf5-serial-1.8.18-gcc-4.9.3
 HDF5_PARALLEL_DIR=/usr/tce/packages/hdf5/hdf5-parallel-1.8.18-gcc-4.9.3-mvapich2-2.2
 

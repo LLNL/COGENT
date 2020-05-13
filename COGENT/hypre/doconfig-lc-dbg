@@ -1,0 +1,15 @@
+#!/bin/sh
+
+file_name=$(basename $0)
+config_name=$(echo ${file_name} | sed s/^doconfig-//)
+base_dir=$(dirname $0)
+base_dir=$(cd ${base_dir}; pwd)
+install_dir=${base_dir}/lib/${config_name}
+
+cd ${base_dir}/src
+./configure "--enable-debug" \
+            CC=mpicc \
+            CXX=mpicxx \
+            --enable-maxdim=5 \
+            --prefix=$install_dir
+

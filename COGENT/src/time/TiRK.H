@@ -385,7 +385,7 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
 
     }
 
-    m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage,i);
+    m_Operators.postTimeStage(m_cur_step,stage_time,m_c[i]*m_dt,m_YStage,i);
     m_Operators.preOpEval(m_YStage,stage_time,chkpt_ti_advance_2);
     m_Operators.explicitOp(m_rhsStage[i],stage_time,m_YStage);
   }

@@ -57,6 +57,7 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
      m_hdf_vpartheta(false),
      m_hdf_rtheta(false),
      m_hdf_pressure(false),
+     m_hdf_gradPoverN(false),
      m_hdf_parallelHeatFlux(false),
      m_hdf_temperature(false),
      m_hdf_fourthMoment(false),
@@ -160,11 +161,11 @@ GKSystem::initialize( const int     a_cur_step,
       m_gk_ops->initializePotential( a_cur_time );
    }
 
-   // Initialize the physical state variables
-   m_gk_ops->convertToPhysical( m_state_comp, m_state_phys );
-
    // Initialize physical fluid species used in fluidOp (has ghost cells)
-   m_gk_ops->initializeFluidSpeciesPhysical( m_state_comp.dataFluid() );
+   m_gk_ops->initializeFluidSpeciesPhysical( m_state_comp.dataFluid(), a_cur_time );
+   
+   // Initialize the physical state variables
+   m_gk_ops->convertToPhysical( m_state_comp, m_state_phys, a_cur_time );
    
    // Initialize the electric field:
    // a.  If the fixed_efield option is true, then the field is calculated
@@ -616,9 +617,9 @@ void GKSystem::createState()
    ScalarPtrVect scalars;
    createScalars( scalars );
 
-   // Define the computational state object by cloning from the argument vectors.  Ghost cells are added
-   // for the kinetic and fluid species.
-   
+   // Define the computational state object by cloning from the argument vectors.  
+   // Ghost cells are added for the kinetic and fluid species.
+   //
    m_state_comp.define( kinetic_species,
                         fluid_species,
                         scalars,
@@ -626,8 +627,9 @@ void GKSystem::createState()
                         m_kinetic_ghosts * IntVect::Unit,
                         m_fluid_ghosts * CFG::IntVect::Unit );
 
-   // Define the physical state object by cloning from the argument vectors.  No ghost cells are included, since
-   // this state object is generally used for output.
+   // Define the physical state object by cloning from the argument vectors.  
+   // No ghost cells are included, since this state object is generally used for output.
+   //
    m_state_phys.define( m_state_comp, IntVect::Zero );
 }
 
@@ -1022,7 +1024,7 @@ void GKSystem::advance( Real& a_cur_time,
       m_floor_post_processor.enforce( m_state_comp.dataFluid() );
    }
    
-   m_gk_ops->convertToPhysical( m_state_comp, m_state_phys );
+   m_gk_ops->convertToPhysical( m_state_comp, m_state_phys, a_cur_time );
 }
 
 
@@ -1259,6 +1261,18 @@ void GKSystem::writePlotFile(const char    *prefix,
          m_gk_ops->plotPressure( filename, soln_species, cur_time );
       }
 
+      // Grad P over N
+
+      if (m_hdf_gradPoverN) {
+         std::string filename( plotFileName( prefix,
+                                             "gradPoverN",
+                                             soln_species.name(),
+                                             cur_step,
+                                             species + 1) );
+
+         m_gk_ops->plotGradPoverN( filename, soln_species, cur_time );
+      }
+
       // Parallel heat flux
       
       if (m_hdf_parallelHeatFlux) {
@@ -1364,6 +1378,35 @@ void GKSystem::writePlotFile(const char    *prefix,
                                                    cur_step,
                                                    species + 1));
                m_gk_ops->plotFluid( filename, fluid_species, fluid_species.cell_var_name(n), cur_time );
+            }
+            for (int n=0; n<fluid_species.num_face_vars(); ++n) {
+               std::string filename (plotFileName( prefix,
+                                                   fluid_species.face_var_name(n),
+                                                   fluid_species.name(),
+                                                   cur_step,
+                                                   species + 1));
+               m_gk_ops->plotFluidAtCellFromFaceNorms( filename, fluid_species, 
+                                                       fluid_species.face_var_name(n), cur_time );
+            }
+            for (int n=0; n<fluid_species.num_edge_vars(); ++n) {
+               std::string filename (plotFileName( prefix,
+                                                   fluid_species.edge_var_name(n),
+                                                   fluid_species.name(),
+                                                   cur_step,
+                                                   species + 1));
+               m_gk_ops->plotFluidAtCellFromEdgeTans( filename, fluid_species, 
+                                                      fluid_species.edge_var_name(n), cur_time );
+            }
+         }
+         if ( fluid_species.m_plotMemberVars == 1 ) {
+            std::vector<string> varname = fluid_species.m_plotMemberVarNames;
+            for (int i(0); i<varname.size(); i++) {
+               std::string filename (plotFileName( prefix,
+                                                   varname[i],
+                                                   fluid_species.name(),
+                                                   cur_step,
+                                                   species + 1 ));
+               m_gk_ops->plotFluidOpMember( filename, fluid_species, varname[i], cur_time );
             }
          }
       }
@@ -1615,7 +1658,6 @@ void GKSystem::preTimeStep(int a_cur_step, Real a_cur_time)
       m_integrator->setCurrentTime( a_cur_time );
       m_integrator->setTimeStep( a_cur_step );
    }
-   //m_gk_ops->convertToPhysical( m_state_comp, m_state_phys );
    m_gk_ops->preTimeStep( a_cur_step, a_cur_time, m_state_comp, m_state_phys );
 }
 
@@ -1635,7 +1677,6 @@ void GKSystem::postTimeStep(int a_cur_step, Real a_dt, Real a_cur_time)
 {
   CH_TIME("postTimeStep");
   m_gk_ops->postTimeStep( a_cur_step, a_dt, a_cur_time, m_state_comp );
-  //m_gk_ops->convertToPhysical( m_state_comp, m_state_phys );
   if (procID() == 0) {
     cout << "  ----\n";
     cout << "  dt: " << a_dt << std::endl;
@@ -1821,6 +1862,9 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
    // Should we make hdf files for pressure?
    a_ppgksys.query("hdf_pressure",m_hdf_pressure);
 
+   // Should we make hdf files for gradPoverN?                                                       
+   a_ppgksys.query("hdf_gradPoverN",m_hdf_gradPoverN);
+   
    // Should we make hdf files for parallel heat flux?
    a_ppgksys.query("hdf_parallelHeatFlux",m_hdf_parallelHeatFlux);
 
@@ -1909,6 +1953,7 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
       int width(2);
       if (m_enforce_step_positivity) width++;
       IntVect halo( width*IntVect::Unit );
+      //IntVect halo(m_kinetic_ghosts*IntVect::Unit);
       m_positivity_post_processor.define( halo, n_iter, verbose );
    }
 

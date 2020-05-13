@@ -2,11 +2,9 @@
 #include <cmath>
 #include "CylindricalBlockCoordSys.H"
 #include "Directions.H"
-#include "CylindricalBlockCoordSys.H"
-
-#include "Directions.H"
 #include "BoxIterator.H"
 #include "ConstFact.H"
+#include "RadialUtils.H"
 //#include "CONSTANTS.H"
 
 #include "NamespaceHeader.H"
@@ -20,9 +18,9 @@ CylindricalBlockCoordSys::CylindricalBlockCoordSys( ParmParse&               a_p
    : MagBlockCoordSys(a_parm_parse)
 {
 
-   // Read the input data specific to this geometry
+   /// Read the input data specific to this geometry
 
-   // Get max values of R, Z, (and if 5D, Phi)
+   /// Get max values of R, Z, (and if 5D, Phi)
    a_parm_parse.get("r_min", m_rmin);
    a_parm_parse.get("r_max", m_rmax);
 
@@ -34,14 +32,14 @@ CylindricalBlockCoordSys::CylindricalBlockCoordSys( ParmParse&               a_p
    a_parm_parse.get("phi_max", m_phimax);
 #endif
 
-   std::string conf_output; // output message after magnetic geometry is created
-   // Get magnetic field type
-   // Check for "B_type" entry
+   std::string conf_output; /// Output message after magnetic geometry is created
+   /// Get magnetic field type
+   /// Check for "B_type" entry
    if (a_parm_parse.contains("B_type")){
      std::string B_type;
      a_parm_parse.get("B_type", B_type);
 
-     // Constant magnetic type: B = B0
+     /// Constant magnetic type: B = B0
      if (B_type=="constant") {
        this->calcB = &CylindricalBlockCoordSys::calcBConst;
        if (a_parm_parse.contains("Btor_0")) {
@@ -49,9 +47,10 @@ CylindricalBlockCoordSys::CylindricalBlockCoordSys( ParmParse&               a_p
 	 conf_output = "Constant B field: Btor_0 = ";
 	 conf_output.append(std::to_string(m_Btor_0));
        }
-       else {MayDay::Error("ERROR: No magnetic field amplitude is specidied (\"Btor_0\" is missing)");}
+       else {MayDay::Error("ERROR: CylindricalBlockCoordSys::CylindricalBlockCoordSys() failed! No magnetic field amplitude is specidied (\"Btor_0\" is missing)");}
      }
-     // Toroidal magnetic type: B = m_Btor_scale / R
+     
+     /// Toroidal magnetic type: B = m_Btor_scale / R
      else if (B_type=="toroidal") {
        this->calcB = &CylindricalBlockCoordSys::calcBTor;
        if (a_parm_parse.contains("Btor_scale")) {
@@ -59,13 +58,14 @@ CylindricalBlockCoordSys::CylindricalBlockCoordSys( ParmParse&               a_p
 	 conf_output = "Toroidal B field: Btor_scale = ";
 	 conf_output.append(std::to_string(m_Btor_scale));
        }
-       else {MayDay::Error("ERROR: No magnetic field amplitude is specidied (\"Btor_scale\" is missing)");}
+       else {MayDay::Error("ERROR: CylindricalBlockCoordSys::CylindricalBlockCoordSys() failed! No magnetic field amplitude is specidied (\"Btor_scale\" is missing)");}
      }
-     // Bennett magnetic type: B = 2 B0 *r/m_r0 / (1 + r*r/m_r0/m_r0)
+     
+     /// Bennett magnetic type: B = 2 B0 *r/m_r0 / (1 + r*r/m_r0/m_r0)
      else if (B_type=="bennett") {
        this->calcB = &CylindricalBlockCoordSys::calcBBennett;
        if (a_parm_parse.contains("r_0")) {a_parm_parse.get("r_0", m_r0);}
-       else {MayDay::Error("ERROR: No Bennett profile radius is specidied (\"r_0\" is missing)");}
+       else {MayDay::Error("ERROR: CylindricalBlockCoordSys::CylindricalBlockCoordSys() failed! No Bennett profile radius is specidied (\"r_0\" is missing)");}
        if (a_parm_parse.contains("Btor_0")) {
 	 a_parm_parse.get("Btor_0", m_Btor_0);
 	 conf_output = "Bennett B field: Btor_0 = ";
@@ -73,18 +73,34 @@ CylindricalBlockCoordSys::CylindricalBlockCoordSys( ParmParse&               a_p
 	 conf_output.append("; r0 = ");
 	 conf_output.append(std::to_string(m_r0));
        }
-       else {MayDay::Error("ERROR: No magnetic field amplitude is specidied (\"Btor_0\" is missing)");}
+       else {MayDay::Error("ERROR: CylindricalBlockCoordSys::CylindricalBlockCoordSys() failed! No magnetic field amplitude is specidied (\"Btor_0\" is missing)");}
      }
+     
+     /// Arbitrary magnetic field profile B(r) provided from a file
+     else if (B_type=="RData") {
+       this->calcB = &CylindricalBlockCoordSys::calcBRData;
+       std::string filename;
+       if (a_parm_parse.contains("data_file")) {a_parm_parse.get("data_file", filename);}
+       else {MayDay::Error("ERROR: CylindricalBlockCoordSys::CylindricalBlockCoordSys()! No data file provided for RData type of magnetic field");}
+
+       /// Create the spline for magnetic field
+       fillDataBRadial (m_B_spline, filename);
+       conf_output = "B(r) profile is provided from file \"";
+       conf_output.append(filename);
+       conf_output.append("\".");
+     }
+     
      // Unknown type of magnetic geometry is specified
      else {
-       conf_output = "ERROR: Unknown magnetic geometry \"";
+       conf_output = "ERROR: CylindricalBlockCoordSys::CylindricalBlockCoordSys() failed! Unknown magnetic geometry \"";
        conf_output.append(B_type);
        conf_output.append("\"");
        const char* cstr = conf_output.c_str();
        MayDay::Error(cstr);
      }
    }
-   else {MayDay::Error("ERROR: No magnetic geometry type is specified (\"B_type\" is missing)");}
+   
+   else {MayDay::Error("ERROR: CylindricalBlockCoordSys::CylindricalBlockCoordSys() failed! No magnetic geometry type is specified (\"B_type\" is missing)");}
 
    // Print geometry data to stdout
    if (m_verbose && !procID()) {
@@ -113,7 +129,7 @@ CylindricalBlockCoordSys::CylindricalBlockCoordSys( ParmParse&               a_p
    define( a_domain, cellSpacing );
 
    if (m_verbose && procID()==0) {
-      cout << "Done constructing cylindrical geometry" << endl;
+     cout << "Done constructing cylindrical geometry" << endl;
    }
 }
 
@@ -186,7 +202,7 @@ CylindricalBlockCoordSys::computeFieldData(const int  a_dir,
                                            const bool a_derived_data_only ) const
 // NEED TO FOLLOW AND SEE WHAT IS GOTTEN IN FORTRAN
 {
-   // Get box intersection
+   /// Get box intersection
    Box box = a_BField.box();
    box &= a_BFieldMag.box();
    box &= a_BFieldDir.box();
@@ -207,30 +223,30 @@ CylindricalBlockCoordSys::computeFieldData(const int  a_dir,
       
       double R = RZ(iv,0);
       double Z = RZ(iv,1);
-      double p_B[17];	//array for magnetic filed configuration
+      double p_B[17];	/// Array for magnetic filed configuration
 	  
       // Calculate magnetic geometry components
       (this->*calcB)(R, Z, p_B);
 	
-      a_BField(iv,0) = p_B[0]; // B[0]
-      a_BField(iv,1) = p_B[1]; // B[1]
-      a_BField(iv,2) = p_B[2]; // B[2]
+      a_BField(iv,0) = p_B[0]; /// B[0]
+      a_BField(iv,1) = p_B[1]; /// B[1]
+      a_BField(iv,2) = p_B[2]; /// B[2]
       
-      a_BFieldMag(iv,0) = p_B[3]; // abs(B)
+      a_BFieldMag(iv,0) = p_B[3]; /// abs(B)
       
-      a_BFieldDir(iv,0) = p_B[4]; // b[0], b=b/abs(B)
-      a_BFieldDir(iv,1) = p_B[5]; // b[1]
-      a_BFieldDir(iv,2) = p_B[6]; // b[2]
+      a_BFieldDir(iv,0) = p_B[4]; /// b[0], b=b/abs(B)
+      a_BFieldDir(iv,1) = p_B[5]; /// b[1]
+      a_BFieldDir(iv,2) = p_B[6]; /// b[2]
 
-      a_gradBFieldMag(iv,0) = p_B[7]; // gB[0], gB = \nabla abs(B)
-      a_gradBFieldMag(iv,1) = p_B[8]; // gB[1]
-      a_gradBFieldMag(iv,2) = p_B[9]; // gB[2]
+      a_gradBFieldMag(iv,0) = p_B[7]; /// gB[0], gB = \nabla abs(B)
+      a_gradBFieldMag(iv,1) = p_B[8]; /// gB[1]
+      a_gradBFieldMag(iv,2) = p_B[9]; /// gB[2]
       
-      a_curlBFieldDir(iv,0) = p_B[10]; // cb[1], cb = \nabla \times b
-      a_curlBFieldDir(iv,1) = p_B[11]; // cb[2]
-      a_curlBFieldDir(iv,2) = p_B[12]; // cb[3]
+      a_curlBFieldDir(iv,0) = p_B[10]; /// cb[1], cb = \nabla \times b
+      a_curlBFieldDir(iv,1) = p_B[11]; /// cb[2]
+      a_curlBFieldDir(iv,2) = p_B[12]; /// cb[3]
       
-      a_BFieldDirdotcurlBFieldDir(iv,0) = p_B[13]; // b \cdot \nabla \times b
+      a_BFieldDirdotcurlBFieldDir(iv,0) = p_B[13]; /// b \cdot \nabla \times b
    }
 }
 
@@ -326,6 +342,40 @@ CylindricalBlockCoordSys::calcBBennett( double a_R, double a_Z, double* a_p_B ) 
   a_p_B[16] = 0.0;
 }
 
+void
+CylindricalBlockCoordSys::calcBRData( double a_R, double a_Z, double* a_p_B ) const
+{
+  /// Get value of B and its first and second derivatives with respect R at the positino a_R
+  double p_BR[3];
+  m_B_spline.getValAt(p_BR, a_R);
+  /// Assume that B does not change sign
+  double sign_b; if (p_BR[0]>0) {sign_b = 1.0;} else {sign_b = -1.0;}
+  	
+  a_p_B[0] = 0.0;
+  a_p_B[1] = p_BR[0];
+  a_p_B[2] = 0.0;
+      
+  a_p_B[3] = fabs( p_BR[0] );
+      
+  a_p_B[4] = 0.0;
+  a_p_B[5] = sign_b;
+  a_p_B[6] = 0.0;
+
+  a_p_B[7] = p_BR[1];
+  a_p_B[8] = 0.0;
+  a_p_B[9] = 0.0;
+      
+  a_p_B[10] = 0.0;
+  a_p_B[11] = 0.0;
+  a_p_B[12] = sign_b / a_R;
+      
+  a_p_B[13] = 0.0;
+
+  a_p_B[14] = a_Z * a_p_B[1];
+  a_p_B[15] = 0.0;
+  a_p_B[16] = 0.0;
+}
+
 array<double,3>
 CylindricalBlockCoordSys::computeBField(const RealVect& a_X) const
 {
@@ -337,7 +387,6 @@ CylindricalBlockCoordSys::computeBField(const RealVect& a_X) const
    result[0] =  p_B[0];
    result[1] =  p_B[1];
    result[2] =  p_B[2];
-   
    
    return result;
 }

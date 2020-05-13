@@ -118,15 +118,15 @@ IC.hydrogen.function  = "maxwellian_tanh_0"
 #####################################################
 # Boundary Condition Definitions
 #####################################################
-BC.hydrogen.radial_inner.function = "maxwellian_tanh_0"
-BC.hydrogen.radial_outer.function = "maxwellian_tanh_0"
+BC.hydrogen.radial_lower.function = "maxwellian_tanh_0"
+BC.hydrogen.radial_upper.function = "maxwellian_tanh_0"
 BC.hydrogen.vpar_lower.function   = "maxwellian_tanh_0"
 BC.hydrogen.vpar_upper.function   = "maxwellian_tanh_0"
 BC.hydrogen.mu_lower.function     = "maxwellian_tanh_0"
 BC.hydrogen.mu_upper.function     = "maxwellian_tanh_0"
 
-BC.potential.radial_inner.type = "neumann"
-BC.potential.radial_outer.type = "neumann"
+BC.potential.radial_lower.type = "neumann"
+BC.potential.radial_upper.type = "neumann"
 
 #####################################################
 # Collisions Definitions

@@ -34,7 +34,8 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
      //m_is_time_implicit(true),
      m_implicitMhd(false),
      m_implicitViscosity(false),
-     m_tauMax(0.0),
+     m_tau(0.0),
+     m_etaMin(0.0),
      m_advScheme("c2"),
      m_species_name(a_species_name),
      m_courant_time_step(DBL_MAX),
@@ -193,7 +194,8 @@ void IdealMhdOp::accumulateMhdRHS( FluidSpecies&  a_rhs_fluid,
    // Cspeed_i = |NTVdotqihat| + |N_i|sqrt(gamma*P/N); i = q0, q1, q2
    //
    const double gamma = a_soln_fluid.m_gamma;
-   setCspeed( m_rhoDen_cc, gamma );
+   setMappedCspeed( gamma, 1, 1 );
+   
    SpaceUtils::upWindToFaces(m_CspeedR_norm, m_Cspeed_cc, m_CspeedR_norm, "c2");
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       m_CspeedL_norm[dit].copy(m_CspeedR_norm[dit],m_CspeedL_norm[dit].box());
@@ -240,7 +242,7 @@ void IdealMhdOp::accumulateExplicitRHS( FluidSpeciesPtrVect&        a_rhs,
       
    if(!m_implicitMhd) {
       accumulateMhdRHS( rhs_fluid, soln_fluid, a_time );
-      if(m_tauMax>0.0) {
+      if(m_tau>0.0 || m_etaMin>0.0) {
          int accumulateMom = 1;
          if(m_implicitViscosity) accumulateMom = 0;
          accumulateViscRHS( rhs_fluid, soln_fluid, accumulateMom, 1 );
@@ -266,7 +268,7 @@ void IdealMhdOp::accumulateImplicitRHS( FluidSpeciesPtrVect&        a_rhs,
    if(m_implicitMhd) {
       accumulateMhdRHS( rhs_fluid, soln_fluid, a_time );
    }
-   if(m_tauMax>0.0 && m_implicitViscosity) {
+   if((m_tau>0.0 || m_etaMin>0.0) && m_implicitViscosity) {
       int accumulateMom = 1;
       int accumulateEne = 0;
       if(m_implicitMhd) accumulateEne = 1;
@@ -770,8 +772,12 @@ void IdealMhdOp::parseParameters( ParmParse& a_pp )
       a_pp.get("advScheme", m_advScheme );
    }
    
-   if (a_pp.contains("tauMax")) {
-      a_pp.get("tauMax", m_tauMax );
+   if (a_pp.contains("tau")) {
+      a_pp.get("tau", m_tau );
+   }
+   
+   if (a_pp.contains("etaMin")) {
+      a_pp.get("etaMin", m_etaMin );
    }
    
 }
@@ -782,7 +788,8 @@ void IdealMhdOp::printParameters()
    if (procID()==0) {
       std::cout << "IdealMhdOp parameters:" << std::endl;
       std::cout << " advScheme  =  " << m_advScheme << std::endl;
-      std::cout << " tauMax     =  " << m_tauMax << std::endl;
+      std::cout << " tau     =  " << m_tau << std::endl;
+      std::cout << " etaMin  =  " << m_etaMin << std::endl;
       std::cout << " implicitMhd  =  " << m_implicitMhd << std::endl;
       std::cout << " implicitVisosity  =  " << m_implicitViscosity << std::endl;
    }
@@ -828,17 +835,21 @@ void IdealMhdOp::setCourantTimeStep( const LevelData<FArrayBox>&  a_Cspeed )
 
 }
 
-void IdealMhdOp::setCspeed( const LevelData<FArrayBox>&  a_density,
-                            const double                 a_gamma )
+void IdealMhdOp::setMappedCspeed( const double  a_gamma,
+                                  const int     a_Ptherm,
+                                  const int     a_Pmag )
 {
-   CH_TIME("IdealMhdOp::setCspeed()");
+   CH_TIME("IdealMhdOp::setMappedCspeed()");
+
+   // compute flux-freezing speed at cell-center for each direction
+   // Cspeed_i = |NTVdotqihot| + |N_i|sqrt(gamma*P/N + B^2/N); i = q0, q1, q2
 
    CH_assert(m_Cspeed_cc.nComp() == SpaceDim);
    
    const DisjointBoxLayout& grids( m_Cspeed_cc.getBoxes() ); 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       
-      const FArrayBox& rho_on_patch  = a_density[dit];   
+      const FArrayBox& rho_on_patch  = m_rhoDen_cc[dit];   
       const FArrayBox& V_on_patch    = m_velocity[dit]; 
       const FArrayBox& P_on_patch    = m_pressure[dit]; 
       const FArrayBox& magP_on_patch = m_Bpressure[dit]; 
@@ -855,20 +866,21 @@ void IdealMhdOp::setCspeed( const LevelData<FArrayBox>&  a_density,
                                      CHF_CONST_FRA(N_on_patch),
                                      CHF_CONST_FRA1(J_on_patch,0),
                                      CHF_CONST_REAL(a_gamma),
-                                     CHF_CONST_INT(SpaceDim),
+                                     CHF_CONST_INT(a_Ptherm),
+                                     CHF_CONST_INT(a_Pmag),
                                      CHF_FRA(C_on_patch) );
       
    }
 
 }
 
-Real IdealMhdOp::computeDtImExTI( const FluidSpeciesPtrVect&  a_fluid_species )
+Real IdealMhdOp::computeDtImExTI( const FluidSpeciesPtrVect&  a_fluid_comp )
 {
    CH_TIME("Real IdealMhdOp::computeDtImExTI()");   
    
    double thisdt=DBL_MAX;
    if(m_courant_time_step==DBL_MAX) {
-      thisdt = computeDtMhd( a_fluid_species );
+      thisdt = computeDtMhd( a_fluid_comp );
       return thisdt;
    }
    else {
@@ -877,38 +889,33 @@ Real IdealMhdOp::computeDtImExTI( const FluidSpeciesPtrVect&  a_fluid_species )
 
 }
 
-Real IdealMhdOp::computeDtExplicitTI( const FluidSpeciesPtrVect&  a_fluid_species )
+Real IdealMhdOp::computeDtExplicitTI( const FluidSpeciesPtrVect&  a_fluid_comp )
 {
    CH_TIME("Real IdealMhdOp::computeDtExplicit()");   
    double thisdt=DBL_MAX;
-   thisdt = computeDtMhd( a_fluid_species );
+   thisdt = computeDtMhd( a_fluid_comp );
    return thisdt;
 }
 
-Real IdealMhdOp::computeDtMhd( const FluidSpeciesPtrVect&  a_fluid_species )
+Real IdealMhdOp::computeDtMhd( const FluidSpeciesPtrVect&  a_fluid_comp )
 {
    CH_TIME("Real IdealMhdOp::computeDtMhd()");   
    // get physical values for m_species_name and calculate freezing speed
-   // Cspeed_i = |NTVdotqihat| + |N_i|sqrt(gamma*P/N); i = q0, q1, q2
+   // Cspeed_i = |NTVdotqihat| + |N_i|sqrt(gamma*P/rho); i = q0, q1, q2
    //
    double gamma;
-   //LevelData<FArrayBox> density, Cspeed;
-   for (int species(0); species<a_fluid_species.size(); species++) {
-      const FluidSpecies& fluid_species( static_cast<FluidSpecies&>(*(a_fluid_species[species])) );
+   for (int species(0); species<a_fluid_comp.size(); species++) {
+      const FluidSpecies& fluid_species( static_cast<FluidSpecies&>(*(a_fluid_comp[species])) );
       const std::string species_name( fluid_species.name() );
       //species_name = fluid_species.name();
       if(species_name==m_species_name) {
-         //const LevelData<FArrayBox>& soln_data( fluid_species.cell_var(0) );
-         //const DisjointBoxLayout& grids( soln_data.getBoxes() );
          gamma = fluid_species.m_gamma;
-         //density.define(grids, 1, IntVect::Zero);
          fluid_species.massDensity(m_rhoDen_cc);
          fluid_species.velocity(m_velocity);  // in-plane velocity vector
          fluid_species.pressure(m_pressure);
          fluid_species.Bpressure(m_Bpressure);
-         //Cspeed.define(grids, SpaceDim, IntVect::Zero);
-   
-         // Calls for physical variables here are from mapped state
+         
+         // Calls for physical variables abve are from mapped state
          // vector (has not been convertToPhysical )
          // and so need to divide by J
          //
@@ -921,11 +928,10 @@ Real IdealMhdOp::computeDtMhd( const FluidSpeciesPtrVect&  a_fluid_species )
          break;
       }
    }
-   setCspeed( m_rhoDen_cc, gamma );
+
+   setMappedCspeed( gamma, 1, 1 );
    setCourantTimeStep(m_Cspeed_cc);   
    
-
-   //cout << "m_courant_time_step = " << m_courant_time_step << endl;
    return m_courant_time_step;
    //return DBL_MAX;
 
@@ -1040,16 +1046,15 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
       // by face area
    } 
       
-   //virtualEleField.define(a_grids, 1, a_ghostVect);
-   m_E0_ce.define(a_grids, 1, IntVect::Unit);
-   m_J0_ce.define(a_grids, 1, IntVect::Unit);
-   m_J0_cc.define(a_grids, SpaceDim, IntVect::Zero);
-   m_E0_cc.define(a_grids, SpaceDim, IntVect::Zero);
+   m_E0_ce.define(a_grids, 1, a_ghostVect);
+   m_J0_ce.define(a_grids, 1, a_ghostVect);
+   m_J0_cc.define(a_grids, SpaceDim, a_ghostVect);
+   m_E0_cc.define(a_grids, SpaceDim, a_ghostVect);
    m_curlE0.define(a_grids, 1, IntVect::Zero);
    m_By_contr_cc.define(a_grids, 1, a_ghostVect);
    m_By_covar_cc.define(a_grids, 1, a_ghostVect);
-   m_JJdotE.define(a_grids, 1, IntVect::Zero); // Jacobian*J\cdotE
-   m_JJcrossB.define(a_grids, SpaceDim, IntVect::Zero); // Jacobian*J\timesB
+   m_JJdotE.define(a_grids, 1, a_ghostVect); // Jacobian*J\cdotE
+   m_JJcrossB.define(a_grids, SpaceDim, a_ghostVect); // Jacobian*J\timesB
    
    //
    m_rhoFlux_ce.define(a_grids, SpaceDim, 1*IntVect::Unit);
@@ -1196,7 +1201,6 @@ void IdealMhdOp::setMagneticFieldTerms( const FluidSpecies&  a_soln_fluid )
 {
    CH_TIME("IdealMhdOp::setMagneticFieldTerms()");
    
-   //  EXPERIMENTAL STUFF FOR EdgeDataBox AND NodeFArrayBox STUFF
    //  NEEDED FOR MAGNETIC FIELD ON CELL FACES AND ELECTRIC FIELD
    //  AT CELL EDGES
    //
@@ -1235,7 +1239,7 @@ void IdealMhdOp::setMagneticFieldTerms( const FluidSpecies&  a_soln_fluid )
       //
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          const Box& thisbox = m_J0_cc[dit].box();
-         FArrayBox m_JJdotE_comp(grids[dit], SpaceDim);
+         FArrayBox m_JJdotE_comp(thisbox, SpaceDim);
          m_JJdotE_comp.copy(m_J0_cc[dit], thisbox);
          m_JJdotE_comp.mult(m_E0_cc[dit]);
          m_JJdotE[dit].copy(m_JJdotE_comp,0,0,1);
@@ -1383,12 +1387,13 @@ void IdealMhdOp::setViscosityCoefficient( LevelData<FArrayBox>&  a_etaVisc,
    const DisjointBoxLayout& grids( m_rhoDen_cc.getBoxes() );
 
    // set the ion viscosity coefficients
+   // eta = 0.96*tau*Pi + etaMin
    //
    const double factor = 0.96*0.5; // 1/2 for only ion pressure
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       a_etaVisc[dit].copy(m_pressure[dit]);
-      a_etaVisc[dit].mult(factor*m_tauMax);
-      //a_etaVisc[dit].setVal(factor*m_tauMax);
+      a_etaVisc[dit].mult(factor*m_tau);
+      a_etaVisc[dit].plus(m_etaMin);
    }
    SpaceUtils::upWindToFaces(a_etaVisc_cf,a_etaVisc,a_etaVisc_cf,"c2"); 
    

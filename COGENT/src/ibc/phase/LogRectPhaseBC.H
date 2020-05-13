@@ -94,13 +94,21 @@ class LogRectPhaseBC
       KineticFunction& inflowFunc( const int& a_dir,
                                     const Side::LoHiSide& a_side );
 
-      void fillInflowData( const Real&      a_time );
+      void fillInflowData(KineticSpecies& species_comp,
+                          const CFG::LevelData<CFG::FArrayBox>& phi,
+                          const LevelData<FluxBox>& velocity,
+                          const Real& time);
    
       void setAllBcType( const BoundaryBoxLayoutPtrVect&  a_bdry_layout );
    
       void applySheathBC( KineticSpecies& species,
                           const CFG::LevelData<CFG::FArrayBox>& phi,
                           const LevelData<FluxBox>& velocity);
+   
+      void applyFluxBC( KineticSpecies& species,
+                       const CFG::LevelData<CFG::FArrayBox>& phi,
+                       const LevelData<FluxBox>& velocity,
+                       const Real& time);
 
       inline std::string radialBcType( const Side::LoHiSide& a_side );
       inline std::string poloidalBcType( const Side::LoHiSide& a_side );
@@ -135,7 +143,8 @@ class LogRectPhaseBC
       Vector<std::string> m_bc_type;
       Vector<std::string> m_bdry_name;
       bool m_all_bdry_defined;
-      bool m_logical_sheath;
+      bool m_logical_sheath_bc;
+      bool m_flux_bc;
       ParmParse m_pp;
    
  };

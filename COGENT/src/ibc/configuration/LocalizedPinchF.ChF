@@ -1,0 +1,96 @@
+#include "CONSTANTS.H"
+
+      subroutine set_localized_pinchb(
+     &     CHF_FRA[f],
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[coord],
+     &     CHF_CONST_VR[PreC],
+     &     CHF_CONST_VR[expC],
+     &     )
+c
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      integer n
+      REAL_T x, x2, x4, a, b, c, d, Ptot, P00, P01, P10, P11, rBsq
+      REAL_T gammaVal
+c
+
+      P00 = PreC(0)
+      P01 = PreC(1)
+      P10 = PreC(2)
+      P11 = PreC(3)
+
+      a = expC(0)
+      b = expC(1)
+      c = expC(2)
+      d = expC(3)
+
+c      gammaVal = lgamma(0.5)
+c      print*, "JRA: gammaval(0.5) = ", gammaVal
+
+      do n=0,CHF_NCOMP[f]-1
+      CHF_MULTIDO[box;i;j;k]
+
+          x = coord(CHF_IX[i;j;k])
+          x2 = x*x
+          x4 = x2*x2
+          Ptot = P00 + P01*exp(-c*x2) + P10*exp(-a*x2-b*x4) + P11*exp(-d*x2-b*x4)
+          rBsq = 2*( - x2*(Ptot-P00) + P01/c*(1-exp(-c*x2)) 
+     &               + P10*sqrt(PI/b)/2*exp(a*a/4/b)*(erf((a+2*b*x2)/2/sqrt(b)) - erf(a/2/sqrt(b))) 
+     &               + P11*sqrt(PI/b)/2*exp(d*d/4/b)*(erf((d+2*b*x2)/2/sqrt(b)) - erf(d/2/sqrt(b))) )
+          f(CHF_IX[i;j;k],n) = sqrt(rBsq)/x 
+      
+      CHF_ENDDO
+      enddo
+c
+      return
+      end
+      
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine set_localized_pinchj(
+     &     CHF_FRA[f],
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[coord],
+     &     CHF_CONST_VR[PreC],
+     &     CHF_CONST_VR[expC],
+     &     )
+c
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      integer n
+      REAL_T x, x2, x4, a, b, c, d, Ptot, P00, P01, P10, P11, rBsq
+      REAL_T By, dPdr
+c
+
+      P00 = PreC(0)
+      P01 = PreC(1)
+      P10 = PreC(2)
+      P11 = PreC(3)
+
+      a = expC(0)
+      b = expC(1)
+      c = expC(2)
+      d = expC(3)
+
+      do n=0,CHF_NCOMP[f]-1
+      CHF_MULTIDO[box;i;j;k]
+
+          x = coord(CHF_IX[i;j;k])
+          x2 = x*x
+          x4 = x2*x2
+          Ptot = P00 + P01*exp(-c*x2) + P10*exp(-a*x2-b*x4) + P11*exp(-d*x2-b*x4)
+          dPdr = -2*c*P01*x*exp(-c*x2) - P10*(2*a*x+4*b*x*x2)*exp(-a*x2-b*x4) - P11*(2*d*x+4*b*x*x2)*exp(-d*x2-b*x4) 
+
+          rBsq = 2*( - x2*(Ptot-P00) + P01/c*(1-exp(-c*x2)) 
+     &               + P10*sqrt(PI/b)/2*exp(a*a/4/b)*(erf((a+2*b*x2)/2/sqrt(b)) - erf(a/2/sqrt(b))) 
+     &               + P11*sqrt(PI/b)/2*exp(d*d/4/b)*(erf((d+2*b*x2)/2/sqrt(b)) - erf(d/2/sqrt(b))) )
+          By = sqrt(rBsq)/x 
+
+          f(CHF_IX[i;j;k],n) = -dPdr/By
+      
+      CHF_ENDDO
+      enddo
+c
+      return
+      end

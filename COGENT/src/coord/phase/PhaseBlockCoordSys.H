@@ -110,6 +110,22 @@ class PhaseBlockCoordSys : public NewFourthOrderCoordSys
       void computePsiThetaProjections( FArrayBox& data ) const;
       void computePsiThetaProjections( FluxBox& data ) const;
 
+      /// Multiplies SpaceDim data by injected_data
+      /**
+       * @param[in] injected_data    multiplier
+       * @param[out] data   result
+       */
+      void multInjectedData(const FArrayBox& injected_data,
+                            FArrayBox& data ) const;
+
+      /// Divides SpaceDim data by injected_data
+      /**
+       * @param[in] injected_data    denominator
+       * @param[out] data   result
+       */
+      void divideInjectedData(const FArrayBox& injected_data,
+                              FArrayBox& data ) const;
+
       virtual void cellVol(FArrayBox& vol, const FluxBox& N, const Box& box) const;
 
       /// Returns configuration space mapping.

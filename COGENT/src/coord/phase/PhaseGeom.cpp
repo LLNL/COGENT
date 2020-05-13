@@ -838,10 +838,18 @@ PhaseGeom::updateVelocityNormals( const CFG::LevelData<CFG::FArrayBox>& a_Efield
 {
    // Computes the cell face integral of the normal component of the mapped velocity
    // using equation (24).
+
+   CH_TIME("PhaseGeom::updateVelocityNormals");
    
-   LevelData<FluxBox> XStarOmega(m_gridsFull, 4, IntVect::Unit);
-   LevelData<FluxBox> UhatNormal(m_gridsFull, 1, IntVect::Unit);
-   computeXStarOmega(a_Efield_cell, a_phi_node, a_fourth_order_Efield, XStarOmega, UhatNormal, a_velocity_option);
+   IntVect ghostVect = (m_second_order) ? IntVect::Zero : IntVect::Unit;
+   if (!m_XStarOmega.isDefined()) {
+     m_XStarOmega.define(m_gridsFull, 4, ghostVect);
+   }
+   if (!m_UhatNormal.isDefined()) {
+     m_UhatNormal.define(m_gridsFull, 1, ghostVect);
+   }
+
+   computeXStarOmega(a_Efield_cell, a_phi_node, a_fourth_order_Efield, m_XStarOmega, m_UhatNormal, a_velocity_option);
 
    for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
       for (int dir=0; dir<SpaceDim; ++dir) {
@@ -850,7 +858,7 @@ PhaseGeom::updateVelocityNormals( const CFG::LevelData<CFG::FArrayBox>& a_Efield
 
          if (dir < MU_DIR) {
 
-            FArrayBox& this_XStarOmega_dir = XStarOmega[dit][dir];
+            FArrayBox& this_XStarOmega_dir = m_XStarOmega[dit][dir];
             FArrayBox this_XStarOmega_tdir(this_XStarOmega_dir.box(),1);
 
             int comp = 0;
@@ -877,7 +885,7 @@ PhaseGeom::updateVelocityNormals( const CFG::LevelData<CFG::FArrayBox>& a_Efield
                }
                else {
                   this_vel_dir.negate();
-                  this_vel_dir += UhatNormal[dit][dir];
+                  this_vel_dir += m_UhatNormal[dit][dir];
                }
             }
          }
@@ -895,6 +903,10 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
                               LevelData<FluxBox>&                   a_UhatNormal,
                               const int                             a_velocity_option ) const
 {
+   CH_TIMERS("PhaseGeom::computeXStarOmega");
+   CH_TIMER("inject_integral_quantities",t_inject_integral_quantities);
+   CH_TIMER("compute_Qs",t_compute_Qs);
+   
    const DisjointBoxLayout& grids = m_gridsFull;
    const CFG::DisjointBoxLayout& cfg_grids = m_mag_geom->gridsFull();
 
@@ -904,6 +916,7 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
    m_mag_geom->getIntegralsForVelocity(a_Efield_cell, a_phi_node, a_fourth_order_Efield,
                                       cfg_nodal_integrals, cfg_face_integrals, cfg_volume_integrals);
 
+   CH_START(t_inject_integral_quantities);
    LevelData<FArrayBox> injected_nodal_integrals;
    injectConfigurationToPhase(cfg_nodal_integrals, injected_nodal_integrals);
 
@@ -912,6 +925,7 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
 
    LevelData<FArrayBox> injected_volume_integrals;
    injectConfigurationToPhase(cfg_volume_integrals, injected_volume_integrals);
+   CH_STOP(t_inject_integral_quantities);
 
    int no_parallel_streaming = (   (a_velocity_option == DRIFT_VELOCITY) 
                                 || (a_velocity_option == EXB_DRIFT_VELOCITY)
@@ -921,7 +935,8 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
    int include_magnetic_drift = ( (a_velocity_option == EXB_DRIFT_VELOCITY)
                                || (a_velocity_option == PARALLEL_STREAMING_VELOCITY) )? 0: 1;
    int no_zero_order_parallel = (a_velocity_option == NO_ZERO_ORDER_TERMS)? 1: 0;
-   
+
+   CH_START(t_compute_Qs);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
       RealVect dx = block_coord_sys.dx();
@@ -1031,6 +1046,7 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
          }
       }
    }
+   CH_STOP(t_compute_Qs);
 }
 
 
@@ -1830,6 +1846,8 @@ PhaseGeom::divideBStarParallel( LevelData<FArrayBox>& a_dfn ) const
    // N.B.: This function divides by BStarParallel in ghost cells too.  The
    // result in physical ghosts will only be second order.
 
+   CH_TIME("PhaseGeom::divideBStarParallel");
+   
    const DisjointBoxLayout& grids = a_dfn.disjointBoxLayout();
 
    if ( grids.compatible( m_gridsFull ) ) {
@@ -2146,7 +2164,7 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt ) 
 
       fillCorners(a_data, a_data.ghostVect(), SpaceDim);
    }
-   else if ( m_mag_geom->extrablockExchange() ) {
+   else if ( m_mag_geom->extrablockExchange() && a_data.ghostVect() != IntVect::Zero) {
 
       CH_START(t_exchange_extrablock_ghosts);
 #ifdef NEW_EXTRABLOCK_EXCHANGE
@@ -2192,7 +2210,7 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt ) 
       CH_STOP(t_exchange_extrablock_ghosts);
    }
 #if CFG_DIM == 3
-   else if ( m_mag_geom->shearedMBGeom() ) {
+   else if ( m_mag_geom->shearedMBGeom() && a_data.ghostVect() != IntVect::Zero) {
 
       if (nghost[TOROIDAL_DIR] > 0) {
          // Fill the codim 1 extrablock ghost cells at the toroidal block boundaries
@@ -2832,10 +2850,6 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& a_s
 
    CH_TIME("PhaseGeom::injectConfigurationToPhase");
 
-   if (a_dst.isDefined()) {
-      MayDay::Error("PhaseBlockCoordSys: a_dst LevelData passed to injectConfigurationToPhase is already defined");
-   }
-
    const Box& domainBox = m_domain.domainBox();
 
    // locate these at the low end of the vp- and mu- domains
@@ -2852,8 +2866,17 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& a_s
    LevelData<FArrayBox> vpmu_flattened_dst;
    injectLevelData(vpmu_flattened_dst, CP1_temp, slice_mu);
 
-   // define destination
-   a_dst.define(m_vpmu_flattened_dbl, a_src.nComp(), ghostVect);
+   // define destination (if not defined)
+   if (!a_dst.isDefined()) {
+     a_dst.define(m_vpmu_flattened_dbl, a_src.nComp(), ghostVect);
+   }
+   //otherwise, check that des is consistent with src
+   else {
+     //CH_assert(a_dst.getBoxes() == m_vpmu_flattened_dbl);
+     CH_assert(m_vpmu_flattened_dbl.compatible(a_dst.getBoxes()));
+     CH_assert(a_dst.nComp() == a_src.nComp());
+     CH_assert(a_dst.ghostVect() == ghostVect);
+   }
 
    Vector<int> spreadingDirs;
    spreadingDirs.push_back(VPARALLEL_DIR);
@@ -4849,7 +4872,7 @@ PhaseGeom::fillTransversePhysicalGhosts( LevelData<FArrayBox>& a_var, int a_max_
       Box interior = grow(grids[dit], grow_vect);
 
       if ( !m_phase_coords->containsPhysicalBoundary(block_number, dir, Side::LoHiSide::Lo) ) interior.growLo(dir,1);
-      if ( !m_phase_coords->containsPhysicalBoundary(block_number, dir, Side::LoHiSide::Hi) ) interior.growLo(dir,1);
+      if ( !m_phase_coords->containsPhysicalBoundary(block_number, dir, Side::LoHiSide::Hi) ) interior.growHi(dir,1);
 
       secondOrderTransExtrapAtDomainBdry(a_var[dit],dir,interior,block_domain);
     }
@@ -4880,7 +4903,7 @@ PhaseGeom::fillTransversePhysicalGhosts( LevelData<FluxBox>& a_var, int a_max_di
       for (int tdir=0; tdir<SpaceDim; ++tdir) {
         if (tdir != dir) {
            if ( !m_phase_coords->containsPhysicalBoundary(block_number, tdir, Side::LoHiSide::Lo) ) interior.growLo(tdir,1);
-           if ( !m_phase_coords->containsPhysicalBoundary(block_number, tdir, Side::LoHiSide::Hi) ) interior.growLo(tdir,1);
+           if ( !m_phase_coords->containsPhysicalBoundary(block_number, tdir, Side::LoHiSide::Hi) ) interior.growHi(tdir,1);
         }
       }
 

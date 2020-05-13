@@ -184,6 +184,10 @@ protected:
    RefCountedPtr<GridFunction> m_charge_exchange_coeff;
    RefCountedPtr<GridFunction> m_parallel_conductivity;
 
+   LevelData<FluxBox> m_electron_temperature_face;
+   LevelData<FluxBox> m_parallel_cond_face;
+   LevelData<FluxBox> m_charge_exchange_coeff_face;
+
    MultiBlockLevelExchangeCenter* m_mblx_ptr;
 
    bool m_include_FLR_effects;

@@ -78,7 +78,7 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
     inline void apply(T& a_Y, const T& a_X)
     {
       CH_assert(isDefined() && (m_species_idx >= 0));
-      if (m_im) m_ops->solvePCImEx(a_Y, a_X, m_species_idx);
+      if (m_im) m_ops->solveFluidOpPCImEx(a_Y, a_X, m_species_idx);
       else      m_ops->solveSolutionPC(a_Y, a_X, m_species_idx);
       return;
     }

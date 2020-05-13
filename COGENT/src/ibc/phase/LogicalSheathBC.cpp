@@ -17,21 +17,19 @@
 
 const string LogicalSheathBC::pp_name = "logical_sheath";
 
-LogicalSheathBC::LogicalSheathBC( const BoundaryBoxLayout&  a_bdry_layout,
-                                  const ParmParse&          a_pp)
+LogicalSheathBC::LogicalSheathBC( const BoundaryBoxLayoutPtr&  a_bdry_layout,
+                                  const ParmParse&             a_pp)
 
 : m_bdry_layout(a_bdry_layout),
   m_compute_potential_BC(false)
 {
    // Create boundary dbl, which is one-cell-wide in vpar and mu
-   const DisjointBoxLayout& grids_full( a_bdry_layout.disjointBoxLayout() );
+   const DisjointBoxLayout& grids_full( a_bdry_layout->disjointBoxLayout() );
    DisjointBoxLayout grids_tmp;
    adjCellLo(grids_tmp, grids_full, VPARALLEL_DIR, -1);
    adjCellLo(m_grids_inj, grids_tmp, MU_DIR, -1);
    
-   string prefix =  a_pp.prefix() + string(".") + string(pp_name);
-   ParmParse pp_log_sheath(prefix.c_str());
-   parseParameters( pp_log_sheath );
+   parseParameters( a_pp );
 }
 
 void
@@ -44,7 +42,7 @@ LogicalSheathBC::computeSheathBC(LevelData<FArrayBox>& a_phi_bc,
    const PhaseGrid& phase_grid = geometry.phaseGrid();
    
    // Get dfn and create bdry_data container
-   const DisjointBoxLayout& bdry_dbl( m_bdry_layout.disjointBoxLayout() );
+   const DisjointBoxLayout& bdry_dbl( m_bdry_layout->disjointBoxLayout() );
    LevelData<FArrayBox> bdry_data(bdry_dbl, 1, IntVect::Zero);
    const LevelData<FArrayBox>& dfn = a_species.distributionFunction();
 
@@ -100,14 +98,14 @@ LogicalSheathBC::fillBoundaryData(LevelData<FArrayBox>& a_bdry_data,
    const DisjointBoxLayout& bdry_grids( a_bdry_data.disjointBoxLayout() );
    for (DataIterator dit( bdry_grids ); dit.ok(); ++dit) {
 
-      const DataIndex& interior_dit( m_bdry_layout.dataIndex(dit) );
+      const DataIndex& interior_dit( m_bdry_layout->dataIndex(dit) );
       const FArrayBox& this_dfn( a_dfn[interior_dit] );
       FArrayBox& this_data( a_bdry_data[dit] );
       
       FArrayBox tmp(this_dfn.box(), 1);
       tmp.copy(this_dfn);
-      const int& dir( m_bdry_layout.dir() );
-      const Side::LoHiSide& side( m_bdry_layout.side() );
+      const int& dir( m_bdry_layout->dir() );
+      const Side::LoHiSide& side( m_bdry_layout->side() );
       tmp.shift(dir, sign(side));
       this_data.copy(tmp);
    }
@@ -133,7 +131,6 @@ LogicalSheathBC::sum( const LevelData<FArrayBox>& a_src,
       a_dst[dit].setVal(0.);
    }
    
-   const DisjointBoxLayout& grids_full( m_bdry_layout.disjointBoxLayout() );
    DisjointBoxLayout grids_tmp;
    adjCellLo(grids_tmp, src_grids, VPARALLEL_DIR, -1);
 
@@ -170,8 +167,8 @@ void LogicalSheathBC::applyBC( KineticSpecies& a_species,
     This BC reflects particles that cannot make the potential barrier
     */
    
-   const int& dir( m_bdry_layout.dir() );
-   const Side::LoHiSide& side( m_bdry_layout.side() );
+   const int& dir( m_bdry_layout->dir() );
+   const Side::LoHiSide& side( m_bdry_layout->side() );
    
    LevelData<FArrayBox>& soln( a_species.distributionFunction() );
    const double mass = a_species.mass();
@@ -283,7 +280,7 @@ LogicalSheathBC::computeSheathBC(LevelData<FArrayBox> a_phi_bc,
    int num_config_boxes = phase_grid.numConfigBoxes();
    
    // Fill boundary data object with dfn
-   const DisjointBoxLayout& bdry_dbl( m_bdry_layout.disjointBoxLayout() );
+   const DisjointBoxLayout& bdry_dbl( m_bdry_layout->disjointBoxLayout() );
    LevelData<FArrayBox> bdry_data(bdry_dbl, 1, IntVect::Zero);
    const LevelData<FArrayBox>& dfn = a_species.distributionFunction();
    fillBoundaryData(bdry_data, dfn);

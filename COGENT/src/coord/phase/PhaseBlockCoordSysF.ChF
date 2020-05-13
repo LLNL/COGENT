@@ -81,6 +81,7 @@ c     local variables
 c     local variables
       integer CHF_AUTODECL[i], kk
 
+      kk = CHF_LBOUND[vec_src;2]
       CHF_AUTOMULTIDO[box;i]
 
 #if CH_SPACEDIM==5
@@ -93,3 +94,56 @@ c     local variables
       return
       end
 
+      subroutine mult_injected_data(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[data_inj],
+     &     CHF_FRA[result],
+     & )
+
+c     local variables
+      integer CHF_AUTODECL[i], kk, n
+      double precision injected_data
+
+      kk = CHF_LBOUND[data_inj;2]
+      CHF_AUTOMULTIDO[box;i]
+
+#if CH_SPACEDIM==5
+        kk = i2
+#endif
+        injected_data = data_inj(CHF_IX[i0;i1;kk;CHF_LBOUND[data_inj;3];CHF_LBOUND[data_inj;4]]);
+
+        do n = 0, CHF_NCOMP[result]-1
+          result(CHF_AUTOIX[i],n) = result(CHF_AUTOIX[i],n) * injected_data
+        enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine divide_injected_data(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[data_inj],
+     &     CHF_FRA[result],
+     & )
+
+c     local variables
+      integer CHF_AUTODECL[i], kk, n
+      double precision injected_data
+
+      kk = CHF_LBOUND[data_inj;2]
+      CHF_AUTOMULTIDO[box;i]
+
+#if CH_SPACEDIM==5
+        kk = i2
+#endif
+        injected_data = data_inj(CHF_IX[i0;i1;kk;CHF_LBOUND[data_inj;3];CHF_LBOUND[data_inj;4]]);
+
+        do n = 0, CHF_NCOMP[result]-1
+          result(CHF_AUTOIX[i],n) = result(CHF_AUTOIX[i],n) / injected_data
+        enddo
+
+      CHF_ENDDO
+
+      return
+      end

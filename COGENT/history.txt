@@ -1,4 +1,132 @@
 ------------------------------------------------------------------------
+r1640 | angus1 | 2020-05-11 19:09:14 -0700 (Mon, 11 May 2020) | 1 line
+
+refactoring some high-level functionality from previous check-in
+------------------------------------------------------------------------
+r1639 | angus1 | 2020-05-11 08:45:43 -0700 (Mon, 11 May 2020) | 1 line
+
+initial commit of ExtendedMhd fluid operator
+------------------------------------------------------------------------
+r1638 | mdorf | 2020-05-07 15:46:02 -0700 (Thu, 07 May 2020) | 1 line
+
+Fix a 5D bug for the Linearized collision model
+------------------------------------------------------------------------
+r1637 | angus1 | 2020-04-30 10:01:49 -0700 (Thu, 30 Apr 2020) | 1 line
+
+added new symmetry BC for fluid and new ibc class for localized pinch profiles
+------------------------------------------------------------------------
+r1636 | angus1 | 2020-04-30 08:58:43 -0700 (Thu, 30 Apr 2020) | 1 line
+
+adding some geometry specific functionality for fluid modules
+------------------------------------------------------------------------
+r1635 | angus1 | 2020-04-29 14:34:15 -0700 (Wed, 29 Apr 2020) | 1 line
+
+adding some basic utils for fluid operator calculations
+------------------------------------------------------------------------
+r1634 | mdorf | 2020-04-26 14:36:09 -0700 (Sun, 26 Apr 2020) | 1 line
+
+Updated sample inputs to be consistent with the new BC parsing
+------------------------------------------------------------------------
+r1633 | mdorf | 2020-04-26 13:58:13 -0700 (Sun, 26 Apr 2020) | 1 line
+
+1. Extended FS-averaged particle and heat fluxes diagnostics to 5D. 2. Improved condition for toroidal periodicity (now supports calculations with phi_max > Pi). 3. Cleaned up BC ParmParse
+------------------------------------------------------------------------
+r1632 | mdorr | 2020-04-25 11:26:10 -0700 (Sat, 25 Apr 2020) | 3 lines
+
+Adding an implicit Vlasov option using the BoomerAMG AIR solver.
+
+
+------------------------------------------------------------------------
+r1631 | mdorr | 2020-04-24 14:46:23 -0700 (Fri, 24 Apr 2020) | 3 lines
+
+Removing the hypre-2.9.0b directory and replacing it with a hypre directory that will contain a version of hypre consistent with the current COGENT revision.  This directory now contains the latest hypre release: v2.18.2.
+
+
+------------------------------------------------------------------------
+r1630 | mdorf | 2020-04-17 12:46:05 -0700 (Fri, 17 Apr 2020) | 1 line
+
+Added BC capability to perform flux-driven calculations; also some cosmetic changes to the logical sheath interface
+------------------------------------------------------------------------
+r1629 | mdorf | 2020-04-10 17:27:07 -0700 (Fri, 10 Apr 2020) | 1 line
+
+added cosmetic changes to LinearizedUnlike model
+------------------------------------------------------------------------
+r1628 | mdorf | 2020-04-05 12:58:31 -0700 (Sun, 05 Apr 2020) | 1 line
+
+Performance optimizaton. Significant refactoring of the Linearized collision model; also trimmed extra ghosts in GKPoisson::computeCoefficients() function
+------------------------------------------------------------------------
+r1627 | geyko1 | 2020-04-02 18:33:58 -0700 (Thu, 02 Apr 2020) | 1 line
+
+Changed the name of the 1d utils folder.
+------------------------------------------------------------------------
+r1626 | geyko1 | 2020-04-02 18:30:08 -0700 (Thu, 02 Apr 2020) | 1 line
+
+1. Optimized the code, so that it compiles in MacOS. 2. Radial utils were made easier to read and use, as templates were removed.
+------------------------------------------------------------------------
+r1625 | mdorf | 2020-04-01 17:10:02 -0700 (Wed, 01 Apr 2020) | 1 line
+
+Performance optimization for UnlikeCollisions, updateVelocityNormals, and Anomalous; several new CH timers added.
+------------------------------------------------------------------------
+r1624 | angus1 | 2020-03-30 08:08:32 -0700 (Mon, 30 Mar 2020) | 1 line
+
+removed one-sided differencing at mu_max from dfB_dmu used in anomalous
+------------------------------------------------------------------------
+r1623 | mdorf | 2020-03-28 12:49:00 -0700 (Sat, 28 Mar 2020) | 1 line
+
+Fixed the issue with ConsDgradDiff model introduced in r1600; also improved dbf_dmu calculation in the anomalous transport model
+------------------------------------------------------------------------
+r1622 | mdorf | 2020-03-27 11:34:45 -0700 (Fri, 27 Mar 2020) | 1 line
+
+1. Added new diagnostics (gradPoverN). 2 Fixed fillInternalGhost to support an input with no ghosts (e.g., was required for dfn plotting).  3. Fixed the index overrun issue in FORT_DFBDMU_CELL_CENTER function of Anomalous.cpp. 4. Generalized injectConfigurationToPhase() to support pre-defined destinations. 5. Miscellaneous performance optimization refactoring for Vlasov and Transport models.
+------------------------------------------------------------------------
+r1621 | angus1 | 2020-03-26 06:56:10 -0700 (Thu, 26 Mar 2020) | 1 line
+
+commented out restart option in anomalous input
+------------------------------------------------------------------------
+r1620 | angus1 | 2020-03-25 11:42:24 -0700 (Wed, 25 Mar 2020) | 1 line
+
+adding anomalous to sample_inputs folder
+------------------------------------------------------------------------
+r1619 | mdorf | 2020-03-22 16:23:38 -0700 (Sun, 22 Mar 2020) | 1 line
+
+Fixed a bug in Anomalous transport model introduced in r1608
+------------------------------------------------------------------------
+r1618 | mdorf | 2020-03-21 20:36:29 -0700 (Sat, 21 Mar 2020) | 1 line
+
+Added unlike-species collision model
+------------------------------------------------------------------------
+r1617 | debo | 2020-03-19 22:51:01 -0700 (Thu, 19 Mar 2020) | 1 line
+
+removing a useless alloc
+------------------------------------------------------------------------
+r1616 | debo | 2020-03-19 22:44:51 -0700 (Thu, 19 Mar 2020) | 1 line
+
+Fixing the previous commit for non-trivial LHS
+------------------------------------------------------------------------
+r1615 | debo | 2020-03-19 19:37:46 -0700 (Thu, 19 Mar 2020) | 1 line
+
+in multiphysics PC, with only one PC, setting the initial guess to rhs/shift
+------------------------------------------------------------------------
+r1614 | geyko1 | 2020-03-15 19:26:53 -0700 (Sun, 15 Mar 2020) | 1 line
+
+Fixed MAXDIM 4
+------------------------------------------------------------------------
+r1613 | geyko1 | 2020-03-15 18:56:47 -0700 (Sun, 15 Mar 2020) | 1 line
+
+Fixed a problem with the 5D build due to the absence of proper paths to configuration/1d
+------------------------------------------------------------------------
+r1612 | geyko1 | 2020-03-12 14:07:09 -0700 (Thu, 12 Mar 2020) | 1 line
+
+Added custom magnetic field option in CylindricalBlockCoordSys class
+------------------------------------------------------------------------
+r1611 | mdorf | 2020-03-11 10:23:46 -0700 (Wed, 11 Mar 2020) | 1 line
+
+Modified the input for the two_field_neutrals case to improve GMRES convergence
+------------------------------------------------------------------------
+r1610 | debo | 2020-02-26 11:56:04 -0800 (Wed, 26 Feb 2020) | 1 line
+
+Bugfix in filling transverse domain boundary ghost cells for a fluxbox
+------------------------------------------------------------------------
 r1609 | mdorf | 2020-02-09 14:15:54 -0800 (Sun, 09 Feb 2020) | 1 line
 
 Added code infrustructure to support logical sheath BC development

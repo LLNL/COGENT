@@ -23,7 +23,6 @@ SpaceUtils::upWindToFaces( LevelData<FluxBox>&    a_face_phi,
       upWindToFaces( this_face_phi, this_cell_phi, this_norm_vel, this_dbl_box, a_method );
        
    } 
-   //a_face_phi.exchange();
 
 }
 
@@ -56,16 +55,16 @@ SpaceUtils::upWindToFaces( FluxBox&      this_face_phi,
       Box face_box( a_dbl_box ); 
     
       // for 4th order, need extra face in mapped-grid,
-      // transverse diection to handle 4th-order products  
-      for (int tdir(0); tdir<SpaceDim; tdir++) {
-         if (tdir!=dir) {
-            const int TRANSVERSE_GROW(1);
-            face_box.grow( tdir, TRANSVERSE_GROW );
-         }
-      }
+      // transverse direction to handle 4th-order products  
+      //for (int tdir(0); tdir<SpaceDim; tdir++) {
+      //   if (tdir!=dir) {
+      //      const int TRANSVERSE_GROW(1);
+      //      face_box.grow( tdir, TRANSVERSE_GROW );
+      //   }
+      //}
       
       face_box.surroundingNodes( dir );
-      face_box.grow( dir, 1 );
+      //face_box.grow( dir, 1 );
 
       //  now compute limited face values
          
@@ -155,7 +154,7 @@ SpaceUtils::interpToFaces( LevelData<FluxBox>&    a_face_phi,
       interpToFaces( this_face_phi, this_cell_phi, this_cell_fun, this_norm_vel, this_dbl_box, a_method );
        
    } 
-   //a_face_phi.exchange();
+
 }
 
 void
@@ -184,22 +183,11 @@ SpaceUtils::interpToFaces( FluxBox&      this_face_phi,
          
       if(a_norm_vel.nComp()==SpaceDim) normVelcomp = dir; 
 
-      Box face_box( a_dbl_box ); 
+      Box face_box( a_dbl_box );         // no ghosts 
+      face_box.surroundingNodes( dir );  // grow hi end by 1 in dir direction
     
-      // for 4th order, need extra face in mapped-grid,
-      // transverse diection to handle 4th-order products  
-      for (int tdir(0); tdir<SpaceDim; tdir++) {
-         if (tdir!=dir) {
-            const int TRANSVERSE_GROW(1);
-            face_box.grow( tdir, TRANSVERSE_GROW );
-         }
-      }
-      
-      face_box.surroundingNodes( dir );
-      face_box.grow( dir, 1 );
-
-      //  now compute limited face values
-         
+      // compute limited face values
+      //
       FArrayBox& this_face_phi_dir( this_face_phi[dir] );
       const FArrayBox& this_norm_vel_dir( a_norm_vel[dir] );
       if(a_method=="c2") {
@@ -248,7 +236,7 @@ SpaceUtils::interpToFacesWENO( LevelData<FluxBox>&   a_face_phi,
       interpToFacesWENO( this_face_phi, this_cell_phi, this_norm_vel, this_smooth, this_dbl_box, a_method );
       
    } // end loop over grids
-   //a_face_phi.exchange();
+
 }
 
 void
@@ -312,104 +300,40 @@ SpaceUtils::interpCellToEdges( LevelData<EdgeDataBox>&   a_edge_phi,
                          const LevelData<EdgeDataBox>&   a_norm_vel,
                          const std::string&              a_method )
 {
-   CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit );
-   CH_assert( a_method=="c2" || 
-              a_method=="TVD1st" || a_method=="TVDvanleer" ||
-              a_method=="TVDminmod"  || a_method=="TVDsuperbee" ||
-              a_method=="uw1" || a_method=="uw3" || a_method=="uw5" ||
-              a_method=="quick" || a_method=="weno5" || a_method=="bweno");
-   
-   int this_limiter;
-   if(a_method=="TVD1st")      this_limiter=0;
-   if(a_method=="TVDvanleer")  this_limiter=1;
-   if(a_method=="TVDminmod")   this_limiter=2;
-   if(a_method=="TVDsuperbee") this_limiter=3;
-
+   const IntVect cellgv = a_cell_phi.ghostVect();
+   const IntVect edgegv = a_edge_phi.ghostVect();
+   CH_assert( cellgv >= edgegv || cellgv >= IntVect::Unit );
+   //CH_assert( a_cell_phi.ghostVect() >= a_edge_phi.ghostVect() );
+   //CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit );  
+   CH_assert( a_method=="c2" ); 
+  
    // Note that EdgeDataBox has extra value in each of the non-dir directions,
    // opposed to FluxBox which has extra value in dir direction. 
 
    const DisjointBoxLayout& grids( a_edge_phi.getBoxes() );
-   int normVelcomp = 0;
-
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       
       const FArrayBox& this_cell_phi( a_cell_phi[dit] );
-
       EdgeDataBox& this_edge_phi( a_edge_phi[dit] );
+      
       for (int dir(0); dir<SpaceDim; dir++) {
-         
-         if(a_norm_vel.nComp()==SpaceDim) normVelcomp = dir; 
-
-         //int dir_edge = (dir + 1) % SpaceDim;
-         //cout << "dir = " << dir << endl;
-         //cout << "dir_edge = " << dir_edge << endl;
+         Box edge_box;
+         if(cellgv >= edgegv )
+            edge_box = this_cell_phi.box();    // has ghost 
+         else {
+            edge_box = grids[dit];    // no ghost 
+         }
+         edge_box.surroundingNodes( );  // grow hi end by one in all dirs
+         edge_box.enclosedCells( dir ); // shrink hi end by 1 in dir
          
          FArrayBox& this_edge_phi_dir( this_edge_phi[dir] );
-         const Box& edge_box = this_edge_phi_dir.box();
          const FArrayBox& this_norm_vel_dir( a_norm_vel[dit][dir] );
-         if(a_method=="c2") {
          FORT_C2EDGE( CHF_FRA( this_edge_phi_dir ),
                       CHF_CONST_FRA( this_cell_phi ),
                       CHF_BOX( edge_box ),
                       CHF_CONST_INT( dir ) );
-         } else
-         if(a_method=="uw1") {
-         FORT_UW1EDGE( CHF_FRA( this_edge_phi_dir ),
-                       CHF_CONST_FRA( this_cell_phi ),
-                       CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
-                       CHF_BOX( edge_box ),
-                       CHF_CONST_INT( dir ) );
-         } else
-         if(a_method=="uw3") {
-         FORT_UW3FACE( CHF_FRA( this_edge_phi_dir ),
-                       CHF_CONST_FRA( this_cell_phi ),
-                       CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
-                       CHF_BOX( edge_box ),
-                       CHF_CONST_INT( dir ) );
-         } else
-         if(a_method=="uw5") {
-         FORT_UW5FACE( CHF_FRA( this_edge_phi_dir ),
-                       CHF_CONST_FRA( this_cell_phi ),
-                       CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
-                       CHF_BOX( edge_box ),
-                       CHF_CONST_INT( dir ) );
-         } else
-         if(a_method=="quick") {
-         FORT_QUICKFACE( CHF_FRA( this_edge_phi_dir ),
-                         CHF_CONST_FRA( this_cell_phi ),
-                         CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
-                         CHF_BOX( edge_box ),
-                         CHF_CONST_INT( dir ) );
-         }
-         if(a_method=="weno5") {
-         FArrayBox this_unit_smooth(this_cell_phi.box(),SpaceDim);
-         this_unit_smooth.setVal(1.0);  
-         FORT_WENO5FACE( CHF_FRA( this_edge_phi_dir ),
-                         CHF_CONST_FRA( this_cell_phi ),
-                         CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
-                         CHF_CONST_FRA( this_unit_smooth ),
-                         CHF_BOX( edge_box ),
-                         CHF_CONST_INT( dir ) );
-         }
-         if(a_method=="bweno") {
-         FORT_BWENOFACE( CHF_FRA( this_edge_phi_dir ),
-                         CHF_CONST_FRA( this_cell_phi ),
-                         CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
-                         CHF_BOX( edge_box ),
-                         CHF_CONST_INT( dir ) );
-         }
-         if(a_method=="TVD1st"    || a_method=="TVDvanleer" || 
-            a_method=="TVDminmod" || a_method=="TVDsuperbee") {
-         FORT_TVDFACE( CHF_FRA( this_edge_phi_dir ),
-                       CHF_CONST_FRA( this_cell_phi ),
-                       CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
-                       CHF_BOX( edge_box ),
-                       CHF_CONST_INT( this_limiter ),
-                       CHF_CONST_INT( dir ) );
-         }
       } // end loop over directions
    } // end loop over grids
-   //a_edge_phi.exchange();
 
 }
 
@@ -419,30 +343,247 @@ SpaceUtils::interpEdgesToCell( LevelData<FArrayBox>&    a_cell_phi,
                          const std::string&             a_method )
 {
    CH_TIME("SpaceUtils::interpEdgesToCell()");
-   CH_assert( a_cell_phi.nComp()==SpaceDim );
-   //CH_assert( a_edge_phi.ghostVect()>=a_cell_phi.ghostVect() );
+   const int cell_ncomp = a_cell_phi.nComp();
+   const int edge_ncomp = a_edge_phi.nComp();
+   CH_assert( (cell_ncomp==SpaceDim && edge_ncomp==1 )
+            || cell_ncomp==edge_ncomp );
+   CH_assert( a_edge_phi.ghostVect()>=a_cell_phi.ghostVect() );
    CH_assert( a_method=="c2" );
-   
+
    const DisjointBoxLayout& grids( a_edge_phi.getBoxes() );
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      
+
       FArrayBox& this_cell_phi( a_cell_phi[dit] );
-      //Box cell_box( grids[dit] ); // has no ghosts
       Box cell_box( this_cell_phi.box() ); // has ghosts
-      for (int dir(0); dir<SpaceDim; dir++) {
-         const FArrayBox& this_edge_phi_dir( a_edge_phi[dit][dir] );
-         if(a_method=="c2") {
-            FORT_C2CELL( CHF_BOX( cell_box ),
-                         CHF_CONST_INT( dir ),
-                         CHF_CONST_FRA1( this_edge_phi_dir,0 ),
-                         CHF_FRA1( this_cell_phi,dir ) );
+
+      if(cell_ncomp==SpaceDim && edge_ncomp==1) { // edge_phi is vector
+         for (int dir(0); dir<SpaceDim; dir++) {
+            const FArrayBox& this_edge_phi_dir( a_edge_phi[dit][dir] );
+            if(a_method=="c2") {
+               FORT_C2CELL( CHF_BOX( cell_box ),
+                            CHF_CONST_INT( dir ),
+                            CHF_CONST_FRA1( this_edge_phi_dir,0 ),
+                            CHF_FRA1( this_cell_phi,dir ) );
+            }
+         }
+      }
+      else { // edge_phi is scalar
+         this_cell_phi.setVal(0.0);
+         for (int dir(0); dir<SpaceDim; dir++) {
+            const FArrayBox& this_edge_phi_dir( a_edge_phi[dit][dir] );
+            if(a_method=="c2") {
+               FORT_EDGE_SCALAR_TO_CELL( CHF_BOX( cell_box ),
+                                         CHF_CONST_INT( dir ),
+                                         CHF_CONST_FRA( this_edge_phi_dir ),
+                                         CHF_FRA( this_cell_phi ) );
+            }
          }
       }
 
    }
-   //a_cell_phi.exchange();
 
+}
+
+void
+SpaceUtils::interpEdgesToEdges( LevelData<EdgeDataBox>&  a_edge_out,
+                          const LevelData<EdgeDataBox>&  a_edge_in,
+                          const std::string&             a_method )
+{
+   CH_TIME("SpaceUtils::interpEdgesToEdges()");
+   CH_assert( a_edge_in.nComp()==1 );
+   CH_assert( a_edge_in.ghostVect() >= 1*IntVect::Unit);
+   CH_assert( a_method=="c2" );
+   
+   // interpolate values that live on one edge to the other edges
+   // example: Ein = [Ex_onz, Ez_onx], Eout = [Ex_onx, Ez_onz]
+   //
+   // Hack for 2D right now... need to think about 3D
+   //
+   
+   int dir0=1;
+   const DisjointBoxLayout& grids( a_edge_out.getBoxes() );
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      for (int dir(0); dir<SpaceDim; dir++) {
+         
+         Box edge_box( grids[dit] ); // no ghosts
+         edge_box.surroundingNodes( );  // grow hi end by one in all dirs
+         edge_box.enclosedCells( dir ); // shrink hi end by 1 in dir
+        
+         if(dir==1) dir0=0;
+         const FArrayBox& this_edge_in(  a_edge_in[dit][dir0] );
+               FArrayBox& this_edge_out( a_edge_out[dit][dir] );
+        
+         FORT_C2_EDGES_TO_EDGES( CHF_BOX( edge_box ),
+                                 CHF_CONST_FRA1( this_edge_in,0 ),
+                                 CHF_FRA1( this_edge_out,0 ),
+                                 CHF_CONST_INT( dir ) );
+      }
+
+   }
+
+}
+
+void
+SpaceUtils::interpNodesToEdges( LevelData<EdgeDataBox>&    a_edgePhi_out,
+                          const LevelData<NodeFArrayBox>&  a_nodePhi_in,
+                          const std::string&               a_method )
+{
+   CH_TIME("SpaceUtils::interpNodesToEdges()");
+   CH_assert( a_edgePhi_out.nComp()==a_nodePhi_in.nComp() );
+   CH_assert( a_method=="c2" );
+   
+   // interpolate values that live cell nodes to cell edges
+   //
+   const DisjointBoxLayout& grids( a_edgePhi_out.getBoxes() );
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      for (int dir(0); dir<SpaceDim; dir++) {
+         
+         Box edgebox( grids[dit] ); // no ghosts
+         edgebox.surroundingNodes( );  // grow hi end by one in all dirs
+         edgebox.enclosedCells( dir ); // shrink hi end by 1 in dir
+        
+         const FArrayBox& this_node_in(  a_nodePhi_in[dit].getFab() );
+               FArrayBox& this_edge_out( a_edgePhi_out[dit][dir] );
+        
+         FORT_C2_NODES_TO_EDGES( CHF_BOX( edgebox ),
+                                 CHF_CONST_INT( dir ),
+                                 CHF_CONST_FRA( this_node_in ),
+                                 CHF_FRA( this_edge_out ) );
+      }
+
+   }
+   
+}
+
+void
+SpaceUtils::interpCellsToNodes( LevelData<NodeFArrayBox>&  a_node_phi,
+                          const LevelData<FArrayBox>&      a_cell_phi,
+                          const std::string&               a_method )
+{
+   const IntVect cellgv = a_cell_phi.ghostVect();
+   const IntVect nodegv = a_node_phi.ghostVect();
+   CH_assert( cellgv > nodegv || cellgv >= IntVect::Unit );
+   CH_assert( a_cell_phi.nComp() == a_node_phi.nComp() );
+   CH_assert( a_method=="c2" );
+   
+   
+   const DisjointBoxLayout& grids( a_node_phi.getBoxes() );
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      const FArrayBox& this_cell_phi( a_cell_phi[dit] );
+            FArrayBox& this_node_phi( a_node_phi[dit].getFab() );
+      
+      Box node_box;
+      if(cellgv > nodegv )
+         node_box = this_cell_phi.box();    // has ghost 
+      else {  
+         node_box = grids[dit];    // no ghost 
+      }
+      node_box.surroundingNodes( );  // grow hi end by one in all dirs
+
+      FORT_C2_CELLS_TO_NODES( CHF_BOX( node_box ),
+                             CHF_CONST_FRA( this_cell_phi ),
+                             CHF_FRA( this_node_phi ) );
+   
+   }
+
+}
+
+void
+SpaceUtils::interpNodesToCells( LevelData<FArrayBox>&      a_cellPhi_out,
+                          const LevelData<NodeFArrayBox>&  a_nodePhi_in,
+                          const std::string&               a_method )
+{
+   CH_TIME("SpaceUtils::interpNodesToCells()");
+   CH_assert( a_cellPhi_out.nComp()==a_nodePhi_in.nComp() );
+   CH_assert( a_nodePhi_in.ghostVect() >= a_cellPhi_out.ghostVect() );
+   CH_assert( a_method=="c2" );
+   
+   // interpolate values that live cell nodes to cell centers
+   //
+   const DisjointBoxLayout& grids( a_cellPhi_out.getBoxes() );
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      const FArrayBox& this_node_in(  a_nodePhi_in[dit].getFab() );
+            FArrayBox& this_cell_out( a_cellPhi_out[dit] );
+      
+      //Box cellbox( grids[dit] ); // no ghosts
+      //cellbox.grow( 1 );         // add one layer of ghost cells
+      const Box& cellbox( this_cell_out.box() );        
+
+      FORT_C2_NODES_TO_CELLS( CHF_BOX( cellbox ),
+                              CHF_CONST_FRA( this_node_in ),
+                              CHF_FRA( this_cell_out ) );
+   }
+
+}
+
+void
+SpaceUtils::ParaEdgeGradientAtNodes( NodeFArrayBox&  a_gradPhi,
+                               const EdgeDataBox&    a_edgePhi,
+                               const RealVect&       a_dx,
+                               const Box&            a_box,
+                               const std::string&    a_method )
+{
+   CH_TIME("SpaceUtils::ParaEdgeGradientAtNodes()");
+   CH_assert( a_method=="c2" );
+   
+   // calculate normal gradient at nodes from edge data
+   // i.e.
+   // gradPhi(comp=0) = d(edgePhi0)/dX0
+   // gradPhi(comp=1) = d(edgePhi1)/dX1
+   //
+      
+   FArrayBox& this_gradPhi( a_gradPhi.getFab() );
+   for (int dir(0); dir<SpaceDim; dir++) {
+         
+      double thisdx = a_dx[dir];
+      const FArrayBox& this_edgePhi( a_edgePhi[dir] );
+        
+      FORT_EDGE_GRAD_AT_NODES( CHF_BOX( a_box ),
+                               CHF_CONST_INT( dir ),
+                               CHF_CONST_REAL( thisdx ),
+                               CHF_CONST_FRA1( this_edgePhi,0 ),
+                               CHF_FRA1( this_gradPhi,dir ) );
+   }
+
+}
+
+void
+SpaceUtils::PerpEdgeGradientAtCells( FArrayBox&    a_gradPhi,
+                               const EdgeDataBox&  a_edgePhi,
+                               const RealVect&     a_dx,
+                               const Box&          a_box,
+                               const std::string&  a_method )
+{
+   CH_TIME("SpaceUtils::PerpEdgeGradientAtCells()");
+   CH_assert( a_gradPhi.nComp()==SpaceDim );
+   CH_assert( a_method=="c2" );
+   
+   // calculate cross gradient comps at cells from edge data
+   // i.e.
+   // gradPhi(comp=0) = d(edgePhi0)/dX1
+   // gradPhi(comp=1) = d(edgePhi1)/dX0
+   //
+          
+   int dir0 = 1;
+   for (int dir(0); dir<SpaceDim; dir++) {
+         
+      const FArrayBox& this_edgePhi( a_edgePhi[dir] );
+
+      if(dir==1) dir0 = 0;
+      double thisdx = a_dx[dir0];
+
+      FORT_EDGE_GRAD_AT_CELLS( CHF_BOX( a_box ),
+                               CHF_CONST_INT( dir0 ),
+                               CHF_CONST_REAL( thisdx ),
+                               CHF_CONST_FRA1( this_edgePhi,0 ),
+                               CHF_FRA1( a_gradPhi,dir ) );
+   }
+      
 }
 
 void
@@ -451,28 +592,39 @@ SpaceUtils::interpFacesToCell( LevelData<FArrayBox>&  a_cell_phi,
                          const std::string&           a_method )
 {
    CH_TIME("SpaceUtils::interpFacesToCell()");
-   CH_assert( a_cell_phi.nComp()==SpaceDim );
-   //CH_assert( a_edge_phi.ghostVect()>=a_cell_phi.ghostVect() );
+   CH_assert( (a_cell_phi.nComp() == SpaceDim && a_face_phi.nComp() == 1) ||
+              (a_cell_phi.nComp() == a_face_phi.nComp()) );
    CH_assert( a_method=="c2" );
-   
+
    const DisjointBoxLayout& grids( a_face_phi.getBoxes() );
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      
+
       FArrayBox& this_cell_phi( a_cell_phi[dit] );
       Box cell_box( grids[dit] );
-      for (int dir(0); dir<SpaceDim; dir++) {
-         const FArrayBox& this_face_phi_dir( a_face_phi[dit][dir] );
-         if(a_method=="c2") {
+      if(a_cell_phi.nComp() == SpaceDim && a_face_phi.nComp() == 1) {
+
+         for (int dir(0); dir<SpaceDim; dir++) {
+            const FArrayBox& this_face_phi_dir( a_face_phi[dit][dir] );
             FORT_C2FACETOCELL( CHF_BOX( cell_box ),
                                CHF_CONST_INT( dir ),
                                CHF_CONST_FRA1( this_face_phi_dir,0 ),
                                CHF_FRA1( this_cell_phi,dir ) );
          }
       }
-
-   }
-   //a_cell_phi.exchange();
+      else { // face_phi is scalar
+      
+         this_cell_phi.setVal(0.0);
+         for (int dir(0); dir<SpaceDim; dir++) {
+            const FArrayBox& this_face_phi_dir( a_face_phi[dit][dir] );
+            FORT_FACE_SCALAR_TO_CELL( CHF_BOX( cell_box ),
+                                      CHF_CONST_INT( dir ),
+                                      CHF_CONST_FRA( this_face_phi_dir ),
+                                      CHF_FRA( this_cell_phi ) );
+         }                            
+      }  
+      
+   } 
 
 }
 
@@ -981,17 +1133,20 @@ SpaceUtils::copyAndFillGhostCellsSimple(  LevelData<FArrayBox>&       a_var_wg,
 
 void 
 SpaceUtils::inspectFArrayBox(const LevelData<FArrayBox>&  a_F0,
-                             const int                    a_comp)
+                             const int                    a_comp, 
+                             const int                    a_ghosts )
 {
    CH_assert(a_comp<a_F0.nComp());
+   CH_assert(a_F0.ghostVect() >= a_ghosts*IntVect::Unit);
    const DisjointBoxLayout& grids( a_F0.getBoxes() );
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       
       const FArrayBox& F0_on_patch = a_F0[dit];   
-      const Box& thisbox = F0_on_patch.box();
+      Box cellbox( grids[dit] ); // no ghosts
+      if(a_ghosts) cellbox.grow( a_ghosts );
 
-      FORT_INSPECT_FARRAYBOX( CHF_BOX(thisbox), 
+      FORT_INSPECT_FARRAYBOX( CHF_BOX(cellbox), 
                               CHF_CONST_FRA1(F0_on_patch,a_comp) );
    }
 }
@@ -1007,14 +1162,13 @@ SpaceUtils::inspectFluxBox(const LevelData<FluxBox>&  a_Flux,
       const FluxBox& Flux_on_patch = a_Flux[dit]; 
       //const Box& thisbox = Flux_on_patch.box();
 
-      //Box face_box( Flux_on_patch.box());
-      //face_box.surroundingNodes( a_dir );
-      //face_box.grow( a_dir, 1 );
+      Box facebox( grids[dit] );
+      facebox.surroundingNodes( a_dir );
 
       const FArrayBox& Flux_on_dir = Flux_on_patch[a_dir]; 
-      const Box& thisbox = Flux_on_dir.box();
+      //const Box& thisbox = Flux_on_dir.box();
 
-      FORT_INSPECT_FLUXBOX( CHF_BOX(thisbox), 
+      FORT_INSPECT_FLUXBOX( CHF_BOX(facebox), 
                             CHF_CONST_FRA(Flux_on_dir),
                             CHF_CONST_INT(a_dir) );
    }
@@ -1029,17 +1183,34 @@ SpaceUtils::inspectEdgeDataBox(const LevelData<EdgeDataBox>&  a_Edge,
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       
       const EdgeDataBox& Edge_on_patch = a_Edge[dit]; 
-      const Box& thisbox = Edge_on_patch.box();
-
       const FArrayBox& Edge_on_dir = Edge_on_patch[a_dir]; 
 
-      FORT_INSPECT_FLUXBOX( CHF_BOX(thisbox), 
+      const Box& edgebox = Edge_on_dir.box();
+      FORT_INSPECT_FLUXBOX( CHF_BOX(edgebox), 
                             CHF_CONST_FRA(Edge_on_dir),
                             CHF_CONST_INT(a_dir) );
    }
 }
 
 #if 1
+void
+SpaceUtils::copyEdgeDataBox( EdgeDataBox& a_dst,
+		       const EdgeDataBox& a_src )
+{
+  
+  CH_assert(a_dst.nComp() == a_src.nComp());
+  for (int dir=0; dir<SpaceDim; dir++) {
+     FArrayBox& dst_dir = a_dst[dir];
+     const FArrayBox& src_dir = a_src[dir];
+   
+     Box thisbox(dst_dir.box()); // use the smaller box
+     if(!src_dir.box().contains(dst_dir.box())) thisbox = src_dir.box();
+
+     copy( dst_dir, src_dir, thisbox );
+  }
+
+}
+
 void
 SpaceUtils::copy(  FArrayBox& a_dst,
 		   const FArrayBox& a_src )
@@ -1049,6 +1220,107 @@ SpaceUtils::copy(  FArrayBox& a_dst,
   FORT_COPY(CHF_BOX(a_dst.box()), 
 	    CHF_FRA( a_dst ),
 	    CHF_CONST_FRA( a_src ));
+
+}
+
+void
+SpaceUtils::copy(  FArrayBox& a_dst,
+             const FArrayBox& a_src,
+             const Box&       a_box )
+{
+  CH_assert(a_dst.nComp() == a_src.nComp());
+  CH_assert(a_dst.box().contains(a_box));
+  CH_assert(a_src.box().contains(a_box));
+  FORT_COPY(CHF_BOX( a_box ),
+            CHF_FRA( a_dst ),
+            CHF_CONST_FRA( a_src ));
+
+}
+
+void
+SpaceUtils::copyNodeToCell(  FArrayBox&  a_dst,
+                       const FArrayBox&  a_src,
+                       const Box&        a_box,
+                       const int         a_dir )
+{ 
+  CH_assert(a_dst.nComp() == a_src.nComp());
+  CH_assert(a_dst.box().type(a_dir) == 0);
+  CH_assert(a_src.box().type(a_dir) == 1);
+  //cout << "copyNodeToCell: src.box().type() = " << a_src.box().type() << endl;
+  FORT_COPY(CHF_BOX( a_box ),
+            CHF_FRA( a_dst ),
+            CHF_CONST_FRA( a_src ));
+
+}
+
+void
+SpaceUtils::localVectorNorm(  FArrayBox& a_dst,
+                        const FArrayBox& a_src )
+{ 
+  CH_assert(a_dst.nComp() == 1);
+  CH_assert(a_src.box().contains(a_dst.box()));
+  FORT_VECTOR_NORM( CHF_BOX(a_dst.box()),
+                    CHF_FRA1( a_dst,0 ), 
+                    CHF_CONST_FRA( a_src ) );
+
+}
+
+void
+SpaceUtils::exchangeEdgeDataBox( LevelData<EdgeDataBox>& a_Edge )
+{
+   CH_TIME("SpaceUtils::exchangeEdgeDataBox()");
+   
+   const DisjointBoxLayout& grids( a_Edge.getBoxes() );
+   DataIterator dit = grids.dataIterator();
+
+   // copy to a temporary
+   //
+   LevelData<EdgeDataBox> tmp_Edge(grids, a_Edge.nComp());
+   for (dit.begin(); dit.ok(); ++dit) {
+      for (int dir=0; dir<SpaceDim; ++dir) { 
+         const FArrayBox& Edge_on_dir     = a_Edge[dit][dir]; 
+               FArrayBox& tmp_Edge_on_dir = tmp_Edge[dit][dir]; 
+         copy(tmp_Edge_on_dir,Edge_on_dir);
+      }
+   }
+
+   // call exchange on passed EdgeDataBox
+   //
+   a_Edge.exchange();
+
+   // now use the original data stored in temp to modify
+   // the exchanged Edge data. In this example, I'm copying data on
+   // on the low-side grid edge from temp->Edge, which has the
+   // effect of declaring the high-side value on the shared edge
+   // to be the "correct" value
+
+   for (dit.begin(); dit.ok(); ++dit) {
+      const Box& gridBox = grids[dit];
+      EdgeDataBox& thisTemp = tmp_Edge[dit];
+      EdgeDataBox& thisEdge = a_Edge[dit];
+
+      //cout << "gridBox = " << gridBox << endl;
+      //cout << "bdryLo0 = " << bdryLo(gridBox,0,1) << endl;
+      //cout << "bdryLo1 = " << bdryLo(gridBox,1,1) << endl;
+      //cout << "adjCellLo0 = " << adjCellLo(gridBox,0,1) << endl;
+      //cout << "adjCellLo1 = " << adjCellLo(gridBox,1,1) << endl;
+
+      for (int dir=0; dir<SpaceDim; dir++) {
+         // define a edge-centered box on the low-side of this
+         // grid box
+         Box loEdgeBox;
+         if(dir==0) loEdgeBox = bdryLo(gridBox, 1, 1); 
+         if(dir==1) loEdgeBox = bdryLo(gridBox, 0, 1); 
+  
+         // now copy from temp->Edge on the low edge.
+         // we can be a bit cavalier about this, because
+         // on the edges which are not shared between grids,
+         // exchange shouldn't have changed anything anyway
+         //thisEdge[dir].copy(thisTemp[dir],loEdgeBox);
+         copy(thisEdge[dir],thisTemp[dir],loEdgeBox);
+      } // end loop over directions
+
+   } // end loop over grids on this level
 
 }
 #endif

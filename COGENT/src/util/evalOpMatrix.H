@@ -163,7 +163,7 @@ class EvalOpMatrix
 
     void computeMatrices(const Vector& a_X, Real a_t, int a_i)
     {
-      int op_flag = 0;
+      int op_flag = 1;
       int ndof = a_X.getVectorSize();
       if (!procID()) {
         std::cout << "  Computing operator matrix for RHS (NDOF = " << ndof << ").\n";

@@ -87,7 +87,7 @@ namespace FluidBCUtils {
             
             const FluxBox& this_face_vel( a_velocity[interior_dit] );
 
-            // JRA stuff for rotating momentum vector and applying symmetry BC
+            // JRA: Rotating momentum vector and applying symmetry BC.
             // This is needed for non-planar geometries, such as anodes in dpfs
             //
             if(this_bc_type=="symmetry") {
@@ -180,7 +180,6 @@ namespace FluidBCUtils {
             const Box fill_box( bdry_grids[dit] );
             FArrayBox& this_a_dst( a_dst[bdry_layout.dataIndex(dit)] );
             const DataIndex& interior_dit( bdry_layout.dataIndex(dit) );
-            //cout << "JRA: this_bc_type = " << this_bc_type << endl;
             //if(this_bc_type=="natural") {
                 
                FourthOrderBC::setBC( this_a_dst,

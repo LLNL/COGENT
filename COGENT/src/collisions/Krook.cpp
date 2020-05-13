@@ -41,6 +41,7 @@ Krook::~Krook()
 void Krook::evalClsRHS( KineticSpeciesPtrVect&       a_rhs,
                         const KineticSpeciesPtrVect& a_soln,
                         const int                    a_species,
+                        const int                    a_species_bkgr,
                         const Real                   a_time )
 // NB: a_soln is on the computational grid
 {

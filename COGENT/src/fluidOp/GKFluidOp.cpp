@@ -2,6 +2,7 @@
 #include "OneFieldOp.H"
 #include "BurgersOp.H"
 #include "IdealMhdOp.H"
+#include "ExtendedMhdOp.H"
 #include "FullFluidOp.H"
 #include "TwoFieldNeutralsOp.H"
 #include "NullFluidOp.H"
@@ -13,9 +14,9 @@
 
 #include "NamespaceHeader.H"
 
-GKFluidOp::GKFluidOp( const MagGeom&  a_geometry,
-                      const double    a_larmor,
-                      const int       a_verbose )
+GKFluidOp::GKFluidOp( const MagGeom&      a_geometry,
+                      const PS::GKUnits&  a_units,
+                      const int           a_verbose )
    : m_verbose(a_verbose)
 {
    bool more_fluid_species(true);
@@ -42,7 +43,8 @@ GKFluidOp::GKFluidOp( const MagGeom&  a_geometry,
                model = new NullFluidOp();
             }
             else if (op_type == "VorticityOp") {
-               model = new VorticityOp( prefix, a_geometry, a_larmor, m_verbose );
+               const double larmor( a_units.larmorNumber() );
+               model = new VorticityOp( prefix, a_geometry, larmor, m_verbose );
             }
             else if (op_type == "AmpereErAverageOp") {
                model = new AmpereErAverageOp();
@@ -55,6 +57,15 @@ GKFluidOp::GKFluidOp( const MagGeom&  a_geometry,
             }
             else if (op_type == "IdealMhdOp") {
                model = new IdealMhdOp( prefix, species_name, a_geometry, m_verbose );
+            }
+            else if (op_type == "ExtendedMhdOp") {
+               const double Nscale( a_units.getScale(a_units.NUMBER_DENSITY) );
+               const double Tscale( a_units.getScale(a_units.TEMPERATURE) );
+               const double Xscale( a_units.getScale(a_units.LENGTH) );
+               const double Mscale( a_units.getScale(a_units.MASS) );
+               model = new ExtendedMhdOp( prefix, species_name, a_geometry, 
+                                          Nscale, Tscale, Xscale, Mscale,
+                                          1 );
             }
             else if (op_type == "FullFluidOp") {
                model = new FullFluidOp( prefix, species_name, a_geometry, m_verbose );
@@ -171,6 +182,43 @@ void GKFluidOp::preOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_species_
    }
 }
 
+void GKFluidOp::postStageEval( FluidSpeciesPtrVect&  a_species_comp,
+                               FluidSpeciesPtrVect&  a_species_phys,
+                               const int             a_stage,
+                               const double          a_dt,
+                               const double          a_time )
+{
+   for (int species(0); species<a_species_phys.size(); species++) {
+      FluidSpecies& fluid_comp( static_cast<FluidSpecies&>(*(a_species_comp[species])) );
+      FluidSpecies& fluid_phys( static_cast<FluidSpecies&>(*(a_species_phys[species])) );
+      const std::string species_name( fluid_phys.name() );
+      FluidOpInterface& fluidOp( fluidModel( species_name ) );
+      fluidOp.postStageEval( fluid_comp, fluid_phys, a_dt, a_time, a_stage );
+   }
+}
+
+void GKFluidOp::postTimeEval( FluidSpeciesPtrVect&  a_species_comp,
+                              FluidSpeciesPtrVect&  a_species_phys,
+                              const double          a_dt,
+                              const double          a_time )
+{
+   for (int species(0); species<a_species_phys.size(); species++) {
+      FluidSpecies& fluid_comp( static_cast<FluidSpecies&>(*(a_species_comp[species])) );
+      FluidSpecies& fluid_phys( static_cast<FluidSpecies&>(*(a_species_phys[species])) );
+      const std::string species_name( fluid_phys.name() );
+      FluidOpInterface& fluidOp( fluidModel( species_name ) );
+      fluidOp.postTimeEval( fluid_comp, fluid_phys, a_dt, a_time, 0);
+   }
+}
+
+void GKFluidOp::getMemberVarForPlotting( LevelData<FArrayBox>&  a_Var,
+                                         const FluidSpecies&    a_fluid_species,
+                                         const string           a_var_name )
+{
+   const std::string species_name( a_fluid_species.name() );
+   FluidOpInterface& fluidOp( fluidModel( species_name ) );
+   fluidOp.getMemberVar( a_Var, a_var_name );
+}
 
 void GKFluidOp::convertToPhysical( FluidSpeciesPtrVect&  a_fluid_species_phys,
                              const FluidSpeciesPtrVect&  a_fluid_species_comp ) const
@@ -327,8 +375,6 @@ bool GKFluidOp::trivialSolutionOp( const FluidSpeciesPtrVect& a_fluid_species )
    return trivial;
 }
 
-
-
 void GKFluidOp::initialize( FluidSpeciesPtrVect&  a_fluid_species,
                             const Real            a_time )
 {
@@ -342,7 +388,18 @@ void GKFluidOp::initialize( FluidSpeciesPtrVect&  a_fluid_species,
    }
 }
 
-
+void GKFluidOp::initializeWithBC( FluidSpeciesPtrVect&  a_fluid_comp,
+                                  FluidSpeciesPtrVect&  a_fluid_phys,
+                            const double                a_time )
+{
+   for (int species(0); species<a_fluid_phys.size(); species++) {
+      FluidSpecies& fluid_comp( static_cast<FluidSpecies&>(*(a_fluid_comp[species])) );
+      FluidSpecies& fluid_phys( static_cast<FluidSpecies&>(*(a_fluid_phys[species])) );
+      const std::string species_name( fluid_phys.name() );
+      FluidOpInterface& fluidOp( fluidModel( species_name ) );
+      fluidOp.initializeWithBC(fluid_comp, fluid_phys, a_time);
+   }
+}
 
 void GKFluidOp::fillGhostCells( FluidSpeciesPtrVect&  a_fluid_species,
                                 const double          a_time )
@@ -355,27 +412,23 @@ void GKFluidOp::fillGhostCells( FluidSpeciesPtrVect&  a_fluid_species,
    }
 }
 
-
-
-Real GKFluidOp::computeDtExplicitTI(const FluidSpeciesPtrVect& fluids)
+Real GKFluidOp::computeDtExplicitTI( const FluidSpeciesPtrVect&  fluids_comp )
 {
   Real dt(DBL_MAX);
-
   std::map<std::string,int>::iterator it;
   for (it=m_fluid_model_name.begin(); it!=m_fluid_model_name.end(); ++it) {
-    Real tmp = m_fluid_model[it->second]->computeDtExplicitTI(fluids);
+    Real tmp = m_fluid_model[it->second]->computeDtExplicitTI(fluids_comp);
     dt = (tmp < dt ? tmp : dt);
   }
   return dt;
 }
 
-Real GKFluidOp::computeDtImExTI(const FluidSpeciesPtrVect& fluids)
+Real GKFluidOp::computeDtImExTI( const FluidSpeciesPtrVect&  fluids_comp )
 {
   Real dt(DBL_MAX);
-
   std::map<std::string,int>::iterator it;
   for (it=m_fluid_model_name.begin(); it!=m_fluid_model_name.end(); ++it) {
-    Real tmp = m_fluid_model[it->second]->computeDtImExTI(fluids);
+    Real tmp = m_fluid_model[it->second]->computeDtImExTI(fluids_comp);
     dt = (tmp < dt ? tmp : dt);
   }
   return dt;

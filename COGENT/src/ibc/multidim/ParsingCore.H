@@ -71,6 +71,7 @@ namespace ParsingSpace{
         LN_           ,
         TENPOWER_     ,
         EXPF_         ,
+        ERF_          ,
         SQRT_         ,
         SINH_         ,
         COSH_         ,

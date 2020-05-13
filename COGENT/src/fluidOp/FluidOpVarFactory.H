@@ -5,6 +5,7 @@
 #include "OneFieldOp.H"
 #include "BurgersOp.H"
 #include "IdealMhdOp.H"
+#include "ExtendedMhdOp.H"
 #include "FullFluidOp.H"
 #include "TwoFieldNeutralsOp.H"
 #include "AmpereErAverageOp.H"
@@ -67,6 +68,11 @@ CFGVars* FluidOpVarFactory::create( const string&      a_pp_prefix,
    }
    else if (a_op_type == "IdealMhdOp" ) {
       IdealMhdOp op(prefix, a_species_name, a_geometry, true);
+      result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
+   }
+   else if (a_op_type == "ExtendedMhdOp" ) {
+      ExtendedMhdOp op(prefix, a_species_name, a_geometry, 
+                       0.0, 0.0, 0.0, 0.0, false);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
    }
    else if (a_op_type == "FullFluidOp" ) {

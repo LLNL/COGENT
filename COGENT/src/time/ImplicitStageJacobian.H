@@ -134,8 +134,8 @@ void ImplicitStageJacobian<T,Ops>::define(  const T&    a_state,
 
     if (m_pc_type == _BASIC_GK_PC_) {
       m_preCond = new BasicGKPreconditioner<T,Ops>;
-    } else if (m_pc_type == _AMG_GK_PC_) {
-      m_preCond = new AMGGKPreconditioner<T,Ops>;
+    } else if (m_pc_type == _GK_VLASOV_PC_) {
+      m_preCond = new GKVlasovPreconditioner<T,Ops>;
     } else if (m_pc_type == _MULTIPHYSICS_PC_) {
       m_preCond = new MultiPhysicsPreconditioner<T,Ops>;
     } else {

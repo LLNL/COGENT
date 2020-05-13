@@ -10,6 +10,7 @@
 #define CH_SPACEDIM PDIM
 #include "Scalar.H"
 #include "GlobalDOF.H"
+#include "GKUnit.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 
@@ -33,9 +34,9 @@ class GKFluidOp
       /**
        *  @param[in] pp the input database.
        */
-      GKFluidOp( const MagGeom&  geometry,
-                 const double    larmor,
-                 const int       verbose );
+      GKFluidOp( const MagGeom&      geometry,
+                 const PS::GKUnits&  units,
+                 const int           verbose );
 
       /// Destructor.
       /**
@@ -68,6 +69,21 @@ class GKFluidOp
                       const PS::ScalarPtrVect&           scalars,
                       const EField&                      E_field,
                       const double                       time );
+      
+      void postTimeEval( FluidSpeciesPtrVect&  a_species_comp,
+                         FluidSpeciesPtrVect&  a_species_phys,
+                         const double          a_dt,
+                         const double          a_time );
+
+      void postStageEval( FluidSpeciesPtrVect&  a_species_comp,
+                          FluidSpeciesPtrVect&  a_species_phys,
+                          const int             a_stage,
+                          const double          a_dt,
+                          const double          a_time );
+      
+      void getMemberVarForPlotting( LevelData<FArrayBox>&  a_Var,
+                              const FluidSpecies&          a_fluid_species,
+                              const string                 a_var_name );
 
       virtual void convertToPhysical( FluidSpeciesPtrVect&  a_fluid_species_phys,
                                 const FluidSpeciesPtrVect&  a_fluid_species_comp ) const;
@@ -116,7 +132,11 @@ class GKFluidOp
       bool trivialSolutionOp( const FluidSpeciesPtrVect& fluid_species );
 
       void initialize( FluidSpeciesPtrVect&  fluid_species,
-                       const Real            time );
+                 const Real                  time );
+      
+      void initializeWithBC( FluidSpeciesPtrVect&  fluid_comp,
+                             FluidSpeciesPtrVect&  fluid_phys,
+                       const Real                  time );
 
       void fillGhostCells( FluidSpeciesPtrVect&  fluid_species,
                            const double          time );
@@ -125,8 +145,8 @@ class GKFluidOp
       /**
        * Computes and returns an estimate of the maximum stable time step.
        */
-      Real computeDtExplicitTI( const FluidSpeciesPtrVect&  fluids);
-      Real computeDtImExTI( const FluidSpeciesPtrVect&  fluids);
+      Real computeDtExplicitTI( const FluidSpeciesPtrVect&  fluids_comp );
+      Real computeDtImExTI( const FluidSpeciesPtrVect&  fluids_comp );
    
 
       /// Compute time scale.

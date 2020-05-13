@@ -2,7 +2,7 @@
 #define _CYLINDRICALBLOCKCOORDSYS_H_
 
 #include "MagBlockCoordSys.H"
-
+#include "RadialUtils.H"
 #include "NamespaceHeader.H"
 
 /// Cylindrical magnetic geometry class
@@ -95,20 +95,21 @@ class CylindricalBlockCoordSys
                                      FArrayBox& BFieldDirdotcurlBFieldDir,
                                      const bool derived_data_only = false ) const;
 									 
-		// pointer to class methods
-		void (CylindricalBlockCoordSys::*calcB)(double R, double Z, double* p_B) const;
+  /// Pointer to class methods
+  void (CylindricalBlockCoordSys::*calcB)(double R, double Z, double* p_B) const;
 		
-		// magnetic field types: Const, Toroidal, Bennett
-		void calcBConst(double, double, double*) const;
-		void calcBTor(double, double, double*) const;
-		void calcBBennett(double, double, double*) const;
+  /// Magnetic field types: Const, Toroidal, Bennett, BRData (custom profile for B(r))
+  void calcBConst(double, double, double*) const;
+  void calcBTor(double, double, double*) const;
+  void calcBBennett(double, double, double*) const;
+  void calcBRData(double, double, double*) const;
 
-      virtual void getMagneticFlux( const FArrayBox& physical_coordinates,
+  virtual void getMagneticFlux( const FArrayBox& physical_coordinates,
                                     FArrayBox&       magnetic_flux ) const;
 
-      virtual double getMagneticFlux( const RealVect& a_physical_coordinate ) const;
+  virtual double getMagneticFlux( const RealVect& a_physical_coordinate ) const;
 
-      virtual void getNodalFieldData(FArrayBox& points, FArrayBox& A, FArrayBox& b, FArrayBox& Bmag) const;
+  virtual void getNodalFieldData(FArrayBox& points, FArrayBox& A, FArrayBox& b, FArrayBox& Bmag) const;
 
       /// Return geometry parameters
       /**
@@ -117,24 +118,25 @@ class CylindricalBlockCoordSys
 
   double getRBtoroidal() const;
   
-      // Object ParmParse name.
-      static const std::string pp_name;
-
-      virtual bool isFieldAlignedMapping() const {return false;}
-
-      virtual string geometryType() const {return "Cylindrical";}
+  // Object ParmParse name.
+  static const std::string pp_name;
+  
+  virtual bool isFieldAlignedMapping() const {return false;}
+  
+  virtual string geometryType() const {return "Cylindrical";}
 
    protected:
 
 
-      double m_rmin, m_rmax;
-      double m_zmin, m_zmax;
+  double m_rmin, m_rmax;
+  double m_zmin, m_zmax;
 #if CFG_DIM==3
-      double m_phimin, m_phimax;
+  double m_phimin, m_phimax;
 #endif
-      double m_Btor_scale;	// magnetic constant for toroidal model: B_0*r_0
-      double m_Btor_0;	// magnetic field amplitude for constant and bennett models
-      double m_r0;	// radial size of bennett model
+  double m_Btor_scale;	               /// Magnetic constant for toroidal model: B_0*r_0
+  double m_Btor_0;	               /// Magnetic field amplitude for constant and bennett models
+  double m_r0;	                       /// Radial size of Bennett model
+  HermiteSpline m_B_spline;   /// Hermite spline representation for magnetic field B(r)
 	  
 };
 

@@ -92,6 +92,9 @@ int OperatorData::operToCode(std::string ops)
     else if(ops=="exp"||ops=="EXP"||ops=="Exp"){
         return ParsingSpace::EXPF_;
     }
+    else if(ops=="erf"||ops=="ERF"||ops=="Erf"){
+        return ParsingSpace::ERF_;
+    }
     else if(ops=="sqrt"||ops=="SQRT"||ops=="Sqrt"){
         return ParsingSpace::SQRT_;
     }
@@ -211,6 +214,7 @@ std::string OperatorData::codeToStr()
         case ParsingSpace::LN_         :tempStr="ln"; break;
         case ParsingSpace::TENPOWER_   :tempStr="tenpower"; break;
         case ParsingSpace::EXPF_       :tempStr="exp"; break;
+        case ParsingSpace::ERF_        :tempStr="erf"; break;
         case ParsingSpace::SQRT_       :tempStr="sqrt"; break;
         case ParsingSpace::SINH_       :tempStr="sinh"; break;
         case ParsingSpace::COSH_       :tempStr="cosh"; break;
@@ -263,6 +267,7 @@ std::string OperatorData::codeToStr(int opercode)
         case ParsingSpace::LN_         :tempStr="ln"; break;
         case ParsingSpace::TENPOWER_   :tempStr="tenpower"; break;
         case ParsingSpace::EXPF_       :tempStr="exp"; break;
+        case ParsingSpace::ERF_        :tempStr="erf"; break;
         case ParsingSpace::SQRT_       :tempStr="sqrt"; break;
         case ParsingSpace::SINH_       :tempStr="sinh"; break;
         case ParsingSpace::COSH_       :tempStr="cosh"; break;
@@ -357,6 +362,10 @@ int OperatorData::setOperatorData(std::string ops)
             m_priority=ParsingSpace::PR5_;//30;
             break;
         case ParsingSpace::EXPF_:
+            m_preInPost=ParsingSpace::PREFIX_;
+            m_priority=ParsingSpace::PR5_;//30;
+            break;
+        case ParsingSpace::ERF_:
             m_preInPost=ParsingSpace::PREFIX_;
             m_priority=ParsingSpace::PR5_;//30;
             break;
@@ -1522,6 +1531,9 @@ double ParsingCore::calculate( OperatorData op, double operand1)
             case ParsingSpace::EXPF_:
                 temp=exp(operand1);
                 break;
+            case ParsingSpace::ERF_:
+                temp=erf(operand1);
+                break;
             case ParsingSpace::SQRT_:
                 temp=sqrt(operand1);
                 break;
@@ -1606,6 +1618,9 @@ double ParsingCore::calculate( OperatorData op, double operand1)
                 break;
             case ParsingSpace::EXPF_:
                 temp=exp(operand1);
+                break;
+            case ParsingSpace::ERF_:
+                temp=erf(operand1);
                 break;
             case ParsingSpace::SQRT_:
                 temp=sqrt(operand1);

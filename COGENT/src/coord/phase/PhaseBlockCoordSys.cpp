@@ -365,6 +365,26 @@ PhaseBlockCoordSys::computePsiThetaProjections( FluxBox& a_data ) const
    }
 }
 
+void
+PhaseBlockCoordSys::multInjectedData(const FArrayBox& a_injected_data,
+                                     FArrayBox& a_data ) const
+{
+   CH_assert(a_injected_data.nComp() == 1);
+   FORT_MULT_INJECTED_DATA(CHF_BOX(a_data.box()),
+                           CHF_CONST_FRA1(a_injected_data,0),
+                           CHF_FRA(a_data));
+}
+
+void
+PhaseBlockCoordSys::divideInjectedData(const FArrayBox& a_injected_data,
+                                       FArrayBox& a_data ) const
+{
+   CH_assert(a_injected_data.nComp() == 1);
+   FORT_DIVIDE_INJECTED_DATA(CHF_BOX(a_data.box()),
+                             CHF_CONST_FRA1(a_injected_data,0),
+                             CHF_FRA(a_data));
+}
+
 
 CFG::RealVect
 PhaseBlockCoordSys::config_restrict( const RealVect& a_x ) const

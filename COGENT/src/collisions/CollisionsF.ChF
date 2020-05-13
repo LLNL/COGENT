@@ -246,8 +246,12 @@ c     local variables
          fluxRHS(CHF_IX[i;j;k;l;m],3) = fluxFace(CHF_IX[i;j;k;l;m],1)
 
 #if CH_SPACEDIM==5
+         fluxRHS(CHF_IX[i;j;k;l;m],2) = zero
+         fluxRHS(CHF_IX[i;j;k;l;m],3) = fluxFace(CHF_IX[i;j;k;l;m],0)
+         fluxRHS(CHF_IX[i;j;k;l;m],4) = fluxFace(CHF_IX[i;j;k;l;m],1)
+
          if (m.eq.1) then
-          fluxRHS(CHF_IX[i;j;k;l;m],3) = 1.0/4.0 * fluxCell(CHF_IX[i;j;k;l;m-1],1)
+          fluxRHS(CHF_IX[i;j;k;l;m],4) = 1.0/4.0 * fluxCell(CHF_IX[i;j;k;l;m-1],1)
      &                               + 13.0/12.0 * fluxCell(CHF_IX[i;j;k;l;m],1)
      &                               - 5.0/12.0 * fluxCell(CHF_IX[i;j;k;l;m+1],1)
      &                               + 1.0/12.0 * fluxCell(CHF_IX[i;j;k;l;m+2],1)
@@ -264,11 +268,11 @@ c     local variables
 c        *** Zero out fluxes at the domain bnds to avoid continous sink of particles
 #if CH_SPACEDIM==5
          if ((m.eq.0).or.(m.eq.Nmu)) then
-          fluxRHS(CHF_IX[i;j;k;l;m],3) = 0.0
+          fluxRHS(CHF_IX[i;j;k;l;m],4) = 0.0
          endif
 
          if ((l.eq.-Nvpar/2).or.(l.eq.Nvpar/2)) then
-          fluxRHS(CHF_IX[i;j;k;l;m],2) = 0.0
+          fluxRHS(CHF_IX[i;j;k;l;m],3) = 0.0
          endif
 #else
          if ((l.eq.0).or.(l.eq.Nmu)) then
@@ -380,6 +384,46 @@ c       ***Calculate local v_th=sqrt(2*T/m) and collision frequencies
 
       end
 
+      subroutine evaluate_full_mr(
+     &     CHF_BOX[box],
+     &     CHF_FRA1[rhs],
+     &     CHF_CONST_FRA1[MRest],
+     &     CHF_CONST_FRA1[MNorm],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_CONST_FRA1[b],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[m]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision x,v_th, Norm, nu_S, NuS, vpar
+
+
+      CHF_AUTOMULTIDO[box;i]
+
+#if CH_SPACEDIM==5
+       Norm = MRest(i0,i1,i2,CHF_LBOUND[MRest;3],CHF_LBOUND[MRest;4])/MNorm(i0,i1,i2,CHF_LBOUND[MNorm;3],CHF_LBOUND[MNorm;4])
+       v_th=sqrt(2.0*T(i0,i1,i2,CHF_LBOUND[T;3],CHF_LBOUND[T;4])/m)
+       vpar = dx(0) * (i3 + half)  
+       x=sqrt(vpar**2 + (i4+half)*dx(1)*b(i0,i1,i2,CHF_LBOUND[b;3],CHF_LBOUND[b;4])/m)/v_th
+#else
+       Norm = MRest(i0,i1,CHF_LBOUND[MRest;2],CHF_LBOUND[MRest;3])/MNorm(i0,i1,CHF_LBOUND[MNorm;2],CHF_LBOUND[MNorm;3])
+       v_th=sqrt(2.0*T(i0,i1,CHF_LBOUND[T;2],CHF_LBOUND[T;3])/m)
+       vpar = dx(0) * (i2 + half)
+       x=sqrt(vpar**2 + (i3+half)*dx(1)*b(i0,i1,CHF_LBOUND[b;2],CHF_LBOUND[b;3])/m)/v_th
+#endif
+       
+       nu_S = nuS(x)
+       rhs(CHF_AUTOIX[i]) = - Norm * vpar * nu_S * exp(-x*x)
+
+      CHF_ENDDO
+
+      return
+
+      end
+
+
 
       subroutine evaluate_norm_er_flux(
      &     CHF_CONST_INT[dir],
@@ -482,6 +526,40 @@ c       ***Calculate flux at the mu faces
 
       end
 
+      subroutine evaluate_norm_mr(
+     &     CHF_BOX[box],
+     &     CHF_FRA1[result],
+     &     CHF_CONST_FRA1[T],
+     &     CHF_CONST_FRA1[b],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[m]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision x,v_th, Norm, nu_S, NuS, vpar
+
+
+      CHF_AUTOMULTIDO[box;i]
+
+#if CH_SPACEDIM==5
+       v_th=sqrt(two*T(i0,i1,i2,CHF_LBOUND[T;3],CHF_LBOUND[T;4])/m)
+       vpar = dx(0) * (i3 + half)  
+       x=sqrt(vpar**2 + (i4+half)*dx(1)*b(i0,i1,i2,CHF_LBOUND[b;3],CHF_LBOUND[b;4])/m)/v_th
+#else
+       v_th=sqrt(two*T(i0,i1,CHF_LBOUND[T;2],CHF_LBOUND[T;3])/m)
+       vpar = dx(0) * (i2 + half)
+       x=sqrt(vpar**2 + (i3+half)*dx(1)*b(i0,i1,CHF_LBOUND[b;2],CHF_LBOUND[b;3])/m)/v_th
+#endif
+       
+       nu_S = nuS(x)
+       result(CHF_AUTOIX[i]) = nu_S * vpar * exp(-x*x)
+
+      CHF_ENDDO
+
+      return
+
+      end
 
 
       subroutine compute_sc_cls_freq(
@@ -508,6 +586,39 @@ c     local variables
 
       return
 
+      end
+
+
+      subroutine second_order_cell_to_face(CHF_CONST_FRA[cellData],
+     &                                     CHF_FRA[faceData],
+     &                                     CHF_BOX[faceBox],
+     &                                     CHF_CONST_INT[dir])
+
+c ::: local variables
+      integer CHF_DDECL[i;j;k;l;m;n]
+      integer CHF_DDECL[ii;jj;kk;ll;mm;nn]
+      integer ncomp
+
+      CHF_MULTIDO[faceBox;i;j;k;l;m;n]
+      CHF_DTERM[
+      ii = i-CHF_ID(0,dir);
+      jj = j-CHF_ID(1,dir);
+      kk = k-CHF_ID(2,dir);
+      ll = l-CHF_ID(3,dir);
+      mm = m-CHF_ID(4,dir);
+      nn = n-CHF_ID(5,dir)]
+
+      do ncomp = 0, CHF_NCOMP[cellData]-1
+
+       faceData(CHF_IX[i;j;k;l;m;n],ncomp) = half*(
+     &                     cellData(CHF_IX[i;j;k;l;m;n],ncomp)
+     &                    +cellData(CHF_IX[ii;jj;kk;ll;mm;nn],ncomp))
+
+      enddo
+
+      CHF_ENDDO
+
+      return
       end
 
 

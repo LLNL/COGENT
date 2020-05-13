@@ -154,44 +154,12 @@ void FourthOrderBC::setInflowOutflowBC( FArrayBox&               a_this_soln,
      const int ISIDE(a_side);
      IntVect ghosts = a_boundary_box.size();
      
-     FluxBox this_face_val;
-     this_face_val.define(a_this_face_vel);
-     this_face_val.copy(a_this_face_vel);
-     this_face_val.setVal(0.);
-      
-     Box box = a_this_soln.box();
-     FArrayBox this_soln_copy(box,1);
-     
-     for (int n=0; n<a_this_soln.nComp(); ++n) {
-     
-     if(n==a_dir) {
-     
-        // apply zero value bc to normal components
-        //
-        this_soln_copy.copy(a_this_soln,n,0,1);
-        FORT_FOURTH_ORDER_ODD_BC( CHF_FRA(this_soln_copy),
-                                  CHF_BOX(a_boundary_box),
-	              	          CHF_CONST_INTVECT(ghosts),
-                                  CHF_CONST_INT(a_dir),
-                                  CHF_CONST_INT(ISIDE) );
-        a_this_soln.copy(this_soln_copy,0,n,1);
-     
-     }
-     else {
-     
-        // apply zero gradient bc to tangential components
-        //
-        this_soln_copy.copy(a_this_soln,n,0,1);
-        FORT_FOURTH_ORDER_NEUMANN_BC( CHF_FRA(this_soln_copy),
-                                      CHF_BOX(a_boundary_box),
-	        	      	      CHF_CONST_INTVECT(ghosts),
-                                      CHF_CONST_INT(a_dir),
-                                      CHF_CONST_INT(ISIDE) );
-        a_this_soln.copy(this_soln_copy,0,n,1);
-        
-     }
-     }
-  
+     FORT_FOURTH_ORDER_SYMMETRY_BC( CHF_FRA(a_this_soln),
+                                    CHF_BOX(a_boundary_box),
+	              	            CHF_CONST_INTVECT(ghosts),
+                                    CHF_CONST_INT(a_dir),
+                                    CHF_CONST_INT(ISIDE) );
+
    } 
 }
 
@@ -249,7 +217,7 @@ void FourthOrderBC::setEdgeBC( EdgeDataBox&     a_dst,
    const int ISIDE(a_side);
    const int GROW(1);
    Box a_fill_box_grown = a_fill_box;
-   //cout << "JRA: a_fill_box = " << a_fill_box << endl;
+   
    if (a_bc_type == "neumann_on_edge") {
       a_fill_box_grown.grow(a_dir,GROW);
       
@@ -270,20 +238,29 @@ void FourthOrderBC::setEdgeBC( EdgeDataBox&     a_dst,
 
       // adjust box appropriately depending on dir
       // Note that dir data is stag in all other dirs
+
+      // non-dir data lives on dir edge 
+      // (need to shift bdry_box lower index in a_dir direction by one)
       //
-      if (dir == a_dir) {
-         a_fill_box_grown.growDir(a_dir,a_side,1);
-         for (int dir0=0; dir0<SpaceDim; dir0++) {
-            if (dir0 != a_dir) a_fill_box_grown.growHi(dir0,1);
-         }
-      }
-      else {
-         if(ISIDE==1) a_fill_box_grown.shift(a_dir,1);
-      }
+      if ( dir!=a_dir && ISIDE==1 ) a_fill_box_grown.shift(a_dir,1);
+   
+      // set bounds of box equal to dst box for all dir except a_dir
+      // 
       FArrayBox& this_dst_dir(a_dst[dir]);
+      const Box& thisdstbox( this_dst_dir.box() );
+      for (int dir0=0; dir0<SpaceDim; dir0++) {
+         if(dir0!=a_dir) {
+            a_fill_box_grown.setSmall(dir0,thisdstbox.smallEnd(dir0));
+            a_fill_box_grown.setBig(dir0,thisdstbox.bigEnd(dir0));
+         } 
+      }
+      
+      // set Small (Big) end of a_dir direction to that of dst box depending on ISIDE
+      //
+      if(ISIDE==0) a_fill_box_grown.setSmall(a_dir,thisdstbox.smallEnd(a_dir));
+      if(ISIDE==1) a_fill_box_grown.setBig(a_dir,thisdstbox.bigEnd(a_dir));
    
       if (a_bc_type == "natural") {
-         //cout << "natural for iside = " << ISIDE << endl;
          FORT_FOURTH_ORDER_EXTRAP_BC_ON_EDGE( CHF_FRA(this_dst_dir),
                                               CHF_BOX(a_fill_box_grown),
                                               CHF_CONST_INT(a_dir),

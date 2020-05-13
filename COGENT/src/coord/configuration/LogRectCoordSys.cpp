@@ -410,12 +410,12 @@ LogRectCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
                                          const int              a_nSrc,
                                          const Side::LoHiSide&  a_side ) const
 {
-
-   //Getting the destination block number (nDst)
+   
+   //Get the destination block number (nDst)
    if (a_side == Side::LoHiSide::Lo) a_nDst = a_nSrc - 1;
    if (a_side == Side::LoHiSide::Hi) a_nDst = a_nSrc + 1;
    
-   //Correction for periodicity
+   //Correct for periodicity
    if (a_nDst == numBlocks()) {
      a_nDst = 0;
    }
@@ -434,7 +434,7 @@ LogRectCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    
    //Get mapped cell-centered coord in dst block
    RealVect x_src = src_coord_sys->realCoord(a_xiSrc);
-   applyPeriodicity(x_src);
+   applyPeriodicity(x_src, a_side);
    RealVect xi0_dst = dst_coord_sys->mappedCoord(x_src);
    
    //Get mapped lower-left coord in dst block
@@ -443,7 +443,7 @@ LogRectCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    xiSW_src[POLOIDAL_DIR] += -0.5 * dx_src[POLOIDAL_DIR];
 
    RealVect xSW_src = src_coord_sys->realCoord(xiSW_src);
-   applyPeriodicity(xSW_src);
+   applyPeriodicity(xSW_src, a_side);
    double xiSW_dst = (dst_coord_sys->mappedCoord(xSW_src))[POLOIDAL_DIR];
    
    //Get mapped upper-left coord in dst block
@@ -452,7 +452,7 @@ LogRectCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    xiNW_src[POLOIDAL_DIR] += 0.5 * dx_src[POLOIDAL_DIR];
 
    RealVect xNW_src = src_coord_sys->realCoord(xiNW_src);
-   applyPeriodicity(xNW_src);
+   applyPeriodicity(xNW_src, a_side);
    double xiNW_dst = (dst_coord_sys->mappedCoord(xNW_src))[POLOIDAL_DIR];
    
    //Get mapped upper-right coord in dst block
@@ -461,7 +461,7 @@ LogRectCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    xiNE_src[POLOIDAL_DIR] += 0.5 * dx_src[POLOIDAL_DIR];
 
    RealVect xNE_src = src_coord_sys->realCoord(xiNE_src);
-   applyPeriodicity(xNE_src);
+   applyPeriodicity(xNE_src, a_side);
    double xiNE_dst = (dst_coord_sys->mappedCoord(xNE_src))[POLOIDAL_DIR];
    
    //Get mapped lower-right coord in dst block
@@ -470,7 +470,7 @@ LogRectCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    xiSE_src[POLOIDAL_DIR] += -0.5 * dx_src[POLOIDAL_DIR];
    
    RealVect xSE_src = src_coord_sys->realCoord(xiSE_src);
-   applyPeriodicity(xSE_src);
+   applyPeriodicity(xSE_src, a_side);
    double xiSE_dst = (dst_coord_sys->mappedCoord(xSE_src))[POLOIDAL_DIR];
   
   
@@ -511,7 +511,8 @@ LogRectCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
 }
 
 void
-LogRectCoordSys::applyPeriodicity(RealVect& a_x) const                              
+LogRectCoordSys::applyPeriodicity(RealVect& a_x,
+                                  const Side::LoHiSide&  a_side ) const
 {
 
   const MagBlockCoordSys* src_coord_0 = (MagBlockCoordSys*)getCoordSys(0);
@@ -546,6 +547,12 @@ LogRectCoordSys::applyPeriodicity(RealVect& a_x) const
     double phi = atan2(a_x[1], a_x[0]);
     double r = sqrt(pow(a_x[0],2) + pow(a_x[1],2));
     
+    // Correct for atan2 limits, since valid
+    // toroidal angle runs from 0 to phi_max
+    if (a_side == Side::LoHiSide::Hi && phi < 0.) {
+      phi += 2. * Pi;
+    }
+
     if (phi < 0.0) {
       double phi_reflected = phi + phi_max;
       a_x[0] = r * cos(phi_reflected);

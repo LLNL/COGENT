@@ -367,7 +367,56 @@ c
 c
       return
       end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine fourth_order_symmetry_bc(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_INTVECT[ng],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside]
+     &     )
+
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[is;js;ks;ls;ms]
+      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3;ibeg4]
+      integer n
+      integer isign
+
+      isign = 2*iside-1
+
+      CHF_DTERM[
+      ibeg0 = ibdryboxlo0+CHF_ID(idir,0)*((1-iside)*(ng(0)+1)-1);
+      ibeg1 = ibdryboxlo1+CHF_ID(idir,1)*((1-iside)*(ng(1)+1)-1);
+      ibeg2 = ibdryboxlo2+CHF_ID(idir,2)*((1-iside)*(ng(2)+1)-1);
+      ibeg3 = ibdryboxlo3+CHF_ID(idir,3)*((1-iside)*(ng(3)+1)-1);
+      ibeg4 = ibdryboxlo4+CHF_ID(idir,4)*((1-iside)*(ng(4)+1)-1)]
+
+      do n=0,nfcomp-1
+      CHF_MULTIDO[bdrybox;i;j;k;l;m]
+
+        CHF_DTERM[
+        is = i + CHF_ID(idir,0)*(2*(ibeg0-i)+isign);
+        js = j + CHF_ID(idir,1)*(2*(ibeg1-j)+isign);
+        ks = k + CHF_ID(idir,2)*(2*(ibeg2-k)+isign);
+        ls = l + CHF_ID(idir,3)*(2*(ibeg3-l)+isign);
+        ms = m + CHF_ID(idir,4)*(2*(ibeg4-m)+isign)]
+
+        if (n.eq.idir) then
+          f(CHF_IX[i;j;k;l;m],n) = -f(CHF_IX[is;js;ks;ls;ms],n)
+        else
+          f(CHF_IX[i;j;k;l;m],n) =  f(CHF_IX[is;js;ks;ls;ms],n)
+        endif
+
+      CHF_ENDDO
+      enddo
       
+      return
+      end
+      
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
       subroutine fourth_order_axis_bc(
      &     CHF_FRA[f],
      &     CHF_BOX[bdrybox],

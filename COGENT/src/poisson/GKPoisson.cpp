@@ -225,8 +225,8 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
 
    const DisjointBoxLayout& grids( m_geometry.grids() );
    
-   LevelData<FluxBox> density_sum_face( grids, 1, 2*IntVect::Unit );
-   LevelData<FArrayBox> density_sum_cell( grids, 1, 4*IntVect::Unit );
+   LevelData<FluxBox> density_sum_face( grids, 1, IntVect::Zero );
+   LevelData<FArrayBox> density_sum_cell( grids, 1, 2*IntVect::Unit );
    
    a_ion_mass_density.copyTo( density_sum_cell );
    
@@ -253,38 +253,38 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
    fourthOrderCellToFaceCenters(density_sum_face, density_sum_cell);
 
    //Assign electron temperature
-   LevelData<FluxBox> electron_temperature_face( grids, 1, 2*IntVect::Unit );
-   if ((m_model == "Vorticity") || (m_model == "ParallelCurrent")) {
+   if ((m_model == "Vorticity" || m_model == "ParallelCurrent") && !m_electron_temperature_face.isDefined() ) {
       if (m_electron_temperature == NULL) {
          MayDay::Error("GKPoisson::computeCoefficients() electron temperature should be specified for voriticity model");
       }
-      LevelData<FArrayBox> electron_temperature_cell( grids, 1, 4*IntVect::Unit );
+      LevelData<FArrayBox> electron_temperature_cell( grids, 1, 2*IntVect::Unit );
       m_electron_temperature->assign( electron_temperature_cell, m_geometry, 0.0);
       m_geometry.fillInternalGhosts( electron_temperature_cell );
-      fourthOrderCellToFaceCenters(electron_temperature_face, electron_temperature_cell);
+      m_electron_temperature_face.define( grids, 1, IntVect::Zero );
+      fourthOrderCellToFaceCenters(m_electron_temperature_face, electron_temperature_cell);
    }
    
    //Assign parallel conductivity
-   LevelData<FluxBox> parallel_cond_face( grids, 1, 2*IntVect::Unit );
-   if ((m_model == "Vorticity") || (m_model == "ParallelCurrent")) {
+   if ((m_model == "Vorticity" || m_model == "ParallelCurrent") && !m_parallel_cond_face.isDefined() ) {
       if (m_parallel_conductivity == NULL) {
-         computeParallelConductivity(electron_temperature_face, parallel_cond_face);
+         computeParallelConductivity(m_electron_temperature_face, m_parallel_cond_face);
       }
       else {
-         LevelData<FArrayBox> parallel_cond_cell( grids, 1, 4*IntVect::Unit );
+         LevelData<FArrayBox> parallel_cond_cell( grids, 1, 2*IntVect::Unit );
          m_parallel_conductivity->assign( parallel_cond_cell, m_geometry, 0.0);
          m_geometry.fillInternalGhosts( parallel_cond_cell );
-         fourthOrderCellToFaceCenters(parallel_cond_face, parallel_cond_cell);
+         m_parallel_cond_face.define( grids, 1, IntVect::Zero );
+         fourthOrderCellToFaceCenters(m_parallel_cond_face, parallel_cond_cell);
       }
    }
 
    //Assign charge exchange coefficient
-   LevelData<FluxBox> charge_exchange_coeff_face( grids, 1, 2*IntVect::Unit );
-   if (m_model == "Vorticity" && m_charge_exchange_coeff != NULL) {
-      LevelData<FArrayBox> charge_exchange_coeff_cell( grids, 1, 4*IntVect::Unit );
+   if (m_model == "Vorticity" && m_charge_exchange_coeff != NULL && !m_charge_exchange_coeff_face.isDefined() ) {
+      LevelData<FArrayBox> charge_exchange_coeff_cell( grids, 1, 2*IntVect::Unit );
       m_charge_exchange_coeff->assign( charge_exchange_coeff_cell, m_geometry, 0.0);
       m_geometry.fillInternalGhosts( charge_exchange_coeff_cell );
-      fourthOrderCellToFaceCenters(charge_exchange_coeff_face, charge_exchange_coeff_cell);
+      m_charge_exchange_coeff_face.define( grids, 1, IntVect::Zero );
+      fourthOrderCellToFaceCenters(m_charge_exchange_coeff_face, charge_exchange_coeff_cell);
    }
    
    const IntVect grown_ghosts( m_mapped_coefficients.ghostVect() + IntVect::Unit );
@@ -311,8 +311,8 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
   
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
 
-      const Box& box = a_unmapped_coefficients[dit].box();
-      
+      const Box& box = grids[dit];
+
       FluxBox isotropic_coeff(box, SpaceDim * SpaceDim);
       isotropic_coeff.copy(perp_coeff[dit]);
       isotropic_coeff += par_coeff[dit];
@@ -384,17 +384,17 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
          perp_fac *= m_alpha;
          if (m_charge_exchange_coeff != NULL) {
             FluxBox perp_fac_chx(box, 1);
-            perp_fac_chx.copy(charge_exchange_coeff_face[dit]);
+            perp_fac_chx.copy(m_charge_exchange_coeff_face[dit]);
             perp_fac_chx *= m_dt_implicit;
             perp_fac += perp_fac_chx;
          }
          
          for (int n=0; n<SpaceDim*SpaceDim; ++n) {
             tmp_perp.mult(perp_fac, box, 0, n);
-            tmp_par.mult(parallel_cond_face[dit], box, 0, n);
+            tmp_par.mult(m_parallel_cond_face[dit], box, 0, n);
             
             tmp_perp_mapped.mult(perp_fac, box, 0, n);
-            tmp_par_mapped.mult(parallel_cond_face[dit], box, 0, n);
+            tmp_par_mapped.mult(m_parallel_cond_face[dit], box, 0, n);
          }
 
          tmp_par *= m_dt_implicit;
@@ -411,13 +411,13 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
       else if (m_model == "ParallelCurrent") {
          
          for (int n=0; n<SpaceDim*SpaceDim; ++n) {
-            tmp_par.mult(parallel_cond_face[dit], box, 0, n);
+            tmp_par.mult(m_parallel_cond_face[dit], box, 0, n);
             tmp_par.divide(density_sum_face[dit],box, 0, n);
-	    tmp_par.mult(electron_temperature_face[dit],box, 0, n);
+            tmp_par.mult(m_electron_temperature_face[dit],box, 0, n);
             
-            tmp_par_mapped.mult(parallel_cond_face[dit], box, 0, n);
+            tmp_par_mapped.mult(m_parallel_cond_face[dit], box, 0, n);
             tmp_par_mapped.divide(density_sum_face[dit],box, 0, n);
-	    tmp_par_mapped.mult(electron_temperature_face[dit],box, 0, n);
+            tmp_par_mapped.mult(m_electron_temperature_face[dit],box, 0, n);
          }
 
          tmp_par *= m_dt_implicit;
@@ -431,15 +431,12 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
          MayDay::Error("GKPoisson:: unknown model is specified");
       }
    }
-
-   grown_unmapped_coefficients.exchange();
-   grown_mapped_coefficients.exchange();
-
-   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-      a_unmapped_coefficients[dit].copy(grown_unmapped_coefficients[dit]);
-   }
    
    if (!m_second_order) {
+
+      grown_unmapped_coefficients.exchange();
+      grown_mapped_coefficients.exchange();
+      
       // The mapped coefficients must now be converted to face averages, which
       // requires a layer of transverse ghost faces that we don't have at the
       // physical boundary, so we need to extrapolate them.
@@ -448,13 +445,14 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
       // Convert the mapped coefficients from face-centered to face-averaged
       fourthOrderAverage(grown_mapped_coefficients);
    
-      m_geometry.fillTransverseGhosts(a_unmapped_coefficients, false);
+      m_geometry.fillTransverseGhosts(grown_unmapped_coefficients, false);
       m_geometry.fillTransverseGhosts(grown_mapped_coefficients, false);
 
    }
    
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
       a_mapped_coefficients[dit].copy(grown_mapped_coefficients[dit]);
+      a_unmapped_coefficients[dit].copy(grown_unmapped_coefficients[dit]);
    }
 }
 

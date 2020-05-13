@@ -27,16 +27,20 @@ Anomalous::Anomalous( const string& a_species_name, ParmParse& a_pptpm, const in
       m_model_only(false),
       m_const_coeff(true),
       m_moment_op( MomentOp::instance() ),
-      m_first_step(true),
+      m_first_call(true),
       m_arbitrary_grid(true),
       m_simple_diffusion(false),
+      m_first_stage(true),
+      m_update_freq(-1),
+      m_it_counter(0),
       m_verbosity(0)
 {
 
    m_verbosity = a_verbosity;
    pptpm = a_pptpm;
    species_name = a_species_name;
-
+   
+   ParseParameters();
 }
 
 Anomalous::~Anomalous()
@@ -60,14 +64,15 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
     D_psi = D0
   */
 
-      CH_TIME("Anomalous::evalTpmRHS");   
+      CH_TIMERS("Anomalous::evalTpmRHS");
+      CH_TIMER("copy_to_tmp",t_copy_to_tmp);
+      CH_TIMER("get_moments",t_get_moments);
    
-      // parse the pptpm database for initial condition items for this species
-      if ( m_first_step ) {ParseParameters();}
-
       // print parameters at the first time step
+      // involves kinetic species to print stable dt, improve design later
+      // move print parameters to the class constructor
       const KineticSpecies& soln_species( *(soln[species]) );
-      if ((m_verbosity) && (m_first_step)) {printParameters(soln_species);}
+      if ((m_verbosity) && (m_first_call)) {printParameters(soln_species);}
 
       // get vlasov RHS for the current species
       //KineticSpecies& rhs_species( *(rhs[species]) );
@@ -99,21 +104,44 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
       // set cfg ghost width
       const CFG::IntVect cfg_ghostVect(phase_geom.config_restrict(m_ghostVect));
       
-      // copy const soln_fB (along wiht the boundary values) to a temporary
+      // copy const soln_fB (along with the boundary values) to a temporary
+      // we do it since m_fB can have smaller number of ghosts than soln_fB
+      // and this can speed up moment calculations
+      CH_START(t_copy_to_tmp);
       if ( !m_fB.isDefined()) m_fB.define( dbl, 1, m_ghostVect );
       DataIterator sdit = m_fB.dataIterator();
       for (sdit.begin(); sdit.ok(); ++sdit) {
         m_fB[sdit].copy(soln_fB[sdit]);
       }
+      CH_STOP(t_copy_to_tmp);
 
-      // get density, mean parallel velocity, temperature, and fourth moment coefficient
-      CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-      CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-      CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-      CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-      CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-   
-      if (!m_simple_diffusion) {
+
+      if (m_simple_diffusion) {
+  	 CH_START(t_get_moments);
+         // Create density, mean parallel velocity, temperature, and fourth moment coefficient
+         CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+         
+         phase_geom.injectConfigurationToPhase(dens_cfg, m_density);
+         phase_geom.injectConfigurationToPhase(Upar_cfg, m_Upar);
+         phase_geom.injectConfigurationToPhase(temp_cfg, m_temperature);
+         phase_geom.injectConfigurationToPhase(four_cfg, m_fourth_coef);
+         phase_geom.injectConfigurationToPhase(perp_cfg, m_perp_coef);
+	 CH_STOP(t_get_moments);
+      }
+         
+      else if ((m_update_freq < 0) || (m_it_counter % m_update_freq == 0 && m_first_stage) || m_first_call) {
+	 CH_START(t_get_moments);
+         // Update density, mean parallel velocity, temperature, and fourth moment coefficient
+         CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+
          m_moment_op.compute(dens_cfg, soln_species, m_fB, DensityKernel());
          m_moment_op.compute(Upar_cfg, soln_species, m_fB, ParallelMomKernel());
          m_moment_op.compute(four_cfg, soln_species, m_fB, FourthMomentKernel());
@@ -134,21 +162,16 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
          for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
             four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by temperature
          }
-      }
-   
-      LevelData<FArrayBox> density;
-      LevelData<FArrayBox> Upar;
-      LevelData<FArrayBox> temperature;
-      LevelData<FArrayBox> fourth_coef;
-      LevelData<FArrayBox> perp_coef;
-      phase_geom.injectConfigurationToPhase(dens_cfg, density);
-      phase_geom.injectConfigurationToPhase(Upar_cfg, Upar);
-      phase_geom.injectConfigurationToPhase(temp_cfg, temperature);
-      phase_geom.injectConfigurationToPhase(four_cfg, fourth_coef);
-      phase_geom.injectConfigurationToPhase(perp_cfg, perp_coef);
 
-   
-      if (m_first_step) {
+	 phase_geom.injectConfigurationToPhase(dens_cfg, m_density);
+         phase_geom.injectConfigurationToPhase(Upar_cfg, m_Upar);
+         phase_geom.injectConfigurationToPhase(temp_cfg, m_temperature);
+         phase_geom.injectConfigurationToPhase(four_cfg, m_fourth_coef);
+         phase_geom.injectConfigurationToPhase(perp_cfg, m_perp_coef);
+	 CH_STOP(t_get_moments);
+      }
+      
+      if (m_first_call) {
 
          //get NJinverse and B-field data for dealigned grid calculations
          CFG::LevelData<CFG::FluxBox> pointwiseNJinv_cfg(mag_geom.grids(), CFG_DIM*CFG_DIM, cfg_ghostVect);
@@ -183,14 +206,15 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
          phase_geom.injectConfigurationToPhase( D_cfg_faces, m_D_kinet_faces);
          
          // compute the preconditioner coeffficient for the implicit solver
-         //
          m_precond_D.define(mag_geom.grids(), CFG_DIM * CFG_DIM, CFG::IntVect::Unit);
          computePrecondCoefficient(m_precond_D, mag_geom, D_cfg_faces);
   
       }
 
-      // create cell-centered dfB/dmu
-      if ( !m_dfBdmu_cc.isDefined()) m_dfBdmu_cc.define( dbl, 1, m_ghostVect );
+      // create cell-centered dfB/dmu (presently we only have 2nd order implementation)
+      if ( !m_dfBdmu_cc.isDefined()) m_dfBdmu_cc.define( dbl, 1, IntVect::Unit );
+      CH_assert(soln_fB.ghostVect() > m_dfBdmu_cc.ghostVect());
+      
       DataIterator dit0 = m_dfBdmu_cc.dataIterator();
       for (dit0.begin(); dit0.ok(); ++dit0)
       {  
@@ -198,7 +222,7 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
         const PhaseBlockCoordSys& block_coord_sys = phase_geom.getBlockCoordSys(dbl[dit0]);
         const RealVect& phase_dx =  block_coord_sys.dx();
 
-        const FArrayBox& fB_on_patch = m_fB[dit0];
+        const FArrayBox& fB_on_patch = soln_fB[dit0];
         FArrayBox& dfBdmu_on_patch = m_dfBdmu_cc[dit0];
 
         FORT_DFBDMU_CELL_CENTER( CHF_BOX(dfBdmu_on_patch.box()),
@@ -213,7 +237,7 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
       }
 
       // calculate face-averaged flux
-      if (!m_fluxNorm.isDefined()) m_fluxNorm.define(dbl, 1, m_ghostVect-IntVect::Unit);
+      if (!m_fluxNorm.isDefined()) m_fluxNorm.define(dbl, 1, IntVect::Zero);
       if (!m_flux.isDefined()) m_flux.define(dbl, SpaceDim, m_ghostVect-IntVect::Unit);
       const int simpleDiff = m_simple_diffusion? 1: 0;
       for (DataIterator dit( m_flux.dataIterator() ); dit.ok(); ++dit)
@@ -225,11 +249,11 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
         const FArrayBox& fB_on_patch = m_fB[dit];
         const FArrayBox& dfBdmu_on_patch = m_dfBdmu_cc[dit];
         const FArrayBox& B_on_patch  = inj_B[dit];
-        const FArrayBox& N_on_patch  = density[dit];
-        const FArrayBox& U_on_patch  = Upar[dit];
-        const FArrayBox& T_on_patch  = temperature[dit];
-        const FArrayBox& C_on_patch  = fourth_coef[dit];
-        const FArrayBox& P_on_patch  = perp_coef[dit];
+        const FArrayBox& N_on_patch  = m_density[dit];
+        const FArrayBox& U_on_patch  = m_Upar[dit];
+        const FArrayBox& T_on_patch  = m_temperature[dit];
+        const FArrayBox& C_on_patch  = m_fourth_coef[dit];
+        const FArrayBox& P_on_patch  = m_perp_coef[dit];
          
         for (int dir=0; dir<SpaceDim; dir++)
         {
@@ -242,57 +266,73 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
 
           if(!m_arbitrary_grid) {
             FORT_EVAL_ANOM_FLUX(CHF_CONST_INT(dir),
-                          CHF_BOX(thisfluxNorm.box()),
-                          CHF_CONST_REALVECT(phase_dx),
-                          CHF_CONST_FRA(lame_on_patch),
-                          CHF_CONST_FRA(D_kinet_on_patch),
-                          CHF_CONST_REAL(mass),
-                          CHF_CONST_INT(num_r_cells),
-                          CHF_CONST_INT(simpleDiff),
-                          CHF_CONST_FRA1(fB_on_patch,0),
-                          CHF_CONST_FRA1(dfBdmu_on_patch,0),
-                          CHF_CONST_FRA1(B_on_patch,0),
-                          CHF_CONST_FRA1(N_on_patch,0),
-                          CHF_CONST_FRA1(U_on_patch,0),
-                          CHF_CONST_FRA1(T_on_patch,0),
-                          CHF_CONST_FRA1(C_on_patch,0),
-                          CHF_CONST_FRA1(P_on_patch,0),
-                          CHF_FRA1(thisfluxNorm,0) );
+				CHF_BOX(thisfluxNorm.box()),
+				CHF_CONST_REALVECT(phase_dx),
+				CHF_CONST_FRA(lame_on_patch),
+				CHF_CONST_FRA(D_kinet_on_patch),
+				CHF_CONST_REAL(mass),
+				CHF_CONST_INT(num_r_cells),
+				CHF_CONST_INT(simpleDiff),
+				CHF_CONST_FRA1(fB_on_patch,0),
+				CHF_CONST_FRA1(dfBdmu_on_patch,0),
+				CHF_CONST_FRA1(B_on_patch,0),
+				CHF_CONST_FRA1(N_on_patch,0),
+				CHF_CONST_FRA1(U_on_patch,0),
+				CHF_CONST_FRA1(T_on_patch,0),
+				CHF_CONST_FRA1(C_on_patch,0),
+				CHF_CONST_FRA1(P_on_patch,0),
+				CHF_FRA1(thisfluxNorm,0) );
           } else {
-            //cout << "arb grid check 0 " << endl;
+
+	    Box face_box( dbl[dit] );
+	    // for 4th order, we need an extra face in the mapped-grid,
+	    // transverse directions to handle 4th-order products
+	    if (!second_order) {
+	      for (int tdir(0); tdir<SpaceDim; tdir++) {
+		if (tdir!=dir) {
+                  const int TRANSVERSE_GROW(1);
+                  face_box.grow( tdir, TRANSVERSE_GROW );
+		}
+	      }
+	    }
+	 
+	    // This will turn cell-centered box into
+	    //face-centered box in the direction dir
+	    face_box.surroundingNodes( dir );
+	    
             FORT_EVAL_ANOM_FLUX_NOT_ALIGNED(CHF_CONST_INT(dir),
-                          CHF_BOX(thisflux.box()),
-                          CHF_CONST_REALVECT(phase_dx),
-                          CHF_CONST_FRA(NJinv_on_patch),
-                          CHF_CONST_FRA(bunit_on_patch),
-                          CHF_CONST_FRA(D_kinet_on_patch),
-                          CHF_CONST_REAL(mass),
-                          CHF_CONST_INT(num_r_cells),
-                          CHF_CONST_INT(simpleDiff),
-                          CHF_CONST_FRA1(fB_on_patch,0),
-                          CHF_CONST_FRA1(dfBdmu_on_patch,0),
-                          CHF_CONST_FRA1(B_on_patch,0),
-                          CHF_CONST_FRA1(N_on_patch,0),
-                          CHF_CONST_FRA1(U_on_patch,0),
-                          CHF_CONST_FRA1(T_on_patch,0),
-                          CHF_CONST_FRA1(C_on_patch,0),
-                          CHF_CONST_FRA1(P_on_patch,0),
-                          CHF_FRA(thisflux) );
+					    CHF_BOX(face_box),
+					    CHF_CONST_REALVECT(phase_dx),
+					    CHF_CONST_FRA(NJinv_on_patch),
+					    CHF_CONST_FRA(bunit_on_patch),
+					    CHF_CONST_FRA(D_kinet_on_patch),
+					    CHF_CONST_REAL(mass),
+					    CHF_CONST_INT(num_r_cells),
+					    CHF_CONST_INT(simpleDiff),
+					    CHF_CONST_FRA1(fB_on_patch,0),
+					    CHF_CONST_FRA1(dfBdmu_on_patch,0),
+					    CHF_CONST_FRA1(B_on_patch,0),
+					    CHF_CONST_FRA1(N_on_patch,0),
+					    CHF_CONST_FRA1(U_on_patch,0),
+					    CHF_CONST_FRA1(T_on_patch,0),
+					    CHF_CONST_FRA1(C_on_patch,0),
+					    CHF_CONST_FRA1(P_on_patch,0),
+					    CHF_FRA(thisflux) );
           }
         }
       }
 
       // calculate div(flux)
       if (!m_rhs_transport.isDefined()) m_rhs_transport.define(rhs_dfn);
+
       if (!m_arbitrary_grid) {
          phase_geom.averageAtBlockBoundaries(m_fluxNorm);
          phase_geom.mappedGridDivergenceFromFluxNormals(m_rhs_transport, m_fluxNorm);
       }
       else {
-         //cout << "arb grid check 1 " << endl;
          phase_geom.applyAxisymmetricCorrection(m_flux);
-	 // This averaging is likely unnesessary )at least to 2nd order)
-	 //(as it is also done as part of mappedGridDivergence calculation)
+         // The averaging at block boundaries is likely unnesessary (at least to 2nd order)
+         // (as it is also done as part of mappedGridDivergence calculation)
          phase_geom.averageAtBlockBoundaries(m_flux);
          const bool OMIT_NT(false);
          phase_geom.mappedGridDivergence( m_rhs_transport, m_flux, OMIT_NT );
@@ -301,7 +341,6 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
             double fac( 1.0 / block_coord_sys.getMappedCellVolume() );
             m_rhs_transport[dit].mult( fac );
          }
-
       }
    
       // add (or overwrite) transport RHS to Vlasov RHS
@@ -317,13 +356,16 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
         }
       }
 
-      m_first_step = false;
+      m_first_call = false;
+      m_first_stage = false;
 }
 
 void Anomalous::getFaceCenteredLameCoefficients( LevelData<FluxBox>&       a_lame_faces,
                                                  const PhaseGeom&          a_phase_geom,
                                                  const DisjointBoxLayout&  a_dbl )
 {
+   CH_TIME("Anomalous::getFaceCenteredLameCoefficients");
+   
    // FluxBox to be filled needs 3 components on each face (hr, htheta, and hphi)
    CH_assert(a_lame_faces.nComp() == 3);
    DataIterator dit = a_lame_faces.dataIterator();
@@ -420,7 +462,7 @@ void Anomalous::setTransportCoeffSpatialDependence( CFG::LevelData<CFG::FArrayBo
    }
    if( pptpm.contains("shape_function_D1") ) {
       m_shape_function_D1->assign( D1_cfg, a_mag_geom, a_time, false);
-      m_shape_function_D0->assign( D1_fluid, a_mag_geom, a_time, false);
+      m_shape_function_D1->assign( D1_fluid, a_mag_geom, a_time, false);
    } 
    else {
       for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
@@ -430,7 +472,7 @@ void Anomalous::setTransportCoeffSpatialDependence( CFG::LevelData<CFG::FArrayBo
    }
    if( pptpm.contains("shape_function_D2") ) {
       m_shape_function_D2->assign( D2_cfg, a_mag_geom, a_time, false);
-      m_shape_function_D0->assign( D2_fluid, a_mag_geom, a_time, false);
+      m_shape_function_D2->assign( D2_fluid, a_mag_geom, a_time, false);
    } 
    else {
       for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
@@ -440,7 +482,7 @@ void Anomalous::setTransportCoeffSpatialDependence( CFG::LevelData<CFG::FArrayBo
    }
    if( pptpm.contains("shape_function_D3") ) {
       m_shape_function_D3->assign( D3_cfg, a_mag_geom, a_time, false);
-      m_shape_function_D0->assign( D3_fluid, a_mag_geom, a_time, false);
+      m_shape_function_D3->assign( D3_fluid, a_mag_geom, a_time, false);
    } 
    else {
       for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
@@ -467,7 +509,7 @@ void Anomalous::setTransportCoeffSpatialDependence( CFG::LevelData<CFG::FArrayBo
 
    // if spatial functions are for fluid coefficients, perform arithmetic
    //
-   if (pptpm.contains("m_D_fluid")) { // spatial functions refer to fluid transport coeffs
+   if (pptpm.contains("D_fluid")) { // spatial functions refer to fluid transport coeffs
       //CFG::LevelData<CFG::FArrayBox> D0_fluid, D1_fluid, D2_fluid, D3_fluid;
       //D0_fluid.define(D0_cfg);
       //D1_fluid.define(D1_cfg);
@@ -599,7 +641,7 @@ void Anomalous::ParseParameters()
    pptpm.query("verbosity",m_verbosity);
    CH_assert( m_verbosity == 0 || m_verbosity == 1);
    pptpm.query("arbitrary_grid",m_arbitrary_grid);
-
+   pptpm.query("update_frequency",m_update_freq);
    
    if (pptpm.contains("const_coeff") ) {
      pptpm.get("const_coeff", m_const_coeff);
@@ -675,16 +717,6 @@ void Anomalous::ParseParameters()
    }
 
 }
-
-/*
-void Anomalous::computeStableDt( Real& stableDt, const KineticSpecies& soln ) {
-
-   stableDt = computeDt(soln);
-   // JRA prevent -nan return that occurs before first step and causes code not to run
-   if(stableDt != stableDt) stableDt = 123456.7;
-
-}
-*/
 
 inline void Anomalous::printParameters( const KineticSpecies& soln )
 {
@@ -838,44 +870,43 @@ Anomalous::computeBeta(LevelData<FArrayBox>& a_beta,
    }
 
    // get density, mean parallel velocity, temperature, and fourth moment coefficient
-   CFG::IntVect	cfg_ghostVect =	CFG::IntVect::Unit;
-   CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-   CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-   CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-   CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-   CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+   if ((m_update_freq < 0) || (m_it_counter % m_update_freq == 0) || m_first_call) {
+      
+      CFG::IntVect	cfg_ghostVect =	CFG::IntVect::Unit;
+      CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
 
-   m_moment_op.compute(dens_cfg, a_soln_species, m_fB_beta, DensityKernel());
-   m_moment_op.compute(Upar_cfg, a_soln_species, m_fB_beta, ParallelMomKernel());
-   m_moment_op.compute(four_cfg, a_soln_species, m_fB_beta, FourthMomentKernel());
-   m_moment_op.compute(perp_cfg, a_soln_species, m_fB_beta, PerpEnergyKernel());
-   CFG::DataIterator cfg_dit = dens_cfg.dataIterator();
-   for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
-     Upar_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
-   }
-   m_moment_op.compute(temp_cfg, a_soln_species, m_fB_beta, PressureKernel(Upar_cfg));
+      m_moment_op.compute(dens_cfg, a_soln_species, m_fB_beta, DensityKernel());
+      m_moment_op.compute(Upar_cfg, a_soln_species, m_fB_beta, ParallelMomKernel());
+      m_moment_op.compute(four_cfg, a_soln_species, m_fB_beta, FourthMomentKernel());
+      m_moment_op.compute(perp_cfg, a_soln_species, m_fB_beta, PerpEnergyKernel());
+      CFG::DataIterator cfg_dit = dens_cfg.dataIterator();
+      for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+         Upar_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
+      }
+      m_moment_op.compute(temp_cfg, a_soln_species, m_fB_beta, PressureKernel(Upar_cfg));
 
-   for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
-     four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by pressure
-     perp_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by pressure
-   }
-   for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
-     temp_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
-   }
-   for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
-     four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by temperature
-   }
-   LevelData<FArrayBox> density;
-   LevelData<FArrayBox> Upar;
-   LevelData<FArrayBox> temperature;
-   LevelData<FArrayBox> fourth_coef;
-   LevelData<FArrayBox> perp_coef;
-   phase_geom.injectConfigurationToPhase(dens_cfg, density);
-   phase_geom.injectConfigurationToPhase(Upar_cfg, Upar);
-   phase_geom.injectConfigurationToPhase(temp_cfg, temperature);
-   phase_geom.injectConfigurationToPhase(four_cfg, fourth_coef);
-   phase_geom.injectConfigurationToPhase(perp_cfg, perp_coef);
+      for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+         four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by pressure
+         perp_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by pressure
+      }
+      for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+         temp_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
+      }
+      for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+         four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by temperature
+      }
 
+      phase_geom.injectConfigurationToPhase(dens_cfg, m_density_beta);
+      phase_geom.injectConfigurationToPhase(Upar_cfg, m_Upar_beta);
+      phase_geom.injectConfigurationToPhase(temp_cfg, m_temperature_beta);
+      phase_geom.injectConfigurationToPhase(four_cfg, m_fourth_coef_beta);
+      phase_geom.injectConfigurationToPhase(perp_cfg, m_perp_coef_beta);
+   }
+   
    DataIterator bdit = a_beta.dataIterator();
    for (bdit.begin(); bdit.ok(); ++bdit)
    {
@@ -884,11 +915,11 @@ Anomalous::computeBeta(LevelData<FArrayBox>& a_beta,
      const RealVect& phase_dx =  block_coord_sys.dx();
 
      const FArrayBox& B_on_patch  = inj_B[bdit];
-     const FArrayBox& N_on_patch  = density[bdit];
-     const FArrayBox& U_on_patch  = Upar[bdit];
-     const FArrayBox& T_on_patch  = temperature[bdit];
-     const FArrayBox& C_on_patch  = fourth_coef[bdit];
-     const FArrayBox& P_on_patch  = perp_coef[bdit];
+     const FArrayBox& N_on_patch  = m_density_beta[bdit];
+     const FArrayBox& U_on_patch  = m_Upar_beta[bdit];
+     const FArrayBox& T_on_patch  = m_temperature_beta[bdit];
+     const FArrayBox& C_on_patch  = m_fourth_coef_beta[bdit];
+     const FArrayBox& P_on_patch  = m_perp_coef_beta[bdit];
 
      FORT_EVAL_BETA( CHF_BOX(a_beta[bdit].box()),
                      CHF_CONST_REALVECT(phase_dx),
@@ -904,6 +935,15 @@ Anomalous::computeBeta(LevelData<FArrayBox>& a_beta,
                      CHF_FRA1(a_beta[bdit],0) );
    }
 
+}
+
+void Anomalous::preTimeStep(const KineticSpeciesPtrVect& a_soln_mapped,
+                            const int a_species,
+                            const Real a_time,
+                            const KineticSpeciesPtrVect& a_soln_physical )
+{
+   m_it_counter+=1;
+   m_first_stage = true;
 }
 
 #include "NamespaceFooter.H"

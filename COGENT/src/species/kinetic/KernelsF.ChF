@@ -43,6 +43,33 @@ c     local variables
       return
       end
 
+      subroutine compute_vel_cell_normals(
+     &     CHF_FRA1[velCell],
+     &     CHF_FRA[velFace],
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox]
+     &     )
+
+c     *** This is a second-order calculation 
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m], CHF_DDECL[ii;jj;kk;ll;mm]
+
+      CHF_DTERM[
+      ii = CHF_ID(0,dir);
+      jj = CHF_ID(1,dir);
+      kk = CHF_ID(2,dir);
+      ll = CHF_ID(3,dir);
+      mm = CHF_ID(4,dir)]
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m]
+
+           velCell(CHF_IX[i;j;k;l;m]) = half * (velFace(CHF_IX[i;j;k;l;m],dir)
+     &                                        + velFace(CHF_IX[i+ ii;j+ jj;k+ kk;l+ ll;m+ mm],dir) ) 
+             
+      CHF_ENDDO
+
+      return
+      end
 
 
       subroutine compute_perp_vel(

@@ -1,8 +1,0 @@
-#!/bin/sh
-
-cd src
-make -j all install
-name=$(grep "^prefix='" config.log | sed s/\'//g | sed 's/.*\///')
-cd ..
-rm -f hypre_loc
-ln -s lib/$name hypre_loc

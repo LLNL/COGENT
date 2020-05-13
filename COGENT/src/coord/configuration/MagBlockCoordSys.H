@@ -5,6 +5,7 @@
 #include "DisjointBoxLayout.H"
 #include "NewFourthOrderCoordSys.H"
 #include "EdgeDataBox.H"
+#include "NodeFArrayBox.H"
 
 #include "NamespaceHeader.H"
 
@@ -99,6 +100,10 @@ class MagBlockCoordSys
 
       virtual void cellVol(FArrayBox& vol, const FluxBox& N, const Box& box) const;
 
+      virtual void pointwiseFaceAreas( FluxBox& face_areas ) const;
+   
+      virtual void pointwiseFaceAreas( FArrayBox& face_areas ) const;
+   
       virtual void getNodeCenteredMappedCoords(FArrayBox& xi) const;
 
       virtual void getCellCenteredMappedCoords(FArrayBox& xi) const;
@@ -112,6 +117,8 @@ class MagBlockCoordSys
       virtual void pointwiseJ( FluxBox& a_J ) const;
       
       virtual void pointwiseJ( EdgeDataBox& a_J ) const;
+      
+      virtual void pointwiseJ( NodeFArrayBox& a_J ) const;
 
 #if 1
 void

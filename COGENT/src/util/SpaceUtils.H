@@ -8,6 +8,7 @@
 #include "Box.H"
 #include "FArrayBox.H"
 #include "EdgeDataBox.H"
+#include "NodeFArrayBox.H"
 
 #include "NamespaceHeader.H"
 
@@ -66,6 +67,34 @@ namespace SpaceUtils {
                     const LevelData<EdgeDataBox>&,
                     const std::string& );
   
+  void interpEdgesToEdges( LevelData<EdgeDataBox>&,
+                     const LevelData<EdgeDataBox>&,
+                     const std::string& );
+
+  void interpNodesToEdges( LevelData<EdgeDataBox>&,
+                     const LevelData<NodeFArrayBox>&,
+                     const std::string& );
+
+  void interpNodesToCells( LevelData<FArrayBox>&,
+                     const LevelData<NodeFArrayBox>&,
+                     const std::string& );
+
+  void interpCellsToNodes( LevelData<NodeFArrayBox>&,
+                     const LevelData<FArrayBox>&,
+                     const std::string& );
+
+  void ParaEdgeGradientAtNodes( NodeFArrayBox&,
+                          const EdgeDataBox&,
+                          const RealVect&,
+                          const Box&,
+                          const std::string& );
+
+  void PerpEdgeGradientAtCells( FArrayBox&,
+                          const EdgeDataBox&,
+                          const RealVect&,
+                          const Box&,
+                          const std::string& );
+
   void interpFacesToCell( LevelData<FArrayBox>&,
                     const LevelData<FluxBox>&,
                     const std::string& );
@@ -136,6 +165,7 @@ namespace SpaceUtils {
                                     const LevelData<FArrayBox>& );
   
   void inspectFArrayBox( const LevelData<FArrayBox>&,
+                         const int,
                          const int                   );
   
   void inspectFluxBox( const LevelData<FluxBox>&,
@@ -144,9 +174,25 @@ namespace SpaceUtils {
   void inspectEdgeDataBox( const LevelData<EdgeDataBox>&,
                            const int                     );
 
+  void exchangeEdgeDataBox( LevelData<EdgeDataBox>& );
+
+  void copyEdgeDataBox( EdgeDataBox&,
+                  const EdgeDataBox& );
 
   void copy( FArrayBox&,
 	     const FArrayBox& );
+
+  void copy( FArrayBox&,
+       const FArrayBox&,
+       const Box&        );
+
+  void copyNodeToCell( FArrayBox&,
+                 const FArrayBox&,
+                 const Box&,
+                 const int );
+
+  void localVectorNorm( FArrayBox&,
+                  const FArrayBox& );
 
 }
 

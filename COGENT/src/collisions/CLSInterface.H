@@ -37,28 +37,37 @@ class CLSInterface
        *  @param[in,out] rhs - collision contribution to be added to rhs.
        *  @param[in] soln - kinetic species.
        *  @param[in] species - species to which collision model is applied.
+       *  @param[in] species_bkgr - background species, which the species collides with 
        *  @param[in] time the time at which the collison RHS is to be evaluated
        */
       virtual void evalClsRHS( KineticSpeciesPtrVect&       rhs,
                                const KineticSpeciesPtrVect& soln,
                                const int                    species,
+                               const int                    species_bkgr,
                                const Real                   time ) = 0;
 
       virtual void evalClsRHSImplicit( KineticSpeciesPtrVect&       rhs,
                                        const KineticSpeciesPtrVect& soln,
                                        const int                    species,
+                                       const int                    species_bkgr,
                                        const Real                   time ) = 0;
 
       virtual void evalClsRHSExplicit( KineticSpeciesPtrVect&       rhs,
                                        const KineticSpeciesPtrVect& soln,
                                        const int                    species,
+                                       const int                    species_bkgr,
                                        const Real                   time ) = 0;
 
       virtual inline bool isLinear() { return false; }
       
-      virtual Real computeDtExplicitTI(const KineticSpeciesPtrVect& soln, const int i) = 0;
-      virtual Real computeDtImExTI(const KineticSpeciesPtrVect& soln, const int i) = 0;
-      virtual Real computeTimeScale(const KineticSpeciesPtrVect& soln, const int i) = 0;
+      virtual Real computeDtExplicitTI(const KineticSpeciesPtrVect& soln,
+                                       const int                    species) = 0;
+
+      virtual Real computeDtImExTI(const KineticSpeciesPtrVect& soln,
+                                   const int                    species) = 0;
+
+      virtual Real computeTimeScale(const KineticSpeciesPtrVect& soln,
+                                    const int                    species) = 0;
 
       virtual int precondMatrixBands() { return(0); }
 

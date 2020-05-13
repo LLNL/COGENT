@@ -154,6 +154,9 @@ MBHypreSolver::solve( const LevelData<FArrayBox>&  a_rhs,
                       LevelData<FArrayBox>&        a_solution,
                       bool                         a_homogeneous_bcs )
 {
+   CH_TIMERS("MBHypreSolver::solve");
+   CH_TIMER("HYPRE_SStructVectorAssemble",t_HYPRE_SStructVectorAssemble);
+   
    if ( !m_convergence_params_set ) {
       MayDay::Error("MBHypreSolver::solve(): solver convergence parameters have not been set");
    }
@@ -176,8 +179,10 @@ MBHypreSolver::solve( const LevelData<FArrayBox>&  a_rhs,
 
    /* This is a collective call finalizing the vector assembly.
       The vectors are now ``ready to be used'' */
+   CH_START(t_HYPRE_SStructVectorAssemble);
    HYPRE_SStructVectorAssemble(m_b);
    HYPRE_SStructVectorAssemble(m_x);
+   CH_STOP(t_HYPRE_SStructVectorAssemble);
 
    if ( m_method == "GMRES" ) {
       AMG_preconditioned_GMRES( m_A, m_A, m_b, m_method_tol, m_method_max_iter,
@@ -1123,6 +1128,7 @@ void
 MBHypreSolver::copyToHypreVector( const LevelData<FArrayBox>&  a_in,
                                   HYPRE_SStructVector&         a_out ) const
 {
+   CH_TIME("MBHypreSolver::copyToHypreVector");
    int var = 0;
 
    const DisjointBoxLayout & grids = a_in.disjointBoxLayout();

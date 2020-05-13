@@ -147,9 +147,9 @@ class GKSystem
       void postTimeStep (int,Real,Real);
 
       inline
-      void postTimeStage( const int a_step,const Real a_time, const int a_stage )
+      void postTimeStage( const int a_step, const Real a_time, const Real a_dt, const int a_stage )
         {
-           m_gk_ops->postTimeStage( a_step, a_time, m_state_comp, a_stage );
+           m_gk_ops->postTimeStage( a_step, a_time, a_dt, m_state_comp, a_stage );
         }
 
       int  getVectorSize()  { return m_state_comp.getVectorSize(); }
@@ -309,6 +309,7 @@ class GKSystem
       bool m_hdf_vpartheta;
       bool m_hdf_rtheta;
       bool m_hdf_pressure;
+      bool m_hdf_gradPoverN;
       bool m_hdf_parallelHeatFlux;
       bool m_hdf_temperature;
       bool m_hdf_fourthMoment;

@@ -61,12 +61,18 @@ class Kernel
        */
       virtual int nComponents() const = 0;
     
-      ///Computes cell-centered psi and theta velocity projections
-
+      ///Computes cell-centered physical velocity components (e.g., V_R, V_Z)
       virtual void computeCellVelCfgComp(LevelData<FArrayBox>&     velCell,
                                          const PhaseGeom&          phase_geom,
                                          const LevelData<FluxBox>& field,
                                          const int                 option) const;
+
+      ///Computes cell-centered projections of the physical velocity components onto normals
+      virtual void computeCellVelCfgCompNormals(LevelData<FArrayBox>&     velCell,
+                                                const PhaseGeom&          phase_geom,
+                                                const LevelData<FluxBox>& field,
+                                                const int                 option) const;
+
 };
 
 /// Density kernel.

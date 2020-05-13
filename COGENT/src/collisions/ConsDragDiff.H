@@ -48,27 +48,30 @@ public:
   Real computeDtImExTI( const KineticSpeciesPtrVect&  soln, const int species);
   Real computeTimeScale( const KineticSpeciesPtrVect&  soln, const int species);
 
-  virtual void evalClsRHS( KineticSpeciesPtrVect&        rhs,
-                           const KineticSpeciesPtrVect&  soln,
-                           const int                     species,
-                           const Real                    time );
+  virtual void evalClsRHS( KineticSpeciesPtrVect&       rhs,
+                           const KineticSpeciesPtrVect& soln,
+                           const int                    species,
+                           const int                    species_bkgr,
+                           const Real                   time );
 
   inline
   virtual void evalClsRHSExplicit( KineticSpeciesPtrVect&        a_rhs,
                                    const KineticSpeciesPtrVect&  a_soln,
                                    const int                     a_species,
+                                   const int                     a_species_bkgr,
                                    const Real                    a_time )
   {
-    if (!m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+    if (!m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_species_bkgr, a_time);
   }
 
   inline
   virtual void evalClsRHSImplicit( KineticSpeciesPtrVect&        a_rhs,
                                    const KineticSpeciesPtrVect&  a_soln,
                                    const int                     a_species,
+                                   const int                     a_species_bkgr,
                                    const Real                    a_time )
   {
-    if (m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+    if (m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_species_bkgr, a_time);
   }
 
 private:

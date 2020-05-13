@@ -135,10 +135,10 @@ public:
    /**
     * Computes and returns an estimate of the maximum stable time step.
     */
-   Real computeDtExplicitTI( const FluidSpeciesPtrVect&  fluid_species );
-   Real computeDtImExTI( const FluidSpeciesPtrVect&  fluid_species );
+   Real computeDtExplicitTI( const FluidSpeciesPtrVect&  a_fluid_comp );
+   Real computeDtImExTI( const FluidSpeciesPtrVect&  a_fluid_comp );
    
-   Real computeDtMhd( const FluidSpeciesPtrVect&  fluid_species );
+   Real computeDtMhd( const FluidSpeciesPtrVect&  a_fluid_comp );
    
    
    static const char* pp_name;
@@ -189,7 +189,8 @@ private:
    
    // allocate containers for viscosity tensor
    //
-   double m_tauMax;
+   double m_tau;
+   double m_etaMin;
    LevelData<FArrayBox> m_etaVisc;
    LevelData<FArrayBox> m_momVisc_source;
    LevelData<FluxBox> m_etaVisc_cf;
@@ -286,12 +287,6 @@ private:
    //FluidVarBC*       m_fluid_variable_bc;
    std::vector<FluidVarBC*>  m_fluid_bc;
   
-   RefCountedPtr<GridFunction> m_D_rad;
-   RefCountedPtr<GridFunction> m_D_par;
-   RefCountedPtr<GridFunction> m_D_perp;
-   RefCountedPtr<GridFunction> m_electron_dens;
-   RefCountedPtr<GridFunction> m_electron_temp;
-
    void accumulateMhdRHS( FluidSpecies&  a_rhs_fluid,
                     const FluidSpecies&  a_soln_fluid,
                     const Real           a_time );
@@ -368,8 +363,9 @@ private:
    void updateRHSs( FluidSpecies&  a_rhs_fluid,
               const FluidSpecies&  a_soln_fluid );
    
-   void setCspeed( const LevelData<FArrayBox>&  a_density,
-                   const double                 a_gamma );
+   void setMappedCspeed( const double  a_gamma,
+                         const int     a_Ptherm,
+                         const int     a_Pmag );
    
 
 };

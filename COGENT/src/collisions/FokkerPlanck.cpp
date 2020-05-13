@@ -1638,6 +1638,7 @@ void FokkerPlanck::computeFokkerPlanckRHS(  LevelData<FArrayBox>&       a_rhs,
 void FokkerPlanck::evalClsRHS(  KineticSpeciesPtrVect&        a_rhs,
                                 const KineticSpeciesPtrVect&  a_soln,
                                 const int                     a_species,
+                                const int                     a_species_bkgr,
                                 const Real                    a_time )
 {
   const KineticSpecies&           soln_species(*(a_soln[a_species]));

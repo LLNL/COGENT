@@ -242,6 +242,9 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
    
    if (m_linear_response) {
       computePrefactorNumerator( a_initial_ion_charge_density );
+   }
+   
+   if (m_linear_response || m_simple_boltzmann) {
       m_initial_ion_charge_density.define(a_initial_ion_charge_density);
    }
    
@@ -399,9 +402,9 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron&  a_ne,
             beta[dit].divide(Te[dit]);
          }
          m_flux_surface.multiply(m_boltzmann_prefactor_saved_numerator, beta);
-	 CH_START(t_construct_Qsolver);
+         CH_START(t_construct_Qsolver);
          m_precond_Qsolver->constructMatrix(alpha, m_mapped_coefficients, beta, a_bc);
-	 CH_STOP(t_construct_Qsolver);
+         CH_STOP(t_construct_Qsolver);
       }
    }
 

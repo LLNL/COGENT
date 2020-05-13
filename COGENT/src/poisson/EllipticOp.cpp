@@ -643,6 +643,7 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
                                    const bool                   a_homogeneous_bcs,
                                    const bool                   a_extrap_to_ghosts)
 {
+   CH_TIME("EllipticOp::computeFluxDivergence");
    const DisjointBoxLayout& grids = a_in.disjointBoxLayout();
 
    LevelData<FArrayBox> phi(grids, 1, 3*IntVect::Unit);
@@ -1074,6 +1075,7 @@ void
 EllipticOp::preCond( LevelData<FArrayBox>&        a_cor,
                      const LevelData<FArrayBox>&  a_residual )
 {
+   CH_TIME("EllipticOp::preCond");
    setToZero(a_cor);
    solvePreconditioner(a_residual, a_cor);
 }
@@ -1085,6 +1087,7 @@ EllipticOp::applyOp( LevelData<FArrayBox>&        a_out,
                      const LevelData<FArrayBox>&  a_in,
                      bool                         a_homogeneous )
 {
+   CH_TIME("EllipticOp::applyOp");
    // We've already accounted for inhomogeneous boundary values, so if
    // a_homogeneous is ever passed in as false we need to know why.
    CH_assert( a_homogeneous );
@@ -1138,6 +1141,7 @@ Real
 EllipticOp::dotProduct( const LevelData<FArrayBox>&  a_1,
                         const LevelData<FArrayBox>&  a_2 )
 {
+   CH_TIME("EllipticOp::dotProduct");
    const DisjointBoxLayout& grids = a_1.disjointBoxLayout();
 
    double local_sum = 0.;
@@ -1201,6 +1205,7 @@ Real
 EllipticOp::norm( const LevelData<FArrayBox>&  a_rhs,
                   int                          a_ord )
 {
+   CH_TIME("EllipticOp::norm");
    return CH_XD::norm(a_rhs, a_rhs.interval(), a_ord);
 }
 

@@ -135,7 +135,7 @@ BC.potential.radial_pf.value = 0.0
 
 
 neutrals_diffusion.linear_solver.precond.method = "AMG"
-neutrals_diffusion.linear_solver.precond.max_iter = 1
+neutrals_diffusion.linear_solver.precond.max_iter = 20
 neutrals_diffusion.linear_solver.precond.tol = 1.e-6
 neutrals_diffusion.linear_solver.precond.verbose = true
 

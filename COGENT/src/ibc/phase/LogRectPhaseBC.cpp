@@ -7,6 +7,7 @@
 #include "PhaseGeom.H"
 #include "SPMD.H"
 #include "LogicalSheathBC.H"
+#include "FluxBC.H"
 #include "PhaseBCUtils.H"
 
 #include <sstream>
@@ -186,7 +187,9 @@ LogRectPhaseBC::LogRectPhaseBC( const std::string& a_name,
      m_verbosity(a_verbosity),
      m_pp(a_pp),
      m_all_bdry_defined(false),
-     m_logical_sheath(false)
+     m_logical_sheath_bc(false),
+     m_flux_bc(false)
+
 {
    m_inflow_function.resize( NUM_INFLOW );
    m_bc_type.resize( NUM_INFLOW );
@@ -222,7 +225,10 @@ LogRectPhaseBC::~LogRectPhaseBC()
 
 
 inline
-void LogRectPhaseBC::fillInflowData( const Real& a_time )
+void LogRectPhaseBC::fillInflowData(KineticSpecies& a_species,
+                                    const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                    const LevelData<FluxBox>& a_velocity,
+                                    const Real& a_time )
 {
    CH_TIMERS("LogRectPhaseBC::fillInflowData");
    CH_TIMER("inflow_func.assign", t_inflow_func_assign);
@@ -289,7 +295,7 @@ void LogRectPhaseBC::apply(KineticSpecies& a_species_comp,
 
       CH_START(t_fill_inflow_data);
       Vector<std::string> all_bc_type;
-      fillInflowData( a_time );
+      fillInflowData( a_species_comp, a_phi, a_velocity, a_time );
       setAllBcType( m_all_bdry_layouts );
       m_all_bdry_defined = true;
       CH_STOP(t_fill_inflow_data);
@@ -309,8 +315,12 @@ void LogRectPhaseBC::apply(KineticSpecies& a_species_comp,
    CodimBC::setCodimBoundaryValues( Bf, coord_sys );
    CH_STOP(t_set_codim_boundary_values);
    
-   if (m_logical_sheath) {
+   if (m_logical_sheath_bc) {
       applySheathBC(a_species_comp, a_phi, a_velocity);
+   }
+      
+   if (m_flux_bc) {
+      applyFluxBC(a_species_comp, a_phi, a_velocity, a_time);
    }
 }
 
@@ -330,7 +340,6 @@ void LogRectPhaseBC::applySheathBC( KineticSpecies& a_species,
                                     const CFG::LevelData<CFG::FArrayBox>& a_phi,
                                     const LevelData<FluxBox>& a_velocity)
 {
-   int SHEATH_DIR = POLOIDAL_DIR;
    
    // Get coordinate system parameters
    const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
@@ -350,9 +359,56 @@ void LogRectPhaseBC::applySheathBC( KineticSpecies& a_species,
    for (int i(0); i<all_bdry_layouts.size(); i++) {
       const BoundaryBoxLayout& bdry_layout( *(all_bdry_layouts[i]) );
       const int& dir( bdry_layout.dir() );
-      if (dir == SHEATH_DIR) {
-         LogicalSheathBC sheathBC(bdry_layout, m_pp);
+      const Side::LoHiSide& side( bdry_layout.side() );
+      
+      if (getBcType(dir, side) == "logical_sheath") {
+
+         std::string prefix( m_pp.prefix() );
+         prefix += "." + m_bdry_name[i];
+         ParmParse pp( prefix.c_str() );
+
+         LogicalSheathBC sheathBC(all_bdry_layouts[i], pp);
          sheathBC.applyBC(a_species, a_velocity, a_phi);
+      }
+   }
+}
+
+void LogRectPhaseBC::applyFluxBC( KineticSpecies& a_species,
+                                  const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                  const LevelData<FluxBox>& a_velocity,
+                                  const Real& a_time)
+{
+   // Get coordinate system parameters
+   const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
+   const MultiBlockCoordSys& coord_sys( *(geometry.coordSysPtr()) );
+   const PhaseGrid& phase_grid = geometry.phaseGrid();
+   const DisjointBoxLayout& dbl = phase_grid.disjointBoxLayout();
+   
+   //For sheath BC calculations we only need one-cell-wide
+   //boundary storage, so define it here
+   BoundaryBoxLayoutPtrVect all_bdry_layouts;
+   PhaseBCUtils::defineBoundaryBoxLayouts(all_bdry_layouts,
+                                          dbl,
+                                          coord_sys,
+                                          IntVect::Unit );
+
+   // Loop over boundaries
+   BoundaryBoxLayoutPtrVect flux_bdry_layouts;
+   for (int i(0); i<all_bdry_layouts.size(); i++) {
+      const BoundaryBoxLayout& bdry_layout( *(all_bdry_layouts[i]) );
+      const int& dir( bdry_layout.dir() );
+      const Side::LoHiSide& side( bdry_layout.side() );
+
+      if (getBcType(dir, side) == "flux") {
+         
+         flux_bdry_layouts.push_back(all_bdry_layouts[i]);
+         
+         std::string prefix( m_pp.prefix() );
+         prefix += "." + m_bdry_name[i];
+         ParmParse pp( prefix.c_str() );
+         
+         FluxBC fluxBC(flux_bdry_layouts, pp);
+         fluxBC.applyBC(a_species, a_velocity, a_phi, a_time);
       }
    }
 }
@@ -387,33 +443,6 @@ void LogRectPhaseBC::parseParameters( ParmParse& a_pp )
       std::string function_name;
       fpp.query( "function", function_name );
       
-      if (function_name.length()==0){ //make "radial_inner" and "radial_lower" compatible
-        if( m_bdry_name[i].compare("radial_outer")==0 ){
-            if (procID()==0) cout<<"LogRectPhaseBC: m_bdry_name["<<i<<"] = \"radial_outer\" not found, trying \"radial_upper\""<<endl;
-            prefix.replace(prefix.end()-12,prefix.end(),"radial_upper");
-            ParmParse fpp( prefix.c_str() );
-            fpp.query( "function", function_name );
-        }
-        else if ( m_bdry_name[i].compare("radial_upper")==0 ){
-            if (procID()==0) cout<<"LogRectPhaseBC: m_bdry_name["<<i<<"] = \"radial_upper\" not found, trying \"radial_outer\""<<endl;
-            prefix.replace(prefix.end()-12,prefix.end(),"radial_outer");
-            ParmParse fpp( prefix.c_str() );
-            fpp.query( "function", function_name );
-        }
-        else if ( m_bdry_name[i].compare("radial_inner")==0 ){
-            if (procID()==0) cout<<"LogRectPhaseBC: m_bdry_name["<<i<<"] = \"radial_inner\" not found, trying \"radial_lower\""<<endl;
-            prefix.replace(prefix.end()-12,prefix.end(),"radial_lower");
-            ParmParse fpp( prefix.c_str() );
-            fpp.query( "function", function_name );
-        }
-        else if ( m_bdry_name[i].compare("radial_lower")==0 ){
-            if (procID()==0) cout<<"LogRectPhaseBC: m_bdry_name["<<i<<"] = \"radial_lower\" not found, trying \"radial_inner\""<<endl;
-            prefix.replace(prefix.end()-12,prefix.end(),"radial_inner");
-            ParmParse fpp( prefix.c_str() );
-            fpp.query( "function", function_name );
-        } 
-      }
-
       if (function_name.length() == 0) {
          m_inflow_function[i] = RefCountedPtr<KineticFunction>(NULL);
       }
@@ -425,36 +454,15 @@ void LogRectPhaseBC::parseParameters( ParmParse& a_pp )
       //Parsing BC type
       fpp.query( "type", m_bc_type[i] );
       
-      if (m_bc_type[i].length()==0){ //make "radial_inner" and "radial_lower" compatible
-         if( m_bdry_name[i].compare("radial_outer")==0 ){
-            if (procID()==0) cout<<"LogRectPhaseBC: m_bdry_name["<<i<<"] = \"radial_outer\" not found, trying \"radial_upper\""<<endl;
-            prefix.replace(prefix.end()-12,prefix.end(),"radial_upper");
-            ParmParse fpp( prefix.c_str() );
-            fpp.query( "type", m_bc_type[i] );
-         }
-         else if ( m_bdry_name[i].compare("radial_upper")==0 ){
-            if (procID()==0) cout<<"LogRectPhaseBC: m_bdry_name["<<i<<"] = \"radial_upper\" not found, trying \"radial_outer\""<<endl;
-            prefix.replace(prefix.end()-12,prefix.end(),"radial_outer");
-            ParmParse fpp( prefix.c_str() );
-            fpp.query( "type", m_bc_type[i] );
-         }
-         else if ( m_bdry_name[i].compare("radial_inner")==0 ){
-            if (procID()==0) cout<<"LogRectPhaseBC: m_bdry_name["<<i<<"] = \"radial_inner\" not found, trying \"radial_lower\""<<endl;
-            prefix.replace(prefix.end()-12,prefix.end(),"radial_lower");
-            ParmParse fpp( prefix.c_str() );
-            fpp.query( "type", m_bc_type[i] );
-         }
-         else if ( m_bdry_name[i].compare("radial_lower")==0 ){
-            if (procID()==0) cout<<"LogRectPhaseBC: m_bdry_name["<<i<<"] = \"radial_lower\" not found, trying \"radial_inner\""<<endl;
-            prefix.replace(prefix.end()-12,prefix.end(),"radial_inner");
-            ParmParse fpp( prefix.c_str() );
-            fpp.query( "type", m_bc_type[i] );
-         }
+      if (m_bc_type[i] == "flux") {
+         m_flux_bc = true;
+      }
+
+      if (m_bc_type[i] == "logical_sheath") {
+         m_logical_sheath_bc = true;
       }
    }
    
-   a_pp.query("logical_sheath",m_logical_sheath);
- 
    if (m_verbosity) {
       printParameters();
    }

@@ -1,0 +1,251 @@
+#TEST np=72, timelimit=00:05:00
+#
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 10
+gksystem.verbosity   = 10
+
+gksystem.hdf_fluids = true
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 200
+#simulation.max_step            = 10000000000
+simulation.max_time            = 2.6
+#simulation.max_dt_grow         = .1
+simulation.initial_dt_fraction = 0.1
+simulation.cfl_number          = 0.7
+#simulation.fixed_dt            = 0.00084872
+simulation.checkpoint_interval = 100000000
+simulation.checkpoint_prefix   = "chk"
+#simulation.restart_file = "chk3200.4d.hdf5"
+#simulation.plot_interval       = 10
+simulation.plot_time_interval  = 1.0e-1
+simulation.plot_prefix         = "plt"
+
+gksystem.ti_class = "rk"
+gksystem.ti_method = "2"
+#gksystem.ti_class = "ark"
+#gksystem.ti_method = "2c"
+#ark_jacobian.with_pc = true
+#ark_pc.type = "multiphysicsPC"
+#ark_newton.rtol = 1.0e-6
+#ark_gmres.rtol = 1.0e-6
+
+#####################################################
+# Computational Grid Definitions
+#####################################################
+gksystem.num_cells   = 396 128 4 4 
+gksystem.is_periodic = 0  1  0  0
+
+gksystem.configuration_decomp = 36 2
+gksystem.velocity_decomp      =      1 1
+gksystem.phase_decomp         = 36 2 1 1
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 1.0e23   # num/m^3
+units.temperature    = 1000.0   # eV
+units.length         = 1.0e-2   # m
+units.mass           = 1.00784  # amu
+units.magnetic_field = 1.0 
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "cylindrical"
+gksystem.magnetic_geometry_mapping.cylindrical.B_type = "constant"
+gksystem.magnetic_geometry_mapping.cylindrical.Btor_0 = 1.0
+gksystem.magnetic_geometry_mapping.cylindrical.verbose  = true
+gksystem.magnetic_geometry_mapping.cylindrical.axisymmetric = true
+gksystem.magnetic_geometry_mapping.cylindrical.pointwise_metrics = true
+gksystem.magnetic_geometry_mapping.cylindrical.r_min = 0.0
+gksystem.magnetic_geometry_mapping.cylindrical.r_max = 1.5
+gksystem.magnetic_geometry_mapping.cylindrical.z_min = -0.3142
+gksystem.magnetic_geometry_mapping.cylindrical.z_max = 0.3142
+gksystem.magnetic_geometry_mapping.cylindrical.Btor_scale = 1.0
+gksystem.magnetic_geometry_mapping.second_order = true
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 1.0
+phase_space_mapping.mu_max = 2.0
+phase_space_mapping.velocity_type = "gyrokinetic"
+phase_space_mapping.second_order = true
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gksystem.fixed_efield = true
+gksystem.zero_efield = true
+gkpoisson.verbose = true
+
+#####################################################
+# Species Definitions
+#####################################################
+fluid_species.1.name   = "neutrals"
+fluid_species.1.mass   = 1.0
+fluid_species.1.charge = 0.0
+fluid_species.1.operator_type = "ExtendedMhdOp"
+fluid_species.1.adiabatic_coefficient = 1.6667
+fluid_species.1.momentumDensity = 1
+fluid_species.1.energyDensity = 1
+fluid_species.1.energyDensity_ele = 1
+fluid_species.1.magneticField_virtual = 1
+fluid_species.1.electricField = 1
+fluid_species.1.currentDensity = 1
+#fluid_species.1.plotChargeDensity = 1
+fluid_species.1.plotMemberVars = 1
+fluid_species.1.plotMemberVars.number = 1 
+fluid_species.1.plotMemberVars.list = "chargeDensity" 
+#                                      "gradVeperp" "gradVepara"
+#                                      "divPie_0" "divPie_1"
+#                                      "etaVisC" "etaVisG"
+#                                      "JaW_cf_0" "JaW_cf_1"
+#                                      "kappai_wedge" "kappae_wedge"
+#                                      "kappai" "kappae" 
+#                                      "qi_wedge"
+
+#fluid_model.neutrals.advScheme = "uw1"
+#fluid_model.neutrals.advScheme = "quick"
+#fluid_model.neutrals.advScheme = "c2"
+fluid_model.neutrals.advScheme = "weno5"
+#fluid_model.neutrals.advScheme = "TVDminmod"
+
+fluid_model.neutrals.modelDriftTerms = true
+fluid_model.neutrals.initializeJfromAmperesLaw = true
+fluid_model.neutrals.initializeEfromOhmsLaw = true
+
+fluid_model.neutrals.useJ0forJcc = 0
+fluid_model.neutrals.advSchemeHall = "c2"
+#fluid_model.neutrals.advSchemeHall = "uw1c2minmod"
+fluid_model.neutrals.fullyImplicitJ = 1
+fluid_model.neutrals.iterHallMax = 1
+fluid_model.neutrals.HallResTol = 1.0e-6
+
+fluid_model.neutrals.epRel = 10.0
+fluid_model.neutrals.meRel = 10.0
+fluid_model.neutrals.useRelaxedOhmsLaw = 1
+
+fluid_model.neutrals.useRelaxedViscosity = 1
+fluid_model.neutrals.etaVis_ele = 1.0e-3
+fluid_model.neutrals.etaResMin = 1.0e-4
+fluid_model.neutrals.etaMin = 1.0e-3
+fluid_model.neutrals.viscLimiter = 1.0e-4
+fluid_model.neutrals.gyroViscLimiter = 1.0e20
+#fluid_model.neutrals.gyroHeatViscCoeff = 0.1
+
+fluid_model.neutrals.useRelaxedHeatFlux = 1
+fluid_model.neutrals.tauiMin = 1.0e-20
+fluid_model.neutrals.taueMin = 1.0e-20
+fluid_model.neutrals.kappaMin = 1.0e-3
+fluid_model.neutrals.heatLimiter = 1.0e-1
+fluid_model.neutrals.gyroHeatLimiter = 1.0e20
+
+fluid_model.neutrals.xionFactor = 3.0e2
+fluid_model.neutrals.xeleFactor = 1.0
+
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.potential.function = "zero_grid_func"
+IC.neutrals.density.function = "neutrals_IC"
+IC.neutrals.momentumDensity_0.function = "zero_grid_func"
+IC.neutrals.momentumDensity_1.function = "momDeny_IC"
+IC.neutrals.energyDensity.function = "energyDensity_IC"
+IC.neutrals.energyDensity_ele.function = "energyDensity_ele_IC"
+IC.neutrals.magneticField_virtual.function = "By_IC"
+IC.neutrals.electricField_0.function = "electricField_IC"
+IC.neutrals.electricField_1.function = "zero_grid_func"
+IC.neutrals.currentDensity_0.function = "zero_grid_func"
+IC.neutrals.currentDensity_1.function = "currentDensity_IC"
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.neutrals.density.radial_lower.function = "zero_grid_func"
+BC.neutrals.density.radial_upper.function = "zero_grid_func"
+BC.neutrals.density.radial_lower.type = "neumann"
+BC.neutrals.density.radial_upper.type = "neumann"
+
+BC.neutrals.momentumDensity.radial_lower.function = "zero_grid_func"
+BC.neutrals.momentumDensity.radial_upper.function = "zero_grid_func"
+BC.neutrals.momentumDensity.radial_lower.type = "symmetry"
+BC.neutrals.momentumDensity.radial_upper.type = "symmetry"
+
+BC.neutrals.energyDensity.radial_lower.function = "zero_grid_func"
+BC.neutrals.energyDensity.radial_upper.function = "zero_grid_func"
+BC.neutrals.energyDensity.radial_lower.type = "neumann"
+BC.neutrals.energyDensity.radial_upper.type = "neumann"
+
+BC.neutrals.energyDensity_ele.radial_lower.function = "zero_grid_func"
+BC.neutrals.energyDensity_ele.radial_upper.function = "zero_grid_func"
+BC.neutrals.energyDensity_ele.radial_lower.type = "neumann"
+BC.neutrals.energyDensity_ele.radial_upper.type = "neumann"
+
+BC.neutrals.magneticField_virtual.radial_lower.function = "zero_grid_func"
+BC.neutrals.magneticField_virtual.radial_upper.function = "zero_grid_func"
+BC.neutrals.magneticField_virtual.radial_lower.type = "odd"
+BC.neutrals.magneticField_virtual.radial_upper.type = "neumannJ"
+
+BC.neutrals.electricField.radial_lower.function = "zero_grid_func"
+BC.neutrals.electricField.radial_upper.function = "zero_grid_func"
+BC.neutrals.electricField.radial_lower.type = "symmetry"
+BC.neutrals.electricField.radial_upper.type = "natural"
+
+BC.neutrals.currentDensity.radial_lower.function = "zero_grid_func"
+BC.neutrals.currentDensity.radial_upper.function = "zero_grid_func"
+BC.neutrals.currentDensity.radial_lower.type = "symmetry"
+BC.neutrals.currentDensity.radial_upper.type = "natural"
+
+#####################################################
+# Grid Function Definitions
+#####################################################
+grid_function_library.number = 8
+grid_function_library.verbosity = 1
+grid_function_library.list = "zero_grid_func" "momDeny_IC" "neutrals_IC" 
+                             "energyDensity_IC" "energyDensity_ele_IC" 
+                             "electricField_IC" "currentDensity_IC"
+                             "By_IC"
+
+grid_function_library.zero_grid_func.type = "zero" 
+
+grid_function_library.momDeny_IC.type = "arbitrary"
+grid_function_library.momDeny_IC.coordinate_type = "physical"
+grid_function_library.momDeny_IC.function = "0.3*x*(0.05 + 0.855*exp(-x^2/0.32-x^4/0.0177)*(1-1.0e-4*cos(2*pi*y/0.6283)*exp(-(x-0.6)^2*9/2)))"
+
+grid_function_library.neutrals_IC.type = "arbitrary"
+grid_function_library.neutrals_IC.coordinate_type = "physical"
+grid_function_library.neutrals_IC.function = "0.05 + 0.855*exp(-x^2/0.32-x^4/0.0177)*(1-1.0e-4*cos(2*pi*y/0.6283)*exp(-(x-0.6)^2*9/2))"
+
+grid_function_library.energyDensity_IC.type = "arbitrary"
+grid_function_library.energyDensity_IC.coordinate_type = "physical"
+grid_function_library.energyDensity_IC.function = "(0.05 + 0.855*exp(-x^2/0.32-x^4/0.0177))*(0.45*x*x+(0.40153+1.0892676*exp(-8.01478*x^2))/0.6667)*(1-1.0e-4*cos(2*pi*y/0.6283)*exp(-(x-0.6)^2*9/2))"
+
+grid_function_library.energyDensity_ele_IC.type = "arbitrary"
+grid_function_library.energyDensity_ele_IC.coordinate_type = "physical"
+grid_function_library.energyDensity_ele_IC.function = "(0.05 + 0.855*exp(-x^2/0.32-x^4/0.0177))*(0.40153+1.0892676*exp(-8.01478*x^2))/0.6667*(1-1.0e-4*cos(2*pi*y/0.6283)*exp(-(x-0.6)^2*9/2))"
+
+grid_function_library.By_IC.type = "localizedPinch"
+grid_function_library.By_IC.varType = "magneticField"
+grid_function_library.By_IC.coordinate_type = "physical"
+grid_function_library.By_IC.PreCoeffs = 4.0153e-2 0.10892676 0.6866163 1.862647596
+grid_function_library.By_IC.expCoeffs = 3.125 56.497 8.01478 11.13978
+
+grid_function_library.currentDensity_IC.type = "localizedPinch"
+grid_function_library.currentDensity_IC.varType = "currentDensity"
+grid_function_library.currentDensity_IC.coordinate_type = "physical"
+grid_function_library.currentDensity_IC.PreCoeffs = 4.0153e-2 0.10892676 0.6866163 1.862647596
+grid_function_library.currentDensity_IC.expCoeffs = 3.125 56.497 8.01478 11.13978
+
+grid_function_library.electricField_IC.type = "arbitrary"
+grid_function_library.electricField_IC.coordinate_type = "physical"
+grid_function_library.electricField_IC.function = " -0.0720276*x*((0.40153+1.0892676*exp(-8.01478*x^2))/(0.05+0.855*exp(-x^2/0.32-x^4/0.0177))*(0.855*(2/0.32+4*x^2/0.0177)*exp(-x^2/0.32-x^4/0.0177)) + 17.4605*exp(-8.01478*x^2))"
+
+
+

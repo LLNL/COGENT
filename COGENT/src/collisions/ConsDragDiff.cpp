@@ -16,7 +16,7 @@ ConsDragDiff::ConsDragDiff( const string& a_species_name, const string& a_ppcls_
       cls_only(false),
       moment_op( MomentOp::instance() ),
       m_first_step(true),
-      m_time_implicit(false),
+      m_time_implicit(true),
       verbosity(0)
 {
    verbosity = a_verbosity;
@@ -31,6 +31,7 @@ ConsDragDiff::~ConsDragDiff()
 void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        rhs,
                                const KineticSpeciesPtrVect&  soln,
                                const int                     species,
+                               const int                     species_bkgr,
                                const Real                    time )
 {
   /*
@@ -57,8 +58,10 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        rhs,
       const DisjointBoxLayout& dbl = soln_fBJ.getBoxes();
 
       // copy soln_fBJ so can perform exchange to ghost cells
-      LevelData<FArrayBox> copy_fBJ;
-      copy_fBJ.define(soln_fBJ);
+      LevelData<FArrayBox> copy_fBJ(dbl, 1, 2*IntVect::Unit);
+      for (DataIterator dit(soln_fBJ.dataIterator()); dit.ok(); ++dit) {
+	copy_fBJ[dit].copy(soln_fBJ[dit]);
+      }
       copy_fBJ.exchange();
 
       // get coordinate system parameters

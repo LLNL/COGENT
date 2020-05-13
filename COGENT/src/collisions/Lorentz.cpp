@@ -36,6 +36,7 @@ Lorentz::~Lorentz()
 void Lorentz::evalClsRHS( KineticSpeciesPtrVect&       a_rhs,
                           const KineticSpeciesPtrVect& a_soln,
                           const int                    a_species,
+			  const int                    a_species_bkgr,
                           const Real                   a_time )
 
 // NB: a_soln is on the computational grid and has 4 ghost cells (passed here as Nans)

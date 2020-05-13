@@ -246,24 +246,27 @@ void LogRectConfigurationBC::applyEdgeBC(const FluidSpecies&  a_species_comp,
    
    const DisjointBoxLayout& grids( a_dst.disjointBoxLayout() );
    const IntVect& ghost_vect( IntVect::Unit );
-   //const IntVect& ghost_vect( a_dst.ghostVect() );
-   
-   if(m_all_bdry_layouts_edge_defined==false) {
-      FluidBCUtils::defineBoundaryBoxLayouts( m_all_bdry_layouts_edge,
-                                              grids,
-                                              coord_sys,
-                                              ghost_vect );
-      //setAllBcType( m_all_bdry_layouts_edge );    
-      m_all_bdry_layouts_edge_defined = true;
-   }
-   setAllBcType( m_all_bdry_layouts_edge );    
+   const IntVect& dst_ghost_vect( a_dst.ghostVect() );
+   if(dst_ghost_vect > IntVect::Zero) {   
 
-   FluidBCUtils::setEdgeBC( a_dst,
-                            m_all_bdry_layouts_edge,
-                            m_all_bc_type,
-                            coord_sys,
-                            a_src );
-   
+      if(m_all_bdry_layouts_edge_defined==false) {
+         FluidBCUtils::defineBoundaryBoxLayouts( m_all_bdry_layouts_edge,
+                                                 grids,
+                                                 coord_sys,
+                                                 ghost_vect );
+         //setAllBcType( m_all_bdry_layouts_edge );    
+         m_all_bdry_layouts_edge_defined = true;
+      }
+      setAllBcType( m_all_bdry_layouts_edge );    
+
+      FluidBCUtils::setEdgeBC( a_dst,
+                               m_all_bdry_layouts_edge,
+                               m_all_bc_type,
+                               coord_sys,
+                               a_src );
+
+   }
+
 }
 
 void LogRectConfigurationBC::setEdgeBC( const FluidSpecies&  a_species_comp,

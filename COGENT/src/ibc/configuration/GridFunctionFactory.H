@@ -10,6 +10,7 @@
 #include "Tanh.H"
 #include "SingleNullDistr.H"
 #include "Localized.H"
+#include "LocalizedPinch.H"
 #include "Constant.H"
 #include "DataArray.H"
 #include "RZdata.H"
@@ -75,6 +76,9 @@ RefCountedPtr<GridFunction> GridFunctionFactory::create(
    }
    else if (model == "localized") {
       result = RefCountedPtr<GridFunction>( new Localized( a_pp, a_verbosity ) );
+   }
+   else if (model == "localizedPinch") {
+      result = RefCountedPtr<GridFunction>( new LocalizedPinch( a_pp, a_verbosity ) );
    }
    else if (model == "tanh") {
       result = RefCountedPtr<GridFunction>( new Tanh( a_pp, a_verbosity ) );

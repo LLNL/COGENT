@@ -212,6 +212,7 @@ c     local variables
       return
       end
 
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       
       subroutine simple_curl_virt(
      &     CHF_BOX[box],
@@ -239,23 +240,45 @@ c     local variables
             endif
             Jdir(CHF_IX[i;j;k],n) = val
 
-c            print*, "shape(Fy) = ", shape(Fy)
-c            print*, "shape(Jdir) = ", shape(Jdir)
-c            print*, "dir = ", dir
-c            print*, "i = ", i 
-c            print*, "j = ", j 
-c            print*, "Fy(i,j)   = ", Fy(CHF_IX[i;j;k],n)
-c            print*, "Fy(i-1,j) = ", Fy(CHF_IX[i-1;j;k],n)
-c            print*, "Fy(i,j-1) = ", Fy(CHF_IX[i;j-1;k],n)
-c            print*, "Jdir(i)   = ", Jdir(CHF_IX[i;j;k],n)
-
          CHF_ENDDO
 
       enddo
 
       return
       end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       
+      subroutine simple_curl_virt_cc(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REAL[dXdir],
+     &     CHF_CONST_FRA1[Fy],
+     &     CHF_FRA[Jcurl])
+c     local variables
+      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk] 
+      double precision val
+
+      CHF_DTERM[
+      ii = CHF_ID(0,0);
+      jj = CHF_ID(1,0);
+      kk = CHF_ID(2,0)]
+      
+      CHF_MULTIDO[box;i;j;k]
+     
+         if(dir==1) then
+            val =  (Fy(CHF_IX[i+1;j;k]) - Fy(CHF_IX[i-1;j;k]))/dXdir*half
+         else
+            val = -(Fy(CHF_IX[i;j+1;k]) - Fy(CHF_IX[i;j-1;k]))/dXdir*half
+         endif
+         Jcurl(CHF_IX[i;j;k],dir) = val
+
+      CHF_ENDDO
+
+      return
+      end
+  
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
    
       subroutine on_axis_curl_correction(
      &     CHF_BOX[box],
@@ -337,13 +360,11 @@ c            print*, "B(i,j)   = ", B(CHF_IX[i;j;k])
                a1 = dXdxi(CHF_IX[i;j;k],1)
                a2 = dXdxi(CHF_IX[i;j;k],2)
                a3 = dXdxi(CHF_IX[i;j;k],3)
-               a4 = dXdxi(CHF_IX[i;j;k],4)
             else
                a0 = dxidX(CHF_IX[i;j;k],0)
                a1 = dxidX(CHF_IX[i;j;k],1)
                a2 = dxidX(CHF_IX[i;j;k],2)
                a3 = dxidX(CHF_IX[i;j;k],3)
-               a4 = dxidX(CHF_IX[i;j;k],4)
             endif
  
             Fnew0 = a0*F(CHF_IX[i;j;k],0) + a1*F(CHF_IX[i;j;k],1)
@@ -412,13 +433,11 @@ c            print*, "B(i,j)   = ", B(CHF_IX[i;j;k])
                a1 = dxidX(CHF_IX[i;j;k],1)
                a2 = dxidX(CHF_IX[i;j;k],2)
                a3 = dxidX(CHF_IX[i;j;k],3)
-               a4 = dxidX(CHF_IX[i;j;k],4)
             else
                a0 = dXdxi(CHF_IX[i;j;k],0)
                a1 = dXdxi(CHF_IX[i;j;k],1)
                a2 = dXdxi(CHF_IX[i;j;k],2)
                a3 = dXdxi(CHF_IX[i;j;k],3)
-               a4 = dXdxi(CHF_IX[i;j;k],4)
             endif
             
             Fnew0 = a0*F(CHF_IX[i;j;k],0) + a2*F(CHF_IX[i;j;k],1)
@@ -489,6 +508,148 @@ c        print*, "glsq  = ", glsq
       return
       end
 
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+ 
+      subroutine ncdivergence(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REAL[dX],
+     &     CHF_CONST_FRA1[JonNodes],
+     &     CHF_CONST_FRA1[JonEdges],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_CONST_FRA[Fcovar],
+     &     CHF_FRA[divF] )
+      
+      integer CHF_DDECL[i;j;k], l0, l1, l2, n 
+      integer CHF_DDECL[ii;jj;kk]
+      double precision gl0, gl1, gl2, glsqup, glsqdown
+      double precision Jaup, Jadown, Janc, JaFcontra_up, JaFcontra_down      
+
+      CHF_DTERM[
+      l0 = 0 + CH_SPACEDIM*dir;
+      l1 = 1 + CH_SPACEDIM*dir;
+      l2 = 2 + CH_SPACEDIM*dir]
+      
+      CHF_DTERM[
+      ii = CHF_ID(dir, 0);
+      jj = CHF_ID(dir, 1);
+      kk = CHF_ID(dir, 2)]
+
+c        print*, "dir  = ", dir
+c        print*, "iboxlo0  = ", iboxlo0
+c        print*, "iboxhi0  = ", iboxhi0
+c        print*, "iboxlo1  = ", iboxlo1
+c        print*, "iboxhi1  = ", iboxhi1
+
+      CHF_MULTIDO[box;i;j;k]
+      
+         if (CH_SPACEDIM==3) then
+
+            gl0 = dXdxi(CHF_IX[i-ii;j-jj;k-kk],l0)
+            gl1 = dXdxi(CHF_IX[i-ii;j-jj;k-kk],l1)
+            gl2 = dXdxi(CHF_IX[i-ii;j-jj;k-kk],l2)
+            glsqdown = gl0*gl0 + gl1*gl1 + gl2*gl2
+            
+            gl0 = dXdxi(CHF_IX[i;j;k],l0)
+            gl1 = dXdxi(CHF_IX[i;j;k],l1)
+            gl2 = dXdxi(CHF_IX[i;j;k],l2)
+            glsqup = gl0*gl0 + gl1*gl1 + gl2*gl2
+
+         else
+            
+            gl0 = dXdxi(CHF_IX[i-ii;j-jj;k-kk],l0)
+            gl1 = dXdxi(CHF_IX[i-ii;j-jj;k-kk],l1)
+            glsqdown = gl0*gl0 + gl1*gl1
+            
+            gl0 = dXdxi(CHF_IX[i;j;k],l0)
+            gl1 = dXdxi(CHF_IX[i;j;k],l1)
+            glsqup = gl0*gl0 + gl1*gl1
+
+         endif
+         Jadown = JonEdges(CHF_IX[i-ii;j-jj;k-kk])
+         Jaup   = JonEdges(CHF_IX[i;j;k])
+         Janc   = JonNodes(CHF_IX[i;j;k])
+           
+         do n=0, (CHF_NCOMP[divF]-1)
+            JaFcontra_down = Jadown*Fcovar(CHF_IX[i-ii;j-jj;k-kk],n)/glsqdown
+            JaFcontra_up   = Jaup*Fcovar(CHF_IX[i;j;k],n)/glsqup
+            if(Janc==0.0) then
+               if(dir==0) then
+                  divF(CHF_IX[i;j;k],n) = divF(CHF_IX[i;j;k],n) + 4.0*Fcovar(CHF_IX[i;j;k],n)/glsqup/dX
+               else
+                  JaFcontra_down = Fcovar(CHF_IX[i-ii;j-jj;k-kk],n)/glsqdown
+                  JaFcontra_up   = Fcovar(CHF_IX[i;j;k],n)/glsqup
+                  divF(CHF_IX[i;j;k],n) = divF(CHF_IX[i;j;k],n) + (JaFcontra_up - JaFcontra_down)/dX
+               endif
+            else
+               JaFcontra_down = Jadown*Fcovar(CHF_IX[i-ii;j-jj;k-kk],n)/glsqdown
+               JaFcontra_up   = Jaup*Fcovar(CHF_IX[i;j;k],n)/glsqup
+               divF(CHF_IX[i;j;k],n) = divF(CHF_IX[i;j;k],n) + (JaFcontra_up - JaFcontra_down)/dX/Janc
+            endif
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+ 
+      subroutine ecdivergence(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REAL[dX],
+     &     CHF_CONST_REAL[dZ],
+     &     CHF_CONST_FRA1[JonCells],
+     &     CHF_CONST_FRA1[JonNodes],
+     &     CHF_CONST_FRA1[JonEdges],
+     &     CHF_CONST_FRA1[Fcells],
+     &     CHF_CONST_FRA1[Fnodes],
+     &     CHF_FRA1[divF] )
+      
+      integer CHF_DDECL[i;j;k], l0, l1, l2, n 
+      integer CHF_DDECL[ii;jj;kk]
+      double precision Jaec, JaFlux_Xup, JaFlux_Xdn, JaFlux_Zup, JaFlux_Zdn      
+
+      CHF_DTERM[
+      l0 = 0 + CH_SPACEDIM*dir;
+      l1 = 1 + CH_SPACEDIM*dir;
+      l2 = 2 + CH_SPACEDIM*dir]
+      
+      CHF_DTERM[
+      ii = CHF_ID(dir, 0);
+      jj = CHF_ID(dir, 1);
+      kk = CHF_ID(dir, 2)]
+
+      CHF_MULTIDO[box;i;j;k]
+      
+         Jaec   = JonEdges(CHF_IX[i;j;k])
+         if(dir.eq.0) then
+            JaFlux_Xup = Fnodes(CHF_IX[i+1;j;k])*JonNodes(CHF_IX[i+1;j;k])
+            JaFlux_Xdn = Fnodes(CHF_IX[i;j;k])*JonNodes(CHF_IX[i;j;k])
+            JaFlux_Zup = Fcells(CHF_IX[i;j;k])*JonCells(CHF_IX[i;j;k])
+            JaFlux_Zdn = Fcells(CHF_IX[i;j-1;k])*JonCells(CHF_IX[i;j-1;k])
+         else
+            JaFlux_Zup = Fnodes(CHF_IX[i;j+1;k])*JonNodes(CHF_IX[i;j+1;k])
+            JaFlux_Zdn = Fnodes(CHF_IX[i;j;k])*JonNodes(CHF_IX[i;j;k])
+            JaFlux_Xup = Fcells(CHF_IX[i;j;k])*JonCells(CHF_IX[i;j;k])
+            JaFlux_Xdn = Fcells(CHF_IX[i-1;j;k])*JonCells(CHF_IX[i-1;j;k])
+         endif 
+ 
+         if(Jaec==0.0) then
+            divF(CHF_IX[i;j;k]) = (Fnodes(CHF_IX[i;j+1;k])-Fnodes(CHF_IX[i;j;k]))/dZ
+         else
+            divF(CHF_IX[i;j;k]) = (JaFlux_Xup - JaFlux_Xdn)/dX/Jaec
+     &                          + (JaFlux_Zup - JaFlux_Zdn)/dZ/Jaec
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
 c    COMPUTE STRAIN TENSOR FOR 2D CASE
 
       subroutine eval_strain_tensor_comps(
@@ -522,6 +683,48 @@ c     local variables
         Wx(CHF_AUTOIX[i],1) = gradVxy + gradVyx
         Wy(CHF_AUTOIX[i],0) = gradVyx + gradVxy
         Wy(CHF_AUTOIX[i],1) = gradVyy + gradVyy - two/three*divV0
+
+      endif
+
+      CHF_ENDDO
+    
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE STRAIN TENSOR FOR 2D CASE
+
+      subroutine eval_strain_tensor_comps_new(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[divV],
+     &     CHF_CONST_FRA[gradVx],
+     &     CHF_CONST_FRA[gradVy],
+     &     CHF_FRA[W],
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision divV0
+      double precision gradVxx, gradVxy
+      double precision gradVyx, gradVyy
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+      if (CH_SPACEDIM==3) then
+
+      else
+
+        gradVxx = gradVx(CHF_AUTOIX[i],0)
+        gradVxy = gradVx(CHF_AUTOIX[i],1)
+        gradVyx = gradVy(CHF_AUTOIX[i],0)
+        gradVyy = gradVy(CHF_AUTOIX[i],1)
+        divV0  = divV(CHF_AUTOIX[i])
+
+        W(CHF_AUTOIX[i],0) = gradVxx + gradVxx - two/three*divV0
+        W(CHF_AUTOIX[i],1) = gradVxy + gradVyx
+        W(CHF_AUTOIX[i],2) = gradVyx + gradVxy
+        W(CHF_AUTOIX[i],3) = gradVyy + gradVyy - two/three*divV0
 
       endif
 

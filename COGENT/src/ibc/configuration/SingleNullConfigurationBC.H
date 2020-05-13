@@ -145,8 +145,6 @@ class SingleNullConfigurationBC
       Vector<std::string> m_bdry_name;
       Vector<std::string> m_bc_type;
       
-      // JRA, stuff for making BCs more efficient
-      //
       Vector<std::string> m_all_bc_type;
       BoundaryBoxLayoutPtrVect m_all_bdry_layouts;
       Vector< RefCountedPtr<LevelData<FArrayBox>> > m_all_bdry_data;

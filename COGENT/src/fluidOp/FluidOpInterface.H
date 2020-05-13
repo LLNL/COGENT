@@ -79,7 +79,23 @@ class FluidOpInterface
                               const PS::ScalarPtrVect&           scalars,
                               const EField&                      E_field,
                               const double                       time ) {;}
+      
+      virtual void postTimeEval( FluidSpecies&  a_species_comp,
+                                 FluidSpecies&  a_species_phys,
+                                 const Real           a_dt,
+                                 const Real           a_time,
+                                 const int            a_stage ) {;}
 
+      virtual void postStageEval( FluidSpecies&  a_species_comp,
+                                  FluidSpecies&  a_species_phys,
+                                  const Real     a_dt,
+                                  const Real     a_time,
+                                  const int      a_stage ) {;}
+
+      virtual void getMemberVar( LevelData<FArrayBox>&  a_Var,
+                           const string&                a_name ) const 
+      { cout << "getMemberVar: default getMemberVar() " << endl;}
+      
       virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
                                   std::vector<PS::DOFList>&,
                                   const PS::GKVector&,
@@ -181,9 +197,13 @@ class FluidOpInterface
             (static_cast<FluidSpecies&>(a_species)).convertFromPhysical();
          }
       }
+      
+      virtual void initializeWithBC( FluidSpecies&  a_species_comp,
+                                     FluidSpecies&  a_species_phys,
+                               const double         a_time ) {;}
 
       virtual void fillGhostCells( FluidSpecies&  a_species_phys,
-                                   const double   a_time ) = 0;
+                             const double         a_time ) = 0;
 
       virtual Real computeDtExplicitTI(const FluidSpeciesPtrVect& fluids)
       {

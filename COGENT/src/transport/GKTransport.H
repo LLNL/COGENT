@@ -43,6 +43,9 @@ class GKTransport
       Real computeDtExplicitTI( const KineticSpeciesPtrVect& soln );
       Real computeDtImExTI( const KineticSpeciesPtrVect& soln );
       Real computeTimeScale( const KineticSpeciesPtrVect& soln );
+   
+      void preTimeStep    (const KineticSpeciesPtrVect&, const Real, const KineticSpeciesPtrVect&);
+
 
    private:
 

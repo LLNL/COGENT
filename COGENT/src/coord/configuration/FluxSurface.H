@@ -129,9 +129,6 @@ public:
                        const LevelData<FArrayBox>& src,
                        LevelData<FArrayBox>&       dst        ) const;
 
-   /// Multiplies by gradPsi
-    void multGradPsi(LevelData<FArrayBox>& a_src ) const;
-
     /// Const reference to the flux surface grids
    /** Const reference to the flux surface grids
     *

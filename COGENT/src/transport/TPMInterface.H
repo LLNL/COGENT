@@ -39,6 +39,11 @@ class TPMInterface
 
       virtual Real computeStableDt(const KineticSpecies& soln) = 0;
       //virtual Real computeDt(const KineticSpecies& soln, const int i) = 0;
+   
+     virtual void preTimeStep  (const KineticSpeciesPtrVect&,
+                                const int, const Real,
+                                const KineticSpeciesPtrVect&) { }
+
 
 };
 

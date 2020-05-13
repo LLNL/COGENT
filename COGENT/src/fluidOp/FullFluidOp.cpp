@@ -155,7 +155,8 @@ void FullFluidOp::accumulateExplicitRHS(FluidSpeciesPtrVect&               a_rhs
    // Compute flux-freezing speed at cell-center for each direction
    // Cspeed_i = |NTVdotqihat| + |N_i|sqrt(gamma*P/N); i = q0, q1, q2
    const double gamma = soln_fluid.m_gamma;
-   setCspeed( m_rhoDen_cc, gamma );
+   setMappedCspeed( gamma, 1, 1 );
+   
    SpaceUtils::upWindToFaces(m_CspeedR_norm, m_Cspeed_cc, m_CspeedR_norm, "c2"); // 3rd arg not used for "c2"
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       m_CspeedL_norm[dit].copy(m_CspeedR_norm[dit],m_CspeedL_norm[dit].box());
@@ -482,6 +483,47 @@ void FullFluidOp::setCourantTimeStep( const LevelData<FArrayBox>&  a_Cspeed )
    m_courant_time_step = this_dt_max;
 }
 
+void FullFluidOp::setMappedCspeed( const double  a_gamma,
+                                   const int     a_Ptherm,
+                                   const int     a_Pmag )
+{
+   CH_TIME("FullFluidOp::setMappedCspeed()");
+
+   // compute flux-freezing speed at cell-center for each direction
+   // Cspeed_i = |NTVdotqihot| + |N_i|sqrt(gamma*P/N + B^2/N); i = q0, q1, q2
+
+   CH_assert(m_Cspeed_cc.nComp() == SpaceDim);
+   
+   const DisjointBoxLayout& grids( m_Cspeed_cc.getBoxes() ); 
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      const FArrayBox& rho_on_patch  = m_rhoDen_cc[dit];   
+      const FArrayBox& V_on_patch    = m_velocity[dit]; 
+      const FArrayBox& P_on_patch    = m_pressure[dit]; 
+      const FArrayBox& N_on_patch    = m_Nmatrix[dit]; 
+      const FArrayBox& J_on_patch    = m_Jacobian[dit]; 
+      FArrayBox& C_on_patch = m_Cspeed_cc[dit];
+      const Box& thisbox = C_on_patch.box();
+      
+      FArrayBox magP_on_patch(thisbox, 1);
+      magP_on_patch.setVal(0.);
+      
+      FORT_EVAL_FLUX_FREEZING_SPEED( CHF_BOX(thisbox), 
+                                     CHF_CONST_FRA1(rho_on_patch,0),
+                                     CHF_CONST_FRA1(P_on_patch,0),
+                                     CHF_CONST_FRA1(magP_on_patch,0),
+                                     CHF_CONST_FRA(V_on_patch),
+                                     CHF_CONST_FRA(N_on_patch),
+                                     CHF_CONST_FRA1(J_on_patch,0),
+                                     CHF_CONST_REAL(a_gamma),
+                                     CHF_CONST_INT(a_Ptherm),
+                                     CHF_CONST_INT(a_Pmag),
+                                     CHF_FRA(C_on_patch) );
+      
+   }
+
+}
+/*
 void FullFluidOp::setCspeed(const LevelData<FArrayBox>&  a_density,
                             const double                 a_gamma )
 {
@@ -517,6 +559,7 @@ void FullFluidOp::setCspeed(const LevelData<FArrayBox>&  a_density,
    }
 
 }
+*/
 
 #if 0
 Real FullFluidOp::computeDtExplicitTI( const FluidSpeciesPtrVect&  a_fluid_species )
@@ -546,7 +589,7 @@ Real FullFluidOp::computeDtExplicitTI( const FluidSpeciesPtrVect&  a_fluid_speci
          break;
       }
    }
-   setCspeed( m_rhoDen_cc, gamma );
+   setMappedCspeed( gamma, 1, 1 );
    setCourantTimeStep(m_Cspeed_cc);   
    
 

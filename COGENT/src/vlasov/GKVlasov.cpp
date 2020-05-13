@@ -1,4 +1,5 @@
 #include "GKVlasov.H"
+#include "CONSTANTS.H"
 #include "Directions.H"
 
 #include "FourthOrderUtil.H"
@@ -9,11 +10,14 @@
 #include "altFaceAverages.H"
 #include "mappedAdvectionFlux.H"
 #include "KineticFunctionLibrary.H"
+#include "GKVlasovPreconditioner.H"
 
 #include "GKVector.H"
 #include "GKOps.H"
 
 #undef TEST_ZERO_DIVERGENCE
+
+#define AMG_PRECOND
 
 #include "NamespaceHeader.H"
 
@@ -125,7 +129,26 @@ GKVlasov::GKVlasov( ParmParse&                      a_pp,
    // In theory, advection is in (PDIM-1) dimensions, so we could relax this
    // a little, but for now, let's be conservative.
    m_dt_dim_factor = (m_face_avg_type>PPM) ? sqrt(PDIM) : 1.0;
+
+   string precond_prefix = string(a_pp.prefix()) + ".precond";
+
+   ParmParse pp_precond(precond_prefix.c_str());
+
+   if ( pp_precond.contains("build_test") ) {
+      pp_precond.get("build_test", m_precond_build_test);
+   }
+   else {
+      m_precond_build_test = false;
+   }
+
+   if ( pp_precond.contains("face_avg_type") ) {
+      pp_precond.get("face_avg_type", m_precond_face_avg_type);
+   }
+   else {
+      m_precond_face_avg_type = "uw1";
+   }
 }
+
 
 GKVlasov::GKVlasov( ParmParse&                      a_pp,
                     const Real                      a_larmor_number,
@@ -222,9 +245,8 @@ GKVlasov::evalRHSExplicit( KineticSpecies&                        a_rhs_species,
   if (m_ti_type[name] == _explicit_) {
     evalRHS(a_rhs_species, a_soln_species, a_phi, a_E_field, a_velocity_option, a_time);
   }
-   
-  return;
 }
+
 
 void
 GKVlasov::evalRHSImplicit( KineticSpecies&                        a_rhs_species,
@@ -245,8 +267,8 @@ GKVlasov::evalRHSImplicit( KineticSpecies&                        a_rhs_species,
   if (m_ti_type[name] == _implicit_) {
     evalRHS(a_rhs_species, a_soln_species, a_phi, a_E_field, a_velocity_option, a_time);
   }
-  return;
 }
+
 
 void
 GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
@@ -302,19 +324,29 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
    // Compute Vlasov_flux[dfn-F0] + Vlasov_flux_high_order[F0]
    else {
       
-      LevelData<FArrayBox> dfn_no_bstar(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
-      for (DataIterator dit(dbl); dit.ok(); ++dit) {
-         dfn_no_bstar[dit].copy(soln_dfn[dit]);
+      if ( !m_dfn_no_bstar.isDefined()) {
+        m_dfn_no_bstar.define( dbl, soln_dfn.nComp(), soln_dfn.ghostVect() );
       }
-      geometry.divideBStarParallel(dfn_no_bstar);
+      for (DataIterator dit(dbl); dit.ok(); ++dit) {
+         m_dfn_no_bstar[dit].copy(soln_dfn[dit]);
+      }
+      geometry.divideBStarParallel(m_dfn_no_bstar);
       
-      LevelData<FArrayBox> maxwellian_dfn(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
-      LevelData<FArrayBox> delta_dfn(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
-      computeDeltaF(a_soln_species, dfn_no_bstar, delta_dfn, maxwellian_dfn);
-      geometry.multBStarParallel(delta_dfn);
       
-      LevelData<FluxBox> flux_df( dbl, SpaceDim, IntVect::Unit );
-      computeFlux( delta_dfn, m_velocity, flux_df, geometry );
+      if (!m_maxwellian_dfn.isDefined()) {
+        m_maxwellian_dfn.define(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
+      }
+      if (!m_delta_dfn.isDefined()) {
+         m_delta_dfn.define(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
+      }
+            
+      computeDeltaF(a_soln_species, m_dfn_no_bstar, m_delta_dfn, m_maxwellian_dfn);
+      geometry.multBStarParallel(m_delta_dfn);
+      
+      if (!m_delta_flux.isDefined()) {
+         m_delta_flux.define( dbl, SpaceDim, ghostVect );
+      }
+      computeFlux( m_delta_dfn, m_velocity, m_delta_flux, geometry );
       
       // Update gk-velocity to include no zero-order terms
       if (a_soln_species.isGyrokinetic()) {
@@ -333,11 +365,11 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
 
       }
 
-      geometry.multBStarParallel(maxwellian_dfn);
-      computeFlux( maxwellian_dfn, m_velocity, m_flux, geometry);
+      geometry.multBStarParallel(m_maxwellian_dfn);
+      computeFlux( m_maxwellian_dfn, m_velocity, m_flux, geometry);
   
       for (DataIterator dit(dbl); dit.ok(); ++dit) {
-         m_flux[dit] += flux_df[dit];
+         m_flux[dit] += m_delta_flux[dit];
       }
    }
 
@@ -366,9 +398,7 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
    double rhs_norm = MaxNorm(rhs_dfn);
    if (procID()==0) cout << "velocity divergence norm = " << veldiv_norm << ", rhs norm = " << rhs_norm << endl;
 #endif
-
 }
-
 
 
 void
@@ -399,9 +429,8 @@ GKVlasov::evalRHSExplicit( KineticSpecies&                        a_rhs_species,
               a_velocity_option, 
               a_time);
   }
-
-  return;
 }
+
 
 void
 GKVlasov::evalRHSImplicit( KineticSpecies&                        a_rhs_species,
@@ -431,9 +460,8 @@ GKVlasov::evalRHSImplicit( KineticSpecies&                        a_rhs_species,
               a_velocity_option, 
               a_time);
   }
-
-  return;
 }
+
 
 void
 GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
@@ -449,59 +477,75 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
      Evaluates the (negated) phase space divergence:
         rhs = - divergence_R ( R_dot soln ) - divergence_v ( v_dot soln )
    */
+
+   CH_TIME("GKVlasov::evalRHS");
+  
    const LevelData<FArrayBox>& soln_dfn( a_soln_species.distributionFunction() );
    const DisjointBoxLayout& dbl( soln_dfn.getBoxes() );
 
    const PhaseGeom& geometry( a_rhs_species.phaseSpaceGeometry() );
    const CFG::MagGeom& mag_geom = geometry.magGeom();
    
-   LevelData<FArrayBox> dfn_no_bstar(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
+   if ( !m_dfn_no_bstar.isDefined()) {
+     m_dfn_no_bstar.define( dbl, soln_dfn.nComp(), soln_dfn.ghostVect() );
+   }
    for (DataIterator dit(dbl); dit.ok(); ++dit) {
-      dfn_no_bstar[dit].copy(soln_dfn[dit]);
+      m_dfn_no_bstar[dit].copy(soln_dfn[dit]);
    }
-   geometry.divideBStarParallel(dfn_no_bstar);
+   geometry.divideBStarParallel(m_dfn_no_bstar);
+      
+   IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
 
-   LevelData<FluxBox> flux_normal( dbl, 1, IntVect::Unit );
-   LevelData<FluxBox> velocity_normal( dbl, 1, IntVect::Unit );
-   
-   // Compute normal flux
-   if (!m_subtract_maxwellian) {
-      a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, a_velocity_option );
-      computeFluxNormal( dfn_no_bstar, velocity_normal, flux_normal, geometry );
+   if ( !m_velocity_normal.isDefined()) {
+     m_velocity_normal.define( dbl, 1, ghostVect );
    }
+
+   a_soln_species.computeMappedVelocityNormals( m_velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, a_velocity_option );
+   
+   if ( !m_flux_normal.isDefined()) {
+     m_flux_normal.define( dbl, 1, ghostVect );
+   }
+      
+   // Compute normals of Vlasov_flux[dfn]
+   if (!m_subtract_maxwellian) {
+      computeFluxNormal( m_dfn_no_bstar, m_velocity_normal, m_flux_normal, geometry );
+   }
+   
+   // Compute normals of Vlasov_flux[dfn-F0] + Vlasov_flux_high_order[F0]
    else {
 
-      LevelData<FArrayBox> maxwellian_dfn(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
-      LevelData<FArrayBox> delta_dfn(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
-      computeDeltaF(a_soln_species, dfn_no_bstar, delta_dfn, maxwellian_dfn);
+      if (!m_maxwellian_dfn.isDefined()) {
+         m_maxwellian_dfn.define(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
+      }
+      if (!m_delta_dfn.isDefined()) {
+         m_delta_dfn.define(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
+      }
+           
+      computeDeltaF(a_soln_species, m_dfn_no_bstar, m_delta_dfn, m_maxwellian_dfn);
+           
+      if (!m_delta_flux.isDefined()) {
+         m_delta_flux_normal.define( dbl, 1, ghostVect );
+      }
       
-      LevelData<FluxBox> flux_tmp( dbl, 1, IntVect::Unit );
-      a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, a_velocity_option );
-      computeFluxNormal( delta_dfn, velocity_normal, flux_tmp, geometry );
- 
-      a_soln_species.computeMappedVelocityNormals( velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield,
+      computeFluxNormal( m_delta_dfn, m_velocity_normal, m_delta_flux_normal, geometry );
+       
+      a_soln_species.computeMappedVelocityNormals( m_velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield,
                                                    PhaseGeom::NO_ZERO_ORDER_TERMS );
 
-      if (!m_update_maxwellian) {
-         computeFluxNormal( m_F0, velocity_normal, flux_normal, geometry);
-      }
-      else {
-         computeFluxNormal( maxwellian_dfn, velocity_normal, flux_normal, geometry);
-      }
+      computeFluxNormal( m_maxwellian_dfn, m_velocity_normal, m_flux_normal, geometry);
 
       for (DataIterator dit(dbl); dit.ok(); ++dit) {
-         flux_normal[dit] += flux_tmp[dit];
+         m_flux_normal[dit] += m_delta_flux_normal[dit];
       }
-
    }
 
    // Enforce conservation
    if (!mag_geom.extrablockExchange()) {
-      geometry.averageAtBlockBoundaries(flux_normal);
+      geometry.averageAtBlockBoundaries(m_flux_normal);
    }
    
    LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
-   geometry.mappedGridDivergenceFromIntegratedFluxNormals( rhs_dfn, flux_normal );
+   geometry.mappedGridDivergenceFromIntegratedFluxNormals( rhs_dfn, m_flux_normal );
 
 #ifdef TEST_ZERO_DIVERGENCE
    LevelData<FArrayBox> velocity_divergence(dbl, 1, IntVect::Zero);
@@ -526,6 +570,7 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
 #endif
 
 }
+
 
 void
 GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
@@ -559,13 +604,13 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
    IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
 
    if ( !m_velocity_normal.isDefined()) {
-     m_velocity_normal.define( dbl, SpaceDim, ghostVect );
+     m_velocity_normal.define( dbl, 1, ghostVect );
    }
    
    a_soln_species.computeMappedVelocityNormals( m_velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield, a_velocity_option );
    
    if ( !m_flux_normal.isDefined()) {
-     m_flux_normal.define( dbl, SpaceDim, ghostVect );
+     m_flux_normal.define( dbl, 1, ghostVect );
    }
 
    // Compute normals of Vlasov_flux[dfn]
@@ -585,11 +630,11 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
       
       computeDeltaF(a_soln_species, m_dfn_no_bstar, m_delta_dfn, m_maxwellian_dfn);
       
-      if (!m_delta_flux.isDefined()) {
-         m_delta_flux.define( dbl, 1, ghostVect );
+      if (!m_delta_flux_normal.isDefined()) {
+         m_delta_flux_normal.define( dbl, 1, ghostVect );
       }
  
-      computeFluxNormal( m_delta_dfn, m_velocity_normal, m_delta_flux, geometry );
+      computeFluxNormal( m_delta_dfn, m_velocity_normal, m_delta_flux_normal, geometry );
  
       a_soln_species.computeMappedVelocityNormals( m_velocity_normal, a_Efield_cell, a_phi_node, a_fourth_order_Efield,
                                                    PhaseGeom::NO_ZERO_ORDER_TERMS );
@@ -597,7 +642,7 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
       computeFluxNormal( m_maxwellian_dfn, m_velocity_normal, m_flux_normal, geometry);
       
       for (DataIterator dit(dbl); dit.ok(); ++dit) {
-         m_flux_normal[dit] += m_delta_flux[dit];
+         m_flux_normal[dit] += m_delta_flux_normal[dit];
       }
 
    }
@@ -720,6 +765,8 @@ GKVlasov::computeFluxNormal( const LevelData<FArrayBox>& a_dist_fn,
       Compute the phase space flux normal given the input phase space advection
       velocity normal.   This is where the hyperbolic stuff connects.
    */
+
+   CH_TIME("GKVlasov::computeFluxNormal");
 
    // Construct appropriately accurate face-averages of phi and advVel
    IntVect ghostVect = (a_phase_geom.secondOrder()) ? IntVect::Zero : IntVect::Unit;
@@ -1876,6 +1923,7 @@ GKVlasov::defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_p
                                bool                                          a_im )
 {
   m_my_pc_idx.clear();
+  m_vlasov_pc_idx.clear();
 
   for (int species(0); species<a_soln.size(); species++) {
     const KineticSpecies&           soln_species(*(a_soln[species]));
@@ -1925,12 +1973,29 @@ GKVlasov::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
     if (!procID()) {
       std::cout << "  Kinetic Species " << a_species_index
                 << " - Vlasov term: "
+#ifdef AMG_PRECOND
+                << " creating " << _GK_VLASOV_PC_ << " preconditioner "
+#else
                 << " creating " << _BASIC_GK_PC_ << " preconditioner "
+#endif
                 << " (index = " << a_pc.size() << ").\n";
     }
 
     Preconditioner<GKVector, GKOps> *pc;
+#ifdef AMG_PRECOND
+    pc = new GKVlasovPreconditioner<GKVector,GKOps>;
+
+    string precond_prefix = string(pp_name) + ".precond";
+    ParmParse pp_precond(precond_prefix.c_str());
+
+    GKVlasovAMG* amg_pc = new GKVlasovAMG(pp_precond);
+
+    m_vlasov_pc_idx[name] = m_pc_vec.size();
+    m_pc_vec.push_back(amg_pc);
+
+#else
     pc = new BasicGKPreconditioner<GKVector,GKOps>;
+#endif
     DOFList dof_list(0);
 
     const LevelData<FArrayBox>& soln_dfn    (a_species.distributionFunction());
@@ -1953,8 +2018,13 @@ GKVlasov::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
 
     std::string out_string = pp_name + std::string(".") + name;
     std::string opt_string = pp_name + std::string(".") + name;
+#ifdef AMG_PRECOND
+    dynamic_cast<GKVlasovPreconditioner<GKVector,GKOps>*>
+       (pc)->define(a_X, a_ops, out_string, opt_string, a_im);
+#else
     dynamic_cast<BasicGKPreconditioner<GKVector,GKOps>*>
-      (pc)->define(a_X, a_ops, out_string, opt_string, a_im, dof_list);
+       (pc)->define(a_X, a_ops, out_string, opt_string, a_im, dof_list);
+#endif
     a_pc.push_back(pc);
     a_dof_list.push_back(dof_list);
 
@@ -1967,17 +2037,19 @@ GKVlasov::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
 void 
 GKVlasov::updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
                                const KineticSpeciesPtrVect&                  a_soln,
+                               const CFG::LevelData<CFG::FArrayBox>&         a_phi,
+                               const CFG::EField&                            a_E_field,
                                const GlobalDOFKineticSpeciesPtrVect&         a_gdofs,
                                const Real                                    a_time,
                                const Real                                    a_shift,
                                const bool                                    a_im )
 {
-  for (int species(0); species<a_soln.size(); species++) {
+   for (int species(0); species<a_soln.size(); species++) {
     const KineticSpecies&           soln_species(*(a_soln[species]));
     const GlobalDOFKineticSpecies&  gdofs_species(*(a_gdofs[species]));
     const std::string               species_name(soln_species.name());
 
-    updateBlockPC(a_pc, soln_species, gdofs_species, a_time, a_shift, a_im, species);
+    updateBlockPC(a_pc, soln_species, a_phi, a_E_field, gdofs_species, a_time, a_shift, a_im, species);
   }
 }
 
@@ -1985,13 +2057,39 @@ GKVlasov::updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_p
 void 
 GKVlasov::updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
                          const KineticSpecies&                         a_species,
+                         const CFG::LevelData<CFG::FArrayBox>&         a_phi,
+                         const CFG::EField&                            a_E_field,
                          const GlobalDOFKineticSpecies&                a_global_dofs,
                          const Real                                    a_time,
                          const Real                                    a_shift,
                          const bool                                    a_im,
                          const int                                     a_species_index )
 {
-  const std::string& name = a_species.name();
+   const LevelData<FArrayBox>& dfn( a_species.distributionFunction() );
+   const DisjointBoxLayout& dbl( dfn.getBoxes() );
+   const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
+
+   IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
+   if ( !m_velocity.isDefined()) {
+      m_velocity.define( dbl, SpaceDim, ghostVect );
+   }
+
+   // Compute full gyrokinetic velocity
+   if (a_species.isGyrokinetic()) {
+
+      LevelData<FluxBox> gyroaveraged_E_field;
+      int order (a_E_field.secondOrder() ? 2 : 4);
+      a_species.gyroaveragedEField( gyroaveraged_E_field,
+                                    a_phi, 
+                                    order );
+
+      a_species.computeVelocity( m_velocity, gyroaveraged_E_field, PhaseGeom::FULL_VELOCITY, 0.);
+   } 
+   else {
+      a_species.computeVelocity( m_velocity, a_E_field.getInjectedField(), PhaseGeom::FULL_VELOCITY, 0.);
+   }
+
+   const std::string& name = a_species.name();
 
   {
     std::map<std::string, tiType>::const_iterator it;
@@ -2013,23 +2111,308 @@ GKVlasov::updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
     CH_assert(a_pc.size() > m_my_pc_idx[name]);
 
     if (!procID()) {
-      std::cout << "    ==> Updating " <<_BASIC_GK_PC_ << " preconditioner "
+#ifdef AMG_PRECOND
+      std::cout << "    ==> Updating " << _GK_VLASOV_PC_ << " preconditioner "
+#else
+      std::cout << "    ==> Updating " << _BASIC_GK_PC_ << " preconditioner "
+#endif
                 << " for Vlasov term of kinetic species " << a_species_index << ".\n";
     }
 
+#ifdef AMG_PRECOND
+    const PhaseGeom& geometry = a_species.phaseSpaceGeometry();
+    const MultiBlockCoordSys* coord_sys = geometry.coordSysPtr();
+    const DisjointBoxLayout& grids = geometry.gridsFull();
+
+    LevelData<BaseFab<Vector<IntVect> > > couplings(grids, 1, IntVect::Unit);
+    LevelData<BaseFab<Vector<Real> > > weights(grids, 1, IntVect::Unit);
+
+    constructStencils( m_velocity, geometry, a_shift, couplings, weights);
+
+    GKVlasovAMG* this_pc = m_pc_vec[m_vlasov_pc_idx[name]];
+
+    this_pc->constructMatrix(coord_sys, m_precond_face_avg_type, couplings, weights);
+
+    if ( m_precond_build_test ) {
+       testPC(this_pc, geometry, m_velocity, a_shift);
+    }
+
+#else
     BasicGKPreconditioner<GKVector,GKOps> *pc = dynamic_cast<BasicGKPreconditioner<GKVector,GKOps>*>
                                                   (a_pc[m_my_pc_idx[name]]);
     CH_assert(pc != NULL);
-
     BandedMatrix *pc_mat((BandedMatrix*)pc->getBandedMatrix());
     pc_mat->setToIdentityMatrix();
     pc_mat->scaleEntries(a_shift);
     //assemblePrecondMatrix((void*)pc_mat, a_species, a_global_dofs, a_shift);
     pc_mat->finalAssembly();
+#endif
   }
 
   return;
 }
+
+
+void GKVlasov::testPC( const GKVlasovAMG*         a_pc,
+                       const PhaseGeom&           a_geometry,
+                       const LevelData<FluxBox>&  a_velocity,
+                       const Real                 a_shift )
+{
+   if ( a_geometry.divFreeVelocity() ) {
+      MayDay::Error("GKVlasov::testPC() is not yet implemented for the divergence-free velocity option");
+   }
+
+   if ( m_subtract_maxwellian ) {
+      MayDay::Error("GKVlasov::testPC() is not yet implemented for the delta-f option");
+   }
+
+   const DisjointBoxLayout& grids = a_geometry.gridsFull();
+
+   // Construct a random vector between -1 and 1
+
+   LevelData<FArrayBox> vec(grids, 1, IntVect::Zero);
+
+   srand(time(NULL));
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for (BoxIterator bit(grids[dit]); bit.ok(); ++bit) {
+         IntVect iv = bit();
+         vec[dit](iv,0) = (double)rand() / (double)RAND_MAX;
+      }
+   }
+
+   // Compute the matrix vector product
+
+   LevelData<FArrayBox> matvec(grids, 1, IntVect::Zero);
+   a_pc->multiplyMatrix(vec, matvec);
+
+   LevelData<FArrayBox> solution(grids, 1, 2*IntVect::Unit);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      solution[dit].setVal(0.);
+      solution[dit].copy(vec[dit]);
+
+      Box grown_box2 = grow(grids[dit],2);
+      FArrayBox J(grown_box2,1);
+      const PhaseBlockCoordSys& block_coord_sys = a_geometry.getBlockCoordSys(grids[dit]);
+      block_coord_sys.getAvgJ(J, grown_box2);
+      solution[dit] /= J;
+   }
+   solution.exchange();
+
+   // Compute the negative flux divergence divided by the mapped cell volue
+
+   LevelData<FArrayBox> pc_operator(grids, 1, IntVect::Zero);
+
+   LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Zero);
+
+   // Compute Vlasov_flux[dfn]
+   computeFlux( solution, a_velocity, flux, a_geometry );
+   
+   const bool OMIT_NT(false);
+   a_geometry.mappedGridDivergence( pc_operator, flux, OMIT_NT );
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = a_geometry.getBlockCoordSys(grids[dit]);
+      double fac( -1.0 / block_coord_sys.getMappedCellVolume() );
+      pc_operator[dit].mult( fac );
+   }
+
+   // Negate the negative flux divergence and add the shifted identity contribution
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      pc_operator[dit].negate();
+      pc_operator[dit].plus(vec[dit], a_shift);
+   }
+
+   // Compute the differnce between the matrix vector product and the evaluated
+   // preconditioner operator
+
+   LevelData<FArrayBox> diff(grids, 1, IntVect::Zero);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      diff[dit].copy(matvec[dit]);
+      diff[dit] -= pc_operator[dit];
+   }
+
+   double relative_difference = MaxNorm(diff) / MaxNorm(pc_operator);
+
+   if (procID()==0) {
+      cout << "GKVlasov::testPC(): relative difference = " << relative_difference << " (using random input)" << endl;
+   }
+}
+
+
+void GKVlasov::solvePCImEx( KineticSpeciesPtrVect&           a_kinetic_species_solution,
+                            const KineticSpeciesPtrVect&     a_kinetic_species_rhs,
+                            const CFG::FluidSpeciesPtrVect&  a_fluid_species_rhs,
+                            int                              a_idx ) const
+{
+   if (a_idx < 0 ) {
+      for (int species(0); species<a_kinetic_species_solution.size(); species++) {
+         KineticSpecies& kinetic_species_soln( static_cast<KineticSpecies&>(*(a_kinetic_species_solution[species])) );
+         const std::string species_name( kinetic_species_soln.name() );
+
+         std::map<std::string, int>::const_iterator it = m_vlasov_pc_idx.find(species_name);
+         if ( it != m_vlasov_pc_idx.end() ) {
+            GKVlasovAMG* this_pc = m_pc_vec[it->second];
+
+            KineticSpecies& kinetic_species_rhs( static_cast<KineticSpecies&>(*(a_kinetic_species_rhs[species])) );
+
+            this_pc->solve(kinetic_species_rhs.distributionFunction(), kinetic_species_soln.distributionFunction(), true);
+         }
+      }
+   }
+   else {
+      KineticSpecies& kinetic_species_soln( static_cast<KineticSpecies&>(*(a_kinetic_species_solution[a_idx])) );
+      const std::string& species_name( kinetic_species_soln.name() );
+
+      std::map<std::string, int>::const_iterator it = m_vlasov_pc_idx.find(species_name);
+      if ( it != m_vlasov_pc_idx.end() ) {
+         GKVlasovAMG* this_pc = m_pc_vec[it->second];
+
+         KineticSpecies& kinetic_species_rhs( static_cast<KineticSpecies&>(*(a_kinetic_species_rhs[a_idx])) );
+
+         this_pc->solve(kinetic_species_rhs.distributionFunction(), kinetic_species_soln.distributionFunction(), true);
+      }
+   }
+}
+
+
+void
+GKVlasov::constructStencils( const LevelData<FluxBox>&               a_physical_velocity,
+                             const PhaseGeom&                        a_geometry,
+                             const Real                              a_shift,
+                             LevelData<BaseFab<Vector<IntVect> > >&  a_couplings,
+                             LevelData<BaseFab<Vector<Real> > >&     a_weights ) const
+{
+   CH_TIME("GKVlasov::constructStencils");
+   
+   const DisjointBoxLayout& grids( a_geometry.gridsFull() );
+
+   // The passed in velocity is assumed to be in the physical frame.  For upwinding,
+   // we need normal velocities in computational space.  Since we just need a sign, we
+   // don't need fourth order for the metric multiplication.
+
+   LevelData<FluxBox> normal_vel(grids, 1, IntVect::Zero);
+   a_geometry.computeMetricTermProductAverage( normal_vel, a_physical_velocity, false );
+
+   // The dimensioning of the following temporary arrays may need to be increased if other methods are added
+   double method_stencil_weights[3];
+   IntVect coupling_iv[3];
+   double coupling_weight[3];
+
+   int stencil_box_radius;
+   int method_stencil_length;
+   if ( m_precond_face_avg_type == "uw1" ) {
+      stencil_box_radius = 1;
+      method_stencil_length = 1;
+      method_stencil_weights[0] = one;
+   }
+   else if ( m_precond_face_avg_type == "uw3" ) {
+      stencil_box_radius = 2;
+      method_stencil_length = 3;
+      method_stencil_weights[0] = third;
+      method_stencil_weights[1] = 5.*sixth;
+      method_stencil_weights[2] = -sixth;
+   }
+   else {
+      MayDay::Error("GKVlasov::computeStencils(): Unknown face_avg_type");
+   }
+
+   CH_assert(method_stencil_length <= 3);  // See previous comment above
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const FluxBox& this_normal_vel( normal_vel[dit] );
+      BaseFab<Vector<IntVect> >& this_couplings = a_couplings[dit];
+      BaseFab<Vector<Real> >& this_weights = a_weights[dit];
+      
+      const PhaseBlockCoordSys& block_coord_sys = a_geometry.getBlockCoordSys(grids[dit]);
+      double mapped_cell_volume = block_coord_sys.getMappedCellVolume();
+
+      Box J_box = grow(grids[dit],stencil_box_radius);
+      FArrayBox J(J_box,1);
+      block_coord_sys.getAvgJ(J, J_box);
+
+      // The following box is grown by one so that we can compute stencils on low and
+      // high face sides without worrying about boundaries
+      Box grown_box = grow(grids[dit],1);
+      for (BoxIterator bit(grown_box); bit.ok(); ++bit) {
+         IntVect iv = bit();
+
+         this_couplings(iv,0).push_back(iv);
+         this_weights(iv,0).push_back(a_shift);
+      }
+
+      for (int dir=0; dir<SpaceDim; dir++) {
+         Box face_box = surroundingNodes(grids[dit], dir);
+
+         for (BoxIterator bit(face_box); bit.ok(); ++bit) {
+            IntVect iv_face = bit();
+            IntVect iv_lo_cell = iv_face; iv_lo_cell[dir]--;
+            IntVect iv_hi_cell = iv_face;
+            
+            double v = this_normal_vel[dir](iv_face,0);
+
+            if ( v > 0. ) {
+               coupling_iv[0] = iv_lo_cell;
+            }
+            else {
+               coupling_iv[0] = iv_hi_cell;
+            }
+
+            if ( m_precond_face_avg_type == "uw3" ) {
+               if ( v > 0. ) {
+                  coupling_iv[1] = coupling_iv[0];
+                  coupling_iv[0][dir]++;
+                  coupling_iv[2] = coupling_iv[1]; coupling_iv[2][dir]--;
+               }
+               else {
+                  coupling_iv[1] = coupling_iv[0];
+                  coupling_iv[0][dir]--;
+                  coupling_iv[2] = coupling_iv[1]; coupling_iv[2][dir]++;
+               }
+            }
+
+            for (int m=0; m<method_stencil_length; ++m) {
+               coupling_weight[m] = method_stencil_weights[m] * v / (mapped_cell_volume * J(coupling_iv[m],0));
+            }
+            
+            // Update the couplings on the high side of the current face.
+            for (int m=0; m<method_stencil_length; ++m) {
+               int num_couplings = this_couplings(iv_hi_cell,0).size();
+               bool new_coupling = true;
+               for (int n=0; n<num_couplings; ++n) {
+                  if ( (this_couplings(iv_hi_cell,0))[n] == coupling_iv[m] ) {
+                     this_weights(iv_hi_cell,0)[n] -= coupling_weight[m];
+                     new_coupling = false;
+                     break;
+                  }
+               }
+               if ( new_coupling ) {
+                  this_couplings(iv_hi_cell,0).push_back(coupling_iv[m]);
+                  this_weights(iv_hi_cell,0).push_back(-coupling_weight[m]);
+               }
+            }
+
+            // Update the couplings on the low side of the current face.
+            for (int m=0; m<method_stencil_length; ++m) {
+               int num_couplings = this_couplings(iv_lo_cell,0).size();
+               bool new_coupling = true;
+               for (int n=0; n<num_couplings; ++n) {
+                  if ( (this_couplings(iv_lo_cell,0))[n] == coupling_iv[m] ) {
+                     this_weights(iv_lo_cell,0)[n] += coupling_weight[m];
+                     new_coupling = false;
+                     break;
+                  }
+               }
+               if ( new_coupling ) {
+                  this_couplings(iv_lo_cell,0).push_back(coupling_iv[m]);
+                  this_weights(iv_lo_cell,0).push_back(coupling_weight[m]);
+               }
+            }               
+         }
+      }
+   }
+}
+
 
 IntVect
 GKVlasov::getSpeciesGhostVect()

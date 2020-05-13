@@ -1,0 +1,19 @@
+#!/bin/sh
+
+debug="--enable-debug"
+
+install_dir=$PWD/lib/ANAG-gcc-gfortran-dbg
+
+cd src
+./configure $debug \
+            --with-CC=/usr/bin/gcc \
+            --with-CFLAGS="-g " \
+            --with-CXX=/usr/bin/g++ \
+            --with-CXXFLAGS="-g " \
+            --with-F77=/usr/bin/gfortran \
+            --with-F77FLAGS="-g " \
+            --without-MPI \
+            --enable-maxdim=5 \
+            --prefix=$install_dir
+cd ..
+

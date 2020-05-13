@@ -7,6 +7,7 @@
 #include "BlockRegister.H"
 #include "EllipticOpBC.H"
 #include "EdgeDataBox.H"
+#include "NodeFArrayBox.H"
 #include "CoDimCopyManager.H"
 
 #include "BoundaryBoxLayout.H.multidim"
@@ -63,6 +64,11 @@ public:
    void setJonEdges( const DisjointBoxLayout&, 
                      const IntVect&           ) const;
    
+   void getJ( LevelData<NodeFArrayBox>& J ) const;
+   
+   void setJonNodes( const DisjointBoxLayout&, 
+                     const IntVect&           ) const;
+   
    void getN( LevelData<FArrayBox>& N ) const;
    
    void setN( const DisjointBoxLayout&, 
@@ -102,6 +108,16 @@ public:
    void setPointwiseNJInverseOnCells( const DisjointBoxLayout&, 
                                       const IntVect&           ) const;
 
+   void getPointwiseFaceAreas( LevelData<FluxBox>& face_areas ) const;
+
+   void setPointwiseFaceAreas( const DisjointBoxLayout&,
+                               const IntVect&           ) const;
+
+   void getPointwiseFaceAreas( LevelData<FArrayBox>& face_areas_cc ) const;
+
+   void setPointwiseFaceAreasOnCells( const DisjointBoxLayout&,
+                                     const IntVect&           ) const;
+   
    void multJonValid( LevelData<FArrayBox>& dfn ) const;
    
    void multJonFaces( LevelData<FluxBox>& dfn ) const;
@@ -140,6 +156,19 @@ public:
 
    void mappedGridDivergenceFromFluxNorms( const FluxBox&    F,
                                                  FArrayBox&  divergence ) const;
+   
+   void physicalDivergenceFromEdgeTans( LevelData<NodeFArrayBox>&  divF, 
+                                  const LevelData<EdgeDataBox>&    covar_F ) const;
+
+   void physicalDivergenceAtEdges( LevelData<EdgeDataBox>&    a_divF_ce,
+                             const LevelData<NodeFArrayBox>&  a_F_nc,
+                             const LevelData<FArrayBox>&      a_F_cc ) const;
+
+   void ParaGradAtNodesFromEdges( LevelData<NodeFArrayBox>&  a_gradF,
+                            const LevelData<EdgeDataBox>&    a_F ) const;
+   
+   void PerpGradAtCellsFromEdges( LevelData<FArrayBox>&    a_gradF,
+                            const LevelData<EdgeDataBox>&  a_F ) const;
 
    void mappedGridCurlFromEdgeTans( const LevelData<EdgeDataBox>&  E,
                                     const int                      face_dir,
@@ -147,6 +176,9 @@ public:
    
    void mappedGridCurlofVirtComp( const LevelData<FArrayBox>&    F,
                                         LevelData<EdgeDataBox>&  edge_curl) const;
+   
+   void mappedGridCurlofVirtComp( const LevelData<FArrayBox>&  F,
+                                        LevelData<FArrayBox>&  cell_curl) const;
    
    void convertPhysToCovar( LevelData<FArrayBox>&  a_F,
                       const int                    a_inverse) const;
@@ -162,6 +194,9 @@ public:
    
    void convertContravarToCovar( LevelData<EdgeDataBox>&  a_F,
                            const int                      a_inverse) const;
+   
+   void computeJaStrainTensorPhys( LevelData<FluxBox>&    a_JaW_phys, 
+                             const LevelData<FArrayBox>&  a_velocity_phys ) const;
    
    void computeJaPhysStrainFlux( LevelData<FluxBox>&    a_JaW0_Flux_phys, 
                                  LevelData<FluxBox>&    a_JaW1_Flux_phys,
@@ -500,10 +535,13 @@ private:
    mutable LevelData<FluxBox> m_rad_coeff_mapped;
     
    mutable LevelData<FArrayBox> m_cell_volume;
+   mutable LevelData<FluxBox> m_face_areas;
+   mutable LevelData<FArrayBox> m_face_areas_cc;
 
    mutable LevelData<FArrayBox> m_J;
    mutable LevelData<FluxBox> m_JonFaces;
    mutable LevelData<EdgeDataBox> m_JonEdges;
+   mutable LevelData<NodeFArrayBox> m_JonNodes;
    mutable LevelData<FArrayBox> m_N;
    mutable LevelData<FArrayBox> m_dXdxi;
    mutable LevelData<FluxBox> m_dXdxi_onFaces;

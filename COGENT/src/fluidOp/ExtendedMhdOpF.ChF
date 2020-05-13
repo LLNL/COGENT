@@ -1,0 +1,879 @@
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE ION HEAT FLUX COEFFICIENTS
+
+      subroutine eval_ion_heat_flux_coeffs(
+     &     CHF_BOX[cellbox],
+     &     CHF_CONST_REAL[xionFactor],
+     &     CHF_CONST_REAL[gamma],
+     &     CHF_CONST_REAL[Vi0sq],
+     &     CHF_CONST_FRA1[taui],
+     &     CHF_CONST_FRA1[xion],
+     &     CHF_CONST_FRA1[Pion],
+     &     CHF_FRA1[kappaC],
+     &     CHF_FRA1[kappaG]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision taui0, Pion0
+      double precision xion0, xion2, xion4, delta0
+      double precision xion0_eff, xion2_eff, xion4_eff, delta0_eff
+      double precision chii_perp, chii_wedge
+
+      CHF_AUTOMULTIDO[cellbox;i]
+
+        taui0  = taui(CHF_AUTOIX[i])
+        Pion0  = Pion(CHF_AUTOIX[i])
+        
+        xion0  = xion(CHF_AUTOIX[i])
+        xion2  = xion0*xion0
+        xion4  = xion2*xion2
+        delta0 = xion4 + 2.70*xion2 + 0.677
+        
+        xion0_eff = xion0/xionFactor;
+        xion2_eff  = xion0_eff*xion0_eff
+        xion4_eff  = xion2_eff*xion2_eff
+        delta0_eff = xion4_eff + 2.70*xion2_eff + 0.677
+
+        chii_perp  =  (two*xion2 + 2.645)/delta0       
+        chii_wedge =  xion0_eff/xionFactor*(gamma/(gamma-1.0)*xion2_eff + 4.65)/delta0_eff       
+
+        kappaC(CHF_AUTOIX[i]) = Vi0sq*taui0*Pion0*chii_perp
+        kappaG(CHF_AUTOIX[i]) = Vi0sq*taui0*Pion0*chii_wedge
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE ELE HEAT FLUX COEFFICIENTS
+
+      subroutine eval_ele_heat_flux_coeffs(
+     &     CHF_BOX[cellbox],
+     &     CHF_CONST_REAL[xeleFactor],
+     &     CHF_CONST_REAL[gamma],
+     &     CHF_CONST_REAL[Ve0sq],
+     &     CHF_CONST_FRA1[taue],
+     &     CHF_CONST_FRA1[xele],
+     &     CHF_CONST_FRA1[Pele],
+     &     CHF_FRA1[kappaC],
+     &     CHF_FRA1[kappaG]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision taue0, Pele0
+      double precision xele0, xele2, xele4, delta0
+      double precision xele0_eff, xele2_eff, xele4_eff, delta0_eff
+      double precision chie_perp, chie_wedge
+
+      CHF_AUTOMULTIDO[cellbox;i]
+
+        taue0  = taue(CHF_AUTOIX[i])
+        Pele0  = Pele(CHF_AUTOIX[i])
+        
+        xele0  = xele(CHF_AUTOIX[i])
+        xele2  = xele0*xele0
+        xele4  = xele2*xele2
+        delta0 = xele4 + 14.79*xele2 + 3.7703
+        
+        xele0_eff  = xele0/xeleFactor;
+        xele2_eff  = xele0_eff*xele0_eff
+        xele4_eff  = xele2_eff*xele2_eff
+        delta0_eff = xele4_eff + 14.79*xele2_eff + 3.7703
+
+        chie_perp  = (4.664*xele2 + 11.92)/delta0       
+        chie_wedge = xele0_eff/xeleFactor*(gamma/(gamma-1.0)*xele2_eff + 21.67)/delta0_eff       
+
+        kappaC(CHF_AUTOIX[i]) = Ve0sq*taue0*Pele0*chie_perp
+        kappaG(CHF_AUTOIX[i]) = Ve0sq*taue0*Pele0*chie_wedge
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE COLLISIONAL HEAT FLUX
+
+      subroutine eval_coll_heat_flux(
+     &     CHF_BOX[facebox],
+     &     CHF_CONST_REAL[gamma],
+     &     CHF_CONST_REAL[tauMinEff],
+     &     CHF_CONST_REAL[kappaMin],
+     &     CHF_CONST_REAL[limiter],
+     &     CHF_CONST_REAL[V0sq],
+     &     CHF_CONST_FRA1[Temp],
+     &     CHF_CONST_FRA1[Dens],
+     &     CHF_CONST_FRA1[kappa],
+     &     CHF_CONST_FRA[gradT],
+     &     CHF_FRA[Dq],
+     &     CHF_FRA[qFlux]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision Temp0, Dens0, kappa0, tauMinEff0, kappaMin0
+      double precision gradT0, gradT1, qFlux0, qFlux1
+      double precision qFluxfs, limqFlux
+
+      CHF_AUTOMULTIDO[facebox;i]
+
+         Temp0  = Temp(CHF_AUTOIX[i])
+         Dens0  = Dens(CHF_AUTOIX[i])
+         kappa0 = kappa(CHF_AUTOIX[i])
+         kappaMin0 =  tauMinEff*Dens0*Temp0*V0sq + kappaMin        
+
+         gradT0 = gradT(CHF_AUTOIX[i],0)
+         gradT1 = gradT(CHF_AUTOIX[i],1)
+         
+         qFlux0 = -kappa0*gradT(CHF_AUTOIX[i],0)
+         qFlux1 = -kappa0*gradT(CHF_AUTOIX[i],1)
+
+c    limit all fluxes
+
+         qFluxfs = Dens0*Temp0*sqrt(Temp0*V0sq)     
+         limqFlux = limiter*qFluxfs
+
+         qFlux(CHF_AUTOIX[i],0) = limqFlux*qFlux0/(limqFlux + abs(qFlux0)) - kappaMin0*gradT0
+         qFlux(CHF_AUTOIX[i],1) = limqFlux*qFlux1/(limqFlux + abs(qFlux1)) - kappaMin0*gradT1
+        
+c    define effective diffusion coefficient for relaxation scheme
+
+         Dq(CHF_AUTOIX[i],0) = (limqFlux*kappa0/(limqFlux + abs(qFlux0)) + kappaMin0)*(gamma-1)
+         Dq(CHF_AUTOIX[i],1) = (limqFlux*kappa0/(limqFlux + abs(qFlux1)) + kappaMin0)*(gamma-1)
+      
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    ADD Ja*div(GYRO HEAT FLUX) to RHS
+
+      subroutine add_gyro_heat_source(
+     &     CHF_BOX[cellbox],
+     &     CHF_CONST_FRA[curlA],
+     &     CHF_CONST_FRA[gradT],
+     &     CHF_FRA1[RHS]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision gradTr, gradTz, curlAr, curlAz
+      double precision JaDivqG
+
+      CHF_AUTOMULTIDO[cellbox;i]
+
+         gradTr = gradT(CHF_AUTOIX[i],0)
+         gradTz = gradT(CHF_AUTOIX[i],1)
+c         gradAr = gradA(CHF_AUTOIX[i],0)
+c         gradAz = gradA(CHF_AUTOIX[i],1)
+         curlAr = curlA(CHF_AUTOIX[i],0)
+         curlAz = curlA(CHF_AUTOIX[i],1)
+
+c         JaDivqG = gradAr*gradTz - gradAz*gradTr         
+         JaDivqG = gradTr*curlAr + gradTz*curlAz         
+
+         RHS(CHF_AUTOIX[i]) = RHS(CHF_AUTOIX[i]) - JaDivqG 
+      
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE PHYSICAL GYRO HEAT FLUX
+
+      subroutine compute_gyro_heat(
+     &     CHF_BOX[cellbox],
+     &     CHF_CONST_REAL[charge],
+     &     CHF_CONST_FRA1[kappaG],
+     &     CHF_CONST_FRA[gradT],
+     &     CHF_FRA[qFlux]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision kappaG0, gradT0, gradT1
+
+      CHF_AUTOMULTIDO[cellbox;i]
+
+         kappaG0 = kappaG(CHF_AUTOIX[i])
+         gradT0 = gradT(CHF_AUTOIX[i],0)
+         gradT1 = gradT(CHF_AUTOIX[i],1)
+         
+         qFlux(CHF_AUTOIX[i],0) = charge*kappaG0*gradT(CHF_AUTOIX[i],1)
+         qFlux(CHF_AUTOIX[i],1) = -charge*kappaG0*gradT(CHF_AUTOIX[i],0)
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    ADD GYRO HEAT FLUX TO COLLISIONAL HEAT FLUX
+
+      subroutine add_gyro_heat(
+     &     CHF_BOX[facebox],
+     &     CHF_CONST_REAL[charge],
+     &     CHF_CONST_REAL[limiter],
+     &     CHF_CONST_REAL[V0sq],
+     &     CHF_CONST_FRA1[Temp],
+     &     CHF_CONST_FRA1[Dens],
+     &     CHF_CONST_FRA1[kappa],
+     &     CHF_CONST_FRA[gradT],
+     &     CHF_FRA[qFlux]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision Temp0, Dens0, kappa0
+      double precision gradT0, gradT1, qFluxGyro0, qFluxGyro1
+      double precision qFluxfs, limqFlux
+
+      CHF_AUTOMULTIDO[facebox;i]
+
+         Temp0  = Temp(CHF_AUTOIX[i])
+         Dens0  = Dens(CHF_AUTOIX[i])
+         kappa0 = kappa(CHF_AUTOIX[i])
+         
+         gradT0 = gradT(CHF_AUTOIX[i],0)
+         gradT1 = gradT(CHF_AUTOIX[i],1)
+         
+         qFluxGyro0 = charge*kappa0*gradT(CHF_AUTOIX[i],1)
+         qFluxGyro1 = -charge*kappa0*gradT(CHF_AUTOIX[i],0)
+
+c    limit all fluxes
+
+c         qFluxfs = Dens0*Temp0*sqrt(Temp0*V0sq)     
+c         limqFlux = limiter*abs(qFluxfs) + 1.0e-20
+
+c         qFlux(CHF_AUTOIX[i],0) = qFlux(CHF_AUTOIX[i],0) 
+c     &                          + limqFlux*qFluxGyro0/(limqFlux + abs(qFluxGyro0))
+c         qFlux(CHF_AUTOIX[i],1) = qFlux(CHF_AUTOIX[i],1) 
+c     &                          + limqFlux*qFluxGyro1/(limqFlux + abs(qFluxGyro1))
+      
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE ION VISCOSITY COEFFICIENTS
+
+      subroutine eval_ion_visc_coeffs(
+     &     CHF_BOX[cellbox],
+     &     CHF_CONST_REAL[xionFactor],
+     &     CHF_CONST_REAL[etaMin],
+     &     CHF_CONST_FRA1[taui],
+     &     CHF_CONST_FRA1[xion],
+     &     CHF_CONST_FRA1[Pion],
+     &     CHF_FRA[etaC],
+     &     CHF_FRA[etaG]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision taui0, Pion0
+      double precision xion0, xion2, xion4, delta0
+      double precision xion0_eff, xion2_eff, xion4_eff, delta0_eff
+
+      CHF_AUTOMULTIDO[cellbox;i]
+
+        taui0  = taui(CHF_AUTOIX[i])
+        Pion0  = Pion(CHF_AUTOIX[i])
+        
+        etaC(CHF_AUTOIX[i],0) = 2.23/2.33*taui0*Pion0
+
+        xion0  = xion(CHF_AUTOIX[i])
+        xion2  = xion0*xion0
+        xion4  = xion2*xion2
+        delta0 = xion4 + 4.03*xion2 + 2.33
+c        etaC(CHF_AUTOIX[i],2) = taui0*Pion0*(six/five*xion2 + 2.23)/delta0
+       
+        xion0_eff  = xion0/xionFactor
+        xion2_eff  = xion0_eff*xion0_eff
+        xion4_eff  = xion2_eff*xion2_eff
+        delta0_eff = xion4_eff + 4.03*xion2_eff + 2.33
+        etaC(CHF_AUTOIX[i],2) = taui0*Pion0/(xion2+1.0e-20)*(six/five*xion4_eff + 2.23*xion2_eff)/delta0_eff
+        etaG(CHF_AUTOIX[i],1) = taui0*Pion0/(xion0+1.0e-20)*(xion4_eff + 2.38*xion2_eff)/delta0_eff
+        
+        xion0  = two*xion0
+        xion2  = xion0*xion0
+        xion4  = xion2*xion2
+        delta0 = xion4 + 4.03*xion2 + 2.33
+c        etaC(CHF_AUTOIX[i],1) = taui0*Pion0*(six/five*xion2 + 2.23)/delta0
+        
+        xion0_eff  = xion0/xionFactor
+        xion2_eff  = xion0_eff*xion0_eff
+        xion4_eff  = xion2_eff*xion2_eff
+        delta0_eff = xion4_eff + 4.03*xion2_eff + 2.33
+        etaC(CHF_AUTOIX[i],1) = taui0*Pion0/(xion2+1.0e-20)*(six/five*xion4_eff + 2.23*xion2_eff)/delta0_eff
+        etaG(CHF_AUTOIX[i],0) = taui0*Pion0/(xion0+1.0e-20)*(xion4_eff + 2.38*xion2_eff)/delta0_eff
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE ION VISCOSITY FLUXES
+
+      subroutine eval_coll_visc_flux(
+     &     CHF_BOX[facebox],
+     &     CHF_CONST_REAL[tauiMin],
+     &     CHF_CONST_REAL[etaMin],
+     &     CHF_CONST_REAL[limiter],
+     &     CHF_CONST_FRA[eta],
+     &     CHF_CONST_FRA1[JaPion],
+     &     CHF_CONST_FRA1[Ja],
+     &     CHF_CONST_FRA[JaW],
+     &     CHF_FRA[Dx],
+     &     CHF_FRA[Dz],
+     &     CHF_FRA[JaPix],
+     &     CHF_FRA[JaPiz]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision eta0, eta1, eta2, JaPion0, limJaPion0, Ja0
+      double precision JaW_xx, JaW_zz, JaW_yy, JaW_xz, JaW_zx
+      double precision JaPix0, JaPix1, JaPiz0, JaPiz1
+      double precision eta0lim, eta1lim, etaMin0
+
+      CHF_AUTOMULTIDO[facebox;i]
+
+      if (CH_SPACEDIM==3) then
+
+      else
+
+        eta0  = eta(CHF_AUTOIX[i],0)
+        eta1  = eta(CHF_AUTOIX[i],1)
+        eta2  = eta(CHF_AUTOIX[i],2)
+        
+        Ja0      = Ja(CHF_AUTOIX[i])
+        JaPion0  = JaPion(CHF_AUTOIX[i])
+        etaMin0 = 0.96*tauiMin*JaPion0/(Ja0+1.0e-30) + etaMin
+
+        JaW_xx = JaW(CHF_AUTOIX[i],0)
+        JaW_xz = JaW(CHF_AUTOIX[i],1)
+        JaW_zx = JaW(CHF_AUTOIX[i],2)
+        JaW_zz = JaW(CHF_AUTOIX[i],3)
+        JaW_yy = -JaW_xx-JaW_zz
+
+c        JaPix0 = eta0*half*JaW_yy - eta1*half*(JaW_xx-JaW_zz) 
+        JaPix0 = -eta0*half*(JaW_xx+JaW_zz) - eta1*half*(JaW_xx-JaW_zz) 
+        JaPix1 = -eta1*JaW_xz
+        
+        JaPiz0 = -eta1*JaW_zx
+c        JaPiz1 = eta0*half*JaW_yy + eta1*half*(JaW_xx-JaW_zz) 
+        JaPiz1 = -eta0*half*(JaW_xx+JaW_zz) + eta1*half*(JaW_xx-JaW_zz) 
+
+c    limit all fluxes
+     
+        limJaPion0 = limiter*JaPion0 + 1.0e-30
+
+        JaPix(CHF_AUTOIX[i],0) = limJaPion0*JaPix0/(limJaPion0 + abs(JaPix0)) - etaMin0*JaW_xx
+        JaPix(CHF_AUTOIX[i],1) = limJaPion0*JaPix1/(limJaPion0 + abs(JaPix1)) - etaMin0*JaW_xz
+        JaPiz(CHF_AUTOIX[i],0) = limJaPion0*JaPiz0/(limJaPion0 + abs(JaPiz0)) - etaMin0*JaW_zx
+        JaPiz(CHF_AUTOIX[i],1) = limJaPion0*JaPiz1/(limJaPion0 + abs(JaPiz1)) - etaMin0*JaW_zz
+        
+c    define effective diffusion coefficients for relaxation scheme
+
+        eta0lim = limJaPion0*eta0/(limJaPion0 + abs(JaPix0)) + etaMin0
+        eta1lim = limJaPion0*eta1/(limJaPion0 + abs(JaPix0)) + etaMin0
+        Dx(CHF_AUTOIX[i],0) = eta0lim/three + eta1lim
+        
+        eta1lim = limJaPion0*eta1/(limJaPion0 + abs(JaPix1)) + etaMin0
+        Dx(CHF_AUTOIX[i],1) = eta1lim
+        
+
+        eta0lim = limJaPion0*eta0/(limJaPion0 + abs(JaPiz1)) + etaMin0
+        eta1lim = limJaPion0*eta1/(limJaPion0 + abs(JaPiz1)) + etaMin0
+        Dz(CHF_AUTOIX[i],1) = eta0lim/three + eta1lim
+        
+        eta1lim = limJaPion0*eta1/(limJaPion0 + abs(JaPiz0)) + etaMin0
+        Dz(CHF_AUTOIX[i],0) = eta1lim
+        
+c        print*, "JRA: limJaPion0 = ", limJaPion0
+c        print*, "JRA: limJaPion0 = ", limJaPion0
+c        print*, "JRA: Dz(CHF_AUTOIX[i],0) = ", Dz(CHF_AUTOIX[i],0)
+c        print*, "JRA: Dz(CHF_AUTOIX[i],1) = ", Dz(CHF_AUTOIX[i],1)
+
+      endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE VISC FLUX SOURCE TERM AXISYMMETRIC
+
+      subroutine eval_coll_visc_source(
+     &     CHF_BOX[cellbox],
+     &     CHF_CONST_REAL[tauiMin],
+     &     CHF_CONST_REAL[etaMin],
+     &     CHF_CONST_REAL[limiter],
+     &     CHF_CONST_FRA1[Pion],
+     &     CHF_CONST_FRA1[eta],
+     &     CHF_FRA1[Dth],
+     &     CHF_FRA1[Piyy]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision eta0, Pion0, Wyy0, Piyy0, limPion0
+      double precision etaMin0
+
+      CHF_AUTOMULTIDO[cellbox;i]
+
+        eta0 = eta(CHF_AUTOIX[i])
+        Wyy0 = Piyy(CHF_AUTOIX[i])
+        
+        Piyy0 = -eta0*Wyy0
+        etaMin0 = 0.96*tauiMin*Pion(CHF_AUTOIX[i]) + etaMin
+
+c    limit flux
+     
+        limPion0 = limiter*Pion(CHF_AUTOIX[i]) + 1.0e-30
+        Piyy(CHF_AUTOIX[i]) = limPion0*Piyy0/(limPion0 + abs(Piyy0)) - etaMin0*Wyy0
+        
+c    redefine eta using limited value (needed for relaxation scheme)
+
+        Dth(CHF_AUTOIX[i]) = four/three*(limPion0*eta0/(limPion0 + abs(Piyy0)) + etaMin0)
+c        eta0lim = limJaPion0*eta0/(limJaPion0 + abs(JaPix0)) + etaMin0
+c        eta1lim = limJaPion0*eta1/(limJaPion0 + abs(JaPix0)) + etaMin0
+c        Dx(CHF_AUTOIX[i],0) = half*eta0lim*(two-four/three) + half*eta1lim*two
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    ADD GYRO VISCOSITY TO FLUXES
+
+      subroutine add_gyro_visc(
+     &     CHF_BOX[facebox],
+     &     CHF_CONST_REAL[limiter],
+     &     CHF_CONST_FRA1[JaPion],
+     &     CHF_CONST_FRA[etaG],
+     &     CHF_CONST_FRA[JaW],
+     &     CHF_FRA[JaPix],
+     &     CHF_FRA[JaPiz]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision eta3, eta4, limJaPion0
+      double precision JaW_xx, JaW_zz, JaW_yy, JaW_xz, JaW_zx
+      double precision JaPix0, JaPix1, JaPiz0, JaPiz1
+
+      CHF_AUTOMULTIDO[facebox;i]
+
+        eta3  = etaG(CHF_AUTOIX[i],0)
+        eta4  = etaG(CHF_AUTOIX[i],1)
+        
+        JaW_xx = JaW(CHF_AUTOIX[i],0)
+        JaW_xz = JaW(CHF_AUTOIX[i],1)
+        JaW_zx = JaW(CHF_AUTOIX[i],2)
+        JaW_zz = JaW(CHF_AUTOIX[i],3)
+        JaW_yy = -JaW_xx-JaW_zz
+
+        JaPix0 = eta3*JaW_xz
+        JaPix1 = eta3*half*(JaW_zz-JaW_xx)
+        JaPiz0 = eta3*half*(JaW_zz-JaW_xx)
+        JaPiz1 = -eta3*JaW_zx
+        
+        JaPix(CHF_AUTOIX[i],0) = JaPix(CHF_AUTOIX[i],0) + JaPix0
+        JaPix(CHF_AUTOIX[i],1) = JaPix(CHF_AUTOIX[i],1) + JaPix1
+        JaPiz(CHF_AUTOIX[i],0) = JaPiz(CHF_AUTOIX[i],0) + JaPiz0
+        JaPiz(CHF_AUTOIX[i],1) = JaPiz(CHF_AUTOIX[i],1) + JaPiz1
+        
+c        limJaPion0 = limiter*JaPion(CHF_AUTOIX[i]) + 1.0e-20
+c        JaPix(CHF_AUTOIX[i],0) = JaPix(CHF_AUTOIX[i],0) + limJaPion0*JaPix0/(limJaPion0 + abs(JaPix0))
+c        JaPix(CHF_AUTOIX[i],1) = JaPix(CHF_AUTOIX[i],1) + limJaPion0*JaPix1/(limJaPion0 + abs(JaPix1))
+c        JaPiz(CHF_AUTOIX[i],0) = JaPiz(CHF_AUTOIX[i],0) + limJaPion0*JaPiz0/(limJaPion0 + abs(JaPiz0))
+c        JaPiz(CHF_AUTOIX[i],1) = JaPiz(CHF_AUTOIX[i],1) + limJaPion0*JaPiz1/(limJaPion0 + abs(JaPiz1))
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    ADVANCE VISC FLUX USING RELAXATION SCHEME (BACKWARD EULER)
+
+      subroutine advance_visc_flux_using_relax(
+     &     CHF_BOX[facebox],
+     &     CHF_CONST_REAL[dt],
+     &     CHF_CONST_REAL[delta],
+     &     CHF_CONST_FRA1[Density],
+     &     CHF_CONST_FRA1[etaVis],
+     &     CHF_CONST_FRA[Pxold],
+     &     CHF_CONST_FRA[Pyold],
+     &     CHF_CONST_FRA[Px0],
+     &     CHF_CONST_FRA[Py0],
+     &     CHF_FRA[Px],
+     &     CHF_FRA[Py]
+     &     )
+
+c     local variables
+      integer n, CHF_AUTODECL[i]
+      double precision d0P, val, expFactor
+
+      CHF_AUTOMULTIDO[facebox;i]
+
+         d0P = dt/delta*Density(CHF_AUTOIX[i])/etaVis(CHF_AUTOIX[i])
+         if (d0P < 1.0e-4) then
+             expFactor = 1.0 - d0P + half*d0P*d0P - half/three*d0P*d0P*d0P
+         else
+             expFactor = exp(-d0P)
+         endif
+         print*, "d0P    = ", d0P
+
+         do n=0, (nPxcomp-1)
+
+c   first-order backward euler
+c            Px(CHF_AUTOIX[i],n) =  Px0(CHF_AUTOIX[i],n) 
+c     &                          + (Pxold(CHF_AUTOIX[i],n)-Px0(CHF_AUTOIX[i],n))/(1.0 + d0P)
+c            Py(CHF_AUTOIX[i],n) =  Py0(CHF_AUTOIX[i],n) 
+c     &                          + (Pyold(CHF_AUTOIX[i],n)-Py0(CHF_AUTOIX[i],n))/(1.0 + d0P)
+
+c   second-order Du-Fort and Frankel (does not relax)
+c            Px(CHF_AUTOIX[i],n) =  Px0(CHF_AUTOIX[i],n) 
+c     &                          + (Pxold(CHF_AUTOIX[i],n)-Px0(CHF_AUTOIX[i],n))*(1.0 - d0P/two)/(1.0 + d0P/two)
+c            Py(CHF_AUTOIX[i],n) =  Py0(CHF_AUTOIX[i],n) 
+c     &                          + (Pyold(CHF_AUTOIX[i],n)-Py0(CHF_AUTOIX[i],n))*(1.0 - d0P/two)/(1.0 + d0P/two)
+
+c   exponential factor            
+            Px(CHF_AUTOIX[i],n) =  Px0(CHF_AUTOIX[i],n) 
+     &                          + (Pxold(CHF_AUTOIX[i],n)-Px0(CHF_AUTOIX[i],n))*expFactor
+
+            Py(CHF_AUTOIX[i],n) =  Py0(CHF_AUTOIX[i],n) 
+     &                          + (Pyold(CHF_AUTOIX[i],n)-Py0(CHF_AUTOIX[i],n))*expFactor
+
+
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE ELECTRON VISCOSITY ENERGY FLUX
+
+      subroutine eval_ele_visc_energy_flux(
+     &     CHF_BOX[facebox],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA[Ue],
+     &     CHF_CONST_FRA1[Pie_xz],
+     &     CHF_CONST_FRA[Pie_diag],
+     &     CHF_FRA[UePie]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+      integer CHF_DDECL[iii;jjj;kkk]
+      double precision Uex0, Uez0, Piexz0, Piexx0, Piezz0 
+      
+      CHF_DTERM[
+      ii = CHF_ID(dir, 0);
+      jj = CHF_ID(dir, 1);
+      kk = 0]
+      
+      CHF_DTERM[
+      iii = 1 - CHF_ID(dir, 0);
+      jjj = 1 - CHF_ID(dir, 1);
+      kkk = 0]
+      
+      CHF_MULTIDO[facebox;i;j;k]
+
+        Uex0  = Ue(CHF_IX[i;j;k],0)
+        Uez0  = Ue(CHF_IX[i;j;k],1)
+
+        Piexz0 = half*(Pie_xz(CHF_IX[i;j;k])     + Pie_xz(CHF_IX[i-ii;jj-jj;k])) 
+        Piexx0 = half*(Pie_diag(CHF_IX[i;j;k],0) + Pie_diag(CHF_IX[i+iii;j+jjj;k],0)) 
+        Piezz0 = half*(Pie_diag(CHF_IX[i;j;k],1) + Pie_diag(CHF_IX[i+iii;j+jjj;k],1)) 
+
+        UePie(CHF_IX[i;j;k],0) = Uex0*Piexx0 + Uez0*Piexz0
+        UePie(CHF_IX[i;j;k],1) = Uex0*Piexz0 + Uez0*Piezz0
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    ADVANCE VISC SOURCE USING RELAXATION SCHEME (BACKWARD EULER)
+
+      subroutine advance_using_relax(
+     &     CHF_BOX[databox],
+     &     CHF_CONST_REAL[dt],
+     &     CHF_CONST_REAL[delta],
+     &     CHF_CONST_FRA1[Density],
+     &     CHF_CONST_FRA1[Diff],
+     &     CHF_CONST_FRA1[Sold],
+     &     CHF_CONST_FRA1[S0],
+     &     CHF_FRA1[S]
+     &     )
+
+c     local variables
+      integer n, CHF_AUTODECL[i]
+      double precision d0, val, expFactor
+
+      CHF_AUTOMULTIDO[databox;i]
+
+         d0 = dt/delta*Density(CHF_AUTOIX[i])/Diff(CHF_AUTOIX[i])
+c         d0 = dt/delta*Density(CHF_AUTOIX[i])/1.0e-3
+         if (d0 < 1.0e-4) then
+             expFactor = 1.0 - d0 + half*d0*d0 - half/three*d0*d0*d0
+         else
+             expFactor = exp(-d0)
+         endif
+c         print*, "JRA: Diff    = ", Diff(CHF_AUTOIX[i])
+c         print*, "CHF_AUTOIX[i]  = ", CHF_AUTOIX[i]
+c         print*, "JRA: d0      = ", d0
+
+c   first-order backward euler (relaxes)
+c         S(CHF_AUTOIX[i]) = S0(CHF_AUTOIX[i]) 
+c     &                    + (Sold(CHF_AUTOIX[i])-S0(CHF_AUTOIX[i]))/(1.0 + d0)
+
+c   second-order Du-Fort and Frankel (does not relax)
+c         S(CHF_AUTOIX[i]) = S0(CHF_AUTOIX[i]) 
+c     &                    + (Sold(CHF_AUTOIX[i])-S0(CHF_AUTOIX[i]))*(1.0 - d0/two)/(1.0 + d0/two)
+
+c   exponential factor (relaxes)            
+         S(CHF_AUTOIX[i]) = S0(CHF_AUTOIX[i]) 
+     &                    + (Sold(CHF_AUTOIX[i])-S0(CHF_AUTOIX[i]))*expFactor
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    ADVANCE USING RELAXATION SCHEME (BACKWARD EULER)
+
+      subroutine advance_using_relax_new(
+     &     CHF_BOX[databox],
+     &     CHF_CONST_REAL[dt],
+     &     CHF_CONST_REAL[delta],
+     &     CHF_CONST_FRA1[Diff],
+     &     CHF_CONST_FRA1[Sold],
+     &     CHF_CONST_FRA1[S0],
+     &     CHF_FRA1[S]
+     &     )
+
+c     local variables
+      integer n, CHF_AUTODECL[i]
+      double precision d0, val, expFactor
+
+      CHF_AUTOMULTIDO[databox;i]
+
+         d0 = dt/delta/Diff(CHF_AUTOIX[i])
+         if (d0 < 1.0e-4) then
+             expFactor = 1.0 - d0 + half*d0*d0 - half/three*d0*d0*d0
+         else
+             expFactor = exp(-d0)
+         endif
+
+c   first-order backward euler (relaxes)
+c         S(CHF_AUTOIX[i]) = S0(CHF_AUTOIX[i]) 
+c     &                    + (Sold(CHF_AUTOIX[i])-S0(CHF_AUTOIX[i]))/(1.0 + d0)
+
+c   second-order Du-Fort and Frankel (does not relax)
+c         S(CHF_AUTOIX[i]) = S0(CHF_AUTOIX[i]) 
+c     &                    + (Sold(CHF_AUTOIX[i])-S0(CHF_AUTOIX[i]))*(1.0 - d0/two)/(1.0 + d0/two)
+
+c   exponential factor (relaxes)            
+         S(CHF_AUTOIX[i]) = S0(CHF_AUTOIX[i]) 
+     &                    + (Sold(CHF_AUTOIX[i])-S0(CHF_AUTOIX[i]))*expFactor
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c   set contravarient hall drift speed: VhallDrift = Li0*BcrossGrad(N)/N^2 
+
+      subroutine eval_hall_drift_speed(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[gradN],
+     &     CHF_CONST_FRA1[N],
+     &     CHF_CONST_FRA1[By_covar],
+     &     CHF_CONST_FRA1[J],
+     &     CHF_CONST_REAL[lambdai],
+     &     CHF_FRA[Vhd]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision Val
+
+
+      CHF_AUTOMULTIDO[box;i]
+        
+        Val = lambdai*By_covar(CHF_AUTOIX[i])/N(CHF_AUTOIX[i])/N(CHF_AUTOIX[i])/J(CHF_AUTOIX[i])
+        Vhd(CHF_AUTOIX[i],0) =  Val*gradN(CHF_AUTOIX[i],1)
+        Vhd(CHF_AUTOIX[i],1) = -Val*gradN(CHF_AUTOIX[i],0)
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c   compute diagonal components of electron viscosity stress tensor 
+
+      subroutine eval_pi_ele_diag(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[dVexdx],
+     &     CHF_CONST_FRA1[dVezdz],
+     &     CHF_CONST_FRA1[divVe],
+     &     CHF_FRA[Piele_diag]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+
+      CHF_AUTOMULTIDO[box;i]
+        
+        Piele_diag(CHF_AUTOIX[i],0) = two*dVexdx(CHF_AUTOIX[i]) - two/three*divVe(CHF_AUTOIX[i])
+        Piele_diag(CHF_AUTOIX[i],1) = two*dVezdz(CHF_AUTOIX[i]) - two/three*divVe(CHF_AUTOIX[i])
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c   compute axisymm yy component of electron viscosity stress tensor 
+
+      subroutine eval_pi_ele_yy(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[Vex],
+     &     CHF_CONST_FRA1[Xphys],
+     &     CHF_CONST_FRA1[divVe],
+     &     CHF_FRA1[Piele_yy]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision Vex0, X0, divVe0
+
+      CHF_AUTOMULTIDO[box;i]
+        
+         Vex0   = Vex(CHF_AUTOIX[i])
+         X0     = Xphys(CHF_AUTOIX[i])
+         divVe0 = divVe(CHF_AUTOIX[i])
+
+         Piele_yy(CHF_AUTOIX[i]) = two*Vex0/X0 - two/three*divVe0
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c   add source term to divPie_r 
+
+      subroutine add_source_to_divpie(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[Xphys],
+     &     CHF_CONST_FRA1[Pyy],
+     &     CHF_FRA1[divPie]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision X0, Pyy0, divPie0
+
+      CHF_AUTOMULTIDO[box;i]
+        
+         Pyy0    = Pyy(CHF_AUTOIX[i])
+         X0      = Xphys(CHF_AUTOIX[i])
+         divPie0 = divPie(CHF_AUTOIX[i])
+
+         divPie(CHF_AUTOIX[i]) = divPie0 - Pyy0/X0
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    compute alpha and g on edges for implicit Hall solve
+
+      subroutine compute_gfun_edges(
+     &     CHF_BOX[edgebox],
+     &     CHF_CONST_REAL[dt],
+     &     CHF_CONST_REAL[epsilon],
+     &     CHF_CONST_REAL[delta],
+     &     CHF_CONST_REAL[lambdai],
+     &     CHF_CONST_FRA1[Eideal],
+     &     CHF_CONST_FRA1[gradPe],
+     &     CHF_CONST_FRA1[betaHall],
+     &     CHF_CONST_FRA1[J0],
+     &     CHF_CONST_FRA1[den],
+     &     CHF_CONST_FRA1[Eold],
+     &     CHF_CONST_FRA1[Jold],
+     &     CHF_FRA1[gfun]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision dtNoe, wpedtsq, dtod, Eboltz, gfun0
+      double precision betaHallsq, gamma
+
+      dtod = dt/delta
+
+      CHF_AUTOMULTIDO[edgebox;i]
+
+        betaHallsq = betaHall(CHF_AUTOIX[i])**2
+        betaHallsq = min(betaHallsq,0.9999)
+        gamma = 1.0/sqrt(1-betaHallsq)
+
+        dtNoe = dt*den(CHF_AUTOIX[i])/epsilon/gamma
+        wpedtsq = dtod*dtNoe
+        Eboltz = -lambdai*gradPe(CHF_AUTOIX[i])/den(CHF_AUTOIX[i])
+
+        gfun0 = Jold(CHF_AUTOIX[i]) + wpedtsq*J0(CHF_AUTOIX[i])
+     &        + dtNoe*(Eold(CHF_AUTOIX[i]) - Eideal(CHF_AUTOIX[i]) - Eboltz)
+
+        gfun(CHF_AUTOIX[i]) = gfun0
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+

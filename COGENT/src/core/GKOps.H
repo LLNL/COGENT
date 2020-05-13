@@ -78,7 +78,8 @@ public:
 
    void initializeElectricField( const GKState& state, const int cur_step, const double cur_time );
  
-   void initializeFluidSpeciesPhysical( const CFG::FluidSpeciesPtrVect&  a_species_comp );
+   void initializeFluidSpeciesPhysical( CFG::FluidSpeciesPtrVect&  a_species_comp,
+                                        const double a_time );
 
    inline
    void initializeState( GKState& a_state, const int a_cur_step, const Real a_time )
@@ -248,16 +249,18 @@ public:
    }
 
    void preTimeStep  (const int,const Real,const GKState&,const GKState&);
-   void postTimeStep (const int,const Real, const Real,const GKState&);
+   void postTimeStep (const int,const Real, const Real, GKState&);
 
-   void postTimeStage(const int,const Real,const GKState&, const int);
-   inline void postTimeStage( const int        a_step,
-                              const Real       a_time,
-                              const GKVector&  a_vec,
-                              const int        a_stage )
+   void postTimeStage(const int, const Real, const Real, GKState&, const int);
+   inline void postTimeStage( const int   a_step,
+                              const Real  a_time,
+                              const Real  a_dt,
+                              GKVector&   a_vec,
+                              const int   a_stage )
    {
       m_Y.copyFrom(a_vec.data());
-      postTimeStage(a_step,a_time,m_Y,a_stage);
+      postTimeStage(a_step,a_time,a_dt,m_Y,a_stage);
+      m_Y.copyTo(a_vec.data());
    }
    
    void setElectricField( const GKState&                   state_comp,
@@ -372,17 +375,20 @@ public:
 
    bool preallocatePCMatrixImEx (void*,const GKVector&);
    void assemblePCImEx( const bool, void*, const GKVector&, const Real, const Real );
+   void assembleVlasovOpPCImEx(void *_P, const GKVector& state, const Real time, const Real shift);
 
    bool preallocateSolPCMatrix (void*,const GKVector&);
    void assembleSolPC( const bool, void*, const GKVector&, const Real );
    
    void solveSolutionPC( GKVector&, const GKVector&, int a_idx=-1);
-   void solvePCImEx( GKVector&, const GKVector&, int a_idx=-1);
+   void solveFluidOpPCImEx( GKVector&, const GKVector&, int a_idx=-1);
+   void solveVlasovOpPCImEx( GKVector&, const GKVector&, int a_idx=-1);
 
    void divideJ( const KineticSpeciesPtrVect& soln_mapped,
                  KineticSpeciesPtrVect&       soln_physical ) const;
 
-   void convertToPhysical( const GKState& soln_mapped, GKState& soln_physical );
+   void convertToPhysical( const GKState& soln_mapped, GKState& soln_physical,
+                           const Real cur_time );
 
    inline
    bool usingBoltzmannElectrons() const
@@ -443,7 +449,22 @@ public:
                    const CFG::FluidSpecies& fluid_species,
                    const string&            var_name,
                    const double&            time ) const;
+      
+   void plotFluidAtCellFromFaceNorms( const std::string&        filename,
+                                      const CFG::FluidSpecies&  fluid_species,
+                                      const string&             var_name,
+                                      const double&             time ) const;
 
+   void plotFluidAtCellFromEdgeTans( const std::string&        filename,
+                                     const CFG::FluidSpecies&  fluid_species,
+                                     const string&             var_name,
+                                     const double&             time ) const;
+   
+   void plotFluidOpMember( const std::string&        filename,
+                           const CFG::FluidSpecies&  fluid_species,
+                           const std::string&        member_var_name,
+                           const double              time ) const;
+   
    void plotDeltaF( const std::string&    filename,
                     const KineticSpecies& soln_species,
                     const double&         time ) const;
@@ -500,7 +521,12 @@ public:
    void plotPressure( const std::string&    filename,
                       const KineticSpecies& soln_species,
                       const double&         time ) const;
-   
+
+   void plotGradPoverN( const std::string&    filename,
+			const KineticSpecies& soln_species,
+			const double&         time ) const;
+
+  
    void plotParallelHeatFlux( const std::string&    filename,
                               const KineticSpecies& soln_species,
                               const double&         time ) const;
@@ -720,7 +746,6 @@ private:
    Real m_dt_scale;
    bool m_is_defined;
    
-   IntVect                        m_ghost_vect;
    int                            m_kinetic_ghosts;
    int                            m_fluid_ghosts;
       

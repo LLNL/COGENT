@@ -65,22 +65,27 @@ public:
    
    
 private:
-
+  MomentOp& m_moment_op;
   Vector<Real> m_D_fluid;
   Vector<Real> m_D_kinet;
+  
   double m_DN0;
+   
   RefCountedPtr<CFG::GridFunction> m_shape_function;
   RefCountedPtr<CFG::GridFunction> m_shape_function_D0, m_shape_function_D1;
   RefCountedPtr<CFG::GridFunction> m_shape_function_D2, m_shape_function_D3;
+  
   bool m_model_only;
   bool m_const_coeff;
-  MomentOp& m_moment_op;
-  bool m_first_step;
+  bool m_first_call;
+  bool m_first_stage;
   bool m_arbitrary_grid;
   bool m_simple_diffusion;
-
-
+  int m_update_freq;
+  int m_it_counter;
   int m_verbosity;
+
+   
   IntVect m_ghostVect;
   ParmParse pptpm;
   string species_name;
@@ -90,6 +95,12 @@ private:
   LevelData<FluxBox> m_lame_faces, m_inj_bunit, m_inj_pointwiseNJinv;
   LevelData<FluxBox> m_D_kinet_faces;
   LevelData<FluxBox> m_flux, m_fluxNorm;
+
+  LevelData<FArrayBox> m_density, m_density_beta;
+  LevelData<FArrayBox> m_Upar, m_Upar_beta;
+  LevelData<FArrayBox> m_temperature, m_temperature_beta;
+  LevelData<FArrayBox> m_fourth_coef, m_fourth_coef_beta;
+  LevelData<FArrayBox> m_perp_coef, m_perp_coef_beta;
 
   CFG::LevelData<CFG::FluxBox> m_precond_D;
 
@@ -140,6 +151,13 @@ private:
    /// Compute cell-centered beta = U_psi^2/D_psi
    void computeBeta(LevelData<FArrayBox>& beta,
                     const KineticSpecies& soln_species );
+   
+   /// Pre time step calculation
+   inline void preTimeStep  ( const KineticSpeciesPtrVect& soln_mapped,
+                              const int species,
+                              const Real time,
+                              const KineticSpeciesPtrVect& soln_physical);
+
    
 };
 

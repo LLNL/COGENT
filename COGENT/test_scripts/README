@@ -240,7 +240,7 @@ MPICC=mpicc
 CXX=g++
 CC=gcc
 FC=gfortran
-HYPRE_DIR=hypre-2.9.0b
+HYPRE_DIR=hypre
 HDF5_SERIAL_DIR=/usr/local/tools/hdf5-gnu-serial-1.8.10
 HDF5_PARALLEL_DIR=/usr/local/tools/hdf5-gnu-parallel-mvapich2-1.8.10
 

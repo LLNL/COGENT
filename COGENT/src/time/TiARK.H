@@ -682,7 +682,7 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
 
     }
 
-    m_Operators.postTimeStage(m_cur_step,stage_time,m_YStage,i);
+    m_Operators.postTimeStage(m_cur_step,stage_time,m_ce[i]*m_dt,m_YStage,i);
     m_Operators.preOpEval(m_YStage,stage_time,chkpt_ti_advance_2);
     m_Operators.explicitOpImEx(m_rhsStage_exp[i],stage_time,m_YStage);
     m_Operators.implicitOpImEx(m_rhsStage_imp[i],stage_time,m_YStage);

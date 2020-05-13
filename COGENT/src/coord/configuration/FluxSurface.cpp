@@ -28,8 +28,17 @@ FluxSurface::FluxSurface( const MagGeom& a_geom,
      m_shell_average(a_shell_average)
 {
    m_volume.define(m_magnetic_geometry->grids(), 1, 2*IntVect::Unit);
-   m_magnetic_geometry->getCellVolumes(m_volume);
-
+   if (m_shell_average) {
+      m_magnetic_geometry->getCellVolumes(m_volume);
+   }
+   else {
+      LevelData<FArrayBox> face_areas(m_magnetic_geometry->grids(), SpaceDim, 2*IntVect::Unit);
+      m_magnetic_geometry->getPointwiseFaceAreas(face_areas);
+      for (DataIterator dit(face_areas.dataIterator()); dit.ok(); ++dit) {
+        m_volume[dit].copy(face_areas[dit],RADIAL_DIR, 0, 1);
+      }
+   }
+   
 #if CFG_DIM == 2
    adjCellLo(m_grids, m_magnetic_geometry->grids(), POLOIDAL_DIR, -1);
 #else
@@ -52,7 +61,6 @@ FluxSurface::FluxSurface( const MagGeom& a_geom,
 }
 
 
-
 void
 FluxSurface::computeAreas()
 {
@@ -62,9 +70,6 @@ FluxSurface::computeAreas()
         ones[dit].setVal(1.);
    }
    
-   if (!m_shell_average) {
-      multGradPsi( ones );
-   }
    integrate(ones, m_areas);
 
    //get flux surface areas for the core and private flux regions
@@ -215,22 +220,13 @@ FluxSurface::average( const LevelData<FArrayBox>& a_src,
                       LevelData<FArrayBox>&       a_dst ) const
 {
 
-   LevelData<FArrayBox> src_GradPsi(a_src.disjointBoxLayout(), a_src.nComp(), a_src.ghostVect());
-   DataIterator dit = a_dst.dataIterator();
-   for (dit.begin(); dit.ok(); ++dit) {
-       src_GradPsi[dit].copy(a_src[dit]);
-   }
-
-    if (!m_shell_average) {
-     multGradPsi(src_GradPsi);
-   }
-    
    CH_assert(a_src.nComp() == a_dst.nComp());
 
-   integrate(src_GradPsi, a_dst);
+   integrate(a_src, a_dst);
 
    int ncomp = a_src.nComp();
 
+   DataIterator dit = a_dst.dataIterator();
    for (dit.begin(); dit.ok(); ++dit) {
       for (int comp=0; comp<ncomp; ++comp) {
          a_dst[dit].divide(m_areas[dit],0,comp,1);
@@ -251,22 +247,14 @@ FluxSurface::averageAndSpread( const LevelData<FArrayBox>& a_src,
      int ncomp = a_src.nComp();
      CH_assert(a_src.nComp() == a_dst.nComp());
 
-     LevelData<FArrayBox> src_GradPsi(a_src.disjointBoxLayout(),ncomp, a_src.ghostVect());
-     DataIterator dit = a_dst.dataIterator();
-     for (dit.begin(); dit.ok(); ++dit) {
-           src_GradPsi[dit].copy(a_src[dit]);
-     }
-     
-     if (!m_shell_average) {
-       multGradPsi(src_GradPsi);
-     }
-    
      LevelData<FArrayBox> src_tmp(a_src.disjointBoxLayout(),ncomp, a_src.ghostVect());
      LevelData<FArrayBox> dst_tmp(a_dst.disjointBoxLayout(),ncomp, a_dst.ghostVect());
      LevelData<FArrayBox> flux_aver_tmp(m_grids, ncomp, a_src.ghostVect());
 
+     DataIterator dit = a_dst.dataIterator();
+
      //Perform the average-and-spreading in the core region
-     zeroBlockData(PF, src_GradPsi, src_tmp);
+     zeroBlockData(PF, a_src, src_tmp);
      integrate(src_tmp, flux_aver_tmp);
      for (dit.begin(); dit.ok(); ++dit) {
       for (int comp=0; comp<ncomp; ++comp) {
@@ -282,7 +270,7 @@ FluxSurface::averageAndSpread( const LevelData<FArrayBox>& a_src,
 
 
      //Perform the average-and-spreading in the private flux region
-     zeroBlockData(CORE, src_GradPsi, src_tmp);
+     zeroBlockData(CORE, a_src, src_tmp);
      integrate(src_tmp, flux_aver_tmp);
      for (dit.begin(); dit.ok(); ++dit) {
       for (int comp=0; comp<ncomp; ++comp) {
@@ -401,35 +389,6 @@ FluxSurface::zeroBlockData( const int                   region_type,
          MayDay::Error("FluxSurface::zeroBlockData(): Invalid region_type encountered");
       }
    }
-}
-
-void
-FluxSurface::multGradPsi(LevelData<FArrayBox>& a_src ) const
-{
-    
-
-    //Later do a check for zero ghost layers
-    DataIterator dit = a_src.dataIterator();
-    int nComp =a_src.nComp();
-    for (dit.begin(); dit.ok(); ++dit) {
-        const MagBlockCoordSys& block_coords = m_magnetic_geometry->getBlockCoordSys(m_magnetic_geometry->grids()[dit]);
-        FArrayBox dXdxi(m_magnetic_geometry->grids()[dit], 4);
-        block_coords.getCellCentereddXdxi(dXdxi);
-        for (BoxIterator bit( m_magnetic_geometry->grids()[dit] ); bit.ok(); ++bit) {
-            IntVect iv( bit() );
-
-            double dZdR = dXdxi(iv,3)/dXdxi(iv,1);
-            double dPsidZ = 1.0/(dXdxi(iv,2) - dXdxi(iv,0)*dZdR);
-            double dPsidR = - dPsidZ * dZdR;
-            double gradPsi = sqrt(pow(dPsidR,2)+pow(dPsidZ,2));
-            
-            for (int n = 0; n < nComp; n++) {
-                a_src[dit](iv,n) *= gradPsi;
-            }
-        }
-        
-        
-    }
 }
 
 #include "NamespaceFooter.H"

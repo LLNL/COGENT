@@ -227,9 +227,26 @@ void MultiPhysicsPreconditioner<T,Ops>::apply(T&        a_x,
 
   } else if (m_block_pc.size() == 1) {
 
-    Preconditioner<T,Ops> *pc(m_block_pc[0]);
-    pc->apply(a_x, a_b);
-
+    if (m_im) {
+  
+      CH_assert(m_shift > 0);
+      Preconditioner<T,Ops> *pc(m_block_pc[0]);
+  
+      a_x = a_b;
+      a_x.scale(1.0/m_shift);
+      pc->apply(a_x, a_b);
+  
+    } else {
+  
+      T z(a_x);
+      Preconditioner<T,Ops> *pc(m_block_pc[0]);
+      const DOFList& dof_list(m_dof_list[0]);
+      
+      z = a_b;
+      pc->apply(z, a_b);
+      a_x.copy(z, dof_list);
+  
+    }
   }
 
   return;

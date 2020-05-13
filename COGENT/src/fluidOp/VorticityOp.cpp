@@ -926,6 +926,7 @@ void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_p
                                            const Real                        a_dt,
                                            const Real                        a_time )
 {
+   CH_TIME("VorticityOp::updatePotentialOldModel");
    const DisjointBoxLayout& grids = m_geometry.gridsFull();
       
    // Compute the polarization density term (at the old time) using the operator and boundary

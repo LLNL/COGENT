@@ -344,25 +344,9 @@ c         endif
 c       endif
 
 #if CH_SPACEDIM==4
-       if (l==0) then
-         dfB_dmu(CHF_IX[i;j;k;l]) = ( zero + ( fB(i,j,k,l+1)-fB(i,j,k,l) )/dx(3) )/two
-       else
-       if (l==nmu-1) then
-         dfB_dmu(CHF_IX[i;j;k;l]) = ( three*fB(i,j,k,l)-four*fB(i,j,k,l-1)+fB(i,j,k,l-2) )/two/dx(3)
-       else
          dfB_dmu(CHF_IX[i;j;k;l]) = ( fB(i,j,k,l+1)-fB(i,j,k,l-1) )/two/dx(3)
-       endif
-       endif
 #else
-       if (m==0) then
-         dfB_dmu(CHF_IX[i;j;k;l;m]) = ( zero + ( fB(i,j,k,l,m+1)-fB(i,j,k,l,m) )/dx(4) )/two
-       else
-       if (m==nmu-1) then
-         dfB_dmu(CHF_IX[i;j;k;l;m]) = ( three*fB(i,j,k,l,m)-four*fB(i,j,k,l,m-1)+fB(i,j,k,l,m-2) )/two/dx(4)
-       else
          dfB_dmu(CHF_IX[i;j;k;l;m]) = ( fB(i,j,k,l,m+1)-fB(i,j,k,l,m-1) )/two/dx(4)
-       endif
-       endif
 #endif
 
       CHF_ENDDO

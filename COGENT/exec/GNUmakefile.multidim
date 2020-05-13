@@ -43,6 +43,7 @@ base_dir = .
 
 ifeq ($(MAXDIM),4)
 2dsrc_dirs =  ../src/coord/configuration ../src/coord/velocity ../src/coord/configuration/2d
+2dsrc_dirs += ../src/coord/configuration/utils
 2dsrc_dirs += ../src/ibc/configuration ../src/poisson
 2dsrc_dirs += ../src/util ../src/ibc ../src/species/fluid
 2dsrc_dirs += ../src/fluidOp
@@ -61,6 +62,7 @@ ifeq ($(MAXDIM),4)
 else
 2dsrc_dirs =  ../src/coord/configuration/2d ../src/coord/velocity 
 3dsrc_dirs  = ../src/coord/configuration  
+3dsrc_dirs += ../src/coord/configuration/utils
 3dsrc_dirs += ../src/ibc ../src/ibc/configuration  
 3dsrc_dirs += ../src/poisson  
 3dsrc_dirs += ../src/util  
@@ -101,11 +103,11 @@ CXXFLAGS += -DCFG_DIM=3 -std=c++0x -ftemplate-depth=128
 endif
 
 ifeq ($(MPI),TRUE)
-#HYPRE_LOC = /usr/local/installed/hypre-2.9.0b
-HYPRE_LOC = ../hypre-2.9.0b/hypre_loc
+#HYPRE_LOC = /usr/local/installed/hypre
+HYPRE_LOC = ../hypre/hypre_loc
 else
-#HYPRE_LOC = /usr/local/installed/hypre-2.9.0b
-HYPRE_LOC = ../hypre-2.9.0b/hypre_loc_serial
+#HYPRE_LOC = /usr/local/installed/hypre
+HYPRE_LOC = ../hypre/hypre_loc_serial
 endif
 
 XTRACPPFLAGS += -I$(HYPRE_LOC)/include

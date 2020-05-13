@@ -765,6 +765,9 @@ private:
    LevelData<FArrayBox> m_BStarParallel;
    LevelData<FArrayBox> m_BStarParallel_cell_averaged;
 
+   mutable LevelData<FluxBox> m_XStarOmega;
+   mutable LevelData<FluxBox> m_UhatNormal;
+  
    mutable LevelData<FluxBox> m_tanGradF;
    mutable LevelData<FluxBox> m_dotTanGrads;
 

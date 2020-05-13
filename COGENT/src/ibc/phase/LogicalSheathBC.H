@@ -21,8 +21,8 @@ class LogicalSheathBC
    /** Constructor
     * @param[in] coords  the boundary box layout
     */
-   LogicalSheathBC( const BoundaryBoxLayout&  bdry_layout,
-                    const ParmParse&          pp );
+   LogicalSheathBC( const BoundaryBoxLayoutPtr& bdry_layout,
+                    const ParmParse&            pp );
 
    /// Destructor
    /** Destructor
@@ -56,7 +56,7 @@ private:
    void parseParameters(const ParmParse& pp);
    
    DisjointBoxLayout m_grids_inj;
-   const BoundaryBoxLayout& m_bdry_layout;
+   const BoundaryBoxLayoutPtr m_bdry_layout;
    bool m_compute_potential_BC;
    
 };

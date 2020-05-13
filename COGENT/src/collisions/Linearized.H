@@ -48,24 +48,27 @@ public:
   virtual void evalClsRHS( KineticSpeciesPtrVect&       rhs,
                            const KineticSpeciesPtrVect& soln,
                            const int                    species,
+                           const int                    species_bkgr,
                            const Real                   time );
 
   inline
   virtual void evalClsRHSExplicit( KineticSpeciesPtrVect&        a_rhs,
                                    const KineticSpeciesPtrVect&  a_soln,
                                    const int                     a_species,
+                                   const int                     a_species_bkgr,
                                    const Real                    a_time )
   {
-    if (!m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+    if (!m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_species_bkgr, a_time);
   }
 
   inline
   virtual void evalClsRHSImplicit( KineticSpeciesPtrVect&        a_rhs,
                                    const KineticSpeciesPtrVect&  a_soln,
                                    const int                     a_species,
+                                   const int                     a_species_bkgr,
                                    const Real                    a_time )
   {
-    if (m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_time);
+    if (m_time_implicit) evalClsRHS(a_rhs, a_soln, a_species, a_species_bkgr, a_time);
   }
 
   /// Compute a stable time step.
@@ -91,24 +94,37 @@ private:
   bool m_conserve_momentum;
   bool m_conserve_energy;
   bool m_fixed_cls_freq;
+  bool m_second_order;
   bool m_first_step;
 
   RefCountedPtr<KineticFunction> m_ref_func;
   RefCountedPtr<CFG::GridFunction> m_ref_temp;
   RefCountedPtr<CFG::GridFunction> m_ref_dens;
 
-  LevelData<FArrayBox> m_temperature;
-  LevelData<FArrayBox> m_sc_cls_freq;
   CFG::LevelData<CFG::FArrayBox> m_norm_momentum;
   CFG::LevelData<CFG::FArrayBox> m_norm_energy;
 
-   inline bool enforceConservation()
-   {
-      return (m_conserve_energy || m_conserve_momentum);
-   }
+  LevelData<FArrayBox> m_temperature;
+  LevelData<FArrayBox> m_sc_cls_freq;
+  LevelData<FArrayBox> m_F0;
+  LevelData<FArrayBox> m_delta_dfn;
+  LevelData<FArrayBox> m_tp_rhs_coll;
+  LevelData<FArrayBox> m_fp_rhs_coll;
+  mutable LevelData<FluxBox> m_flux_full_ERest;
+  mutable LevelData<FArrayBox> m_rhs_ERest;
+  mutable LevelData<FArrayBox>  m_tmp_dfn_withGhosts;
+  mutable LevelData<FArrayBox>  m_flux_vmu_cc;
+  mutable LevelData<FluxBox>    m_flux;
+  mutable LevelData<FluxBox>    m_flux_vmu;
+ 
+  MomentOp& m_moment_op;
+   
+  inline bool enforceConservation()
+  {
+    return (m_conserve_energy || m_conserve_momentum);
+  }
 
   void addConservativeTerms( KineticSpecies& rhs_species,
-                             const KineticSpecies& soln_species,
                              const LevelData<FArrayBox>& tp_rhs_coll,
                              const LevelData<FArrayBox>& delta_F,
                              const Real time );
@@ -133,14 +149,6 @@ private:
                         const CFG::LevelData<CFG::FArrayBox>& energ_rest,
                         const CFG::LevelData<CFG::FArrayBox>& moment_rest,
                         const double mass ) const;
-
-  /// Computes the kernels for the restoring terms
-  void collKernels(LevelData<FArrayBox>& kern_energ,
-                   LevelData<FArrayBox>& kern_moment,
-                     const LevelData<FArrayBox>& test_part_coll_RHS,
-                       const PhaseGeom& phase_geom,
-                       const double mass ) const;
-
 
   ///Computes the kernels for the normalization factors
   void evaluateNormKern( LevelData<FArrayBox>& kern_moment_norm,

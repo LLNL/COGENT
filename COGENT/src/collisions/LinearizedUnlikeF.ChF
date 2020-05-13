@@ -1,0 +1,275 @@
+#include "CONSTANTS.H"
+
+      subroutine evaluate_tp_lorentz_unlike(
+     &     CHF_FRA[ClsFlux],
+     &     CHF_CONST_FRA1[f],
+     &     CHF_CONST_FRA1[bmag],
+     &     CHF_CONST_FRA1[Tb],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[ma],
+     &     CHF_CONST_REAL[mb]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision fmu,fvpar, nu_D, NuD, b , vth_b, xb
+      double precision CfmuLorentz,CfvparLorentz
+
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+c       ***Calculate local v_th=sqrt(2*T/m) and collision frequencies
+#if CH_SPACEDIM==5
+        b = bmag(i0,i1,i2,CHF_LBOUND[bmag;3],CHF_LBOUND[bmag;4])
+        vth_b=sqrt(2.0*Tb(i0,i1,i2,CHF_LBOUND[Tb;3],CHF_LBOUND[Tb;4])/mb)
+        xb=sqrt((i3+0.5)*(i3+0.5)*dx(0)*dx(0)+(i4+0.5)*dx(1)*b/mb)/vth_b
+#else
+        b = bmag(i0,i1,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+        vth_b=sqrt(2.0*Tb(i0,i1,CHF_LBOUND[Tb;2],CHF_LBOUND[Tb;3])/mb)
+        xb=sqrt((i2+0.5)*(i2+0.5)*dx(0)*dx(0)+(i3+0.5)*dx(1)*b/mb)/vth_b
+#endif
+        nu_D = (NuD(xb) / vth_b**3) * (sqrt(2.0/ma))**3
+
+
+c       ***Calculate fourth-order cell-centered derivatives
+#if CH_SPACEDIM==5
+        fmu=(1.0/12.0/dx(1))*(8.0*(f(CHF_IX[i0;i1;i2;i3;i4+1])-f(CHF_IX[i0;i1;i2;i3;i4-1]))-(f(CHF_IX[i0;i1;i2;i3;i4+2])-f(CHF_IX[i0;i1;i2;i3;i4-2])))
+        fvpar=(1.0/12.0/dx(0))*(8.0*(f(CHF_IX[i0;i1;i2;i3+1;i4])-f(CHF_IX[i0;i1;i2;i3-1;i4]))-(f(CHF_IX[i0;i1;i2;i3+2;i4])-f(CHF_IX[i0;i1;i2;i3-2;i4])))
+#else
+        fmu=(1.0/12.0/dx(1))*(8.0*(f(CHF_IX[i0;i1;i2;i3+1])-f(CHF_IX[i0;i1;i2;i3-1]))-(f(CHF_IX[i0;i1;i2;i3+2])-f(CHF_IX[i0;i1;i2;i3-2])))
+        fvpar=(1.0/12.0/dx(0))*(8.0*(f(CHF_IX[i0;i1;i2+1;i3])-f(CHF_IX[i0;i1;i2-1;i3]))-(f(CHF_IX[i0;i1;i2+2;i3])-f(CHF_IX[i0;i1;i2-2;i3])))
+#endif
+
+c       ***Calculate one-sided 4-th order accurate derivatives at mu=0 bnd
+#if CH_SPACEDIM==5
+        if ((i4.eq.0) .or. (i4.eq.1)) then
+          fmu=1.0/dx(1)*(-25.0/12.0*f(CHF_AUTOIX[i])+4.0*f(CHF_IX[i0;i1;i2;i3;i4+1])-3.0*f(CHF_IX[i0;i1;i2;i3;i4+2])+4.0/3.0*f(CHF_IX[i0;i1;i2;i3;i4+3])-1.0/4.0*f(CHF_IX[i0;i1;i2;i3;i4+4]))
+        endif
+#else
+        if ((i3.eq.0) .or. (i3.eq.1)) then
+          fmu=1.0/dx(1)*(-25.0/12.0*f(CHF_AUTOIX[i])+4.0*f(CHF_IX[i0;i1;i2;i3+1])-3.0*f(CHF_IX[i0;i1;i2;i3+2])+4.0/3.0*f(CHF_IX[i0;i1;i2;i3+3])-1.0/4.0*f(CHF_IX[i0;i1;i2;i3+4]))
+        endif
+#endif
+
+#if CH_SPACEDIM==5
+        CfvparLorentz = 0.5*(b/ma*dx(1)*(i4+0.5)*nu_D*fvpar-2.0*dx(0)*(i3+0.5)*dx(1)*(i4+0.5)*nu_D*fmu)
+        CfmuLorentz = 0.5*(4.0*ma/b*dx(0)*dx(0)*(i3+0.5)*(i3+0.5)*(i4+0.5)*dx(1)*nu_D*fmu-2.0*dx(0)*(i3+0.5)*dx(1)*(i4+0.5)*nu_D*fvpar)
+#else
+        CfvparLorentz = 0.5*(b/ma*dx(1)*(i3+0.5)*nu_D*fvpar-2.0*dx(0)*(i2+0.5)*dx(1)*(i3+0.5)*nu_D*fmu)
+        CfmuLorentz = 0.5*(4.0*ma/b*dx(0)*dx(0)*(i2+0.5)*(i2+0.5)*(i3+0.5)*dx(1)*nu_D*fmu-2.0*dx(0)*(i2+0.5)*dx(1)*(i3+0.5)*nu_D*fvpar)
+#endif
+
+
+c       ***Fill the (cell-centered) collsion flux 
+        ClsFlux(CHF_AUTOIX[i],0) = CfvparLorentz
+        ClsFlux(CHF_AUTOIX[i],1) = CfmuLorentz
+
+      CHF_ENDDO
+
+      return
+
+      end
+
+      subroutine evaluate_tp_energ_diff_unlike(
+     &     CHF_FRA[ClsFlux],
+     &     CHF_CONST_FRA1[f],
+     &     CHF_CONST_FRA1[bmag],
+     &     CHF_CONST_FRA1[Temp_b],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[dx],
+     &     CHF_CONST_REAL[ma],
+     &     CHF_CONST_REAL[mb]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision xb, vth_b, fac,  b, Tb, fmu, fvpar, nu_S, nu_Par, NuD, NuS, NuPar
+      double precision CfmuEdiff, CfvparEdiff
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+c       ***Calculate local v_th=sqrt(2*T/m) and collision frequencies
+#if CH_SPACEDIM==5
+        b = bmag(i0,i1,i2,CHF_LBOUND[bmag;3],CHF_LBOUND[bmag;4])
+        Tb = Temp_b(i0,i1,i2,CHF_LBOUND[Temp_b;3],CHF_LBOUND[Temp_b;4])
+        vth_b=sqrt(2.0*Tb/mb)
+        xb=sqrt((i3+0.5)*(i3+0.5)*dx(0)*dx(0)+(i4+0.5)*dx(1)*b/ma)/vth_b
+#else
+        b = bmag(i0,i1,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
+        Tb = Temp_b(i0,i1,CHF_LBOUND[Temp_b;2],CHF_LBOUND[Temp_b;3])
+        vth_b=sqrt(2.0*Tb/mb)
+        xb=sqrt((i2+0.5)*(i2+0.5)*dx(0)*dx(0)+(i3+0.5)*dx(1)*b/ma)/vth_b
+#endif
+        
+        nu_S = (NuS(xb)/2.0)*(1.0+mb/ma) / (Tb * vth_b) * sqrt(2.0/ma)
+        nu_Par = (NuPar(xb)/ vth_b**3) * (sqrt(2.0/ma))**3
+        fac = ma/(ma+mb)
+        
+c       ***Calculate fourth-order cell-centered derivatives
+#if CH_SPACEDIM==5
+        fmu=(1.0/12.0/dx(1))*(8.0*(f(CHF_IX[i0;i1;i2;i3;i4+1])-f(CHF_IX[i0;i1;i2;i3;i4-1]))-(f(CHF_IX[i0;i1;i2;i3;i4+2])-f(CHF_IX[i0;i1;i2;i3;i4-2])))
+        fvpar=(1.0/12.0/dx(0))*(8.0*(f(CHF_IX[i0;i1;i2;i3+1;i4])-f(CHF_IX[i0;i1;i2;i3-1;i4]))-(f(CHF_IX[i0;i1;i2;i3+2;i4])-f(CHF_IX[i0;i1;i2;i3-2;i4])))
+#else
+        fmu=(1.0/12.0/dx(1))*(8.0*(f(CHF_IX[i0;i1;i2;i3+1])-f(CHF_IX[i0;i1;i2;i3-1]))-(f(CHF_IX[i0;i1;i2;i3+2])-f(CHF_IX[i0;i1;i2;i3-2])))
+        fvpar=(1.0/12.0/dx(0))*(8.0*(f(CHF_IX[i0;i1;i2+1;i3])-f(CHF_IX[i0;i1;i2-1;i3]))-(f(CHF_IX[i0;i1;i2+2;i3])-f(CHF_IX[i0;i1;i2-2;i3])))
+#endif
+
+c       ***Calculate one-sided 4-th order accurate derivatives at mu=0 bnd
+#if CH_SPACEDIM==5
+        if ((i4.eq.0) .or. (i4.eq.1)) then
+          fmu=1.0/dx(1)*(-25.0/12.0*f(CHF_AUTOIX[i])+4.0*f(CHF_IX[i0;i1;i2;i3;i4+1])-3.0*f(CHF_IX[i0;i1;i2;i3;i4+2])+4.0/3.0*f(CHF_IX[i0;i1;i2;i3;i4+3])-1.0/4.0*f(CHF_IX[i0;i1;i2;i3;i4+4]))
+        endif
+#else
+        if ((i3.eq.0) .or. (i3.eq.1)) then
+          fmu=1.0/dx(1)*(-25.0/12.0*f(CHF_AUTOIX[i])+4.0*f(CHF_IX[i0;i1;i2;i3+1])-3.0*f(CHF_IX[i0;i1;i2;i3+2])+4.0/3.0*f(CHF_IX[i0;i1;i2;i3+3])-1.0/4.0*f(CHF_IX[i0;i1;i2;i3+4]))
+        endif
+#endif
+
+c       ***Add the energy-diffusion part of the full test-particle operator
+#if CH_SPACEDIM==5
+        ClsFlux(CHF_AUTOIX[i],0) = ClsFlux(CHF_AUTOIX[i],0) + fac*nu_S*f(CHF_AUTOIX[i])*(i3+0.5)*dx(0)+0.5*nu_Par*(i3+0.5)*dx(0)*(2.0*(i4+0.5)*dx(1)*fmu+(i3+0.5)*dx(0)*fvpar)
+        ClsFlux(CHF_AUTOIX[i],1) = ClsFlux(CHF_AUTOIX[i],1) + 2.0*fac*nu_S*f(CHF_AUTOIX[i])*(i4+0.5)*dx(1)+nu_Par*(i4+0.5)*dx(1)*(2.0*(i4+0.5)*dx(1)*fmu+(i3+0.5)*dx(0)*fvpar)
+#else
+        ClsFlux(CHF_AUTOIX[i],0) = ClsFlux(CHF_AUTOIX[i],0) + fac*nu_S*f(CHF_AUTOIX[i])*(i2+0.5)*dx(0)+0.5*nu_Par*(i2+0.5)*dx(0)*(2.0*(i3+0.5)*dx(1)*fmu+(i2+0.5)*dx(0)*fvpar)
+        ClsFlux(CHF_AUTOIX[i],1) = ClsFlux(CHF_AUTOIX[i],1) + 2.0*fac*nu_S*f(CHF_AUTOIX[i])*(i3+0.5)*dx(1)+nu_Par*(i3+0.5)*dx(1)*(2.0*(i3+0.5)*dx(1)*fmu+(i2+0.5)*dx(0)*fvpar)
+#endif
+
+      CHF_ENDDO
+
+      return
+
+      end
+
+
+      subroutine cls_freq_scale(
+     &     CHF_BOX[box],
+     &     CHF_FRA1[rhs],
+     &     CHF_CONST_FRA1[nb],
+     &     CHF_CONST_FRA1[nu],
+     &     CHF_CONST_REAL[ma]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==5
+       rhs(CHF_IX[i;j;k;l;m]) = rhs(CHF_IX[i;j;k;l;m]) * nb(i,j,k,CHF_LBOUND[nb;3],CHF_LBOUND[nb;4]) 
+     &                          * nu(i,j,k,CHF_LBOUND[nu;3],CHF_LBOUND[nu;4]) / sqrt(ma) 
+#else
+       rhs(CHF_IX[i;j;k;l]) = rhs(CHF_IX[i;j;k;l]) * nb(i,j,CHF_LBOUND[nb;2],CHF_LBOUND[nb;3]) 
+     &                          * nu(i,j,CHF_LBOUND[nu;2],CHF_LBOUND[nu;3]) / sqrt(ma) 
+#endif
+     
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine mult_mvpar(
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA1[result],
+     &     CHF_CONST_FRA[velCoords],
+     &     CHF_CONST_REAL[mass]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+      double precision vpar
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m]
+
+         vpar = velCoords(CHF_IX[i;j;k;l;m],0)
+
+         result(CHF_IX[i;j;k;l;m]) = result(CHF_IX[i;j;k;l;m]) * mass * vpar 
+ 
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine mult_mv2(
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA1[result],
+     &     CHF_CONST_FRA[velCoords],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_REAL[mass]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+      double precision vperp2, vpar, v2
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m]
+
+         vpar = velCoords(CHF_IX[i;j;k;l;m],0)
+
+#if CH_SPACEDIM==4
+         vperp2 = velCoords(CHF_IX[i;j;k;l;m],1) * B(i,j,CHF_LBOUND[b;2],CHF_LBOUND[b;3])
+#else
+         vperp2 = velCoords(CHF_IX[i;j;k;l;m],1) * B(i,j,k,CHF_LBOUND[b;3],CHF_LBOUND[b;4])
+#endif
+
+         v2 = mass * vpar**2 + vperp2	 
+
+         result(CHF_IX[i;j;k;l;m]) = result(CHF_IX[i;j;k;l;m]) * v2 
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine divide_cfg_data(
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA1[result],
+     &     CHF_FRA1[inj_data]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+      double precision data
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+         data = inj_data(i,j,CHF_LBOUND[inj_data;2],CHF_LBOUND[inj_data;3])
+#else
+         data = inj_data(i,j,k,CHF_LBOUND[inj_data;3],CHF_LBOUND[inj_data;4])
+#endif
+
+         result(CHF_IX[i;j;k;l;m]) = result(CHF_IX[i;j;k;l;m]) / data
+
+      CHF_ENDDO
+
+      return
+      end
+
+      subroutine mult_cfg_data(
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA1[result],
+     &     CHF_FRA1[inj_data]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+      double precision data
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+         data = inj_data(i,j,CHF_LBOUND[inj_data;2],CHF_LBOUND[inj_data;3])
+#else
+         data = inj_data(i,j,k,CHF_LBOUND[inj_data;3],CHF_LBOUND[inj_data;4])
+#endif
+
+         result(CHF_IX[i;j;k;l;m]) = result(CHF_IX[i;j;k;l;m]) * data
+
+      CHF_ENDDO
+
+      return
+      end

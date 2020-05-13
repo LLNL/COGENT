@@ -123,7 +123,6 @@ Real GKTransport::computeDtExplicitTI( const KineticSpeciesPtrVect& soln )
       dt = (tmp < dt ? tmp : dt);
       count++;
    }
-   //cout << "JRA: dt = " << dt << endl;
    return (count ? dt : -1);
    */   
 
@@ -144,13 +143,25 @@ Real GKTransport::computeDtImExTI( const KineticSpeciesPtrVect& soln )
       dt = (tmp < dt ? tmp : dt);
       count++;
    }
-   //cout << "JRA: dt = " << dt << endl;
    return (count ? dt : -1);
    */   
 
    Real dt(DBL_MAX);
    
    return dt;
+}
+
+void GKTransport::preTimeStep( const KineticSpeciesPtrVect& a_soln,
+                               const Real a_time,
+                               const KineticSpeciesPtrVect& a_soln_physical )
+
+{
+  for (int species(0); species<a_soln.size(); species++) {
+    KineticSpecies&           soln_species(*(a_soln[species]));
+    const std::string         species_name(soln_species.name());
+    TPMInterface& TPM( transportModel( species_name ) );
+    TPM.preTimeStep(a_soln, species, a_time, a_soln_physical);
+  }
 }
 
 #include "NamespaceFooter.H"

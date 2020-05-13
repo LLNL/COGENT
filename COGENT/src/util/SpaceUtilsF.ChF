@@ -747,6 +747,262 @@ c  -------------------------------------------------------------
       return
       end
 
+c  -------------------------------------------------------------
+c
+c  interp cell face scalar values to cell center using C2 method
+c
+c  -------------------------------------------------------------
+      subroutine FACE_SCALAR_TO_CELL( CHF_BOX[cellBox],
+     &                                CHF_CONST_INT[dir],
+     &                                CHF_CONST_FRA[facePhi],
+     &                                CHF_FRA[cellPhi] )
+
+      integer comp, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val
+
+      CHF_DTERM[
+      ii = CHF_ID(dir, 0);
+      jj = CHF_ID(dir, 1);
+      kk = 0;
+      ll = 0;
+      mm = 0]
+
+      CHF_MULTIDO[cellBox;i;j;k;l;m]
+
+         do comp = 0, (CHF_NCOMP[cellPhi]-1)
+            val = half*( facePhi(CHF_IX[i+ii;j+jj;k;l;m],comp)
+     &          +        facePhi(CHF_IX[i;j;k;l;m],comp) )
+            cellPhi(CHF_IX[i;j;k;l;m],comp) = (cellPhi(CHF_IX[i;j;k;l;m],comp) + val)/(dir+1.0)
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+c ------------------------------------------------------------------
+c
+c  interp cell edge values from one edge to another using C2 method
+c
+c  -----------------------------------------------------------------
+      subroutine C2_EDGES_TO_EDGES( CHF_BOX[edgeBox], 
+     &                              CHF_CONST_FRA1[Ein],
+     &                              CHF_FRA1[Eout],
+     &                              CHF_CONST_INT[idir] )
+
+
+      integer n, ncell, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      integer CHF_DDECL[ii0;jj0;kk0;ll0;mm0]
+      REAL_T val_up, val_down
+
+      CHF_DTERM[
+      ii = 1 - CHF_ID(idir, 0);
+      jj = 1 - CHF_ID(idir, 1);
+      kk = 1 - CHF_ID(idir, 2);
+      ll = 1 - CHF_ID(idir, 3);
+      mm = 1 - CHF_ID(idir, 4)]
+      
+      CHF_DTERM[
+      ii0 = CHF_ID(idir, 0);
+      jj0 = CHF_ID(idir, 1);
+      kk0 = CHF_ID(idir, 2);
+      ll0 = CHF_ID(idir, 3);
+      mm0 = CHF_ID(idir, 4)]
+
+      CHF_MULTIDO[edgeBox;i;j;k;l;m]
+
+c        interp to cell on one side of idir
+         val_up = Ein(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm])
+     &          + Ein(CHF_IX[i;j;k;l;m])
+         val_up = val_up * half
+         
+c        interp to cell on other side of idir
+         val_down = Ein(CHF_IX[i-ii+ii0;j-jj+jj0;k-kk+kk0;l-ll+ll0;m-mm+mm0])
+     &            + Ein(CHF_IX[i+ii0;j+jj0;k+kk0;l+ll0;m+mm0])
+         val_down = val_down * half
+
+         Eout(CHF_IX[i;j;k;l;m]) = ( val_down + val_up ) * half
+
+      CHF_ENDDO
+
+      return
+      end
+
+c --------------------------------------------------------------
+c
+c  interp cell node values to cell edge values using C2 method
+c
+c  -------------------------------------------------------------
+
+      subroutine C2_NODES_TO_EDGES( CHF_BOX[edgeBox], 
+     &                              CHF_CONST_INT[dir],
+     &                              CHF_CONST_FRA[ncFin],
+     &                              CHF_FRA[ecFout] )
+
+
+      integer comp, n, ncell, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T valUp, valDown
+
+      CHF_DTERM[
+      ii = CHF_ID(dir, 0);
+      jj = CHF_ID(dir, 1);
+      kk = CHF_ID(dir, 2);
+      ll = CHF_ID(dir, 3);
+      mm = CHF_ID(dir, 4)]
+      
+      CHF_MULTIDO[edgeBox;i;j;k;l;m]
+          
+         do comp = 0, (CHF_NCOMP[ecFout]-1)
+
+            valUp   = ncFin(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],comp)
+            valDown = ncFin(CHF_IX[i;j;k;l;m],comp)
+            ecFout(CHF_IX[i;j;k;l;m],comp) = ( valUp + valDown ) * half
+
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+c --------------------------------------------------------------
+c
+c  interp cell node values to cell center values using C2 method
+c
+c  -------------------------------------------------------------
+
+      subroutine C2_NODES_TO_CELLS( CHF_BOX[cellBox], 
+     &                              CHF_CONST_FRA[ncFin],
+     &                              CHF_FRA[ccFout] )
+
+
+      integer comp, n, ncell, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val00, val01, val10, val11
+
+      CHF_MULTIDO[cellBox;i;j;k;l;m]
+          
+         do comp = 0, (CHF_NCOMP[ccFout]-1)
+
+            val11 = ncFin(CHF_IX[i+1;j+1;k;l;m],comp)
+            val10 = ncFin(CHF_IX[i+1;j;k;l;m],comp)
+            val01 = ncFin(CHF_IX[i;j+1;k;l;m],comp)
+            val00 = ncFin(CHF_IX[i;j;k;l;m],comp)
+            ccFout(CHF_IX[i;j;k;l;m],comp) = ( val00 + val01 + val10 + val11 ) / four
+
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+c --------------------------------------------------------------
+c
+c  interp cell center values to cell node values using C2 method
+c
+c  -------------------------------------------------------------
+
+      subroutine C2_CELLS_TO_NODES( CHF_BOX[nodeBox], 
+     &                              CHF_CONST_FRA[ccFin],
+     &                              CHF_FRA[ncFout] )
+
+
+      integer comp, n, ncell, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val00, val01, val10, val11
+
+      CHF_MULTIDO[nodeBox;i;j;k;l;m]
+          
+         do comp = 0, (CHF_NCOMP[ncFout]-1)
+
+            val11 = ccFin(CHF_IX[i;j;k;l;m],comp)
+            val10 = ccFin(CHF_IX[i-1;j;k;l;m],comp)
+            val01 = ccFin(CHF_IX[i;j-1;k;l;m],comp)
+            val00 = ccFin(CHF_IX[i-1;j-1;k;l;m],comp)
+            ncFout(CHF_IX[i;j;k;l;m],comp) = ( val00 + val01 + val10 + val11 ) / four
+
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+c --------------------------------------------------------------
+c
+c  compute dir derivative of cell edge values using C2 method
+c
+c -------------------------------------------------------------
+
+      subroutine EDGE_GRAD_AT_CELLS(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REAL[dX],
+     &     CHF_CONST_FRA1[PhiOnEdges],
+     &     CHF_FRA1[gradPhi] )
+      
+      integer CHF_DDECL[i;j;k;l;m] 
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      double precision edgePhi_up, edgePhi_down      
+
+      CHF_DTERM[
+      ii = CHF_ID(dir, 0);
+      jj = CHF_ID(dir, 1);
+      kk = 0;
+      ll = 0;
+      mm = 0]
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+      
+         edgePhi_down = PhiOnEdges(CHF_IX[i;j;k;l;m])
+         edgePhi_up   = PhiOnEdges(CHF_IX[i+ii;j+jj;k;l;m])
+           
+         gradPhi(CHF_IX[i;j;k;l;m]) = (edgePhi_up - edgePhi_down)/dX
+
+      CHF_ENDDO
+
+      return
+      end
+
+c --------------------------------------------------------------
+c
+c  compute dir derivative of cell edge values using C2 method
+c
+c -------------------------------------------------------------
+
+      subroutine EDGE_GRAD_AT_NODES(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_REAL[dX],
+     &     CHF_CONST_FRA1[PhiOnEdges],
+     &     CHF_FRA1[gradPhi] )
+      
+      integer CHF_DDECL[i;j;k;l;m] 
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      double precision edgePhi_up, edgePhi_down      
+
+      CHF_DTERM[
+      ii = CHF_ID(dir, 0);
+      jj = CHF_ID(dir, 1);
+      kk = 0;
+      ll = 0;
+      mm = 0]
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+      
+         edgePhi_down = PhiOnEdges(CHF_IX[i-ii;j-jj;k;l;m])
+         edgePhi_up   = PhiOnEdges(CHF_IX[i;j;k;l;m])
+           
+         gradPhi(CHF_IX[i;j;k;l;m]) = (edgePhi_up - edgePhi_down)/dX
+
+      CHF_ENDDO
+
+      return
+      end
 
 c ----------------------------------------------------------
 c  interp cell edge values to cell center using C2 method
@@ -764,16 +1020,53 @@ c  -------------------------------------------------------------
       CHF_DTERM[
       ii = 1 - CHF_ID(dir, 0);
       jj = 1 - CHF_ID(dir, 1);
-      kk = 1 - CHF_ID(dir, 2);
-      ll = 1 - CHF_ID(dir, 3);
-      mm = 1 - CHF_ID(dir, 4)]
+      kk = 0;
+      ll = 0;
+      mm = 0]
 
       CHF_MULTIDO[cellBox;i;j;k;l;m]
 
-         val = edgePhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm])
+         val = edgePhi(CHF_IX[i+ii;j+jj;k;l;m])
      &       + edgePhi(CHF_IX[i;j;k;l;m])
 
          cellPhi(CHF_IX[i;j;k;l;m]) = val * half
+
+      CHF_ENDDO
+
+      return
+      end
+
+c  -------------------------------------------------------------
+c
+c  interp cell edge scalar values to cell center using C2 method
+c
+c  -------------------------------------------------------------
+      subroutine EDGE_SCALAR_TO_CELL( CHF_BOX[cellBox],
+     &                                CHF_CONST_INT[dir],
+     &                                CHF_CONST_FRA[edgePhi],
+     &                                CHF_FRA[cellPhi] )
+
+      integer comp, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val
+
+      CHF_DTERM[
+      ii = 1-CHF_ID(dir, 0);
+      jj = 1-CHF_ID(dir, 1);
+      kk = 0;
+      ll = 0;
+      mm = 0]
+
+      CHF_MULTIDO[cellBox;i;j;k;l;m]
+
+         do comp = 0, (CHF_NCOMP[cellPhi]-1)
+            val = half*( edgePhi(CHF_IX[i+ii;j+jj;k;l;m],comp)
+     &          +        edgePhi(CHF_IX[i;j;k;l;m],comp) )
+            cellPhi(CHF_IX[i;j;k;l;m],comp) = (cellPhi(CHF_IX[i;j;k;l;m],comp) + val)/(dir+1.0)
+c            cellPhi(CHF_IX[i;j;k;l;m],comp) = (cellPhi(CHF_IX[i;j;k;l;m],comp) + val)
+c            cellPhi(CHF_IX[i;j;k;l;m],comp) = edgePhi(CHF_IX[i+ii;j+jj;k;l;m],comp)
+c            if(dir==0) cellPhi(CHF_IX[i;j;k;l;m],comp) = val
+         enddo
 
       CHF_ENDDO
 
@@ -1346,6 +1639,33 @@ c     local variables
            dst(CHF_IX[i;j;k;l;m;n],comp) = src(CHF_IX[i;j;k;l;m;n],comp)
 
          enddo
+
+      CHF_ENDDO
+
+      return
+      end
+     
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+ 
+      subroutine vector_norm(
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA1[dst],
+     &     CHF_CONST_FRA[src]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n], comp
+      double precision val
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+
+         val = 0.0
+         do comp = 0, CHF_NCOMP[src]-1
+
+           val = val + src(CHF_IX[i;j;k;l;m;n],comp)*src(CHF_IX[i;j;k;l;m;n],comp)
+
+         enddo
+         dst(CHF_IX[i;j;k;l;m;n]) = sqrt(val)
 
       CHF_ENDDO
 

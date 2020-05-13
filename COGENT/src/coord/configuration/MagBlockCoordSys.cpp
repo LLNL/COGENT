@@ -445,6 +445,89 @@ MagBlockCoordSys::cellVolSubGrid(FArrayBox&        a_vol,
    }
 }
 
+void MagBlockCoordSys::pointwiseFaceAreas( FluxBox& a_face_areas ) const
+{
+   /*
+    Returns unsigned pointwise calculation
+    of face areas in physical space
+    */
+   
+   CH_assert(a_face_areas.nComp() == 1);
+   const Box& box = a_face_areas.box();
+   
+   FluxBox dXdxi(box, SpaceDim*SpaceDim);
+   getFaceCentereddXdxi( dXdxi );
+   
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      FArrayBox& face_on_dir( a_face_areas[dir] );
+      FORT_COMPUTE_POINTWISE_AREA(CHF_BOX(face_on_dir.box()),
+                                  CHF_CONST_INT(dir),
+                                  CHF_CONST_REALVECT(m_dx),
+                                  CHF_CONST_FRA(dXdxi[dir]),
+                                  CHF_FRA1(face_on_dir,0));
+      
+      if ( m_axisymmetric ) {
+         
+         FArrayBox xi(box,SpaceDim);
+         getFaceCenteredMappedCoords(dir, xi);
+         
+         BoxIterator bit(box);
+         for (bit.begin();bit.ok();++bit) {
+            const IntVect& iv = bit();
+
+            RealVect this_xi;
+            this_xi[RADIAL_DIR] = xi(iv,RADIAL_DIR);
+            this_xi[POLOIDAL_DIR] = xi(iv,POLOIDAL_DIR);
+      
+            double TwoPiRmaj = 2. * Pi * majorRadius(this_xi);
+            face_on_dir(iv,0) *= TwoPiRmaj;
+         }
+      }
+   }
+}
+
+void MagBlockCoordSys::pointwiseFaceAreas( FArrayBox& a_face_areas ) const
+{
+   /*
+    Returns unsigned pointwise calculation
+    of face areas in physical space
+    */
+   
+   CH_assert(a_face_areas.nComp() == SpaceDim);
+   const Box& box = a_face_areas.box();
+   
+   FArrayBox dXdxi(box, SpaceDim*SpaceDim);
+   getCellCentereddXdxi( dXdxi );
+   
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      FORT_COMPUTE_POINTWISE_AREA(CHF_BOX(a_face_areas.box()),
+                                  CHF_CONST_INT(dir),
+                                  CHF_CONST_REALVECT(m_dx),
+                                  CHF_CONST_FRA(dXdxi),
+                                  CHF_FRA1(a_face_areas,dir));
+   }
+   
+   if ( m_axisymmetric ) {
+         
+      FArrayBox xi(box,SpaceDim);
+      getCellCenteredMappedCoords(xi);
+         
+      BoxIterator bit(box);
+      for (bit.begin();bit.ok();++bit) {
+         const IntVect& iv = bit();
+
+         RealVect this_xi;
+         this_xi[RADIAL_DIR] = xi(iv,RADIAL_DIR);
+         this_xi[POLOIDAL_DIR] = xi(iv,POLOIDAL_DIR);
+      
+         double TwoPiRmaj = 2. * Pi * majorRadius(this_xi);
+         for (int comp=0; comp<SpaceDim; ++comp) {
+            a_face_areas(iv,comp) *= TwoPiRmaj;
+         }
+      }
+   }
+}
+
 void MagBlockCoordSys::getPointwiseMajorRadius( const FArrayBox& a_xi,
                                                 FArrayBox&       a_R ) const
 {
@@ -853,7 +936,14 @@ void MagBlockCoordSys::pointwiseJ( EdgeDataBox& a_J ) const
    }
 }
 
-
+void MagBlockCoordSys::pointwiseJ( NodeFArrayBox& a_J ) const
+{
+   CH_assert(a_J.nComp() == 1);
+   FArrayBox& J( a_J.getFab() );
+   FArrayBox Xi( a_J.box(),SpaceDim );
+   getNodeCenteredMappedCoords( Xi );
+   pointwiseJ(J, Xi, a_J.box());
+}
 
 void MagBlockCoordSys::getPointwisePoloidalJ( FArrayBox& a_poloidal_J ) const
 {
@@ -900,7 +990,6 @@ void MagBlockCoordSys::getPointwisePoloidalJ( FArrayBox& a_poloidal_J ) const
       }
    }
 }
-
 
 void
 MagBlockCoordSys::getNodeCenteredMappedCoords( FArrayBox& a_xi ) const

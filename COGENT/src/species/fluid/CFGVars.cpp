@@ -1,4 +1,5 @@
 #include "CFGVars.H"
+#include "SpaceUtils.H"
 
 #include "NamespaceHeader.H"
 
@@ -80,7 +81,8 @@ void CFGVars::copy( const CFGVars& a_rhs )
          const LevelData<EdgeDataBox>& that_edge_data = a_rhs.edge_var(i);
          CH_assert( (this_edge_data.disjointBoxLayout()).compatible( that_edge_data.disjointBoxLayout() ) );
          for (DataIterator dit( this_edge_data.dataIterator() ); dit.ok(); ++dit) {
-            this_edge_data[dit].copy(that_edge_data[dit],0,0,this_edge_data.nComp() );
+            //this_edge_data[dit].copy(that_edge_data[dit],0,0,this_edge_data.nComp() );
+            SpaceUtils::copyEdgeDataBox(this_edge_data[dit],that_edge_data[dit]); 
          }
       }
    }

@@ -114,7 +114,8 @@ public:
                                      const RealVect& xi_dst_cent,
                                      const RealVect& dx) const;
 
-   void applyToroidalPeriodicity(RealVect& a_x) const;
+   void applyToroidalPeriodicity(RealVect& X,
+				 const Side::LoHiSide&  side) const;
 
    Vector<Box> getToroidalBoundaryBoxes( const int              block_number,
                                          const Side::LoHiSide&  side,

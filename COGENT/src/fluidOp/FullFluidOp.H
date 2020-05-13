@@ -286,8 +286,12 @@ private:
                                        const Real& a_mass,
                                        const Real& a_charge) const;
    
-   void setCspeed( const LevelData<FArrayBox>&  a_density,
-                   const double                 a_gamma );
+   //void setCspeed( const LevelData<FArrayBox>&  a_density,
+   //                const double                 a_gamma );
+   
+   void setMappedCspeed( const double  a_gamma,
+                         const int     a_Ptherm,
+                         const int     a_Pmag );
    
    void checkModelConsistency(const FluidSpecies& fluid_species) const;
   

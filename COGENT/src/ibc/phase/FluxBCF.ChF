@@ -1,0 +1,430 @@
+#include "CONSTANTS.H"
+
+
+      function Maxwellian(dens, vshift, temp, vpar, mu, B, mass)
+      implicit none
+      double precision Maxwellian, dens, vshift, temp, vpar, mu, B, mass
+      double precision factor, eparnorm, munorm, val
+      
+      factor = dsqrt(PI*(two/mass)**3)
+      eparnorm = half * mass * (vpar-vshift)**2 / temp
+      munorm   = half * B * mu / temp
+      val      = dexp( -( eparnorm + munorm ) )
+
+      Maxwellian  = val * dens / ( factor * dsqrt( temp) * temp )
+      
+      return
+      end
+
+
+       subroutine set_flux_inflow_bc(
+     &     CHF_FRA1[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_VR[outflow_moms],
+     &     CHF_CONST_VR[pert_moms],
+     &     CHF_CONST_FRA[velCoords],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_FRA1[vn],
+     &     CHF_CONST_FRA1[inj_B],
+     &     CHF_CONST_FRA1[BStarPar],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      integer CHF_DDECL[i1;j1;k1;l1;m1]
+      integer CHF_DDECL[iv0;iv1;iv2;iv3;iv4]
+      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3;ibeg4]
+      integer CHF_DDECL[ng0;ng1;ng2;ng3;ng4]
+      integer isign
+      integer ng(0:CH_SPACEDIM-1),gn(0:CH_SPACEDIM-1)
+      double precision val, n0, Vf0, T0, dn, dVf, dT, Maxwellian
+      double precision BstarPar_bnd, B_bnd, vn_bnd, vpar, mu
+      
+c
+      isign = 2*iside-1
+c
+      CHF_DTERM[
+      i1 = isign * CHF_ID(idir,0);
+      j1 = isign * CHF_ID(idir,1);
+      k1 = isign * CHF_ID(idir,2);
+      l1 = isign * CHF_ID(idir,3);
+      m1 = isign * CHF_ID(idir,4)]
+c
+      CHF_DTERM[
+      ng0 = CHF_UBOUND[bdrybox;0]-CHF_LBOUND[bdrybox;0];
+      ng1 = CHF_UBOUND[bdrybox;1]-CHF_LBOUND[bdrybox;1];
+      ng2 = CHF_UBOUND[bdrybox;2]-CHF_LBOUND[bdrybox;2];
+      ng3 = CHF_UBOUND[bdrybox;3]-CHF_LBOUND[bdrybox;3];
+      ng4 = CHF_UBOUND[bdrybox;4]-CHF_LBOUND[bdrybox;4]]
+c
+c     *** ibeg - index of the first ghost cell outside the boundary
+      CHF_DTERM[
+      ibeg0 = ibdryboxlo0+CHF_ID(idir,0)*(1-iside)*ng0;
+      ibeg1 = ibdryboxlo1+CHF_ID(idir,1)*(1-iside)*ng1;
+      ibeg2 = ibdryboxlo2+CHF_ID(idir,2)*(1-iside)*ng2;
+      ibeg3 = ibdryboxlo3+CHF_ID(idir,3)*(1-iside)*ng3;
+      ibeg4 = ibdryboxlo4+CHF_ID(idir,4)*(1-iside)*ng4]
+c
+      CHF_MULTIDO[bdrybox;i;j;k;l;m]
+c
+        CHF_DTERM[
+        iv0 = i+CHF_ID(idir,0)*(ibeg0-i);
+        iv1 = j+CHF_ID(idir,1)*(ibeg1-j);
+        iv2 = k+CHF_ID(idir,2)*(ibeg2-k);
+        iv3 = l+CHF_ID(idir,3)*(ibeg3-l);
+        iv4 = m+CHF_ID(idir,4)*(ibeg4-m)]
+
+c     *** compute the boundary face value for BstarPar as an average
+c     *** between the last valid and first ghost cells
+        BstarPar_bnd = half *(BstarPar(CHF_IX[iv0;iv1;iv2;iv3;iv4]) 
+     &                      + BstarPar(CHF_IX[iv0-i1;iv1-j1;iv2-k1;iv3-l1;iv4-m1]))
+
+
+c     *** compute the boundary face value for BstarPar as an average
+c     *** between the last valid and first ghost cells
+#if CH_SPACEDIM==4
+       	B_bnd = half * (inj_B(CHF_IX[iv0;iv1;CHF_LBOUND[inj_B;2];CHF_LBOUND[inj_B;3]])
+     &               + inj_B(CHF_IX[iv0-i1;iv1-j1;CHF_LBOUND[inj_B;2];CHF_LBOUND[inj_B;3]]))  
+#else
+        B_bnd = half * (inj_B(CHF_IX[iv0;iv1;iv2;CHF_LBOUND[inj_B;3];CHF_LBOUND[inj_B;4]])
+     &               + inj_B(CHF_IX[iv0-i1;iv1-j1;iv2-k1;CHF_LBOUND[inj_B;3];CHF_LBOUND[inj_B;4]]))  
+#endif
+
+        CHF_DTERM[
+        ii = i+CHF_ID(idir,0)*(iside-1)*(2*(i-ibeg0)+ng0);
+        jj = j+CHF_ID(idir,1)*(iside-1)*(2*(j-ibeg1)+ng1);
+        kk = k+CHF_ID(idir,2)*(iside-1)*(2*(k-ibeg2)+ng2);
+        ll = l+CHF_ID(idir,3)*(iside-1)*(2*(l-ibeg3)+ng3);
+        mm = m+CHF_ID(idir,4)*(iside-1)*(2*(m-ibeg4)+ng4);]
+
+        CHF_DTERM[
+        gn(0) = iabs(ii-ibeg0);
+        gn(1) = iabs(jj-ibeg1);
+        gn(2) = iabs(kk-ibeg2);
+        gn(3) = iabs(ll-ibeg3);
+        gn(4) = iabs(mm-ibeg4)]
+
+
+c     *** compute the boundary face value
+        
+        n0 = outflow_moms(0)
+        Vf0 = outflow_moms(1)
+        T0 = outflow_moms(2)
+
+        dn = pert_moms(0)
+        dVf = pert_moms(1)
+        dT = pert_moms(2)
+
+        vpar  = velCoords(CHF_IX[ii;jj;kk;ll;mm],0)
+        mu    = velCoords(CHF_IX[ii;jj;kk;ll;mm],1)
+
+        val = one + dn/n0
+        val = val + mass*(vpar - Vf0)*dVf/T0
+        val = val + half*(mass*(vpar - Vf0)**2 + mu * B_bnd - three)*dT/T0
+
+        val = Maxwellian(n0, Vf0, T0, vpar, mu, B_bnd, mass) * val
+
+        val = val * BstarPar_bnd
+
+  
+
+c     *** get the boundary value of faceVel
+
+        vn_bnd = vn(CHF_IX[iv0-i1;iv1-j1;iv2-k1;iv3-l1;iv4-m1])
+
+
+c     *** fill ghosts for inflow
+
+        if ( isign*vn_bnd .lt. zero  ) then
+
+          f(CHF_IX[ii;jj;kk;ll;mm]) = two*(one + gn(idir)) * val 
+     &      - (one + two * gn(idir)) * f(CHF_IX[iv0-i1;iv1-j1;iv2-k1;iv3-l1;iv4-m1])
+
+        endif
+
+      CHF_ENDDO
+c
+      return
+      end
+
+
+       subroutine compute_outflow_moments(
+     &     CHF_FRA[kernels],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_FRA1[dfn],
+     &     CHF_CONST_FRA1[faceVel],
+     &     CHF_CONST_FRA1[inj_phi],
+     &     CHF_CONST_FRA1[inj_B],
+     &     CHF_CONST_FRA1[BStarPar],
+     &     CHF_CONST_FRA[velCoords],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_REAL[charge],
+     &     CHF_CONST_REAL[velArea],
+     &     CHF_CONST_REAL[cfgArea],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[i1;j1;k1;l1;m1]
+      integer CHF_DDECL[iv0;iv1;iv2;iv3;iv4]
+      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3;ibeg4]
+      integer isign
+      double precision phi_bnd, dfn_bnd, velNT_bnd
+      double precision BstarPar_bnd, B_bnd, vpar, mu, fac
+      
+c
+      isign = 2*iside-1
+c
+      CHF_DTERM[
+      i1 = isign * CHF_ID(idir,0);
+      j1 = isign * CHF_ID(idir,1);
+      k1 = isign * CHF_ID(idir,2);
+      l1 = isign * CHF_ID(idir,3);
+      m1 = isign * CHF_ID(idir,4)]
+c
+
+c     *** ibeg - index of the first ghost cell outside the physical boundary
+c     *** it is also the last ghost cell, as we consider one-cell-wide ghost layer
+      CHF_DTERM[
+      ibeg0 = ibdryboxlo0;
+      ibeg1 = ibdryboxlo1;
+      ibeg2 = ibdryboxlo2;
+      ibeg3 = ibdryboxlo3;
+      ibeg4 = ibdryboxlo4]
+c
+      CHF_MULTIDO[bdrybox;i;j;k;l;m]
+c
+        CHF_DTERM[
+        iv0 = i+CHF_ID(idir,0)*(ibeg0-i);
+        iv1 = j+CHF_ID(idir,1)*(ibeg1-j);
+        iv2 = k+CHF_ID(idir,2)*(ibeg2-k);
+        iv3 = l+CHF_ID(idir,3)*(ibeg3-l);
+        iv4 = m+CHF_ID(idir,4)*(ibeg4-m)]
+
+c     *** compute the boundary face value for BstarPar as an average
+c     *** between the last valid and first ghost cells
+        BstarPar_bnd = half *(BstarPar(CHF_IX[iv0;iv1;iv2;iv3;iv4]) 
+     &                      + BstarPar(CHF_IX[iv0-i1;iv1-j1;iv2-k1;iv3-l1;iv4-m1]))
+
+
+c     *** compute the boundary face value for BstarPar as an average
+c     *** between the last valid and first ghost cells
+#if CH_SPACEDIM==4
+        B_bnd = half * (inj_B(CHF_IX[iv0;iv1;CHF_LBOUND[inj_B;2];CHF_LBOUND[inj_B;3]])
+     &               + inj_B(CHF_IX[iv0-i1;iv1-j1;CHF_LBOUND[inj_B;2];CHF_LBOUND[inj_B;3]]))  
+#else
+        B_bnd = half * (inj_B(CHF_IX[iv0;iv1;iv2;CHF_LBOUND[inj_B;3];CHF_LBOUND[inj_B;4]])
+     &               + inj_B(CHF_IX[iv0-i1;iv1-j1;iv2-k1;CHF_LBOUND[inj_B;3];CHF_LBOUND[inj_B;4]]))  
+#endif
+
+
+c     *** compute the boundary face value for dfn, and inj_phi 
+c     *** by extrapolation from the first two valid cells adjacent to the boundary
+
+        dfn_bnd = (three/two) * dfn(CHF_IX[iv0-i1;iv1-j1;iv2-k1;iv3-l1;iv4-m1]) 
+     &      - (one/two) * dfn(CHF_IX[iv0-2*i1;iv1-2*j1;iv2-2*k1;iv3-2*l1;iv4-2*m1])
+
+#if CH_SPACEDIM==4
+        phi_bnd = (three/two) * inj_phi(CHF_IX[iv0-i1;iv1-j1;CHF_LBOUND[inj_phi;2];CHF_LBOUND[inj_phi;3]])
+     &          - (one/two) * inj_phi(CHF_IX[iv0-2*i1;iv1-2*j1;CHF_LBOUND[inj_phi;2];CHF_LBOUND[inj_phi;3]])  
+#else
+        phi_bnd = (three/two) * inj_phi(CHF_IX[iv0-i1;iv1-j1;iv2-k1;CHF_LBOUND[inj_phi;3];CHF_LBOUND[inj_phi;4]])
+     &          - (one/two) * inj_phi(CHF_IX[iv0-2*i1;iv1-2*j1;iv2-2*k1;CHF_LBOUND[inj_phi;3];CHF_LBOUND[inj_phi;4]])
+#endif
+
+
+c     *** get the boundary value of faceVel
+        velNT_bnd = faceVel(CHF_IX[iv0-i1;iv1-j1;iv2-k1;iv3-l1;iv4-m1])
+        
+
+c     *** compute the kernels
+
+c        fac = BstarPar_bnd * dfn_bnd * velArea / mass
+        fac = dfn_bnd * velArea / mass
+        
+        vpar  = velCoords(CHF_IX[i;j;k;l;m],0)
+        mu    = velCoords(CHF_IX[i;j;k;l;m],1)
+       
+c     *** compute dens, vpar, and temperature kernels
+c     *** more accurately, we need to subtract flow when computing temperature kernel
+c     *** for now, assume (small) diamagnetic-level flow velocity, and neglect 
+c     *** these small corrections for temperature calculations   
+
+        kernels(CHF_IX[i;j;k;l;m],0) = fac
+        kernels(CHF_IX[i;j;k;l;m],1) = vpar * fac
+        kernels(CHF_IX[i;j;k;l;m],2) = (mass * vpar**2 + mu * B_bnd) * fac / three  
+       
+
+        fac = fac * isign * velNT_bnd * cfgArea
+
+        if ( isign*velNT_bnd .ge. zero  ) then
+          kernels(CHF_IX[i;j;k;l;m],3) = fac 
+          kernels(CHF_IX[i;j;k;l;m],4) = vpar * fac
+          kernels(CHF_IX[i;j;k;l;m],5) = (half * (mass * vpar**2 + mu * B_bnd) + charge * phi_bnd) * fac
+        else 
+          kernels(CHF_IX[i;j;k;l;m],3) = zero
+          kernels(CHF_IX[i;j;k;l;m],4) = zero
+          kernels(CHF_IX[i;j;k;l;m],5) = zero
+        endif
+
+c     *** compute kernel for the configuration area
+
+#if CH_SPACEDIM==4
+        if ((k.eq.0).and.(l.eq.0)) then
+           kernels(CHF_IX[i;j;k;l;m],6) = one
+        endif
+#else
+        if ((l.eq.0).and.(m.eq.0)) then
+           kernels(CHF_IX[i;j;k;l;m],6) = one
+        endif
+#endif
+
+      CHF_ENDDO
+c
+      return
+      end
+
+       subroutine compute_flux_matrix(
+     &     CHF_FRA[kernels],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_VR[outflow_moms],
+     &     CHF_CONST_FRA1[faceVel],
+     &     CHF_CONST_FRA1[inj_phi],
+     &     CHF_CONST_FRA1[inj_B],
+     &     CHF_CONST_FRA1[BStarPar],
+     &     CHF_CONST_FRA[velCoords],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_REAL[charge],
+     &     CHF_CONST_REAL[velArea],
+     &     CHF_CONST_REAL[cfgArea],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[i1;j1;k1;l1;m1]
+      integer CHF_DDECL[iv0;iv1;iv2;iv3;iv4]
+      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3;ibeg4]
+      integer isign, comp
+      double precision n0, Vf0, T0, Maxwellian
+      double precision BstarPar_bnd, B_bnd, phi_bnd, velNT_bnd
+      double precision vpar, mu, energ_kin, energ_full, fac
+
+c
+      isign = 2*iside-1
+c
+      CHF_DTERM[
+      i1 = isign * CHF_ID(idir,0);
+      j1 = isign * CHF_ID(idir,1);
+      k1 = isign * CHF_ID(idir,2);
+      l1 = isign * CHF_ID(idir,3);
+      m1 = isign * CHF_ID(idir,4)]
+c
+
+c     *** ibeg - index of the first ghost cell outside the physical boundary
+c     *** it is also the last ghost cell, as we consider one-cell-wide ghost layer
+      CHF_DTERM[
+      ibeg0 = ibdryboxlo0;
+      ibeg1 = ibdryboxlo1;
+      ibeg2 = ibdryboxlo2;
+      ibeg3 = ibdryboxlo3;
+      ibeg4 = ibdryboxlo4]
+c
+      CHF_MULTIDO[bdrybox;i;j;k;l;m]
+c
+        CHF_DTERM[
+        iv0 = i+CHF_ID(idir,0)*(ibeg0-i);
+        iv1 = j+CHF_ID(idir,1)*(ibeg1-j);
+        iv2 = k+CHF_ID(idir,2)*(ibeg2-k);
+        iv3 = l+CHF_ID(idir,3)*(ibeg3-l);
+        iv4 = m+CHF_ID(idir,4)*(ibeg4-m)]
+
+c     *** compute the boundary face value for BstarPar as an average
+c     *** between the last valid and first ghost cells
+        BstarPar_bnd = half *(BstarPar(CHF_IX[iv0;iv1;iv2;iv3;iv4]) 
+     &                      + BstarPar(CHF_IX[iv0-i1;iv1-j1;iv2-k1;iv3-l1;iv4-m1]))
+
+
+c     *** compute the boundary face value for BstarPar as an average
+c     *** between the last valid and first ghost cells
+#if CH_SPACEDIM==4
+        B_bnd = half * (inj_B(CHF_IX[iv0;iv1;CHF_LBOUND[inj_B;2];CHF_LBOUND[inj_B;3]])
+     &               + inj_B(CHF_IX[iv0-i1;iv1-j1;CHF_LBOUND[inj_B;2];CHF_LBOUND[inj_B;3]]))  
+#else
+        B_bnd = half * (inj_B(CHF_IX[iv0;iv1;iv2;CHF_LBOUND[inj_B;3];CHF_LBOUND[inj_B;4]])
+     &               + inj_B(CHF_IX[iv0-i1;iv1-j1;iv2-k1;CHF_LBOUND[inj_B;3];CHF_LBOUND[inj_B;4]]))  
+#endif
+
+
+c     *** compute the boundary face value for  inj_phi 
+c     *** by extrapolation from the first two valid cells adjacent to the boundary
+
+#if CH_SPACEDIM==4
+        phi_bnd = (three/two) * inj_phi(CHF_IX[iv0-i1;iv1-j1;CHF_LBOUND[inj_phi;2];CHF_LBOUND[inj_phi;3]])
+     &          - (one/two) * inj_phi(CHF_IX[iv0-2*i1;iv1-2*j1;CHF_LBOUND[inj_phi;2];CHF_LBOUND[inj_phi;3]])  
+#else
+        phi_bnd = (three/two) * inj_phi(CHF_IX[iv0-i1;iv1-j1;iv2-k1;CHF_LBOUND[inj_phi;3];CHF_LBOUND[inj_phi;4]])
+     &          - (one/two) * inj_phi(CHF_IX[iv0-2*i1;iv1-2*j1;iv2-2*k1;CHF_LBOUND[inj_phi;3];CHF_LBOUND[inj_phi;4]])
+#endif
+
+
+c     *** get the boundary value of faceVel
+        velNT_bnd = faceVel(CHF_IX[iv0-i1;iv1-j1;iv2-k1;iv3-l1;iv4-m1])
+        
+
+c     *** compute the kernels
+	
+        n0 = outflow_moms(0)
+        Vf0 = outflow_moms(1)
+        T0 = outflow_moms(2)
+        
+        vpar  = velCoords(CHF_IX[i;j;k;l;m],0)
+        mu    = velCoords(CHF_IX[i;j;k;l;m],1)
+        
+        fac = Maxwellian(n0, Vf0, T0, vpar, mu, B_bnd, mass)
+
+        fac = fac * BstarPar_bnd * velArea / mass
+        fac = fac * (-isign * velNT_bnd) * cfgArea
+        
+        energ_kin = half * (mass * (vpar-Vf0)**2 + mu * B_bnd)
+        energ_full = energ_kin + charge * phi_bnd 
+       
+c     *** compute kernels for matrix elements; that are Gamma, M, and Q fluxes
+c     *** driven by perturbations of density, parallel momentum, and temperature
+       
+        if ( isign*velNT_bnd .lt. zero  ) then
+
+c     *** elements for the particle flux equation
+          kernels(CHF_IX[i;j;k;l;m],0) = one/n0 
+          kernels(CHF_IX[i;j;k;l;m],1) = mass*(vpar - Vf0)/T0
+          kernels(CHF_IX[i;j;k;l;m],2) = (energ_kin / T0 - three/two) / T0 
+
+c     *** elements for the parallel momentum flux equation
+          kernels(CHF_IX[i;j;k;l;m],3) = kernels(CHF_IX[i;j;k;l;m],0) * vpar
+          kernels(CHF_IX[i;j;k;l;m],4) = kernels(CHF_IX[i;j;k;l;m],1) * vpar
+          kernels(CHF_IX[i;j;k;l;m],5) = kernels(CHF_IX[i;j;k;l;m],2) * vpar
+
+c     *** elements for the energy flux equation
+          kernels(CHF_IX[i;j;k;l;m],6) = kernels(CHF_IX[i;j;k;l;m],0) * energ_full
+          kernels(CHF_IX[i;j;k;l;m],7) = kernels(CHF_IX[i;j;k;l;m],1) * energ_full
+          kernels(CHF_IX[i;j;k;l;m],8) = kernels(CHF_IX[i;j;k;l;m],2) * energ_full
+
+c     *** fluxes driven by background Maxwellian (contribute to the rhs of the trilinear system)
+          kernels(CHF_IX[i;j;k;l;m],9) = one 
+          kernels(CHF_IX[i;j;k;l;m],10) = vpar
+          kernels(CHF_IX[i;j;k;l;m],11) = energ_full          
+
+        endif
+
+        do comp = 0, 11
+         kernels(CHF_IX[i;j;k;l;m],comp) = kernels(CHF_IX[i;j;k;l;m],comp) * fac
+        enddo
+ 
+      CHF_ENDDO
+c
+      return
+      end
+      

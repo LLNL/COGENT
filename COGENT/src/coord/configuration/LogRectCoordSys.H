@@ -98,7 +98,8 @@ private:
    
 #if CFG_DIM ==3 
    //applies toroidal periodicity
-   void applyPeriodicity(RealVect& a_x) const;
+   void applyPeriodicity(RealVect& a_x,
+                         const Side::LoHiSide&  a_side) const;
 
    //enforces cut conditions in the poloidal direction
    //for the case of the toroidal geometry

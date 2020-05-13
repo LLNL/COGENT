@@ -1,4 +1,4 @@
-#TEST np=20, timelimit=00:05:00
+#TEST np=100, timelimit=00:05:00
 #####################################################
 # Verbosity Definitions
 #####################################################
@@ -12,7 +12,7 @@ gksystem.hdf_fluids = true
 #####################################################
 #simulation.max_step            = 2
 simulation.max_step            = 235650
-simulation.max_time            = 10.0
+simulation.max_time            = 1.0 # 10.0
 #simulation.max_dt_grow         = .1
 simulation.initial_dt_fraction = 1.0
 simulation.cfl_number          = 0.7
@@ -100,7 +100,8 @@ fluid_model.neutrals.advScheme = "quick"
 #fluid_model.neutrals.advScheme = "c2"
 #fluid_model.neutrals.advScheme = "weno5"
 #fluid_model.neutrals.advScheme = "TVDminmod"
-fluid_model.neutrals.tauMax = 1.0e-2
+fluid_model.neutrals.tau = 1.0e-2
+fluid_model.neutrals.etaMin = 0.0e-2
 fluid_model.neutrals.implicitMhd = 0
 fluid_model.neutrals.implicitViscosity = 0
 

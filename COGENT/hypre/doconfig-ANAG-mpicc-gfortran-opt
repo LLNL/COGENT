@@ -1,0 +1,18 @@
+#!/bin/sh
+
+debug="--enable-opt"
+
+install_dir=$PWD/lib/ANAG-mpicc-gfortran-opt
+
+cd src
+./configure $debug \
+            --with-CC=mpicc \
+            --with-CFLAGS="-O2 " \
+            --with-CXX=mpiCC \
+            --with-CXXFLAGS="-g -O2 " \
+            --with-F77=mpif77 \
+            --with-F77FLAGS="-g -O2 " \
+            --enable-maxdim=5 \
+            --prefix=$install_dir
+cd ..
+

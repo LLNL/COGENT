@@ -4,6 +4,7 @@
 #include "KineticFunction.H"
 #include "GlobalDOF.H"
 #include "MultiPhysicsPreconditioner.H"
+#include "GKVlasovAMG.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -158,6 +159,8 @@ public:
 
    void updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>&,
                              const KineticSpeciesPtrVect&,
+                             const CFG::LevelData<CFG::FArrayBox>&  phi,
+                             const CFG::EField&                     E_field,
                              const GlobalDOFKineticSpeciesPtrVect&,
                              const Real, const Real, const bool);
 
@@ -174,6 +177,8 @@ public:
 
    void updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
                        const KineticSpecies&,
+                       const CFG::LevelData<CFG::FArrayBox>&  phi,
+                       const CFG::EField&                     E_field,
                        const GlobalDOFKineticSpecies&,
                        const Real,
                        const Real,
@@ -195,7 +200,23 @@ public:
      }
    }
 
-protected:
+   void testPC( const GKVlasovAMG*         pc,
+                const PhaseGeom&           geometry,
+                const LevelData<FluxBox>&  velocity,
+                const Real                 shift );
+
+   void solvePCImEx( KineticSpeciesPtrVect&           kinetic_species_solution,
+                     const KineticSpeciesPtrVect&     kinetic_species_rhs,
+                     const CFG::FluidSpeciesPtrVect&  fluid_species_rhs,
+                     int                              idx ) const;
+   
+   void constructStencils( const LevelData<FluxBox>&               face_vel,
+                           const PhaseGeom&                        geometry,
+                           const Real                              shift,
+                           LevelData<BaseFab<Vector<IntVect> > >&  couplings,
+                           LevelData<BaseFab<Vector<Real> > >&     weights ) const;
+
+  protected:
 
    void computeFlux( const LevelData<FArrayBox>& dist_fn,
                      const LevelData<FluxBox>&   velocity,
@@ -273,12 +294,18 @@ protected:
    LevelData<FluxBox> m_velocity;
    LevelData<FluxBox> m_velocity_normal;
    LevelData<FluxBox> m_delta_flux;
+   LevelData<FluxBox> m_delta_flux_normal;
    
    LevelData<FluxBox> m_face_dist;
    RefCountedPtr<KineticFunction> m_ref_func;
 
    std::map<std::string, tiType> m_ti_type;
    std::map<std::string, int> m_my_pc_idx;
+   std::map<std::string, int> m_vlasov_pc_idx;
+
+   Vector<GKVlasovAMG*> m_pc_vec;
+   bool m_precond_build_test;
+   string m_precond_face_avg_type;
 };
 
 #include "NamespaceFooter.H"

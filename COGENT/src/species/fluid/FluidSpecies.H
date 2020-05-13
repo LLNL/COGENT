@@ -88,6 +88,11 @@ class FluidSpecies
        */
       virtual void pressure( LevelData<FArrayBox>& pressure ) const;
       
+      /// Returns electron species pressure.
+      /**
+       */
+      virtual void pressure_ele( LevelData<FArrayBox>& pressure_ele ) const;
+      
       /// Returns species magnetic pressure.
       /**
        */
@@ -146,11 +151,14 @@ class FluidSpecies
       Real minValue() const;
 
       int m_evolve_momentumDensity=0, m_evolve_momentumDensity_virtual=0; 
-      int m_evolve_energyDensity=0;
+      int m_evolve_energyDensity=0, m_evolve_energyDensity_ele=0;
       int m_evolve_magneticField=0, m_evolve_magneticField_virtual=0;
       int m_evolve_electricField=0, m_evolve_electricField_virtual=0;
       int m_evolve_currentDensity=0, m_evolve_currentDensity_virtual=0;
-      
+      int m_plotMemberVars=0;      
+
+      std::vector<string> m_plotMemberVarNames;
+    
       Real m_gamma = 5.0/3.0;
 
 private:
