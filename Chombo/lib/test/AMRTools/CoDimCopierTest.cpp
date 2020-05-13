@@ -171,8 +171,8 @@ void initData(LevelData<FArrayBox>& ld)
 
 int main( int argc, char* argv[] )
 {
-
 #ifdef CH_USE_PETSC
+  int ierr;
   ierr = PetscInitialize(&argc, &argv,PETSC_NULL,PETSC_NULL); CHKERRQ(ierr);
 #else
 #ifdef CH_MPI
