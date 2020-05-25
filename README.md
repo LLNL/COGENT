@@ -58,7 +58,7 @@ Install Instructions
 
       For example:
   
-          export HDF5_DIR=/opt/cray/pe/hdf5-parallel/1.10.0.3/GNU/5.1
+          export HDF5_DIR=/opt/cray/pe/hdf5-parallel/1.10.2.0/gnu/8.2/
 
 
       should work.
