@@ -123,6 +123,9 @@ class LogRectPhaseBC
       inline std::string getBcType( const int& a_dir,
                                     const Side::LoHiSide& a_side );
 
+      inline std::string getBcName( const int& a_dir,
+                                    const Side::LoHiSide& a_side );
+
       const std::string m_name;
       int m_verbosity;
 

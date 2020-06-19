@@ -60,11 +60,12 @@ public:
    ~GKPoissonBoltzmann( );
 
    void computePotentialAndElectronDensity(
-      LevelData<FArrayBox>&        phi,
-      BoltzmannElectron&           ne,
-      const LevelData<FArrayBox>&  ni,
-      const EllipticOpBC&          bc,
-      const bool                   first_step = false);
+      LevelData<FArrayBox>&            phi,
+      BoltzmannElectron&               ne,
+      const LevelData<FArrayBox>&      ni,
+      const PS::KineticSpeciesPtrVect& kinetic_species,
+      const EllipticOpBC&              bc,
+      const bool                       first_step = false);
 
    virtual void setOperatorCoefficients( const LevelData<FArrayBox>&  ni,
                                          const EllipticOpBC&          bc ); 
@@ -152,16 +153,18 @@ protected:
    void solveLinear( const LevelData<FArrayBox>&  ni,
                      const EllipticOpBC&          bc,
                      BoltzmannElectron&           ne,
-                     LevelData<FArrayBox>&        phi );
+                     LevelData<FArrayBox>&        phi,
+		     const bool                   update_linear_system = true);
 
    void solveSubspaceIteration( const LevelData<FArrayBox>&  ni,
                                 const EllipticOpBC&          bc,
                                 BoltzmannElectron&           ne,
                                 LevelData<FArrayBox>&        phi );
 
-   void solveSimpleBoltzmann( const LevelData<FArrayBox>&   ni,
-                                BoltzmannElectron&          ne,
-                                LevelData<FArrayBox>&       phi );
+   void solveSimpleBoltzmann(const LevelData<FArrayBox>&       ni,
+                             const PS::KineticSpeciesPtrVect&  kinetic_species,
+                             BoltzmannElectron&                ne,
+                             LevelData<FArrayBox>&             phi );
 
    /// Solve the Jacobian system Jz = r
    /** Solve the Jacobian system Jz = r
@@ -261,6 +264,18 @@ protected:
    
    void initializeElectronTemperature(LevelData<FArrayBox>&    Te,
                                       const BoltzmannElectron& ne);
+   
+   /// parseParameters function
+   /**
+    * parseParameters function
+    */
+   void parseParameters( const ParmParse&   pp );
+
+   /// printParameters function
+   /**
+    * printParameters function
+    */
+   void printParameters();
 
    LevelData<FArrayBox> m_M;
    LevelData<FArrayBox> m_boltzmann_prefactor;
@@ -320,6 +335,12 @@ protected:
    bool m_preserve_initial_ni_average;
 
    bool m_gkp_verbose;
+   
+   bool m_use_ion_temperature;
+   bool m_use_parallel_ion_temperature;
+   bool m_use_fsa_temperature;
+   int m_simple_boltz_species;
+   
 };
 
 #include "NamespaceFooter.H"

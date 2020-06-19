@@ -423,7 +423,7 @@ LogRectCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    if (a_nDst == -1) {
      a_nDst = numBlocks() - 1;
    }
-   
+
    const MagBlockCoordSys* src_coord_sys = (MagBlockCoordSys*)getCoordSys(a_nSrc);
    const RealVect& dx_src = src_coord_sys->getMappedCellSize();
    
@@ -602,6 +602,27 @@ LogRectCoordSys::enforcePoloidalCut(const RealVect& a_xiSrc,
    a_xiSW_dst = poloidalNodes[2];
    a_xiSE_dst = poloidalNodes[3];
    a_xi0_dst = poloidalNodes[4];
+   
+   /*
+    Alhough q>1 (in a stable tokamak), having a single block wedge angle of more than Pi
+    can lead to the re-mapping shift of a poloidal angle to be larger than Pi.
+    That can "confuse" the above corrections, leading to the poloidal distance
+    beween the vertices be about 2Pi. In principle, the present algorithm only
+    cares about a_xi0_dst coordinate, so the code may still work (provided
+    we turn off the check for remapping properties). However, boxes that contain
+    ghost data for remapping might be the size of a poloidal domain, and thus
+    parallelism will not be efectively used. Better, to simply increase the
+    number of blocks.
+    */
+   if (m_mag_geom_type == "toroidal") {
+      const MagBlockCoordSys* src_coord_0 = (MagBlockCoordSys*)getCoordSys(0);
+      double phi_max = ((const ToroidalBlockCoordSys*)src_coord_0)->getToroidalWedgeFraction();
+      phi_max *= 2. * Pi;
+      if (numBlocks() == 1 && phi_max > Pi) {
+         MayDay::Error("LogRectCoordSys::toroidalBlockRemapping(): using wedge angle wider than Pi with a single block is dangerous; try using two blocks");
+      }
+   }
+
 }
 
 

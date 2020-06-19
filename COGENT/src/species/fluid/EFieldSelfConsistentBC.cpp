@@ -100,13 +100,12 @@ void EFieldSelfConsistentBC::computeEField( const PS::GKState&                a_
 
                   ((NewGKPoissonBoltzmann*)m_poisson)
                      ->setDivertorBVs( ion_charge_density, ion_parallel_current_density, a_bc );
-               }
-
-               if (single_null) {
+               
                   ((NewGKPoissonBoltzmann*)m_poisson)
                      ->computePotentialAndElectronDensity( a_phi,
                                                            *m_boltzmann_electron,
                                                            ion_charge_density,
+                                                           a_kinetic_species,
                                                            a_bc,
                                                            a_initial_time );
                }
@@ -115,6 +114,7 @@ void EFieldSelfConsistentBC::computeEField( const PS::GKState&                a_
                      ->computePotentialAndElectronDensity( a_phi,
                                                            *m_boltzmann_electron,
                                                            ion_charge_density,
+                                                           a_kinetic_species,
                                                            a_bc,
                                                            a_initial_time );
                }

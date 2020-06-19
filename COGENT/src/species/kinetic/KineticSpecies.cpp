@@ -160,6 +160,23 @@ void KineticSpecies::ParallelMomentum( CFG::LevelData<CFG::FArrayBox>& a_Paralle
    m_moment_op.compute( a_ParallelMom, *this, ParallelMomKernel() );
 }
 
+void KineticSpecies::ParallelVelocity( CFG::LevelData<CFG::FArrayBox>& a_ParallelVel ) const
+{
+   const CFG::MagGeom& mag_geom = m_geometry->magGeom();
+   
+   CFG::LevelData<CFG::FArrayBox> density;
+   density.define(a_ParallelVel);
+   m_moment_op.compute( density, *this, DensityKernel() );
+
+   m_moment_op.compute( a_ParallelVel, *this, ParallelMomKernel() );
+
+// Note that ParallelMomKernel is actually the Number Density Flux (not the Mass Density)
+   for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
+      a_ParallelVel[dit].divide(density[dit]);
+   }
+}
+
+
 void KineticSpecies::PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& a_PoloidalMom,
                                        const LevelData<FluxBox>& field,
                                        const double larmor  ) const 
@@ -281,6 +298,88 @@ void KineticSpecies::pressureMoment( CFG::LevelData<CFG::FArrayBox>& a_pressure,
    m_moment_op.compute( a_pressure, *this, PressureKernel(a_vparshift) );
 }
 
+void KineticSpecies::pressureMoment( CFG::LevelData<CFG::FArrayBox>& a_pressure ) const
+{
+   CFG::LevelData<CFG::FArrayBox> vpar;
+   vpar.define( a_pressure );
+   this->ParallelVelocity(vpar);
+
+   m_moment_op.compute( a_pressure, *this, PressureKernel(vpar) );
+}
+
+void KineticSpecies::parallelPressure( CFG::LevelData<CFG::FArrayBox>& a_pressure,
+                                     CFG::LevelData<CFG::FArrayBox>& a_vparshift ) const
+{
+   m_moment_op.compute( a_pressure, *this, ParallelPressureKernel(a_vparshift) );
+}
+
+void KineticSpecies::parallelPressure( CFG::LevelData<CFG::FArrayBox>& a_pressure ) const
+{
+   CFG::LevelData<CFG::FArrayBox> vpar;
+   vpar.define( a_pressure );
+   this->ParallelVelocity(vpar);
+
+   m_moment_op.compute( a_pressure, *this, ParallelPressureKernel(vpar) );
+}
+
+void KineticSpecies::perpPressure( CFG::LevelData<CFG::FArrayBox>& a_pressure ) const
+{
+   m_moment_op.compute( a_pressure, *this, PerpPressureKernel() );
+}
+
+void KineticSpecies::temperature( CFG::LevelData<CFG::FArrayBox>& a_temperature ) const
+{
+   CFG::LevelData<CFG::FArrayBox> density;
+   density.define( a_temperature );
+   m_moment_op.compute( density, *this, DensityKernel() );
+
+   CFG::LevelData<CFG::FArrayBox> vpar;
+   vpar.define( a_temperature );
+   m_moment_op.compute( vpar, *this, ParallelMomKernel() );
+// Note that ParallelMomKernel is actually the Number Density Flux (not the Mass Density)
+   for (CFG::DataIterator dit(vpar.dataIterator()); dit.ok(); ++dit) {
+      vpar[dit].divide(density[dit]);
+   }
+   
+   m_moment_op.compute( a_temperature, *this, PressureKernel(vpar) );
+   for (CFG::DataIterator dit(a_temperature.dataIterator()); dit.ok(); ++dit) {
+      a_temperature[dit].divide(density[dit]);
+   }
+}
+
+void KineticSpecies::parallelTemperature( CFG::LevelData<CFG::FArrayBox>& a_temperature ) const
+{
+   CFG::LevelData<CFG::FArrayBox> density;
+   density.define( a_temperature );
+   m_moment_op.compute( density, *this, DensityKernel() );
+
+   CFG::LevelData<CFG::FArrayBox> vpar;
+   vpar.define( a_temperature );
+   m_moment_op.compute( vpar, *this, ParallelMomKernel() );
+// Note that ParallelMomKernel is actually the Number Density Flux (not the Mass Density)
+   for (CFG::DataIterator dit(vpar.dataIterator()); dit.ok(); ++dit) {
+      vpar[dit].divide(density[dit]);
+   }
+   
+   m_moment_op.compute( a_temperature, *this, ParallelPressureKernel(vpar) );
+   for (CFG::DataIterator dit(a_temperature.dataIterator()); dit.ok(); ++dit) {
+      a_temperature[dit].divide(density[dit]);
+   }
+}
+
+void KineticSpecies::perpTemperature( CFG::LevelData<CFG::FArrayBox>& a_temperature ) const
+{
+   CFG::LevelData<CFG::FArrayBox> density;
+   density.define( a_temperature );
+   m_moment_op.compute( density, *this, DensityKernel() );
+   m_moment_op.compute( a_temperature, *this, PerpPressureKernel() );
+
+   for (CFG::DataIterator dit(a_temperature.dataIterator()); dit.ok(); ++dit) {
+      a_temperature[dit].divide(density[dit]);
+   }
+}
+
+
 void KineticSpecies::energyMoment( CFG::LevelData<CFG::FArrayBox>& a_energy ) const
 {
    m_moment_op.compute( a_energy, *this, EnergyKernel() );
@@ -290,6 +389,16 @@ void KineticSpecies::energyMoment( CFG::LevelData<CFG::FArrayBox>&  a_energy,
                                    const LevelData<FArrayBox>&      a_function ) const
 {
    m_moment_op.compute( a_energy, *this, a_function, EnergyKernel() );
+}
+
+void KineticSpecies::perpEnergyDensity( CFG::LevelData<CFG::FArrayBox>& a_energy ) const
+{
+   m_moment_op.compute( a_energy, *this, PerpEnergyKernel() );
+}
+
+void KineticSpecies::parallelEnergyDensity( CFG::LevelData<CFG::FArrayBox>& a_energy ) const
+{
+   m_moment_op.compute( a_energy, *this, ParallelEnergyKernel() );
 }
 
 void KineticSpecies::fourthMoment( CFG::LevelData<CFG::FArrayBox>& a_fourth ) const

@@ -20,11 +20,12 @@ public:
    ~NewGKPoissonBoltzmann();
 
    void computePotentialAndElectronDensity(
-      LevelData<FArrayBox>&        phi,
-      BoltzmannElectron&           ne,
-      const LevelData<FArrayBox>&  ni,
-      const EllipticOpBC&          bc,
-      const bool                   first_step = false);
+      LevelData<FArrayBox>&            phi,
+      BoltzmannElectron&               ne,
+      const LevelData<FArrayBox>&      ni,
+      const PS::KineticSpeciesPtrVect& kinetic_species,
+      const EllipticOpBC&              bc,
+      const bool                       first_step = false);
 
    virtual void setOperatorCoefficients( const LevelData<FArrayBox>&  ni,
                                          const EllipticOpBC&          bc ); 

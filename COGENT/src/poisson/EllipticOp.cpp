@@ -6,12 +6,19 @@
 #include "FluxSurface.H"
 #include "BiCGStabSolver.H"
 #include "GMRESSolver.H"
+#include "SingleNullCoordSys.H"
 #include "MBSolverF_F.H"
-#include "BilinearInterp.H"
-#include "BicubicInterp.H"
 #include "SimpleDivergence.H"
 #include "CoDimCopyManager.H"
 #include "DataArray.H"
+
+#undef CH_SPACEDIM
+#define CH_SPACEDIM POL_DIM
+#include "BilinearInterp.H"
+#include "BicubicInterp.H"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM CFG_DIM
+
 #include "inspect.H"
 
 #include "NamespaceHeader.H"
@@ -77,8 +84,6 @@ EllipticOp::EllipticOp( const ParmParse& a_pp,
    }
 
    m_bc_divergence.define(grids, 1, IntVect::Zero);
-   
-   m_subtract_fs_par_div = false;
 }
       
 
@@ -195,7 +200,7 @@ EllipticOp::solve( const LevelData<FArrayBox>&  a_rhs,
    setToZero(a_solution);
    m_Chombo_solver->solve(a_solution, a_rhs);
 
-   if (procID() == 0) {
+   if (m_verbose && procID() == 0) {
       if ( m_method == "BiCGStab" ) {
          int exit_status = ((BiCGStabSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_exitStatus;
          if ( exit_status == 1 ) {
@@ -652,8 +657,6 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
       phi[dit].copy(a_in[dit]);
    }
 
-   fillInternalGhosts(phi);
-
    LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Unit);
 
    if (!m_low_pollution) {
@@ -723,11 +726,6 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       a_out[dit] /= m_volume[dit];
    }
-   
-   if (m_subtract_fs_par_div) {
-      subtractFSAverParDiv(a_out, flux);
-   }
-   
 }
 
 
@@ -781,9 +779,14 @@ EllipticOp::computeBcDivergence( LevelData<FArrayBox>& a_out ) const
          const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
          RealVect dx = block_coord_sys.dx();
          for (int dir=0; dir<SpaceDim; ++dir) {
-            int perp_dir = (dir + 1) % 2;
+            Real transverse_area_mapped(1.0);
+            for (int tdir = 0; tdir<SpaceDim; tdir++) {
+               if (tdir != dir) {
+                  transverse_area_mapped *= dx[tdir];
+               }
+            }
             NTF_normal[dit][dir].copy(flux[dit][dir],dir,0,1);
-            NTF_normal[dit][dir].mult(dx[perp_dir]);
+            NTF_normal[dit][dir].mult(transverse_area_mapped);
          }
       }
       RealVect fakeDx = RealVect::Unit;
@@ -841,7 +844,7 @@ EllipticOp::computeRadialFSAverage( const LevelData<FluxBox>&  a_in,
 
    const DisjointBoxLayout& grids = m_geometry.grids();
    const MagCoordSys& coords = *m_geometry.getCoordSys();
-    
+   
    LevelData<FluxBox> mapped_flux_even(grids, SpaceDim, IntVect::Unit);
    LevelData<FluxBox> mapped_flux_odd(grids, SpaceDim, IntVect::Unit);
     
@@ -860,9 +863,10 @@ EllipticOp::computeRadialFSAverage( const LevelData<FluxBox>&  a_in,
          int block_number = coords.whichBlock(grids[dit]);
             
          if ( dir == RADIAL_DIR ) {
-                
-            if ( block_number < 2 ) {
-                    
+            
+            if ((typeid(coords) != typeid(SingleNullCoordSys)) ||
+               ((const SingleNullCoordSys&)coords).isCORE(block_number))  {
+               
                BoxIterator bit(box);
                for (bit.begin(); bit.ok(); ++bit) {
                   IntVect iv = bit();
@@ -881,11 +885,18 @@ EllipticOp::computeRadialFSAverage( const LevelData<FluxBox>&  a_in,
    mapped_flux_odd.exchange();
     
    LevelData<FluxBox> flux_even(grids, SpaceDim, IntVect::Unit);
-   m_geometry.unmapPoloidalGradient(mapped_flux_even, flux_even);
-
    LevelData<FluxBox> flux_odd(grids, SpaceDim, IntVect::Unit);
-   m_geometry.unmapPoloidalGradient(mapped_flux_odd, flux_odd);
-    
+
+   if (SpaceDim == 2) {
+      m_geometry.unmapPoloidalGradient(mapped_flux_even, flux_even);
+      m_geometry.unmapPoloidalGradient(mapped_flux_odd, flux_odd);
+   }
+
+   else {
+      m_geometry.unmap3DGradient(mapped_flux_even, flux_even);
+      m_geometry.unmap3DGradient(mapped_flux_odd, flux_odd);
+   }
+
    // Multiply the flux by the unmapped, face-centered coefficients
    multiplyCoefficients(flux_even, false);
    multiplyCoefficients(flux_odd, false);
@@ -947,9 +958,13 @@ EllipticOp::computeRadialFSAverage( const LevelData<FluxBox>&  a_in,
    const MagCoordSys& coord_sys( *(m_geometry.getCoordSys()) );
    
    for (DataIterator dit(grids); dit.ok(); ++dit) {
+
       const Box& box = grids[dit];
       int block_number = coord_sys.whichBlock(box);
-      if (block_number < 2) {
+
+      if ((typeid(coords) != typeid(SingleNullCoordSys)) ||
+          ((const SingleNullCoordSys&)coords).isCORE(block_number))  {
+         
          IntVect iv = box.smallEnd();
          if ( iv[RADIAL_DIR] == domain_box.smallEnd(RADIAL_DIR) ) {
             if (iv[0]%2 == 0 ) {
@@ -973,48 +988,6 @@ EllipticOp::computeRadialFSAverage( const LevelData<FluxBox>&  a_in,
     
    a_lo_value = globalMax(a_lo_value);
    a_hi_value = globalMax(a_hi_value);
-}
-
-void
-EllipticOp::subtractFSAverParDiv( LevelData<FArrayBox>&      a_div,
-                                  const  LevelData<FluxBox>& a_flux) const
-{
-   
-   const DisjointBoxLayout& grids = a_div.disjointBoxLayout();
-   
-   LevelData<FluxBox> NTF_normal(grids, 1, IntVect::Zero);
-   for (DataIterator dit(a_flux.dataIterator()); dit.ok(); ++dit) {
-      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
-      RealVect faceArea = block_coord_sys.getMappedFaceArea();
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         NTF_normal[dit][dir].copy(a_flux[dit][dir],dir,0,1);
-         NTF_normal[dit][dir].mult(faceArea[dir]);
-         
-         //zero out flux on radial faces
-         if (dir == RADIAL_DIR) {
-            NTF_normal[dit][dir].setVal(0.);
-         }
-      }
-   }
-   
-   RealVect fakeDx = RealVect::Unit;
-   LevelData<FArrayBox> parallel_div(grids, 1, IntVect::Zero);
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      simpleDivergence(parallel_div[dit], NTF_normal[dit], grids[dit], fakeDx);
-   }
-   
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      parallel_div[dit] /= m_volume[dit];
-   }
-
-   //subtract parallel divergence
-   FluxSurface flux_surface(m_geometry);
-   LevelData<FArrayBox> par_div_fs(grids, 1, IntVect::Zero);
-   flux_surface.averageAndSpread(parallel_div, par_div_fs);
-
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      a_div[dit] -= par_div_fs[dit];
-   }
 }
 
 void

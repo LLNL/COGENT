@@ -169,25 +169,19 @@ public:
 
    /// Computes the operator (normalized by the shell volume) in the lHS of Eq. (5) in the "Poloidal_variations_PB_model-II" note.
    /**
-    * Computes <grad(psi) * D *NJinv * in>/(one-cell wide shell volume) (in corresponds to mapped_grad(Phi) in the notes)
+    * Computes <grad(psi) * D *NJinv * in> * S/(one-cell wide shell volume) (in corresponds to mapped_grad(Phi) in the notes)
     * LevelData<FArrayBox> out does not have ghost cells, and stores the data in the radial direction  as follows
-    * out[i] = <grad(psi) * D *NJinv* in[i]>/shell_volume[i]
-    * lo_value = out[0]=<grad(psi) * D *NJinv* in[0]>/shell_volume[0]
-    * hi_value = <grad(psi) * D *NJinv* in[nrad+1]>/shell_volume[nrad]
+    * out[i] = <grad(psi) * D *NJinv* in[i]> * S[i]/shell_volume[i]
+    * lo_value = out[0]=<grad(psi) * D *NJinv* in[0]> * S[0]/shell_volume[0]
+    * hi_value = <grad(psi) * D *NJinv* in[nrad+1]> * S[nrad]/shell_volume[nrad]
     * n_rad number of the core cells in the radial direction 
-    * <...> denotes the shell-average
+    * <...> denotes the shell-average, S is the surface area of a flux surface
     */
 
    void computeRadialFSAverage( const LevelData<FluxBox>& in,
                                 double&                   lo_value,
                                 double&                   hi_value,
                                 LevelData<FArrayBox>&     out ) const;
-   
-   
-   /// Substract flux-averaged parallel divergence; used for 3D MB vorticity 
-   void subtractFSAverParDiv( LevelData<FArrayBox>&      divergence,
-                              const  LevelData<FluxBox>& flux) const;
-   
    
    void fillInternalGhosts( LevelData<FArrayBox>& phi ) const;
 
@@ -284,8 +278,6 @@ public:
    const Real   getPrecondTol() const {return m_precond_tol;}
    const Real   getPrecondMaxIter() const {return m_precond_max_iter;}
    const bool   getPrecondVerbose() const {return m_precond_verbose;}
-  
-   bool m_subtract_fs_par_div;
 
 protected:
 

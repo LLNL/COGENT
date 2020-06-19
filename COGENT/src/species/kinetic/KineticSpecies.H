@@ -94,6 +94,11 @@ class KineticSpecies
        */
       virtual void ParallelMomentum( CFG::LevelData<CFG::FArrayBox>& Parallel_Vel ) const;
 
+      /// Returns species parallel velocity (Vpar).
+      /**
+       */
+      virtual void ParallelVelocity( CFG::LevelData<CFG::FArrayBox>& Parallel_Vel ) const;
+   
       /// Returns species poloidal momentum (n * Vpol).
       /**
        */
@@ -131,11 +136,57 @@ class KineticSpecies
        */
       virtual void pressureMoment( CFG::LevelData<CFG::FArrayBox>& pressure,
                                    CFG::LevelData<CFG::FArrayBox>& vparshift ) const;
+      /// Returns species pressure.
+      /**
+       */
+      virtual void pressureMoment( CFG::LevelData<CFG::FArrayBox>& pressure ) const;
 
-      /// Returns species energy.
+      /// Returns species parallel pressure.
+      /**
+       */
+      virtual void parallelPressure( CFG::LevelData<CFG::FArrayBox>& pressure ) const;
+
+      /// Returns species parallel pressure.
+      /**
+       */
+      virtual void parallelPressure(CFG::LevelData<CFG::FArrayBox>& pressure,
+                                    CFG::LevelData<CFG::FArrayBox>& vparshift ) const;
+
+      /// Returns species perpendicular pressure.
+      /**
+       */
+      virtual void perpPressure( CFG::LevelData<CFG::FArrayBox>& pressure) const;
+
+      /// Returns species temperature.
+      /**
+       */
+      virtual void temperature( CFG::LevelData<CFG::FArrayBox>& temperature ) const;
+
+      /// Returns species parallel temperature.
+      /**
+       */
+      virtual void parallelTemperature( CFG::LevelData<CFG::FArrayBox>& temperature ) const;
+
+      /// Returns species perpendicular temperature.
+      /**
+       */
+      virtual void perpTemperature( CFG::LevelData<CFG::FArrayBox>& temperature ) const;
+
+
+      /// Returns species energy density.
       /**
        */
       virtual void energyMoment( CFG::LevelData<CFG::FArrayBox>& energy ) const;
+
+      /// Returns species parallel energy density.
+      /**
+       */
+      virtual void parallelEnergyDensity( CFG::LevelData<CFG::FArrayBox>& energy ) const;
+
+      /// Returns species perpendicular energy density.
+      /**
+       */
+      virtual void perpEnergyDensity( CFG::LevelData<CFG::FArrayBox>& energy ) const;
 
       /// Returns species energy for an arbitrary FArrayBox
       /**

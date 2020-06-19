@@ -212,7 +212,6 @@ public:
    
    void constructStencils( const LevelData<FluxBox>&               face_vel,
                            const PhaseGeom&                        geometry,
-                           const Real                              shift,
                            LevelData<BaseFab<Vector<IntVect> > >&  couplings,
                            LevelData<BaseFab<Vector<Real> > >&     weights ) const;
 

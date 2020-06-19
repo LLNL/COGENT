@@ -108,7 +108,7 @@ void FluxBC::applyBC(KineticSpecies& a_species,
    }
    
    solveTrilinearSystem(pert_moments, flux_matrix, rhs);
-  
+   
    // Fill ghost data
    fillGhosts(a_species, a_velocity_mapped, outflow_moments, pert_moments);
 }
@@ -415,7 +415,10 @@ void
 FluxBC::normalizeFluxes (Vector<Real>& a_fluxes) const
 {
    /*
-    Convert fluxes specified in Watt=Joule/second
+    Convert fluxes specified in SI units, i.e.,
+    [0] ParticleFlux [1/sec]
+    [1] ParallelMomenutmFlux [m/sec^2]
+    [2] HeatFlux [Watt=Joule/sec]
     to COGENT units
     */
    
@@ -432,10 +435,10 @@ FluxBC::normalizeFluxes (Vector<Real>& a_fluxes) const
    Real masskg = Constants::MASS_OF_PROTON;
    Real velocity = sqrt( tempJoules / masskg );
 
-   //Renormalize fluxes
-   for (int i=0; i<a_fluxes.size(); ++i) {
-     a_fluxes[i] /= dens * tempJoules * pow(length,2) * velocity;
-   }
+   //Renormalize fluxes (convert to COGENT units)
+   a_fluxes[0] /= dens * pow(length,2) * velocity;
+   a_fluxes[1] /= dens * velocity * pow(length,2) * velocity;
+   a_fluxes[2] /= dens * tempJoules * pow(length,2) * velocity;
 }
 
 void

@@ -103,6 +103,11 @@ class SingleNullPhaseBC
                          const CFG::LevelData<CFG::FArrayBox>& a_phi,
                          const LevelData<FluxBox>& a_velocity);
    
+      void applyFluxBC( KineticSpecies& species,
+                       const CFG::LevelData<CFG::FArrayBox>& phi,
+                       const LevelData<FluxBox>& velocity,
+                       const Real& time);
+   
       inline void parseParameters( ParmParse& a_pp );
 
       inline KineticFunction& radialInflowFunc( const Side::LoHiSide& a_side,
@@ -142,7 +147,8 @@ class SingleNullPhaseBC
 
       const std::string m_name;
       int m_verbosity;
-      bool m_logical_sheath; 
+      bool m_logical_sheath;
+      bool m_flux_bc;
 
       enum {INVALID=-1,
             RADIAL_CORE, RADIAL_SOL, RADIAL_PF,

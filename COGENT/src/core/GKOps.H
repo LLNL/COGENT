@@ -506,10 +506,14 @@ public:
                            const KineticSpeciesPtrVect& species,
                            const double&          time ) const;
 
-   void plotMomentum( const std::string&     filename,
-		      const KineticSpecies&  soln_species,
-		      const double&          time ) const;
-
+   void plotMomentum(const std::string&     filename,
+                     const KineticSpecies&  soln_species,
+                     const double&          time ) const;
+   
+   void plotParallelVelocity( const std::string&    filename,
+                              const KineticSpecies& soln_species,
+                              const double&         time ) const;
+   
    void plotParallelMomentum( const std::string&    filename,
                               const KineticSpecies& soln_species,
                               const double&         time ) const;
@@ -517,24 +521,55 @@ public:
    void plotPoloidalMomentum( const std::string&    filename,
                               const KineticSpecies& kinetic_species,
                               const double&         time ) const;
+
+   void plotEnergyDensity( const std::string&    filename,
+                         const KineticSpecies& soln_species,
+                         const double&         time ) const;
+
+   void plotPerpEnergyDensity( const std::string&    filename,
+                         const KineticSpecies& soln_species,
+                         const double&         time ) const;
+
+   void plotParallelEnergyDensity( const std::string&    filename,
+                         const KineticSpecies& soln_species,
+                         const double&         time ) const;
    
    void plotPressure( const std::string&    filename,
                       const KineticSpecies& soln_species,
                       const double&         time ) const;
 
-   void plotGradPoverN( const std::string&    filename,
-			const KineticSpecies& soln_species,
-			const double&         time ) const;
+   void plotParallelPressure( const std::string&    filename,
+                             const KineticSpecies& soln_species,
+                             const double&         time ) const;
 
-  
-   void plotParallelHeatFlux( const std::string&    filename,
-                              const KineticSpecies& soln_species,
-                              const double&         time ) const;
+   void plotPerpPressure(const std::string&    filename,
+                         const KineticSpecies& soln_species,
+                         const double&         time ) const;
    
+   void plotGradPoverN(const std::string&    filename,
+                       const KineticSpecies& soln_species,
+                       const double&         time ) const;
 
    void plotTemperature( const std::string&    filename,
                          const KineticSpecies& soln_species,
                          const double&         time ) const;
+
+   void plotPerpTemperature(const std::string&    filename,
+                            const KineticSpecies& soln_species,
+                            const double&         time ) const;
+
+   void plotParallelTemperature(const std::string&    filename,
+                                const KineticSpecies& soln_species,
+                                const double&         time ) const;
+   
+   void plotParallelHeatFlux( const std::string&    filename,
+                              const KineticSpecies& soln_species,
+                              const double&         time ) const;
+
+   void plotTotalParallelHeatFlux(const std::string&    filename,
+                                  const KineticSpecies& soln_species,
+                                  const double&         time ) const;
+
 
    void plotFourthMoment( const std::string&    filename,
                           const KineticSpecies& soln_species,
@@ -761,6 +796,7 @@ private:
    bool                           m_Esol_extrapolation;
    bool                           m_dealignment_corrections;
    bool                           m_old_vorticity_model;
+   bool                           m_skip_efield_stage_update;
    
    /* The following 4 flags are relevant only for IMEX time integration */
    bool                           m_transport_imex_implicit;

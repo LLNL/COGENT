@@ -105,6 +105,10 @@ c     with (m,n) [poloilda, toridal] perturbations
 #if CH_SPACEDIM==4
          B      = B_inj(i,j,CHF_LBOUND[B_inj;2],CHF_LBOUND[B_inj;3])
          psi    = psi_inj(i,j,CHF_LBOUND[psi_inj;2],CHF_LBOUND[psi_inj;3])
+
+         r =      toroidal_coords(i,j,CHF_LBOUND[toroidal_coords;2],CHF_LBOUND[toroidal_coords;3],0)
+         phi    = zero
+         theta  = toroidal_coords(i,j,CHF_LBOUND[toroidal_coords;2],CHF_LBOUND[toroidal_coords;3],1)
 #else
          B      = B_inj(i,j,k,CHF_LBOUND[B_inj;3],CHF_LBOUND[B_inj;4])
          psi    = psi_inj(i,j,k,CHF_LBOUND[psi_inj;3],CHF_LBOUND[psi_inj;4])

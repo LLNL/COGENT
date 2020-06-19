@@ -34,160 +34,18 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
      m_mblex_ptr(NULL)
 {
    // Read input
-
-   if (a_pp.contains("verbose")) {
-      a_pp.get("verbose", m_gkp_verbose);
+   parseParameters( a_pp );
+   
+   if (m_gkp_verbose) {
+      printParameters();
    }
-   else {
-      m_gkp_verbose = false;
-   }
-
-   // Determine the form of the Boltzmann prefactor if specified in the input;
-   // otherwise, assume global neutrality
-   if (a_pp.contains("prefactor")) {
-      string prefactor;
-      a_pp.get("prefactor", prefactor);
-
-      if( prefactor == "global_neutrality" ) {
-         MayDay::Error("GKPoissonBoltzmann: GLOBAL_NEUTRALITY option is currently disabled");
-         m_prefactor_strategy = GLOBAL_NEUTRALITY;
-      }
-      else if( prefactor == "global_neutrality_initial" ) {
-         MayDay::Error("GKPoissonBoltzmann: GLOBAL_NEUTRALITY_INITIAL option is currently disabled");
-         m_prefactor_strategy = GLOBAL_NEUTRALITY_INITIAL;
-      }
-      else if ( prefactor == "fs_neutrality" ) {
-         m_prefactor_strategy = FS_NEUTRALITY;
-      }
-      else if ( prefactor == "fs_neutrality_global_ni" ) {
-         m_prefactor_strategy = FS_NEUTRALITY_GLOBAL_NI;
-      }
-      else if ( prefactor == "fs_neutrality_initial_global_ni" ) {
-         m_prefactor_strategy = FS_NEUTRALITY_INITIAL_GLOBAL_NI;
-      }
-      else if ( prefactor == "fs_neutrality_initial_fs_ni" ) {
-         m_prefactor_strategy = FS_NEUTRALITY_INITIAL_FS_NI;
-      }
-      else {
-         MayDay::Error( "gkpoissonboltzmann.prefactor must be one of: ""global_neutrality"", ""global_neutrality_initial"", ""fs_neutrality"", ""fs_neutrality_initial"", ""fs_neutrality_global_ni"", ""fs_neutrality_initial_global_ni"" or ""fs_neutrality_initial_fs_ni""" );
-      }
-   }
-   else {
-      m_prefactor_strategy = GLOBAL_NEUTRALITY;
-   }
-
+   
 #if 0
    m_recompute_prefactor = !( (m_prefactor_strategy == GLOBAL_NEUTRALITY_INITIAL )
                               && !a_first_step);
 #else
    m_recompute_prefactor = true;
 #endif
-
-   if ( a_pp.contains("simple_boltzmann") ) {
-      a_pp.get("simple_boltzmann", m_simple_boltzmann);
-   }
-   else {
-      m_simple_boltzmann = false;
-   }
-
-   if ( a_pp.contains("linear_response") ) {
-      a_pp.get("linear_response", m_linear_response);
-   }
-   else {
-      m_linear_response = false;
-   }
-
-   if (a_pp.contains("nonlinear_relative_tolerance")) {
-      a_pp.get("nonlinear_relative_tolerance", m_nonlinear_relative_tolerance);
-   }
-   else {
-      m_nonlinear_relative_tolerance = 1.e-5;
-   }
-
-   if (a_pp.contains("nonlinear_maximum_iterations")) {
-      a_pp.get("nonlinear_maximum_iterations", m_nonlinear_max_iterations);
-   }
-   else {
-      m_nonlinear_max_iterations = 20;
-   }
-
-   if (a_pp.contains("nonlinear_change_tolerance")) {
-      a_pp.get("nonlinear_change_tolerance", m_nonlinear_change_tolerance);
-   }
-   else {
-      m_nonlinear_change_tolerance = 1.e-5;
-   }
-
-   if (a_pp.contains("jacobian_solve_tolerance")) {
-      a_pp.get("jacobian_solve_tolerance", m_jacobian_solve_tolerance);
-   }
-   else {
-      m_jacobian_solve_tolerance = 1.e-4;
-   }
-
-   if (m_gkp_verbose && procID()==0) {
-      cout << "GKPoissonAdiabaticElectron parameters:" << endl;
-      cout << "   Debye number squared = "<< m_debye_number2 << endl;
-      cout << "   Larmor number squared = " << m_larmor_number2 << endl;
-      cout << "   prefactor_strategy = " << m_prefactor_strategy << endl;
-      cout << "   nonlinear_relative_tolerance = " << m_nonlinear_relative_tolerance << endl;
-      cout << "   nonlinear_maximum_iterations = " << m_nonlinear_max_iterations << endl;
-   }
-
-   // This is an algorithm tweak to address problems with constant null spaces resulting
-   // from periodic and/or homogeneous Neumann boundary conditions
-   if (a_pp.contains("preserve_initial_ni_average")) {
-      a_pp.get("preserve_initial_ni_average", m_preserve_initial_ni_average);
-   }
-   else {
-      m_preserve_initial_ni_average = false;
-   }
-
-   if ( a_pp.contains("radial_solve_only") ) {
-      a_pp.get("radial_solve_only", m_radial_solve_only);
-   }
-   else {
-      m_radial_solve_only = false;
-   }
-
-   if ( a_pp.contains("linear_solve") ) {
-      a_pp.get("linear_solve", m_linear_solve);
-      if (m_linear_solve) CH_assert(m_linear_response);
-   }
-   else {
-      m_linear_solve = false;
-   }
-   
-   if ( a_pp.contains("subspace_iteration_solve") ) {
-      a_pp.get("subspace_iteration_solve", m_subspace_iteration_solve);
-
-      if ( a_pp.contains("max_subspace_iterations") ) {
-         a_pp.get("max_subspace_iterations", m_max_subspace_iterations);
-      }
-      else {
-         m_max_subspace_iterations = 20;
-      }
-      if ( a_pp.contains("subspace_iteration_tol") ) {
-         a_pp.get("subspace_iteration_tol", m_subspace_iteration_tol);
-      }
-      else {
-         m_subspace_iteration_tol = 1.e-6;
-      }
-   }
-   else {
-      m_subspace_iteration_solve = false;
-   }
-
-   if (m_radial_solve_only && m_subspace_iteration_solve) {
-      MayDay::Error("Specify either radial or subspace iteration solve, but not both");
-   }
-
-   if ( a_pp.contains("zero_initial_solution") ) {
-     a_pp.get("zero_initial_solution", m_zero_initial_solution);
-   }
-   else {
-     m_zero_initial_solution = false;
-   }
 
    int precond_order = 2;
 
@@ -284,11 +142,12 @@ GKPoissonBoltzmann::initializeElectronTemperature(LevelData<FArrayBox>&    a_Te,
 
 void
 GKPoissonBoltzmann::computePotentialAndElectronDensity(
-   LevelData<FArrayBox>&        a_phi,
-   BoltzmannElectron&           a_ne,
-   const LevelData<FArrayBox>&  a_ni,
-   const EllipticOpBC&          a_bc,
-   const bool                   a_first_step)
+   LevelData<FArrayBox>&            a_phi,
+   BoltzmannElectron&               a_ne,
+   const LevelData<FArrayBox>&      a_ni,
+   const PS::KineticSpeciesPtrVect& a_kinetic_species,
+   const EllipticOpBC&              a_bc,
+   const bool                       a_first_step)
 {
 
    initializeElectronTemperature(m_Te, a_ne);
@@ -303,7 +162,7 @@ GKPoissonBoltzmann::computePotentialAndElectronDensity(
       solveLinear( a_ni, a_bc, a_ne, a_phi );
    }
    else if ( m_simple_boltzmann ) {
-      solveSimpleBoltzmann( a_ni, a_ne, a_phi );
+      solveSimpleBoltzmann( a_ni, a_kinetic_species, a_ne, a_phi );
    }
    else {
       solve( a_ni, a_bc, a_ne, a_phi );
@@ -381,6 +240,7 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron&  a_ne,
 {
    CH_TIMERS("updateLinearSystem");
    CH_TIMER("construct_Qsolver",t_construct_Qsolver);
+   CH_TIMER("construct_Psolver",t_construct_Psolver);
 
    const DisjointBoxLayout& grids = m_geometry.grids();
    LevelData<FArrayBox> alpha(grids, 1, IntVect::Zero);
@@ -393,8 +253,10 @@ GKPoissonBoltzmann::updateLinearSystem( const BoltzmannElectron&  a_ne,
          beta[dit].setVal(0.);
       }
 
+      CH_START(t_construct_Psolver);
       m_precond_Psolver->constructMatrix(alpha, m_mapped_coefficients, beta, a_bc);
-
+      CH_STOP(t_construct_Psolver);
+      
       if (m_linear_response) {
          const LevelData<FArrayBox>& Te = a_ne.temperature();
          for (DataIterator dit(beta.dataIterator()); dit.ok(); ++dit) {
@@ -641,12 +503,15 @@ void
 GKPoissonBoltzmann::solveLinear( const LevelData<FArrayBox>&  a_Zni,
                                  const EllipticOpBC&          a_bc,
                                  BoltzmannElectron&           a_ne,
-                                 LevelData<FArrayBox>&        a_phi )
+                                 LevelData<FArrayBox>&        a_phi,
+				 const bool                   a_update_linear_system)
 {
-  CH_TIMERS("GKPoissonBoltzmann::solveLinear");
-  CH_TIMER("define_rhs",t_define_rhs);
+   CH_TIMERS("GKPoissonBoltzmann::solveLinear");
+   CH_TIMER("define_rhs",t_define_rhs);
 
-   updateLinearSystem(a_ne, a_bc);
+   if (a_update_linear_system) {
+     updateLinearSystem(a_ne, a_bc);
+   }
    
    CH_START(t_define_rhs);
 
@@ -755,7 +620,7 @@ GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
 
       if (!m_linear_response) getPhiTilde(temp, a_ne, phi_tilde);
       else {
-	solveLinear( temp, a_bc, a_ne, phi_tilde );
+	solveLinear( temp, a_bc, a_ne, phi_tilde, false );
 	//subtract average part
         m_flux_surface.averageAndSpread(phi_tilde, temp);
         for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -826,17 +691,44 @@ GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
 
 
 void
-GKPoissonBoltzmann::solveSimpleBoltzmann( const LevelData<FArrayBox>& a_Zni,
-                                          BoltzmannElectron&          a_ne,
-                                          LevelData<FArrayBox>&       a_phi )
+GKPoissonBoltzmann::solveSimpleBoltzmann( const LevelData<FArrayBox>&      a_Zni,
+                                          const PS::KineticSpeciesPtrVect& a_kinetic_species,
+                                          BoltzmannElectron&               a_ne,
+                                          LevelData<FArrayBox>&            a_phi )
 {
-   LevelData<FArrayBox>& Te = a_ne.temperature();  
 
    const DisjointBoxLayout& grids = m_geometry.grids();
-
+   
+   // Get initial flux surface average density
    LevelData<FArrayBox> n0_fs_aver;
    n0_fs_aver.define(a_Zni);
    m_flux_surface.averageAndSpread(m_initial_ion_charge_density, n0_fs_aver);
+   
+   // Get electron temperature
+   LevelData<FArrayBox> Te(grids, 1, IntVect::Zero);
+   LevelData<FArrayBox>& Te_boltz = a_ne.temperature();
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      Te[dit].copy(Te_boltz[dit]);
+   }
+   
+   const PS::KineticSpecies& this_species( *(a_kinetic_species[m_simple_boltz_species]) );
+   
+   if (m_use_ion_temperature) {
+      this_species.temperature( Te );
+   }
+   
+   else if (m_use_parallel_ion_temperature) {
+      this_species.parallelTemperature( Te );
+   }
+
+   if (m_use_fsa_temperature) {
+      LevelData<FArrayBox> Te_tmp;
+      Te_tmp.define(Te);
+      m_flux_surface.averageAndSpread(Te, Te_tmp);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         Te[dit].copy(Te_tmp[dit]);
+      }
+   }
    
    if (m_linear_response) {
       // Sets phi = Zni * Te / (e0 * n0)
@@ -1490,6 +1382,199 @@ GKPoissonBoltzmann::applyOp( LevelData<FArrayBox>&       a_out,
 }
 
 
+void
+GKPoissonBoltzmann::parseParameters( const ParmParse&   a_pp )
+{
+   // Get verbosity
+   if (a_pp.contains("verbose")) {
+      a_pp.get("verbose", m_gkp_verbose);
+   }
+   else {
+      m_gkp_verbose = false;
+   }
+
+   // Determine the form of the Boltzmann prefactor if specified in the input;
+   // otherwise, assume global neutrality
+   if (a_pp.contains("prefactor")) {
+      string prefactor;
+      a_pp.get("prefactor", prefactor);
+
+      if( prefactor == "global_neutrality" ) {
+         MayDay::Error("GKPoissonBoltzmann: GLOBAL_NEUTRALITY option is currently disabled");
+         m_prefactor_strategy = GLOBAL_NEUTRALITY;
+      }
+      else if( prefactor == "global_neutrality_initial" ) {
+         MayDay::Error("GKPoissonBoltzmann: GLOBAL_NEUTRALITY_INITIAL option is currently disabled");
+         m_prefactor_strategy = GLOBAL_NEUTRALITY_INITIAL;
+      }
+      else if ( prefactor == "fs_neutrality" ) {
+         m_prefactor_strategy = FS_NEUTRALITY;
+      }
+      else if ( prefactor == "fs_neutrality_global_ni" ) {
+         m_prefactor_strategy = FS_NEUTRALITY_GLOBAL_NI;
+      }
+      else if ( prefactor == "fs_neutrality_initial_global_ni" ) {
+         m_prefactor_strategy = FS_NEUTRALITY_INITIAL_GLOBAL_NI;
+      }
+      else if ( prefactor == "fs_neutrality_initial_fs_ni" ) {
+         m_prefactor_strategy = FS_NEUTRALITY_INITIAL_FS_NI;
+      }
+      else {
+         MayDay::Error( "gkpoissonboltzmann.prefactor must be one of: ""global_neutrality"", ""global_neutrality_initial"", ""fs_neutrality"", ""fs_neutrality_initial"", ""fs_neutrality_global_ni"", ""fs_neutrality_initial_global_ni"" or ""fs_neutrality_initial_fs_ni""" );
+      }
+   }
+   else {
+      m_prefactor_strategy = GLOBAL_NEUTRALITY;
+   }
+   
+   // Get solver parameters for the original nonlinear model
+   if (a_pp.contains("nonlinear_relative_tolerance")) {
+      a_pp.get("nonlinear_relative_tolerance", m_nonlinear_relative_tolerance);
+   }
+   else {
+      m_nonlinear_relative_tolerance = 1.e-5;
+   }
+
+   if (a_pp.contains("nonlinear_maximum_iterations")) {
+      a_pp.get("nonlinear_maximum_iterations", m_nonlinear_max_iterations);
+   }
+   else {
+      m_nonlinear_max_iterations = 20;
+   }
+
+   if (a_pp.contains("nonlinear_change_tolerance")) {
+      a_pp.get("nonlinear_change_tolerance", m_nonlinear_change_tolerance);
+   }
+   else {
+      m_nonlinear_change_tolerance = 1.e-5;
+   }
+
+   if (a_pp.contains("jacobian_solve_tolerance")) {
+      a_pp.get("jacobian_solve_tolerance", m_jacobian_solve_tolerance);
+   }
+   else {
+      m_jacobian_solve_tolerance = 1.e-4;
+   }
+   
+   // This is an algorithm tweak to address problems with constant null spaces resulting
+   // from periodic and/or homogeneous Neumann boundary conditions
+   if (a_pp.contains("preserve_initial_ni_average")) {
+      a_pp.get("preserve_initial_ni_average", m_preserve_initial_ni_average);
+   }
+   else {
+      m_preserve_initial_ni_average = false;
+   }
+
+   // Parse for other models
+   if ( a_pp.contains("linear_response") ) {
+      a_pp.get("linear_response", m_linear_response);
+   }
+   else {
+      m_linear_response = false;
+   }
+   
+   if ( a_pp.contains("linear_solve") ) {
+      a_pp.get("linear_solve", m_linear_solve);
+      if (m_linear_solve) CH_assert(m_linear_response);
+   }
+   else {
+      m_linear_solve = false;
+   }
+   
+   if ( a_pp.contains("radial_solve_only") ) {
+      a_pp.get("radial_solve_only", m_radial_solve_only);
+   }
+   else {
+      m_radial_solve_only = false;
+   }
+   
+   if ( a_pp.contains("subspace_iteration_solve") ) {
+      a_pp.get("subspace_iteration_solve", m_subspace_iteration_solve);
+
+      if ( a_pp.contains("max_subspace_iterations") ) {
+         a_pp.get("max_subspace_iterations", m_max_subspace_iterations);
+      }
+      else {
+         m_max_subspace_iterations = 20;
+      }
+      if ( a_pp.contains("subspace_iteration_tol") ) {
+         a_pp.get("subspace_iteration_tol", m_subspace_iteration_tol);
+      }
+      else {
+         m_subspace_iteration_tol = 1.e-6;
+      }
+   }
+   else {
+      m_subspace_iteration_solve = false;
+   }
+
+   if (m_radial_solve_only && m_subspace_iteration_solve) {
+      MayDay::Error("Specify either radial or subspace iteration solve, but not both");
+   }
+
+   if ( a_pp.contains("zero_initial_solution") ) {
+     a_pp.get("zero_initial_solution", m_zero_initial_solution);
+   }
+   else {
+     m_zero_initial_solution = false;
+   }
+   
+   // Get parameters for the simple boltzmann model
+   if ( a_pp.contains("simple_boltzmann") ) {
+      a_pp.get("simple_boltzmann", m_simple_boltzmann);
+      
+      if ( a_pp.contains("use_ion_temperature") ) {
+         a_pp.get("use_ion_temperature", m_use_ion_temperature);
+      }
+      else {
+         m_use_ion_temperature = false;
+      }
+
+      if ( a_pp.contains("use_parallel_ion_temperature") ) {
+         a_pp.get("use_parallel_ion_temperature", m_use_parallel_ion_temperature);
+      }
+      else {
+         m_use_parallel_ion_temperature = false;
+      }
+      
+      if (m_use_ion_temperature && m_use_parallel_ion_temperature) {
+       MayDay::Error( "GKPoissonBoltzmann:: use_ion_temperature and use_parallel_ion_temperature cannot be set to true at the same time!!!" );
+      }
+
+      if ( a_pp.contains("use_fsa_temperature") ) {
+         a_pp.get("use_fsa_temperature", m_use_fsa_temperature);
+      }
+      else {
+         m_use_fsa_temperature = false;
+      }
+ 
+      if ( a_pp.contains("simple_boltzmann_species_index") ) {
+          a_pp.get("simple_boltzmann_species_index", m_simple_boltz_species);
+	  // Since indexing in the input starts with 1
+	  // need to correct to be consistent with C++ vectors
+	  m_simple_boltz_species -= 1;
+       }
+       else {
+          m_simple_boltz_species = 0;
+       }
+   }
+   else {
+      m_simple_boltzmann = false;
+   }
+}
+
+void
+GKPoissonBoltzmann::printParameters()
+{
+   if (procID()==0) {
+      cout << "GKPoissonAdiabaticElectron parameters:" << endl;
+      cout << "   Debye number squared = "<< m_debye_number2 << endl;
+      cout << "   Larmor number squared = " << m_larmor_number2 << endl;
+      cout << "   prefactor_strategy = " << m_prefactor_strategy << endl;
+      cout << "   nonlinear_relative_tolerance = " << m_nonlinear_relative_tolerance << endl;
+      cout << "   nonlinear_maximum_iterations = " << m_nonlinear_max_iterations << endl;
+   }
+}
 
 void
 GKPoissonBoltzmann::computeBoundaryData( FArrayBox& a_inner_divertor_bvs,

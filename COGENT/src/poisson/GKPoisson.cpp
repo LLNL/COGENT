@@ -25,13 +25,9 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
                       const Real         a_debye_number )
    : EllipticOp(a_pp, a_geom),
      m_debye_number2(a_debye_number*a_debye_number),
-     m_dt_implicit(0.),
      m_alpha(1.),
      m_model("GyroPoisson"),
      m_larmor_number2(a_larmor_number*a_larmor_number),
-     m_electron_temperature(NULL),
-     m_charge_exchange_coeff(NULL),
-     m_parallel_conductivity(NULL),
      m_mblx_ptr(NULL),
      m_include_FLR_effects(false),
      m_phase_geom(NULL),
@@ -78,27 +74,6 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
 #endif
    
    m_preconditioner->setMethodParams(m_precond_method, m_precond_precond_method);
-
-   if (a_pp.contains("charge_exchange_coefficient")) {
-      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-      std::string grid_function_name;
-      a_pp.get("charge_exchange_coefficient", grid_function_name );
-      m_charge_exchange_coeff = grid_library->find( grid_function_name );
-   }
-   
-   if (a_pp.contains("parallel_conductivity")) {
-      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-      std::string grid_function_name;
-      a_pp.get("parallel_conductivity", grid_function_name );
-      m_parallel_conductivity = grid_library->find( grid_function_name );
-   }
-
-   if (a_pp.contains("electron_temperature")) {
-      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-      std::string grid_function_name;
-      a_pp.get("electron_temperature", grid_function_name );
-      m_electron_temperature = grid_library->find( grid_function_name );
-   }
 }
       
 
@@ -225,16 +200,14 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
 
    const DisjointBoxLayout& grids( m_geometry.grids() );
    
-   LevelData<FluxBox> density_sum_face( grids, 1, IntVect::Zero );
    LevelData<FArrayBox> density_sum_cell( grids, 1, 2*IntVect::Unit );
-   
-   a_ion_mass_density.copyTo( density_sum_cell );
-   
+      
    // This fills two codim 1 ghost cell layers at all block boundaries
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
       const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
       const ProblemDomain& domain = block_coord_sys.domain();
       
+      density_sum_cell[dit].copy(a_ion_mass_density[dit]);
       fourthOrderCellExtrapAtDomainBdry(density_sum_cell[dit], domain, grids[dit]);
    }
    
@@ -249,44 +222,10 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
    // (i.e., does not involve CODIM 2 isses, and therefore it is safe to use even
    // even for the second-order (since fourthOrderCellExtrapAtDomainBdry() call provided all
    // nesesary information).
-   
+
+   LevelData<FluxBox> density_sum_face( grids, 1, IntVect::Zero );
    fourthOrderCellToFaceCenters(density_sum_face, density_sum_cell);
 
-   //Assign electron temperature
-   if ((m_model == "Vorticity" || m_model == "ParallelCurrent") && !m_electron_temperature_face.isDefined() ) {
-      if (m_electron_temperature == NULL) {
-         MayDay::Error("GKPoisson::computeCoefficients() electron temperature should be specified for voriticity model");
-      }
-      LevelData<FArrayBox> electron_temperature_cell( grids, 1, 2*IntVect::Unit );
-      m_electron_temperature->assign( electron_temperature_cell, m_geometry, 0.0);
-      m_geometry.fillInternalGhosts( electron_temperature_cell );
-      m_electron_temperature_face.define( grids, 1, IntVect::Zero );
-      fourthOrderCellToFaceCenters(m_electron_temperature_face, electron_temperature_cell);
-   }
-   
-   //Assign parallel conductivity
-   if ((m_model == "Vorticity" || m_model == "ParallelCurrent") && !m_parallel_cond_face.isDefined() ) {
-      if (m_parallel_conductivity == NULL) {
-         computeParallelConductivity(m_electron_temperature_face, m_parallel_cond_face);
-      }
-      else {
-         LevelData<FArrayBox> parallel_cond_cell( grids, 1, 2*IntVect::Unit );
-         m_parallel_conductivity->assign( parallel_cond_cell, m_geometry, 0.0);
-         m_geometry.fillInternalGhosts( parallel_cond_cell );
-         m_parallel_cond_face.define( grids, 1, IntVect::Zero );
-         fourthOrderCellToFaceCenters(m_parallel_cond_face, parallel_cond_cell);
-      }
-   }
-
-   //Assign charge exchange coefficient
-   if (m_model == "Vorticity" && m_charge_exchange_coeff != NULL && !m_charge_exchange_coeff_face.isDefined() ) {
-      LevelData<FArrayBox> charge_exchange_coeff_cell( grids, 1, 2*IntVect::Unit );
-      m_charge_exchange_coeff->assign( charge_exchange_coeff_cell, m_geometry, 0.0);
-      m_geometry.fillInternalGhosts( charge_exchange_coeff_cell );
-      m_charge_exchange_coeff_face.define( grids, 1, IntVect::Zero );
-      fourthOrderCellToFaceCenters(m_charge_exchange_coeff_face, charge_exchange_coeff_cell);
-   }
-   
    const IntVect grown_ghosts( m_mapped_coefficients.ghostVect() + IntVect::Unit );
    CH_assert(grown_ghosts == 2*IntVect::Unit);
    const LevelData<FluxBox>& BFieldMag = m_geometry.getFCBFieldMag();
@@ -377,56 +316,7 @@ GKPoisson::computeCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
          grown_mapped_coefficients[dit].copy(radial_coeff_mapped[dit]);
       }
       
-      else if (m_model == "Vorticity") {
-         
-         FluxBox perp_fac(box, 1);
-         perp_fac.copy(polarization_fac);
-         perp_fac *= m_alpha;
-         if (m_charge_exchange_coeff != NULL) {
-            FluxBox perp_fac_chx(box, 1);
-            perp_fac_chx.copy(m_charge_exchange_coeff_face[dit]);
-            perp_fac_chx *= m_dt_implicit;
-            perp_fac += perp_fac_chx;
-         }
-         
-         for (int n=0; n<SpaceDim*SpaceDim; ++n) {
-            tmp_perp.mult(perp_fac, box, 0, n);
-            tmp_par.mult(m_parallel_cond_face[dit], box, 0, n);
-            
-            tmp_perp_mapped.mult(perp_fac, box, 0, n);
-            tmp_par_mapped.mult(m_parallel_cond_face[dit], box, 0, n);
-         }
 
-         tmp_par *= m_dt_implicit;
-         tmp_par_mapped *= m_dt_implicit;
-
-         grown_unmapped_coefficients[dit].copy(tmp_perp);
-         grown_unmapped_coefficients[dit] += tmp_par;
-
-         grown_mapped_coefficients[dit].copy(tmp_perp_mapped);
-         grown_mapped_coefficients[dit] += tmp_par_mapped;
-	 
-      }
-
-      else if (m_model == "ParallelCurrent") {
-         
-         for (int n=0; n<SpaceDim*SpaceDim; ++n) {
-            tmp_par.mult(m_parallel_cond_face[dit], box, 0, n);
-            tmp_par.divide(density_sum_face[dit],box, 0, n);
-            tmp_par.mult(m_electron_temperature_face[dit],box, 0, n);
-            
-            tmp_par_mapped.mult(m_parallel_cond_face[dit], box, 0, n);
-            tmp_par_mapped.divide(density_sum_face[dit],box, 0, n);
-            tmp_par_mapped.mult(m_electron_temperature_face[dit],box, 0, n);
-         }
-
-         tmp_par *= m_dt_implicit;
-         tmp_par_mapped *= m_dt_implicit;
-         
-         grown_unmapped_coefficients[dit].copy(tmp_par);
-         grown_mapped_coefficients[dit].copy(tmp_par_mapped);
-      }
-      
       else {
          MayDay::Error("GKPoisson:: unknown model is specified");
       }
@@ -573,7 +463,11 @@ GKPoisson::getMinMax(LevelData<FluxBox>& a_data, double& a_min, double& a_max) c
 #endif
 }
 
-
+//void
+//GKPoisson::setModel(const std::string& a_model)
+//{
+//   m_model = a_model;
+//}
 
 void
 GKPoisson::setPreconditionerConvergenceParams( const double a_tol,
@@ -659,63 +553,6 @@ GKPoisson::multiplyCoefficients( LevelData<FluxBox>& a_data,
    }
 
    a_data.exchange();
-}
-
-void
-GKPoisson::computeParallelConductivity(const LevelData<FluxBox>& a_Te,
-                                       LevelData<FluxBox>&       a_parallel_conductivity ) const
-
-{
-   //Get normalization parameters (units)
-   double N, T, L;
-   ParmParse ppunits( "units" );
-   ppunits.get("number_density",N);  //[m^{-3}]
-   ppunits.get("temperature",T);     //[eV]
-   ppunits.get("length",L);          //[m]
-   
-   double Ncgs = 1.0e-6 * N;    //[cm^{-3}]
-   double Tcgs = 1.602e-12 * T; //[erg]
-   double Lcgs  = 1.0e2 * L;   //[cm]
-   
-   //Universal constants (in CGS)
-   double mp = 1.6726e-24;
-   double me = 9.1094e-28;
-   double ech = 4.8032e-10;
-   
-   //In computing Coulumb logarithm we neglect variations of n and T
-   //relative to thier corresponding unit values
-   double Coulomb_Lg_ee = 23.5 - log( sqrt(Ncgs)/ pow(T, 5.0/4.0) )
-                          - sqrt(1.0e-5 + 1.0/16.0 * pow(log(T) - 2.0, 2));
-
-   //Braginskii tau_e [s] and sigma_parallel [1/s] (computed for the "units" values)
-   double tau_e = 3.44 * 1.0e5 * pow(T, 3.0/2.0) / (Ncgs * Coulomb_Lg_ee);
-   double sigma_e = ech * ech * Ncgs * tau_e / (0.51 * me);
-
-   //Normalization coefficient
-   double Vunit = sqrt(Tcgs/mp);
-   double norm_coeff = Tcgs / (ech*ech * Vunit * Ncgs * Lcgs);
-   double sigma_norm = sigma_e * norm_coeff;
-   
-   //In case we need to limit the value of sigma for numerical purposes
-   double sigma_max = DBL_MAX;
-   
-   //Compute parallel conductivity
-   const DisjointBoxLayout& grids = a_parallel_conductivity.disjointBoxLayout();
-   DataIterator dit(grids.dataIterator());
-   for (dit.begin(); dit.ok(); ++dit) {
-      for (int dir=0; dir<SpaceDim; dir++) {
-         
-         FArrayBox& this_sigma = a_parallel_conductivity[dit][dir];
-         const FArrayBox& this_T = a_Te[dit][dir];
-      
-         FORT_COMPUTE_CONDUCTIVITY(CHF_BOX(this_sigma.box()),
-                                  CHF_FRA1(this_sigma,0),
-                                  CHF_CONST_FRA1(this_T,0),
-                                  CHF_CONST_REAL(sigma_norm),
-                                  CHF_CONST_REAL(sigma_max));
-      
-      }
-   }
 }
 
 void

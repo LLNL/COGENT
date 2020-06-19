@@ -158,9 +158,81 @@ PressureKernel::eval( LevelData<FArrayBox>& a_result,
 
       FORT_COMPUTE_PRESSURE(CHF_FRA(this_result),
                             CHF_CONST_FRA(velocityRealCoords),
-			    CHF_CONST_FRA1(this_vparshift,0),
-			    CHF_CONST_FRA1(this_B,0),
-			    CHF_CONST_REAL(mass),
+                            CHF_CONST_FRA1(this_vparshift,0),
+                            CHF_CONST_FRA1(this_B,0),
+                            CHF_CONST_REAL(mass),
+                            CHF_BOX(this_result.box()));
+   }
+}
+
+ParallelPressureKernel::ParallelPressureKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
+   : m_v_parallel_shift(v_parallel_shift)
+{
+}
+
+void
+ParallelPressureKernel::eval( LevelData<FArrayBox>& a_result,
+                             const KineticSpecies& a_kinetic_species ) const
+{
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+
+   const LevelData<FArrayBox>& B_injected = geometry.getBFieldMagnitude();
+
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   double mass = a_kinetic_species.mass();
+
+   LevelData<FArrayBox> vpar_inj;
+   geometry.injectConfigurationToPhase( m_v_parallel_shift, vpar_inj );
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+
+      FArrayBox& this_result = a_result[dit];
+      const FArrayBox& this_B = B_injected[dit];
+      const FArrayBox& this_vparshift = vpar_inj[dit];
+
+      // Get the physical velocity coordinates for this part of phase space
+      FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+      block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+      FORT_COMPUTE_PARALLEL_PRESSURE(CHF_FRA(this_result),
+                            CHF_CONST_FRA(velocityRealCoords),
+             CHF_CONST_FRA1(this_vparshift,0),
+             CHF_CONST_FRA1(this_B,0),
+             CHF_CONST_REAL(mass),
+                            CHF_BOX(this_result.box()));
+   }
+}
+
+void
+PerpPressureKernel::eval(LevelData<FArrayBox>& a_result,
+                         const KineticSpecies& a_kinetic_species ) const
+{
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+
+   const LevelData<FArrayBox>& B_injected = geometry.getBFieldMagnitude();
+
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   double mass = a_kinetic_species.mass();
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+
+      FArrayBox& this_result = a_result[dit];
+      const FArrayBox& this_B = B_injected[dit];
+
+      // Get the physical velocity coordinates for this part of phase space
+      FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+      block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+      FORT_COMPUTE_PERP_PRESSURE(CHF_FRA(this_result),
+                            CHF_CONST_FRA(velocityRealCoords),
+             CHF_CONST_FRA1(this_B,0),
+             CHF_CONST_REAL(mass),
                             CHF_BOX(this_result.box()));
    }
 }
@@ -229,6 +301,7 @@ EnergyKernel::eval( LevelData<FArrayBox>& a_result,
    const PhaseGeom&             geometry    = a_kinetic_species.phaseSpaceGeometry();
    const LevelData<FArrayBox>&  B_injected  = geometry.getBFieldMagnitude();
    const LevelData<FArrayBox>&  dfn         = a_kinetic_species.distributionFunction();
+   const Real mass = a_kinetic_species.mass();
 
    const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
    DataIterator dit = grids.dataIterator();
@@ -257,12 +330,12 @@ EnergyKernel::eval( LevelData<FArrayBox>& a_result,
 
          double v_parallel  = velocityRealCoords(iv,0);
          double mu          = velocityRealCoords(iv,1);
-         double v_perp2     = mu * this_B(ivB) ;
-         double v2          = v_parallel*v_parallel + v_perp2;
+         double mv_perp2     = mu * this_B(ivB) ;
+         double mv2          = mass*v_parallel*v_parallel + mv_perp2;
 
          // Multiply the a_result by the velocity square.
          for (int n_comp=0; n_comp<a_result.nComp(); ++n_comp) {
-            this_result(iv,n_comp) *= v2 / 2.0;
+            this_result(iv,n_comp) *= mv2 / 2.0;
          }
       }
    }
@@ -302,11 +375,56 @@ PerpEnergyKernel::eval( LevelData<FArrayBox>& a_result,
          ivB[VPARALLEL_DIR] = vp_index;
          ivB[MU_DIR] = mu_index;
          double mu = velocityRealCoords(iv,1);
-         double v_perp2 =  mu * this_B(ivB) ;
+         double mv_perp2 =  mu * this_B(ivB) ;
 
          // Multiply the a_result by the velocity square.
          for (int n_comp=0; n_comp<a_result.nComp(); ++n_comp) {
-            this_result(iv,n_comp) *= v_perp2/2.0;
+            this_result(iv,n_comp) *= mv_perp2/2.0;
+         }
+      }
+   }
+}
+
+void
+ParallelEnergyKernel::eval( LevelData<FArrayBox>& a_result,
+                           const KineticSpecies& a_kinetic_species ) const
+{
+   const PhaseGeom&             geometry    = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FArrayBox>&  B_injected  = geometry.getBFieldMagnitude();
+   const LevelData<FArrayBox>&  dfn         = a_kinetic_species.distributionFunction();
+   const Real mass = a_kinetic_species.mass();
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+      FArrayBox&                this_result     = a_result[dit];
+      const FArrayBox&          this_B          = B_injected[dit];
+
+      const Box& Bbox = this_B.box();
+      int   vp_index  = Bbox.smallEnd(VPARALLEL_DIR);
+      int   mu_index  = Bbox.smallEnd(MU_DIR);
+
+      // Get the physical velocity coordinates for this part of phase space
+      FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+      block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+      BoxIterator bit(velocityRealCoords.box());
+      for (bit.begin(); bit.ok(); ++bit) {
+
+         IntVect iv   = bit();
+         IntVect ivB  = iv;
+
+         ivB[VPARALLEL_DIR] = vp_index;
+         ivB[MU_DIR]        = mu_index;
+
+         double v_parallel  = velocityRealCoords(iv,0);
+         double mv2          = mass*v_parallel*v_parallel;
+
+         // Multiply the a_result by the velocity square.
+         for (int n_comp=0; n_comp<a_result.nComp(); ++n_comp) {
+            this_result(iv,n_comp) *= mv2 / 2.0;
          }
       }
    }

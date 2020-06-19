@@ -177,6 +177,58 @@ std::string LogRectPhaseBC::getBcType( const int& a_dir,
    return bc_type;
 }
 
+inline
+std::string LogRectPhaseBC::getBcName( const int& a_dir,
+                                       const Side::LoHiSide& a_side )
+{
+   std::string bc_name;
+   if (a_dir==RADIAL_DIR) {
+      if (a_side==Side::Lo) {
+         bc_name = m_bdry_name[RADIAL_LOWER];
+      }
+      else {
+         bc_name = m_bdry_name[RADIAL_UPPER];
+      }
+   }
+   else if (a_dir==POLOIDAL_DIR) {
+      if (a_side==Side::Lo) {
+         bc_name = m_bdry_name[POLOIDAL_LOWER];
+      }
+      else {
+         bc_name = m_bdry_name[POLOIDAL_UPPER];
+      }
+   }
+#if CFG_DIM==3
+   else if (a_dir==TOROIDAL_DIR) {
+      if (a_side==Side::Lo) {
+         bc_name = m_bdry_name[TOROIDAL_LOWER];
+      }
+      else {
+         bc_name = m_bdry_name[TOROIDAL_UPPER];
+      }
+   }
+#endif
+   else if (a_dir==VPARALLEL_DIR) {
+      if (a_side==Side::Lo) {
+         bc_name = m_bdry_name[VPAR_LOWER];
+      }
+      else {
+         bc_name = m_bdry_name[VPAR_UPPER];
+      }
+   }
+   else if (a_dir==MU_DIR) {
+      if (a_side==Side::Lo) {
+         bc_name = m_bdry_name[MU_LOWER];
+      }
+      else {
+         bc_name = m_bdry_name[MU_UPPER];
+      }
+   }
+   else {
+      MayDay::Error( "LogRectPhaseBC: BCs not implemented!" );
+   }
+   return bc_name;
+}
 /////// END INLINE METHODS /////////////////////////////////////////////////////
 
 
@@ -310,11 +362,6 @@ void LogRectPhaseBC::apply(KineticSpecies& a_species_comp,
                                      a_velocity );
    CH_STOP(t_set_inflow_outflow_BC);
    
-   // interpolate all other codim boundaries
-   CH_START(t_set_codim_boundary_values);
-   CodimBC::setCodimBoundaryValues( Bf, coord_sys );
-   CH_STOP(t_set_codim_boundary_values);
-   
    if (m_logical_sheath_bc) {
       applySheathBC(a_species_comp, a_phi, a_velocity);
    }
@@ -322,6 +369,12 @@ void LogRectPhaseBC::apply(KineticSpecies& a_species_comp,
    if (m_flux_bc) {
       applyFluxBC(a_species_comp, a_phi, a_velocity, a_time);
    }
+
+   // interpolate all other codim boundaries                                                                                      
+   CH_START(t_set_codim_boundary_values);
+   CodimBC::setCodimBoundaryValues( Bf, coord_sys );
+   CH_STOP(t_set_codim_boundary_values);
+
 }
 
 inline
@@ -384,7 +437,7 @@ void LogRectPhaseBC::applyFluxBC( KineticSpecies& a_species,
    const PhaseGrid& phase_grid = geometry.phaseGrid();
    const DisjointBoxLayout& dbl = phase_grid.disjointBoxLayout();
    
-   //For sheath BC calculations we only need one-cell-wide
+   //For flux BC calculations we only need one-cell-wide
    //boundary storage, so define it here
    BoundaryBoxLayoutPtrVect all_bdry_layouts;
    PhaseBCUtils::defineBoundaryBoxLayouts(all_bdry_layouts,
@@ -392,23 +445,31 @@ void LogRectPhaseBC::applyFluxBC( KineticSpecies& a_species,
                                           coord_sys,
                                           IntVect::Unit );
 
-   // Loop over boundaries
-   BoundaryBoxLayoutPtrVect flux_bdry_layouts;
-   for (int i(0); i<all_bdry_layouts.size(); i++) {
-      const BoundaryBoxLayout& bdry_layout( *(all_bdry_layouts[i]) );
-      const int& dir( bdry_layout.dir() );
-      const Side::LoHiSide& side( bdry_layout.side() );
-
-      if (getBcType(dir, side) == "flux") {
-         
-         flux_bdry_layouts.push_back(all_bdry_layouts[i]);
-         
-         std::string prefix( m_pp.prefix() );
-         prefix += "." + m_bdry_name[i];
-         ParmParse pp( prefix.c_str() );
-         
-         FluxBC fluxBC(flux_bdry_layouts, pp);
-         fluxBC.applyBC(a_species, a_velocity, a_phi, a_time);
+   //Loop over directions and sides
+   for (int dir=0; dir<CFG_DIM; ++dir) {
+      for (SideIterator si; si.ok(); ++si) {
+         Side::LoHiSide side( si() );
+         BoundaryBoxLayoutPtrVect flux_bdry_layouts;
+         //Loop over boundaries
+         for (int i(0); i<all_bdry_layouts.size(); i++) {
+            const BoundaryBoxLayout& bdry_layout( *(all_bdry_layouts[i]) );
+            const int& this_dir( bdry_layout.dir() );
+            const Side::LoHiSide& this_side( bdry_layout.side() );
+      
+            if (this_dir == dir &&
+                this_side == side &&
+                getBcType(dir, side) == "flux") {
+               flux_bdry_layouts.push_back(all_bdry_layouts[i]);
+            }
+         }
+         //Apply flux BC
+         if (getBcType(dir, side) == "flux") {
+            std::string prefix( m_pp.prefix() );
+            prefix += "." + getBcName(dir, side);
+            ParmParse pp( prefix.c_str() );
+            FluxBC fluxBC(flux_bdry_layouts, pp);
+            fluxBC.applyBC(a_species, a_velocity, a_phi, a_time);
+         }
       }
    }
 }

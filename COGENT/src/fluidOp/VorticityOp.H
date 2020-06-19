@@ -4,6 +4,7 @@
 #include "FluidOpInterface.H"
 #include "GKFluidOp.H"
 #include "GKPoisson.H"
+#include "GKVorticity.H"
 #include "CellVar.H"
 
 #undef CH_SPACEDIM
@@ -199,10 +200,10 @@ private:
    double m_larmor;
    bool m_par_cond_op_coefs_defined;
   
-   GKPoisson*    m_parallel_current_divergence_op;
-   GKPoisson*    m_par_cond_op;
-   GKPoisson*    m_imex_pc_op;
-   GKPoisson*    m_gyropoisson_op;
+   GKVorticity*    m_parallel_current_divergence_op;
+   GKVorticity*    m_par_cond_op;
+   GKVorticity*    m_imex_pc_op;
+   GKPoisson*      m_gyropoisson_op;
 
    PS::GKVlasov*  m_vlasov;
 
@@ -227,6 +228,10 @@ private:
    bool	m_reynolds_stress;
    bool m_ExB_current_model;
    bool m_include_pol_den_corrections;
+   bool m_consistent_lower_bc_only;
+   bool m_consistent_upper_bc_only;
+   int m_update_pc_freq;
+   int m_it_counter;
 
    RefCountedPtr<GridFunction> m_electron_temperature_func;
 };

@@ -58,6 +58,7 @@ private:
    DisjointBoxLayout m_grids_inj;
    const BoundaryBoxLayoutPtr m_bdry_layout;
    bool m_compute_potential_BC;
+   std::string m_sheath_bc_type;
    
 };
 

@@ -703,6 +703,12 @@ public:
 
    DisjointBoxLayout getGhostDBL(const LevelData<FArrayBox>& a_data) const;
   
+   void interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const;
+
+   const LevelData<FArrayBox>& getShearedRemappedIndex() const {return *m_sheared_remapped_index;}
+   const LevelData<FArrayBox>& getShearedInterpStencil() const {return *m_sheared_interp_stencil;}
+   const LevelData<FArrayBox>& getShearedInterpStencilOffsets() const {return *m_sheared_interp_stencil_offsets;}
+
 protected:
 
    void setCellCenteredRealCoords();
@@ -789,7 +795,6 @@ private:
    
 #if CFG_DIM == 3
    void getShearedGhostBoxLayout();
-   void interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const;
    
    BoxLayout m_shearedGhostBLLoEnd;
    BoxLayout m_shearedGhostBLHiEnd;

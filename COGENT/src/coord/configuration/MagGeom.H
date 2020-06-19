@@ -449,6 +449,9 @@ public:
 
    bool providesFlux() const {return m_coord_sys->providesFlux();}
    
+   void multiplyMatrix(LevelData<FluxBox>&       a_data,
+                       const LevelData<FluxBox>& a_mat) const;
+   
 private:
 
    void setRealCoords();

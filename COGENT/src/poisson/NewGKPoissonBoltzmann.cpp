@@ -75,11 +75,12 @@ NewGKPoissonBoltzmann::~NewGKPoissonBoltzmann()
 
 
 void
-NewGKPoissonBoltzmann::computePotentialAndElectronDensity( LevelData<FArrayBox>&        a_phi,
-                                                           BoltzmannElectron&           a_ne,
-                                                           const LevelData<FArrayBox>&  a_Zni,
-                                                           const EllipticOpBC&          a_bc,
-                                                           const bool                   a_first_step )
+NewGKPoissonBoltzmann::computePotentialAndElectronDensity( LevelData<FArrayBox>&             a_phi,
+                                                           BoltzmannElectron&                a_ne,
+                                                           const LevelData<FArrayBox>&       a_Zni,
+                                                           const PS::KineticSpeciesPtrVect&  a_kinetic_species,
+                                                           const EllipticOpBC&               a_bc,
+                                                           const bool                        a_first_step )
 {
    if ( m_bc_core == NULL ) {
       MayDay::Error("NewGKPoissonBoltzmann::computePotentialAndElectronDensity(): setOperatorCoefficients has not been called");
@@ -109,7 +110,8 @@ NewGKPoissonBoltzmann::computePotentialAndElectronDensity( LevelData<FArrayBox>&
    BoltzmannElectron ne_core(a_ne.mass(), a_ne.charge(), *m_core_geometry, Te_core);
 
    // Solve for the potential and electron density in the core
-   m_gkpb_solver->computePotentialAndElectronDensity( phi_core, ne_core, Zni_core, *m_bc_core, a_first_step);
+   m_gkpb_solver->computePotentialAndElectronDensity( phi_core, ne_core, Zni_core,
+                                                      a_kinetic_species, *m_bc_core, a_first_step);
 
    double phi_outer = coreOuterPotential(*m_core_geometry, phi_core);
 

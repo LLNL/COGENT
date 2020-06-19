@@ -306,25 +306,40 @@ class GKSystem
       bool m_hdf_efield;
       bool m_hdf_density;
       bool m_hdf_momentum;
-      bool m_hdf_vpartheta;
-      bool m_hdf_rtheta;
-      bool m_hdf_pressure;
-      bool m_hdf_gradPoverN;
-      bool m_hdf_parallelHeatFlux;
-      bool m_hdf_temperature;
-      bool m_hdf_fourthMoment;
       bool m_hdf_ParallelMomentum;
       bool m_hdf_PoloidalMomentum;
+      bool m_hdf_ParallelVelocity;
+
+      bool m_hdf_energyDensity;
+      bool m_hdf_perpEnergyDensity;
+      bool m_hdf_parallelEnergyDensity;
+      bool m_hdf_pressure;
+      bool m_hdf_perpPressure;
+      bool m_hdf_gradPoverN;
+      bool m_hdf_parallelPressure;
+      bool m_hdf_temperature;
+      bool m_hdf_perpTemperature;
+      bool m_hdf_parallelTemperature;
+
+      bool m_hdf_parallelHeatFlux;
+      bool m_hdf_totalParallelHeatFlux;
+      bool m_hdf_fourthMoment;
       bool m_hdf_ParticleFlux;
       bool m_hdf_HeatFlux;
-      bool m_hdf_vparmu;
+      
       bool m_hdf_vlasov_divergence;
       bool m_hdf_AmpereErIncrement;
       bool m_hdf_total_density;
+   
       bool m_hdf_dfn;
       bool m_hdf_deltaF;
       bool m_hdf_dfn_at_mu;
       bool m_hdf_fluids;
+   
+      bool m_hdf_vpartheta;
+      bool m_hdf_rtheta;
+      bool m_hdf_vparmu;
+
       std::vector<int> m_fixed_plotindices;
 
       PositivityPostProcessor m_positivity_post_processor;

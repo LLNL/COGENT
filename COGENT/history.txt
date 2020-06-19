@@ -1,4 +1,98 @@
 ------------------------------------------------------------------------
+r1659 | mdorr | 2020-06-18 11:01:00 -0700 (Thu, 18 Jun 2020) | 3 lines
+
+Changing hypre option calls that were problematic on Cori.
+
+
+------------------------------------------------------------------------
+r1658 | mdorf | 2020-06-17 09:02:06 -0700 (Wed, 17 Jun 2020) | 1 line
+
+Extended the self-consistent BC option to support a single radial S-C boundary only for the case of LogRectCoordSys
+------------------------------------------------------------------------
+r1657 | mdorr | 2020-06-16 11:48:07 -0700 (Tue, 16 Jun 2020) | 3 lines
+
+Removing unused ghost cells in the tanGradF variable in PhaseGeom::computeMetricTermProductAverage.
+
+
+------------------------------------------------------------------------
+r1656 | mdorf | 2020-06-12 20:06:57 -0700 (Fri, 12 Jun 2020) | 1 line
+
+Fixed a sign bug in the calculations of polarization density correction; extended subtractFSdiv to single-null geometries; miscellaneous performance optimizations
+------------------------------------------------------------------------
+r1655 | mdorr | 2020-06-10 10:11:19 -0700 (Wed, 10 Jun 2020) | 4 lines
+
+Removing the clearing of a couple std::map members, since defineBlockBC() might be called more than once (e.g., from both ExplicitStageJacobian and ImplicitStageJacobian)
+
+
+
+------------------------------------------------------------------------
+r1654 | mdorr | 2020-06-06 19:24:22 -0700 (Sat, 06 Jun 2020) | 3 lines
+
+Extending the implicit Vlasov preconditioner to multiblock sheared annular geometry.
+
+
+------------------------------------------------------------------------
+r1653 | mdorf | 2020-06-04 15:28:19 -0700 (Thu, 04 Jun 2020) | 1 line
+
+Fixed a bug in the simple_boltzmann model introduced in r1562
+------------------------------------------------------------------------
+r1652 | mdorf | 2020-06-04 12:18:16 -0700 (Thu, 04 Jun 2020) | 1 line
+
+Merged Ilon's revisions for the simple_boltzmann model; also misc. improvements to the GKVorticity class
+------------------------------------------------------------------------
+r1651 | mdorf | 2020-06-04 10:04:02 -0700 (Thu, 04 Jun 2020) | 1 line
+
+Fixed a ParmParse bug in LogicalSheathBC
+------------------------------------------------------------------------
+r1650 | mdorf | 2020-06-02 21:15:24 -0700 (Tue, 02 Jun 2020) | 1 line
+
+Refactored GK-vorticity code; added code to support polarization density correction for the old vorticity model
+------------------------------------------------------------------------
+r1649 | mdorf | 2020-05-31 13:36:22 -0700 (Sun, 31 May 2020) | 1 line
+
+Merged Ilon's revisions for (1) diagnostics, (2) sheathBCs, and (3) fixed_krho2 E-field option with the repo code
+------------------------------------------------------------------------
+r1648 | mdorf | 2020-05-28 11:54:30 -0700 (Thu, 28 May 2020) | 1 line
+
+Some code refactoring to optimize the performance of self-consistent BC calculations and the iterative GKPoissonBoltzmann solve
+------------------------------------------------------------------------
+r1647 | mdorr | 2020-05-28 10:47:00 -0700 (Thu, 28 May 2020) | 3 lines
+
+Adding barriers before the clock reads
+
+
+------------------------------------------------------------------------
+r1646 | mdorr | 2020-05-27 18:11:11 -0700 (Wed, 27 May 2020) | 4 lines
+
+Moving SparseCoupling from src/poisson to src/util to make it also available to the kinetic Vlasov solver.
+
+
+
+------------------------------------------------------------------------
+r1645 | mdorf | 2020-05-24 16:06:49 -0700 (Sun, 24 May 2020) | 1 line
+
+Added a new method for poloidal interpolation for the case of a sheared SN geoemtry
+------------------------------------------------------------------------
+r1644 | mdorf | 2020-05-19 17:22:57 -0700 (Tue, 19 May 2020) | 1 line
+
+Extended canonical Maxwellian initialization to 4D single-null; revised injectToroidal to be consistent with physical coordinate injection
+------------------------------------------------------------------------
+r1643 | mdorf | 2020-05-15 20:28:47 -0700 (Fri, 15 May 2020) | 1 line
+
+Extended self-consistent BCs and fluxBC to 3D/5D
+------------------------------------------------------------------------
+r1642 | mdorr | 2020-05-13 17:51:50 -0700 (Wed, 13 May 2020) | 3 lines
+
+Setting the build dimensions back to its usual 4D default
+
+
+------------------------------------------------------------------------
+r1641 | mdorr | 2020-05-13 17:49:22 -0700 (Wed, 13 May 2020) | 3 lines
+
+Removing the input directory that was superceded by sample_inputs years ago.
+
+
+------------------------------------------------------------------------
 r1640 | angus1 | 2020-05-11 19:09:14 -0700 (Mon, 11 May 2020) | 1 line
 
 refactoring some high-level functionality from previous check-in

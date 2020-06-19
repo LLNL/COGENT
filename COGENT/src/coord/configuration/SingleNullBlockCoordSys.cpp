@@ -2094,7 +2094,7 @@ void SingleNullBlockCoordSys::getToroidalCoords(FArrayBox& a_coords) const
 
     convertCartesianToToroidal(coord);
 
-    for (int dir=0; dir<SpaceDim; ++dir) {
+     for (int dir=0; dir<SpaceDim; ++dir) {
       a_coords(iv,dir) = coord[dir];
     }
   }
@@ -2102,11 +2102,18 @@ void SingleNullBlockCoordSys::getToroidalCoords(FArrayBox& a_coords) const
 
 void SingleNullBlockCoordSys::convertCartesianToToroidal(RealVect& a_coord) const
 {
-#if CFG_DIM == 3
+
   //get Cartesian coordinates
+#if CFG_DIM == 3
   Real x = a_coord[0];
   Real y = a_coord[1];
   Real z = a_coord[2];
+#else
+  Real x = a_coord[0];
+  Real y = 0.0;
+  Real z = a_coord[1];
+#endif
+   
    
   //compute toroidal coordinates
 
@@ -2125,9 +2132,13 @@ void SingleNullBlockCoordSys::convertCartesianToToroidal(RealVect& a_coord) cons
   Real theta = asin((z-Z0)/r);
   if (r_xy < R0) theta = Pi - theta;
   if (theta < 0) theta += 2. * Pi;
-   
+
+#if CFG_DIM == 3
   a_coord[RADIAL_DIR] = flux_norm;
   a_coord[TOROIDAL_DIR] = phi;
+  a_coord[POLOIDAL_DIR] = theta;
+#else
+  a_coord[RADIAL_DIR] = flux_norm;
   a_coord[POLOIDAL_DIR] = theta;
 #endif
 }
@@ -2279,11 +2290,16 @@ SingleNullBlockCoordSys::restrictMappedCoordsToPoloidal( const FArrayBox&  a_coo
 RealVect
 SingleNullBlockCoordSys::injectToroidal( const POL::RealVect  a_v ) const
 {
+  /*                                                                                                                      
+    Converts a poloidal physical coordinate (R,Z) to                                                                      
+    (X,Y,Z) with Y=0                                                                                                      
+   */
 #if CFG_DIM==2
    return a_v;
 #endif
 #if CFG_DIM==3
-   return RealVect(a_v[0], lowerMappedCoordinate(TOROIDAL_DIR), a_v[1]);
+   //return RealVect(a_v[0], lowerMappedCoordinate(TOROIDAL_DIR), a_v[1]);                                                
+   return RealVect(a_v[0], 0.0, a_v[1]);
 #endif
 }
 

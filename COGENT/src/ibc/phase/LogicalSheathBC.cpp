@@ -21,7 +21,8 @@ LogicalSheathBC::LogicalSheathBC( const BoundaryBoxLayoutPtr&  a_bdry_layout,
                                   const ParmParse&             a_pp)
 
 : m_bdry_layout(a_bdry_layout),
-  m_compute_potential_BC(false)
+  m_compute_potential_BC(false),
+  m_sheath_bc_type("first_order")
 {
    // Create boundary dbl, which is one-cell-wide in vpar and mu
    const DisjointBoxLayout& grids_full( a_bdry_layout->disjointBoxLayout() );
@@ -243,15 +244,35 @@ void LogicalSheathBC::applyBC( KineticSpecies& a_species,
       block_coord_sys.getVelocityRealCoords(velocityRealCoords);
             
       const int SIDE(side);
-      FORT_SET_LOGICAL_SHEATH_BC(CHF_FRA1(this_dfn,0),
-                                 CHF_BOX(boundaryBox),
-                                 CHF_CONST_FRA1(flippedData[fdit],0),
-                                 CHF_CONST_FRA(velocityRealCoords),
-                                 CHF_CONST_FRA1(this_vel[dir],dir),
-                                 CHF_CONST_FRA1(this_phi,0),
-                                 CHF_CONST_REAL(mass),
-                                 CHF_CONST_REAL(charge),
-                                 CHF_CONST_INT(SIDE) );
+      
+      if (m_sheath_bc_type == "first_order") {
+         FORT_SET_LOGICAL_SHEATH_BC(CHF_FRA1(this_dfn,0),
+                                    CHF_BOX(boundaryBox),
+                                    CHF_CONST_FRA1(flippedData[fdit],0),
+                                    CHF_CONST_FRA(velocityRealCoords),
+                                    CHF_CONST_FRA1(this_vel[dir],dir),
+                                    CHF_CONST_FRA1(this_phi,0),
+                                    CHF_CONST_REAL(mass),
+                                    CHF_CONST_REAL(charge),
+                                    CHF_CONST_INT(SIDE) );
+      }
+      
+      else if (m_sheath_bc_type == "second_order") {
+      
+         FORT_SET_LOGICAL_SHEATH_BC_ORDER2(CHF_FRA1(this_dfn,0),
+                                           CHF_BOX(boundaryBox),
+                                           CHF_CONST_FRA1(flippedData[fdit],0),
+                                           CHF_CONST_FRA(velocityRealCoords),
+                                           CHF_CONST_FRA1(this_vel[dir],dir),
+                                           CHF_CONST_FRA1(this_phi,0),
+                                           CHF_CONST_REAL(mass),
+                                           CHF_CONST_REAL(charge),
+                                           CHF_CONST_INT(SIDE) );
+      }
+      
+      else {
+         MayDay::Error( "LogicalSheathBC::applyBC: unknown BC type" );
+      }
       
    }
 }
@@ -260,6 +281,7 @@ void
 LogicalSheathBC::parseParameters(const ParmParse& a_pp)
 {
    a_pp.query("compute_potential_BC", m_compute_potential_BC);
+   a_pp.query("sheath_bc_type", m_sheath_bc_type);
 }
 
 #if 0

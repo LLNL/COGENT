@@ -12,7 +12,7 @@
      &     CHF_CONST_INT[iside]
      &     )
 c
-c     We assign f=0 if mass * vparallel^2 > q phi, and reflect if mass*vparallel^2 < q phi.
+c     We assign f=0 if 0.5*mass*vparallel^2 > q Delta phi, and reflect if 0.5*mass*vparallel^2 < q Delta phi.
 c     Note reflection is done using the reflected distribution function f_rflct.
 
 
@@ -23,10 +23,12 @@ c
       integer isign
       integer vn_jbdry, phi_jbdry
       integer jbdry,jsrc,jsrc_offset
-      real  pot_energy_min
+      REAL_T pot_energy_min
+
 c
 c     First construct jbdry, the index of the first cell just inside the boundary box.
 c
+
       if (iside.eq.0) then
         jbdry = CHF_UBOUND[bdrybox;1]
       else
@@ -35,6 +37,7 @@ c
       isign = 2*iside-1
       jsrc_offset = 2 * jbdry - isign
 c
+
       CHF_MULTIDO[bdrybox;i;j;k;l;m]
 
           vn_jbdry = jbdry - isign + iside
@@ -47,7 +50,8 @@ c            or set f = 0 otherwise
              
              phi_jbdry = jbdry - isign
              pot_energy_min = -charge * phi(i,phi_jbdry,CHF_LBOUND[phi;2],CHF_LBOUND[phi;3])
-             if (mass * (vel(i,jbdry,k,l,0)**2).gt.pot_energy_min) then
+
+             if (half*mass*(vel(i,jbdry,k,l,0)**2).gt.pot_energy_min) then
                f(i,j,k,l) = zero
              else
                jsrc = jsrc_offset - j
@@ -64,7 +68,7 @@ c            or set f = 0 otherwise
              
              phi_jbdry = jbdry - isign
              pot_energy_min = -charge * phi(i,phi_jbdry,k,CHF_LBOUND[phi;2],CHF_LBOUND[phi;3])
-             if (mass * (vel(i,jbdry,k,l,m,0)**2).gt.pot_energy_min) then
+             if (half * mass * (vel(i,jbdry,k,l,m,0)**2).gt.pot_energy_min) then
                f(i,j,k,l,m) = zero
              else
                jsrc = jsrc_offset - j
@@ -80,3 +84,114 @@ c            or set f = 0 otherwise
       return
       end
 
+      subroutine set_logical_sheath_bc_order2(
+     &     CHF_FRA1[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_FRA1[f_rflct],
+     &     CHF_CONST_FRA[vel],
+     &     CHF_CONST_FRA1[vn],
+     &     CHF_CONST_FRA1[phi],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_CONST_real[charge],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+c     We assign f=0 if 0.5*mass*vparallel^2 > q Delta phi, and reflect if 0.5*mass*vparallel^2 < q Delta phi.
+c     Note reflection is done using the reflected distribution function f_rflct.
+
+
+c
+c     local variables
+c
+      integer i,j,k,l,m
+      integer isign
+      integer vn_jbdry, phi_jbdry
+      integer jbdry,jsrc,jsrc_offset
+      REAL_T pot_energy_min
+      REAL_T vel_esc, vel_center, vel_lower, vel_upper
+
+c
+c     First construct jbdry, the index of the first cell just inside the boundary box.
+c
+
+      if (iside.eq.0) then
+        jbdry = CHF_UBOUND[bdrybox;1]
+      else
+        jbdry = CHF_LBOUND[bdrybox;1]
+      endif
+      isign = 2*iside-1
+      jsrc_offset = 2 * jbdry - isign
+c
+
+      CHF_MULTIDO[bdrybox;i;j;k;l;m]
+
+          vn_jbdry = jbdry - isign + iside
+          
+#if CH_SPACEDIM==4
+          if (isign*vn(i,vn_jbdry,k,l).le.zero) then
+
+c            Inflow from limiter: construct f by reflection if below potential boundary
+c            or set f = 0 otherwise
+             
+             phi_jbdry = jbdry - isign
+             pot_energy_min = -charge * phi(i,phi_jbdry,CHF_LBOUND[phi;2],CHF_LBOUND[phi;3])
+
+             vel_center = vel(i,jbdry,k,l,0)
+             if( vel_center**2 .le. vel(i,jbdry,k+1,l,0)**2 ) then
+                vel_upper = half*(vel(i,jbdry,k,l,0) + vel(i,jbdry,k+1,l,0))
+                vel_lower = half*(vel(i,jbdry,k,l,0) + vel(i,jbdry,k-1,l,0))
+             else
+                vel_lower = half*(vel(i,jbdry,k,l,0) + vel(i,jbdry,k+1,l,0))
+                vel_upper = half*(vel(i,jbdry,k,l,0) + vel(i,jbdry,k-1,l,0))
+             endif
+
+             if (half*mass*(vel_center**2).gt.pot_energy_min) then
+               f(i,j,k,l) = zero
+             else
+               jsrc = jsrc_offset - j
+               f(i,j,k,l) = f_rflct(i,jsrc,-k-1,l)
+               if (half*mass*(vel_upper**2).gt.pot_energy_min) then
+                 vel_esc = dsqrt(abs(two*pot_energy_min/mass))*sign(one,vel_center)
+                 f(i,j,k,l) = f(i,j,k,l)*(vel_esc-vel_lower)/(vel_upper-vel_lower)
+               endif
+             endif
+          
+          endif
+#else
+c     THIS SUBROUTINE ONLY COMPILES IN 5D, IT NEEDS TO BE REVISED LATER.
+          if (isign*vn(i,vn_jbdry,k,l,m).le.zero) then
+
+c            Inflow from limiter: construct f by reflection if below potential boundary
+c            or set f = 0 otherwise
+             
+             phi_jbdry = jbdry - isign
+             pot_energy_min = -charge * phi(i,phi_jbdry,k,CHF_LBOUND[phi;2],CHF_LBOUND[phi;3])
+
+             vel_center = vel(i,jbdry,k,l,m,0)
+             if( (vel_center**2) .le. (vel(i,jbdry,k,l+1,m,0)**2) ) then
+                vel_upper = half*(vel(i,jbdry,k,l,m,0) + vel(i,jbdry,k,l+1,m,0))
+                vel_lower = half*(vel(i,jbdry,k,l,m,0) + vel(i,jbdry,k,l-1,m,0))
+             else
+                vel_lower = half*(vel(i,jbdry,k,l,m,0) + vel(i,jbdry,k,l+1,m,0))
+                vel_upper = half*(vel(i,jbdry,k,l,m,0) + vel(i,jbdry,k,l-1,m,0))
+             endif
+
+             if (half * mass * (vel_center**2).gt.pot_energy_min) then
+               f(i,j,k,l,m) = zero
+             else
+               jsrc = jsrc_offset - j
+               f(i,j,k,l,m) = f_rflct(i,jsrc,k,-l-1,m)
+               if (half*mass*(vel_upper**2).gt.pot_energy_min) then
+                 vel_esc = sqrt(abs(two*pot_energy_min/mass))*sign(one,vel_center)
+                 f(i,j,k,l,m) = f(i,j,k,l,m)*(vel_esc-vel_lower)/(vel_upper-vel_lower)
+               endif
+             endif
+          
+          endif
+
+#endif
+
+      CHF_ENDDO
+
+      return
+      end

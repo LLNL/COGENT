@@ -207,8 +207,6 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
    CH_assert((a_cc_coords.box()).contains(a_box));
    cc_phase_coords.copy(a_cc_coords);
    CH_STOP(t_get_real_coords);
-
-#if CFG_DIM == 3
    
    Real R0;          //Major radius coordinate of the magnetic axis
    Real RBtor;       //R*Btor constant factor
@@ -216,8 +214,10 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
    Real dpsidr_mid;  //dpsi/dr at the midpoint
    
    FArrayBox toroidal_coords_inj;
-   
+
+#if CFG_DIM == 3
    if (typeid(a_mag_coord_sys) == typeid(CFG::ToroidalBlockCoordSys)) {
+
       CFG::FArrayBox cfg_toroidal_coords( cfg_box, CFG_DIM );
       ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getToroidalCoords( cfg_toroidal_coords );
       
@@ -235,8 +235,10 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
       //Presently not used; but might be useful for some other models
       Real q_mid = ((const CFG::ToroidalBlockCoordSys&)a_mag_coord_sys).getSafetyFactor(m_r_mid/R0);
    }
+#endif
+   
+   if (typeid(a_mag_coord_sys) == typeid(CFG::SingleNullBlockCoordSys)) {
 
-   else if (typeid(a_mag_coord_sys) == typeid(CFG::SingleNullBlockCoordSys)) {
       CFG::FArrayBox cfg_toroidal_coords( cfg_box, CFG_DIM );
       ((const CFG::SingleNullBlockCoordSys&)a_mag_coord_sys).getToroidalCoords( cfg_toroidal_coords );
       
@@ -251,13 +253,20 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
       CFG::RealVect axis = ((const CFG::SingleNullBlockCoordSys&)a_mag_coord_sys).getMagAxis();
       R0 = axis[RADIAL_DIR];
       
+#if CFG_DIM == 3
       CFG::RealVect X_mid(axis[RADIAL_DIR]+m_r_mid,0,axis[POLOIDAL_DIR]);
+#else
+      CFG::RealVect X_mid(axis[RADIAL_DIR]+m_r_mid, axis[POLOIDAL_DIR]);
+#endif
       array<double,3> B_mid = ((const CFG::SingleNullBlockCoordSys&)a_mag_coord_sys).computeBField(X_mid);
+#if CFG_DIM == 3
       Real Bpol = sqrt(pow(B_mid[RADIAL_DIR],2)+pow(B_mid[POLOIDAL_DIR],2));
+#else
+      Real Bpol = sqrt(pow(B_mid[RADIAL_DIR],2)+pow(B_mid[2],2));
+#endif
       psi_mid = ((const CFG::SingleNullBlockCoordSys&)a_mag_coord_sys).getMagneticFlux(X_mid);
       dpsidr_mid = X_mid[RADIAL_DIR] * Bpol;
    }
-   
    
    Real larmor_number = (m_zero_larmor) ? 0.0 : a_larmor_number;
 
@@ -283,7 +292,6 @@ void CanonicalMaxwellianKineticFunction::setPointValues(FArrayBox&              
                               CHF_CONST_REAL(a_charge),
                               CHF_CONST_REAL(larmor_number),
                               CHF_CONST_INT(m_profile_option));
-#endif
 }
 
 inline

@@ -91,8 +91,18 @@ void EField::computeEField( const PS::GKState&                a_state,
             
                LevelData<FArrayBox> total_charge_density( grids, 1, IntVect::Zero );
                computeTotalChargeDensity( total_charge_density, a_kinetic_species, a_fluid_species );
-               m_poisson->computePotential( a_phi, total_charge_density );
+               
+               if (!m_fixed_krho2) {
+                  m_poisson->computePotential( a_phi, total_charge_density );
+               }
+               else {
+                  for (DataIterator dit(a_phi.dataIterator()); dit.ok(); ++dit) {
+                      a_phi[dit].copy(total_charge_density[dit]);
+                      a_phi[dit].divide(m_krho2_value);
+                   }
+               }
             }
+            
             else {
                
                // Boltzmann electron model
@@ -107,13 +117,12 @@ void EField::computeEField( const PS::GKState&                a_state,
 
                   ((NewGKPoissonBoltzmann*)m_poisson)
                      ->setDivertorBVs( ion_charge_density, ion_parallel_current_density, a_bc );
-               }
-               
-               if (single_null) {
+              
                   ((NewGKPoissonBoltzmann*)m_poisson)
                      ->computePotentialAndElectronDensity( a_phi,
                                                            *m_boltzmann_electron,
                                                            ion_charge_density,
+                                                           a_kinetic_species,
                                                            a_bc,
                                                            a_initial_time );
                }
@@ -122,6 +131,7 @@ void EField::computeEField( const PS::GKState&                a_state,
                      ->computePotentialAndElectronDensity( a_phi,
                                                            *m_boltzmann_electron,
                                                            ion_charge_density,
+                                                           a_kinetic_species,
                                                            a_bc,
                                                            a_initial_time );
                }
@@ -207,8 +217,16 @@ void EField::setCoreBC( const double   a_core_inner_bv,
    const MagGeom& mag_geom = configurationSpaceGeometry();
 
    if ( typeid(*(mag_geom.getCoordSys())) == typeid(LogRectCoordSys) ) {
+     if (m_consistent_lower_bc_only) {
+       a_bc.setBCValue(0,RADIAL_DIR,0,a_core_inner_bv);
+     }
+     else if (m_consistent_upper_bc_only) {
+       a_bc.setBCValue(0,RADIAL_DIR,1,a_core_outer_bv);
+     }
+     else{
       a_bc.setBCValue(0,RADIAL_DIR,0,a_core_inner_bv);
       a_bc.setBCValue(0,RADIAL_DIR,1,a_core_outer_bv);
+     }
    }
    else if ( typeid(*(mag_geom.getCoordSys())) == typeid(SNCoreCoordSys) ) {
       a_bc.setBCValue(SNCoreBlockCoordSys::LCORE,RADIAL_DIR,0,a_core_inner_bv);
@@ -484,14 +502,39 @@ EField::parseParameters( ParmParse& a_pp)
   a_pp.query( "include_electron_polarization_density", m_include_pol_dens_e);
    
   if (a_pp.contains("harmonic_filtering")) {
-    a_pp.get("harmonic_filtering", m_apply_harm_filtering);
+     a_pp.get("harmonic_filtering", m_apply_harm_filtering);
   }
   else {
-    m_apply_harm_filtering = false;
+     m_apply_harm_filtering = false;
   }
   
   if (m_apply_harm_filtering) {
-    a_pp.get("harmonic_filtering_dir", m_harm_filtering_dir);
+     a_pp.get("harmonic_filtering_dir", m_harm_filtering_dir);
+  }
+
+  if (a_pp.contains("fixed_krho2")) {
+    a_pp.get("fixed_krho2", m_fixed_krho2);
+  }
+  else {
+    m_fixed_krho2 = false;
+  }
+   
+  if (m_fixed_krho2) {
+    a_pp.get("krho2_value", m_krho2_value);
+  }
+
+  if (a_pp.contains("consistent_upper_bc_only")) {
+    a_pp.get("consistent_upper_bc_only", m_consistent_upper_bc_only);
+  }
+  else {
+    m_consistent_upper_bc_only = false;
+  }
+
+  if (a_pp.contains("consistent_lower_bc_only")) {
+    a_pp.get("consistent_lower_bc_only",m_consistent_lower_bc_only);
+  }
+  else {
+    m_consistent_lower_bc_only = false;
   }
 }
 

@@ -1173,21 +1173,21 @@ PhaseGeom::computeMetricTermProductAverage( LevelData<FluxBox>&       a_Product,
    const DisjointBoxLayout& grids = a_F.getBoxes();
 
    // temp storage
-   IntVect grownGhost2(a_Product.ghostVect());
-   grownGhost2 += 2*IntVect::Unit;
+   IntVect grownGhost(a_Product.ghostVect());
+   grownGhost += IntVect::Unit;
 
    int nGradFTerms_cfg = CFG_DIM*CFG_DIM*(CFG_DIM-1);
    int nGradFTerms_vel = VEL_DIM*VEL_DIM*(VEL_DIM-1);
    int nGradFTerms = Max(nGradFTerms_cfg,nGradFTerms_vel);
 
-   if ( !m_tanGradF.isDefined() || (grownGhost2 != m_tanGradF.ghostVect()) ) {
-      m_tanGradF.define(grids, nGradFTerms, grownGhost2);
+   if ( !m_tanGradF.isDefined() || (grownGhost != m_tanGradF.ghostVect()) ) {
+      m_tanGradF.define(grids, nGradFTerms, grownGhost);
    }
 
    if ( !m_dotTanGrads.isDefined()
-       ||(grownGhost2 != m_dotTanGrads.ghostVect())
+       ||(grownGhost != m_dotTanGrads.ghostVect())
        ||(a_Product.nComp() != m_dotTanGrads.nComp()) ) {
-      m_dotTanGrads.define(a_Product.getBoxes(), a_Product.nComp(), grownGhost2);
+      m_dotTanGrads.define(a_Product.getBoxes(), a_Product.nComp(), grownGhost);
    }
    
    if (a_fourthOrder) {
@@ -2118,7 +2118,6 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt ) 
    CH_TIMERS("PhaseGeom::fillInternalGhosts");
    CH_TIMER("phase_exchangeExtraBlockGhosts", t_exchange_extrablock_ghosts);
    CH_TIMER("phase_exchange_ghosts", t_exchange_ghosts);
-   CH_TIMER("phase_interpolate_from_sheared_ghosts", t_interpolate_sheared);
 
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
    const IntVect& nghost = a_data.ghostVect();
@@ -2184,7 +2183,6 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt ) 
       }
 
 #if CFG_DIM==3
-      CH_START(t_interpolate_sheared);
       if ( nghost[TOROIDAL_DIR] > 0 && m_mag_geom->shearedMBGeom() && m_mag_geom->fieldAlignedMapping() ) {
          // Fill the codim 1 extrablock ghost cells at the toroidal block boundaries
          interpolateFromShearedGhosts(a_data);
@@ -2197,7 +2195,6 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt ) 
             exchangeExtraBlockGhosts(a_data, codim, toroidal_dir_only, no_toroidal_exchange);
          }
       }
-      CH_STOP(t_interpolate_sheared);
 #endif
 
       fillCorners(a_data, nghost, CFG_DIM);
@@ -2238,7 +2235,8 @@ PhaseGeom::exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const
     the test below.
     */
    
-  
+   CH_TIME("PhaseGeom::exchangeExtraBlockGhosts");
+   
    IntVect ghost_vect = a_data.ghostVect();
    int max_ghost = -1;
    for (int dir=0; dir<SpaceDim; ++dir) {

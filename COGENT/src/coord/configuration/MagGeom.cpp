@@ -5750,4 +5750,30 @@ MagGeom::mixedBoundaries() const
   return result;
 } 
 
+void
+MagGeom::multiplyMatrix(LevelData<FluxBox>&       a_data,
+                        const LevelData<FluxBox>& a_mat) const
+{
+   CH_assert(a_data.ghostVect() <= a_mat.ghostVect());
+
+   for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+      FluxBox& this_data = a_data[dit];
+      FluxBox saved_data(this_data.box(),SpaceDim);
+      saved_data.copy(this_data);
+      this_data.setVal(0.);
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         FArrayBox& this_data_dir = this_data[dir];
+         FArrayBox& this_saved_data_dir = saved_data[dir];
+         FArrayBox tmp(this_data_dir.box(),1);
+         for (int i=0; i<SpaceDim; ++i) {
+            for (int j=0; j<SpaceDim; ++j) {
+               tmp.copy(a_mat[dit][dir], SpaceDim*i+j, 0, 1);
+               tmp.mult(this_saved_data_dir, j, 0, 1);
+               this_data_dir.plus(tmp, 0, i, 1);
+            }
+         }
+      }
+   }
+}
+   
 #include "NamespaceFooter.H"

@@ -10,6 +10,7 @@
 #include "SPMD.H"
 #include "PhaseBCUtils.H"
 #include "LogicalSheathBC.H"
+#include "FluxBC.H"
 
 #include <sstream>
 
@@ -241,7 +242,8 @@ SingleNullPhaseBC::SingleNullPhaseBC( const std::string& a_name,
      m_verbosity(a_verbosity),
      m_pp(a_pp),
      m_all_bdry_defined(false),
-     m_logical_sheath(false)
+     m_logical_sheath(false),
+     m_flux_bc(false)
 {
    m_inflow_function.resize( NUM_INFLOW );
    m_bc_type.resize( NUM_INFLOW );
@@ -369,6 +371,10 @@ void SingleNullPhaseBC::apply( KineticSpecies& a_species_phys,
        applySheathBC(a_species_phys, a_phi, a_velocity);
    }
    
+   if (m_flux_bc) {
+      applyFluxBC(a_species_phys, a_phi, a_velocity, a_time);
+   }
+   
    CH_START(t_set_codim_boundary_values);
    // interpolate all other codim boundaries
    CodimBC::setCodimBoundaryValues( Bf, coord_sys );
@@ -431,6 +437,69 @@ void SingleNullPhaseBC::applySheathBC( KineticSpecies& a_species,
    }
 }
 
+
+void SingleNullPhaseBC::applyFluxBC(KineticSpecies& a_species,
+                                    const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                                    const LevelData<FluxBox>& a_velocity,
+                                    const Real& a_time)
+{
+   // Get coordinate system parameters
+   const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
+   const MultiBlockCoordSys& coord_sys( *(geometry.coordSysPtr()) );
+   const PhaseGrid& phase_grid = geometry.phaseGrid();
+   const DisjointBoxLayout& dbl = phase_grid.disjointBoxLayout();
+   
+   //For flux BC calculations we only need one-cell-wide
+   //boundary storage, so define it here
+   BoundaryBoxLayoutPtrVect all_bdry_layouts;
+   PhaseBCUtils::defineBoundaryBoxLayouts(all_bdry_layouts,
+                                          dbl,
+                                          coord_sys,
+                                          IntVect::Unit );
+
+   
+   //Get boundary layout for the inner core boundary
+   BoundaryBoxLayoutPtrVect flux_bdry_layouts;
+   for (int i(0); i<all_bdry_layouts.size(); i++) {
+      const BoundaryBoxLayout& bdry_layout( *(all_bdry_layouts[i]) );
+      const int& dir( bdry_layout.dir() );
+      const Side::LoHiSide& side( bdry_layout.side() );
+      bool include_bdry(false);
+      if (dir == RADIAL_DIR && side == Side::Lo) {
+          KineticSpecies& bdry_data( *(m_all_bdry_data[i]) );
+          const PhaseGeom& geometry( bdry_data.phaseSpaceGeometry() );
+          const SingleNullPhaseCoordSys& coord_sys(dynamic_cast<const SingleNullPhaseCoordSys&>( geometry.phaseCoordSys()) );
+          const DisjointBoxLayout& grids( bdry_layout.disjointBoxLayout() );
+          for (LayoutIterator lit( grids.layoutIterator() ); lit.ok(); ++lit) {
+             // This is one-cell-wide boundary box
+             Box box_tmp = grids[lit];
+             // Shift boudary box into the physical domain (in the radial dir)
+             box_tmp.shift(RADIAL_DIR, 1);
+             const int block( coord_sys.whichBlock( box_tmp ) );
+             const int block_type( coord_sys.poloidalBlock( block ) );
+             
+             if (block_type==CFG::SingleNullBlockCoordSys::MCORE  ||
+                 block_type==CFG::SingleNullBlockCoordSys::LCORE  ||
+                 block_type==CFG::SingleNullBlockCoordSys::RCORE) {
+                
+                include_bdry = true;
+             }
+          }
+         
+          if (include_bdry) {
+            flux_bdry_layouts.push_back(all_bdry_layouts[i]);
+          }
+      }
+   }
+   
+   //Apply flux BC to the inner radial boundary
+   std::string prefix( m_pp.prefix() );
+   prefix += "." + m_bdry_name[RADIAL_CORE];
+   ParmParse pp( prefix.c_str() );
+   FluxBC fluxBC(flux_bdry_layouts, pp);
+   fluxBC.applyBC(a_species, a_velocity, a_phi, a_time);
+}
+
 void SingleNullPhaseBC::printParameters() const
 {
    if (procID()==0) {
@@ -461,6 +530,10 @@ void SingleNullPhaseBC::parseParameters( ParmParse& a_pp )
       m_inflow_function[i] = library->find( function_name );
       
       fpp.query( "type", m_bc_type[i] );
+      
+      if (m_bc_type[i] == "flux") {
+         m_flux_bc = true;
+      }
    }
 
    a_pp.query("logical_sheath",m_logical_sheath);

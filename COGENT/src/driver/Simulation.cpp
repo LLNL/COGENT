@@ -144,6 +144,9 @@ Simulation<SYSTEM>::Simulation( ParmParse& a_pp )
        m_shutdown_timer( NULL )
 #endif
 {
+#ifdef CH_MPI
+   MPI_Barrier(MPI_COMM_WORLD);
+#endif
    m_main_start = clock();
 #ifdef CH_USE_TIMER
    initializeTimers();
@@ -181,6 +184,9 @@ Simulation<SYSTEM>::Simulation( ParmParse& a_pp )
 
 #ifdef CH_USE_TIMER
    solve_timer->start();
+#endif
+#ifdef CH_MPI
+   MPI_Barrier(MPI_COMM_WORLD);
 #endif
    m_solve_start = clock();
 }
@@ -225,6 +231,9 @@ void Simulation<SYSTEM>::advance()
 
    postTimeStep();
 
+#ifdef CH_MPI
+   MPI_Barrier(MPI_COMM_WORLD);
+#endif
    clock_t m_now = clock();
    double walltime, walltime_g;
    walltime = ((double) (m_now - m_solve_start)) / CLOCKS_PER_SEC;
@@ -285,6 +294,9 @@ void Simulation<SYSTEM>::advance()
 template <class SYSTEM>
 void Simulation<SYSTEM>::finalize()
 {
+#ifdef CH_MPI
+   MPI_Barrier(MPI_COMM_WORLD);
+#endif
   m_solve_end = clock();
 #ifdef CH_USE_TIMER
    solve_timer->stop();
@@ -313,6 +325,9 @@ void Simulation<SYSTEM>::finalize()
       writeCheckpointFile();
    }
 
+#ifdef CH_MPI
+   MPI_Barrier(MPI_COMM_WORLD);
+#endif
    m_main_end = clock();
 
    double main_walltime = ((double) (m_main_end - m_main_start)) / CLOCKS_PER_SEC;

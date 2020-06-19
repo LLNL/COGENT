@@ -54,23 +54,32 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
      m_hdf_efield(false),
      m_hdf_density(false),
      m_hdf_momentum(false),
-     m_hdf_vpartheta(false),
-     m_hdf_rtheta(false),
-     m_hdf_pressure(false),
-     m_hdf_gradPoverN(false),
-     m_hdf_parallelHeatFlux(false),
-     m_hdf_temperature(false),
-     m_hdf_fourthMoment(false),
      m_hdf_ParallelMomentum(false),
      m_hdf_PoloidalMomentum(false),
+     m_hdf_ParallelVelocity(false),
+     m_hdf_energyDensity(false),
+     m_hdf_perpEnergyDensity(false),
+     m_hdf_parallelEnergyDensity(false),
+     m_hdf_pressure(false),
+     m_hdf_perpPressure(false),
+     m_hdf_parallelPressure(false),
+     m_hdf_gradPoverN(false),
+     m_hdf_temperature(false),
+     m_hdf_perpTemperature(false),
+     m_hdf_parallelTemperature(false),
+     m_hdf_parallelHeatFlux(false),
+     m_hdf_totalParallelHeatFlux(false),
+     m_hdf_fourthMoment(false),
      m_hdf_ParticleFlux(false),
      m_hdf_HeatFlux(false),
-     m_hdf_vparmu(false),
      m_hdf_AmpereErIncrement(false),
      m_hdf_total_density(false),
      m_hdf_dfn(false),
      m_hdf_deltaF(false),
      m_hdf_dfn_at_mu(false),
+     m_hdf_vpartheta(false),
+     m_hdf_rtheta(false),
+     m_hdf_vparmu(false),
      m_hdf_fluids(false),
      m_verbosity(0),
      m_use_native_time_integrator( !a_use_external_TI ),
@@ -1218,13 +1227,13 @@ void GKSystem::writePlotFile(const char    *prefix,
       // Momentum density                                                                                                                                                                                        
 
       if (m_hdf_momentum) {
-	std::string filename( plotFileName( prefix,
-					    "momentum",
-					    soln_species.name(),
-					    cur_step,
-					    species + 1) );
+         std::string filename( plotFileName( prefix,
+                                            "momentum",
+                                            soln_species.name(),
+                                            cur_step,
+                                            species + 1) );
 
-	m_gk_ops->plotMomentum( filename, soln_species, cur_time );
+         m_gk_ops->plotMomentum( filename, soln_species, cur_time );
       }
 
       // Parallel momentum moment
@@ -1249,6 +1258,53 @@ void GKSystem::writePlotFile(const char    *prefix,
          m_gk_ops->plotPoloidalMomentum( filename, soln_species, cur_time );
       }
 
+      // Parallel velocity moment
+
+      if (m_hdf_ParallelVelocity) {
+         std::string filename( plotFileName( prefix,
+                                             "ParallelVelocity",
+                                             soln_species.name(),
+                                             cur_step,
+                                             species + 1) );
+         m_gk_ops->plotParallelVelocity( filename, soln_species, cur_time );
+      }
+
+      // Energy density
+
+      if (m_hdf_energyDensity) {
+         std::string filename( plotFileName( prefix,
+                                             "energyDensity",
+                                             soln_species.name(),
+                                             cur_step,
+                                             species + 1) );
+
+         m_gk_ops->plotEnergyDensity( filename, soln_species, cur_time );
+      }
+
+      // Parallel energy density
+
+      if (m_hdf_parallelEnergyDensity) {
+         std::string filename( plotFileName( prefix,
+                                             "parallelEnergyDensity",
+                                             soln_species.name(),
+                                             cur_step,
+                                             species + 1) );
+
+         m_gk_ops->plotParallelEnergyDensity( filename, soln_species, cur_time );
+      }
+
+      // Perpendicular energy density
+
+      if (m_hdf_perpEnergyDensity) {
+         std::string filename( plotFileName( prefix,
+                                             "perpEnergyDensity",
+                                             soln_species.name(),
+                                             cur_step,
+                                             species + 1) );
+
+         m_gk_ops->plotPerpEnergyDensity( filename, soln_species, cur_time );
+      }
+      
       // Pressure
 
       if (m_hdf_pressure) {
@@ -1260,6 +1316,30 @@ void GKSystem::writePlotFile(const char    *prefix,
 
          m_gk_ops->plotPressure( filename, soln_species, cur_time );
       }
+
+      // Parallel Pressure
+
+       if (m_hdf_parallelPressure) {
+          std::string filename( plotFileName( prefix,
+                                              "parallelPressure",
+                                              soln_species.name(),
+                                              cur_step,
+                                              species + 1) );
+
+          m_gk_ops->plotParallelPressure( filename, soln_species, cur_time );
+       }
+
+       // Perpendicular Pressure
+
+       if (m_hdf_perpPressure) {
+          std::string filename( plotFileName( prefix,
+                                              "perpPressure",
+                                              soln_species.name(),
+                                              cur_step,
+                                              species + 1) );
+
+          m_gk_ops->plotPerpPressure( filename, soln_species, cur_time );
+       }
 
       // Grad P over N
 
@@ -1296,6 +1376,54 @@ void GKSystem::writePlotFile(const char    *prefix,
                                              species + 1) );
 
          m_gk_ops->plotTemperature( filename, soln_species, cur_time );
+      }
+
+      // Parallel temperature
+
+      if (m_hdf_parallelTemperature) {
+         std::string filename( plotFileName( prefix,
+                                             "parallelTemperature",
+                                             soln_species.name(),
+                                             cur_step,
+                                             species + 1) );
+
+         m_gk_ops->plotParallelTemperature( filename, soln_species, cur_time );
+      }
+
+      // Perpendicular temperature
+
+      if (m_hdf_perpTemperature) {
+         std::string filename( plotFileName( prefix,
+                                             "perpTemperature",
+                                             soln_species.name(),
+                                             cur_step,
+                                             species + 1) );
+
+         m_gk_ops->plotPerpTemperature( filename, soln_species, cur_time );
+      }
+
+      // Parallel heat flux
+      
+      if (m_hdf_parallelHeatFlux) {
+         std::string filename( plotFileName( prefix,
+                                            "ParallelHeatFlux",
+                                            soln_species.name(),
+                                            cur_step,
+                                            species + 1) );
+         
+         m_gk_ops->plotParallelHeatFlux( filename, soln_species, cur_time );
+      }
+
+      // Total parallel heat flux
+      
+      if (m_hdf_totalParallelHeatFlux) {
+         std::string filename( plotFileName( prefix,
+                                            "totalParallelHeatFlux",
+                                            soln_species.name(),
+                                            cur_step,
+                                            species + 1) );
+         
+         m_gk_ops->plotTotalParallelHeatFlux( filename, soln_species, cur_time );
       }
 
       // Fourth momemnt
@@ -1847,7 +1975,7 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
    // Should we make hdf files for charge density?
    a_ppgksys.query("hdf_density",m_hdf_density);
 
-   // Should we make hdf files for momentum?                                                                                                                                                               
+   // Should we make hdf files for momentum?
    a_ppgksys.query("hdf_momentum",m_hdf_momentum);
 
    // Should we make an hdf file for the total charge density?
@@ -1859,8 +1987,26 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
    // Should we make hdf files for PoloidalMomentum?
    a_ppgksys.query("hdf_PoloidalMomentum",m_hdf_PoloidalMomentum);
 
+   // Should we make hdf files for ParallelMomentum?
+   a_ppgksys.query("hdf_ParallelVelocity",m_hdf_ParallelVelocity);
+
+   // Should we make hdf files for pressure?
+   a_ppgksys.query("hdf_energyDensity",m_hdf_energyDensity);
+
+   // Should we make hdf files for temperature?
+   a_ppgksys.query("hdf_parallelEnergyDensity",m_hdf_parallelEnergyDensity);
+
+   // Should we make hdf files for temperature?
+   a_ppgksys.query("hdf_perpEnergyDensity",m_hdf_perpEnergyDensity);
+   
    // Should we make hdf files for pressure?
    a_ppgksys.query("hdf_pressure",m_hdf_pressure);
+
+   // Should we make hdf files for temperature?
+   a_ppgksys.query("hdf_parallelPressure",m_hdf_parallelPressure);
+
+   // Should we make hdf files for temperature?
+   a_ppgksys.query("hdf_perpPressure",m_hdf_perpPressure);
 
    // Should we make hdf files for gradPoverN?                                                       
    a_ppgksys.query("hdf_gradPoverN",m_hdf_gradPoverN);
@@ -1870,6 +2016,18 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
 
    // Should we make hdf files for temperature?
    a_ppgksys.query("hdf_temperature",m_hdf_temperature);
+
+   // Should we make hdf files for temperature?
+   a_ppgksys.query("hdf_parallelTemperature",m_hdf_parallelTemperature);
+
+   // Should we make hdf files for temperature?
+   a_ppgksys.query("hdf_perpTemperature",m_hdf_perpTemperature);
+
+   // Should we make hdf files for parallel heat flux?
+   a_ppgksys.query("hdf_parallelHeatFlux",m_hdf_parallelHeatFlux);
+
+   // Should we make hdf files for parallel heat flux?
+   a_ppgksys.query("hdf_totalParallelHeatFlux",m_hdf_totalParallelHeatFlux);
 
    // Should we make hdf files for fourthMoment?
    a_ppgksys.query("hdf_fourthMoment",m_hdf_fourthMoment);

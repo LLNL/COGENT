@@ -123,13 +123,14 @@ public:
 protected:
 
    /**
-    * Computes <grad(psi) * Flux>/(one-cell wide shell volume) 
+    * Computes <grad(psi) * Flux> * S/(one-cell wide shell volume) 
     * radial_flux_divergence_average does not have ghost cells, and stores the data in the radial direction  as follows
-    * radial_flux_divergence_average[i] = <grad(psi) *Flux[i]>/shell_volume[i]
-    * lo_value = radial_flux_divergence_average[0] = <grad(psi) * Flux[0]>/shell_volume[0]
-    * hi_value = <grad(psi) * Flux[nrad+1]>/shell_volume[nrad]
+    * radial_flux_divergence_average[i] = <grad(psi) *Flux[i]> * S[i]/shell_volume[i]
+    * lo_value = radial_flux_divergence_average[0] = <grad(psi) * Flux[0]> * S[0]/shell_volume[0]
+    * hi_value = <grad(psi) * Flux[nrad+1]> * S[nrad]/shell_volume[nrad]
     * n_rad number of the core cells in the radial direction 
-    * <...> denotes the shell-average
+    * <...> denotes the shell-average, S is the surface area of a flux surface
+    * <grad(psi) * Flux> * S is the total flux through the flux-surface
     */
 
    void computeRadialFluxDivergence(const RefCountedPtr<PhaseGeom>&  geometry,
@@ -140,6 +141,13 @@ protected:
                                     double&                          hi_value,
                                     CFG::LevelData<CFG::FArrayBox>&  radial_flux_divergence_average) const;
 
+   void computeRadialFluxDivergence(const RefCountedPtr<PhaseGeom>&  geometry,
+                                    const LevelData<FluxBox>&        flux,
+                                    const KineticSpecies&            species,
+                                    double&                          lo_value,
+                                    double&                          hi_value) const;
+
+   
    void computeRadialNormalFluxDivergence(const RefCountedPtr<PhaseGeom>&  geometry,
                                           LevelData<FluxBox>&              flux,
                                           double                           mass,
@@ -148,11 +156,21 @@ protected:
                                           double&                          hi_value,
                                           CFG::LevelData<CFG::FArrayBox>&  radial_flux_divergence_average) const;
 
+   void computeRadialNormalFluxDivergence(const RefCountedPtr<PhaseGeom>&  geometry,
+                                          const LevelData<FluxBox>&        flux,
+                                          const KineticSpecies&            species,
+                                          double&                          lo_value,
+                                          double&                          hi_value) const;
    bool m_self_consistent_bcs_only;
 
    CFG::LevelData<CFG::FArrayBox> m_total_radial_flux_divergence_average;
    double m_lo_radial_flux_divergence_average;
    double m_hi_radial_flux_divergence_average;
+   
+   mutable LevelData<FArrayBox> m_volume;
+   mutable LevelData<FluxBox> m_bdry_flux;
+   mutable LevelData<FluxBox> m_bdry_flux_normal;
+   mutable LevelData<FArrayBox> m_phase_divergence_bdry;
 };
 
 #include "NamespaceFooter.H"

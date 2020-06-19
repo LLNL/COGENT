@@ -437,7 +437,7 @@ void GKOps::postTimeStage( const int   a_step,
    // Calculation of the field is skipped for stage 0, since we assume it
    // has already been calculated to compute the velocity used in the
    // time step estimate.
-   if (a_stage && !m_zero_efield) {
+   if (a_stage && !m_zero_efield && !m_skip_efield_stage_update ) {
       setElectricField( a_state_comp, a_step, m_phi, *m_E_field );
    }
 
@@ -1498,7 +1498,14 @@ void GKOps::parseParameters( ParmParse& a_ppgksys )
    else {
       m_old_vorticity_model = false;
    }
-   
+
+   if (a_ppgksys.contains("skip_efield_stage_update")) {
+      a_ppgksys.get("skip_efield_stage_update", m_skip_efield_stage_update);
+   }
+   else {
+      m_skip_efield_stage_update = false;
+   }
+
    if (a_ppgksys.contains("consistent_potential_bcs")) {
       a_ppgksys.query( "consistent_potential_bcs", m_consistent_potential_bcs );
    }
@@ -2023,6 +2030,65 @@ void GKOps::plotPoloidalMomentum( const std::string&    a_filename,
    phase_geometry.plotConfigurationData( a_filename.c_str(), poloidal_mom, a_time );
 }
 
+void GKOps::plotParallelVelocity( const std::string&    a_filename,
+                                  const KineticSpecies& a_soln_species,
+                                  const double&         a_time ) const
+{
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
+   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+
+   CFG::LevelData<CFG::FArrayBox> parallel_velocity( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   a_soln_species.ParallelVelocity( parallel_velocity );
+
+   phase_geometry.plotConfigurationData( a_filename.c_str(), parallel_velocity, a_time );
+}
+
+
+void GKOps::plotEnergyDensity(const std::string&    a_filename,
+                              const KineticSpecies& a_soln_species,
+                              const double&         a_time ) const
+{
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
+   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+
+   CFG::LevelData<CFG::FArrayBox> energy_density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   a_soln_species.energyMoment( energy_density );
+   
+   phase_geometry.plotConfigurationData( a_filename.c_str(), energy_density, a_time );
+}
+
+
+void GKOps::plotParallelEnergyDensity(const std::string&    a_filename,
+                                      const KineticSpecies& a_soln_species,
+                                      const double&         a_time ) const
+{
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
+   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+
+   CFG::LevelData<CFG::FArrayBox> energy_density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   a_soln_species.parallelEnergyDensity( energy_density );
+   
+   phase_geometry.plotConfigurationData( a_filename.c_str(), energy_density, a_time );
+}
+
+
+void GKOps::plotPerpEnergyDensity(const std::string&    a_filename,
+                                  const KineticSpecies& a_soln_species,
+                                  const double&         a_time ) const
+{
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
+   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+
+   CFG::LevelData<CFG::FArrayBox> energy_density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   a_soln_species.perpEnergyDensity( energy_density );
+   
+   phase_geometry.plotConfigurationData( a_filename.c_str(), energy_density, a_time );
+}
+
 
 void GKOps::plotPressure( const std::string&    a_filename,
                           const KineticSpecies& a_soln_species,
@@ -2032,23 +2098,45 @@ void GKOps::plotPressure( const std::string&    a_filename,
    const PhaseGeom& phase_geometry( *m_phase_geometry );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
 
-   CFG::LevelData<CFG::FArrayBox> density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.numberDensity( density );
-   a_soln_species.ParallelMomentum( ParallelMom );
-
-   for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
-      ParallelMom[dit].divide(density[dit]);
-   }
    CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.pressureMoment(pressure, ParallelMom);
+   a_soln_species.pressureMoment( pressure );
 
    phase_geometry.plotConfigurationData( a_filename.c_str(), pressure, a_time );
 }
 
-void GKOps::plotGradPoverN( const std::string&    a_filename,
-			    const KineticSpecies& a_soln_species,
-			    const double&         a_time ) const
+
+void GKOps::plotParallelPressure(const std::string&    a_filename,
+                                 const KineticSpecies& a_soln_species,
+                                 const double&         a_time ) const
+{
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
+   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+
+   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   a_soln_species.parallelPressure( pressure );
+
+   phase_geometry.plotConfigurationData( a_filename.c_str(), pressure, a_time );
+}
+
+
+void GKOps::plotPerpPressure(const std::string&    a_filename,
+                             const KineticSpecies& a_soln_species,
+                             const double&         a_time ) const
+{
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
+   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+
+   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   a_soln_species.perpPressure( pressure );
+
+   phase_geometry.plotConfigurationData( a_filename.c_str(), pressure, a_time );
+}
+
+void GKOps::plotGradPoverN(const std::string&    a_filename,
+                           const KineticSpecies& a_soln_species,
+                           const double&         a_time ) const
 {
    CH_assert( m_phase_geometry != NULL );
    const PhaseGeom& phase_geometry( *m_phase_geometry );
@@ -2088,7 +2176,7 @@ void GKOps::plotGradPoverN( const std::string&    a_filename,
       mag_geom.getBlockCoordSys(cfg_grids[dit]).computePsiThetaProjections(pressure_gradient[dit]);
       gradPoverN[dit].copy(pressure_gradient[dit]);
       for (int n=0; n<gradPoverN.nComp(); ++n) {
-	gradPoverN[dit].divide(density[dit], 0, n);
+         gradPoverN[dit].divide(density[dit], 0, n);
       }
    }
    
@@ -2096,8 +2184,54 @@ void GKOps::plotGradPoverN( const std::string&    a_filename,
 
 #else
    MayDay::Error("GKOps::gradPover this diagnostcs is not implemented in 3D");
-#endif  
+#endif
 }
+
+void GKOps::plotTemperature( const std::string&    a_filename,
+                             const KineticSpecies& a_soln_species,
+                             const double&         a_time ) const
+{
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
+   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+
+   CFG::LevelData<CFG::FArrayBox> temperature( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   a_soln_species.temperature( temperature );
+
+   phase_geometry.plotConfigurationData( a_filename.c_str(), temperature, a_time );
+}
+
+
+
+void GKOps::plotParallelTemperature(const std::string&    a_filename,
+                                    const KineticSpecies& a_soln_species,
+                                    const double&         a_time ) const
+{
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
+   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+
+   CFG::LevelData<CFG::FArrayBox> temperature( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   a_soln_species.parallelTemperature( temperature );
+
+   phase_geometry.plotConfigurationData( a_filename.c_str(), temperature, a_time );
+}
+
+
+void GKOps::plotPerpTemperature( const std::string&    a_filename,
+                                 const KineticSpecies& a_soln_species,
+                                 const double&         a_time ) const
+{
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
+   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+
+   CFG::LevelData<CFG::FArrayBox> temperature( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   a_soln_species.perpTemperature( temperature );
+
+   phase_geometry.plotConfigurationData( a_filename.c_str(), temperature, a_time );
+}
+
 
 void GKOps::plotParallelHeatFlux( const std::string&    a_filename,
                                   const KineticSpecies& a_soln_species,
@@ -2122,35 +2256,26 @@ void GKOps::plotParallelHeatFlux( const std::string&    a_filename,
 }
 
 
-void GKOps::plotTemperature( const std::string&    a_filename,
-                             const KineticSpecies& a_soln_species,
-                             const double&         a_time ) const
+
+void GKOps::plotTotalParallelHeatFlux(const std::string&    a_filename,
+                                      const KineticSpecies& a_soln_species,
+                                      const double&         a_time ) const
 {
+   CH_assert( isDefined() );
    CH_assert( m_phase_geometry != NULL );
    const PhaseGeom& phase_geometry( *m_phase_geometry );
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   CFG::LevelData<CFG::FArrayBox> density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.numberDensity( density );
-
-   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.ParallelMomentum( ParallelMom );
-   for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
-      ParallelMom[dit].divide(density[dit]);
+   
+   CFG::LevelData<CFG::FArrayBox> zero_velocity( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   for (CFG::DataIterator dit(zero_velocity.dataIterator()); dit.ok(); ++dit) {
+      zero_velocity[dit].setVal(0.0);
    }
 
-   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.pressureMoment(pressure, ParallelMom);
-
-   CFG::LevelData<CFG::FArrayBox> temperature;
-   temperature.define( pressure );
-
-   for (CFG::DataIterator dit(temperature.dataIterator()); dit.ok(); ++dit) {
-      temperature[dit].divide(density[dit]);
-   }
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), temperature, a_time );
+   CFG::LevelData<CFG::FArrayBox> parallelHeatFlux( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
+   a_soln_species.parallelHeatFluxMoment( parallelHeatFlux, zero_velocity );
+   
+   phase_geometry.plotConfigurationData( a_filename.c_str(), parallelHeatFlux, a_time );
 }
-
 
 void GKOps::plotFourthMoment( const std::string&    a_filename,
                               const KineticSpecies& a_soln_species,

@@ -88,9 +88,9 @@ public:
                                          double&                     hi_value,
                                          LevelData<FArrayBox>&       radial_gkp_divergence_average);
    
-   void computeCoefficients( const LevelData<FArrayBox>& ni,
-                             LevelData<FluxBox>& mapped_coefficients,
-                             LevelData<FluxBox>& unmapped_coefficients );
+   virtual void computeCoefficients(const LevelData<FArrayBox>& ni,
+                                    LevelData<FluxBox>& mapped_coefficients,
+                                    LevelData<FluxBox>& unmapped_coefficients );
 
    void computeCoefficientsGK( LevelData<FluxBox>& mapped_coefficients_gk,
                                LevelData<FluxBox>& unmapped_coefficients_gk );
@@ -128,6 +128,8 @@ public:
        CH_assert(m_include_FLR_effects == false);
      }
    }
+   
+   inline void setModel(const std::string& model) {m_model = model;};
 
    /// parseParameters function
    /**
@@ -149,9 +151,7 @@ public:
    static const char* pp_name;
    
    Real m_debye_number2;
-   Real m_dt_implicit;
    Real m_alpha;
-   std::string m_model;
    
 protected:
 
@@ -163,6 +163,7 @@ protected:
    
    void computeParallelConductivity(const LevelData<FluxBox>& Te,
                                     LevelData<FluxBox>&       parallel_conductivity ) const;
+   
 
 #ifdef with_petsc
    MBPETScSolver* m_preconditioner;
@@ -180,14 +181,6 @@ protected:
    LevelData<FluxBox> m_unmapped_coefficients_gk;
    std::vector<PS::LevelData<PS::FArrayBox>* > m_FLR_integrand_factor;
    
-   RefCountedPtr<GridFunction> m_electron_temperature;
-   RefCountedPtr<GridFunction> m_charge_exchange_coeff;
-   RefCountedPtr<GridFunction> m_parallel_conductivity;
-
-   LevelData<FluxBox> m_electron_temperature_face;
-   LevelData<FluxBox> m_parallel_cond_face;
-   LevelData<FluxBox> m_charge_exchange_coeff_face;
-
    MultiBlockLevelExchangeCenter* m_mblx_ptr;
 
    bool m_include_FLR_effects;
@@ -200,6 +193,7 @@ protected:
 
 private:
    int m_verbosity;
+   std::string m_model;
 };
 
 

@@ -161,23 +161,90 @@ c     local variables
 
 c     local variables
       integer CHF_DDECL[i;j;k;l;m], comp
-      double precision vperp2, vparLoc, v2
+      double precision mvperp2, vparLoc, mv2
 
       CHF_MULTIDO[gridbox;i;j;k;l;m]
 
 #if CH_SPACEDIM==4
-         vperp2 = velCoords(CHF_IX[i;j;k;l;m],1) * B(i,j,CHF_LBOUND[b;2],CHF_LBOUND[b;3])
+         mvperp2 = velCoords(CHF_IX[i;j;k;l;m],1) * B(i,j,CHF_LBOUND[b;2],CHF_LBOUND[b;3])
          vparLoc = velCoords(CHF_IX[i;j;k;l;m],0) - vparShift(i,j,CHF_LBOUND[vparShift;2],CHF_LBOUND[vparShift;3])
 #else
-         vperp2 = velCoords(CHF_IX[i;j;k;l;m],1) * B(i,j,k,CHF_LBOUND[b;3],CHF_LBOUND[b;4])
+         mvperp2 = velCoords(CHF_IX[i;j;k;l;m],1) * B(i,j,k,CHF_LBOUND[b;3],CHF_LBOUND[b;4])
          vparLoc = velCoords(CHF_IX[i;j;k;l;m],0) - vparShift(i,j,k,CHF_LBOUND[vparShift;3],CHF_LBOUND[vparShift;4])
 #endif
 
-         v2 = mass * vparLoc**2 + vperp2	 
+         mv2 = mass * vparLoc**2 + mvperp2	 
 
          do comp = 0, CHF_NCOMP[result]-1
 
-           result(CHF_IX[i;j;k;l;m],comp) = result(CHF_IX[i;j;k;l;m],comp) * v2 / 3.0
+           result(CHF_IX[i;j;k;l;m],comp) = result(CHF_IX[i;j;k;l;m],comp) * mv2 / 3.0
+
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine compute_perp_pressure(
+     &     CHF_FRA[result],
+     &     CHF_CONST_FRA[velCoords],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_BOX[gridbox]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m], comp
+      double precision mvperp2 
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+         mvperp2 = velCoords(CHF_IX[i;j;k;l;m],1) * B(i,j,CHF_LBOUND[b;2],CHF_LBOUND[b;3])
+#else
+         mvperp2 = velCoords(CHF_IX[i;j;k;l;m],1) * B(i,j,k,CHF_LBOUND[b;3],CHF_LBOUND[b;4])
+#endif	 
+
+         do comp = 0, CHF_NCOMP[result]-1
+
+           result(CHF_IX[i;j;k;l;m],comp) = result(CHF_IX[i;j;k;l;m],comp) * mvperp2 / 2.0
+
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine compute_parallel_pressure(
+     &     CHF_FRA[result],
+     &     CHF_CONST_FRA[velCoords],
+     &     CHF_CONST_FRA1[vparShift],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_REAL[mass],
+     &     CHF_BOX[gridbox]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m], comp
+      double precision vperp2, vparLoc, mv2
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+         vparLoc = velCoords(CHF_IX[i;j;k;l;m],0) - vparShift(i,j,CHF_LBOUND[vparShift;2],CHF_LBOUND[vparShift;3])
+#else
+         vparLoc = velCoords(CHF_IX[i;j;k;l;m],0) - vparShift(i,j,k,CHF_LBOUND[vparShift;3],CHF_LBOUND[vparShift;4])
+#endif
+
+         mv2 = mass * vparLoc**2	 
+
+         do comp = 0, CHF_NCOMP[result]-1
+
+           result(CHF_IX[i;j;k;l;m],comp) = result(CHF_IX[i;j;k;l;m],comp) * mv2
 
          enddo
 

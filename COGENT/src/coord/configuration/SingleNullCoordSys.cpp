@@ -2057,6 +2057,13 @@ SingleNullCoordSys::readParams( ParmParse& a_pp_grid,
       a_pp_geom.query( "num_toroidal_sectors", m_num_toroidal_sectors);
    }
 
+   if ( a_pp_geom.contains("interpolation_scheme") ) {
+      a_pp_geom.query( "interpolation_scheme", m_interpolation_scheme);
+   }
+   else {
+     m_interpolation_scheme = "mapped";
+   }
+   
    a_pp_geom.get( "toroidal_width_over_2pi", m_toroidal_width);
    CH_assert(m_toroidal_width > 0. && m_toroidal_width <= 1.);
    m_toroidal_width *= 2.*Pi;
@@ -2768,6 +2775,58 @@ SingleNullCoordSys::defineStencilsUe8( const DisjointBoxLayout&  a_grids,
 }
 
 
+bool
+SingleNullCoordSys::isCORE(const int a_block_number) const
+{
+   bool result(false);
+
+   int poloidal_block = poloidalBlockNumber(a_block_number);
+   
+   if (poloidal_block == SingleNullBlockCoordSys::LCORE ||
+       poloidal_block == SingleNullBlockCoordSys::RCORE ||
+       poloidal_block == SingleNullBlockCoordSys::MCORE) {
+
+      result = true;
+   }
+   
+   return result;
+}
+
+bool
+SingleNullCoordSys::isSOL(const int a_block_number) const
+{
+   bool result(false);
+
+   int poloidal_block = poloidalBlockNumber(a_block_number);
+   
+   if (poloidal_block == SingleNullBlockCoordSys::LCSOL ||
+       poloidal_block == SingleNullBlockCoordSys::RCSOL ||
+       poloidal_block == SingleNullBlockCoordSys::MCSOL ||
+       poloidal_block == SingleNullBlockCoordSys::LSOL ||
+       poloidal_block == SingleNullBlockCoordSys::RSOL ) {
+
+      result = true;
+   }
+   
+   return result;
+}
+
+bool
+SingleNullCoordSys::isPF(const int a_block_number) const
+{
+   bool result(false);
+
+   int poloidal_block = poloidalBlockNumber(a_block_number);
+   
+   if (poloidal_block == SingleNullBlockCoordSys::LPF ||
+       poloidal_block == SingleNullBlockCoordSys::RPF ) {
+
+      result = true;
+   }
+   
+   return result;
+}
+
 void SingleNullCoordSys::extrapolateEfield( LevelData<FluxBox>&   a_Er_average_face,
                                             LevelData<FArrayBox>& a_Er_average_cell ) const
 {
@@ -3272,7 +3331,15 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    // the interpolation error is h^3.
    int order = 3;
 
-   getInterpolationCoefficients(a_interpStecil, a_interpStencilOffsets, xi_dst, a_ivDst, dx_dst, order);
+   if (m_interpolation_scheme == "mapped") {
+     getInterpolationCoefficients(a_interpStecil, a_interpStencilOffsets, xi_dst, a_ivDst, dx_dst, order);
+   }
+   else if (m_interpolation_scheme == "physical") {
+     getInterpolationCoefficients(a_interpStecil, a_interpStencilOffsets, X, a_ivDst, *dst_coord_sys);
+   }
+   else {
+     MayDay::Error("SingleNullCoordSys::toroidalBlockRemapping(): Invalid interpolation scheme type");
+   }
 
 #if 0
    if ( a_ivDst[POLOIDAL_DIR] <= dst_domain_box.smallEnd(POLOIDAL_DIR) &&
@@ -3351,6 +3418,80 @@ SingleNullCoordSys::getInterpolationCoefficients( Vector<Real>&    a_coeff,
       MayDay::Error("getInterpolationCoefficients:: only order = 2 or 3 is currently supported");
    }
    
+   a_coeff[0] = coeffLo;
+   a_coeff[1] = coeffCent;
+   a_coeff[2] = coeffHi;
+}
+
+
+void
+SingleNullCoordSys::getInterpolationCoefficients( Vector<Real>&                  a_coeff,
+                                                  Vector<int>&                   a_offsets,
+                                                  const RealVect&                a_X,
+                                                  const IntVect&                 a_iv0_dst,
+                                                  const SingleNullBlockCoordSys& a_coords_dst) const
+
+{
+   //Get physical coordinate of the dst cell-center
+   RealVect dx = a_coords_dst.dx();
+   RealVect xi_dest_cent;
+   for (int dir=0; dir<SpaceDim; ++dir) {
+      if (dir == POLOIDAL_DIR) {
+         xi_dest_cent[dir] = (a_iv0_dst[dir] + a_offsets[1] + 0.5) * dx[dir];
+      }
+      else {
+         xi_dest_cent[dir] = (a_iv0_dst[dir] + 0.5) * dx[dir];
+      }
+   }
+   RealVect X_cent = a_coords_dst.realCoord(xi_dest_cent);
+   Real R_cent = sqrt(X_cent[0]*X_cent[0] + X_cent[1]*X_cent[1]);
+   Real Z_cent = X_cent[2];
+
+   //Get physical coordinate of the hi cell-center
+   RealVect xi_dest_hi(xi_dest_cent);
+   xi_dest_hi[POLOIDAL_DIR] += dx[POLOIDAL_DIR];
+   RealVect X_hi = a_coords_dst.realCoord(xi_dest_hi);
+   Real R_hi = sqrt(X_hi[0]*X_hi[0] + X_hi[1]*X_hi[1]);
+   Real Z_hi = X_hi[2];
+
+   //Get physical coordinate of the lo cell-center
+   RealVect xi_dest_lo(xi_dest_cent);
+   xi_dest_lo[POLOIDAL_DIR] -= dx[POLOIDAL_DIR];
+   RealVect X_lo = a_coords_dst.realCoord(xi_dest_lo);
+   Real R_lo = sqrt(X_lo[0]*X_lo[0] + X_lo[1]*X_lo[1]);
+   Real Z_lo = X_lo[2];
+   
+   //Get (R,Z) coordinate of the destination point
+   Real R_point = sqrt(a_X[0]*a_X[0] + a_X[1]*a_X[1]);
+   Real Z_point = a_X[2];
+
+   Real d0;
+   Real d1;
+   Real d2;
+   
+   // Check if radial points are monotonically increasing/decreasing
+   if ((R_hi - R_cent)*(R_cent - R_lo) > 0 && abs(R_hi-R_lo)>abs(Z_hi-Z_lo)) {
+      d0 = R_lo - R_point;
+      d1 = R_cent - R_point;
+      d2 = R_hi - R_point;
+   }
+   // else use Z points
+   else if ( (Z_hi - Z_cent)*(Z_cent - Z_lo) > 0 && abs(Z_hi-Z_lo)>abs(R_hi-R_lo)) {
+      d0 = Z_lo - Z_point;
+      d1 = Z_cent - Z_point;
+      d2 = Z_hi - Z_point;
+   }
+   
+   else {
+      MayDay::Error("getInterpolationCoefficients:: flux-surface appears to be too curved");
+   }
+   
+   //Get inerpolation coefficients
+   Real coeffLo = d1*d2/(d0-d1)/(d0-d2);
+   Real coeffCent = d2*d0/(d1-d2)/(d1-d0);
+   Real coeffHi = d0*d1/(d2-d0)/(d2-d1);
+
+   //Assign interpolation coefficients
    a_coeff[0] = coeffLo;
    a_coeff[1] = coeffCent;
    a_coeff[2] = coeffHi;

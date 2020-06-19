@@ -32,6 +32,8 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
      m_larmor(a_larmor),
      m_my_pc_idx_e(-1),
      m_my_pc_idx_i(-1),
+     m_it_counter(0),
+     m_update_pc_freq(1),
      m_sigma_div_e_coefs_set(false),
      m_reynolds_stress(false),
      m_ExB_current_model(true),
@@ -47,41 +49,27 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
    // This might be needed for seetin up fluid preconditioner  
    m_opt_string = "gksystem";
    
-   const std::string geomType = a_geometry.getCoordSys()->type();
-   
-   bool subtract_fs_par_div = (a_geometry.shearedMBGeom() && geomType != "SingleNull") ;
-   
-   m_parallel_current_divergence_op = new GKPoisson(pp_vorticity_op, a_geometry, a_larmor, 0.);
-   m_parallel_current_divergence_op->m_model = "ParallelCurrent";
-   m_parallel_current_divergence_op->m_dt_implicit = 1.;
-   m_parallel_current_divergence_op->m_subtract_fs_par_div = subtract_fs_par_div;
+   m_parallel_current_divergence_op = new GKVorticity(pp_vorticity_op, a_geometry, a_larmor, 0.);
+   m_parallel_current_divergence_op->setModel("ParallelCurrent");
    m_parallel_current_divergence_op_bcs = elliptic_op_bc_factory.create( name,
                                                                          ppsp,
                                                                          *(a_geometry.getCoordSys()),
                                                                          false );
    //setCoreBC( 0., 0., *m_parallel_current_divergence_op_bcs );
 
-   m_par_cond_op = new GKPoisson(pp_vorticity_op, a_geometry, 0., 0.);
-   m_par_cond_op->m_model = "Vorticity";
-   m_par_cond_op->m_dt_implicit = 1.;
-   m_par_cond_op->m_subtract_fs_par_div = subtract_fs_par_div;
+   m_par_cond_op = new GKVorticity(pp_vorticity_op, a_geometry, 0., 0.);
    m_par_cond_op_bcs = elliptic_op_bc_factory.create( name,
                                                       ppsp,
                                                       *(a_geometry.getCoordSys()),
                                                       false );
 
-   m_imex_pc_op = new GKPoisson(pp_vorticity_op, a_geometry, a_larmor, 0.);
-   m_imex_pc_op->m_model = "Vorticity";
-   m_imex_pc_op->m_dt_implicit = 1.;
-   m_imex_pc_op->m_subtract_fs_par_div = subtract_fs_par_div;
+   m_imex_pc_op = new GKVorticity(pp_vorticity_op, a_geometry, a_larmor, 0.);
    m_imex_pc_op_bcs = elliptic_op_bc_factory.create( name,
                                                      ppsp,
                                                       *(a_geometry.getCoordSys()),
                                                      false );
 
    m_gyropoisson_op = new GKPoisson(pp_vorticity_op, a_geometry, a_larmor, 0.);
-   m_gyropoisson_op->m_model = "GyroPoisson";
-   m_gyropoisson_op->m_dt_implicit = 1.;
    m_gyropoisson_op_bcs = elliptic_op_bc_factory.create( name,
                                                          ppsp,
                                                          *(a_geometry.getCoordSys()),
@@ -752,7 +740,7 @@ void VorticityOp::computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&
             flux[dit][dir].mult(adv_vel[dit][dir],1,1);
             flux[dit][dir].mult(adv_vel[dit][dir],2,2);
          }
-	 flux[dit][dir] *= m_larmor;
+         flux[dit][dir] *= m_larmor;
       }
    }
 
@@ -810,7 +798,7 @@ void VorticityOp::computeReynoldsStressTerm( LevelData<FArrayBox>&             a
             flux[dit][dir].mult(ExB_drift[dit][dir],1,1);
             flux[dit][dir].mult(ExB_drift[dit][dir],2,2);
          }
-	 flux[dit][dir] *= m_larmor;
+         flux[dit][dir] *= m_larmor;
       }
    }
 
@@ -882,8 +870,16 @@ void VorticityOp::setCoreBC( const double   a_core_inner_bv,
                              EllipticOpBC&  a_bc ) const 
 {
    if ( typeid(*(m_geometry.getCoordSys())) == typeid(LogRectCoordSys) ) {
-      a_bc.setBCValue(0,RADIAL_DIR,0,a_core_inner_bv);
-      a_bc.setBCValue(0,RADIAL_DIR,1,a_core_outer_bv);
+     if (m_consistent_lower_bc_only) { 
+       a_bc.setBCValue(0,RADIAL_DIR,0,a_core_inner_bv);
+     }
+     else if (m_consistent_upper_bc_only) {
+       a_bc.setBCValue(0,RADIAL_DIR,1,a_core_outer_bv);
+     }
+     else{
+       a_bc.setBCValue(0,RADIAL_DIR,0,a_core_inner_bv);
+       a_bc.setBCValue(0,RADIAL_DIR,1,a_core_outer_bv);
+     }
    }
    else if ( typeid(*(m_geometry.getCoordSys())) == typeid(SNCoreCoordSys) ) {
       a_bc.setBCValue(SNCoreBlockCoordSys::LCORE,RADIAL_DIR,0,a_core_inner_bv);
@@ -942,10 +938,10 @@ void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_p
    
    // Compute the parallel current divergence
    computeIonChargeDensity(m_ion_charge_density, a_kinetic_species);
-   m_parallel_current_divergence_op->m_dt_implicit = a_dt;
+   m_parallel_current_divergence_op->setImplicitDt(a_dt);
    m_parallel_current_divergence_op->setOperatorCoefficients(m_ion_charge_density, *m_parallel_current_divergence_op_bcs, false);
    m_parallel_current_divergence_op->computeFluxDivergence(m_ion_charge_density, m_negativeDivJpar, false, true);
-      
+    
    // Compute the perpendicular current divergence
    LevelData<FArrayBox> div_J_electron_mag(grids, 1, IntVect::Zero);
    if (m_ExB_current_model) {
@@ -969,16 +965,18 @@ void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_p
       gkPoissonRHS[dit] -= div_J_ion_mag[dit];
 
       if (m_reynolds_stress) {
-	negative_div_ExB_vorticity[dit] *= a_dt;
-	gkPoissonRHS[dit] -= negative_div_ExB_vorticity[dit];
+         negative_div_ExB_vorticity[dit] *= a_dt;
+         gkPoissonRHS[dit] -= negative_div_ExB_vorticity[dit];
       }
    }
       
    // Do the implicit vorticity solve
    computeIonMassDensity(m_ion_mass_density, a_kinetic_species);
-   m_imex_pc_op->m_dt_implicit = a_dt;
+   m_imex_pc_op->setImplicitDt(a_dt);
    if (a_scalar_data.size() > 0) setCoreBC( a_scalar_data[0], -a_scalar_data[1], *m_imex_pc_op_bcs );
-   m_imex_pc_op->setOperatorCoefficients(m_ion_mass_density, *m_imex_pc_op_bcs, true);
+
+   bool update_precond = (m_it_counter % m_update_pc_freq == 0) ? true : false;
+   m_imex_pc_op->setOperatorCoefficients(m_ion_mass_density, *m_imex_pc_op_bcs, update_precond);
 
    m_imex_pc_op->computePotential( a_phi, gkPoissonRHS );
    m_imex_pc_op->fillInternalGhosts( a_phi );
@@ -989,6 +987,8 @@ void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_p
    // Set up the polarization density operator for the next step
    if (a_scalar_data.size() > 0) setCoreBC( a_scalar_data[0], -a_scalar_data[1], *m_gyropoisson_op_bcs );
    m_gyropoisson_op->setOperatorCoefficients(m_ion_mass_density, *m_gyropoisson_op_bcs, false);
+   
+   m_it_counter++;
 }
 
 
@@ -997,7 +997,22 @@ void VorticityOp::parseParameters( const ParmParse& a_pp )
    a_pp.query( "include_reynolds_stress", m_reynolds_stress);
    a_pp.query( "ExB_current_model", m_ExB_current_model );
    a_pp.query( "include_pol_den_corrections", m_include_pol_den_corrections );
+   a_pp.query( "update_precond_interval", m_update_pc_freq );
 
+   if (a_pp.contains("consistent_upper_bc_only")) {
+     a_pp.get("consistent_upper_bc_only", m_consistent_upper_bc_only);
+   }
+   else {
+     m_consistent_upper_bc_only = false;
+   }
+
+   if (a_pp.contains("consistent_lower_bc_only")) {
+     a_pp.get("consistent_lower_bc_only",m_consistent_lower_bc_only);
+   }
+   else	{
+     m_consistent_lower_bc_only = false;
+   }
+   
    if (a_pp.contains("electron_temperature")) {
       GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
       std::string grid_function_name;
@@ -1016,8 +1031,8 @@ void VorticityOp::printParameters()
                 << std::endl;
 
       if (m_electron_temperature_func != NULL) {
-	std::cout << "  Electron Temperature Function:" << std::endl;
-	m_electron_temperature_func->printParameters();
+         std::cout << "  Electron Temperature Function:" << std::endl;
+         m_electron_temperature_func->printParameters();
       }
    }
 }

@@ -107,6 +107,12 @@ public:
                                      const RealVect&  dx_dst,
                                      const int        order) const;
 
+   void getInterpolationCoefficients(Vector<Real>&                  a_coeff,
+                                     Vector<int>&                   a_offsets,
+                                     const RealVect&                a_X,
+                                     const IntVect&                 a_iv0_dst,
+                                     const SingleNullBlockCoordSys& a_coords) const;
+   
    Real getInterpMappedPoloidalCoord(const RealVect& X,
                                      const RealVect& X_dst_pol_cent,
                                      const RealVect& X_dst_pol_hi,
@@ -141,6 +147,11 @@ public:
 #if CFG_DIM==3
    double toroidalWidth() const {return m_toroidal_width;}
 #endif
+   
+   
+   bool isCORE(const int block_number) const;
+   bool isSOL(const int block_number) const;
+   bool isPF(const int block_number) const;
    
 protected:
 
@@ -232,6 +243,8 @@ protected:
    LayoutData< IntVectSet > m_ghostCells_ue;
 
    Vector<MagBlockCoordSys *> m_coord_vec;
+
+   std::string m_interpolation_scheme;
 };
 
 

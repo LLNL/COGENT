@@ -166,6 +166,10 @@ protected:
    int m_harm_filtering_dir;
    bool m_include_pol_dens_i;
    bool m_include_pol_dens_e;
+   bool m_consistent_upper_bc_only;
+   bool m_consistent_lower_bc_only;
+   bool m_fixed_krho2;
+   Real m_krho2_value;
    
 private:
    void parseParameters( ParmParse& pp);
