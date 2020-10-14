@@ -755,8 +755,8 @@ SingleNullBlockCoordSys::mappedCoord( const RealVect& a_X ) const
 
    RealVect xi = mappedCoordNewton(RealVect(R,Phi,Z), xi_initial, iv_closest);
 
-   double Phi_lo = lowerMappedCoordinate(TOROIDAL_DIR) - m_toroidal_ghosts*m_dx[TOROIDAL_DIR];
-   double Phi_hi = upperMappedCoordinate(TOROIDAL_DIR) + m_toroidal_ghosts*m_dx[TOROIDAL_DIR];
+   //   double Phi_lo = lowerMappedCoordinate(TOROIDAL_DIR) - m_toroidal_ghosts*m_dx[TOROIDAL_DIR];
+   //   double Phi_hi = upperMappedCoordinate(TOROIDAL_DIR) + m_toroidal_ghosts*m_dx[TOROIDAL_DIR];
 
    if ( m_phys_coord_type == CARTESIAN ) {
 #if 0
@@ -2243,7 +2243,6 @@ SingleNullBlockCoordSys::restrictPhysCoordsToPoloidal( const FArrayBox&  a_coord
    a_coords_pol.copy(a_coords);
 #endif
 #if CFG_DIM==3
-   const Box& box = a_coords.box();
    const POL::Box& box_pol = a_coords_pol.box();
 
    for (POL::BoxIterator bit(box_pol); bit.ok(); ++bit) {

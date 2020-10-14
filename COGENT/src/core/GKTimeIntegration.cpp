@@ -92,6 +92,144 @@ void GKRHSData::copyTo( Real* a_vector ) const
 
 ////////////////////////////////////////////////////////////////////
 
+static
+std::vector<Real> inverse(const std::vector<Real>& a_vec, const Real a_tol)
+{
+  std::vector<Real> inv_vec(a_vec.size());
+  for (int n=0; n<a_vec.size(); n++) {
+    if (a_vec[n] > a_tol) {
+      inv_vec[n] = 1.0/a_vec[n];
+    } else {
+      inv_vec[n] = 1.0;
+    }
+  }
+  return inv_vec;
+}
+
+static inline
+void setVarScalingArray(  Real* const                       a_scales_arr,
+                          const KineticSpeciesPtrVect&      a_kinetic_species,
+                          const CFG::FluidSpeciesPtrVect&   a_fluid_species,
+                          const ScalarPtrVect&              a_scalars,
+                          const std::string&                a_op_str,
+                          const Real                        a_tol )
+{
+   int offset(0);
+
+   if (!procID()) {
+     printf("    Setting scales (%s):-\n", a_op_str.c_str());
+   }
+
+   for (int s(0); s<a_kinetic_species.size(); s++) {
+
+      const LevelData<FArrayBox>& lvldata(a_kinetic_species[s]->distributionFunction());
+
+      std::vector<Real> scales;
+      GKUtils::maxAbsVal(lvldata, scales);
+
+      if (!procID()) {
+        printf("      Kinetic Species %d (%s):\n", s, (a_kinetic_species[s]->name()).c_str());
+        for (int n = 0; n<scales.size(); n++) {
+          printf("        component %3d - %1.6e\n", scales[n]);
+        }
+      }
+
+      LevelData<FArrayBox> tmp(lvldata.disjointBoxLayout(), lvldata.nComp());
+      GKUtils::setVal(tmp, inverse(scales, a_tol));
+
+      offset += GKUtils::copyFromLevelData(a_scales_arr+offset, tmp);
+   }
+
+   for (int s(0); s<a_fluid_species.size(); s++) {
+
+      for (int n=0; n<a_fluid_species[s]->num_cell_vars(); ++n) {
+
+         const CFG::LevelData<CFG::FArrayBox>& lvldata(a_fluid_species[s]->cell_var(n));
+
+         std::vector<Real> scales;
+         CFG::GKUtils::maxAbsVal(lvldata, scales);
+
+         if (!procID()) {
+           printf("      Fluid Species %d (%s) (cell var %d):\n", s, (a_fluid_species[s]->name()).c_str(), n);
+           for (int v = 0; v<scales.size(); v++) {
+             printf("        component %3d - %1.6e\n", scales[v]);
+           }
+         }
+
+         CFG::LevelData<CFG::FArrayBox> tmp(lvldata.disjointBoxLayout(), lvldata.nComp());
+         CFG::GKUtils::setVal(tmp, inverse(scales, a_tol));
+
+         offset += CFG::GKUtils::copyFromLevelData( a_scales_arr+offset, tmp);
+
+      }
+
+      for (int n=0; n<a_fluid_species[s]->num_face_vars(); ++n) {
+
+         const CFG::LevelData<CFG::FluxBox>& lvldata(a_fluid_species[s]->face_var(n));
+
+         std::vector<Real> scales;
+         CFG::GKUtils::maxAbsVal(lvldata, scales);
+
+         if (!procID()) {
+           printf("      Fluid Species %d (%s) (face var %d):\n", s, (a_fluid_species[s]->name()).c_str(), n);
+           for (int v = 0; v<scales.size(); v++) {
+             printf("      component %3d - %1.6e\n", scales[v]);
+           }
+         }
+
+         CFG::LevelData<CFG::FluxBox> tmp(lvldata.disjointBoxLayout(), lvldata.nComp());
+         CFG::GKUtils::setVal(tmp, inverse(scales, a_tol));
+
+         offset += CFG::GKUtils::copyFromLevelData( a_scales_arr+offset, tmp);
+
+      }
+
+      for (int n=0; n<a_fluid_species[s]->num_edge_vars(); ++n) {
+
+         const CFG::LevelData<CFG::EdgeDataBox>& lvldata(a_fluid_species[s]->edge_var(n));
+
+         std::vector<Real> scales;
+         CFG::GKUtils::maxAbsVal(lvldata, scales);
+
+         if (!procID()) {
+           printf("      Fluid Species %d (%s) (edge var %d):\n", s, (a_fluid_species[s]->name()).c_str(), n);
+           for (int v = 0; v<scales.size(); v++) {
+             printf("      component %3d - %1.6e\n", scales[v]);
+           }
+         }
+
+         CFG::LevelData<CFG::EdgeDataBox> tmp(lvldata.disjointBoxLayout(), lvldata.nComp());
+         CFG::GKUtils::setVal(tmp, inverse(scales, a_tol));
+
+         offset += CFG::GKUtils::copyFromLevelData( a_scales_arr+offset, tmp);
+
+      }
+
+   }
+   for (int s(0); s<a_scalars.size(); s++) {
+      Vector<Real>& data = a_scalars[s]->data();
+      for (int i=0; i<data.size(); ++i) {
+         a_scales_arr[offset++] = 1.0;//data[i];
+      }
+   }
+
+   return;
+}
+
+void GKState::setVarScaling(Real* const a_scales, const Real a_tol) const
+{
+  CH_assert(isDefined());
+  setVarScalingArray( a_scales, m_kinetic_species, m_fluid_species, m_scalars, "state", a_tol );
+}
+
+void GKRHSData::setVarScaling(Real* const a_scales, const Real a_tol) const
+{
+  CH_assert(isDefined());
+  setVarScalingArray( a_scales, m_kinetic_species, m_fluid_species, m_scalars, "rhs", a_tol );
+}
+
+////////////////////////////////////////////////////////////////////
+
 inline
 void copyFromArray( KineticSpeciesPtrVect&     a_kinetic_species,
                     CFG::FluidSpeciesPtrVect&  a_fluid_species,

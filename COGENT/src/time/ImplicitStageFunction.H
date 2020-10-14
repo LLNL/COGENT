@@ -23,6 +23,11 @@ class ImplicitStageFunction: public Function<T,Ops>
 
     inline void setJac(ImplicitStageJacobian<T,Ops>* a_jac) { m_jac = a_jac; }
 
+    inline Real computeStepNorm(const GKVector& a_vec) const
+    {
+      return m_ops->scaledVecNormU(a_vec);
+    }
+
   private:
     bool m_is_Defined;
     Real m_shift, m_StageTime;
@@ -78,6 +83,15 @@ void ImplicitStageFunction<T,Ops>::evalFunction(  T&        a_F,
   a_F.scale(m_shift);
   a_F.increment(m_Z,-1);
   a_F.increment(a_b,-1);
+
+  if (a_its == 0) {
+    m_ops->computeUScale(a_Y);
+    m_ops->computeRHSOpScale(a_F);
+  }
+
+  m_ops->scaleRHSOp(a_F);
+
+  return;
 }
 
 #include "NamespaceFooter.H"

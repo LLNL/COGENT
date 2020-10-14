@@ -5,7 +5,7 @@
 #include "PhaseGeom.H"
 #include "SparseCoupling.H"
 #include "IntVectSet.H"
-#include "PhaseTBLEX.H"
+#include "GKVlasovMBCoupling.H"
 
 // Hypre headers
 #include "krylov.h"
@@ -88,9 +88,10 @@ class GKVlasovAMG
   private:
 
    const PhaseGeom& m_geometry;
+   LevelData<FArrayBox> m_volume;
    BlockBaseRegister<BaseFab<SparseCoupling> >* m_block_register;
 
-   PhaseTBLEX* m_mblex_ptr; 
+   GKVlasovMBCoupling* m_mb_coupling; 
 
    // Hypre data structures
 

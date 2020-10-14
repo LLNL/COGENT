@@ -2,6 +2,8 @@
 #define _SINGLENULLPHASECOORDSYS_H_
 
 #include "PhaseCoordSys.H"
+#include "IVSFAB.H"
+#include "MBStencil.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -78,6 +80,17 @@ public:
    virtual bool containsPhysicalBoundary( int                    block_number,
                                           int                    dir,
                                           const Side::LoHiSide&  side ) const;
+
+   void defineStencilsUe( const DisjointBoxLayout&                          grids,
+                          const int                                         nghost,
+                          LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& stencil_ue,
+                          LayoutData< IntVectSet >&                         ghostCells_ue);
+
+   void defineStencilsUe8( const DisjointBoxLayout&                          grids,
+                           const int                                         nghost,
+                           LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& stencil_ue,
+                           LayoutData< IntVectSet >&                         ghostCells_ue);
+
 private:
 
    void defineBoundaries8();
@@ -85,6 +98,8 @@ private:
    void defineBoundaries10();
 
    void getDecompositionParams( ParmParse& pp );
+
+   RefCountedPtr<CFG::SingleNullCoordSys> m_sn_coord_sys;
 
    IntVect m_decomp_mcore;
    IntVect m_decomp_lcore;

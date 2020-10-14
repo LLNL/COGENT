@@ -263,28 +263,31 @@ void SNCorePhaseBC::fillInflowData( KineticSpeciesPtrVect& a_bdry_data,
    }
 }
 
-void SNCorePhaseBC::apply( KineticSpecies& a_species_comp,
-                            const CFG::LevelData<CFG::FArrayBox>& a_phi,
-                            const LevelData<FluxBox>& a_velocity,
-                            const Real& a_time )
+void SNCorePhaseBC::apply( KineticSpeciesPtrVect&  a_species,
+                           const int&  a_species_index,
+                           const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                           const LevelData<FluxBox>& a_velocity,
+                           const Real& a_time )
 {
-   const PhaseGeom& geometry( a_species_comp.phaseSpaceGeometry() );
+   KineticSpecies& species_physical( *(a_species[a_species_index]) );
+   
+   const PhaseGeom& geometry( species_physical.phaseSpaceGeometry() );
    const MultiBlockCoordSys& coord_sys( *(geometry.coordSysPtr()) );
 
-   LevelData<FArrayBox>& BfJ( a_species_comp.distributionFunction() );
-   const DisjointBoxLayout& grids( BfJ.disjointBoxLayout() );
-   const IntVect& ghost_vect( BfJ.ghostVect() );
+   LevelData<FArrayBox>& Bf( species_physical.distributionFunction() );
+   const DisjointBoxLayout& grids( Bf.disjointBoxLayout() );
+   const IntVect& ghost_vect( Bf.ghostVect() );
 
    BoundaryBoxLayoutPtrVect all_bdry_layouts;
    PhaseBCUtils::defineBoundaryBoxLayouts( all_bdry_layouts, grids, coord_sys, ghost_vect );
 
    KineticSpeciesPtrVect all_bdry_data;
-   PhaseBCUtils::defineInflowDataStorage( all_bdry_data, all_bdry_layouts, a_species_comp );
+   PhaseBCUtils::defineInflowDataStorage( all_bdry_data, all_bdry_layouts, species_physical );
 
    Vector<std::string> all_bc_type;
    fillInflowData( all_bdry_data, all_bc_type, all_bdry_layouts, a_time );
 
-   PhaseBCUtils::setInflowOutflowBC( BfJ,
+   PhaseBCUtils::setInflowOutflowBC( Bf,
                                      all_bdry_layouts,
                                      all_bdry_data,
                                      all_bc_type,
@@ -292,7 +295,7 @@ void SNCorePhaseBC::apply( KineticSpecies& a_species_comp,
                                      a_velocity );
    
    // interpolate all other codim boundaries
-   CodimBC::setCodimBoundaryValues( BfJ, coord_sys );
+   CodimBC::setCodimBoundaryValues( Bf, coord_sys );
 }
 
 

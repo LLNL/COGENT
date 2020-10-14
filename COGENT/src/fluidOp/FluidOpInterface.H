@@ -93,6 +93,7 @@ class FluidOpInterface
                                   const int      a_stage ) {;}
 
       virtual void getMemberVar( LevelData<FArrayBox>&  a_Var,
+                           const FluidSpecies&          a_fluid_species,
                            const string&                a_name ) const 
       { cout << "getMemberVar: default getMemberVar() " << endl;}
       

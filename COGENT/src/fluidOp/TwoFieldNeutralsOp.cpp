@@ -27,13 +27,13 @@ TwoFieldNeutralsOp::TwoFieldNeutralsOp(const string&   a_pp_str,
                                        const string&   a_species_name,
                                        const MagGeom&  a_geometry,
                                        const int       a_verbosity )
-   : m_verbosity(a_verbosity),
-     m_geometry(a_geometry),
+   : m_geometry(a_geometry),
+     m_verbosity(a_verbosity),
+     m_my_pc_idx(-1),
+     m_bckgr_density(1.0e-7),
      m_is_time_implicit(true),
      m_advScheme("uw3"),
-     m_bckgr_density(1.0e-7),
-     m_opt_string(a_pp_str),
-     m_my_pc_idx(-1)
+     m_opt_string(a_pp_str)
 {
    ParmParse pp(a_pp_str.c_str());
    parseParameters( pp );
@@ -214,7 +214,7 @@ void TwoFieldNeutralsOp::accumulateDiffusiveTerms(FluidSpecies&        a_fluid_r
    
    // Get soln data
    const LevelData<FArrayBox>& soln_density( a_fluid_soln.cell_var("density") );
-   const LevelData<FArrayBox>& soln_par_mom( a_fluid_soln.cell_var("momentumDensity_virtual") );
+   //const LevelData<FArrayBox>& soln_par_mom( a_fluid_soln.cell_var("momentumDensity_virtual") );
 
    //Get species mass
    const Real species_mass = a_fluid_soln.mass();

@@ -12,10 +12,10 @@ class GKVlasovPreconditioner : public Preconditioner<T,Ops>
   public:
 
     GKVlasovPreconditioner<T,Ops>()
-       : m_ops(NULL),
-         m_shift(0.0),
+       : m_is_defined(false),
          m_species_idx(-1),
-         m_is_defined(false) {};
+         m_ops(NULL),
+         m_shift(0.0) {};
 
     ~GKVlasovPreconditioner<T,Ops>() {};
 

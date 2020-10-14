@@ -360,30 +360,30 @@ FluxSurface::zeroBlockData( const int                   region_type,
                             LevelData<FArrayBox>&       a_dst       ) const
 {
    const DisjointBoxLayout& grids = a_src.getBoxes();
-   const MagCoordSys* coord_sys = m_magnetic_geometry->getCoordSys();
-   
+   const MagCoordSys& coord_sys = *(m_magnetic_geometry->getCoordSys());
 
+   CH_assert( typeid(coord_sys) == typeid(SingleNullCoordSys) );
+   
    DataIterator dit = grids.dataIterator();
    for (dit.begin(); dit.ok(); ++dit) {
      a_dst[dit].copy(a_src[dit]);
-     int block_number = coord_sys->whichBlock( grids[dit] );
+     int block_number = coord_sys.whichBlock( grids[dit] );
      switch (region_type) 
       { 
       case CORE:
-         if ((block_number == SingleNullBlockCoordSys::MCORE) || 
-             (block_number == SingleNullBlockCoordSys::RCORE) ||
-             (block_number == SingleNullBlockCoordSys::LCORE)) {a_dst[dit].setVal(0.0); }
+	if ( ((const SingleNullCoordSys&)coord_sys).isCORE(block_number) ) {
+	  a_dst[dit].setVal(0.0);
+	}
         break;
       case PF:
-        if ((block_number == SingleNullBlockCoordSys::RPF) ||
-            (block_number == SingleNullBlockCoordSys::LPF)) {a_dst[dit].setVal(0.0);}
-        break;    
+	if ( ((const SingleNullCoordSys&)coord_sys).isPF(block_number) ) {
+          a_dst[dit].setVal(0.0);
+        }
+	break;    
       case SOL:
-        if ((block_number == SingleNullBlockCoordSys::MCSOL) ||
-            (block_number == SingleNullBlockCoordSys::RCSOL) ||
-            (block_number == SingleNullBlockCoordSys::LCSOL) ||
-            (block_number == SingleNullBlockCoordSys::RSOL) ||
-            (block_number == SingleNullBlockCoordSys::LSOL)) {a_dst[dit].setVal(0.0);}
+	if ( ((const SingleNullCoordSys&)coord_sys).isSOL(block_number) ) {
+          a_dst[dit].setVal(0.0);
+        }
         break;    
       default:
          MayDay::Error("FluxSurface::zeroBlockData(): Invalid region_type encountered");

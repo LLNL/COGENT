@@ -23,6 +23,10 @@ MBHypreSolver::MBHypreSolver( const MultiBlockLevelGeom&      a_geom,
      m_AMG_solver_allocated(false)
 {
    createHypreData();
+   
+   const std::string mbhs( "MBHypreSolver");
+   ParmParse pp_mbhs( mbhs.c_str() );
+   parseParameters( pp_mbhs );
 }
       
 
@@ -32,7 +36,14 @@ MBHypreSolver::~MBHypreSolver()
    destroyHypreData();
 }
 
-
+void 
+MBHypreSolver::parseParameters( ParmParse& a_pp )
+{
+   a_pp.query( "use_old_amg_setup", m_use_old_amg_setup );
+   if(!procID() && m_use_old_amg_setup==1) {
+      cout << "using old AMG setup for MBHypreSolver" << endl;
+   }
+}
 
 void
 MBHypreSolver::multiplyMatrix( const LevelData<FArrayBox>&  a_in,
@@ -994,7 +1005,13 @@ MBHypreSolver::AMGSetup( const HYPRE_SStructMatrix& a_matrix )
 
    // Algorithm options
    HYPRE_BoomerAMGSetStrongThreshold(m_par_AMG_solver, 0.25);
-   HYPRE_BoomerAMGSetCoarsenType(m_par_AMG_solver, 6);  // Falgout coarsening
+   if(m_use_old_amg_setup) { 
+      HYPRE_BoomerAMGSetOldDefault( m_par_AMG_solver );
+      HYPRE_BoomerAMGSetRelaxOrder(m_par_AMG_solver,1);
+   } 
+   else {
+      HYPRE_BoomerAMGSetCoarsenType(m_par_AMG_solver, 6);  // Falgout coarsening
+   }
    //   HYPRE_BoomerAMGSetRelaxType(m_par_AMG_solver, 3);  // hybrid Gauss-Seidel
    //   HYPRE_BoomerAMGSetCycleRelaxType(m_par_AMG_solver, 3, 3);  // hybrid Gauss-Seidel on coarsest level
    //   HYPRE_BoomerAMGSetCycleRelaxType(m_par_AMG_solver, 9, 3);  // Gaussian elimination on coarsest level
@@ -1035,7 +1052,7 @@ MBHypreSolver::AMG( const HYPRE_SStructMatrix&  a_matrix,
 
    HYPRE_BoomerAMGSetTol(m_par_AMG_solver, a_tol);
    HYPRE_BoomerAMGSetMaxIter(m_par_AMG_solver, a_max_iter);
-   HYPRE_BoomerAMGSetPrintLevel(m_par_AMG_solver, 0);
+   HYPRE_BoomerAMGSetPrintLevel(m_par_AMG_solver, 0); // JRA, set to 10 to see information on each cycle
 
    CH_START(t_AMG_solve);
    HYPRE_BoomerAMGSolve(m_par_AMG_solver, par_A, par_b, par_x);

@@ -1,19 +1,19 @@
-#ifndef _PHASE_TBLEX_
-#define _PHASE_TBLEX_
+#ifndef _GKVLASOV_MB_COUPLING_
+#define _GKVLASOV_MB_COUPLING_
 
 #include "PhaseGeom.H"
 
 #include "NamespaceHeader.H"
 
-class PhaseTBLEX
+class GKVlasovMBCoupling
 {
 public:
 
-   PhaseTBLEX( const PhaseGeom&  geometry,
-               int               ghosts,
-               int               order );
+   GKVlasovMBCoupling( const PhaseGeom&  geometry,
+                       int               ghosts,
+                       int               order );
 
-   virtual ~PhaseTBLEX() {;}
+   virtual ~GKVlasovMBCoupling() {;}
 
    void interpGhosts( LevelData<FArrayBox>& data ) const;
 

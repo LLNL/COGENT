@@ -274,6 +274,7 @@ EField::clone( const bool a_copy_data ) const
    efield->m_boltzmann_electron = m_boltzmann_electron;
    efield->m_fixed_efield = m_fixed_efield;
    efield->m_poisson = m_poisson;
+   efield->m_FLR_charge_density = m_FLR_charge_density;
    efield->m_defined = true;
 
    return RefCountedPtr<CFGVars>(efield);
@@ -317,7 +318,7 @@ void EField::computeIonChargeDensity( LevelData<FArrayBox>&             a_ion_ch
       if ( this_species.charge() < 0.0 ) continue;
       
       // Compute the charge density for this species
-      if (this_species.isGyrokinetic()) {
+      if (this_species.isGyrokinetic() && m_FLR_charge_density) {
         this_species.gyroaveragedChargeDensity( species_charge_density );
       } else {
         this_species.chargeDensity( species_charge_density );
@@ -398,7 +399,7 @@ void EField::computeTotalChargeDensity( LevelData<FArrayBox>&             a_char
       const PS::KineticSpecies& this_species( *(a_kinetic_species[species]) );
 
       // Compute the charge density for this species
-      if (this_species.isGyrokinetic()) {
+      if (this_species.isGyrokinetic() && m_FLR_charge_density) {
         this_species.gyroaveragedChargeDensity( species_charge_density );
       } else {
         this_species.chargeDensity( species_charge_density );
@@ -500,6 +501,7 @@ EField::parseParameters( ParmParse& a_pp)
 {
   a_pp.query( "include_ion_polarization_density", m_include_pol_dens_i);
   a_pp.query( "include_electron_polarization_density", m_include_pol_dens_e);
+  a_pp.query( "FLR_charge_density", m_FLR_charge_density);
    
   if (a_pp.contains("harmonic_filtering")) {
      a_pp.get("harmonic_filtering", m_apply_harm_filtering);

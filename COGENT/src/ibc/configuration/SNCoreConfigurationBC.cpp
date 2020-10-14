@@ -175,15 +175,13 @@ void SNCoreConfigurationBC::apply( FluidSpecies&  a_species_comp,
 
 void SNCoreConfigurationBC::applyFluxBC(const FluidSpecies&  a_species_comp,
                                          LevelData<FluxBox>& a_dst,
-                                         const LevelData<FluxBox>& a_src,
-                                         const Real&    a_time )
+                                         const Real    a_time )
 {
 }
 
 void SNCoreConfigurationBC::applyEdgeBC(const FluidSpecies&  a_species_comp,
                                          LevelData<EdgeDataBox>& a_dst,
-                                         const LevelData<EdgeDataBox>& a_src,
-                                         const Real&    a_time )
+                                         const Real    a_time )
 {
 }
 

@@ -159,7 +159,7 @@ public:
                                const bool                  homogeneous_bcs,
                                const bool                  extrap_to_ghosts = false );
 
-   void computeBcDivergence( LevelData<FArrayBox>& out ) const;
+   virtual void computeBcDivergence( LevelData<FArrayBox>& out );
 
    void setBc( const EllipticOpBC& bc );
 

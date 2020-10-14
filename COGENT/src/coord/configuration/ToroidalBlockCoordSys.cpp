@@ -18,8 +18,8 @@ ToroidalBlockCoordSys::ToroidalBlockCoordSys( ParmParse&               a_parm_pa
    : MagBlockCoordSys(a_parm_parse),
      m_block(a_block),
      m_num_blocks(a_num_blocks),
-     m_is_flux_defined(false),
-     m_eps(1.0e-10)
+     m_eps(1.0e-10),
+     m_is_flux_defined(false)
 {
    if (SpaceDim != 3){
       MayDay::Error("ToroidalBlockCoordSys:: 3D space is expected; for axisymmetric 2D case use Miller");

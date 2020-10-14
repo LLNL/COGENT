@@ -24,17 +24,17 @@
 
 LinearizedUnlike::LinearizedUnlike( const std::string& a_ppcls_str, const int a_verbosity )
     : m_verbosity(a_verbosity),
-      m_moment_op( MomentOp::instance() ),
       m_time_implicit(false),
-      m_second_order(true),
-      m_fixed_bkgr(false),
       m_update_freq(-1),
       m_it_counter(0),
+      m_second_order(true),
       m_conserve_momentum(true),
       m_conserve_energy(true),
+      m_fixed_bkgr(false),
       m_first_call(true),
       m_first_stage(true),
-      m_include_bkgr_cls(true)
+      m_include_bkgr_cls(true),
+      m_moment_op( MomentOp::instance() )
 {
    ParmParse ppcls(a_ppcls_str.c_str());
    parseParameters( ppcls );

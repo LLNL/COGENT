@@ -150,9 +150,10 @@ public:
                                             const LevelData<FArrayBox>&       ion_charge_density,
                                             const Real&                       time);
 
-   void computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&             a_div_Jperp,
-						 const LevelData<FArrayBox>&       a_ion_charge_density,
-						 const Real&                       a_time);
+   void computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&             div_Jperp,
+						 const LevelData<FArrayBox>&       ion_charge_density,
+						 const LevelData<FArrayBox>&       negative_vorticity,
+						 const Real&                       time);
 
   
    void computeReynoldsStressTerm( LevelData<FArrayBox>&             div_ExB_times_vorticity,
@@ -228,6 +229,8 @@ private:
    bool	m_reynolds_stress;
    bool m_ExB_current_model;
    bool m_include_pol_den_corrections;
+   bool m_include_pol_den_corrections_to_pe;
+   bool m_remove_axisymmetric_phi;
    bool m_consistent_lower_bc_only;
    bool m_consistent_upper_bc_only;
    int m_update_pc_freq;

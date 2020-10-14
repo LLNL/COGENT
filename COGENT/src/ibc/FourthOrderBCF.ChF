@@ -87,8 +87,9 @@ c
       return
       end
 
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
-      subroutine fourth_order_neumann_bc(
+      subroutine fourth_order_even_bc(
      &     CHF_FRA[f],
      &     CHF_BOX[bdrybox],
      &     CHF_CONST_INTVECT[ng],
@@ -129,11 +130,11 @@ c
       return
       end
       
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       subroutine fourth_order_neumann_bc_on_edge(
      &     CHF_FRA[f],
      &     CHF_BOX[bdrybox],
-     &     CHF_CONST_INTVECT[ng],
      &     CHF_CONST_INT[idir],
      &     CHF_CONST_INT[iside]
      &     )
@@ -154,9 +155,9 @@ c
       mm = CHF_ID(idir, 4)]
 c
       do n=0,nfcomp-1
-c        print*, "ibdryboxlo0  = ", ibdryboxlo0
+        print*, "ibdryboxlo0  = ", ibdryboxlo0
 c        print*, "ibdryboxhi0  = ", ibdryboxhi0
-c        print*, "iside        = ", iside
+        print*, "iside        = ", iside
       CHF_MULTIDO[bdrybox;i;j;k;l;m]
 c
         CHF_DTERM[
@@ -186,13 +187,15 @@ c        print*, "CHF_IX[i;j]  = ", CHF_IX[i;j;k;l;m]
 c
       return
       end
-      
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc      
    
-      subroutine fourth_order_extrap_bc_on_edge(
+      subroutine fourth_order_extrap_bc(
      &     CHF_FRA[f],
      &     CHF_BOX[bdrybox],
      &     CHF_CONST_INT[idir],
-     &     CHF_CONST_INT[iside]
+     &     CHF_CONST_INT[iside],
+     &     CHF_CONST_INT[order]
      &     )
 c
       integer CHF_AUTODECL[i]
@@ -225,45 +228,96 @@ c
 c
       do n=0,nfcomp-1
 c        print*, "ibdryboxlo0  = ", ibdryboxlo0
-c        print*, "ibdryboxhi0  = ", ibdryboxhi0
-c        print*, "iside        = ", iside
 c        print*, "idir         = ", idir
       CHF_AUTOMULTIDO[bdrybox;i]
-c        print*, CHF_AUTODECL[i]
-c
+        
         CHF_DTERM[
-        iv0 = i0+CHF_ID(idir,0)*(ibeg0-i0);
-        iv1 = i1+CHF_ID(idir,1)*(ibeg1-i1);
-        iv2 = i2+CHF_ID(idir,2)*(ibeg2-i2);
-        iv3 = i3+CHF_ID(idir,3)*(ibeg3-i3);
-        iv4 = i4+CHF_ID(idir,4)*(ibeg4-i4)]
+        iv0 = i0 + CHF_ID(idir,0)*(ibeg0-i0);
+        iv1 = i1 + CHF_ID(idir,1)*(ibeg1-i1);
+        iv2 = i2 + CHF_ID(idir,2)*(ibeg2-i2);
+        iv3 = i3 + CHF_ID(idir,3)*(ibeg3-i3);
+        iv4 = i4 + CHF_ID(idir,4)*(ibeg4-i4)]
 
           CHF_DTERM[
-          ii0 = i0+CHF_ID(idir,0)*(iside-1)*(2*(i0-ibeg0)+ng0+1);
-          ii1 = i1+CHF_ID(idir,1)*(iside-1)*(2*(i1-ibeg1)+ng1+1);
-          ii2 = i2+CHF_ID(idir,2)*(iside-1)*(2*(i2-ibeg2)+ng2+1);
-          ii3 = i3+CHF_ID(idir,3)*(iside-1)*(2*(i3-ibeg3)+ng3+1);
-          ii4 = i4+CHF_ID(idir,4)*(iside-1)*(2*(i4-ibeg4)+ng4+1)]
+          ii0 = i0 + CHF_ID(idir,0)*(iside-1)*(2*(i0-ibeg0)+ng0+1);
+          ii1 = i1 + CHF_ID(idir,1)*(iside-1)*(2*(i1-ibeg1)+ng1+1);
+          ii2 = i2 + CHF_ID(idir,2)*(iside-1)*(2*(i2-ibeg2)+ng2+1);
+          ii3 = i3 + CHF_ID(idir,3)*(iside-1)*(2*(i3-ibeg3)+ng3+1);
+          ii4 = i4 + CHF_ID(idir,4)*(iside-1)*(2*(i4-ibeg4)+ng4+1)]
 
 c         A second order option for experimental purposes
-          f(CHF_AUTOIX[ii],n) =
+          if(order.eq.2) then
+             f(CHF_AUTOIX[ii],n) =
      &                   2*f(CHF_IX[ii0-  iii0;ii1-  iii1;ii2-  iii2;ii3-  iii3;ii4-  iii4],n)
      &                 - 1*f(CHF_IX[ii0-2*iii0;ii1-2*iii1;ii2-2*iii2;ii3-2*iii3;ii4-2*iii4],n)
 
-c          f(CHF_AUTOIX[ii],n) =
-c     &                   4*f(CHF_IX[ii0-  iii0;ii1-  iii1;ii2-  iii2;ii3-  iii3;ii4-  iii4],n)
-c     &                 - 6*f(CHF_IX[ii0-2*iii0;ii1-2*iii1;ii2-2*iii2;ii3-2*iii3;ii4-2*iii4],n)
-c     &                 + 4*f(CHF_IX[ii0-3*iii0;ii1-3*iii1;ii2-3*iii2;ii3-3*iii3;ii4-3*iii4],n)
-c     &                 - 1*f(CHF_IX[ii0-4*iii0;ii1-4*iii1;ii2-4*iii2;ii3-4*iii3;ii4-4*iii4],n)
+          else
+             f(CHF_AUTOIX[ii],n) =
+     &                   4*f(CHF_IX[ii0-  iii0;ii1-  iii1;ii2-  iii2;ii3-  iii3;ii4-  iii4],n)
+     &                 - 6*f(CHF_IX[ii0-2*iii0;ii1-2*iii1;ii2-2*iii2;ii3-2*iii3;ii4-2*iii4],n)
+     &                 + 4*f(CHF_IX[ii0-3*iii0;ii1-3*iii1;ii2-3*iii2;ii3-3*iii3;ii4-3*iii4],n)
+     &                 - 1*f(CHF_IX[ii0-4*iii0;ii1-4*iii1;ii2-4*iii2;ii3-4*iii3;ii4-4*iii4],n)
+          endif
 
       CHF_ENDDO
       enddo
 
       return
       end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc      
+   
+      subroutine fourth_order_evenodd_bc(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_INT[evenodd],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+      integer CHF_AUTODECL[i]
+      integer CHF_AUTODECL[is]
+      integer CHF_AUTODECL[ibeg]
+      integer CHF_AUTODECL[ng]
+      integer n,d,ng(0:CH_SPACEDIM-1)
+c
+      CHF_DTERM[
+      ng0 = CHF_UBOUND[bdrybox;0]-CHF_LBOUND[bdrybox;0]+1;
+      ng1 = CHF_UBOUND[bdrybox;1]-CHF_LBOUND[bdrybox;1]+1;
+      ng2 = CHF_UBOUND[bdrybox;2]-CHF_LBOUND[bdrybox;2]+1;
+      ng3 = CHF_UBOUND[bdrybox;3]-CHF_LBOUND[bdrybox;3]+1;
+      ng4 = CHF_UBOUND[bdrybox;4]-CHF_LBOUND[bdrybox;4]+1]
+c
+      CHF_DTERM[
+      ibeg0 = ibdryboxlo0+CHF_ID(idir,0)*(1-iside)*ng0;
+      ibeg1 = ibdryboxlo1+CHF_ID(idir,1)*(1-iside)*ng1;
+      ibeg2 = ibdryboxlo2+CHF_ID(idir,2)*(1-iside)*ng2;
+      ibeg3 = ibdryboxlo3+CHF_ID(idir,3)*(1-iside)*ng3;
+      ibeg4 = ibdryboxlo4+CHF_ID(idir,4)*(1-iside)*ng4]
+c
+      do n=0,nfcomp-1
+      CHF_AUTOMULTIDO[bdrybox;i]
       
+         CHF_DTERM[
+         is0 = i0 + CHF_ID(idir,0)*(2*(ibeg0-i0)-1);
+         is1 = i1 + CHF_ID(idir,1)*(2*(ibeg1-i1)-1);
+         is2 = i2 + CHF_ID(idir,2)*(2*(ibeg2-i2)-1);
+         is3 = i3 + CHF_ID(idir,3)*(2*(ibeg3-i3)-1);
+         is4 = i4 + CHF_ID(idir,4)*(2*(ibeg4-i4)-1)]
+c        print*, "i0           = ", i0
+c        print*, "is0          = ", is0
+
+         f(CHF_AUTOIX[i],n) = evenodd*f(CHF_AUTOIX[is],n)
+
+      CHF_ENDDO
+      enddo
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc 
       
-      subroutine fourth_order_evenodd_bc_on_edge(
+      subroutine fourth_order_evenodd_bc_stag(
      &     CHF_FRA[f],
      &     CHF_BOX[bdrybox],
      &     CHF_CONST_INT[evenodd],
@@ -297,27 +351,23 @@ c
       do n=0,nfcomp-1
 c        print*, "ibdryboxlo0  = ", ibdryboxlo0
 c        print*, "ibdryboxhi0  = ", ibdryboxhi0
+c        print*, "idir         = ", idir
 c        print*, "iside        = ", iside
+c        print*, "ng0          = ", ng0
+c        print*, "ibeg0        = ", ibeg0
       CHF_AUTOMULTIDO[bdrybox;i]
 c        print*, CHF_AUTODECL[i]
       
-      if (evenodd.eq.1) then
          CHF_DTERM[
-         is0 = i0 + CHF_ID(idir,0)*(2*(ibeg0-i0));
-         is1 = i1 + CHF_ID(idir,1)*(2*(ibeg1-i1));
-         is2 = i2 + CHF_ID(idir,2)*(2*(ibeg2-i2));
-         is3 = i3 + CHF_ID(idir,3)*(2*(ibeg3-i3));
-         is4 = i4 + CHF_ID(idir,4)*(2*(ibeg4-i4))]
-      else
-         CHF_DTERM[
-         is0 = i0 + CHF_ID(idir,0)*(2*(ibeg0-i0)+isign);
-         is1 = i1 + CHF_ID(idir,1)*(2*(ibeg1-i1)+isign);
-         is2 = i2 + CHF_ID(idir,2)*(2*(ibeg2-i2)+isign);
-         is3 = i3 + CHF_ID(idir,3)*(2*(ibeg3-i3)+isign);
-         is4 = i4 + CHF_ID(idir,4)*(2*(ibeg4-i4)+isign)]
-      endif
+         is0 = i0 + CHF_ID(idir,0)*(2*(ibeg0-i0)-1-isign);
+         is1 = i1 + CHF_ID(idir,1)*(2*(ibeg1-i1)-1-isign);
+         is2 = i2 + CHF_ID(idir,2)*(2*(ibeg2-i2)-1-isign);
+         is3 = i3 + CHF_ID(idir,3)*(2*(ibeg3-i3)-1-isign);
+         is4 = i4 + CHF_ID(idir,4)*(2*(ibeg4-i4)-1-isign)]
+c        print*, "i0           = ", i0
+c        print*, "is0          = ", is0
+
          f(CHF_AUTOIX[i],n) = evenodd*f(CHF_AUTOIX[is],n)
-c
 
       CHF_ENDDO
       enddo
@@ -325,50 +375,7 @@ c
       return
       end
 
-
-
-      subroutine fourth_order_odd_bc(
-     &     CHF_FRA[f],
-     &     CHF_BOX[bdrybox],
-     &     CHF_CONST_INTVECT[ng],
-     &     CHF_CONST_INT[idir],
-     &     CHF_CONST_INT[iside]
-     &     )
-c
-      integer CHF_DDECL[i;j;k;l;m]
-      integer CHF_DDECL[is;js;ks;ls;ms]
-      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3;ibeg4]
-      integer n
-      integer isign
-c
-      isign = 2*iside-1
-
-      CHF_DTERM[
-      ibeg0 = ibdryboxlo0+CHF_ID(idir,0)*((1-iside)*(ng(0)+1)-1);
-      ibeg1 = ibdryboxlo1+CHF_ID(idir,1)*((1-iside)*(ng(1)+1)-1);
-      ibeg2 = ibdryboxlo2+CHF_ID(idir,2)*((1-iside)*(ng(2)+1)-1);
-      ibeg3 = ibdryboxlo3+CHF_ID(idir,3)*((1-iside)*(ng(3)+1)-1);
-      ibeg4 = ibdryboxlo4+CHF_ID(idir,4)*((1-iside)*(ng(4)+1)-1)]
-c
-      do n=0,nfcomp-1
-      CHF_MULTIDO[bdrybox;i;j;k;l;m]
-c
-        CHF_DTERM[
-        is = i + CHF_ID(idir,0)*(2*(ibeg0-i)+isign);
-        js = j + CHF_ID(idir,1)*(2*(ibeg1-j)+isign);
-        ks = k + CHF_ID(idir,2)*(2*(ibeg2-k)+isign);
-        ls = l + CHF_ID(idir,3)*(2*(ibeg3-l)+isign);
-        ms = m + CHF_ID(idir,4)*(2*(ibeg4-m)+isign)]
-c
-        f(CHF_IX[i;j;k;l;m],n) = -f(CHF_IX[is;js;ks;ls;ms],n)
-c
-      CHF_ENDDO
-      enddo
-c
-      return
-      end
-
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       subroutine fourth_order_symmetry_bc(
      &     CHF_FRA[f],
@@ -458,6 +465,8 @@ c
       return
       end
 
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
       subroutine fourth_order_dirichlet_bc(
      &     CHF_FRA[f],
      &     CHF_BOX[bdrybox],
@@ -516,10 +525,10 @@ c
         if (gn(idir).eq.1) then
 c
           f(CHF_AUTOIX[ii],n) =
-     *        third * (+ twelve   * val(CHF_AUTOIX[iv],n)
-     &                 - thirteen * f(CHF_OFFSETIX[ii;-1*iii],n)
-     &                 + five     * f(CHF_OFFSETIX[ii;-2*iii],n)
-     &                 - one      * f(CHF_OFFSETIX[ii;-3*iii],n))
+     *         third * (+ twelve   * val(CHF_AUTOIX[iv],n)
+     &                        - thirteen * f(CHF_OFFSETIX[ii;-1*iii],n)
+     &                        + five     * f(CHF_OFFSETIX[ii;-2*iii],n)
+     &                        - one      * f(CHF_OFFSETIX[ii;-3*iii],n))
 c
         else if (gn(idir).eq.2) then
 c
@@ -553,6 +562,8 @@ c
 c
       return
       end
+
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       subroutine second_order_dirichlet_bc(
      &     CHF_FRA[f],
@@ -638,3 +649,108 @@ c        endif
 c
       return
       end
+
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine fourth_order_neumann_bc(
+     &     CHF_FRA[f],
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside]
+     &     )
+c
+      integer CHF_AUTODECL[i]
+      integer CHF_AUTODECL[ii]
+      integer CHF_AUTODECL[iii]
+      integer CHF_AUTODECL[ibeg]
+      integer CHF_AUTODECL[ng]
+      integer isign, gn(0:CH_SPACEDIM-1)
+      integer n
+      double precision BCgradVal
+c
+      BCgradVal = 0.0
+c
+      isign = 2*iside-1
+      CHF_AUTOID[iii;idir;isign]
+c
+      CHF_DTERM[
+      ng0 = CHF_UBOUND[bdrybox;0]-CHF_LBOUND[bdrybox;0]+1;
+      ng1 = CHF_UBOUND[bdrybox;1]-CHF_LBOUND[bdrybox;1]+1;
+      ng2 = CHF_UBOUND[bdrybox;2]-CHF_LBOUND[bdrybox;2]+1;
+      ng3 = CHF_UBOUND[bdrybox;3]-CHF_LBOUND[bdrybox;3]+1;
+      ng4 = CHF_UBOUND[bdrybox;4]-CHF_LBOUND[bdrybox;4]+1]
+c
+      CHF_DTERM[
+      ibeg0 = CHF_LBOUND[bdrybox;0]+CHF_ID(idir,0)*(1-iside)*ng0;
+      ibeg1 = CHF_LBOUND[bdrybox;1]+CHF_ID(idir,1)*(1-iside)*ng1;
+      ibeg2 = CHF_LBOUND[bdrybox;2]+CHF_ID(idir,2)*(1-iside)*ng2;
+      ibeg3 = CHF_LBOUND[bdrybox;3]+CHF_ID(idir,3)*(1-iside)*ng3;
+      ibeg4 = CHF_LBOUND[bdrybox;4]+CHF_ID(idir,4)*(1-iside)*ng4]
+c
+      do n=0,nfcomp-1
+      CHF_AUTOMULTIDO[bdrybox;i]
+c
+        CHF_DTERM[
+        ii0 = i0+CHF_ID(idir,0)*(iside-1)*(2*i0+ng0+1);
+        ii1 = i1+CHF_ID(idir,1)*(iside-1)*(2*i1+ng1+1);
+        ii2 = i2+CHF_ID(idir,2)*(iside-1)*(2*i2+ng2+1);
+        ii3 = i3+CHF_ID(idir,3)*(iside-1)*(2*i3+ng3+1);
+        ii4 = i4+CHF_ID(idir,4)*(iside-1)*(2*i4+ng4+1)]
+c
+        CHF_DTERM[
+        gn(0) = iside*(ii0-ibeg0+1) + (iside-1)*(ii0-ibeg0);
+        gn(1) = iside*(ii1-ibeg1+1) + (iside-1)*(ii1-ibeg1);
+        gn(2) = iside*(ii2-ibeg2+1) + (iside-1)*(ii2-ibeg2);
+        gn(3) = iside*(ii3-ibeg3+1) + (iside-1)*(ii3-ibeg3);
+        gn(4) = iside*(ii4-ibeg4+1) + (iside-1)*(ii4-ibeg4)]
+c
+c        print*, "ibdryboxlo0  = ", ibdryboxlo0
+c        print*, "ibdryboxhi0  = ", ibdryboxhi0
+c        print*, "idir         = ", idir
+c        print*, "iside        = ", iside
+c        print*, "ng0          = ", ng0
+c        print*, "ibeg0        = ", ibeg0
+c        print*, "i0           = ", i0
+c        print*, "ii0          = ", ii0
+c        print*, "gn(idir)     = ", gn(idir)
+c        print*, "break ccccccccccccccccc"
+c
+        if (gn(idir).eq.1) then
+c
+          f(CHF_AUTOIX[ii],n) = ( 24.0  * BCgradVal
+     &                        +   21.0  * f(CHF_OFFSETIX[ii;-1*iii],n)
+     &                        +   three * f(CHF_OFFSETIX[ii;-2*iii],n)
+     &                        -   one   * f(CHF_OFFSETIX[ii;-3*iii],n) ) / 23.0
+c
+        else if (gn(idir).eq.2) then
+c
+          f(CHF_AUTOIX[ii],n) = ( 96.0  * BCgradVal
+     &                        +   50.0  * f(CHF_OFFSETIX[ii;-1*iii],n)
+     &                        -   54.0  * f(CHF_OFFSETIX[ii;-2*iii],n)
+     &                        +   27.0  * f(CHF_OFFSETIX[ii;-3*iii],n) ) / 23.0
+c
+c        else if (gn(idir).eq.3) then
+c
+c          f(CHF_AUTOIX[ii],n) =
+c     &                 + zero   * f(CHF_OFFSETIX[ii;-1*iii],n)
+c     &                 - zero   * f(CHF_OFFSETIX[ii;-2*iii],n)
+c     *                 + zero   * BCgradVal
+c     &                 - zero   * f(CHF_OFFSETIX[ii;-3*iii],n)
+c
+        else
+c
+          f(CHF_AUTOIX[ii],n) =
+     &                   four * f(CHF_OFFSETIX[ii;-1*iii],n)
+     &                 - six  * f(CHF_OFFSETIX[ii;-2*iii],n)
+     &                 + four * f(CHF_OFFSETIX[ii;-3*iii],n)
+     &                 - one  * f(CHF_OFFSETIX[ii;-4*iii],n)
+c
+        endif
+c
+c
+      CHF_ENDDO
+      enddo
+c
+      return
+      end
+

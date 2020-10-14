@@ -3162,7 +3162,6 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    }
 
    IntVect iv_saved = a_ivDst;
-   int nDst_saved = a_nDst;
    RealVect saved_X_dst_cent = X_dst_cent;
    
    if ( fixPoloidalBlock( a_nDst, a_ivDst ) ) {
@@ -3258,7 +3257,6 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    a_interpStecil[stenc_size-1] = -1.0;
    
    //Handle the saw-tooth boundary stencil coefficeints
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = this->boundaries();
    Box dst_domain_box = dst_coord_sys->domain().domainBox();
    
    if ( a_ivDst[POLOIDAL_DIR] <= dst_domain_box.smallEnd(POLOIDAL_DIR) &&

@@ -34,6 +34,7 @@ public:
            const IntVect&      ghost_vect )
       : CFGVars(pp_prefix, name, geometry),
         m_poisson(NULL),
+        m_FLR_charge_density(false),
         m_defined(false)
    {
       addCellVar(name, 3, IntVect::Unit);
@@ -161,6 +162,7 @@ protected:
    BoltzmannElectron* m_boltzmann_electron;
    bool m_fixed_efield;
    GKPoisson* m_poisson;
+   bool m_FLR_charge_density;
    bool m_defined;
    bool m_apply_harm_filtering;
    int m_harm_filtering_dir;

@@ -1,4 +1,111 @@
 ------------------------------------------------------------------------
+r1682 | angus1 | 2020-10-08 12:58:38 -0700 (Thu, 08 Oct 2020) | 1 line
+
+updating idealMhdOp to work in 3D
+------------------------------------------------------------------------
+r1681 | mdorf | 2020-09-05 09:37:40 -0700 (Sat, 05 Sep 2020) | 1 line
+
+Added an option to include polarization density corrections to the electron pressure term. Presently this option is only supprted by the old vorticity model.
+------------------------------------------------------------------------
+r1680 | debo | 2020-09-02 17:57:15 -0700 (Wed, 02 Sep 2020) | 1 line
+
+Fixed initial guess for ARK when solutionOp is nontrivial; added a tolerance for computing scales that is the same as the Newton solver abs tol
+------------------------------------------------------------------------
+r1679 | ligocki | 2020-08-28 01:04:20 -0700 (Fri, 28 Aug 2020) | 2 lines
+
+Added a space to try to trigger a commit email...
+
+------------------------------------------------------------------------
+r1678 | mdorr | 2020-08-27 17:16:56 -0700 (Thu, 27 Aug 2020) | 5 lines
+
+Adding a BiCGStab solver (converted from the Chombo version) for use with the ARK integrator.  Added a switch to the Newton solver to use either this as the Jacobian solver, or the previous GMRES solver, with the latter remaining the default.
+
+Fixed the handling of outflow BCs with UW3 in the Vlasov preconditioner.
+
+
+------------------------------------------------------------------------
+r1677 | mdorr | 2020-08-20 18:47:17 -0700 (Thu, 20 Aug 2020) | 3 lines
+
+Adding diagnostics
+
+
+------------------------------------------------------------------------
+r1676 | debo | 2020-08-19 12:34:04 -0700 (Wed, 19 Aug 2020) | 1 line
+
+added the option of using scaled norms for IMEX solves. it is off by default. to use it, add "ark.scaled_norms = true" to the input file.
+------------------------------------------------------------------------
+r1675 | mdorf | 2020-08-19 11:53:13 -0700 (Wed, 19 Aug 2020) | 1 line
+
+Added diagnostics for a local safety factor
+------------------------------------------------------------------------
+r1674 | mdorr | 2020-08-13 18:17:54 -0700 (Thu, 13 Aug 2020) | 3 lines
+
+Fixing issues related to the mapping Jacobian in the Vlasov preconditioner.
+
+
+------------------------------------------------------------------------
+r1673 | mdorf | 2020-08-04 12:15:24 -0700 (Tue, 04 Aug 2020) | 1 line
+
+Extended consistentBC and flux-surface averaging capabilities to support calculations in SN geometries with multiple toroidal blocks
+------------------------------------------------------------------------
+r1672 | mdorf | 2020-08-02 15:42:53 -0700 (Sun, 02 Aug 2020) | 1 line
+
+Refactored kinetic species boundary condition classes to support BCs that depend on the data from other kinetic species
+------------------------------------------------------------------------
+r1671 | mdorf | 2020-08-02 12:04:18 -0700 (Sun, 02 Aug 2020) | 1 line
+
+Added accessors to GKVorticity class members required for a preconditioner operator
+------------------------------------------------------------------------
+r1670 | mdorf | 2020-07-30 13:13:01 -0700 (Thu, 30 Jul 2020) | 1 line
+
+Added ExB velocity and shear diagnostics; added update_interval option for recomputing a Hypre matrix for the implicit Vlasov solve
+------------------------------------------------------------------------
+r1669 | mdorf | 2020-07-22 11:16:47 -0700 (Wed, 22 Jul 2020) | 1 line
+
+Moved the inhomogeneous BC contribution from the high-order polarization density correction operator to the RHS of the linear (GMRES) solver
+------------------------------------------------------------------------
+r1668 | mdorf | 2020-07-13 19:34:45 -0700 (Mon, 13 Jul 2020) | 1 line
+
+Fixed a bug in the implementation of the polarization density corrections in the old vorticity model; also added infrustructure to discretize the Reynolds stress term with uwinding schemes
+------------------------------------------------------------------------
+r1667 | debo | 2020-07-09 19:22:41 -0700 (Thu, 09 Jul 2020) | 1 line
+
+Minor changes to avoid warnings when compiling in debug mode; the remaining warnings are external to COGENT
+------------------------------------------------------------------------
+r1666 | debo | 2020-07-08 17:02:01 -0700 (Wed, 08 Jul 2020) | 1 line
+
+A few bugfixes related to the gyroaveraging operator; printing the absolute and relative step norms in time integration; adding input parameters to control whether to include FLR effects in Vlasov and Poisson calculations
+------------------------------------------------------------------------
+r1665 | ricketson1 | 2020-07-08 11:32:11 -0700 (Wed, 08 Jul 2020) | 1 line
+
+Restoring GNUmakefile to its default parameters, modified in previous commit.
+------------------------------------------------------------------------
+r1664 | ricketson1 | 2020-07-08 11:30:55 -0700 (Wed, 08 Jul 2020) | 1 line
+
+Beginning to put in new stencil capability that is friendly to sparse grids
+------------------------------------------------------------------------
+r1663 | mdorr | 2020-07-02 15:59:00 -0700 (Thu, 02 Jul 2020) | 3 lines
+
+Extending implicit Vlasov to single null geometry.
+
+
+------------------------------------------------------------------------
+r1662 | mdorr | 2020-06-24 13:11:01 -0700 (Wed, 24 Jun 2020) | 3 lines
+
+Adding 5D build to hypre config template.
+
+
+------------------------------------------------------------------------
+r1661 | mdorr | 2020-06-23 13:39:28 -0700 (Tue, 23 Jun 2020) | 3 lines
+
+Adding ELM implicit Vlasov input
+
+
+------------------------------------------------------------------------
+r1660 | debo | 2020-06-19 18:48:51 -0700 (Fri, 19 Jun 2020) | 1 line
+
+Streamlined the updating of physical kinetic and fluid speciesin GKOps; consequently fixed the inconsistent time integration bug
+------------------------------------------------------------------------
 r1659 | mdorr | 2020-06-18 11:01:00 -0700 (Thu, 18 Jun 2020) | 3 lines
 
 Changing hypre option calls that were problematic on Cori.

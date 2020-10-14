@@ -81,24 +81,37 @@ public:
                         const LevelData<FArrayBox>& in,
                         bool homogeneous = false);
 
+   virtual void computeBcDivergence( LevelData<FArrayBox>& out );
+
    void computeFluxDivergence(const LevelData<FArrayBox>& in,
-			      LevelData<FArrayBox>&       out,
-			      const bool                  homogeneous_bcs,
-			      const bool                  extrap_to_ghosts = false );
+                              LevelData<FArrayBox>&       out,
+                              const bool                  homogeneous_bcs,
+                              const bool                  extrap_to_ghosts = false );
 
    void  computeFluxDivergenceWithCoeff(LevelData<FArrayBox>&       out,
                                         const LevelData<FArrayBox>& in,
                                         const LevelData<FluxBox>&   coeff_mapped,
                                         const bool                  homogeneous_bcs,
-					const bool                  subtract_fs_par_div,
+                                        const bool                  subtract_fs_par_div,
                                         const bool                  extrap_to_ghosts = false);
+   
+   void setPolDensCorrectionCoeff(const LevelData<FArrayBox>& ion_charge_density );
 
    /// Substract flux-averaged parallel divergence; used for 3D MB vorticity
    void subtractFSAverParDiv( LevelData<FArrayBox>&      divergence,
                               const  LevelData<FluxBox>& flux) const;
 
    inline void setModel(const std::string& model) {m_model = model;};
-      
+   
+   /// Return perpendicular coefficeints (those of the perpendicular Laplacian operator, M)
+   const LevelData<FluxBox>& getPerpCoeffMapped() const {return m_perp_coeff_mapped;}
+   
+   /// Return parallel coefficeints (those of the parallel current operator)
+   const LevelData<FluxBox>& getParCoeffMapped() const {return m_par_coeff_mapped;}
+
+   /// Return face-cenetered electron temperature
+   const LevelData<FluxBox>& getFCElectronTemp() const {return m_electron_temperature_face;}
+   
    /// Set implicit dt value
    inline void setImplicitDt(const Real a_value) {m_dt_implicit = a_value;};
    

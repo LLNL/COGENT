@@ -190,8 +190,8 @@ PhaseGeom::PhaseGeom( const PhaseGeom&                        a_phase_geom,
      m_sheared_remapped_index(a_phase_geom.m_sheared_remapped_index),
      m_sheared_interp_stencil(a_phase_geom.m_sheared_interp_stencil),
      m_sheared_interp_stencil_offsets(a_phase_geom.m_sheared_interp_stencil_offsets),
-     m_optimized_copier(a_phase_geom.m_optimized_copier),
      m_exchangeCopier(a_phase_geom.m_exchangeCopier),
+     m_optimized_copier(a_phase_geom.m_optimized_copier),
      m_exchange_ghosts(a_phase_geom.m_exchange_ghosts),
      m_gyroavg_op(NULL),
      m_is_gyrokinetic(a_is_gyrokinetic)
@@ -487,10 +487,6 @@ PhaseGeom::~PhaseGeom()
          }
       }
 
-      list<CoDimCopyManager<FArrayBox>*>::iterator it;
-      for (it = m_ebe_copy_manager_cache.begin(); it != m_ebe_copy_manager_cache.end(); ++it) {
-         CoDimCopyManager<FArrayBox>* this_ebe_copy_manager = *it;
-      }
       m_ebe_copy_manager_cache.clear();
 
       m_speciesDefined = false;
@@ -4545,7 +4541,7 @@ PhaseGeom::computeMappedGradient( const LevelData<FArrayBox>& a_var,
   /* extrapolate at physical boundaries */
 
   const PhaseCoordSys& phase_coord_sys = phaseCoordSys();
-  const Vector< Tuple <BlockBoundary, 2*SpaceDim> >& boundaries = phase_coord_sys.boundaries();
+  //const Vector< Tuple <BlockBoundary, 2*SpaceDim> >& boundaries = phase_coord_sys.boundaries();
 
   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
 
@@ -4605,7 +4601,7 @@ PhaseGeom::computeMappedGradient( const LevelData<FArrayBox>& a_var,
   /* extrapolate at physical boundaries */
 
   const PhaseCoordSys& phase_coord_sys = phaseCoordSys();
-  const Vector< Tuple <BlockBoundary, 2*SpaceDim> >& boundaries = phase_coord_sys.boundaries();
+  //const Vector< Tuple <BlockBoundary, 2*SpaceDim> >& boundaries = phase_coord_sys.boundaries();
 
   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
 
@@ -4748,7 +4744,7 @@ PhaseGeom::computeMappedGradientWithGhosts( const LevelData<FArrayBox>& a_var,
     RealVect dx = block_coord_sys.dx();
 
     IntVect grow_vec = IntVect::Zero;
-    for (int dir = 0; dir < a_max_dim; dir++) {
+    for (int dir = 0; dir < SpaceDim; dir++) {
       if (grad_var_gvec[dir] == 1) grow_vec[dir] = 1;
     }
     Box box = grow(grids[dit], grow_vec);

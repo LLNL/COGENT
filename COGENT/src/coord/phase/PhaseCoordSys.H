@@ -49,6 +49,17 @@ public:
                                const RealVect& xiSrc,
                                int             nSrc) const = 0;
 
+   /// Return the mapping which corresponds to the block with the given index.
+   virtual const PhaseBlockCoordSys* getCoordSys(int a_n) const
+           {return (const PhaseBlockCoordSys*)m_coordSysVect[a_n];}
+
+   /// Return the mapping which corresponds to the given box.
+   /// \param a_box The Box for which the coordinate system is retrieved. This
+   ///              Box must be contained completely within a block or this
+   ///              method will fail.
+   virtual const PhaseBlockCoordSys* getCoordSys(const Box& a_box) const
+           { return (const PhaseBlockCoordSys*)m_coordSysVect[whichBlock(a_box)]; }
+
    virtual IntVect getDecomposition(int block) const = 0;
 
    virtual void defineBoundaries() = 0;

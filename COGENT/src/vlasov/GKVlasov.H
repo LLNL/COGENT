@@ -185,8 +185,6 @@ public:
                        const bool,
                        const int );
    
-   IntVect getSpeciesGhostVect();
-   
    bool computeCfl() const {return m_compute_cfl;}
 
    inline void implicitSpecies(std::vector<std::string>& a_names) const
@@ -305,6 +303,10 @@ public:
    Vector<GKVlasovAMG*> m_pc_vec;
    bool m_precond_build_test;
    string m_precond_face_avg_type;
+
+   bool m_include_FLR_effects;
+   int m_it_counter;
+   int m_update_pc_freq;
 };
 
 #include "NamespaceFooter.H"

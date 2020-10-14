@@ -335,6 +335,253 @@ namespace GKUtils {
       return accum;
    }
    
+   void maxVal( const LevelData<FArrayBox>& a_data,
+                std::vector<Real>&          a_vals )
+   {
+     int nv = a_data.nComp();
+     a_vals.resize(nv);
+     std::vector<Real> local_max(nv, -DBL_MAX);
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int n=0; n<nv; n++) {
+         Real val = a_data[dit].max(n);
+         if (val > local_max[n]) local_max[n] = val;
+       }
+     }
+#ifdef CH_MPI
+     MPI_Allreduce(local_max.data(), a_vals.data(), nv, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#else
+     a_vals = local_max;
+#endif
+     return;
+   }
+   
+   void minVal( const LevelData<FArrayBox>& a_data,
+                std::vector<Real>&          a_vals )
+   {
+     int nv = a_data.nComp();
+     a_vals.resize(nv);
+     std::vector<Real> local_min(nv, DBL_MAX);
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int n=0; n<nv; n++) {
+         Real val = a_data[dit].min(n);
+         if (val < local_min[n]) local_min[n] = val;
+       }
+     }
+#ifdef CH_MPI
+     MPI_Allreduce(local_min.data(), a_vals.data(), nv, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+#else
+     a_vals = local_min;
+#endif
+     return;
+   }
+   
+   void maxAbsVal(  const LevelData<FArrayBox>& a_data,
+                    std::vector<Real>&          a_vals )
+   {
+     int nv = a_data.nComp();
+     a_vals.resize(nv);
+     std::vector<Real> local_maxabs(nv, 0);
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int n=0; n<nv; n++) {
+         Real val1 = a_data[dit].max(n);
+         Real val2 = a_data[dit].min(n);
+         Real val = std::max(abs(val1), abs(val2));
+         if (val > local_maxabs[n]) local_maxabs[n] = val;
+       }
+     }
+#ifdef CH_MPI
+     MPI_Allreduce(local_maxabs.data(), a_vals.data(), nv, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#else
+     a_vals = local_maxabs;
+#endif
+     return;
+   }
+   
+   void setVal( LevelData<FArrayBox>&     a_data,
+                const std::vector<Real>&  a_vals )
+   {
+     int nv = a_data.nComp();
+     CH_assert(a_vals.size() == nv);
+   
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int n=0; n<nv; n++) {
+         a_data[dit].setVal(a_vals[n], n);
+       }
+     }
+   
+     return;
+   }
+   
+   void maxVal( const LevelData<FluxBox>& a_data,
+                std::vector<Real>&        a_vals )
+   {
+     int nv = a_data.nComp();
+     a_vals.resize(nv);
+     std::vector<Real> local_max(nv, -DBL_MAX);
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int dir=0; dir<SpaceDim; dir++) {
+         for (int n=0; n<nv; n++) {
+           Real val = a_data[dit][dir].max(n);
+           if (val > local_max[n]) local_max[n] = val;
+         }
+       }
+     }
+#ifdef CH_MPI
+     MPI_Allreduce(local_max.data(), a_vals.data(), nv, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#else
+     a_vals = local_max;
+#endif
+     return;
+   }
+   
+   void minVal( const LevelData<FluxBox>& a_data,
+                std::vector<Real>&        a_vals )
+   {
+     int nv = a_data.nComp();
+     a_vals.resize(nv);
+     std::vector<Real> local_min(nv, DBL_MAX);
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int dir=0; dir<SpaceDim; dir++) {
+         for (int n=0; n<nv; n++) {
+           Real val = a_data[dit][dir].min(n);
+           if (val < local_min[n]) local_min[n] = val;
+         }
+       }
+     }
+#ifdef CH_MPI
+     MPI_Allreduce(local_min.data(), a_vals.data(), nv, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+#else
+     a_vals = local_min;
+#endif
+     return;
+   }
+   
+   void maxAbsVal(  const LevelData<FluxBox>& a_data,
+                    std::vector<Real>&        a_vals )
+   {
+     int nv = a_data.nComp();
+     a_vals.resize(nv);
+     std::vector<Real> local_maxabs(nv, 0);
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int dir=0; dir<SpaceDim; dir++) {
+         for (int n=0; n<nv; n++) {
+           Real val1 = a_data[dit][dir].max(n);
+           Real val2 = a_data[dit][dir].min(n);
+           Real val = std::max(abs(val1), abs(val2));
+           if (val > local_maxabs[n]) local_maxabs[n] = val;
+         }
+       }
+     }
+#ifdef CH_MPI
+     MPI_Allreduce(local_maxabs.data(), a_vals.data(), nv, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#else
+     a_vals = local_maxabs;
+#endif
+     return;
+   }
+   
+   void setVal( LevelData<FluxBox>&       a_data,
+                const std::vector<Real>&  a_vals )
+   {
+     int nv = a_data.nComp();
+     CH_assert(a_vals.size() == nv);
+   
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int dir=0; dir<SpaceDim; dir++) {
+         for (int n=0; n<nv; n++) {
+           a_data[dit][dir].setVal(a_vals[n], n);
+         }
+       }
+     }
+   
+     return;
+   }
+   
+   void maxVal( const LevelData<EdgeDataBox>& a_data,
+                std::vector<Real>&            a_vals )
+   {
+     int nv = a_data.nComp();
+     a_vals.resize(nv);
+     std::vector<Real> local_max(nv, -DBL_MAX);
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int dir=0; dir<SpaceDim; dir++) {
+         for (int n=0; n<nv; n++) {
+           Real val = a_data[dit][dir].max(n);
+           if (val > local_max[n]) local_max[n] = val;
+         }
+       }
+     }
+#ifdef CH_MPI
+     MPI_Allreduce(local_max.data(), a_vals.data(), nv, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#else
+     a_vals = local_max;
+#endif
+     return;
+   }
+   
+   void minVal( const LevelData<EdgeDataBox>& a_data,
+                std::vector<Real>&            a_vals )
+   {
+     int nv = a_data.nComp();
+     a_vals.resize(nv);
+     std::vector<Real> local_min(nv, DBL_MAX);
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int dir=0; dir<SpaceDim; dir++) {
+         for (int n=0; n<nv; n++) {
+           Real val = a_data[dit][dir].min(n);
+           if (val < local_min[n]) local_min[n] = val;
+         }
+       }
+     }
+#ifdef CH_MPI
+     MPI_Allreduce(local_min.data(), a_vals.data(), nv, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+#else
+     a_vals = local_min;
+#endif
+     return;
+   }
+   
+   void maxAbsVal(  const LevelData<EdgeDataBox>& a_data,
+                    std::vector<Real>&          a_vals )
+   {
+     int nv = a_data.nComp();
+     a_vals.resize(nv);
+     std::vector<Real> local_maxabs(nv, 0);
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int dir=0; dir<SpaceDim; dir++) {
+         for (int n=0; n<nv; n++) {
+           Real val1 = a_data[dit][dir].max(n);
+           Real val2 = a_data[dit][dir].min(n);
+           Real val = std::max(abs(val1), abs(val2));
+           if (val > local_maxabs[n]) local_maxabs[n] = val;
+         }
+       }
+     }
+#ifdef CH_MPI
+     MPI_Allreduce(local_maxabs.data(), a_vals.data(), nv, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#else
+     a_vals = local_maxabs;
+#endif
+     return;
+   }
+   
+   void setVal( LevelData<EdgeDataBox>&   a_data,
+                const std::vector<Real>&  a_vals )
+   {
+     int nv = a_data.nComp();
+     CH_assert(a_vals.size() == nv);
+   
+     for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+       for (int dir=0; dir<SpaceDim; dir++) {
+         for (int n=0; n<nv; n++) {
+           a_data[dit][dir].setVal(a_vals[n], n);
+         }
+       }
+     }
+   
+     return;
+   }
+
 }
    
  

@@ -156,13 +156,14 @@ class TiARK : public TimeIntegrator<Vector,Ops>
     Vector        m_YStage, m_YPrev,
                   *m_rhsStage_exp, *m_rhsStage_imp, 
                   *m_rhsStage_exp_prev, *m_rhsStage_imp_prev,
-                  m_R, m_Z;
+                  m_R, m_Z, m_W;
     Ops           m_Operators;
     Real          m_time;
     Real          m_dt;
     Real          m_epsJFNK;
     int           m_cur_step,
                   m_count;
+    bool          m_use_scaled_norms;
 
     ExplicitStageFunction<Vector,Ops>*  m_Efunction;
     ExplicitStageJacobian<Vector,Ops>*  m_EJacobian;
@@ -186,6 +187,7 @@ void TiARK<Vector,Ops>::define(ParmParse& a_pp, std::string a_name, Vector& a_Y,
   m_dt = a_dt;
   m_stagePredictor = false;
   m_epsJFNK = 1e-6;
+  m_use_scaled_norms = false;
 
   /* set Butcher coefficients */
   if (a_name == "1bee") {
@@ -434,11 +436,12 @@ void TiARK<Vector,Ops>::define(ParmParse& a_pp, std::string a_name, Vector& a_Y,
   m_YStage.define(a_Y);
   m_R.define(a_Y);
   m_Z.define(a_Y);
+  m_W.define(a_Y);
   for (int i=0; i<m_nstages; i++) {
     m_rhsStage_exp[i].define(a_Y);
     m_rhsStage_imp[i].define(a_Y);
   }
-  m_Operators.define((*a_Y.getState()), m_dt);
+  m_Operators.define((*a_Y.getState()), m_dt, m_use_scaled_norms);
   m_isLinear = m_Operators.isLinear();
 
   /* define vectors for stage predictors */
@@ -503,6 +506,8 @@ void TiARK<Vector,Ops>::define(ParmParse& a_pp, std::string a_name, Vector& a_Y,
     m_ExplicitStageSolver.define(a_pp,m_R,esolverOutPrefix,solverOptPrefix);
     m_ExplicitStageSolver.setIsLinear(m_isLinear);
   }
+
+  m_Operators.setScaleTolerance(m_ImplicitStageSolver.getAbsTol());
 
   m_count = 0;
 
@@ -597,11 +602,11 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
   CH_TIMER("explicitStageSolver",t_explicit_stage_solver);
   CH_assert(isDefined());
   CH_assert(m_time == a_time);
-  m_Z.copy(a_Y);
+
+  m_YStage = a_Y;
 
   /* Assert explicit-first-stage - post-time-stage function implementation 
-   * in GKOps.cpp assumes that YStage(1) = y_n!
-  */
+   * in GKOps.cpp assumes that YStage(1) = y_n! */
   CH_assert(m_Ai[0] == 0.0);
 
   bool IJacobian_precond_updated = false;
@@ -613,15 +618,17 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
 
     Real stage_time = m_time+m_ce[i]*m_dt;
 
-    if (m_Operators.trivialSolutionOp()) {
-      m_YStage.copy(a_Y);
-    } else {
-      m_Operators.preSolutionOpEval(a_Y,m_time,chkpt_ti_advance_1);
-      m_Operators.solutionOp(m_YStage,m_time,a_Y);
-    }
+    /* explicit stage solution */
+    m_Z = a_Y;
+    for (j=0; j<i; j++) m_Z.increment(m_rhsStage_exp[j],(m_dt*m_Ae[i*m_nstages+j]));
+    for (j=0; j<i; j++) m_Z.increment(m_rhsStage_imp[j],(m_dt*m_Ai[i*m_nstages+j]));
 
-    for (j=0; j<i; j++) m_YStage.increment(m_rhsStage_exp[j],(m_dt*m_Ae[i*m_nstages+j]));
-    for (j=0; j<i; j++) m_YStage.increment(m_rhsStage_imp[j],(m_dt*m_Ai[i*m_nstages+j]));
+    if (!m_Operators.trivialSolutionOp()) {
+      m_Operators.preSolutionOpEval(a_Y,m_time,chkpt_ti_advance_1);
+      m_Operators.solutionOp(m_W,m_time,a_Y);
+      for (j=0; j<i; j++) m_W.increment(m_rhsStage_exp[j],(m_dt*m_Ae[i*m_nstages+j]));
+      for (j=0; j<i; j++) m_W.increment(m_rhsStage_imp[j],(m_dt*m_Ai[i*m_nstages+j]));
+    }
 
     if (m_Ai[i*m_nstages+i] != 0.0) {
       
@@ -634,51 +641,59 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
       m_IJacobian->setShift(shift);
       m_IJacobian->setStageTime(stage_time);
 
-      /* Build precond matrix from m_Z, which is
+      /* Build precond matrix from m_YStage, which is
        * first stage - a_Y
        * subsequent stages - m_YStage from previous stage */
       if ( !m_Operators.stepConstCoef() || !IJacobian_precond_updated ) {
-         m_IJacobian->updatePreCondMat(m_Z);
+         m_IJacobian->updatePreCondMat(m_YStage);
          IJacobian_precond_updated = true;
       }
 
-      /* right-hand side */
-      m_R.copy(m_YStage);  
-      m_R.scale(shift);
+      /* RHS for stage solve */
+      if (m_Operators.trivialSolutionOp()) {
+        m_R = m_Z;
+      } else {
+        m_R = m_W;
+      }
+      m_R *= shift;
 
       /* Before the Newton solve begins, m_Z contains the
        * initial guess. If using stage predictor, initial 
        * guess is computed by extrapolating from previous step */
       if (m_stagePredictor && (m_cur_step > 0)) extrapolate(m_ce[i],m_Z);
 
-      m_Z = m_YStage;
-
       CH_START(t_implicit_stage_solver);
       m_ImplicitStageSolver.solve(m_Z,m_R);
       CH_STOP(t_implicit_stage_solver);
-      m_YStage.copy(m_Z);
+      m_YStage = m_Z;
 
     } else if (!m_Operators.trivialSolutionOp()) {
 
       m_Efunction->setStageTime(stage_time);
-
       m_EJacobian->setStageTime(stage_time);
 
-      /* Build precond matrix from m_Z, which is
+      /* Build precond matrix from m_YStage, which is
        * first stage - a_Y
        * subsequent stages - m_YStage from previous stage */
       if ( !m_Operators.stepConstCoef() || !EJacobian_precond_updated ) {
-         m_EJacobian->updatePreCondMat(m_Z);
+         m_EJacobian->updatePreCondMat(m_YStage);
          EJacobian_precond_updated = true;
       }
 
-      /* right-hand side */
-      m_R.copy(m_YStage);  
+      /* RHS for stage solve */
+      m_R = m_W;
+
+      /* initial guess */
+      m_Z = m_YStage;
 
       CH_START(t_explicit_stage_solver);
       m_ExplicitStageSolver.solve(m_Z, m_R);
       CH_STOP(t_explicit_stage_solver);
-      m_YStage.copy(m_Z);
+      m_YStage = m_Z;
+
+    } else {
+
+      m_YStage = m_Z;
 
     }
 
@@ -772,6 +787,7 @@ void TiARK<Vector,Ops>::parseParameters( ParmParse& a_pp)
   /* use stage predictor based on dense output */
   a_pp.query("stage_predictor", m_stagePredictor); 
   a_pp.query("jfnk_epsilon", m_epsJFNK); 
+  a_pp.query("scaled_norms", m_use_scaled_norms); 
 }
 
 #include "NamespaceFooter.H"

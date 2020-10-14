@@ -135,6 +135,11 @@ public:
 
    void multPointwiseJ( LevelData<FArrayBox>& dfn,
                         const BoundaryBoxLayout& bdry_layout ) const;
+   
+   void multNTransposePointwise(LevelData<FluxBox>& a_data) const;
+
+   void multiplyNTranspose( LevelData<FArrayBox>&  a_NTF,
+                      const LevelData<FArrayBox>&  a_F ) const;
 
    // Computes physical face areas (no 2piR factors for axisymmetric)
    void getFaceAreas( LevelData<FluxBox>& areas ) const;
@@ -174,11 +179,18 @@ public:
                                     const int                      face_dir,
                                           LevelData<FArrayBox>&    face_curl) const;
    
-   void mappedGridCurlofVirtComp( const LevelData<FArrayBox>&    F,
-                                        LevelData<EdgeDataBox>&  edge_curl) const;
+   void mappedGridCurlofVirtComp( LevelData<EdgeDataBox>&  edge_curl, 
+                            const LevelData<FArrayBox>&    F ) const;
    
-   void mappedGridCurlofVirtComp( const LevelData<FArrayBox>&  F,
-                                        LevelData<FArrayBox>&  cell_curl) const;
+   void mappedGridCurlofVirtComp( LevelData<FArrayBox>&  cell_curl,
+                            const LevelData<FArrayBox>&  F ) const;
+   
+   void mappedGridCurl3D( LevelData<EdgeDataBox>&  a_JaCurlB_ce,
+                    const LevelData<FluxBox>&      a_B_cf ) const;
+   
+   void mappedGridCurl3D( LevelData<FluxBox>&      a_JaCurlB_cf,
+                    const LevelData<EdgeDataBox>&  a_B_ce ) const;
+   
    
    void convertPhysToCovar( LevelData<FArrayBox>&  a_F,
                       const int                    a_inverse) const;
@@ -193,14 +205,17 @@ public:
                           const int                  a_inverse) const;
    
    void convertContravarToCovar( LevelData<EdgeDataBox>&  a_F,
-                           const int                      a_inverse) const;
+                           const int                      a_inverse ) const;
+   
+   void convertContravarToCovar( LevelData<FluxBox>&  a_F,
+                           const int                  a_inverse ) const;
+   
+   void convertContravarToCovar( FluxBox&    a_F,
+                           const DataIndex&  a_dit,
+                           const int         a_inverse ) const;
    
    void computeJaStrainTensorPhys( LevelData<FluxBox>&    a_JaW_phys, 
                              const LevelData<FArrayBox>&  a_velocity_phys ) const;
-   
-   void computeJaPhysStrainFlux( LevelData<FluxBox>&    a_JaW0_Flux_phys, 
-                                 LevelData<FluxBox>&    a_JaW1_Flux_phys,
-                           const LevelData<FArrayBox>&  a_velocity_phys ) const;
    
    // Project the vector from phys directions to unit normal
    // coord sys with 0-component normal to the a_dir direction 
@@ -210,6 +225,12 @@ public:
                              const DataIndex&  a_dit,
                              const int         a_dir,
                              const int         a_inverse ) const;
+
+   void multJ( FArrayBox&  a_data,
+         const DataIndex&  a_dit ) const;
+   
+   void divideJ( FArrayBox&  a_data,
+           const DataIndex&  a_dit ) const;
 
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
@@ -345,7 +366,10 @@ public:
 
    void computeEXBDrift( const LevelData<FluxBox>& E_field,
                          LevelData<FluxBox>&       ExB_drift ) const;
-   
+
+   void computeEXBDrift( const LevelData<FArrayBox>& E_field,
+                         LevelData<FArrayBox>&       ExB_drift ) const;
+
    //Extracts a radial electric field at the top cut, and then interpolates
    //it on the grid (taking into account the the magnetic flux expansion)
    void interpolateErFromMagFS(LevelData<FluxBox>&   Er_face,
@@ -395,7 +419,10 @@ public:
    void projectOntoParallel( LevelData<FArrayBox>& vector ) const;
    
    void projectOntoParallel( LevelData<FluxBox>& vector ) const;
-   
+
+   void computeParallelProjection(LevelData<FArrayBox>& parComp,
+                                  const LevelData<FArrayBox>& vector) const;
+    
    //Compute vector projection onto the direction of phi x bpol
    void computeRadialProjection( LevelData<FArrayBox>& radComp,
                                  const LevelData<FArrayBox>& vector) const;
@@ -409,6 +436,12 @@ public:
    
    void computePoloidalProjection( LevelData<FluxBox>& polComp,
                                    const LevelData<FluxBox>& vector) const;
+   
+   void getBfieldDirCylindrical(LevelData<FArrayBox>& BfieldDir_cyl_cc) const;
+   
+   void getBfieldDirCylindrical(LevelData<FluxBox>& BfieldDir_cyl_fc) const;
+   
+   void getBfieldCylindrical(LevelData<FArrayBox>& Bfield_cyl) const;
    
    void computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& phi,
                                                  LevelData<FArrayBox>&       field,
@@ -584,6 +617,9 @@ private:
    LevelData<FluxBox> m_gradBFieldMag_fc;
    LevelData<FluxBox> m_curlBFieldDir_fc;
    LevelData<FluxBox> m_BFieldDirdotcurlBFieldDir_fc;
+   
+   mutable LevelData<FArrayBox> m_BFieldDirCyl_cc;
+   mutable LevelData<FluxBox> m_BFieldDirCyl_fc;
    
    mutable LevelData<FArrayBox> m_nodal_integrals;
    mutable LevelData<FluxBox> m_face_Binverse_integrals;

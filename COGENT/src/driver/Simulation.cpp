@@ -246,6 +246,7 @@ void Simulation<SYSTEM>::advance()
    CH_START(t_print_diagnostcs);
    if (m_verbosity >= 1) {
       m_system->printDiagnostics();
+      m_system->printStepNorm();
       pout()<< "Step " << m_cur_step << " completed, simulation time is "
             << m_cur_time << ", solver wall time is " << walltime_g << " seconds"
             << endl << "----" << endl;

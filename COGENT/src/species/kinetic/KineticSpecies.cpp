@@ -162,7 +162,7 @@ void KineticSpecies::ParallelMomentum( CFG::LevelData<CFG::FArrayBox>& a_Paralle
 
 void KineticSpecies::ParallelVelocity( CFG::LevelData<CFG::FArrayBox>& a_ParallelVel ) const
 {
-   const CFG::MagGeom& mag_geom = m_geometry->magGeom();
+   //const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    
    CFG::LevelData<CFG::FArrayBox> density;
    density.define(a_ParallelVel);
@@ -674,12 +674,11 @@ Real KineticSpecies::minValue() const
 
 void KineticSpecies::computeVelocity(LevelData<FluxBox>&       a_velocity,
                                      const LevelData<FluxBox>& a_E_field,
-                                     const bool                a_ignore_gyrokinetic,
+                                     const bool                a_include_FLR,
                                      const int                 a_velocity_option,
                                      const Real&               a_time,
                                      const bool                a_apply_axisymmetric_correction) const
 {
-   
    CH_TIMERS("KineticSpecies::computeVelocity");
    //CH_TIMER("copy_velocity_chombo", t_copy_velocity_chombo);
    CH_TIMER("copy_velocity_fort", t_copy_velocity_fort);
@@ -688,7 +687,10 @@ void KineticSpecies::computeVelocity(LevelData<FluxBox>&       a_velocity,
    CH_assert(a_velocity.nComp() == m_velocity.nComp());
    
 //   if (m_velocity_option != a_velocity_option) {
-       m_geometry->updateVelocities( a_E_field, m_velocity, a_velocity_option, (isGyrokinetic()&&(!a_ignore_gyrokinetic)) );
+       m_geometry->updateVelocities(  a_E_field, 
+                                      m_velocity, 
+                                      a_velocity_option, 
+                                      (isGyrokinetic() && a_include_FLR) );
 //       m_velocity_option = a_velocity_option;
 //   }
 
@@ -738,19 +740,28 @@ void KineticSpecies::computeMappedVelocityNormals(LevelData<FluxBox>& a_velocity
 {
    const DisjointBoxLayout& dbl( m_dist_func.getBoxes() );
    a_velocity_normal.define( dbl, 1, IntVect::Unit );
-   m_geometry->updateVelocityNormals( a_E_field_cell, a_phi_node, a_fourth_order_Efield, a_velocity_normal, a_velocity_option);
+   m_geometry->updateVelocityNormals( a_E_field_cell, 
+                                      a_phi_node, 
+                                      a_fourth_order_Efield, 
+                                      a_velocity_normal, 
+                                      a_velocity_option );
 }
 
 
 void KineticSpecies::computeMappedVelocity(LevelData<FluxBox>& a_velocity,
                                            const LevelData<FluxBox>& a_E_field,
-                                           const bool a_ignore_gyrokinetic,
+                                           const bool a_include_FLR,
                                            const Real&  a_time) const
 {
    
    CH_TIME("KineticSpecies::computeMappedVelocity");
 
-   computeVelocity(a_velocity, a_E_field, a_ignore_gyrokinetic, PhaseGeom::FULL_VELOCITY, a_time, false);
+   computeVelocity( a_velocity, 
+                    a_E_field, 
+                    a_include_FLR, 
+                    PhaseGeom::FULL_VELOCITY, 
+                    a_time, 
+                    false);
    m_geometry->multNTransposePointwise( a_velocity );
 
 }

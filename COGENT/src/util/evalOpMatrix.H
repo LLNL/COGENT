@@ -227,11 +227,11 @@ void EvalOpMatrix<Vector,Ops>::computeOpMatrix( const Vector& a_Y0,
   clock_t timer_start = clock();
 
   int ndof = a_Y0.getVectorSize();
-  Real eps, norm = a_Y0.computeNorm(2);
+  Real eps, norm = a_Y0.computeNorm();
   if (norm < m_tolerance) {
     eps = m_epsJFNK;
   } else {
-    eps = m_epsJFNK * a_Y0.computeNorm(2);
+    eps = m_epsJFNK * a_Y0.computeNorm();
   }
 
   if (!procID()) {

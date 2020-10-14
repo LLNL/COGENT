@@ -93,7 +93,7 @@ void PointJacobiSolver<T,Ops>::solve(T& a_x, const T& a_b, int a_its)
   for (n = 0; n < a_its; n++) {
 
     m_op->residual(m_y, a_x, a_b);
-    norm = m_y.computeNorm(2);
+    norm = m_y.computeNorm();
     if (n == 0) norm0 = norm;
     if ((norm < m_atol) || (norm/norm0 < m_rtol)) break;
 

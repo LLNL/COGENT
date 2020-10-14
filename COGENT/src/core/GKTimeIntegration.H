@@ -345,6 +345,8 @@ public:
       }
       return ghost_vect;
    }
+
+   void setVarScaling(Real* const, const Real) const;
    
 private:
 
@@ -558,6 +560,8 @@ public:
    const Real& operator[] (int idx) const;
    
    Real& operator[] (int idx);
+   
+   void setVarScaling(Real* const, const Real) const;
    
 private:
 

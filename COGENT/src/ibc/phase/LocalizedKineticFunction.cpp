@@ -46,7 +46,7 @@ void LocalizedKineticFunction::assign( KineticSpecies& a_species,
    }
    geometry.multBStarParallel( dfn );
    if ( !(geometry.secondOrder()) )  {
-     KineticFunctionUtils::convertToCellAverage( geometry, dfn );
+     KineticFunctionUtils::convertToCellAverage( geometry, dfn, m_useSG );
    }
    geometry.multJonValid( dfn );
    dfn.exchange();
@@ -59,6 +59,9 @@ void LocalizedKineticFunction::assign( KineticSpecies& a_species,
 {
    const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
    checkGeometryValidity( geometry );
+   
+   FourthOrderUtil mySGutils; 
+   mySGutils.setSG(m_useSG);
 
    LevelData<FArrayBox>& dfn( a_species.distributionFunction() );
    const DisjointBoxLayout& grids( dfn.disjointBoxLayout() );
@@ -78,7 +81,8 @@ void LocalizedKineticFunction::assign( KineticSpecies& a_species,
        Box domain_box( dfn_tmp[dit].box() );
        domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
        ProblemDomain domain( domain_box );
-       fourthOrderAverageCell( dfn_tmp[dit], domain, grids[dit] );
+       //fourthOrderAverageCell( dfn_tmp[dit], domain, grids[dit] );
+       mySGutils.fourthOrderAverageCellSG( dfn_tmp[dit], domain, grids[dit] ); //Lee changed this!
      }
    }
    dfn_tmp.copyTo( dfn );
@@ -102,6 +106,11 @@ void LocalizedKineticFunction::parseParameters( ParmParse& a_pp )
    m_width = RealVect( temp );
 
    a_pp.get( "floor", m_floor );
+   
+   ParmParse ppsg("sparsegrid");
+
+   m_useSG = false;
+   ppsg.query( "useSGstencils", m_useSG );
 
    if (m_verbosity) {
       printParameters();

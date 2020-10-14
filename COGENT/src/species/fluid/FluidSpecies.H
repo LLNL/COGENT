@@ -160,10 +160,12 @@ class FluidSpecies
       std::vector<string> m_plotMemberVarNames;
     
       Real m_gamma = 5.0/3.0;
+      int  m_CGL = 0;
 
 private:
 
       LevelData<FluxBox> m_velocity;
+      mutable LevelData<FArrayBox> m_magField_cc;
    
       enum {INVALID=-1, MASS_DENSITY, MOMENTUM_DENSITY, TOTAL_ENERGY_DENSITY };
 

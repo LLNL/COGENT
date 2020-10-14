@@ -48,12 +48,14 @@ class SingleNullPhaseBC
        * at the given time.  Assumes distribution function is in computational
        * coordinates.
        *
-       * @param[out] species_phys Kinetic species to set.
+       * @param[out] species  Physical kinetic species vector
+       * @param[out] species_index  Species to set (index)
        * @param[in] phi           Potential field.
        * @param[in] velocity      Phase space velocity field.
        * @param[in] time          Time value at which to evaluate the function.
        */
-      virtual void apply( KineticSpecies& species_phys,
+      virtual void apply( KineticSpeciesPtrVect& species,
+                          const int& species_index,
                           const CFG::LevelData<CFG::FArrayBox>& phi,
                           const LevelData<FluxBox>& velocity,
                           const Real& time );
@@ -99,7 +101,8 @@ class SingleNullPhaseBC
       /**
        */
    
-      void applySheathBC(KineticSpecies& a_species,
+      void applySheathBC(KineticSpeciesPtrVect& species,
+                         const int& species_index,
                          const CFG::LevelData<CFG::FArrayBox>& a_phi,
                          const LevelData<FluxBox>& a_velocity);
    

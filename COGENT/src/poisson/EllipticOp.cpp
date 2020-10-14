@@ -371,7 +371,7 @@ EllipticOp::computeMapped3DField( const LevelData<FArrayBox>&  a_phi,
    int order = m_second_order? 2: 4;
 
    const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
+   //const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
@@ -427,7 +427,7 @@ EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
    int order = m_second_order? 2: 4;
 
    const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
+   //const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
@@ -484,7 +484,7 @@ EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
    int order = m_second_order? 2: 4;
 
    const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
+   //const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
@@ -540,7 +540,7 @@ EllipticOp::computeMapped3DField( const LevelData<FArrayBox>&  a_phi,
    int order = m_second_order? 2: 4;
 
    const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
+   //const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       int block_number = mag_coord_sys->whichBlock(grids[dit]);
@@ -731,7 +731,7 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
 
 
 void
-EllipticOp::computeBcDivergence( LevelData<FArrayBox>& a_out ) const
+EllipticOp::computeBcDivergence( LevelData<FArrayBox>& a_out ) 
 {
    const DisjointBoxLayout& grids = a_out.disjointBoxLayout();
    LevelData<FArrayBox> phi(grids, 1, IntVect::Zero);
@@ -1840,7 +1840,7 @@ EllipticOp::interpToNodes( const LevelData<FArrayBox>&  a_phi,
    int order = m_second_order? 2: 4;
 
    const MagCoordSys* mag_coord_sys = m_geometry.getCoordSys();
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
+   //const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& boundaries = mag_coord_sys->boundaries();
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       int block_number = mag_coord_sys->whichBlock(grids[dit]);

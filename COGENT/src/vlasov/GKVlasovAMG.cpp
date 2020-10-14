@@ -16,7 +16,7 @@ GKVlasovAMG::GKVlasovAMG( const ParmParse&  a_pp,
                           const PhaseGeom&  a_geometry )
    : m_geometry(a_geometry),
      m_block_register(NULL),
-     m_mblex_ptr(NULL),
+     m_mb_coupling(NULL),
      m_hypre_allocated(false),
      m_A(NULL),
      m_AMG_solver_allocated(false)
@@ -75,11 +75,15 @@ GKVlasovAMG::GKVlasovAMG( const ParmParse&  a_pp,
          break;
       }
    }
+
+   // Save cell volumes
+   m_volume.define(m_geometry.gridsFull(), 1, IntVect::Zero);
+   m_geometry.getCellVolumes(m_volume);
 }
 
 GKVlasovAMG::~GKVlasovAMG()
 {
-   if (m_mblex_ptr) delete m_mblex_ptr;
+   if (m_mb_coupling) delete m_mb_coupling;
 
    for (int n=0; n<m_stencil_size; ++n) delete [] m_offsets[n];
    delete m_offsets;
@@ -141,8 +145,8 @@ void GKVlasovAMG::createHypreData()
             bool this_dir_periodic = domain.isPeriodic(dir);
 
             if ( !this_dir_periodic ||
-                 (block_boundaries[block_number][dir].isInterface() && m_mblex_ptr != NULL) ||
-                 (block_boundaries[block_number][dir + SpaceDim].isInterface() && m_mblex_ptr != NULL) ) {
+                 (block_boundaries[block_number][dir].isInterface() && m_mb_coupling != NULL) ||
+                 (block_boundaries[block_number][dir + SpaceDim].isInterface() && m_mb_coupling != NULL) ) {
                periodic[dir] = 0;
             }
             else {
@@ -394,7 +398,7 @@ void GKVlasovAMG::constructMatrix( const string&                                
       if ( coord_sys_ptr->numBlocks() > 1 || ((CFG::MagGeom&)m_geometry.magGeom()).shearedMBGeom()) {
          int ghosts = m_stencil_radius;
          int order = 2;
-         m_mblex_ptr = new PhaseTBLEX(m_geometry, ghosts, order);
+         m_mb_coupling = new GKVlasovMBCoupling(m_geometry, ghosts, order);
       }
       
       CH_START(t_create_hypre_data);
@@ -410,8 +414,6 @@ void GKVlasovAMG::constructMatrix( const string&                                
    HYPRE_SStructMatrixInitialize(m_A);
    CH_STOP(t_hypre_initialize);
 
-   const Box& problem_box = grids.physDomain().domainBox();
-
    bool lo_block_interface[CFG_DIM+1];
    bool hi_block_interface[CFG_DIM+1];
    bool lo_block_boundary[CFG_DIM+1];
@@ -423,6 +425,10 @@ void GKVlasovAMG::constructMatrix( const string&                                
       const Box& box = grids[dit];
       int block_number = coord_sys_ptr->whichBlock(box);
       const Box& block_box = (coord_sys_ptr->mappingBlocks())[block_number];
+
+      const FArrayBox& this_volume = m_volume[dit];
+      const PhaseBlockCoordSys* block_coord_sys = coord_sys_ptr->getCoordSys(block_number);
+      double mapped_volume = block_coord_sys->getMappedCellVolume();
 
       const BaseFab<Vector<IntVect> >& this_couplings = a_structured_couplings[dit];
       const BaseFab<Vector<Real> >& this_weights = a_structured_weights[dit];
@@ -440,9 +446,12 @@ void GKVlasovAMG::constructMatrix( const string&                                
       for (BoxIterator bit(box); bit.ok(); ++bit) {
          IntVect iv = bit();
 
-         // Initialize the matrix with a_shift times the identity
+         // Initialize the matrix with a_shift times the identity.  The J (= physical cell volume
+         // divided by mapped cell volume) factor is needed because the matrix being constructed
+         // here is assumed to act on vectors in the physical frame, but the time-integration
+         // shift is done in the computational frame
          int center_entry = findStructuredEntry(iv, iv);
-         double center_value = a_shift;
+         double center_value = a_shift * this_volume(iv,0) / mapped_volume;
          HYPRE_SStructMatrixSetValues(m_A, block_number, iv.dataPtr(), 0, 1, &center_entry, 
                                       &center_value);
 
@@ -454,7 +463,7 @@ void GKVlasovAMG::constructMatrix( const string&                                
                Side::LoHiSide side = sit();
 
                // Couplings corresponding to faces at block interfaces are handled later
-               if ( m_mblex_ptr == NULL || 
+               if ( m_mb_coupling == NULL || 
                     (!(side == Side::LoHiSide::Lo && at_lo_interface) &&
                      !(side == Side::LoHiSide::Hi && at_hi_interface) ) ) {
 
@@ -509,11 +518,11 @@ GKVlasovAMG::addUnstructuredMatrixEntries(
    CH_TIMER("add_stencil_contrib",t_add_stencil_contrib);
    CH_TIMER("add_extrablock_contrib",t_add_extrablock_contrib);
 
-   if ( m_mblex_ptr ) {
+   if ( m_mb_coupling ) {
 
       const RefCountedPtr<PhaseCoordSys>& coord_sys_ptr = m_geometry.phaseCoordSysPtr();
       const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = coord_sys_ptr->boundaries();
-      const LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& stencil = m_mblex_ptr->stencils();
+      const LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& stencil = m_mb_coupling->stencils();
 
       const DisjointBoxLayout & grids = m_geometry.gridsFull();
 
@@ -827,14 +836,14 @@ void
 GKVlasovAMG::getUnstructuredCouplings( int                                 a_radius,
                                        LayoutData< BaseFab<IntVectSet> >&  a_unstructured_couplings ) const
 {
-   if ( m_mblex_ptr ) {
+   if ( m_mb_coupling ) {
 
       const RefCountedPtr<PhaseCoordSys>& coord_sys_ptr = m_geometry.phaseCoordSysPtr();
 
       LayoutData< Vector< BaseFab<IntVectSet>* > > all_couplings;
 
-      const LayoutData< IntVectSet >& ghostCells = m_mblex_ptr->ghostCells();
-      const LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& stencil = m_mblex_ptr->stencils();
+      //const LayoutData< IntVectSet >& ghostCells = m_mb_coupling->ghostCells();
+      const LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& stencil = m_mb_coupling->stencils();
 
       const DisjointBoxLayout & grids = m_geometry.gridsFull();
     
@@ -853,7 +862,7 @@ GKVlasovAMG::getUnstructuredCouplings( int                                 a_rad
       const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = coord_sys_ptr->boundaries();
 
       for (DataIterator dit(grids); dit.ok(); ++dit) {
-         const IntVectSet& this_ghosts_fab = ghostCells[dit];
+         //const IntVectSet& this_ghosts_fab = ghostCells[dit];
          if ( stencil[dit] != NULL  ) {
             const IVSFAB<MBStencil>& this_stencil_fab = *stencil[dit];
             int block_number = coord_sys_ptr->whichBlock(grids[dit]);
@@ -1059,7 +1068,7 @@ GKVlasovAMG::addUnstructuredGraphEntries( const int                             
                                           const LayoutData< BaseFab<IntVectSet> >&  a_unstructured_coupling,
                                           HYPRE_SStructGraph&                       a_graph ) const
 {
-   if ( m_mblex_ptr ) {
+   if ( m_mb_coupling ) {
 
       const DisjointBoxLayout& grids = m_geometry.gridsFull();
       const RefCountedPtr<PhaseCoordSys>& coord_sys_ptr = m_geometry.phaseCoordSysPtr();
@@ -1199,7 +1208,9 @@ void GKVlasovAMG::solve( const LevelData<FArrayBox>&  a_rhs,
 
    copyFromHypreVector(m_x, a_solution);
 
-   a_solution.exchange();
+   // The matrix of the linear system just solved acts on vectors in the physical
+   // frame, so convert the solution back to the computational frame
+   m_geometry.multJonValid(a_solution);
 }
 
 

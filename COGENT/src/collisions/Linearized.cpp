@@ -17,13 +17,13 @@
 
 Linearized::Linearized( const std::string& a_ppcls_str, const int a_verbosity )
     : m_verbosity(a_verbosity),
-      m_moment_op( MomentOp::instance() ),
       m_time_implicit(true),
       m_cls_freq(-1.0),
       m_conserve_momentum(true),
       m_conserve_energy(true),
       m_second_order(false),
-      m_first_step(true)
+      m_first_step(true),
+      m_moment_op( MomentOp::instance() )
 {
    ParmParse ppcls(a_ppcls_str.c_str());
    parseParameters( ppcls );
@@ -309,7 +309,7 @@ void Linearized::fieldPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
    CH_TIME("Linearized::fieldPartCollRHS");
    
    const DisjointBoxLayout& grids( a_rhs_coll.getBoxes() );
-   const int n_comp( a_rhs_coll.nComp() );
+   //const int n_comp( a_rhs_coll.nComp() );
    const LevelData<FArrayBox>& B_injected( a_phase_geom.getBFieldMagnitude() );
    const VEL::VelCoordSys& vel_coords = a_phase_geom.velSpaceCoordSys();
    const VEL::ProblemDomain& vel_domain = vel_coords.domain();
@@ -328,7 +328,7 @@ void Linearized::fieldPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
      a_phase_geom.injectConfigurationToPhase( m_norm_momentum, inj_MNorm );
 
      for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
-        const PhaseBlockCoordSys& block_coord_sys( a_phase_geom.getBlockCoordSys(grids[dit]) );
+        //const PhaseBlockCoordSys& block_coord_sys( a_phase_geom.getBlockCoordSys(grids[dit]) );
 
         FArrayBox& this_RHS( a_rhs_coll[dit] );
         const FArrayBox& this_MRest( inj_MRest[dit] );
@@ -448,7 +448,7 @@ void Linearized::evaluateNormKern( LevelData<FArrayBox>& a_kern_moment_norm,
 
    //Calculate kernels for the conserving terms normalization factors
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
-      const PhaseBlockCoordSys& block_coord_sys( a_phase_geom.getBlockCoordSys(grids[dit]) );
+      //const PhaseBlockCoordSys& block_coord_sys( a_phase_geom.getBlockCoordSys(grids[dit]) );
 
       FArrayBox& this_MN( a_kern_moment_norm[dit] );
       const FArrayBox& this_TempDistr = m_temperature[dit];

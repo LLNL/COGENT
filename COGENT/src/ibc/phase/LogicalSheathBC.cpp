@@ -35,18 +35,27 @@ LogicalSheathBC::LogicalSheathBC( const BoundaryBoxLayoutPtr&  a_bdry_layout,
 
 void
 LogicalSheathBC::computeSheathBC(LevelData<FArrayBox>& a_phi_bc,
-                                 const KineticSpecies& a_species) const
+                                 const KineticSpeciesPtrVect& a_species,
+                                 const int& a_species_index) const
 {
    // Get coordinate system parameters
-   const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
-   const MultiBlockCoordSys& coord_sys( *(geometry.coordSysPtr()) );
-   const PhaseGrid& phase_grid = geometry.phaseGrid();
+   //const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
+   //const MultiBlockCoordSys& coord_sys( *(geometry.coordSysPtr()) );
+   //const PhaseGrid& phase_grid = geometry.phaseGrid();
    
    // Get dfn and create bdry_data container
+   const KineticSpecies& species_physical( *(a_species[a_species_index]) );
    const DisjointBoxLayout& bdry_dbl( m_bdry_layout->disjointBoxLayout() );
    LevelData<FArrayBox> bdry_data(bdry_dbl, 1, IntVect::Zero);
-   const LevelData<FArrayBox>& dfn = a_species.distributionFunction();
+   const LevelData<FArrayBox>& dfn = species_physical.distributionFunction();
 
+   //Get ion parallel current or other data on the boundary,
+   // UNCOMMENT THIS CODE ONCE IT'S TESTED
+   /*
+    LevelData<FArrayBox> bdry_ion_current(bdry_dbl, 1, IntVect::Zero);
+    computeBoundaryIonCurrent(bdry_ion_current, a_species);
+   */
+   
    // Solve for potential BC
    Real residual = DBL_MAX;
    while (residual > 1.0e-6) {
@@ -55,9 +64,9 @@ LogicalSheathBC::computeSheathBC(LevelData<FArrayBox>& a_phi_bc,
       fillBoundaryData(bdry_data, dfn);
 
       for (DataIterator dit(bdry_dbl); dit.ok(); ++dit) {
-         const Box& bdry_box = bdry_dbl[dit];
-         const FArrayBox& this_data = bdry_data[dit];
-         FArrayBox& this_phi = a_phi_bc[dit];
+         //const Box& bdry_box = bdry_dbl[dit];
+         //const FArrayBox& this_data = bdry_data[dit];
+         //FArrayBox& this_phi = a_phi_bc[dit];
          /*
             Here, do something to the phase-space bdry_data using
             the current iteration of a_phi_bc. Note that this_phi is defined
@@ -71,8 +80,8 @@ LogicalSheathBC::computeSheathBC(LevelData<FArrayBox>& a_phi_bc,
 
       Real local_residual = DBL_MAX;
       for (DataIterator dit(m_grids_inj); dit.ok(); ++dit) {
-         const FArrayBox& this_data = bdry_data_summed[dit];
-         FArrayBox& this_phi = a_phi_bc[dit];
+         //const FArrayBox& this_data = bdry_data_summed[dit];
+         //FArrayBox& this_phi = a_phi_bc[dit];
          FArrayBox this_residual(m_grids_inj[dit], 1);
          /*
             Here, compute residual and update a_phi_bc
@@ -110,6 +119,39 @@ LogicalSheathBC::fillBoundaryData(LevelData<FArrayBox>& a_bdry_data,
       tmp.shift(dir, sign(side));
       this_data.copy(tmp);
    }
+}
+
+void
+LogicalSheathBC::computeBoundaryIonCurrent(LevelData<FArrayBox>& a_bdry_ion_current,
+                                           const KineticSpeciesPtrVect& a_species) const
+{
+   LevelData<FArrayBox> bdry_kernel(m_grids_inj, 1, IntVect::Zero);
+   for (DataIterator dit( m_grids_inj ); dit.ok(); ++dit) {
+      bdry_kernel[dit].setVal(0.0);
+   }
+
+   LevelData<FArrayBox> this_bdry_data(m_grids_inj, 1, IntVect::Zero);
+   
+   for (int s_index(0); s_index<a_species.size(); s_index++) {
+
+      const KineticSpecies& species_physical( *(a_species[s_index]) );
+      
+      if ( species_physical.charge() > 0.0 ) continue;
+      
+      const LevelData<FArrayBox>& dfn = species_physical.distributionFunction();
+      fillBoundaryData(this_bdry_data, dfn);
+      
+      for (DataIterator dit( m_grids_inj ); dit.ok(); ++dit) {
+         this_bdry_data[dit].mult(species_physical.charge());
+         bdry_kernel[dit].plus(this_bdry_data[dit]);
+      }
+   }
+   
+   /*
+    Multiply by the proper kernel here (e.g., v_parallel)
+   */
+   
+   sum(bdry_kernel, a_bdry_ion_current);
 }
 
 void
@@ -160,7 +202,8 @@ LogicalSheathBC::sum( const LevelData<FArrayBox>& a_src,
    tmp.copyTo(tmp.interval(), a_dst, a_dst.interval(), reduceCopierMu, opMu);
 }
 
-void LogicalSheathBC::applyBC( KineticSpecies& a_species,
+void LogicalSheathBC::applyBC( KineticSpeciesPtrVect& a_species,
+                               const int& a_species_index,
                                const LevelData<FluxBox>& a_velocity,
                                const CFG::LevelData<CFG::FArrayBox>& a_phi) const
 {
@@ -171,11 +214,13 @@ void LogicalSheathBC::applyBC( KineticSpecies& a_species,
    const int& dir( m_bdry_layout->dir() );
    const Side::LoHiSide& side( m_bdry_layout->side() );
    
-   LevelData<FArrayBox>& soln( a_species.distributionFunction() );
-   const double mass = a_species.mass();
-   const double charge = a_species.charge();
+   KineticSpecies& species_physical( *(a_species[a_species_index]) );
+   LevelData<FArrayBox>& soln( species_physical.distributionFunction() );
+   
+   const double mass = species_physical.mass();
+   const double charge = species_physical.charge();
             
-   const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
+   const PhaseGeom& geometry( species_physical.phaseSpaceGeometry() );
          
    LevelData<FArrayBox> phi_injected;
    if (!m_compute_potential_BC) {
@@ -183,7 +228,7 @@ void LogicalSheathBC::applyBC( KineticSpecies& a_species,
    }
    else {
       phi_injected.define(m_grids_inj, 1, IntVect::Zero);
-      computeSheathBC(phi_injected, a_species);
+      computeSheathBC(phi_injected, a_species, a_species_index);
    }
          
    // Create valid-cell box that extends ghost_vect number

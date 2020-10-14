@@ -17,7 +17,7 @@ class ExplicitStagePC: public IMEXStagePCFunction<T,Ops>
     ~ExplicitStagePC<T,Ops>() {}
 
     void residual   (T& a_residual, const T& a_y, const T& a_rhs);
-    void applyOp    (T& a_F, const T& a_y);
+    void applyOp    (T& a_F, const T& a_y, int a_its = -1);
     void axby       (T& a_Z, const T& a_X, const T& a_Y, Real a_a, Real a_b);
 
     inline void preCond(T& a_Y, const T& a_X) { a_Y.copy(a_X); }
@@ -28,14 +28,18 @@ class ExplicitStagePC: public IMEXStagePCFunction<T,Ops>
     inline void scale     (T& a_Y, const Real& a_scale)       { a_Y.scale(a_scale); }
     inline void setToZero (T& a_Y)                            { a_Y.zero(); }
     inline Real dotProduct(T& a_X, const T& a_Y)              { return(a_X.dotProduct(a_Y)); }
-    inline Real norm      (T& a_Y, int a_ord)                 { return(a_Y.computeNorm(a_ord)); }
+
+    inline Real norm (T& a_Y, int a_ord) { 
+      CH_assert(a_ord == 2);
+      return(a_Y.computeNorm()); 
+    }
 
     inline bool isDefined       ()              const { return m_is_Defined;  }
 
     inline void setBaseSolution (const T& a_Y)
     { 
       m_Y0.copy(a_Y); 
-      m_normY0 = m_Y0.computeNorm(2); 
+      m_normY0 = m_Y0.computeNorm(); 
     }
 
     inline void setBaseRHS (const T& a_M)              
@@ -115,9 +119,9 @@ void ExplicitStagePC<T,Ops>::residual(
 }
 
 template <class T, class Ops>
-void ExplicitStagePC<T,Ops>::applyOp(T& a_F, const T& a_y)
+void ExplicitStagePC<T,Ops>::applyOp(T& a_F, const T& a_y, int a_its)
 {
-  Real normY = a_y.computeNorm(2);
+  Real normY = a_y.computeNorm();
   if (normY < 1e-15) a_F.zero();
   else {
     Real eps;

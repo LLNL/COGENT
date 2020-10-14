@@ -4,6 +4,7 @@
 #include "FluidOpInterface.H"
 #include "FluidVarBC.H"
 #include "Diffusion.H"
+#include "Poisson.H"
 #include "SpaceUtils.H"
 
 #include "EdgeDataBox.H"
@@ -115,6 +116,10 @@ public:
                              const int                         component );
 
    virtual bool trivialSolutionOp() const {return true;}
+   
+   virtual void getMemberVar( LevelData<FArrayBox>&  a_Var,
+                        const FluidSpecies&          a_fluid_species,
+                        const string&                a_name ) const;
 
    virtual CFGVars* createStateVariable( const string&       a_pp_prefix,
                                          const std::string&  a_name,
@@ -127,6 +132,9 @@ public:
    virtual void initialize( CFGVars&      a_species,
                             const double  a_time );
 
+   virtual void initializeWithBC( FluidSpecies&  species_comp,
+                                  FluidSpecies&  species_phys,
+                            const double         time );
 
    virtual void fillGhostCells( FluidSpecies&  species_phys,
                                 const double   time );
@@ -151,6 +159,8 @@ private:
    int m_implicitMhd, m_implicitViscosity;
    std::string m_advScheme;
    std::string m_species_name;
+   int m_CGL;
+   int m_initializeBfromVectorPotential;
 
    std::string m_opt_string;
    int m_my_pc_idx;
@@ -176,6 +186,7 @@ private:
    LevelData<FArrayBox> m_rhoDen_cc;
    LevelData<FArrayBox> m_momDen_cc;
    LevelData<FArrayBox> m_eneDen_cc;
+   LevelData<FluxBox>   m_magField_cf;
    LevelData<FArrayBox> m_momDen_virtual_cc;
    LevelData<FArrayBox> m_magField_virtual_cc;
    
@@ -194,11 +205,14 @@ private:
    LevelData<FArrayBox> m_etaVisc;
    LevelData<FArrayBox> m_momVisc_source;
    LevelData<FluxBox> m_etaVisc_cf;
+   LevelData<FluxBox> m_JaW_cf;
    LevelData<FluxBox> m_m0JaFluxVisc_cf;
    LevelData<FluxBox> m_m1JaFluxVisc_cf;
+   LevelData<FluxBox> m_m2JaFluxVisc_cf;
    LevelData<FluxBox> m_enJaFluxVisc_cf;
    LevelData<FluxBox> m_m0JaFluxVisc_norm;
    LevelData<FluxBox> m_m1JaFluxVisc_norm;
+   LevelData<FluxBox> m_m2JaFluxVisc_norm;
    LevelData<FluxBox> m_momJaFluxVisc_norm;
    LevelData<FluxBox> m_enJaFluxVisc_norm;
 
@@ -209,6 +223,7 @@ private:
    LevelData<FArrayBox> m_myFlux_cc;
    LevelData<FArrayBox> m_mzFlux_cc;
    LevelData<FArrayBox> m_enFlux_cc;
+   LevelData<FArrayBox> m_enParFlux_cc;
    LevelData<FArrayBox> m_mvFlux_cc;
    
    // allocate containers for Cspeed
@@ -224,6 +239,7 @@ private:
    LevelData<FluxBox> m_myFlux_norm;
    LevelData<FluxBox> m_mzFlux_norm;
    LevelData<FluxBox> m_enFlux_norm;
+   LevelData<FluxBox> m_enParFlux_norm;
    LevelData<FluxBox> m_momFlux_norm;
    LevelData<FluxBox> m_mvFlux_norm;
    LevelData<FArrayBox> m_div_IdentFlux_R;
@@ -233,23 +249,17 @@ private:
    //
    //LevelData<NodeFArrayBox> virtualEleField;
    LevelData<EdgeDataBox>  m_E0_ce;
-   LevelData<EdgeDataBox>  m_J0_ce;
-   LevelData<FArrayBox>  m_J0_cc;
+   LevelData<FArrayBox>  m_JaJ0_cc;
+   LevelData<FArrayBox>  m_Apar_cc;
    LevelData<FArrayBox>  m_E0_cc;
-   LevelData<FArrayBox>  m_curlE0;
+   LevelData<FArrayBox>  m_curlE0_virtual;
+   LevelData<FluxBox>    m_curlE0_cf;
    LevelData<FArrayBox>  m_By_contr_cc;
-   LevelData<FArrayBox>  m_By_covar_cc;
-   LevelData<FArrayBox>  m_JJdotE; // Jacobian*J\cdotE
-   LevelData<FArrayBox>  m_JJcrossB; // Jacobian*J\timesB
+   LevelData<FluxBox>    m_B_contr_cf;
+   LevelData<FArrayBox>  m_JaJdotE;   // Jacobian*J\cdotE
+   LevelData<FArrayBox>  m_JaJcrossB; // Jacobian*J\timesB
    
    // allocate containers for stuff used to enforce flux BCs
-   //
-   LevelData<FluxBox> m_rhoFlux_ce;
-   LevelData<FluxBox> m_mxFlux_ce;
-   LevelData<FluxBox> m_myFlux_ce;
-   LevelData<FluxBox> m_mzFlux_ce;
-   LevelData<FluxBox> m_enFlux_ce;
-   LevelData<FluxBox> m_mvFlux_ce;
    //
    LevelData<EdgeDataBox> m_EdgeBC_zeros;
    LevelData<FluxBox> m_FluxBC_zeros;
@@ -258,11 +268,19 @@ private:
    LevelData<FluxBox> m_myFluxBC_norm;
    LevelData<FluxBox> m_mzFluxBC_norm;
    LevelData<FluxBox> m_enFluxBC_norm;
+   LevelData<FluxBox> m_enParFluxBC_norm;
    LevelData<FluxBox> m_mvFluxBC_norm;
    LevelData<FluxBox> m_momFluxBC_norm;
    //
-   LevelData<FArrayBox> m_dummyDiv;
+   
+   mutable LevelData<FArrayBox> m_dummyDiv;
+   mutable LevelData<FArrayBox> m_dummyFArray_oneComp;
+   mutable LevelData<FArrayBox> m_dummyFArray_spaceDim;
    LevelData<FArrayBox> m_dummyDiv_mom;
+   
+   mutable LevelData<FluxBox> m_dummyFlux_oneComp;
+   mutable LevelData<FluxBox> m_dummyFlux_spaceDim;
+   mutable LevelData<EdgeDataBox> m_dummyEdge_oneComp;
 
    /// Parse parameters.
    /**
@@ -280,12 +298,16 @@ private:
     */
    void printParameters();
    
-   Diffusion*        m_diffusionOp_mom0;
-   Diffusion*        m_diffusionOp_mom1; 
-   EllipticOpBC*     m_bc_mom0;
-   EllipticOpBC*     m_bc_mom1;
-   //FluidVarBC*       m_fluid_variable_bc;
+   Diffusion*  m_diffusionOp_mom0;
+   Diffusion*  m_diffusionOp_mom1; 
+   Diffusion*  m_diffusionOp_mom2; 
+   Poisson*  m_diffusionOp_Apar; 
+   EllipticOpBC*  m_bc_mom0;
+   EllipticOpBC*  m_bc_mom1;
+   EllipticOpBC*  m_bc_mom2;
+   EllipticOpBC*  m_bc_Apar;
    std::vector<FluidVarBC*>  m_fluid_bc;
+   std::vector<FluidVarBC*>  m_fluid_face_var_bc;
   
    void accumulateMhdRHS( FluidSpecies&  a_rhs_fluid,
                     const FluidSpecies&  a_soln_fluid,
@@ -304,17 +326,12 @@ private:
    void inspectEdgeDataBox(const LevelData<EdgeDataBox>& a_Edge,
                            const int                 a_dir) const;
    
-   
-   void convertPhysFluxToMappedFlux(LevelData<FArrayBox>& a_mapped_flux,
-                              const LevelData<FArrayBox>& a_physical_flux,
-                              const LevelData<FArrayBox>& a_N) const;
-   
    void convertPhysFluxToMappedFlux( FArrayBox& a_mapped_flux,
                                const FArrayBox& a_physical_flux,
                                const FArrayBox& a_N) const;
 
    void computeNTFfaceArea( LevelData<FluxBox>&    a_Flux_norm,
-                      const LevelData<FArrayBox>&  a_Flux_cc_mapped,
+                      const LevelData<FArrayBox>&  a_Flux_mapped_cc,
                       const LevelData<FArrayBox>&  a_Jf_cc,
                       const LevelData<FArrayBox>&  a_Cspeed_cc,
                       const LevelData<FluxBox>&    a_CspeedR_norm,
@@ -325,6 +342,11 @@ private:
                         const LevelData<FArrayBox>&    a_B_contr_cc,
                         const LevelData<FArrayBox>&    a_Cspeed_cc ) const;
    
+   void computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
+                        const LevelData<FArrayBox>&    a_V_phys_cc,
+                        const LevelData<FluxBox>&      a_B_contr_cc,
+                        const LevelData<FArrayBox>&    a_Cspeed_cc ) const;
+   
    void setCourantTimeStep(const LevelData<FArrayBox>& a_Cspeed);
 
    void defineLevelDatas( const DisjointBoxLayout&  a_grids,
@@ -333,10 +355,15 @@ private:
    void setCellCenterValues( const FluidSpecies&  a_soln_fluid );
    
    void setCellCenterFluxes( const FluidSpecies&  a_soln_fluid );
+   
+   void setCellCenterFluxesCGL( const FluidSpecies&  a_soln_fluid );
 
    void setMagneticFieldTerms( const FluidSpecies&  a_soln_fluid );
 
    void setFaceCenteredFluxes( const FluidSpecies&  a_soln_fluid );
+
+   void setFaceCenteredFlux( LevelData<FluxBox>&    a_Flux_norm,
+                       const LevelData<FArrayBox>&  a_Flux_phys_cc );
    
    void enforceFluxBCs( FluidSpecies&  a_rhs_fluid,
                   const FluidSpecies&  a_soln_fluid,
@@ -347,8 +374,6 @@ private:
                            const FluidSpecies&          a_soln_fluid ); 
    
    void computeViscosityEnergyFlux( LevelData<FluxBox>&  a_UJaPi_Flux_phys,
-                              const LevelData<FluxBox>&  a_JaPix_Flux_phys,
-                              const LevelData<FluxBox>&  a_JaPiy_Flux_phys,
                               const LevelData<FluxBox>&  a_velocity_phys );
    
    void computeViscSourceAxisymm( LevelData<FArrayBox>&  a_Wthth,
@@ -366,6 +391,21 @@ private:
    void setMappedCspeed( const double  a_gamma,
                          const int     a_Ptherm,
                          const int     a_Pmag );
+
+   void computePhysicalDivergence( LevelData<FArrayBox>&  a_divF_phys,
+                             const LevelData<FluxBox>&    a_F_mapped,
+                             const int                    a_mapped ) const;
+
+   void computeMappedCurrentDensity( LevelData<FArrayBox>&  a_JaJ0_phys,
+                               const LevelData<FluxBox>&    a_B_contra ) const;
+   
+   void computeMappedCurrentDensity( LevelData<FArrayBox>&  a_JaJ0_phys,
+                               const LevelData<FArrayBox>&  a_By_contra ) const;
+   
+   void computePhysicalElectricField( LevelData<FArrayBox>&  a_E_phys,
+                                const LevelData<FArrayBox>&  a_V_phys, 
+                                const LevelData<FArrayBox>&  a_B_phys,
+                                const int                    a_virtual ) const;
    
 
 };

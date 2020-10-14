@@ -232,9 +232,8 @@ void ExtendedMhdOp::accumulateMhdRHS( FluidSpecies&  a_rhs_fluid,
    CH_TIME("ExtendedMhdOp::accumulateMhdRHS()");
    
    // Get RHS fluid species
-   //
-   LevelData<FArrayBox>& rhs_data( a_rhs_fluid.cell_var(0) );
-   const DisjointBoxLayout& grids( rhs_data.getBoxes() );
+   //LevelData<FArrayBox>& rhs_data( a_rhs_fluid.cell_var(0) );
+   //const DisjointBoxLayout& grids( rhs_data.getBoxes() );
    //const IntVect& ghostVect( rhs_data.ghostVect() ); // caution, this is zero
 
    // Get solution fluid species
@@ -309,12 +308,12 @@ void ExtendedMhdOp::accumulateMaxwellRHS( FluidSpecies&  a_rhs_fluid,
    // compute covariant J0=curl(By) at cell-edges and apply BC
    //
    if(a_soln_fluid.m_evolve_currentDensity) {
-      m_geometry.mappedGridCurlofVirtComp(m_By_covar_cc,m_J0_ce); // Jacobian * curl(By)\cdot g^l
+      m_geometry.mappedGridCurlofVirtComp(m_J0_ce,m_By_covar_cc); // Jacobian * curl(By)\cdot g^l
       m_geometry.convertContravarToCovar(m_J0_ce,0);              // Jacobian * curl(By)\cdot g_l
       m_geometry.divideJonEdges(m_J0_ce);                         // curl(By)\cdot g_l
       m_geometry.applyOnAxisCurlCorrection(m_J0_ce, soln_By); // sets correct BC for J0z at r=0
       this_evc = a_soln_fluid.edge_var_component("currentDensity");
-      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_soln_fluid, m_J0_ce, m_J0_ce, a_time );
+      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_soln_fluid, m_J0_ce, a_time );
    }
 
    // update RHSs
@@ -565,13 +564,13 @@ void ExtendedMhdOp::postTimeEval( FluidSpecies&  a_species_comp,
   
       // compute covariant J0=curl(By) at cell-edges and apply BC
       //
-      m_geometry.mappedGridCurlofVirtComp(m_By_covar_cc,m_J0_ce); // Jacobian * curl(By)\cdot g^l
+      m_geometry.mappedGridCurlofVirtComp(m_J0_ce,m_By_covar_cc); // Jacobian * curl(By)\cdot g^l
       m_geometry.convertContravarToCovar(m_J0_ce,0);              // Jacobian * curl(By)\cdot g_l
       m_geometry.divideJonEdges(m_J0_ce);                         // curl(By)\cdot g_l
       m_geometry.applyOnAxisCurlCorrection(m_J0_ce, soln_By); // sets correct BC for J0z at r=0
       SpaceUtils::exchangeEdgeDataBox(m_J0_ce);
       this_evc = a_species_phys.edge_var_component("currentDensity");
-      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, m_J0_ce, m_J0_ce, a_time );
+      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, m_J0_ce, a_time );
 
       if(a_time==0) { // set initial old values of J and E variables
          for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -603,7 +602,7 @@ void ExtendedMhdOp::postTimeEval( FluidSpecies&  a_species_comp,
                         m_J0_ce,  m_NonEdges, m_Eold, m_Jold );
       SpaceUtils::exchangeEdgeDataBox(m_gfun_covar); 
       this_evc = a_species_phys.edge_var_component("currentDensity");
-      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, m_gfun_covar, m_gfun_covar, a_time );
+      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, m_gfun_covar, a_time );
       SpaceUtils::interpEdgesToEdges(m_gfun_covar_op,m_gfun_covar,"c2");
       //SpaceUtils::inspectEdgeDataBox(m_gfun_covar_op,0);
       //SpaceUtils::inspectEdgeDataBox(m_gfun_covar_op,1);
@@ -623,7 +622,7 @@ void ExtendedMhdOp::postTimeEval( FluidSpecies&  a_species_comp,
       }
       SpaceUtils::exchangeEdgeDataBox(soln_Jcovar); 
       this_evc = a_species_phys.edge_var_component("currentDensity");
-      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, soln_Jcovar, soln_Jcovar, a_time );
+      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, soln_Jcovar, a_time );
       //SpaceUtils::inspectEdgeDataBox(soln_Jcovar,0); 
 
 
@@ -679,7 +678,7 @@ void ExtendedMhdOp::postTimeEval( FluidSpecies&  a_species_comp,
          //
          SpaceUtils::exchangeEdgeDataBox(soln_Jcovar); 
          this_evc = a_species_phys.edge_var_component("currentDensity");
-         m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, soln_Jcovar, soln_Jcovar, a_time );
+         m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, soln_Jcovar, a_time );
 
          // update Jcc with updated soln_Jcovar and compute residual matrix
          //
@@ -732,7 +731,7 @@ void ExtendedMhdOp::postTimeEval( FluidSpecies&  a_species_comp,
    
       SpaceUtils::exchangeEdgeDataBox(soln_Ecovar); 
       this_evc = a_species_phys.edge_var_component("electricField");
-      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, soln_Ecovar, soln_Ecovar, a_time );
+      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, soln_Ecovar, a_time );
 
       // set E and J comp and phys (same for edge vars, both covar)
       //
@@ -893,7 +892,7 @@ void ExtendedMhdOp::postTimeEval( FluidSpecies&  a_species_comp,
                m_dummyFlux_oneComp[dit][dir].negate(); // pi_yy = -(pi_xx+pi_zz)
             }
          }
-         SpaceUtils::interpFacesToCell(m_momVisc_source,m_dummyFlux_oneComp,"c2");
+         SpaceUtils::interpFaceScalarToCell(m_momVisc_source,m_dummyFlux_oneComp,"c2");
          m_geometry.divideJonValid(m_momVisc_source);
       }
       */
@@ -1005,6 +1004,7 @@ void ExtendedMhdOp::postTimeEval( FluidSpecies&  a_species_comp,
 }
 
 void ExtendedMhdOp::getMemberVar( LevelData<FArrayBox>&  a_Var,
+                            const FluidSpecies&          a_fluid_species,
                             const string&                a_name ) const
 {
    const DisjointBoxLayout& grids( m_geometry.grids() );
@@ -1748,7 +1748,7 @@ void ExtendedMhdOp::setHallDriftSpeed( const LevelData<FArrayBox>&  a_N,
    // compute contravariant Vhall = -lambdai*J/N at cell center
    // for time step too
    //
-   m_geometry.mappedGridCurlofVirtComp(a_By_covar,m_J0_ce); // Jacobian * curl(By)\cdot g^l
+   m_geometry.mappedGridCurlofVirtComp(m_J0_ce,a_By_covar); // Jacobian * curl(By)\cdot g^l
    SpaceUtils::interpEdgesToCell(m_Jcc,m_J0_ce,"c2");  // Ja*contravariant at cell center
    m_geometry.divideJonValid(m_Jcc);                   // this is contravariant J at cc
    for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -2083,13 +2083,13 @@ void ExtendedMhdOp::initializeWithBC( FluidSpecies&  a_species_comp,
       
       // compute covariant J0=curl(By) at cell-edges and apply BC
       //
-      m_geometry.mappedGridCurlofVirtComp(m_By_covar_cc,m_J0_ce); // Jacobian * curl(By)\cdot g^l
+      m_geometry.mappedGridCurlofVirtComp(m_J0_ce,m_By_covar_cc); // Jacobian * curl(By)\cdot g^l
       m_geometry.convertContravarToCovar(m_J0_ce,0);              // Jacobian * curl(By)\cdot g_l
       m_geometry.divideJonEdges(m_J0_ce);                         // curl(By)\cdot g_l
       m_geometry.applyOnAxisCurlCorrection(m_J0_ce, phys_By); // sets correct BC for J0z at r=0
       SpaceUtils::exchangeEdgeDataBox(m_J0_ce);
       this_evc = a_species_phys.edge_var_component("currentDensity");
-      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, m_J0_ce, m_J0_ce, a_time );
+      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, m_J0_ce, a_time );
 
       // copy covar J0 to phys_Jcovar and comp_Jcovar,
       // which are the same for edge vars with expection that phys has ghost cells
@@ -2195,7 +2195,7 @@ void ExtendedMhdOp::initializeWithBC( FluidSpecies&  a_species_comp,
       //
       SpaceUtils::exchangeEdgeDataBox(phys_Ecovar); 
       this_evc = a_species_phys.edge_var_component("electricField");
-      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, phys_Ecovar, phys_Ecovar, a_time );
+      m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( a_species_phys, phys_Ecovar, a_time );
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          SpaceUtils::copyEdgeDataBox(comp_Ecovar[dit],phys_Ecovar[dit]);
       }
@@ -2230,14 +2230,14 @@ void ExtendedMhdOp::fillGhostCells( FluidSpecies&  a_species_phys,
       m_fluid_bc.at(n)->apply( a_species_phys, a_time );
    }
 
-   for (int n=0; n<a_species_phys.num_face_vars(); ++n) {
-      LevelData<FluxBox>& faceVar( a_species_phys.face_var(n) );
-      //m_fluid_face_var_bc.at(n)->applyFluxBC( a_species_phys, faceVar, faceVar, a_time );
-   }
+   //for (int n=0; n<a_species_phys.num_face_vars(); ++n) {
+      //LevelData<FluxBox>& faceVar( a_species_phys.face_var(n) );
+      //m_fluid_face_var_bc.at(n)->applyFluxBC( a_species_phys, faceVar, a_time );
+   //}
    
    for (int n=0; n<a_species_phys.num_edge_vars(); ++n) {
       LevelData<EdgeDataBox>& edgeVar( a_species_phys.edge_var(n) );
-      m_fluid_edge_var_bc.at(n)->applyEdgeBC( a_species_phys, edgeVar, edgeVar, a_time );
+      m_fluid_edge_var_bc.at(n)->applyEdgeBC( a_species_phys, edgeVar, a_time );
    }
 
 }
@@ -2367,9 +2367,9 @@ void ExtendedMhdOp::parseParameters( ParmParse& a_pp,
    // get fundamental constants
    //
    const double cvac = Constants::SPEED_OF_LIGHT;
-   const double ep0 = Constants::VACUUM_PERMITTIVITY;
+   //const double ep0 = Constants::VACUUM_PERMITTIVITY;
    const double mu0 = 4.0e-7*Constants::PI;
-   const double kB  = Constants::BOLTZMANN_CONSTANT;
+   //const double kB  = Constants::BOLTZMANN_CONSTANT;
    const double qe  = Constants::ELEMENTARY_CHARGE;
    const double me  = Constants::MASS_OF_ELECTRON;
    const double Mp  = Constants::MASS_OF_PROTON;
@@ -2541,10 +2541,10 @@ void ExtendedMhdOp::setCourantTimeStep( const LevelData<FArrayBox>&  a_Cspeed )
    double dtElect_max=DBL_MAX;
    double dtHallD_max=DBL_MAX;
    double dtLight_max=DBL_MAX;
-   double sumCsoundOverDx=0.0;
-   double sumCelectOverDx=0.0;
-   double sumChalldOverDx=0.0;
-   double sumClightOverDx=0.0;
+//   double sumCsoundOverDx=0.0;
+//   double sumCelectOverDx=0.0;
+//   double sumChalldOverDx=0.0;
+//   double sumClightOverDx=0.0;
    double dtwpe_max=DBL_MAX;
    for (int dir=0; dir<SpaceDim; ++dir) {
 #ifdef CH_MPI
@@ -3182,7 +3182,7 @@ void ExtendedMhdOp::addHallEnergyFlux( const FluidSpecies&  a_soln_fluid )
    // needed for electron energy density flux
    //
    if(m_useJ0forJcc) {
-      m_geometry.mappedGridCurlofVirtComp(m_By_covar_cc,m_J0_ce); // Jacobian * curl(By)\cdot g^l
+      m_geometry.mappedGridCurlofVirtComp(m_J0_ce,m_By_covar_cc); // Jacobian * curl(By)\cdot g^l
       SpaceUtils::interpEdgesToCell(m_Vhall_cc,m_J0_ce,"c2");     // Ja*curl(By)_contra at cell center
       m_geometry.divideJonValid( m_Vhall_cc );                    // contra curl(By) at cell center
    }
@@ -3241,9 +3241,9 @@ void ExtendedMhdOp::setMagneticFieldTerms( const FluidSpecies&  a_soln_fluid )
    //
    if(a_soln_fluid.m_evolve_magneticField_virtual) {
 
-      const LevelData<FArrayBox>& soln_rhoDen( a_soln_fluid.cell_var(0) );
+      //const LevelData<FArrayBox>& soln_rhoDen( a_soln_fluid.cell_var(0) );
       const LevelData<FArrayBox>& soln_momDen( a_soln_fluid.cell_var("momentumDensity") );
-      const LevelData<FArrayBox>& soln_By( a_soln_fluid.cell_var("magneticField_virtual") );
+      //const LevelData<FArrayBox>& soln_By( a_soln_fluid.cell_var("magneticField_virtual") );
       const DisjointBoxLayout& grids( m_rhoDen_cc.getBoxes() ); 
 
       // compute contravar and covar components of virtual magnetic field
@@ -3263,7 +3263,7 @@ void ExtendedMhdOp::setMagneticFieldTerms( const FluidSpecies&  a_soln_fluid )
       m_geometry.convertPhysToCovar(m_Ecc,1);
 
       if(m_useJ0forJcc) {
-         m_geometry.mappedGridCurlofVirtComp(m_By_covar_cc,m_J0_ce); // Jacobian * curl(By)\cdot g^l
+         m_geometry.mappedGridCurlofVirtComp(m_J0_ce,m_By_covar_cc); // Jacobian * curl(By)\cdot g^l
          SpaceUtils::interpEdgesToCell(m_Jcc,m_J0_ce,"c2"); // Ja*contravariant at cell center
       }
       else {
@@ -3429,7 +3429,7 @@ void ExtendedMhdOp::enforceFluxBCs( FluidSpecies&  a_rhs_fluid,
    SpaceUtils::upWindToFaces( m_rhoFlux_ce, m_rhoFlux_cc, m_rhoFlux_ce, "c2" );
    m_geometry.applyAxisymmetricCorrection( m_rhoFlux_ce );
    m_geometry.computeMetricTermProductAverage( m_rhoFluxBC_norm, m_rhoFlux_ce, 0 );
-   m_fluid_bc.at(0)->applyFluxBC( a_rhs_fluid, m_rhoFlux_norm, m_rhoFluxBC_norm, a_time );
+   m_fluid_bc.at(0)->setFluxBC( a_rhs_fluid, m_rhoFlux_norm, m_rhoFluxBC_norm, a_time );
    
    // enforce flux BC for momentum density flux
    //
@@ -3454,7 +3454,7 @@ void ExtendedMhdOp::enforceFluxBCs( FluidSpecies&  a_rhs_fluid,
       }
    }
    this_cvc = a_soln_fluid.cell_var_component("momentumDensity");
-   m_fluid_bc.at(this_cvc)->applyFluxBC( a_rhs_fluid, m_momFlux_norm, m_momFluxBC_norm, a_time );
+   m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_momFlux_norm, m_momFluxBC_norm, a_time );
   
    // enforce flux BC for energy density flux
    //
@@ -3462,7 +3462,7 @@ void ExtendedMhdOp::enforceFluxBCs( FluidSpecies&  a_rhs_fluid,
    m_geometry.applyAxisymmetricCorrection( m_enFluxi_ce );
    m_geometry.computeMetricTermProductAverage( m_enFluxiBC_norm, m_enFluxi_ce, 0 );
    this_cvc = a_soln_fluid.cell_var_component("energyDensity");
-   m_fluid_bc.at(this_cvc)->applyFluxBC( a_rhs_fluid, m_enFluxi_norm, m_enFluxiBC_norm, a_time );
+   m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_enFluxi_norm, m_enFluxiBC_norm, a_time );
    
    // enforce flux BC for electron energy density flux
    //
@@ -3470,7 +3470,7 @@ void ExtendedMhdOp::enforceFluxBCs( FluidSpecies&  a_rhs_fluid,
    m_geometry.applyAxisymmetricCorrection( m_enFluxe_ce );
    m_geometry.computeMetricTermProductAverage( m_enFluxeBC_norm, m_enFluxe_ce, 0 );
    this_cvc = a_soln_fluid.cell_var_component("energyDensity_ele");
-   m_fluid_bc.at(this_cvc)->applyFluxBC( a_rhs_fluid, m_enFluxe_norm, m_enFluxeBC_norm, a_time );
+   m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_enFluxe_norm, m_enFluxeBC_norm, a_time );
 
    // enforce flux BC for virtual momentum density flux
    //
@@ -3479,7 +3479,7 @@ void ExtendedMhdOp::enforceFluxBCs( FluidSpecies&  a_rhs_fluid,
       m_geometry.applyAxisymmetricCorrection( m_mvFlux_ce );
       m_geometry.computeMetricTermProductAverage( m_mvFluxBC_norm, m_mvFlux_ce, 0 );
       this_cvc = a_soln_fluid.cell_var_component("momentumDensity_virtual");
-      m_fluid_bc.at(this_cvc)->applyFluxBC( a_rhs_fluid, m_mvFlux_norm, m_mvFluxBC_norm, a_time );
+      m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_mvFlux_norm, m_mvFluxBC_norm, a_time );
    }
  
 }   
@@ -3514,6 +3514,8 @@ void ExtendedMhdOp::updateCollisionTerms( const FluidSpecies&          a_soln_fl
    // m_xion = m_wciscale_Hz*a_B*m_tscale_s*m_taui (dimensionless)
    // m_xele = m_wcescale_Hz*a_B*m_tscale_s*m_taue (dimensionless)
    
+   double NvacC = 1.0e-4;
+   double NvacP = 4;
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       
       const FArrayBox& this_B    = m_magField_virtual_cc[dit];
@@ -3539,6 +3541,8 @@ void ExtendedMhdOp::updateCollisionTerms( const FluidSpecies&          a_soln_fl
                                  CHF_CONST_REAL(m_mM),
                                  CHF_CONST_REAL(gamma),
                                  CHF_CONST_REAL(m_etaResMin),
+                                 CHF_CONST_REAL(NvacC),
+                                 CHF_CONST_REAL(NvacP),
                                  CHF_CONST_FRA1(this_B,0),
                                  CHF_CONST_FRA1(this_N,0),
                                  CHF_CONST_FRA1(this_Pele,0),
@@ -3795,7 +3799,7 @@ void ExtendedMhdOp::computeViscFluxes( LevelData<FluxBox>&    a_m0JaFluxVisc_cf,
                                      CHF_FRA1(Dth_onPatch,0),
                                      CHF_FRA1(Piyy_onPatch,0) );
       } 
-      //SpaceUtils::interpFacesToCell(m_DiffVth,m_DiffVx_cf,"c2"); // something not right here
+      //SpaceUtils::interpFaceVectorToCell(m_DiffVth,m_DiffVx_cf,"c2"); // something not right here
       //SpaceUtils::inspectFArrayBox(m_DiffVth,0); 
    }
 }
@@ -3954,7 +3958,7 @@ void ExtendedMhdOp::addGyroHeatToSource( LevelData<FArrayBox>&  a_RHS,
       }
    }
    //m_geometry.computeMappedPoloidalGradientWithGhosts(m_dummyFArray_oneComp, m_dummyFArray_SpaceDim, 2);   
-   m_geometry.mappedGridCurlofVirtComp(m_dummyFArray_oneComp,m_dummyFArray_SpaceDim); // Ja*curl(A)\cdot g^l
+   m_geometry.mappedGridCurlofVirtComp(m_dummyFArray_SpaceDim,m_dummyFArray_oneComp); // Ja*curl(A)\cdot g^l
    m_geometry.convertPhysToContravar(m_dummyFArray_SpaceDim, 1);
    
 
@@ -4555,7 +4559,7 @@ void ExtendedMhdOp::updateMaxwellRHSs( FluidSpecies&  a_rhs_fluid,
    
    const LevelData<EdgeDataBox>& soln_Jcovar( a_soln_fluid.edge_var("currentDensity") );
    const LevelData<EdgeDataBox>& soln_Ecovar( a_soln_fluid.edge_var("electricField") );
-   const DisjointBoxLayout& grids( soln_Jcovar.getBoxes() ); 
+   //const DisjointBoxLayout& grids( soln_Jcovar.getBoxes() ); 
    
    // update RHS for in-plane electric field
    //
@@ -4614,7 +4618,7 @@ void ExtendedMhdOp::initialize( CFGVars&  a_species,
 {
    CH_TIME("ExtendedMhdOp::initialize()");
    
-   const DisjointBoxLayout& grids( m_geometry.grids() );
+   //const DisjointBoxLayout& grids( m_geometry.grids() );
    
    // initilize cell center variables
    //
@@ -4706,7 +4710,6 @@ void ExtendedMhdOp::initialize( CFGVars&  a_species,
          SpaceUtils::exchangeEdgeDataBox(a_species.edge_var(n));
          const int this_evc = a_species.edge_var_component("electricField");
          m_fluid_edge_var_bc.at(this_evc)->applyEdgeBC( static_cast<FluidSpecies&>(a_species), 
-                                                        a_species.edge_var(n), 
                                                         a_species.edge_var(n), a_time );
       
          const DisjointBoxLayout& grids( a_species.edge_var(n).getBoxes() ); 

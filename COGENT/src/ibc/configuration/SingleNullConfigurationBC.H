@@ -39,26 +39,33 @@ class SingleNullConfigurationBC
       virtual void apply( FluidSpecies&  species_comp,
                           const Real&    time );
       
-      virtual void applyBC( const FluidSpecies&          species_comp,
-                                  LevelData<FArrayBox>&  a_dst,
-                            const Real                   time );
+      virtual void applyBC( const FluidSpecies&    species_comp,
+                            LevelData<FArrayBox>&  a_dst,
+                      const Real                   time );
       
-      virtual void applyFluxBC( const FluidSpecies&       a_species_comp,
-                                LevelData<FluxBox>& a_dst,
-                          const LevelData<FluxBox>& a_src,
-                          const Real&               a_time );
+      virtual void applyFluxBC( const FluidSpecies&  a_species_comp,
+                                LevelData<FluxBox>&  a_dst,
+                          const Real                 a_time );
       
-      virtual void applyEdgeBC( const FluidSpecies&       a_species_comp,
-                                LevelData<EdgeDataBox>& a_dst,
-                          const LevelData<EdgeDataBox>& a_src,
-                          const Real&               a_time );
+      virtual void applyEdgeBC( const FluidSpecies&      a_species_comp,
+                                LevelData<EdgeDataBox>&  a_dst,
+                          const Real                     a_time );
       
-      virtual void setEdgeBC( const FluidSpecies&       a_species_comp,
-                              LevelData<EdgeDataBox>& a_dst,
-                        const LevelData<EdgeDataBox>& a_src,
-                        const Real&               a_time ) {};
-
-
+      virtual void setBC( const FluidSpecies&    a_species_comp,
+                          LevelData<FArrayBox>&  a_dst,
+                    const LevelData<FArrayBox>&  a_src,
+                    const Real                   a_time ) {};
+      
+      virtual void setFluxBC( const FluidSpecies&  a_species_comp,
+                              LevelData<FluxBox>&  a_dst,
+                        const LevelData<FluxBox>&  a_src,
+                        const Real                 a_time ) {};
+      
+      virtual void setEdgeBC( const FluidSpecies&      a_species_comp,
+                              LevelData<EdgeDataBox>&  a_dst,
+                        const LevelData<EdgeDataBox>&  a_src,
+                        const Real                     a_time ) {};
+      
 
       /// Check association with variable
       /**

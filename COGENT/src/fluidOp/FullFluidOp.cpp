@@ -27,16 +27,16 @@ FullFluidOp::FullFluidOp( const string&   a_pp_str,
                         const MagGeom&  a_geometry,
                         const int       a_verbosity )
    : m_verbosity(a_verbosity),
+     m_courant_time_step(DBL_MAX),
      m_geometry(a_geometry),
      m_is_time_implicit(true),
      m_advScheme("c2"),
+     m_species_name(a_species_name),
      m_isothermal(false),
      m_const_mom_dens_x(false),
-     m_temperature_func(NULL),
-     m_species_name(a_species_name),
-     m_courant_time_step(DBL_MAX),
      m_opt_string(a_pp_str),
-     m_my_pc_idx(-1)
+     m_my_pc_idx(-1),
+     m_temperature_func(NULL)
 
 {
    ParmParse pp(a_pp_str.c_str());
@@ -424,7 +424,7 @@ void FullFluidOp::parseParameters( ParmParse& a_pp )
 {
    a_pp.query( "time_implicit", m_is_time_implicit);
 
-   GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
+   //GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
    std::string grid_function_name;
    
    if (a_pp.contains("advScheme")) {
@@ -868,7 +868,7 @@ void FullFluidOp::enforceFluxBCs(FluidSpecies&  a_rhs_fluid,
    SpaceUtils::upWindToFaces( m_rhoFlux_ce, m_rhoFlux_cc, m_rhoFlux_ce, "c2" );
    m_geometry.applyAxisymmetricCorrection( m_rhoFlux_ce );
    m_geometry.computeMetricTermProductAverage( m_rhoFluxBC_norm, m_rhoFlux_ce, 0 );
-   m_fluid_bc.at(0)->applyFluxBC( a_rhs_fluid, m_rhoFlux_norm, m_rhoFluxBC_norm, a_time );
+   m_fluid_bc.at(0)->setFluxBC( a_rhs_fluid, m_rhoFlux_norm, m_rhoFluxBC_norm, a_time );
    
    // Enforce flux BC for momentum density flux
    int this_cvc;
@@ -892,7 +892,7 @@ void FullFluidOp::enforceFluxBCs(FluidSpecies&  a_rhs_fluid,
       }
    }
    this_cvc = a_soln_fluid.cell_var_component("momentumDensity");
-   m_fluid_bc.at(this_cvc)->applyFluxBC( a_rhs_fluid, m_momFlux_norm, m_momFluxBC_norm, a_time );
+   m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_momFlux_norm, m_momFluxBC_norm, a_time );
   
    // Enforce flux BC for energy density flux
    if(a_soln_fluid.m_evolve_energyDensity) {
@@ -900,7 +900,7 @@ void FullFluidOp::enforceFluxBCs(FluidSpecies&  a_rhs_fluid,
      m_geometry.applyAxisymmetricCorrection( m_enFlux_ce );
      m_geometry.computeMetricTermProductAverage( m_enFluxBC_norm, m_enFlux_ce, 0 );
      this_cvc = a_soln_fluid.cell_var_component("energyDensity");
-     m_fluid_bc.at(this_cvc)->applyFluxBC( a_rhs_fluid, m_enFlux_norm, m_enFluxBC_norm, a_time );
+     m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_enFlux_norm, m_enFluxBC_norm, a_time );
    }
 
    // Enforce flux BC for virtual momentum density flux
@@ -909,7 +909,7 @@ void FullFluidOp::enforceFluxBCs(FluidSpecies&  a_rhs_fluid,
       m_geometry.applyAxisymmetricCorrection( m_mvFlux_ce );
       m_geometry.computeMetricTermProductAverage( m_mvFluxBC_norm, m_mvFlux_ce, 0 );
       this_cvc = a_soln_fluid.cell_var_component("momentumDensity_virtual");
-      m_fluid_bc.at(this_cvc)->applyFluxBC( a_rhs_fluid, m_mvFlux_norm, m_mvFluxBC_norm, a_time );
+      m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_mvFlux_norm, m_mvFluxBC_norm, a_time );
    }
 }
 

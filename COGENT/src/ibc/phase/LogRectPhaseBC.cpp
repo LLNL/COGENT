@@ -237,10 +237,10 @@ LogRectPhaseBC::LogRectPhaseBC( const std::string& a_name,
                                 const int& a_verbosity )
    : m_name(a_name),
      m_verbosity(a_verbosity),
-     m_pp(a_pp),
      m_all_bdry_defined(false),
      m_logical_sheath_bc(false),
-     m_flux_bc(false)
+     m_flux_bc(false),
+     m_pp(a_pp)
 
 {
    m_inflow_function.resize( NUM_INFLOW );
@@ -312,7 +312,8 @@ Box computeFillBox( const Box&                a_interior_box,
                                      a_n_ghost ) );
 }
 
-void LogRectPhaseBC::apply(KineticSpecies& a_species_comp,
+void LogRectPhaseBC::apply(KineticSpeciesPtrVect&  a_species,
+                           const int&  a_species_index,
                            const CFG::LevelData<CFG::FArrayBox>& a_phi,
                            const LevelData<FluxBox>& a_velocity,
                            const Real& a_time )
@@ -324,10 +325,12 @@ void LogRectPhaseBC::apply(KineticSpecies& a_species_comp,
    CH_TIMER("setInflowOutflowBC", t_set_inflow_outflow_BC);
    CH_TIMER("setCodimBoundaryValues", t_set_codim_boundary_values);
 
-   const PhaseGeom& geometry( a_species_comp.phaseSpaceGeometry() );
+   KineticSpecies& species_physical( *(a_species[a_species_index]) );
+   
+   const PhaseGeom& geometry( species_physical.phaseSpaceGeometry() );
    const MultiBlockCoordSys& coord_sys( *(geometry.coordSysPtr()) );
    
-   LevelData<FArrayBox>& Bf( a_species_comp.distributionFunction() );
+   LevelData<FArrayBox>& Bf( species_physical.distributionFunction() );
    const DisjointBoxLayout& grids( Bf.disjointBoxLayout() );
    const IntVect& ghost_vect( Bf.ghostVect() );
 
@@ -342,12 +345,12 @@ void LogRectPhaseBC::apply(KineticSpecies& a_species_comp,
       CH_START(t_define_inflow_data_storage);
       PhaseBCUtils::defineInflowDataStorage(m_all_bdry_data,
                                             m_all_bdry_layouts,
-                                            a_species_comp );
+                                            species_physical );
       CH_STOP(t_define_inflow_data_storage);
 
       CH_START(t_fill_inflow_data);
       Vector<std::string> all_bc_type;
-      fillInflowData( a_species_comp, a_phi, a_velocity, a_time );
+      fillInflowData( species_physical, a_phi, a_velocity, a_time );
       setAllBcType( m_all_bdry_layouts );
       m_all_bdry_defined = true;
       CH_STOP(t_fill_inflow_data);
@@ -363,11 +366,11 @@ void LogRectPhaseBC::apply(KineticSpecies& a_species_comp,
    CH_STOP(t_set_inflow_outflow_BC);
    
    if (m_logical_sheath_bc) {
-      applySheathBC(a_species_comp, a_phi, a_velocity);
+      applySheathBC(a_species, a_species_index, a_phi, a_velocity);
    }
       
    if (m_flux_bc) {
-      applyFluxBC(a_species_comp, a_phi, a_velocity, a_time);
+      applyFluxBC(species_physical, a_phi, a_velocity, a_time);
    }
 
    // interpolate all other codim boundaries                                                                                      
@@ -389,13 +392,15 @@ void LogRectPhaseBC::setAllBcType( const BoundaryBoxLayoutPtrVect&  a_bdry_layou
    }
 }
 
-void LogRectPhaseBC::applySheathBC( KineticSpecies& a_species,
+void LogRectPhaseBC::applySheathBC( KineticSpeciesPtrVect&  a_species,
+                                    const int&  a_species_index,
                                     const CFG::LevelData<CFG::FArrayBox>& a_phi,
                                     const LevelData<FluxBox>& a_velocity)
 {
    
    // Get coordinate system parameters
-   const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
+   KineticSpecies& species_physical( *(a_species[a_species_index]) );
+   const PhaseGeom& geometry( species_physical.phaseSpaceGeometry() );
    const MultiBlockCoordSys& coord_sys( *(geometry.coordSysPtr()) );
    const PhaseGrid& phase_grid = geometry.phaseGrid();
    const DisjointBoxLayout& dbl = phase_grid.disjointBoxLayout();
@@ -421,7 +426,7 @@ void LogRectPhaseBC::applySheathBC( KineticSpecies& a_species,
          ParmParse pp( prefix.c_str() );
 
          LogicalSheathBC sheathBC(all_bdry_layouts[i], pp);
-         sheathBC.applyBC(a_species, a_velocity, a_phi);
+         sheathBC.applyBC(a_species, a_species_index, a_velocity, a_phi);
       }
    }
 }

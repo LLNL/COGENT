@@ -26,7 +26,7 @@ class LinearFunction
   
     virtual void residual(T& a_lhs, const T& a_phi, const T& a_rhs) = 0;
     virtual void preCond(T& a_cor, const T& a_residual) = 0;
-    virtual void applyOp(T& a_lhs, const T& a_phi) = 0;
+    virtual void applyOp(T& a_lhs, const T& a_phi, int a_its) = 0;
     virtual void create(T& a_lhs, const T& a_rhs) = 0;
     virtual void assign(T& a_lhs, const T& a_rhs) = 0;
     virtual Real dotProduct(T& a_1, const T& a_2) = 0;

@@ -157,7 +157,7 @@ void GridFunction::assign(LevelData<FArrayBox>&       a_data,
    LevelData<FArrayBox> data_tmp( grids, a_data.nComp(), IntVect::Unit );
    for (DataIterator dit( grids ); dit.ok(); ++dit) {
       const Box box( a_bdry_layout.interiorBox( dit ) );
-      const MagBlockCoordSys& coord_sys( ((MagGeom&)a_geometry).getBlockCoordSys( box ) );
+      //const MagBlockCoordSys& coord_sys( ((MagGeom&)a_geometry).getBlockCoordSys( box ) );
       const int block_number( coords.whichBlock( box ) );
       const DataIndex& internal_dit( a_bdry_layout.dataIndex( dit ) );
       setPointwise( data_tmp[dit], a_geometry, real_coords[internal_dit], normalized_flux[internal_dit], block_number );

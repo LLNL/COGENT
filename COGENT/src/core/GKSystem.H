@@ -197,6 +197,13 @@ class GKSystem
         }
         return;
       }
+      inline void printStepNorm()
+      {
+        if (!procID()) {
+          printf("  Step norm: %1.4e (rel), %1.4e (abs)\n", m_step_norm_rel, m_step_norm_abs);
+          printf("\n");
+        }
+      }
 
    private:
 
@@ -293,7 +300,9 @@ class GKSystem
       GKState m_state_comp;
       GKState m_state_phys;
       GKRHSData m_rhs;   // needed for the PETSc option
-      GKVector m_serialized_vector;
+      GKVector m_U, m_U_old;
+
+      Real m_step_norm_rel, m_step_norm_abs;
 
       GlobalDOF m_global_dof;
 
@@ -304,6 +313,7 @@ class GKSystem
       bool m_hdf_potential;
       bool m_hdf_potential_non_zonal;
       bool m_hdf_efield;
+      bool m_hdf_ExBdata;
       bool m_hdf_density;
       bool m_hdf_momentum;
       bool m_hdf_ParallelMomentum;
@@ -315,8 +325,8 @@ class GKSystem
       bool m_hdf_parallelEnergyDensity;
       bool m_hdf_pressure;
       bool m_hdf_perpPressure;
-      bool m_hdf_gradPoverN;
       bool m_hdf_parallelPressure;
+      bool m_hdf_gradPoverN;
       bool m_hdf_temperature;
       bool m_hdf_perpTemperature;
       bool m_hdf_parallelTemperature;

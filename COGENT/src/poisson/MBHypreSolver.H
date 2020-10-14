@@ -51,6 +51,7 @@ public:
                               const bool    method_verbose,
                               const double  precond_tol,
                               const int     precond_max_iter,
+                             // const bool    use_old_mag_setup,
                               const bool    precond_verbose );
 
    static const std::string pp_name;
@@ -60,6 +61,8 @@ public:
                       LevelData<FArrayBox>& a_data ) const;
 
 protected:
+ 
+   void parseParameters( ParmParse& a_pp );
 
    virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
                                         LevelData<FluxBox>&   tensor_coefficient,
@@ -139,7 +142,10 @@ protected:
 
    bool m_method_params_set;
    bool m_convergence_params_set;
-
+   
+   //bool m_use_old_amg_setup = true; // JRA
+   bool m_use_old_amg_setup = false; // JRA
+   
    // Hypre data structures
 
    bool m_hypre_allocated;

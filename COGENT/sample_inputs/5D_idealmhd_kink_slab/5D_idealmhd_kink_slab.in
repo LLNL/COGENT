@@ -1,0 +1,274 @@
+#TEST np=256, timelimit=00:05:00
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 10
+gksystem.verbosity   = 10
+gksystem.hdf_fluids = true
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 20
+#simulation.max_step            = 80000
+simulation.max_time            = 10.0
+#simulation.max_dt_grow         = .1
+#simulation.initial_dt_fraction = 1.0
+simulation.cfl_number          = 0.5
+#simulation.fixed_dt            = 0.0005
+simulation.checkpoint_interval = 10000
+simulation.checkpoint_prefix   = "chk"
+#simulation.restart_file = "chk3200.4d.hdf5"
+simulation.plot_interval       = 80
+simulation.plot_time_interval  = 1.0
+simulation.plot_prefix         = "plt"
+
+gksystem.ti_class = "rk"
+gksystem.ti_method = "4"
+#gksystem.ti_class = "ark"
+#gksystem.ti_method = "2c"
+#ark.stage_predictor = false
+ark_jacobian.with_pc = true
+ark_pc.type = "multiphysicsPC"
+#ark_newton.atol = 1.0e-6
+ark_newton.rtol = 1.0e-6
+#ark_newton.stol = 1.0e-10
+ark_gmres.rtol = 1.0e-6
+
+#####################################################
+# Computational Grid Definitions
+#####################################################
+gksystem.num_cells   = 256 256 32 4 4 
+gksystem.is_periodic = 0   0  1 0 0
+
+gksystem.configuration_decomp = 16 16 1
+gksystem.velocity_decomp      =         1 1
+gksystem.phase_decomp         = 16 16 1 1 1
+
+#####################################################
+# Units Definitions
+#####################################################
+units.number_density = 1.0e20
+units.temperature    = 400.0
+units.length         = 1.0
+units.mass           = 1.0
+units.magnetic_field = 1.0 
+
+#####################################################
+# Magnetic Geometry Definitions
+#####################################################
+gksystem.magnetic_geometry_mapping = "slab"
+gksystem.magnetic_geometry_mapping.slab.verbose  = true
+#gksystem.magnetic_geometry_mapping.slab.visit_plotfile  = "SlabViz"
+gksystem.magnetic_geometry_mapping.slab.axisymmetric = false
+gksystem.magnetic_geometry_mapping.slab.pointwise_metrics = true
+gksystem.magnetic_geometry_mapping.slab.x_max = 6.0
+gksystem.magnetic_geometry_mapping.slab.y_max = 6.0
+gksystem.magnetic_geometry_mapping.slab.z_max = 1.570796326794897
+gksystem.magnetic_geometry_mapping.slab.By_inner = 1.0
+gksystem.magnetic_geometry_mapping.slab.By_outer = 1.0
+gksystem.magnetic_geometry_mapping.slab.Bz_inner = 1.0
+gksystem.magnetic_geometry_mapping.slab.Bz_outer = 1.0
+gksystem.magnetic_geometry_mapping.second_order = true
+
+gksystem.kinetic_ghost_width = 0
+gksystem.fluid_ghost_width = 2
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 1.0
+phase_space_mapping.mu_max = 2.0
+phase_space_mapping.velocity_type = "gyrokinetic"
+phase_space_mapping.second_order = true
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gksystem.fixed_efield = true
+gksystem.zero_efield = true
+gkpoisson.verbose = true
+
+#####################################################
+# Species Definitions
+#####################################################
+fluid_species.1.name   = "plasma"
+fluid_species.1.mass   = 1.0
+fluid_species.1.charge = 0.0
+fluid_species.1.operator_type = "IdealMhdOp"
+fluid_species.1.adiabatic_coefficient = 1.6667
+fluid_species.1.momentumDensity = 1
+fluid_species.1.energyDensity = 1
+fluid_species.1.magneticField_virtual = 0
+fluid_species.1.magneticField = 1
+fluid_species.1.plotMemberVars = 1
+fluid_species.1.plotMemberVars.number = 3
+fluid_species.1.plotMemberVars.list = "currentDensity" "electricField" "divB" 
+#                                      "Apar" "electricField_upwinded"
+
+#fluid_model.plasma.advScheme = "uw1"
+#fluid_model.plasma.advScheme = "quick"
+#fluid_model.plasma.advScheme = "c2"
+#fluid_model.plasma.advScheme = "weno5"
+fluid_model.plasma.advScheme = "TVDminmod"
+fluid_model.plasma.tau = 0.0e-2
+fluid_model.plasma.etaMin = 0.0e-2
+fluid_model.plasma.implicitMhd = 0
+fluid_model.plasma.implicitViscosity = 0
+
+fluid_model.plasma.initializeBfromVectorPotential = 1
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.potential.function = "zero_grid_func"
+IC.plasma.density.function = "massDensity_IC"
+IC.plasma.momentumDensity_0.function = "zero_grid_func"
+IC.plasma.momentumDensity_1.function = "zero_grid_func"
+IC.plasma.momentumDensity_2.function = "zero_grid_func"
+IC.plasma.energyDensity.function = "energyDensity_IC"
+IC.plasma.magneticField_0.function = "Bx_grid_func"
+IC.plasma.magneticField_1.function = "By_grid_func"
+IC.plasma.magneticField_2.function = "Bz_grid_func"
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.mom0_visc.radial_lower.type = "dirichlet"
+BC.mom0_visc.radial_upper.type = "dirichlet"
+BC.mom0_visc.poloidal_lower.type = "neumann"
+BC.mom0_visc.poloidal_upper.type = "neumann"
+BC.mom0_visc.toroidal_lower.type = "neumann"
+BC.mom0_visc.toroidal_upper.type = "neumann"
+
+BC.mom1_visc.radial_lower.type = "neumann"
+BC.mom1_visc.radial_upper.type = "neumann"
+BC.mom1_visc.poloidal_lower.type = "dirichlet"
+BC.mom1_visc.poloidal_upper.type = "dirichlet"
+BC.mom1_visc.toroidal_lower.type = "neumann"
+BC.mom1_visc.toroidal_upper.type = "neumann"
+
+BC.mom2_visc.radial_lower.type = "neumann"
+BC.mom2_visc.radial_upper.type = "neumann"
+BC.mom2_visc.poloidal_lower.type = "neumann"
+BC.mom2_visc.poloidal_upper.type = "neumann"
+BC.mom2_visc.toroidal_lower.type = "dirichlet"
+BC.mom2_visc.toroidal_upper.type = "dirichlet"
+
+BC.Apar_init.radial_lower.type = "dirichlet"
+BC.Apar_init.radial_upper.type = "dirichlet"
+BC.Apar_init.poloidal_lower.type = "dirichlet"
+BC.Apar_init.poloidal_upper.type = "dirichlet"
+#BC.Apar_init.toroidal_lower.type = "dirichlet"
+#BC.Apar_init.toroidal_upper.type = "dirichlet"
+
+BC.plasma.density.radial_lower.function = "massDensity_IC"
+BC.plasma.density.radial_upper.function = "massDensity_IC"
+BC.plasma.density.poloidal_lower.function = "massDensity_IC"
+BC.plasma.density.poloidal_upper.function = "massDensity_IC"
+BC.plasma.density.toroidal_lower.function = "massDensity_IC"
+BC.plasma.density.toroidal_upper.function = "massDensity_IC"
+BC.plasma.density.radial_lower.type = "neumann"
+BC.plasma.density.radial_upper.type = "neumann"
+BC.plasma.density.poloidal_lower.type = "neumann"
+BC.plasma.density.poloidal_upper.type = "neumann"
+BC.plasma.density.toroidal_lower.type = "neumann"
+BC.plasma.density.toroidal_upper.type = "neumann"
+
+BC.plasma.momentumDensity.radial_lower.function = "zero_grid_func"
+BC.plasma.momentumDensity.radial_upper.function = "zero_grid_func"
+BC.plasma.momentumDensity.poloidal_lower.function = "zero_grid_func"
+BC.plasma.momentumDensity.poloidal_upper.function = "zero_grid_func"
+BC.plasma.momentumDensity.toroidal_lower.function = "zero_grid_func"
+BC.plasma.momentumDensity.toroidal_upper.function = "zero_grid_func"
+BC.plasma.momentumDensity.radial_lower.type = "symmetry"
+BC.plasma.momentumDensity.radial_upper.type = "symmetry"
+BC.plasma.momentumDensity.poloidal_lower.type = "symmetry"
+BC.plasma.momentumDensity.poloidal_upper.type = "symmetry"
+BC.plasma.momentumDensity.toroidal_lower.type = "symmetry"
+BC.plasma.momentumDensity.toroidal_upper.type = "symmetry"
+
+BC.plasma.energyDensity.radial_lower.function = "energyDensity_IC"
+BC.plasma.energyDensity.radial_upper.function = "energyDensity_IC"
+BC.plasma.energyDensity.poloidal_lower.function = "energyDensity_IC"
+BC.plasma.energyDensity.poloidal_upper.function = "energyDensity_IC"
+BC.plasma.energyDensity.toroidal_lower.function = "energyDensity_IC"
+BC.plasma.energyDensity.toroidal_upper.function = "energyDensity_IC"
+BC.plasma.energyDensity.radial_lower.type = "neumann"
+BC.plasma.energyDensity.radial_upper.type = "neumann"
+BC.plasma.energyDensity.poloidal_lower.type = "neumann"
+BC.plasma.energyDensity.poloidal_upper.type = "neumann"
+BC.plasma.energyDensity.toroidal_lower.type = "neumann"
+BC.plasma.energyDensity.toroidal_upper.type = "neumann"
+
+BC.plasma.magneticField.radial_lower.function = "zero_grid_func"
+BC.plasma.magneticField.radial_upper.function = "zero_grid_func"
+BC.plasma.magneticField.poloidal_lower.function = "zero_grid_func"
+BC.plasma.magneticField.poloidal_upper.function = "zero_grid_func"
+BC.plasma.magneticField.toroidal_lower.function = "zero_grid_func"
+BC.plasma.magneticField.toroidal_upper.function = "zero_grid_func"
+BC.plasma.magneticField.radial_lower.type = "wall"
+BC.plasma.magneticField.radial_upper.type = "wall"
+BC.plasma.magneticField.poloidal_lower.type = "wall"
+BC.plasma.magneticField.poloidal_upper.type = "wall"
+BC.plasma.magneticField.toroidal_lower.type = "wall"
+BC.plasma.magneticField.toroidal_upper.type = "wall"
+
+#####################################################
+# Elliptic Solver Definitions
+#####################################################
+MBHypreSolver.use_old_amg_setup = true
+
+mom0_visc.linear_solver.precond.method = "AMG"
+mom0_visc.linear_solver.precond.max_iter = 20
+mom0_visc.linear_solver.precond.tol = 1.e-6
+mom0_visc.linear_solver.precond.verbose = true
+mom0_visc.second_order = true
+
+mom1_visc.linear_solver.precond.method = "AMG"
+mom1_visc.linear_solver.precond.max_iter = 20
+mom1_visc.linear_solver.precond.tol = 1.e-6
+mom1_visc.linear_solver.precond.verbose = true
+mom1_visc.second_order = true
+
+mom2_visc.linear_solver.precond.method = "AMG"
+mom2_visc.linear_solver.precond.max_iter = 20
+mom2_visc.linear_solver.precond.tol = 1.e-6
+mom2_visc.linear_solver.precond.verbose = true
+mom2_visc.second_order = true
+
+Apar_init.linear_solver.precond.method = "AMG"
+Apar_init.linear_solver.precond.max_iter = 20
+Apar_init.linear_solver.precond.tol = 1.e-6
+Apar_init.linear_solver.precond.verbose = true
+Apar_init.second_order = true
+
+#####################################################
+# Grid Function Definitions
+#####################################################
+grid_function_library.number = 6
+grid_function_library.verbosity = 1
+grid_function_library.list = "zero_grid_func" "massDensity_IC" "energyDensity_IC" "Bx_grid_func" "By_grid_func" "Bz_grid_func"
+
+grid_function_library.zero_grid_func.type = "zero" 
+
+grid_function_library.massDensity_IC.type = "arbitrary"
+grid_function_library.massDensity_IC.coordinate_type = "physical"
+grid_function_library.massDensity_IC.function = "1.0/(1.0 + (x-3.0)^2+(y-3.0)^2)^2*(1-1.0e-3*cos(4*z-pi)*exp(-(sqrt((x-3)^2+(y-3)^2)-1)^2*9/2)*(y-3.0)/sqrt((x-3.0)^2+(y-3.0)^2))"
+
+grid_function_library.energyDensity_IC.type = "arbitrary"
+grid_function_library.energyDensity_IC.coordinate_type = "physical"
+grid_function_library.energyDensity_IC.function = "3.0/(1.0 + (x-3.0)^2+(y-3.0)^2)^2*(1-1.0e-3*cos(4*z-pi)*exp(-(sqrt((x-3)^2+(y-3)^2)-1)^2*9/2)*(y-3.0)/sqrt((x-3.0)^2+(y-3.0)^2))"
+
+grid_function_library.Bx_grid_func.type = "arbitrary"
+grid_function_library.Bx_grid_func.coordinate_type = "physical"
+grid_function_library.Bx_grid_func.function = "-2*(y-3.0)/(1+(x-3.0)^2+(y-3.0)^2)"
+
+grid_function_library.By_grid_func.type = "arbitrary"
+grid_function_library.By_grid_func.coordinate_type = "physical"
+grid_function_library.By_grid_func.function = "2*(x-3.0)/(1+(x-3.0)^2+(y-3.0)^2)"
+
+grid_function_library.Bz_grid_func.type = "arbitrary"
+grid_function_library.Bz_grid_func.coordinate_type = "physical"
+grid_function_library.Bz_grid_func.function = "0"
+

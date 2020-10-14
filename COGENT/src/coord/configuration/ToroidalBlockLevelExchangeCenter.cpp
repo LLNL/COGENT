@@ -42,8 +42,6 @@ ToroidalBlockLevelExchangeCenter::ToroidalBlockLevelExchangeCenter( const MagGeo
    int order = a_geometry.shearedInterpOrder();
    int num_blocks = coord_sys_ptr->numBlocks();
 
-   int num_ghosts = a_geometry.ghosts();
-   
    const LevelData<FArrayBox>& sheared_interp_stencil_offsets = a_geometry.getShearedInterpStencilOffsets();
 
    const RefCountedPtr<MagCoordSys>& coord_sys = a_geometry.getCoordSys();

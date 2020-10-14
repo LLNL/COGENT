@@ -1,6 +1,7 @@
 #ifndef _KINETIC_SPECIES_BC_H_
 #define _KINETIC_SPECIES_BC_H_
 
+#undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
 #include "Dimensions.H"
@@ -25,7 +26,8 @@ class KineticSpeciesBC
 
       virtual ~KineticSpeciesBC() {;}
 
-      virtual void apply( KineticSpecies& a_species_phys,
+      virtual void apply( KineticSpeciesPtrVect& species,
+                          const int& species_index,
                           const CFG::LevelData<CFG::FArrayBox>& a_phi,
                           const LevelData<FluxBox>& a_velocity,
                           const Real& a_time ) = 0;

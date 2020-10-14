@@ -266,7 +266,11 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                        a_rhs_species,
    if ( !m_velocity.isDefined()) {
       m_velocity.define( dbl, SpaceDim, ghostVect );
    }
-   a_soln_species.computeVelocity( m_velocity, a_E_field.getInjectedField(), a_velocity_option, a_time);
+   a_soln_species.computeVelocity(  m_velocity, 
+                                    a_E_field.getInjectedField(), 
+                                    false,
+                                    a_velocity_option, 
+                                    a_time );
     
    if ( !m_flux.isDefined()) {
       m_flux.define( dbl, SpaceDim, ghostVect );
@@ -305,7 +309,11 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                        a_rhs_species,
       computeFlux( m_delta_dfn, m_velocity, m_delta_flux, geometry );
         
 
-      a_soln_species.computeVelocity( m_velocity, a_E_field.getInjectedField(), PhaseGeom::NO_ZERO_ORDER_TERMS, a_time);
+      a_soln_species.computeVelocity( m_velocity, 
+                                      a_E_field.getInjectedField(), 
+                                      false,
+                                      PhaseGeom::NO_ZERO_ORDER_TERMS, 
+                                      a_time );
 
       geometry.multBStarParallel(m_maxwellian_dfn);
       computeFlux( m_maxwellian_dfn, m_velocity, m_flux, geometry);

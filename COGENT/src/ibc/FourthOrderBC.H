@@ -33,10 +33,9 @@ namespace FourthOrderBC {
          const int&             a_dir,
          const Side::LoHiSide&  a_side );
    
-   void setFluxBc( FluxBox&           a_dst,
+   void setFluxBC( FluxBox&           a_dst,
              const Box&               a_fill_box,
              const std::string&       a_bc_type,
-             const FluxBox&           a_src,
              const int                a_dir,
              const Side::LoHiSide&    a_side );
 

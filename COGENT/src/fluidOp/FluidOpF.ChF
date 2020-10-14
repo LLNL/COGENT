@@ -190,132 +190,6 @@ c     local variables
 
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
-c    compute collision terms
-
-      subroutine eval_collision_terms(
-     &     CHF_BOX[cellbox],
-     &     CHF_CONST_REAL[tscale_s],
-     &     CHF_CONST_REAL[Tscale_eV],
-     &     CHF_CONST_REAL[tauiscale1eV_s],
-     &     CHF_CONST_REAL[tauescale1eV_s],
-     &     CHF_CONST_REAL[Le0sq],
-     &     CHF_CONST_REAL[wciscale_Hz],
-     &     CHF_CONST_REAL[wcescale_Hz],
-     &     CHF_CONST_REAL[mM],
-     &     CHF_CONST_REAL[gamma],
-     &     CHF_CONST_REAL[etaResMin],
-     &     CHF_CONST_FRA1[By],
-     &     CHF_CONST_FRA1[den],
-     &     CHF_CONST_FRA1[Pele],
-     &     CHF_CONST_FRA1[Pion],
-     &     CHF_FRA1[taui],
-     &     CHF_FRA1[taue],
-     &     CHF_FRA1[etaRes],
-     &     CHF_FRA1[Qie],
-     &     CHF_FRA1[xi],
-     &     CHF_FRA1[xe]
-     &     )
-
-c     local variables
-      integer n, CHF_AUTODECL[i]
-      double precision By0, den0, Ti_eV, Te_eV, Clogii, Clogei
-      double precision Pion0, Pele0
-
-      CHF_AUTOMULTIDO[cellbox;i]
-
-         By0   = By(CHF_AUTOIX[i])
-         den0  = den(CHF_AUTOIX[i])
-         Pion0 = Pion(CHF_AUTOIX[i])
-         Pele0 = Pele(CHF_AUTOIX[i])
-         Ti_eV = Tscale_eV*Pion0/den0
-         Te_eV = Tscale_eV*Pele0/den0
-         Clogii = 10.0
-         Clogei = 10.0
-
-         taui(CHF_AUTOIX[i]) = tauiscale1eV_s*10.0/Clogii*Ti_eV*sqrt(Ti_eV)/den0/tscale_s
-         taue(CHF_AUTOIX[i]) = tauescale1eV_s*10.0/Clogei*Te_eV*sqrt(Te_eV)/den0/tscale_s
-
-         if(etaResMin>0.0) then
-            etaRes(CHF_AUTOIX[i]) = Le0sq/taue(CHF_AUTOIX[i])/den0 + etaResMin
-         else 
-            etaRes(CHF_AUTOIX[i]) = 0.0
-         endif
-  
-         Qie(CHF_AUTOIX[i]) = 2.0/(gamma-1.0)*mM*( 1.0/taue(CHF_AUTOIX[i]) )*(Pele0 - Pion0)
-
-         xi(CHF_AUTOIX[i]) = wciscale_Hz*By0*tscale_s*taui(CHF_AUTOIX[i])
-         xe(CHF_AUTOIX[i]) = wcescale_Hz*By0*tscale_s*taue(CHF_AUTOIX[i])
-
-      CHF_ENDDO
-
-      return
-      end
-
-
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
-c    compute source terms for energy equations
-
-      subroutine eval_energy_source_terms(
-     &     CHF_BOX[cellbox],
-     &     CHF_CONST_INT[useFiniteIon],
-     &     CHF_CONST_REAL[lambdai],
-     &     CHF_CONST_FRA1[Ja],
-     &     CHF_CONST_FRA1[eta],
-     &     CHF_CONST_FRA1[Qie],
-     &     CHF_CONST_FRA1[den],
-     &     CHF_CONST_FRA[JaJxB],
-     &     CHF_CONST_FRA[gradPe],
-     &     CHF_CONST_FRA[gradTeeff],
-     &     CHF_CONST_FRA[NU],
-     &     CHF_CONST_FRA[Ecc],
-     &     CHF_CONST_FRA[Jcc],
-     &     CHF_FRA1[JaSion],
-     &     CHF_FRA1[JaSele]
-     &     )
-
-c     local variables
-      integer n, CHF_AUTODECL[i]
-      double precision Ja0, eta0, NU0, Ecc0, Jcc0, JdotE0, NUdotE0
-      double precision Qie0, den0, gradPe0, gradTeeff0, JxB0 
-
-      CHF_AUTOMULTIDO[cellbox;i]
-
-         Ja0   = Ja(CHF_AUTOIX[i])
-         eta0  = eta(CHF_AUTOIX[i])
-         Qie0  = Qie(CHF_AUTOIX[i])
-         den0  = den(CHF_AUTOIX[i])
-
-         JdotE0  = 0.0
-         NUdotE0 = 0.0
-         do n=0, (CH_SPACEDIM-1)
-            JxB0  = JaJxB(CHF_AUTOIX[i],n)/Ja0
-            gradPe0 = gradPe(CHF_AUTOIX[i],n)
-            gradTeeff0 = gradTeeff(CHF_AUTOIX[i],n)
-            Ecc0 = Ecc(CHF_AUTOIX[i],n)
-            Jcc0 = Jcc(CHF_AUTOIX[i],n)
-            NU0  = NU(CHF_AUTOIX[i],n)
-            if(useFiniteIon.eq.zero) then
-               JdotE0  = JdotE0  + Jcc0*Ecc0
-               NUdotE0 = NUdotE0 + NU0*(JxB0 - gradPe0)/den0
-            else
-               JdotE0  = JdotE0  + Jcc0*( Ecc0 + gradTeeff0*lambdai )
-               NUdotE0 = NUdotE0 + NU0*(Ecc0 - eta0*Jcc0)/lambdai
-            endif
-         enddo
-
-         JaSion(CHF_AUTOIX[i]) = Ja0*(NUdotE0 + Qie0)
-         JaSele(CHF_AUTOIX[i]) = Ja0*JdotE0 - JaSion(CHF_AUTOIX[i])
-
-      CHF_ENDDO
-
-      return
-      end
-
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
 c    COMPUTE VISCOSITY ENERGY FLUX
 
       subroutine eval_visc_energy_flux(
@@ -343,6 +217,64 @@ c     local variables
         UPi(CHF_AUTOIX[i],1) = Vx0*Piy(CHF_AUTOIX[i],0) + Vy0*Piy(CHF_AUTOIX[i],1)
 
       endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE DOT PRODUCT
+
+      subroutine eval_dot_product(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA[A],
+     &     CHF_CONST_FRA[B],
+     &     CHF_FRA1[C]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], m
+      double precision sum
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+         sum = zero
+         do m=0, (CH_SPACEDIM-1)
+            sum = sum + A(CHF_AUTOIX[i],m)*B(CHF_AUTOIX[i],m)
+         enddo
+         C(CHF_AUTOIX[i]) = sum
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE DOT PRODUCT
+
+      subroutine eval_cross_product(
+     &     CHF_BOX[cellbox],
+     &     CHF_CONST_FRA[A],
+     &     CHF_CONST_FRA[B],
+     &     CHF_FRA[C]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], dir0, dir1, dir2
+
+      CHF_AUTOMULTIDO[cellbox;i]
+
+         do dir0=0, (CH_SPACEDIM-1)
+            dir1 = dir0+1 
+            dir2 = dir0+2 
+            dir1 = mod(dir1,CH_SPACEDIM)
+            dir2 = mod(dir2,CH_SPACEDIM)
+            C(CHF_AUTOIX[i],dir0) = A(CHF_AUTOIX[i],dir1)*B(CHF_AUTOIX[i],dir2)
+     &                            - A(CHF_AUTOIX[i],dir2)*B(CHF_AUTOIX[i],dir1)
+         enddo
 
       CHF_ENDDO
 
@@ -397,6 +329,73 @@ c     local variables
 
             enFlux(CHF_AUTOIX[i],n) = (eneDen(CHF_AUTOIX[i]) + Ptot)
      &                                *V(CHF_AUTOIX[i],n)
+            
+         CHF_ENDDO
+
+      enddo
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE CELL CENTER FLUXES
+
+      subroutine cell_center_fluxes_cgl(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[eneDenPerp],
+     &     CHF_CONST_FRA1[eneDenPar],
+     &     CHF_CONST_FRA[momDen],
+     &     CHF_CONST_FRA[V],
+     &     CHF_CONST_FRA1[Pperp],
+     &     CHF_CONST_FRA1[Ppar],
+     &     CHF_FRA[rhoFlux],
+     &     CHF_FRA[mxFlux],
+     &     CHF_FRA[myFlux],
+     &     CHF_FRA[mzFlux],
+     &     CHF_FRA[enPerpFlux],
+     &     CHF_FRA[enParFlux]
+     &     )
+
+c     local variables
+      integer n, CHF_AUTODECL[i]
+      double precision norm0, norm1, norm2
+      double precision Pperp0, Ppar0
+
+      do n=0, (CH_SPACEDIM-1)
+      
+         CHF_AUTOMULTIDO[gridbox;i]
+   
+            Pperp0 = Pperp(CHF_AUTOIX[i])       
+            Ppar0  = Ppar(CHF_AUTOIX[i])       
+ 
+            rhoFlux(CHF_AUTOIX[i],n) = momDen(CHF_AUTOIX[i],n)
+            mxFlux(CHF_AUTOIX[i],n) = momDen(CHF_AUTOIX[i],0)*V(CHF_AUTOIX[i],n)
+            myFlux(CHF_AUTOIX[i],n) = momDen(CHF_AUTOIX[i],1)*V(CHF_AUTOIX[i],n)
+ 
+            if (CH_SPACEDIM==3) then
+               mzFlux(CHF_AUTOIX[i],n) = momDen(CHF_AUTOIX[i],2)*V(CHF_AUTOIX[i],n)
+            endif
+         
+            if (n==0) then
+               mxFlux(CHF_AUTOIX[i],n) = mxFlux(CHF_AUTOIX[i],n) + Pperp0
+            endif
+            if (n==1) then
+               myFlux(CHF_AUTOIX[i],n) = myFlux(CHF_AUTOIX[i],n) + Pperp0
+            endif
+            if (n==2) then
+               mzFlux(CHF_AUTOIX[i],n) = mzFlux(CHF_AUTOIX[i],n) + Ppar0
+            endif
+
+            enPerpFlux(CHF_AUTOIX[i],n) = eneDenPerp(CHF_AUTOIX[i])*V(CHF_AUTOIX[i],n)
+            if (n<2) then
+              enPerpFlux(CHF_AUTOIX[i],n) = enPerpFlux(CHF_AUTOIX[i],n) + Pperp0*V(CHF_AUTOIX[i],n)
+            endif
+            
+            enParFlux(CHF_AUTOIX[i],n) = eneDenPar(CHF_AUTOIX[i])*V(CHF_AUTOIX[i],n)
+            if (n==3) then
+              enParFlux(CHF_AUTOIX[i],n) = enParFlux(CHF_AUTOIX[i],n) + Ppar0*V(CHF_AUTOIX[i],n)
+            endif
             
          CHF_ENDDO
 
@@ -507,8 +506,6 @@ c    CONVERT FLUX FROM PHYSICAL TO MAPPED
      &     CHF_BOX[gridbox],
      &     CHF_CONST_FRA[physFlux],
      &     CHF_CONST_FRA[N],
-c     &     CHF_CONST_FRA1[twoPiRmaj],
-c     &     CHF_CONST_BOOL[twoDaxisymm],
      &     CHF_CONST_INT[Dims],
      &     CHF_FRA[mappedFlux]
      &     )
@@ -518,6 +515,16 @@ c     local variables
       double precision mapped0, mapped1, mapped2
 
       CHF_AUTOMULTIDO[gridbox;i]
+      
+c      m = 0
+c      do row = 0, CH_SPACEDIM-1
+c         sum = zero
+c         do col = 0, CH_SPACEDIM-1
+c            sum = sum + N(CHF_AUTOIX[i],row+m*CH_SPACEDIM)*physFlux(CHF_AUTOIX[i],col)
+c            m = m + 1
+c         enddo
+c         mappedFlux(CHF_AUTOIX[i],row) = sum
+c      enddo
 
       if (Dims==3) then
         
@@ -527,7 +534,7 @@ c     local variables
         mapped1  = N(CHF_AUTOIX[i],1)*physFlux(CHF_AUTOIX[i],0) 
      &           + N(CHF_AUTOIX[i],4)*physFlux(CHF_AUTOIX[i],1)
      &           + N(CHF_AUTOIX[i],7)*physFlux(CHF_AUTOIX[i],2)
-        mapped2  = N(CHF_AUTOIX[i],3)*physFlux(CHF_AUTOIX[i],0) 
+        mapped2  = N(CHF_AUTOIX[i],2)*physFlux(CHF_AUTOIX[i],0) 
      &           + N(CHF_AUTOIX[i],5)*physFlux(CHF_AUTOIX[i],1)
      &           + N(CHF_AUTOIX[i],8)*physFlux(CHF_AUTOIX[i],2)
         
@@ -541,123 +548,11 @@ c     local variables
      &           + N(CHF_AUTOIX[i],2)*physFlux(CHF_AUTOIX[i],1)
         mapped1  = N(CHF_AUTOIX[i],1)*physFlux(CHF_AUTOIX[i],0) 
      &           + N(CHF_AUTOIX[i],3)*physFlux(CHF_AUTOIX[i],1)
-c        print*, "shape(J)   = ", shape(J)
-c        print*, "norm0    = ", norm0
-c        print*, "CHF_AUTOIX[i]    = ", CHF_AUTOIX[i]
-c        print*, "physFlux0    = ", physFlux(CHF_AUTOIX[i],0)
-c        print*, "mappedFlux0  = ", mapped0
-c        print*, "J    = ", J(CHF_AUTOIX[i])
-c        print*, "J    = ", J(CHF_AUTOIX[i])
 
         mappedFlux(CHF_AUTOIX[i],0) = mapped0
         mappedFlux(CHF_AUTOIX[i],1) = mapped1
 
       endif
-
-      CHF_ENDDO
-
-      return
-      end
-
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
-c    ADVANCE E AND J USING RELAXATION SCHEME (BACKWARD EULER)
-
-      subroutine advance_eandj_using_relax(
-     &     CHF_BOX[edgebox],
-     &     CHF_CONST_INT[dir],
-     &     CHF_CONST_INT[method],
-     &     CHF_CONST_REAL[dt],
-     &     CHF_CONST_REAL[epsilon],
-     &     CHF_CONST_REAL[delta],
-     &     CHF_CONST_REAL[lambdai],
-     &     CHF_CONST_FRA1[Eideal],
-     &     CHF_CONST_FRA1[etaRes],
-     &     CHF_CONST_FRA1[Ehall],
-     &     CHF_CONST_FRA1[etaHall],
-     &     CHF_CONST_FRA1[gfun],
-     &     CHF_CONST_FRA1[gfunOp],
-     &     CHF_CONST_FRA1[gradPe],
-     &     CHF_CONST_FRA1[betaHall],
-c     &     CHF_CONST_FRA1[divStress],
-     &     CHF_CONST_FRA1[J0],
-     &     CHF_CONST_FRA1[den],
-     &     CHF_CONST_FRA1[Eold],
-     &     CHF_CONST_FRA1[Jold],
-     &     CHF_FRA1[Esoln],
-     &     CHF_FRA1[Jsoln]
-     &     )
-
-c     local variables
-      integer CHF_AUTODECL[i]
-      double precision dtod, dtNoe, Eboltz, Estress, E0
-      double precision alpha, wpedtsq, gfun0, gfun02, gfunOp0, dirSign, wlhdt
-      double precision nudt, error
-      double precision eta0, etamin, betaHallsq, gamma
-
-      dtod = dt/delta
-      etamin = 0.0e-4
-
-      CHF_AUTOMULTIDO[edgebox;i]
-
-        betaHallsq = betaHall(CHF_AUTOIX[i])**2
-        betaHallsq = min(betaHallsq,0.9999)
-        gamma = 1.0/sqrt(1-betaHallsq)
-
-        dtNoe = dt*den(CHF_AUTOIX[i])/epsilon/gamma
-        eta0 = etaRes(CHF_AUTOIX[i]) + etamin
-        nudt = dtNoe*eta0
-        wpedtsq = dtod*dtNoe
-        alpha = 1.0 + wpedtsq + nudt
-        dirSign = 1.0-2.0*dir
-        wlhdt = dtNoe*etaHall(CHF_AUTOIX[i])*dirSign
-
-        Eboltz = -lambdai*gradPe(CHF_AUTOIX[i])/den(CHF_AUTOIX[i])
-c        Estress = divStress(CHF_AUTOIX[i])/den(CHF_AUTOIX[i])
-        E0 = Eideal(CHF_AUTOIX[i]) + Ehall(CHF_AUTOIX[i]) + Eboltz
-c     &     + Estress
-
-
-        gfun0 = Jold(CHF_AUTOIX[i]) + wpedtsq*J0(CHF_AUTOIX[i])
-     &        + dtNoe*(Eold(CHF_AUTOIX[i]) - Eideal(CHF_AUTOIX[i]) - Eboltz)
-        gfun02 = gfun(CHF_AUTOIX[i])
-        error = abs(gfun0-gfun02)
-        gfunOp0 = gfunOp(CHF_AUTOIX[i])
-
-      if(method.eq.two) then
-         Jsoln(CHF_AUTOIX[i]) = J0(CHF_AUTOIX[i])
-         Esoln(CHF_AUTOIX[i]) = E0
-      else
-
-      if(method.eq.zero) then
-        Jsoln(CHF_AUTOIX[i]) = (gfun02 - dtNoe*Ehall(CHF_AUTOIX[i]))/alpha
-      else
-        Jsoln(CHF_AUTOIX[i]) = (alpha*gfun02 + wlhdt*gfunOp0)/(alpha*alpha + wlhdt*wlhdt)
-      endif
-
-        Esoln(CHF_AUTOIX[i]) = Eold(CHF_AUTOIX[i])
-     &                       + dtod*( J0(CHF_AUTOIX[i]) - Jsoln(CHF_AUTOIX[i]) )
-
-      endif
-
-      if(error > 1.0e-15 ) then
-c        print*, "CHF_AUTOIX[i] = ", CHF_AUTOIX[i]
-c        print*, "dir = ", dir
-c        print*, "Boxlo0 = ", iedgeBoxlo0
-c        print*, "Boxhi0 = ", iedgeBoxhi0
-c        print*, "Boxlo1 = ", iedgeBoxlo1
-c        print*, "Boxhi1 = ", iedgeBoxhi1
-c        print*, "error    = ", error
-c        print*, "gfun0    = ", gfun0
-c        print*, "gfun02   = ", gfun02
-      endif
-c        Esoln(CHF_AUTOIX[i]) = E0
-c        Jsoln(CHF_AUTOIX[i]) = J0(CHF_AUTOIX[i])
-c        print*, "CHF_AUTOIX[i]    = ", CHF_AUTOIX[i]
-c        print*, "Eold(i,j)  = ", Eold(CHF_AUTOIX[i])
-c        print*, "E0(i,j)    = ", E0
-c        print*, "J0(i,j)    = ", J0(CHF_AUTOIX[i])
-c        print*, "Jsoln(i,j) = ", Jsoln(CHF_AUTOIX[i])
 
       CHF_ENDDO
 

@@ -20,11 +20,13 @@
 
 
 void GKOps::define( const GKState& a_state,
-                    const Real     a_dt )
+                    const Real     a_dt,
+                    const bool     a_use_scales )
 {
    CH_assert( isDefined()==false );
    CH_assert( a_dt>0.0 );
    m_dt = a_dt;
+   m_use_scales = a_use_scales;
    m_phase_geometry = a_state.geometry();
    CH_assert( m_phase_geometry != NULL );
 
@@ -101,6 +103,12 @@ void GKOps::define( const GKState& a_state,
        KineticSpecies& species = *(kin_species[s]);
        if (species.isGyrokinetic()) species.gyroaverageOp(m_gyroavg_ops[species.name()]);
      }
+   }
+
+   m_scale_u.define(a_state); m_scale_u.ones();
+   m_scale_rhsop.define(a_state); m_scale_rhsop.ones();
+   if (!trivialSolutionOp()) {
+     m_scale_lhsop.define(a_state); m_scale_lhsop.ones();
    }
 
    m_is_defined = true;
@@ -238,6 +246,19 @@ void GKOps::initializeElectricField( const GKState& a_state_phys,
    
 }
 
+void GKOps::initializeKineticSpeciesPhysical( KineticSpeciesPtrVect& a_species_comp,
+                                              const double a_time )
+{
+   CH_TIME("GKOps::initializeKineticSpeciesPhysical()");
+   m_kinetic_species_phys.resize( a_species_comp.size() );
+   for (int s(0); s<a_species_comp.size(); s++) {
+      m_kinetic_species_phys[s] = a_species_comp[s]->clone( m_kinetic_ghosts*IntVect::Unit );
+      LevelData<FArrayBox>& dfn_phys( m_kinetic_species_phys[s]->distributionFunction() );
+      const PhaseGeom& geometry( a_species_comp[s]->phaseSpaceGeometry() );
+      geometry.divideJonValid( dfn_phys );
+   }
+}
+
 void GKOps::initializeFluidSpeciesPhysical( CFG::FluidSpeciesPtrVect&  a_species_comp,
                                             const double a_time )
 {
@@ -277,6 +298,9 @@ GKOps::~GKOps()
    delete m_initial_conditions;
    delete m_boundary_conditions;
    delete m_units;
+
+   m_kinetic_species_phys.clear();
+   m_fluid_species_phys.clear();
 
    GyroaverageOperatorFactory::deleteOps(m_gyroavg_ops);
 }
@@ -331,6 +355,7 @@ void GKOps::preTimeStep (const int       a_step,
 
    if(!m_zero_efield) {
       updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time);
+      updatePhysicalSpeciesVector( a_state_comp.dataKinetic(), a_time, false);
       setElectricField( a_state_comp, a_step, m_phi, *m_E_field );
    }
 
@@ -412,13 +437,12 @@ void GKOps::postTimeStep( const int   a_step,
 
    if ( m_old_vorticity_model ) {
 
-      KineticSpeciesPtrVect kinetic_species_phys;
-      createPhysicalSpeciesVector(kinetic_species_phys, a_state.dataKinetic(), a_time);
+      updatePhysicalSpeciesVector(a_state.dataKinetic(), a_time);
       Vector<Real> scalar_data;
       if (m_consistent_potential_bcs) {
         scalar_data = a_state.dataScalar()[m_Y.getScalarComponent("Er_boundary")]->data();
       }
-      m_VorticityOp->updatePotentialOldModel(m_phi, *m_E_field, kinetic_species_phys, scalar_data, a_dt, a_time);
+      m_VorticityOp->updatePotentialOldModel(m_phi, *m_E_field, m_kinetic_species_phys, scalar_data, a_dt, a_time);
    }
    
    updatePhysicalSpeciesVector( a_state.dataFluid(), a_time ); 
@@ -437,9 +461,13 @@ void GKOps::postTimeStage( const int   a_step,
    // Calculation of the field is skipped for stage 0, since we assume it
    // has already been calculated to compute the velocity used in the
    // time step estimate.
+   
+   updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time ); 
+   updatePhysicalSpeciesVector( a_state_comp.dataKinetic(), a_time, false ); 
    if (a_stage && !m_zero_efield && !m_skip_efield_stage_update ) {
       setElectricField( a_state_comp, a_step, m_phi, *m_E_field );
    }
+   fillPhysicalKineticSpeciesGhostCells(a_time);
 
    const KineticSpeciesPtrVect& soln( a_state_comp.dataKinetic() );
    m_collisions->postTimeStage( soln, a_time, a_stage );
@@ -456,9 +484,6 @@ void GKOps::postTimeStage( const int   a_step,
    }
    
    // post stage eval used for semi-implicit advance in relaxation scheme
-   // (physical species vector may not be updated prior to this call)
-   //
-   updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time ); 
    m_fluidOp->postStageEval(a_state_comp.dataFluid(), m_fluid_species_phys, a_stage, a_dt, a_time);
 
 }
@@ -470,7 +495,7 @@ void GKOps::preSolutionOpEval( const GKState&     a_state,
 {
   CH_assert(!trivialSolutionOp());
   CH_TIMERS("GKOps::preSolutionOpEval");
-  CH_TIMER("createPhysicalSpeciesVector",t_create_phys_vector);
+  CH_TIMER("updatePhysicalSpeciesVector",t_update_phys_vector);
   CH_TIMER("fluidpreOpEval",t_fluid_preop_eval);
 
   // The purpose of this function is to enable the calculation of data prior to
@@ -490,9 +515,9 @@ void GKOps::preSolutionOpEval( const GKState&     a_state,
 
     if (!m_step_const_coef) {
 
-      CH_START(t_create_phys_vector);
-      createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
-      CH_STOP(t_create_phys_vector);
+      CH_START(t_update_phys_vector);
+      updatePhysicalSpeciesVector( a_state.dataKinetic(), a_time );
+      CH_STOP(t_update_phys_vector);
   
       CH_START(t_fluid_preop_eval);
       m_fluidOp->preSolutionOpEval(m_kinetic_species_phys, a_state.dataFluid(), a_state.dataScalar(), *m_E_field, a_time);
@@ -504,9 +529,9 @@ void GKOps::preSolutionOpEval( const GKState&     a_state,
 
     /* in time step, before step completion */
 
-    CH_START(t_create_phys_vector);
-    createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
-    CH_STOP(t_create_phys_vector);
+    CH_START(t_update_phys_vector);
+    updatePhysicalSpeciesVector( a_state.dataKinetic(), a_time );
+    CH_STOP(t_update_phys_vector);
   
     updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
 
@@ -534,7 +559,7 @@ void GKOps::preOpEval( const GKState&     a_state,
                        const Checkpoint&  a_chkpt )
 {
   CH_TIMERS("GKOps::preOpEval");
-  CH_TIMER("createPhysicalSpeciesVector",t_create_phys_vector);
+  CH_TIMER("updatePhysicalSpeciesVector",t_update_phys_vector);
   CH_TIMER("fluidpreOpEval",t_fluid_preop_eval);
   
   // The purpose of this function is to enable the calculation of data prior to
@@ -574,7 +599,7 @@ void GKOps::preOpEval( const GKState&     a_state,
 
     // in time step, after stage calculation //
 
-    update_kinetic_phys   = true;
+    update_kinetic_phys   = false; // done in postTimeStage
     update_fluid_phys     = false; // done in postTimeStage
     compute_fluid_pre_op  = !m_step_const_coef;
 
@@ -610,9 +635,9 @@ void GKOps::preOpEval( const GKState&     a_state,
   }
 
   if ( update_kinetic_phys ) {
-    CH_START(t_create_phys_vector);
-    createPhysicalSpeciesVector( m_kinetic_species_phys, a_state.dataKinetic(), a_time );
-    CH_STOP(t_create_phys_vector);
+    CH_START(t_update_phys_vector);
+    updatePhysicalSpeciesVector( a_state.dataKinetic(), a_time );
+    CH_STOP(t_update_phys_vector);
   }
 
   if (update_fluid_phys) {
@@ -620,7 +645,6 @@ void GKOps::preOpEval( const GKState&     a_state,
   }
 
   if (compute_fluid_pre_op) {
-    CH_assert(update_kinetic_phys);
     CH_START(t_fluid_preop_eval);
     m_fluidOp->preOpEval(m_kinetic_species_phys, a_state.dataFluid(), a_state.dataScalar(), *m_E_field, a_time);
     CH_STOP(t_fluid_preop_eval);
@@ -1073,39 +1097,12 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
       }
    }
 
-   const KineticSpeciesPtrVect& a_kinetic_species = a_state_comp.dataKinetic();
-   const int num_kinetic_species( a_kinetic_species.size() );
-   KineticSpeciesPtrVect kinetic_species_phys;
-   kinetic_species_phys.resize(num_kinetic_species);
-   for (int species(0); species<num_kinetic_species; species++) {
-      kinetic_species_phys[species] = a_kinetic_species[species]->clone( m_kinetic_ghosts*IntVect::Unit );
-   }
-
-   divideJ( a_kinetic_species, kinetic_species_phys );
-   
-   /*
-   const CFG::FluidSpeciesPtrVect& a_fluid_species = a_state_comp.dataFluid();
-
-   const int num_fluid_species( a_fluid_species.size() );
-   CFG::FluidSpeciesPtrVect fluid_species_phys;
-   fluid_species_phys.resize(num_fluid_species);
-
-   CFG::IntVect ghost_vect_cfg;
-   for (int d(0); d<CFG_DIM; d++) {
-      ghost_vect_cfg[d] = m_ghost_vect[d];
-   }
-   
-   for (int species(0); species<num_fluid_species; species++) {
-      fluid_species_phys[species] = a_fluid_species[species]->convertToPhysical(ghost_vect_cfg);
-   }
-   */   
-
    // If the potential is a state variable or the old vorticity model is being used or the
    // efield is fixed, then something else is controlling the potential, so don't recompute it here.
    bool compute_potential = !(m_state_includes_potential || m_old_vorticity_model || m_fixed_efield);
 
    a_E_field.computeEField( m_Y,
-                            kinetic_species_phys,
+                            m_kinetic_species_phys,
                             m_fluid_species_phys,
                             a_state_comp.dataScalar(),
                             a_phi,
@@ -1118,21 +1115,28 @@ void GKOps::setElectricField( const GKState&                   a_state_comp,
 
 
 inline
-void GKOps::createPhysicalSpeciesVector( KineticSpeciesPtrVect&        a_species_phys,
-                                         const KineticSpeciesPtrVect&  a_species_comp,
-                                         const double                  a_time )
+void GKOps::updatePhysicalSpeciesVector( const KineticSpeciesPtrVect&  a_species_comp,
+                                         const double                  a_time,
+                                         const bool                    a_fill_ghost_cells )
 {
-   CH_TIMERS("GKOps::createPhysicalSpeciesVector (kinetic)");
-   
-   a_species_phys.resize( a_species_comp.size() );
-   for (int s(0); s<a_species_comp.size(); s++) {
-      a_species_phys[s] = a_species_comp[s]->clone( m_kinetic_ghosts*IntVect::Unit );
-      LevelData<FArrayBox>& dfn_phys( a_species_phys[s]->distributionFunction() );
-      const PhaseGeom& geometry( a_species_comp[s]->phaseSpaceGeometry() );
-      geometry.divideJonValid( dfn_phys );
-   }
+   CH_TIMERS("GKOps::updatePhysicalSpeciesVector (kinetic)");
 
-   m_boundary_conditions->fillGhostCells( a_species_phys,
+   divideJ( a_species_comp, m_kinetic_species_phys );
+
+   if (a_fill_ghost_cells) {
+     m_boundary_conditions->fillGhostCells( m_kinetic_species_phys,
+                                            m_phi,
+                                            m_E_field->getInjectedField(),
+                                            a_time );
+   }
+}
+
+
+inline
+void GKOps::fillPhysicalKineticSpeciesGhostCells( const double a_time )
+{
+   CH_TIMERS("GKOps::fillPhysicalKineticSpeciesGhostCells");
+   m_boundary_conditions->fillGhostCells( m_kinetic_species_phys,
                                           m_phi,
                                           m_E_field->getInjectedField(),
                                           a_time );
@@ -1141,11 +1145,23 @@ void GKOps::createPhysicalSpeciesVector( KineticSpeciesPtrVect&        a_species
 
 inline
 void GKOps::updatePhysicalSpeciesVector( const CFG::FluidSpeciesPtrVect&  a_species_comp,
-                                         const double                     a_time )
+                                         const double                     a_time,
+                                         const bool                       a_fill_ghost_cells )
 {
    CH_TIME("GKOps::updatePhysicalSpeciesVector (fluid)");
 
    m_fluidOp->convertToPhysical( m_fluid_species_phys, a_species_comp ); 
+
+   if (a_fill_ghost_cells) {
+     m_fluidOp->fillGhostCells( m_fluid_species_phys, a_time );
+   }
+}
+
+
+inline
+void GKOps::fillPhysicalFluidSpeciesGhostCells( const double a_time )
+{
+   CH_TIME("GKOps::fillPhysicalFluidSpeciesGhostCells");
    m_fluidOp->fillGhostCells( m_fluid_species_phys, a_time );
 }
 
@@ -1704,6 +1720,57 @@ void GKOps::plotEField( const std::string& a_filename,
    }
 }
 
+void GKOps::plotExBData(const std::string& a_filename,
+                        const double&      a_time ) const
+{
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
+
+   // Plot the psi and theta projections of the physical field
+
+   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
+   const CFG::DisjointBoxLayout& grids = mag_geom.gridsFull();
+
+   CFG::LevelData<CFG::FArrayBox> Efield( grids, 3, CFG::IntVect::Unit);
+   m_E_field->computeField( m_phi, Efield );
+   
+   CFG::LevelData<CFG::FArrayBox> ExB_drift( grids, 3, CFG::IntVect::Zero);
+   mag_geom.computeEXBDrift(Efield, ExB_drift);
+   
+   const double larmor_number( m_units->larmorNumber() );
+   for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
+      ExB_drift[dit].mult(larmor_number);
+   }
+   
+   CFG::LevelData<CFG::FArrayBox> ExB_data( grids, 3, CFG::IntVect::Zero);
+   CFG::LevelData<CFG::FArrayBox> tmp( grids, 1, CFG::IntVect::Zero);
+   
+   // Compute radial component of ExB velocity
+   mag_geom.computeRadialProjection(tmp, ExB_drift);
+   for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
+      ExB_data[dit].copy(tmp[dit],0,0,1);
+   }
+
+   // Compute poloidal component of ExB velocity
+   mag_geom.computePoloidalProjection(tmp, ExB_drift);
+   for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
+      ExB_data[dit].copy(tmp[dit],0,1,1);
+   }
+
+   // Compute radial component of the ExB velocity shear
+   CFG::LevelData<CFG::FArrayBox> ExB_shear( grids, 3, CFG::IntVect::Unit);
+   m_E_field->computeField(tmp, ExB_shear);
+   
+   mag_geom.computeRadialProjection(tmp, ExB_shear);
+   for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
+      ExB_data[dit].copy(tmp[dit],0,2,1);
+      //Multiply by -1 to compensate for th eminus sign
+      // in computeField calculation that returns -grad(phi)
+      ExB_data[dit].mult(-1.0,2,1);
+   }
+
+   phase_geometry.plotConfigurationData( a_filename.c_str(), ExB_data, a_time );
+}
 
 void GKOps::plotDistributionFunction( const std::string&    a_filename,
                                       const KineticSpecies& a_soln_species,
@@ -1783,8 +1850,8 @@ void GKOps::plotFluidOpMember( const std::string&        a_filename,
 
 {
    CH_TIME("GKOps::plotFluidOpMember()");
-   const CFG::IntVect& ghostVect = 1*CFG::IntVect::Unit;
-   const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
+   //const CFG::IntVect& ghostVect = 1*CFG::IntVect::Unit;
+   //const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
    CFG::LevelData<CFG::FArrayBox> this_cell_data;
    m_fluidOp->getMemberVarForPlotting(this_cell_data, a_fluid_species, a_member_var_name);
    m_phase_geometry->plotConfigurationData( a_filename.c_str(), this_cell_data, a_time );

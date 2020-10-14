@@ -78,6 +78,9 @@ public:
 
    void initializeElectricField( const GKState& state, const int cur_step, const double cur_time );
  
+   void initializeKineticSpeciesPhysical( KineticSpeciesPtrVect&  a_species_comp,
+                                          const double a_time );
+
    void initializeFluidSpeciesPhysical( CFG::FluidSpeciesPtrVect&  a_species_comp,
                                         const double a_time );
 
@@ -235,9 +238,13 @@ public:
       m_count_fluids(0),
       m_count_scalars(0),
       m_count_neutrals(0),
-      m_verbosity(0) {;}   
+      m_verbosity(0),
+      m_use_scales(false),
+      m_scale_tol(1e-12) {;}   
    
-   void define( const GKState& a_state, const Real a_dt );
+   void define( const GKState& a_state, 
+                const Real a_dt, 
+                const bool a_use_scales = false );
    
    bool isDefined() const { return m_is_defined; }
    
@@ -268,6 +275,76 @@ public:
                           CFG::LevelData<CFG::FArrayBox>&  phi,
                           CFG::EField&                     E_field,
                           const bool                       inject_field = true) const;
+
+   inline
+   void setScaleTolerance(const Real a_tol)
+   {
+     m_scale_tol = a_tol;
+   }
+
+   inline
+   void computeUScale( const GKVector&  a_vec )
+   {
+     static bool first_call = true;
+     if (m_use_scales) {
+       m_Y.copyFrom(a_vec.data());
+       m_Y.setVarScaling(m_scale_u.data(), m_scale_tol);
+     } else {
+       if (first_call) m_scale_u.ones();
+     }
+     first_call = false;
+   }
+
+   inline
+   void computeRHSOpScale( const GKVector&  a_vec )
+   {
+     static bool first_call = true;
+     if (m_use_scales) {
+       m_rhs.copyFrom(a_vec.data());
+       m_rhs.setVarScaling(m_scale_rhsop.data(), m_scale_tol);
+     } else {
+       if (first_call) m_scale_rhsop.ones();
+     }
+     first_call = false;
+   }
+
+   inline
+   void computeLHSOpScale( const GKVector&  a_vec )
+   {
+     static bool first_call = true;
+     if (m_use_scales) {
+       m_rhs.copyFrom(a_vec.data());
+       m_rhs.setVarScaling(m_scale_lhsop.data(), m_scale_tol);
+     } else {
+       if (first_call) m_scale_lhsop.ones();
+     }
+     first_call = false;
+   }
+
+   inline void scaleU(GKVector& a_vec) { a_vec.elementwiseMultiply(m_scale_u); }
+   inline void scaleRHSOp(GKVector& a_vec) { a_vec.elementwiseMultiply(m_scale_rhsop); }
+   inline void scaleLHSOp(GKVector& a_vec) { a_vec.elementwiseMultiply(m_scale_lhsop); }
+
+   inline void deScaleU(GKVector& a_vec) { a_vec.elementwiseDivide(m_scale_u); }
+   inline void deScaleRHSOp(GKVector& a_vec) { a_vec.elementwiseDivide(m_scale_rhsop); }
+   inline void deScaleLHSOp(GKVector& a_vec) { a_vec.elementwiseDivide(m_scale_lhsop); }
+
+   inline const GKVector& uScale() { return m_scale_u; }
+   inline const GKVector& rhsOpScale() { return m_scale_rhsop; }
+   inline const GKVector& lhsOpScale() { return m_scale_lhsop; }
+
+   inline Real scaledVecNormU( const GKVector& a_vec) 
+   { 
+     return a_vec.computeNorm(m_scale_u); 
+   }
+   inline Real scaledVecNormRHSOp( const GKVector& a_vec) 
+   { 
+     return a_vec.computeNorm(m_scale_rhsop); 
+   }
+   inline Real scaledVecNormLHSOp( const GKVector& a_vec) 
+   { 
+     return a_vec.computeNorm(m_scale_lhsop); 
+   }
 
    inline bool trivialSolutionOp() const { return m_trivial_solution_op; }
 
@@ -589,6 +666,9 @@ public:
 
    void plotEField( const std::string& filename,
                     const double&      time ) const;
+   
+   void plotExBData(const std::string& filename,
+                    const double&      time ) const;
 
    void plotAmpereErIncrement( const std::string&                filename,
                                const CFG::FluidSpeciesPtrVect&   soln_fluid,
@@ -667,12 +747,16 @@ private:
     */
    void parseParameters( ParmParse& ppgksys );
 
-   void createPhysicalSpeciesVector( KineticSpeciesPtrVect&        out,
-                                     const KineticSpeciesPtrVect&  in,
-                                     const double                  time );
+   void fillPhysicalKineticSpeciesGhostCells(const double);
+   void fillPhysicalFluidSpeciesGhostCells(const double);
+
+   void updatePhysicalSpeciesVector( const KineticSpeciesPtrVect&  in,
+                                     const double                  time,
+                                     const bool                    fill_ghosts = true);
    
    void updatePhysicalSpeciesVector( const CFG::FluidSpeciesPtrVect&  in,
-                                     const double                     time );
+                                     const double                     time,
+                                     const bool                       fill_ghosts = true);
    
    void applyVlasovOperator( GKRHSData&                    rhs,
                              const KineticSpeciesPtrVect&  kinetic_phys,
@@ -863,6 +947,11 @@ private:
    int m_count_neutrals;
 
    int m_verbosity;
+
+   /* Scales */
+   bool m_use_scales;
+   Real m_scale_tol;
+   GKVector m_scale_u, m_scale_rhsop, m_scale_lhsop;
 
    /* gyroaverage operators */
    std::map<std::string,GyroaverageOperator*> m_gyroavg_ops;

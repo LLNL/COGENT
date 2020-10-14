@@ -217,7 +217,7 @@ void GKFluidOp::getMemberVarForPlotting( LevelData<FArrayBox>&  a_Var,
 {
    const std::string species_name( a_fluid_species.name() );
    FluidOpInterface& fluidOp( fluidModel( species_name ) );
-   fluidOp.getMemberVar( a_Var, a_var_name );
+   fluidOp.getMemberVar( a_Var, a_fluid_species, a_var_name );
 }
 
 void GKFluidOp::convertToPhysical( FluidSpeciesPtrVect&  a_fluid_species_phys,

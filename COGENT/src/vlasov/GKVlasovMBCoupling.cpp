@@ -1,43 +1,27 @@
-#include "PhaseTBLEX.H"
+#include "GKVlasovMBCoupling.H"
 #include "Directions.H"
 #include "MBStencilIterator.H"
-
-#define NO_SINGLE_NULL
-
-#ifndef NO_SINGLE_NULL
-#include "MagFluxAlignedMBLEXCenter.H"
-#endif
-
-#undef CH_SPACEDIM
-#define CH_SPACEDIM CFG_DIM
-#include "MagCoordSys.H"
-#undef CH_SPACEDIM
-#define CH_SPACEDIM PDIM
-
+#include "SingleNullPhaseCoordSys.H"
 
 #include "NamespaceHeader.H"
 
 
-PhaseTBLEX::PhaseTBLEX( const PhaseGeom&  a_geometry,
-                        int               a_ghosts,
-                        int               a_order )
+GKVlasovMBCoupling::GKVlasovMBCoupling( const PhaseGeom&  a_geometry,
+                                        int               a_ghosts,
+                                        int               a_order )
    : m_geometry(a_geometry)
 {
 #if CFG_DIM==3
    const CFG::MagGeom& mag_geom = a_geometry.magGeom();
-   
    const RefCountedPtr<CFG::MagCoordSys> mag_coord_sys_ptr = mag_geom.getCoordSys();
-#ifdef NO_SINGLE_NULL
-   if ( mag_coord_sys_ptr->type() != "LogicallyRectangular" ) {
-      MayDay::Error("PhaseTBLEX is currently only implemented for logically rectangular");
+
+   if ( mag_coord_sys_ptr->type() != "LogicallyRectangular" &&
+        mag_coord_sys_ptr->type() != "SingleNull" ) {
+      MayDay::Error("GKVlasovMBCoupling is currently only implemented for logically rectangular or single null geometry");
    }
-#else
-   if ( mag_coord_sys_ptr->type() != "LogicallyRectangular" && mag_coord_sys_ptr->type() != "SingleNull" ) {
-      MayDay::Error("PhaseTBLEX is currently only implemented for logically rectangular or single null geometry");
-   }
-#endif
 
    const DisjointBoxLayout& grids = a_geometry.gridsFull();
+
    m_ghostCells.define(grids);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       m_ghostCells[dit] = extraBlockGhosts(grids[dit], a_ghosts);
@@ -49,13 +33,45 @@ PhaseTBLEX::PhaseTBLEX( const PhaseGeom&  a_geometry,
       m_stencils[dit] = RefCountedPtr< IVSFAB<MBStencil> >(new IVSFAB<MBStencil>(ghostCellsIVS, 1));
    }
 
-#ifndef NO_SINGLE_NULL
-   MagFluxAlignedMBLEXCenter* mfa_mblx_ptr = NULL;
+   const RefCountedPtr<PhaseCoordSys>& coord_sys = a_geometry.phaseCoordSysPtr();
+
+   LayoutData< RefCountedPtr< IVSFAB<MBStencil> > > poloidal_stencils;
+
    if ( mag_coord_sys_ptr->type() == "SingleNull" ) {
-      mfa_mblx_ptr = new MagFluxAlignedMBLEXCenter;
-      mfa_mblx_ptr->define(&a_geometry, a_ghosts, a_order);
+      RefCountedPtr<SingleNullPhaseCoordSys> sn_coord_sys = (RefCountedPtr<SingleNullPhaseCoordSys>)coord_sys;
+
+      if ( mag_geom.extrablockExchange() ) {
+         LayoutData< IntVectSet > poloidal_ghost_cells; // Not used here
+         sn_coord_sys->defineStencilsUe(grids, a_ghosts, poloidal_stencils, poloidal_ghost_cells);
+      }
+      else {
+         // If magnetic geometry ghost cells are not being filled using extrablock exchanges,
+         // then we need to use the more general multiblock exchange data contained in the phase geometry
+         const MultiBlockLevelExchangeAverage* mblexPtr = a_geometry.mblexPtr();
+         CH_assert(mblexPtr);
+
+         const LayoutData< IntVectSet >& geom_ghostCells = mblexPtr->ghostCells();
+         const LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& geom_stencils = mblexPtr->stencils();
+
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            const IntVectSet& this_geom_ghostCells = geom_ghostCells[dit];
+            const IVSFAB<MBStencil>& this_geom_stencils = *geom_stencils[dit];
+
+            IVSFAB<MBStencil>& this_stencils = *poloidal_stencils[dit];
+
+            for (IVSIterator iv_it(m_ghostCells[dit]); iv_it.ok(); ++iv_it) {
+               IntVect iv = iv_it();
+
+               if ( this_geom_ghostCells.contains(iv) ) {
+                  this_stencils(iv,0) = this_geom_stencils(iv,0);
+               }
+               else {
+                  MayDay::Error("GKVlasovMBCoupling::GKVlasovMBCoupling(): ghost cell not found in mblexPtr object");
+               }
+            }
+         }
+      }
    }
-#endif
 
    const LevelData<FArrayBox>& remapped_index = a_geometry.getShearedRemappedIndex();
    const LevelData<FArrayBox>& interp_stencil = a_geometry.getShearedInterpStencil();
@@ -64,7 +80,6 @@ PhaseTBLEX::PhaseTBLEX( const PhaseGeom&  a_geometry,
    int order = mag_geom.shearedInterpOrder();
    int num_blocks = mag_coord_sys_ptr->numBlocks();
 
-   const RefCountedPtr<PhaseCoordSys>& coord_sys = a_geometry.phaseCoordSysPtr();
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       const Box box = grids[dit];
       const int block_num = coord_sys->whichBlock(box);
@@ -73,7 +88,7 @@ PhaseTBLEX::PhaseTBLEX( const PhaseGeom&  a_geometry,
       const FArrayBox& this_remapped_index = remapped_index[dit];
       const FArrayBox& this_interp_stencil = interp_stencil[dit];
       const IntVectSet& ghost_cells = m_ghostCells[dit];
-      IVSFAB<MBStencil>& this_stencil_fab = *(m_stencils[dit]);
+      IVSFAB<MBStencil>& this_stencil_fab = *m_stencils[dit];
       
       for (IVSIterator iv_it(ghost_cells); iv_it.ok(); ++iv_it) {
          IntVect iv = iv_it();
@@ -129,11 +144,10 @@ PhaseTBLEX::PhaseTBLEX( const PhaseGeom&  a_geometry,
             }
             else if ( mag_coord_sys_ptr->type() == "SingleNull" ) {
 
-#ifndef NO_SINGLE_NULL
-               int iv_remapped_valid_block = this_remapped_index(iv,SpaceDim);
+               int iv_remapped_valid_block = this_remapped_index(iv_injected,CFG_DIM);
                CH_assert(iv_remapped_valid_block >= 0);
 
-               double sawtooth_interp_fac = this_interp_stencil(iv,order+1);
+               double sawtooth_interp_fac = this_interp_stencil(iv_injected,order+1);
 
                if ( sawtooth_interp_fac < 1. ) {
 
@@ -155,18 +169,16 @@ PhaseTBLEX::PhaseTBLEX( const PhaseGeom&  a_geometry,
                      IntVect iv_valid = valid_cells[0];
                      CH_assert(valid_block >= 0);
 
-                     double weight = this_interp_stencil(iv,n);
+                     double weight = this_interp_stencil(iv_injected,n);
                      if ( sawtooth_interp_fac >= 0. ) weight *= (1. - sawtooth_interp_fac);
                      
                      // Construct the stencil entry and append it
                      stencil_vect_ptr->push_back(MBStencilElement(iv_valid, valid_block, weight));
                   }
                }
-#endif
-
             }
             else {
-               MayDay::Error("PhaseTBLEX::PhaseTBLEX(): unknown geometry type");
+               MayDay::Error("GKVlasovMBCoupling::GKVlasovMBCoupling(): unknown geometry type");
             }
          }
          else if ( mag_coord_sys_ptr->type() == "LogicallyRectangular" 
@@ -185,35 +197,28 @@ PhaseTBLEX::PhaseTBLEX( const PhaseGeom&  a_geometry,
          }
          else if ( mag_coord_sys_ptr->type() == "SingleNull" ) {
 
-#ifndef NO_SINGLE_NULL
-            const LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& stencil = mfa_mblx_ptr->stencils();
-            const IVSFAB<MBStencil>& stencil_fab = *stencil[dit];
+            const IVSFAB<MBStencil>& stencil_fab = *poloidal_stencils[dit];
             
             MBStencilIterator stit(stencil_fab(iv, 0));
             for (stit.begin(); stit.ok(); ++stit) {
                stencil_vect_ptr->push_back(stit());
             }
-#endif
          }
          else {
-            MayDay::Error("PhaseTBLEX::PhaseTBLEX(): unknown geometry type");
+            MayDay::Error("GKVlasovMBCoupling::GKVlasovMBCoupling(): unknown geometry type");
          }
 
          this_stencil_fab(iv,0) = MBStencil(stencil_vect_ptr);
       }
    }
 
-#ifndef NO_SINGLE_NULL
-   if ( mfa_mblx_ptr ) delete mfa_mblx_ptr;
-#endif
-
 #else
-   MayDay::Error("Attempted to construct a PhaseTBLEX object when not 3D");
+   MayDay::Error("Attempted to construct a GKVlasovMBCoupling object when not 3D");
 #endif
 }
 
 
-void PhaseTBLEX::interpGhosts( LevelData<FArrayBox>& a_data ) const
+void GKVlasovMBCoupling::interpGhosts( LevelData<FArrayBox>& a_data ) const
 {
 #if CFG_DIM==3
    m_geometry.interpolateFromShearedGhosts(a_data);
@@ -221,16 +226,13 @@ void PhaseTBLEX::interpGhosts( LevelData<FArrayBox>& a_data ) const
 }
 
 
-IntVectSet PhaseTBLEX::extraBlockGhosts( const Box&  a_box,
-                                         int         a_ghosts ) const
+IntVectSet GKVlasovMBCoupling::extraBlockGhosts( const Box&  a_box,
+                                                 int         a_ghosts ) const
 {
-   // This is a slight modification of MultiBlockUtil::extraBlockGhosts()
-   IntVect ghostLayerVect = a_ghosts*IntVect::Unit;
-   ghostLayerVect[VPARALLEL_DIR] = 0;  // No extrablock ghosts in VPARALLEL_DIR
-   ghostLayerVect[MU_DIR] = 0;         // No extrablock ghosts in MU_DIR
+   // This is a modification of MultiBlockUtil::extraBlockGhosts().  It returns
+   // the a_ghosts extrablock ghostcells normal to the non-physical configuration
+   // space sides of a_box.
 
-   Box grownBox = grow(a_box, ghostLayerVect);
-  
    const RefCountedPtr<PhaseCoordSys> coord_sys_ptr = m_geometry.phaseCoordSysPtr();
    Vector< Tuple<BlockBoundary, 2*SpaceDim> > boundaries = coord_sys_ptr->boundaries();
    int block_number = coord_sys_ptr->whichBlock(a_box);
@@ -240,8 +242,13 @@ IntVectSet PhaseTBLEX::extraBlockGhosts( const Box&  a_box,
 
    IntVectSet ivsReturn; // empty
 
-   if ( !block_box.contains(grownBox) ) // otherwise, empty
-      {
+   for (int idir = 0; idir < CFG_DIM; idir++) {
+
+      Box grownBox = a_box;
+      grownBox.grow(idir, a_ghosts);
+
+      if ( !block_box.contains(grownBox) ) { // otherwise, empty
+
          // We'll set ivs to extra-block ghost cells of a_box.
          // Start with ivs being the full grownBox.
          DenseIntVectSet ivs = DenseIntVectSet(grownBox, true);
@@ -251,35 +258,35 @@ IntVectSet PhaseTBLEX::extraBlockGhosts( const Box&  a_box,
          if ( !ivs.isEmpty() ) {
             // Now remove ghost cells that are outside domain.
             ivs.recalcMinBox();
-            for (int idir = 0; idir < CFG_DIM; idir++) {
-               // Check idir Lo face.
-               int endBlockLo = block_box.smallEnd(idir);
-               if (grownBox.smallEnd(idir) < endBlockLo)
-                  { // Remove ghost cells from idir Lo face.
-                     if (boundaries[block_number][idir].isDomainBoundary())
-                        { // Remove ghost cells beyond this face.
-                           Box grownBoxFace(grownBox);
-                           grownBoxFace.setBig(idir, endBlockLo-1);
-                           ivs -= grownBoxFace;
-                        }
-                  }
-               // Check idir Hi face.
-               int endBlockHi = block_box.bigEnd(idir);
-               if (grownBox.bigEnd(idir) > endBlockHi)
-                  { // Remove ghost cells from idir Hi face.
-                     if (boundaries[block_number][idir + SpaceDim].isDomainBoundary())
-                        { // Remove ghost cells beyond this face.
-                           Box grownBoxFace(grownBox);
-                           grownBoxFace.setSmall(idir, endBlockHi+1);
-                           ivs -= grownBoxFace;
-                        }
-                  }
-            }
+            // Check idir Lo face.
+            int endBlockLo = block_box.smallEnd(idir);
+            if (grownBox.smallEnd(idir) < endBlockLo)
+               { // Remove ghost cells from idir Lo face.
+                  if (boundaries[block_number][idir].isDomainBoundary())
+                     { // Remove ghost cells beyond this face.
+                        Box grownBoxFace(grownBox);
+                        grownBoxFace.setBig(idir, endBlockLo-1);
+                        ivs -= grownBoxFace;
+                     }
+               }
+            // Check idir Hi face.
+            int endBlockHi = block_box.bigEnd(idir);
+            if (grownBox.bigEnd(idir) > endBlockHi)
+               { // Remove ghost cells from idir Hi face.
+                  if (boundaries[block_number][idir + SpaceDim].isDomainBoundary())
+                     { // Remove ghost cells beyond this face.
+                        Box grownBoxFace(grownBox);
+                        grownBoxFace.setSmall(idir, endBlockHi+1);
+                        ivs -= grownBoxFace;
+                     }
+               }
+
             ivs.recalcMinBox();
             // convert from DenseIntVectSet.
-            ivsReturn = IntVectSet(ivs);
+            ivsReturn |= IntVectSet(ivs);
          }
       }
+   }
 
    return ivsReturn;
 }

@@ -31,12 +31,17 @@ class LogicalSheathBC
 
    
    void computeSheathBC(LevelData<FArrayBox>& phi_bc,
-                        const KineticSpecies& species) const;
+                        const KineticSpeciesPtrVect& species,
+                        const int& species_index) const;
    
    void fillBoundaryData(LevelData<FArrayBox>& bdry_data,
                          const LevelData<FArrayBox>& dfn) const;
    
-   void applyBC(KineticSpecies& species,
+   void computeBoundaryIonCurrent(LevelData<FArrayBox>& bdry_ion_current,
+                                  const KineticSpeciesPtrVect& species) const;
+   
+   void applyBC(KineticSpeciesPtrVect& species,
+                const int& species_index,
                 const LevelData<FluxBox>& velocity,
                 const CFG::LevelData<CFG::FArrayBox>& phi ) const;
 

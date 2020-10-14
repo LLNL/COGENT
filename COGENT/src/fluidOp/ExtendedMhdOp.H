@@ -140,6 +140,7 @@ public:
    //{ return m_deltaN_Ptr; }
    
    virtual void getMemberVar( LevelData<FArrayBox>&  a_Var,
+                        const FluidSpecies&          a_fluid_species,
                         const string&                a_name ) const;
 
    virtual bool trivialSolutionOp() const {return true;}

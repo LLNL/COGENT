@@ -91,6 +91,8 @@ fluid_species.1.mass   = 1.0
 fluid_species.1.charge = 0.0
 fluid_species.1.operator_type = "IdealMhdOp"
 fluid_species.1.adiabatic_coefficient = 1.6667
+#fluid_species.1.adiabatic_coefficient = 2.0
+#fluid_species.1.CGL_MODEL = 1
 fluid_species.1.momentumDensity = 1
 fluid_species.1.energyDensity = 1
 fluid_species.1.magneticField_virtual = 1
@@ -113,6 +115,8 @@ IC.neutrals.density.function = "neutrals_IC"
 IC.neutrals.momentumDensity_0.function = "zero_grid_func"
 IC.neutrals.momentumDensity_1.function = "momDeny_IC"
 IC.neutrals.energyDensity.function = "energyDensity_IC"
+#IC.neutrals.energyDensity_0.function = "energyDensityPerp_IC"
+#IC.neutrals.energyDensity_1.function = "energyDensityPar_IC"
 IC.neutrals.magneticField_virtual.function = "By_IC"
 
 #####################################################

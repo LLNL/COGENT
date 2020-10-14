@@ -1,0 +1,376 @@
+#TEST np=128, timelimit=00:05:00
+#####################################################
+# Verbosity Definitions
+#####################################################
+simulation.verbosity = 1
+gksystem.verbosity   = 1
+gksystem.neutrals_model_on = true
+
+gksystem.hdf_dfn = false
+gksystem.hdf_potential = true
+gksystem.hdf_efield = true
+gksystem.hdf_density = true
+gksystem.hdf_ParallelMomentum = true
+gksystem.hdf_ParallelVelocity = true
+gksystem.hdf_pressure = true
+gksystem.hdf_temperature = true
+gksystem.hdf_perpTemperature = true
+gksystem.hdf_parallelTemperature = true
+gksystem.hdf_parallelHeatFlux = true
+gksystem.hdf_totalParallelHeatFlux = true
+#gksystem.hdf_energyMoment = true
+#gksystem.hdf_perpEnergyMoment = true
+#gksystem.hdf_parallelEnergyMoment = true
+#gksystem.hdf_fourthMoment = true
+#gksystem.hdf_boltzmannElectronDensity = true
+#gksystem.hdf_boltzmannElectronTemperature = true
+
+gksystem.hdf_vparmu = true
+gksystem.hdf_vpartheta = true
+gksystem.fixed_plot_indices = 2 16 0 0 0  
+
+#gksystem.ti_class = "rk"
+#gksystem.ti_method = "4"
+
+gksystem.ti_class = "ark"
+
+#gksystem.ti_method = "2a"
+gksystem.ti_method = "2c"
+#gksystem.ti_method = "2e"
+#gksystem.ti_method = "3"
+#gksystem.ti_method = "4"
+
+ark_gmres.atol = 1.e-12
+ark_gmres.rtol = 1.e-3
+ark_newton.atol = 1.e-10
+ark_newton.rtol = 1.e-6
+
+ark_jacobian.with_pc = true
+ark_pc.type = "multiphysicsPC"
+
+#####################################################
+# Time Stepping Definitions
+#####################################################
+simulation.max_step            = 2
+simulation.max_time            = 2.340786202983106
+#simulation.fixed_dt            = 0e-3
+simulation.initial_dt_fraction = 0.1
+simulation.cfl_number          = 0.1
+
+simulation.checkpoint_interval = 250
+simulation.checkpoint_prefix   = "chk"
+#simulation.restart_file = "chk2000.4d.hdf5"
+
+simulation.plot_interval       = 10
+simulation.plot_prefix         = "plt"
+#simulation.histories = true
+#simulation.1.history_field = "potential"
+#simulation.1.history_indices = 8 8
+
+#####################################################
+# Computational Grid Definitions
+#####################################################
+gksystem.num_cells   = 4 64 128 128
+gksystem.is_periodic = 0  0  0  0
+
+gksystem.configuration_decomp = 1 4
+gksystem.velocity_decomp      =     8 8
+gksystem.phase_decomp         = 1 4 8 8
+#gksystem.configuration_decomp = 1 1
+#gksystem.velocity_decomp      =     1 1
+#gksystem.phase_decomp         = 1 1 1 1
+
+#####################################################
+# Units Definitions for ELM Benchmark 
+#
+# Field line angle 6 deg = 0.1047198 rad
+# Btor = 3 T, Bpol = Btor*tan(alpha) = 0.3153127 T
+#
+# Lpar = 80 m, Ls,par = 25 m
+# Ls,par/Lpar = 5/16 = 0.3125
+# Lpol = Lpar * sin(alpha) = 8.362277 m
+# Ls,pol = Ls,par * sin(alpha) = 2.6132 m
+#####################################################
+units.number_density = 1e19 #1e19
+units.temperature    = 100.0
+units.length         = 8.362277061412277
+units.mass           = 1.0 #=Ad*Mu/Mp in Mp units not 2.013553212745 amu
+units.me_over_mass   = 5.44617021352e-4 # in Mp units
+units.magnetic_field = 3.0 #3.0 
+
+#####################################################
+# Magnetic Geometry Definitions
+# Field line angle 6 deg = 1.047197551196598e-1 rad
+# Lpol = 80*sin(alpha) = 8.362277061412277
+# Bpol = B0*sin(alpha) = 1.045284632676535e-1
+# Btor = B0*cos(alpha) = 2.983565686104820
+#####################################################
+##slab
+gksystem.magnetic_geometry_mapping = "slab"
+gksystem.magnetic_geometry_mapping.slab.verbose  = true
+gksystem.magnetic_geometry_mapping.slab.visit_plotfile  = "SlabViz"
+gksystem.magnetic_geometry_mapping.slab.num_quad_points = 5
+gksystem.magnetic_geometry_mapping.slab.axisymmetric = false
+gksystem.magnetic_geometry_mapping.slab.x_max = 0.005
+gksystem.magnetic_geometry_mapping.slab.z_max = 1
+gksystem.magnetic_geometry_mapping.slab.By_inner = 0.994521895368273
+gksystem.magnetic_geometry_mapping.slab.By_outer = 0.994521895368273
+gksystem.magnetic_geometry_mapping.slab.Bz_inner = 0.104528463267653 
+gksystem.magnetic_geometry_mapping.slab.Bz_outer = 0.104528463267653 
+
+gksystem.enforce_positivity = true
+gksystem.enforce_positivity_type = "step"
+
+#####################################################
+# Phase Space Geometry Definitions
+#####################################################
+phase_space_mapping.v_parallel_max = 17.3205 	# exp(-10)
+phase_space_mapping.mu_max = 300.0	     	# exp(-10)	
+phase_space_mapping.second_order = true
+phase_space_mapping.velocity_type = "gyrokinetic"
+phase_space_mapping.no_drifts = true
+phase_space_mapping.divfree_velocity = false
+
+#####################################################
+# Vlasov Operator Definitions
+#####################################################
+gkvlasov.verbose = true
+#gkvlasov.face_avg_type = uw1
+gkvlasov.face_avg_type = uw3
+#gkvlasov.face_avg_type = uw5
+#gkvlasov.face_avg_type = weno5
+#gkvlasov.face_avg_type = bweno
+gkvlasov.time_step_diagnostics = true
+
+gkvlasov.precond.verbose = true
+gkvlasov.precond.max_iter = 20
+gkvlasov.precond.tol = 1.e-1
+gkvlasov.precond.build_test = false
+gkvlasov.precond.face_avg_type = uw1
+
+#####################################################
+# Poisson Operator Definitions
+#####################################################
+gksystem.fixed_efield = false
+gkpoisson.verbose = true
+gkpoisson.verbosity = 1
+gkpoisson.second_order = true
+gkpoisson.fixed_krho2 = true
+gkpoisson.krho2_value = 0.1
+
+#gkpoissonboltzmann.second_order = true
+#gkpoissonboltzmann.simple_boltzmann = true
+#gkpoissonboltzmann.prefactor = fs_neutrality_initial_fs_ni
+#gkpoissonboltzmann.verbose = true
+#gkpoissonboltzmann.use_ion_temperature = true
+#gkpoissonboltzmann.use_parallel_ion_temperature = true
+#gkpoissonboltzmann.use_fsa_temperature = true
+
+#gkpoissonboltzmann.preserve_initial_ni_average = false
+#gkpoissonboltzmann.subspace_iteration_solve = true
+
+#gkpoisson.linear_solver.method = "GMRES"
+#gkpoisson.linear_solver.max_iter = 80
+#gkpoisson.linear_solver.tol = 1.e-10
+#gkpoisson.linear_solver.verbose = true
+##gkpoisson.linear_solver.precond.method = "AMG"
+#gkpoisson.linear_solver.precond.max_iter = 20
+#gkpoisson.linear_solver.precond.tol = 1.e-6
+#gkpoisson.linear_solver.precond.verbose = true
+
+#####################################################
+# Species Definitions
+#
+# deuterium: pre-ELM Ti=260eV
+# electron: pre=ELM  Te=210eV
+#####################################################
+kinetic_species.1.name   = "deuterium"
+kinetic_species.1.mass   = 1.99900750068314
+kinetic_species.1.charge = 1.0
+kinetic_species.1.velocity_renormalization = true
+kinetic_species.1.ntr    = "FixedBckgr"
+#kinetic_species.1.cls    = "FokkerPlanck"
+
+#boltzmann_electron.name        = "electron"
+#boltzmann_electron.mass        = 0.01
+#boltzmann_electron.charge      = -1.0
+#boltzmann_electron.temperature = 2.1
+#boltzmann_electron.quasineutral = true
+
+kinetic_species.2.name   = "electron"
+kinetic_species.2.mass   = 5.44617021352e-4
+kinetic_species.2.charge = -1.0
+kinetic_species.2.velocity_renormalization = true
+kinetic_species.2.ntr    = "FixedBckgr"
+#kinetic_species.2.cls    = "Linearized"
+gkvlasov.electron.time_implicit = true
+
+###################################################
+# Neutrals Definitions
+#####################################################
+#NTR.deuterium.ntr_freq = 2.0e2
+#NTR.deuterium.ref_function = "maxwellian_deuterium_phase_func"
+#NTR.deuterium.ref_temperature = "iT0_grid_func" 
+#NTR.deuterium.ref_density = "iN0_grid_func" 
+
+NTR.deuterium.ionization_rate = "ionization_rate"
+NTR.deuterium.neutral_phase_func = "source_ion_phase_func"      #NTR source ~ neutr_dfn*density, overrides NTR source ~ dfn*density
+NTR.deuterium.density = "source_ele_dens"                   #this is used for ele dens when neutral_phase_func is set
+NTR.deuterium.fixed_source_density = false
+NTR.deuterium.parallel_velocity = "source_vpar"
+NTR.deuterium.temperature = "source_temp"
+NTR.deuterium.verbosity = 1 
+
+#NTR.electron.ntr_freq = 2.0e2
+#NTR.electron.ref_function = "maxwellian_electron_phase_func"
+#NTR.electron.ref_temperature = "iT0_grid_func" 
+#NTR.electron.ref_density = "iN0_grid_func" 
+
+NTR.electron.ionization_rate = "ionization_rate"
+NTR.electron.neutral_phase_func = "source_ele_phase_func"      #NTR source ~ neutr_dfn*density, overrides NTR source ~ dfn*density
+NTR.electron.density = "source_ele_dens"
+NTR.electron.fixed_source_density = false
+NTR.electron.parallel_velocity = "source_vpar"
+NTR.electron.temperature = "source_ele_temp"
+NTR.electron.verbosity = 1 
+
+#####################################################
+# Collisions Definitions
+#####################################################
+#CLS.deuterium.max_interation_number = 1000
+#CLS.deuterium.convergence_tolerance = 1.e-6
+#CLS.deuterium.multipole_number = 3
+#CLS.deuterium.ref_function = "maxwellian_deuterium_phase_func"
+#CLS.deuterium.rosenbluth_skip_stage = true
+
+#CLS.electron.cls_freq = 10000.0
+#CLS.electron.conserve_momentum  = false
+#CLS.electron.conserve_particle = true
+#CLS.electron.ref_function = "maxwellian_electron_phase_func"
+#CLS.electron.ref_temperature = "eT0_grid_func"
+
+#####################################################
+# Initial Condition Definitions
+#####################################################
+IC.potential.function = "zero_grid_func"
+IC.deuterium.function = "maxwellian_deuterium_phase_func" 
+IC.electron.function = "maxwellian_electron_phase_func"
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.deuterium.radial_lower.function = "maxwellian_deuterium_phase_func"
+BC.deuterium.radial_upper.function = "maxwellian_deuterium_phase_func"
+BC.deuterium.poloidal_lower.type = "logical_sheath"
+BC.deuterium.poloidal_upper.function = "zero_phase"
+BC.deuterium.poloidal_upper.type = "logical_sheath"
+BC.deuterium.poloidal_lower.function = "zero_phase"
+BC.deuterium.vpar_lower.function = "maxwellian_deuterium_phase_func"
+BC.deuterium.vpar_upper.function = "maxwellian_deuterium_phase_func"
+BC.deuterium.mu_lower.function = "maxwellian_deuterium_phase_func"
+BC.deuterium.mu_upper.function = "maxwellian_deuterium_phase_func"
+
+BC.electron.radial_lower.function = "maxwellian_electron_phase_func"
+BC.electron.radial_upper.function = "maxwellian_electron_phase_func"
+BC.electron.poloidal_lower.type = "logical_sheath"
+BC.electron.poloidal_lower.function = "zero_phase"
+BC.electron.poloidal_upper.type = "logical_sheath"
+BC.electron.poloidal_upper.function = "zero_phase"
+BC.electron.vpar_lower.function = "maxwellian_electron_phase_func"
+BC.electron.vpar_upper.function = "maxwellian_electron_phase_func"
+BC.electron.mu_lower.function = "maxwellian_electron_phase_func"
+BC.electron.mu_upper.function = "maxwellian_electron_phase_func"
+
+BC.potential.radial_lower.type = "dirichlet"  #ignored for the periodic direction 
+BC.potential.radial_upper.type = "dirichlet"  #ignored for the periodic	direction
+BC.potential.poloidal_lower.type = "dirichlet"
+BC.potential.poloidal_upper.type = "dirichlet"
+
+#####################################################
+# Kinetic Function Definitions
+#####################################################
+kinetic_function_library.number = 5
+kinetic_function_library.verbosity = 1
+kinetic_function_library.list = "maxwellian_deuterium_phase_func" "maxwellian_electron_phase_func" "zero_phase" "source_ion_phase_func" "source_ele_phase_func"
+
+kinetic_function_library.zero_phase.type = "zero"
+
+kinetic_function_library.maxwellian_deuterium_phase_func.type = "maxwellian"
+kinetic_function_library.maxwellian_deuterium_phase_func.vparallel.function = "iVpar_grid_func"
+kinetic_function_library.maxwellian_deuterium_phase_func.density.function = "iN0_grid_func" 
+kinetic_function_library.maxwellian_deuterium_phase_func.temperature.function = "iT0_grid_func" 
+
+kinetic_function_library.maxwellian_electron_phase_func.type = "maxwellian"
+kinetic_function_library.maxwellian_electron_phase_func.vparallel.function = "eVpar_grid_func"
+kinetic_function_library.maxwellian_electron_phase_func.density.function = "eN0_grid_func" 
+kinetic_function_library.maxwellian_electron_phase_func.temperature.function = "eT0_grid_func" 
+
+kinetic_function_library.source_ion_phase_func.type = "maxwellian"
+kinetic_function_library.source_ion_phase_func.density.function = "source_dens"
+kinetic_function_library.source_ion_phase_func.vparallel.function = "source_vpar"
+kinetic_function_library.source_ion_phase_func.temperature.function = "source_ion_temp" 
+
+kinetic_function_library.source_ele_phase_func.type = "maxwellian"
+kinetic_function_library.source_ele_phase_func.density.function = "source_dens" 
+kinetic_function_library.source_ele_phase_func.vparallel.function = "source_vpar"
+kinetic_function_library.source_ele_phase_func.temperature.function = "source_ele_temp" 
+
+
+#####################################################
+# Grid Function Definitions
+#####################################################
+grid_function_library.number = 13
+grid_function_library.verbosity = 1
+grid_function_library.list = "zero_grid_func" "iN0_grid_func" "iVpar_grid_func" "iT0_grid_func" "eT0_grid_func"  "eN0_grid_func" "eVpar_grid_func" "source_dens" "source_ele_dens" "source_vpar" "source_ion_temp" "source_ele_temp" "ionization_rate"
+
+grid_function_library.zero_grid_func.type = "zero" 
+
+#computational coordinate X runs from 0 to 2 pi. 
+
+grid_function_library.iN0_grid_func.type = "arbitrary"
+#grid_function_library.iN0_grid_func.function = "1"
+#grid_function_library.iN0_grid_func.function = "1-0.3*abs(y/pi-1)+0.5*cos(pi/2*(y/pi-1)/0.3125)*H(1-abs((y/pi-1)/0.3125))"
+grid_function_library.iN0_grid_func.function = "1-0.3*abs(y/pi-1)+0.5*exp(-(pi/2*(y/pi-1)/0.3125)^2/2)*sqrt(2/pi)"
+grid_function_library.iT0_grid_func.type = "arbitrary"
+#grid_function_library.iT0_grid_func.function = "1.45"
+#grid_function_library.iT0_grid_func.function = "1.45 - 0.45*abs(y/pi-1) + 0.30*cos(pi/2*(y/pi-1)/0.3125)*H(1-abs((y/pi-1)/0.3125))"
+grid_function_library.iT0_grid_func.function = "1.45 - 0.45*abs(y/pi-1) + 0.3*exp(-(pi/2*(y/pi-1)/0.3125)^2/2)*sqrt(2/pi)"
+grid_function_library.iVpar_grid_func.type = "arbitrary"
+#grid_function_library.iVpar_grid_func.function = "0"
+#grid_function_library.iVpar_grid_func.function = "sqrt(2*1.0/pi)*( (y/pi-1)/0.3125*H(1-abs((y/pi-1)/0.3125)) + H((y/pi-1)/0.3125-1) - H(-(y/pi-1)/0.3125-1) )"
+grid_function_library.iVpar_grid_func.function = "sqrt(2/pi)*tanh(pi/2*(y/pi-1)/0.3125/sqrt(2))"
+
+grid_function_library.eN0_grid_func.type = "arbitrary"
+#grid_function_library.eN0_grid_func.function = "1"
+#grid_function_library.eN0_grid_func.function = "1-0.3*abs(y/pi-1)+0.5*cos(pi/2*(y/pi-1)/0.3125)*H(1-abs((y/pi-1)/0.3125))"
+grid_function_library.eN0_grid_func.function = "1-0.3*abs(y/pi-1)+0.5*exp(-(pi/2*(y/pi-1)/0.3125)^2/2)*sqrt(2/pi)"
+grid_function_library.eT0_grid_func.type = "arbitrary"
+grid_function_library.eT0_grid_func.function = "0.75"
+#grid_function_library.eT0_grid_func.function = "1.45 - 0.45*abs(y/pi-1) + 0.30*cos(pi/2*(y/pi-1)/0.3125)*H(1-abs((y/pi-1)/0.3125))"
+#grid_function_library.eT0_grid_func.function = "1.45 - 0.45*abs(y/pi-1) + 0.30*exp(-(pi/2*(y/pi-1)/0.3125)^2/2)*sqrt(2/pi)"
+grid_function_library.eVpar_grid_func.type = "arbitrary"
+#grid_function_library.eVpar_grid_func.value = "0"
+#grid_function_library.eVpar_grid_func.function = "sqrt(2*1.0/pi)*( (y/pi-1)/0.3125*H(1-abs((y/pi-1)/0.3125)) + H((y/pi-1)/0.3125-1) - H(-(y/pi-1)/0.3125-1) )"
+grid_function_library.eVpar_grid_func.function = "sqrt(2/pi)*tanh(pi/2*(y/pi-1)/0.3125/sqrt(2))"
+
+grid_function_library.source_dens.type = "arbitrary"
+grid_function_library.source_dens.function = "1.0"
+#grid_function_library.source_dens.function = "9*0.863866634698912*cos(pi/2*(y/pi-1)/0.3125)*H(1-abs((y/pi-1)/0.3125))"
+grid_function_library.source_dens.function = "9*0.863866634698912*exp(-(pi/2*(y/pi-1)/0.3125)^2/2)*sqrt(2/pi)"
+grid_function_library.source_vpar.type = "arbitrary"
+grid_function_library.source_vpar.function = "0.0"
+grid_function_library.source_ion_temp.type = "arbitrary"
+grid_function_library.source_ion_temp.function = "15.0"
+#grid_function_library.source_ion_temp.function = "2.6
+grid_function_library.source_ele_temp.type = "arbitrary"    
+grid_function_library.source_ele_temp.function = "15.0"
+#grid_function_library.source_ele_temp.function = "2.1"
+
+
+grid_function_library.ionization_rate.type = "arbitrary"
+grid_function_library.ionization_rate.function = "1.0"
+grid_function_library.source_ele_dens.type = "arbitrary"    
+grid_function_library.source_ele_dens.function = "1.0"
+
+
+

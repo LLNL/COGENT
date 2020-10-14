@@ -135,6 +135,8 @@ class LocalizedKineticFunction : public KineticFunction
       RealVect m_location;
       RealVect m_width;
       Real m_floor;
+
+	  bool m_useSG;
 };
 
 #include "NamespaceFooter.H"

@@ -10,6 +10,8 @@ class Function
     virtual ~Function() {;}
     virtual void evalFunction(T&, const T&, const T&, int) = 0;
     virtual void define(const T&, Ops&) = 0;
+
+    virtual Real computeStepNorm(const T&) const = 0;
 };
 
 #include "NamespaceFooter.H"

@@ -52,6 +52,7 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
      m_hdf_potential(false),
      m_hdf_potential_non_zonal(false),
      m_hdf_efield(false),
+     m_hdf_ExBdata(false),
      m_hdf_density(false),
      m_hdf_momentum(false),
      m_hdf_ParallelMomentum(false),
@@ -77,10 +78,10 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
      m_hdf_dfn(false),
      m_hdf_deltaF(false),
      m_hdf_dfn_at_mu(false),
+     m_hdf_fluids(false),
      m_hdf_vpartheta(false),
      m_hdf_rtheta(false),
      m_hdf_vparmu(false),
-     m_hdf_fluids(false),
      m_verbosity(0),
      m_use_native_time_integrator( !a_use_external_TI ),
      m_compute_op_matrices(false),
@@ -113,7 +114,8 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
       m_rhs.define( m_state_comp );
    }
    else {
-      m_serialized_vector.define(m_state_comp);
+      m_U.define(m_state_comp);
+      m_U_old.define(m_state_comp);
       if (m_ti_class == _TI_RK_) {
          m_integrator = new TiRK<GKVector, GKOps>;
       }
@@ -123,7 +125,7 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
       else {
          MayDay::Error("Unrecognized input for m_ti_class.");
       }
-      m_integrator->define( a_pp, m_ti_method, m_serialized_vector, BASE_DT );
+      m_integrator->define( a_pp, m_ti_method, m_U, BASE_DT );
       m_gk_ops = &( m_integrator->getOperators() );
    }
    giveSpeciesTheirGyroaverageOps();
@@ -145,7 +147,7 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
    setupFieldHistories();
 
    if (m_compute_op_matrices && m_use_native_time_integrator) {
-     m_op_matrices.define(m_gk_ops, m_serialized_vector, m_op_matrices_tolerance);
+     m_op_matrices.define(m_gk_ops, m_U, m_op_matrices_tolerance);
    }
 }
 
@@ -170,7 +172,8 @@ GKSystem::initialize( const int     a_cur_step,
       m_gk_ops->initializePotential( a_cur_time );
    }
 
-   // Initialize physical fluid species used in fluidOp (has ghost cells)
+   // Initialize physical kinetic & fluid species used in fluidOp (has ghost cells)
+   m_gk_ops->initializeKineticSpeciesPhysical( m_state_comp.dataKinetic(), a_cur_time );
    m_gk_ops->initializeFluidSpeciesPhysical( m_state_comp.dataFluid(), a_cur_time );
    
    // Initialize the physical state variables
@@ -183,6 +186,7 @@ GKSystem::initialize( const int     a_cur_step,
    // b.  If the fixed_efield option is false, then both the potential and
    //     associated field are computed.
    m_gk_ops->initializeElectricField( m_state_phys, a_cur_step, a_cur_time );
+
 }
 
 
@@ -1014,12 +1018,26 @@ void GKSystem::advance( Real& a_cur_time,
    CH_assert(m_use_native_time_integrator);
    m_integrator->setTimeStepSize( a_dt );
 
-   m_state_comp.copyTo  ( m_serialized_vector.data() );
+   m_state_comp.copyTo  ( m_U.data() );
    if (m_compute_op_matrices) {
-     m_op_matrices.computeMatrices(m_serialized_vector,a_cur_time,0);
+     m_op_matrices.computeMatrices(m_U,a_cur_time,0);
    }
-   m_integrator->advance( a_cur_time, m_serialized_vector );
-   m_state_comp.copyFrom( m_serialized_vector.data() );
+
+
+   m_U_old = m_U;
+   Real ref_norm = m_U_old.computeNorm();
+
+   m_integrator->advance( a_cur_time, m_U );
+
+   m_U_old -= m_U;
+   m_step_norm_abs = m_U_old.computeNorm();
+   if (ref_norm > 1e-15) {
+     m_step_norm_rel = m_step_norm_abs / ref_norm;
+   } else {
+     m_step_norm_rel = m_step_norm_abs;
+   }
+
+   m_state_comp.copyFrom( m_U.data() );
 
    m_integrator->getCurrentTime( a_cur_time );
    m_integrator->getTimeStep( a_step_number );
@@ -1111,6 +1129,13 @@ void GKSystem::writePlotFile(const char    *prefix,
                                               "efield",
                                               cur_step );
          m_gk_ops->plotEField( filename, cur_time );
+      }
+      
+      if (m_hdf_ExBdata) {
+         std::string filename = plotFileName( prefix,
+                                              "ExBdata",
+                                              cur_step );
+         m_gk_ops->plotExBData( filename, cur_time );
       }
    }
 
@@ -1951,6 +1976,9 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
    // Should we make an hdf file for the electric field?
    a_ppgksys.query("hdf_efield",m_hdf_efield);
 
+   // Should we make an hdf file for the ExB data?
+   a_ppgksys.query("hdf_ExBdata",m_hdf_ExBdata);
+   
    // Should we make an hdf file for the distribution function?
    a_ppgksys.query("hdf_dfn",m_hdf_dfn);
 

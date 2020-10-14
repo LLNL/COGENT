@@ -3,14 +3,9 @@
 #include "PhaseGeom.H"
 #include "SpaceUtils.H"
 
-#undef CH_SPACEDIM
-#define CH_SPACEDIM CFG_DIM
-#include "SpaceUtils.H"
-#undef CH_SPACEDIM
-#define CH_SPACEDIM PDIM
-
 #include "NamespaceHeader.H"
 
+#if 0
 static bool closerPoint(  const pair<CFG::IntVect, Real>& a_i,
                           const pair<CFG::IntVect, Real>& a_j )
 {
@@ -42,6 +37,7 @@ static bool isColinear( const CFG::IntVect&               a_point,
     return retval;
   }
 }
+#endif
 
 #if CFG_DIM==3
 static bool isCoplanar( const CFG::IntVect&               a_point,
@@ -193,11 +189,8 @@ void GyroaverageOperator::define( const PhaseGeom&          a_phase_geom,
       CFG::RealVect x;
       for (int d=0; d<CFG_DIM; d++) x[d] = rcoords(i_cfg, d);
 
-      /* magnetic field and its magnitude at this grid point */
+      /* magnetic field magnitude at this grid point */
       Real b_magn = b_field_magn(i_cfg, 0);
-      Real bx = b_field(i_cfg,0),
-           by = b_field(i_cfg,1),
-           bz = b_field(i_cfg,2);
 
       /* initialize the gyroavg operator at this grid point */
       Stencil& op = op_fab(iv, 0);
@@ -217,6 +210,7 @@ void GyroaverageOperator::define( const PhaseGeom&          a_phase_geom,
 
 #if CFG_DIM==2
         /* calculate major and minor radii of the elliptical gyro-orbit */
+        Real by = b_field(i_cfg,1);
         Real rho_a, rho_b;
         if (b_magn == 0.0) {
           rho_a = rho_b = 0.0;
@@ -225,6 +219,9 @@ void GyroaverageOperator::define( const PhaseGeom&          a_phase_geom,
           rho_b = rho * (by/b_magn);
         }
 #else
+        Real bx = b_field(i_cfg,0);
+        Real by = b_field(i_cfg,1);
+        Real bz = b_field(i_cfg,2);
         /* normalized magnetic field vector */
         CFG::RealVect nb;
         nb[0] = bx / sqrt(bx*bx+by*by+bz*bz);

@@ -715,14 +715,15 @@ c.......assign face value
       return
       end
 
-c ----------------------------------------------------------
-c  interp face center value to cell center using C2 method
+c --------------------------------------------------------------
+c
+c  interp dir face value to cell center using C2 method
 c
 c  -------------------------------------------------------------
-      subroutine C2FACETOCELL(CHF_BOX[cellBox],
-     &                        CHF_CONST_INT[dir],
-     &                        CHF_CONST_FRA1[facePhi],
-     &                        CHF_FRA1[cellPhi])
+      subroutine C2_FACE_TO_CELL( CHF_BOX[cellBox],
+     &                            CHF_CONST_INT[dir],
+     &                            CHF_CONST_FRA1[facePhi],
+     &                            CHF_FRA1[cellPhi] )
 
       integer CHF_DDECL[i;j;k;l;m]
       integer CHF_DDECL[ii;jj;kk;ll;mm]
@@ -1005,13 +1006,14 @@ c -------------------------------------------------------------
       end
 
 c ----------------------------------------------------------
+c
 c  interp cell edge values to cell center using C2 method
 c
 c  -------------------------------------------------------------
-      subroutine C2CELL(CHF_BOX[cellBox],
-     &                  CHF_CONST_INT[dir],
-     &                  CHF_CONST_FRA1[edgePhi],
-     &                  CHF_FRA1[cellPhi])
+      subroutine C2_EDGE_TO_CELL_2D( CHF_BOX[cellBox],
+     &                               CHF_CONST_INT[dir],
+     &                               CHF_CONST_FRA1[edgePhi],
+     &                               CHF_FRA1[cellPhi] )
 
       integer CHF_DDECL[i;j;k;l;m]
       integer CHF_DDECL[ii;jj;kk;ll;mm]
@@ -1074,13 +1076,14 @@ c            if(dir==0) cellPhi(CHF_IX[i;j;k;l;m],comp) = val
       end
 
 c ----------------------------------------------------------
+c
 c  interp cell center values to cell edges based C2 method
 c
 c  -------------------------------------------------------------
-      subroutine C2EDGE(CHF_FRA[edgePhi],
-     &                  CHF_CONST_FRA[cellPhi],
-     &                  CHF_BOX[edgeBox],
-     &                  CHF_CONST_INT[idir] )
+      subroutine C2_CELL_TO_EDGE_2D( CHF_FRA[edgePhi],
+     &                               CHF_CONST_FRA[cellPhi],
+     &                               CHF_BOX[edgeBox],
+     &                               CHF_CONST_INT[idir] )
 
 
       integer n, ncell, CHF_DDECL[i;j;k;l;m]
@@ -1116,6 +1119,99 @@ c  -------------------------------------------------------------
       end
 
 c ----------------------------------------------------------
+c
+c  interp 3D cell center values in dir0 and dir1 directions
+c  to cell edges based C2 method
+c
+c  -------------------------------------------------------------
+      subroutine C2_CELL_TO_EDGE_3D( CHF_BOX[edgeBox],
+     &                               CHF_CONST_INT[dir0],
+     &                               CHF_CONST_INT[dir1],
+     &                               CHF_CONST_FRA1[cellPhi],
+     &                               CHF_FRA1[edgePhi] )
+
+
+      integer n, ncell, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii0;jj0;kk0;ll0;mm0]
+      integer CHF_DDECL[ii1;jj1;kk1;ll1;mm1]
+      REAL_T val00, val01, val10, val11
+
+      CHF_DTERM[
+      ii0 = CHF_ID(dir0, 0);
+      jj0 = CHF_ID(dir0, 1);
+      kk0 = CHF_ID(dir0, 2);
+      ll0 = CHF_ID(dir0, 3);
+      mm0 = CHF_ID(dir0, 4)];
+
+      CHF_DTERM[
+      ii1 = CHF_ID(dir1, 0);
+      jj1 = CHF_ID(dir1, 1);
+      kk1 = CHF_ID(dir1, 2);
+      ll1 = CHF_ID(dir1, 3);
+      mm1 = CHF_ID(dir1, 4)];
+
+      CHF_MULTIDO[edgeBox;i;j;k;l;m]
+
+         val11 = cellPhi(CHF_IX[i;j;k;l;m])
+         val10 = cellPhi(CHF_IX[i-ii0;j-jj0;k-kk0;l-ll0;m-mm0])
+         val01 = cellPhi(CHF_IX[i-ii1;j-jj1;k-kk1;l-ll1;m-mm1])
+         val00 = cellPhi(CHF_IX[i-ii0-ii1;j-jj0-jj1;k-kk0-kk1;l-ll0-ll1;m-mm0-mm1])
+
+         edgePhi(CHF_IX[i;j;k;l;m]) = ( val00 + val01 + val10 + val11 ) / four
+
+      CHF_ENDDO
+
+      return
+      end
+
+c ----------------------------------------------------------
+c
+c  interp 3D edge center values in dir !=dir0 or !=dir1 directions
+c  to cell center based C2 method
+c
+c  -------------------------------------------------------------
+      subroutine C2_EDGE_TO_CELL_3D( CHF_BOX[cellBox],
+     &                               CHF_CONST_INT[dir0],
+     &                               CHF_CONST_INT[dir1],
+     &                               CHF_CONST_FRA1[edgePhi],
+     &                               CHF_FRA1[cellPhi] )
+
+
+      integer n, ncell, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii0;jj0;kk0;ll0;mm0]
+      integer CHF_DDECL[ii1;jj1;kk1;ll1;mm1]
+      REAL_T val00, val01, val10, val11
+
+      CHF_DTERM[
+      ii0 = CHF_ID(dir0, 0);
+      jj0 = CHF_ID(dir0, 1);
+      kk0 = CHF_ID(dir0, 2);
+      ll0 = CHF_ID(dir0, 3);
+      mm0 = CHF_ID(dir0, 4)];
+
+      CHF_DTERM[
+      ii1 = CHF_ID(dir1, 0);
+      jj1 = CHF_ID(dir1, 1);
+      kk1 = CHF_ID(dir1, 2);
+      ll1 = CHF_ID(dir1, 3);
+      mm1 = CHF_ID(dir1, 4)];
+
+      CHF_MULTIDO[cellBox;i;j;k;l;m]
+
+         val00 = edgePhi(CHF_IX[i;j;k;l;m])
+         val01 = edgePhi(CHF_IX[i+ii0;j+jj0;k+kk0;l+ll0;m+mm0])
+         val10 = edgePhi(CHF_IX[i+ii1;j+jj1;k+kk1;l+ll1;m+mm1])
+         val11 = edgePhi(CHF_IX[i+ii0+ii1;j+jj0+jj1;k+kk0+kk1;l+ll0+ll1;m+mm0+mm1])
+
+         cellPhi(CHF_IX[i;j;k;l;m]) = ( val00 + val01 + val10 + val11 ) / four
+
+      CHF_ENDDO
+
+      return
+      end
+
+c ----------------------------------------------------------
+c
 c  interp cell center values to cell edges based U1 method
 c
 c  -------------------------------------------------------------
@@ -1205,6 +1301,48 @@ c.......assign face value
 
         CHF_ENDDO
       enddo
+
+      return
+      end
+
+c ----------------------------------------------------------
+c  Cross product VB on faces where B lives on faces
+c  and V lives on cells
+c
+c  faceBox <=> dir face box
+c  idir    <=> direction normal to face
+c  faceB   <=> face-centered B (dir comp)
+c  cellV   <=> cell-centered V (a non dir comp)
+c  faceVB  <=> V*B
+c
+c  -------------------------------------------------------------
+      subroutine CELLFACEPRODUCT( CHF_BOX[faceBox],
+     &                            CHF_INT[idir],
+     &                            CHF_CONST_FRA1[faceB],
+     &                            CHF_CONST_FRA1[cellV],
+     &                            CHF_FRA1[faceVB] )
+
+
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T Vval, Bval
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3);
+      mm = CHF_ID(idir, 4)]
+
+      CHF_MULTIDO[faceBox;i;j;k;l;m]
+
+        Bval = faceB(CHF_IX[i;j;k;l;m]);
+        Vval = half*( cellV(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm])
+     &       +        cellV(CHF_IX[i;j;k;l;m]) )
+
+        faceVB(CHF_IX[i;j;k;l;m]) = Vval * Bval
+
+      CHF_ENDDO
 
       return
       end

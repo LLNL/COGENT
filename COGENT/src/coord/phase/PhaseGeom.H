@@ -411,6 +411,8 @@ public:
 
    const CFG::MagBlockCoordSys& getMagBlockCoordSys(const Box& box) const;
 
+   const MultiBlockLevelExchangeAverage* mblexPtr() const {return m_mblexPtr;}
+
    bool secondOrder() const {return m_second_order;}
 
    bool divFreeVelocity() const {return m_divfree_velocity;}
@@ -753,6 +755,9 @@ private:
 
    LevelData<FArrayBox> * m_cell_centered_real_coords;
 
+   LevelData<FArrayBox> * m_normalized_magnetic_flux_cell;
+   LevelData<FluxBox> * m_normalized_magnetic_flux_face;
+
    LevelData<FArrayBox> * m_BCell;
    LevelData<FluxBox> * m_BFace;
    LevelData<FArrayBox> * m_gradBCell;
@@ -763,9 +768,6 @@ private:
    LevelData<FluxBox> * m_BMagFace;
    LevelData<FArrayBox> * m_bdotcurlbCell;
    LevelData<FluxBox> * m_bdotcurlbFace;
-
-   LevelData<FArrayBox> * m_normalized_magnetic_flux_cell;
-   LevelData<FluxBox> * m_normalized_magnetic_flux_face;
 
    LevelData<FArrayBox> m_BStar;
    LevelData<FArrayBox> m_BStarParallel;
@@ -819,8 +821,8 @@ private:
    mutable list<CoDimCopyManager<FArrayBox>*> m_ebe_copy_manager_cache;   
    
    Copier m_exchangeCopier;
-   int m_exchange_ghosts;
    bool m_optimized_copier;
+   int m_exchange_ghosts;
   
    mutable GyroaverageOperator const *m_gyroavg_op;
    bool m_is_gyrokinetic;

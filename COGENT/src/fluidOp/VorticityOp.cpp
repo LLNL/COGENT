@@ -6,6 +6,7 @@
 #include "SNCoreCoordSys.H"
 #include "FourthOrderUtil.H"
 #include "SimpleDivergence.H"
+#include "SpaceUtils.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -32,12 +33,14 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
      m_larmor(a_larmor),
      m_my_pc_idx_e(-1),
      m_my_pc_idx_i(-1),
-     m_it_counter(0),
-     m_update_pc_freq(1),
      m_sigma_div_e_coefs_set(false),
      m_reynolds_stress(false),
      m_ExB_current_model(true),
      m_include_pol_den_corrections(false),
+     m_include_pol_den_corrections_to_pe(false),
+     m_remove_axisymmetric_phi(false),
+     m_update_pc_freq(1),
+     m_it_counter(0),
      m_electron_temperature_func(NULL)
 {
    const std::string name("potential");
@@ -301,7 +304,15 @@ void VorticityOp::preOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_specie
 
    computeDivPerpIonMagCurrentDensity(m_divJperp_mag_i, a_E_field, a_kinetic_species, a_time);
 
-   computeDivPerpElectronMagCurrentDensity(m_divJperp_mag_e, m_ion_charge_density, a_time);
+   if (!m_include_pol_den_corrections_to_pe) {
+     const DisjointBoxLayout& grids = m_ion_charge_density.disjointBoxLayout();
+     LevelData<FArrayBox> zero(grids, 1, IntVect::Zero);
+     setZero(zero);
+     computeDivPerpElectronMagCurrentDensity(m_divJperp_mag_e, m_ion_charge_density, zero, a_time);
+   }
+   else {
+     MayDay::Error("VorticityOp::preOpEval: polarization density corrections to electron pressure are not yet implemented for the new vorticity model ");
+   }
 }
 
 
@@ -674,6 +685,7 @@ void VorticityOp::computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&     
 
 void VorticityOp::computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&             a_div_Jperp,
 							   const LevelData<FArrayBox>&       a_ion_charge_density,
+							   const LevelData<FArrayBox>&       a_negative_vorticity,
 							   const Real&                       a_time)
 
 {
@@ -698,8 +710,16 @@ void VorticityOp::computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&
 
 #ifdef FULL_DIAMAG_CURRENT
    // Compute -grad(n) [the calculation below extrapolates n in ghosts]
+   LevelData<FArrayBox> ne(grids, 1, IntVect::Zero);
+   for (DataIterator dit(ne.dataIterator()); dit.ok(); ++dit) {
+     ne[dit].copy(a_ion_charge_density[dit]);
+     if (m_include_pol_den_corrections_to_pe) {
+       ne[dit].minus(a_negative_vorticity[dit]);
+     }
+   }
    LevelData<FluxBox> neg_grad_n(grids, 3, IntVect::Unit);
-   m_gyropoisson_op->computeField(a_ion_charge_density, neg_grad_n);
+   m_gyropoisson_op->computeField(ne, neg_grad_n);
+
    
    // Compute -grad(n)xB/B^2
    m_geometry.computeEXBDrift(neg_grad_n, adv_vel);
@@ -709,6 +729,11 @@ void VorticityOp::computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&
    LevelData<FArrayBox> u(grids, 1, 2*IntVect::Unit);
    for (DataIterator dit(u.dataIterator()); dit.ok(); ++dit) {
      u[dit].copy(a_ion_charge_density[dit]);
+
+     if (m_include_pol_den_corrections_to_pe) {
+       u[dit].minus(a_negative_vorticity[dit]);
+     }
+
      u[dit].mult(m_electron_temperature[dit]);
      u[dit].divide(Bfield[dit]);
      fourthOrderCellExtrap(u[dit],grids[dit]);
@@ -762,6 +787,11 @@ void VorticityOp::computeReynoldsStressTerm( LevelData<FArrayBox>&             a
 {
    CH_TIME("VorticityOp::computeReynoldsStressTerm");
    
+   // The present implementation supports only the second-order option
+   // since vorticity_grown has only 2 layers of ghosts and
+   // we use fourthOrderCellToFace. Extend to 4th order later.
+   CH_assert(m_geometry.secondOrder());
+   
    const DisjointBoxLayout& grids = m_geometry.gridsFull();
    
    // Compute the ExB drift on face centers
@@ -783,6 +813,21 @@ void VorticityOp::computeReynoldsStressTerm( LevelData<FArrayBox>&             a
    LevelData<FluxBox> faceVorticity(grids, 1, IntVect::Unit);
    fourthOrderCellToFace(faceVorticity, vorticity_grown);
 
+ #if 0
+   // Experimental option to use uw3 method for ExB vorticity advection
+   // Might not be useful, since cfl is likely dominated by stiff k^4 term
+   LevelData<FluxBox> ExB_drift_mapped(grids, 3, IntVect::Unit);
+   for (DataIterator dit(ExB_drift_mapped.dataIterator()); dit.ok(); ++dit) {
+      ExB_drift_mapped[dit].copy(ExB_drift[dit]);
+   }
+   m_geometry.multNTransposePointwise(ExB_drift_mapped);
+   
+   SpaceUtils::upWindToFaces(faceVorticity,
+                             vorticity_grown,
+                             ExB_drift_mapped,
+                             "uw3");
+ #endif
+   
    // Compute ExB times vorticity flux
    LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Unit);
    for (DataIterator dit(a_vorticity.dataIterator()); dit.ok(); ++dit) {
@@ -924,7 +969,7 @@ void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_p
 {
    CH_TIME("VorticityOp::updatePotentialOldModel");
    const DisjointBoxLayout& grids = m_geometry.gridsFull();
-      
+
    // Compute the polarization density term (at the old time) using the operator and boundary
    // conditions set in the previous call of this function or initializeOldModel().
    // NB: gkPoissonRHS = -vorticity
@@ -934,7 +979,9 @@ void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_p
    // Compute the Reynolds stress term (at the old time)
    // NB: -div(ExB*vorticity) = div(ExB*gkPoissonRHS)
    LevelData<FArrayBox> negative_div_ExB_vorticity(grids, 1, IntVect::Zero);
-   computeReynoldsStressTerm(negative_div_ExB_vorticity, gkPoissonRHS, a_E_field);
+   if (m_reynolds_stress) {
+     computeReynoldsStressTerm(negative_div_ExB_vorticity, gkPoissonRHS, a_E_field);
+   }
    
    // Compute the parallel current divergence
    computeIonChargeDensity(m_ion_charge_density, a_kinetic_species);
@@ -948,7 +995,7 @@ void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_p
      computeDivPerpIonExBCurrentDensity(div_J_electron_mag, a_E_field, a_kinetic_species, m_ion_charge_density, a_time);
    }
    else{
-     computeDivPerpElectronMagCurrentDensity(div_J_electron_mag, m_ion_charge_density, a_time);
+     computeDivPerpElectronMagCurrentDensity(div_J_electron_mag, m_ion_charge_density, gkPoissonRHS, a_time);
    }
    
    LevelData<FArrayBox> div_J_ion_mag(grids, 1, IntVect::Zero);
@@ -973,10 +1020,16 @@ void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_p
    // Do the implicit vorticity solve
    computeIonMassDensity(m_ion_mass_density, a_kinetic_species);
    m_imex_pc_op->setImplicitDt(a_dt);
+      
    if (a_scalar_data.size() > 0) setCoreBC( a_scalar_data[0], -a_scalar_data[1], *m_imex_pc_op_bcs );
 
    bool update_precond = (m_it_counter % m_update_pc_freq == 0) ? true : false;
    m_imex_pc_op->setOperatorCoefficients(m_ion_mass_density, *m_imex_pc_op_bcs, update_precond);
+
+   // update parallel coefficient; will be used for the case where
+   // the polarization density correction in the parallel current
+   // are retained; needs to be called after setOperatorCoefficients
+   m_imex_pc_op->setPolDensCorrectionCoeff(m_ion_charge_density);
 
    m_imex_pc_op->computePotential( a_phi, gkPoissonRHS );
    m_imex_pc_op->fillInternalGhosts( a_phi );
@@ -987,7 +1040,18 @@ void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_p
    // Set up the polarization density operator for the next step
    if (a_scalar_data.size() > 0) setCoreBC( a_scalar_data[0], -a_scalar_data[1], *m_gyropoisson_op_bcs );
    m_gyropoisson_op->setOperatorCoefficients(m_ion_mass_density, *m_gyropoisson_op_bcs, false);
-   
+
+   // Optional phi post-processing to remove the axisymmetric component
+   if (m_remove_axisymmetric_phi) {
+     FluxSurface flux_surface(m_geometry);
+     LevelData<FArrayBox> phi_fs(grids, 1, IntVect::Zero);
+     flux_surface.averageAndSpread(a_phi, phi_fs);
+
+     for (DataIterator dit(grids); dit.ok(); ++dit) {
+       a_phi[dit] -= phi_fs[dit];
+     }
+   }
+
    m_it_counter++;
 }
 
@@ -997,8 +1061,10 @@ void VorticityOp::parseParameters( const ParmParse& a_pp )
    a_pp.query( "include_reynolds_stress", m_reynolds_stress);
    a_pp.query( "ExB_current_model", m_ExB_current_model );
    a_pp.query( "include_pol_den_corrections", m_include_pol_den_corrections );
+   a_pp.query( "include_pol_den_corrections_to_pe", m_include_pol_den_corrections_to_pe );
    a_pp.query( "update_precond_interval", m_update_pc_freq );
-
+   a_pp.query( "remove_axisymmetric_phi", m_remove_axisymmetric_phi );
+   
    if (a_pp.contains("consistent_upper_bc_only")) {
      a_pp.get("consistent_upper_bc_only", m_consistent_upper_bc_only);
    }

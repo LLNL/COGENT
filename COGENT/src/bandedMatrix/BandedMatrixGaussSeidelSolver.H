@@ -104,7 +104,7 @@ void BandedMatrixGaussSeidelSolver<Vec>::solve(Vec& a_x, const BandedMatrix& a_A
       BandedMatrixSolver<Vec>::applyOp(tmp, a_x, a_A);
       tmp *= -1.0;
       tmp += a_b;
-      Real norm = tmp.computeNorm(2);
+      Real norm = tmp.computeNorm();
       if (!procID()) {
         std::cout << "      --> (" << m_out_string << ") iteration " << n+1
                   << ", residual = " << norm << std::endl;

@@ -26,6 +26,57 @@ c     local variables
       return
       end
 
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine multiply_nt(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[metricN],
+     &     CHF_FRA[F])
+
+      integer CHF_DDECL[i;j;k]
+      double precision NTF0, NTF1, NTF2
+      double precision N0, N1, N2, N3, N4, N5, N6, N7, N8
+
+      CHF_MULTIDO[box;i;j;k]
+
+         N0 = metricN(CHF_IX[i;j;k],0)
+         N1 = metricN(CHF_IX[i;j;k],1)
+         N2 = metricN(CHF_IX[i;j;k],2)
+         N3 = metricN(CHF_IX[i;j;k],3)
+
+         if (CH_SPACEDIM==3) then
+
+            N4 = metricN(CHF_IX[i;j;k],4)
+            N5 = metricN(CHF_IX[i;j;k],5)
+            N6 = metricN(CHF_IX[i;j;k],6)
+            N7 = metricN(CHF_IX[i;j;k],7)
+            N8 = metricN(CHF_IX[i;j;k],8)
+
+            NTF0 = N0*F(CHF_IX[i;j;k],0) + N3*F(CHF_IX[i;j;k],1) + N6*F(CHF_IX[i;j;k],2)
+            NTF1 = N1*F(CHF_IX[i;j;k],0) + N4*F(CHF_IX[i;j;k],1) + N7*F(CHF_IX[i;j;k],2)
+            NTF2 = N2*F(CHF_IX[i;j;k],0) + N5*F(CHF_IX[i;j;k],1) + N8*F(CHF_IX[i;j;k],2)
+
+            F(CHF_IX[i;j;k],0) = NTF0
+            F(CHF_IX[i;j;k],1) = NTF1
+            F(CHF_IX[i;j;k],2) = NTF2
+
+         else
+
+            NTF0 = N0*F(CHF_IX[i;j;k],0) + N2*F(CHF_IX[i;j;k],1)
+            NTF1 = N1*F(CHF_IX[i;j;k],0) + N3*F(CHF_IX[i;j;k],1)
+
+            F(CHF_IX[i;j;k],0) = NTF0
+            F(CHF_IX[i;j;k],1) = NTF1
+
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+cccccccccccccccccccccccccccccccccccccccccccccccc
+
       subroutine project_onto_parallel(
      &     CHF_BOX[box],
      &     CHF_CONST_FRA[bunit],
@@ -63,6 +114,42 @@ c     local variables
 
       return
       end
+
+      subroutine compute_parallel_projection(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_CONST_FRA[vector],
+     &     CHF_CONST_FRA1[par_projection]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], n 
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k]
+      fac = zero
+
+#if CH_SPACEDIM==3
+
+        do n = 0, CHF_NCOMP[vector]-1
+         fac = fac + vector(CHF_IX[i;j;k],n) * bunit(CHF_IX[i;j;k],n) 
+        enddo
+
+        par_projection(CHF_IX[i;j;k]) = fac 
+
+#else
+        fac = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0) 
+     &      + vector(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],2)                
+
+
+        par_projection(CHF_IX[i;j;k]) = fac    
+   
+#endif      
+      CHF_ENDDO
+      
+      return
+      end
+
 
       subroutine compute_radial_projection(
      &     CHF_BOX[box],
@@ -133,6 +220,37 @@ c     local variables
       return
       end
 
+      subroutine convert_cartesian_to_cylindrical(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[vect_cart],
+     &     CHF_CONST_FRA[coords],
+     &     CHF_FRA[vect_cyl]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k] 
+      double precision x, y, rxy
+
+      CHF_MULTIDO[box;i;j;k]
+
+        x = coords(CHF_IX[i;j;k],0)
+        y = coords(CHF_IX[i;j;k],1)
+        rxy = sqrt(x*x + y*y)
+        
+        vect_cyl(CHF_IX[i;j;k],0) = vect_cart(CHF_IX[i;j;k],0) * x/rxy
+     &                            + vect_cart(CHF_IX[i;j;k],1) * y/rxy
+
+        vect_cyl(CHF_IX[i;j;k],1) = -vect_cart(CHF_IX[i;j;k],0) * y/rxy
+     &                              +vect_cart(CHF_IX[i;j;k],1) * x/rxy
+
+        vect_cyl(CHF_IX[i;j;k],2) = vect_cart(CHF_IX[i;j;k],2)
+
+      
+      CHF_ENDDO
+
+      return
+      end
+
       subroutine compute_face_Binverse_integrals(
      &     CHF_BOX[box],
      &     CHF_CONST_INT[dir],
@@ -174,8 +292,10 @@ c     local variables
       return
       end
       
+ccccccccccccccccccccccccccccccccccccccccccccccc
+
       subroutine simple_curl(
-     &     CHF_BOX[box],
+     &     CHF_BOX[facebox],
      &     CHF_CONST_INT[dir_j],
      &     CHF_CONST_INT[dir_k],
      &     CHF_CONST_REAL[dX_j],
@@ -184,23 +304,23 @@ c     local variables
      &     CHF_CONST_FRA[Edge_k],
      &     CHF_FRA[Face_i])
 c     local variables
-      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii_j;jj_j;kk_j], CHF_DDECL[ii_k;jj_k;kk_k] 
+      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii_j;jj_j;kk_j], CHF_DDECL[ii_k;jj_k;kk_k]
       double precision djEk, dkEj
 
       CHF_DTERM[
       ii_j = CHF_ID(0,dir_j);
       jj_j = CHF_ID(1,dir_j);
       kk_j = CHF_ID(2,dir_j)]
-      
+
       CHF_DTERM[
       ii_k = CHF_ID(0,dir_k);
       jj_k = CHF_ID(1,dir_k);
       kk_k = CHF_ID(2,dir_k)]
 
       do n=0, (CHF_NCOMP[Face_i]-1)
-         
-         CHF_MULTIDO[box;i;j;k]
-      
+
+         CHF_MULTIDO[facebox;i;j;k]
+
             djEk = (Edge_k(CHF_IX[i+ii_j;j+jj_j;k+kk_j],n) - Edge_k(CHF_IX[i;j;k],n))/dX_j
             dkEj = (Edge_j(CHF_IX[i+ii_k;j+jj_k;k+kk_k],n) - Edge_j(CHF_IX[i;j;k],n))/dX_k
             Face_i(CHF_IX[i;j;k],n) = djEk - dkEj
@@ -212,8 +332,48 @@ c     local variables
       return
       end
 
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+ccccccccccccccccccccccccccccccccccccccccccccccc
+ 
+      subroutine simple_curl_face_to_edge(
+     &     CHF_BOX[edgebox],
+     &     CHF_CONST_INT[dir_j],
+     &     CHF_CONST_INT[dir_k],
+     &     CHF_CONST_REAL[dX_j],
+     &     CHF_CONST_REAL[dX_k],
+     &     CHF_CONST_FRA[face_j],
+     &     CHF_CONST_FRA[face_k],
+     &     CHF_FRA[Edge_i])
+c     local variables
+      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii_j;jj_j;kk_j], CHF_DDECL[ii_k;jj_k;kk_k] 
+      double precision djFk, dkFj
+
+      CHF_DTERM[
+      ii_j = CHF_ID(0,dir_j);
+      jj_j = CHF_ID(1,dir_j);
+      kk_j = CHF_ID(2,dir_j)]
       
+      CHF_DTERM[
+      ii_k = CHF_ID(0,dir_k);
+      jj_k = CHF_ID(1,dir_k);
+      kk_k = CHF_ID(2,dir_k)]
+
+      do n=0, (CHF_NCOMP[Edge_i]-1)
+         
+         CHF_MULTIDO[edgebox;i;j;k]
+      
+            djFk = (Face_k(CHF_IX[i;j;k],n) - Face_k(CHF_IX[i-ii_j;j-jj_j;k-kk_j],n))/dX_j
+            dkFj = (Face_j(CHF_IX[i;j;k],n) - Face_j(CHF_IX[i-ii_k;j-jj_k;k-kk_k],n))/dX_k
+            Edge_i(CHF_IX[i;j;k],n) = djFk - dkFj
+
+         CHF_ENDDO
+
+      enddo
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
       subroutine simple_curl_virt(
      &     CHF_BOX[box],
      &     CHF_CONST_INT[dir],
@@ -221,18 +381,18 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
      &     CHF_CONST_FRA[Fy],
      &     CHF_FRA[Jdir])
 c     local variables
-      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk] 
+      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
       double precision val
 
       CHF_DTERM[
       ii = CHF_ID(0,0);
       jj = CHF_ID(1,0);
       kk = CHF_ID(2,0)]
-      
+
       do n=0, (CHF_NCOMP[Fy]-1)
-         
+
          CHF_MULTIDO[box;i;j;k]
-     
+
             if(dir==1) then
                val = (Fy(CHF_IX[i;j;k],n) - Fy(CHF_IX[i-1;j;k],n))/dXdir
             else
@@ -248,7 +408,7 @@ c     local variables
       end
 
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-      
+
       subroutine simple_curl_virt_cc(
      &     CHF_BOX[box],
      &     CHF_CONST_INT[dir],
@@ -256,16 +416,16 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
      &     CHF_CONST_FRA1[Fy],
      &     CHF_FRA[Jcurl])
 c     local variables
-      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk] 
+      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
       double precision val
-
+  
       CHF_DTERM[
       ii = CHF_ID(0,0);
       jj = CHF_ID(1,0);
       kk = CHF_ID(2,0)]
-      
+
       CHF_MULTIDO[box;i;j;k]
-     
+
          if(dir==1) then
             val =  (Fy(CHF_IX[i+1;j;k]) - Fy(CHF_IX[i-1;j;k]))/dXdir*half
          else
@@ -277,7 +437,7 @@ c     local variables
 
       return
       end
-  
+
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
    
       subroutine on_axis_curl_correction(
@@ -342,7 +502,7 @@ c            print*, "B(i,j)   = ", B(CHF_IX[i;j;k])
                a5 = dxidX(CHF_IX[i;j;k],5)
                a6 = dxidX(CHF_IX[i;j;k],6)
                a7 = dxidX(CHF_IX[i;j;k],7)
-               a8 = dXdxi(CHF_IX[i;j;k],8)
+               a8 = dxidX(CHF_IX[i;j;k],8)
             endif
   
             Fnew0 = a0*F(CHF_IX[i;j;k],0) + a1*F(CHF_IX[i;j;k],1) + a2*F(CHF_IX[i;j;k],2)
@@ -469,12 +629,6 @@ c            print*, "B(i,j)   = ", B(CHF_IX[i;j;k])
       l1 = 1 + CH_SPACEDIM*dir;
       l2 = 2 + CH_SPACEDIM*dir]
 
-c        print*, "dir  = ", dir
-c        print*, "iboxlo0  = ", iboxlo0
-c        print*, "iboxhi0  = ", iboxhi0
-c        print*, "iboxlo1  = ", iboxlo1
-c        print*, "iboxhi1  = ", iboxhi1
-
       CHF_MULTIDO[box;i;j;k]
       
          if (CH_SPACEDIM==3) then
@@ -504,6 +658,186 @@ c        print*, "glsq  = ", glsq
          endif
 
       CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine project_phys_to_mapped_dir(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dxidX],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[inverse],
+     &     CHF_FRA[data]
+     & )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+      double precision a, b, c
+      double precision d, e, f
+      double precision g, h, l
+      double precision det, norm, fac0, fac1, fac2
+      double precision data0new, data1new, data2new
+
+      if (CH_SPACEDIM==2) then
+
+      CHF_MULTIDO[box;i;j;k]
+
+         if (dir==0) then
+c           define the unit vector normal to dir=0 face
+            a = dxidX(CHF_IX[i;j;k],0);
+            b = dxidX(CHF_IX[i;j;k],2);
+            norm = one / dsqrt( a**2 + b**2 )
+            a = a*norm;
+            b = b*norm;
+
+c           e1 = e2 x e0 (e2 in virtual dimension)
+            c = -b;
+            d = a;
+         else
+c           define the unit vector normal to dir=1 face
+            c = dxidX(CHF_IX[i;j;k],1);
+            d = dxidX(CHF_IX[i;j;k],3);
+            norm = one / dsqrt( c**2 + d**2 )
+            c = c*norm;
+            d = d*norm;
+
+c           e0 = e1 x e2 (e2 in virtual dimension)
+            b = -c;
+            a = d;
+         endif
+
+         if (inverse==0) then
+
+            data0new =  data(CHF_IX[i;j;k],0)*a + data(CHF_IX[i;j;k],1)*b;
+            data1new =  data(CHF_IX[i;j;k],0)*c + data(CHF_IX[i;j;k],1)*d;
+
+         else
+
+            det = a*d - b*c
+            data0new =  data(CHF_IX[i;j;k],0)*d/det - data(CHF_IX[i;j;k],1)*b/det;
+            data1new = -data(CHF_IX[i;j;k],0)*c/det + data(CHF_IX[i;j;k],1)*a/det;
+
+         endif
+
+         data(CHF_IX[i;j;k],0) = data0new;
+         data(CHF_IX[i;j;k],1) = data1new;
+
+      CHF_ENDDO
+
+      else
+
+      CHF_MULTIDO[box;i;j;k]
+
+         if (dir==0) then
+c           define the unit vector normal to dir=0 face
+            a = dxidX(CHF_IX[i;j;k],0);
+            b = dxidX(CHF_IX[i;j;k],3);
+            c = dxidX(CHF_IX[i;j;k],6);
+            norm = one / dsqrt( a**2 + b**2 + c**2 )
+            a = a*norm;
+            b = b*norm;
+            c = c*norm;
+
+c           define a unit vector tangent to dir=0 face
+            d = dXdxi(CHF_IX[i;j;k],3);
+            e = dXdxi(CHF_IX[i;j;k],4);
+            f = dXdxi(CHF_IX[i;j;k],5);
+            norm = one / dsqrt( d**2 + e**2 + f**2 )
+            d = d*norm
+            e = e*norm
+            f = f*norm
+
+c           e2 = e0 x e1
+            g = b*f - c*e
+            h = c*d - a*f
+            l = a*e - b*d
+         endif
+         if (dir==1) then
+c           define the unit vector normal to dir=1 face
+            d = dxidX(CHF_IX[i;j;k],1);
+            e = dxidX(CHF_IX[i;j;k],4);
+            f = dxidX(CHF_IX[i;j;k],7);
+            norm = one / dsqrt( d**2 + e**2 + f**2 )
+            d = d*norm;
+            e = e*norm;
+            f = f*norm;
+
+c           define a unit vector tangent to dir=1 face
+            a = dXdxi(CHF_IX[i;j;k],0);
+            b = dXdxi(CHF_IX[i;j;k],1);
+            c = dXdxi(CHF_IX[i;j;k],2);
+            norm = one / dsqrt( a**2 + b**2 + c**2 )
+            a = a*norm
+            b = b*norm
+            c = c*norm
+
+c           e2 = e0 x e1
+            g = b*f - c*e
+            h = c*d - a*f
+            l = a*e - b*d
+         endif
+         if (dir==2) then
+c           define the unit vector normal to dir=2 face
+            g = dxidX(CHF_IX[i;j;k],2);
+            h = dxidX(CHF_IX[i;j;k],5);
+            l = dxidX(CHF_IX[i;j;k],8);
+            norm = one / dsqrt( g**2 + h**2 + l**2 )
+            g = g*norm;
+            h = h*norm;
+            l = l*norm;
+
+c           define a unit vector tangent to dir=2 face
+            d = dXdxi(CHF_IX[i;j;k],3);
+            e = dXdxi(CHF_IX[i;j;k],4);
+            f = dXdxi(CHF_IX[i;j;k],5);
+            norm = one / dsqrt( d**2 + e**2 + f**2 )
+            d = d*norm
+            e = e*norm
+            f = f*norm
+
+c           e0 = e1 x e2
+            a = e*l - f*h
+            b = f*g - d*l
+            c = d*h - e*g
+         endif
+
+         if (inverse==0) then
+
+            data0new = data(CHF_IX[i;j;k],0)*a
+     &               + data(CHF_IX[i;j;k],1)*b
+     &               + data(CHF_IX[i;j;k],2)*c;
+            data1new = data(CHF_IX[i;j;k],0)*d
+     &               + data(CHF_IX[i;j;k],1)*e
+     &               + data(CHF_IX[i;j;k],2)*f;
+            data2new = data(CHF_IX[i;j;k],0)*g
+     &               + data(CHF_IX[i;j;k],1)*h
+     &               + data(CHF_IX[i;j;k],2)*l;
+
+         else
+
+            det = a*(e*l-f*h) - b*(d*l-f*g) + c*(d*h-e*g)
+            data0new = data(CHF_IX[i;j;k],0)*(e*l - f*h)/det
+     &               + data(CHF_IX[i;j;k],1)*(h*c - l*b)/det
+     &               + data(CHF_IX[i;j;k],2)*(b*f - c*e)/det;
+            data1new = data(CHF_IX[i;j;k],0)*(g*f - d*l)/det
+     &               + data(CHF_IX[i;j;k],1)*(a*l - g*c)/det
+     &               + data(CHF_IX[i;j;k],2)*(d*c - a*f)/det;
+            data2new = data(CHF_IX[i;j;k],0)*(d*h - g*e)/det
+     &               + data(CHF_IX[i;j;k],1)*(g*b - a*h)/det
+     &               + data(CHF_IX[i;j;k],2)*(a*e - d*b)/det;
+
+         endif
+
+         data(CHF_IX[i;j;k],0) = data0new;
+         data(CHF_IX[i;j;k],1) = data1new;
+         data(CHF_IX[i;j;k],2) = data2new;
+
+      CHF_ENDDO
+
+      endif
 
       return
       end
@@ -648,54 +982,11 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       return
       end
 
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
-c    COMPUTE STRAIN TENSOR FOR 2D CASE
-
-      subroutine eval_strain_tensor_comps(
-     &     CHF_BOX[gridbox],
-     &     CHF_CONST_FRA1[divV],
-     &     CHF_CONST_FRA[gradVx],
-     &     CHF_CONST_FRA[gradVy],
-     &     CHF_FRA[Wx],
-     &     CHF_FRA[Wy]
-     &     )
-
-c     local variables
-      integer CHF_AUTODECL[i]
-      double precision divV0
-      double precision gradVxx, gradVxy
-      double precision gradVyx, gradVyy
-
-      CHF_AUTOMULTIDO[gridbox;i]
-
-      if (CH_SPACEDIM==3) then
-
-      else
-
-        gradVxx = gradVx(CHF_AUTOIX[i],0)
-        gradVxy = gradVx(CHF_AUTOIX[i],1)
-        gradVyx = gradVy(CHF_AUTOIX[i],0)
-        gradVyy = gradVy(CHF_AUTOIX[i],1)
-        divV0  = divV(CHF_AUTOIX[i])
-
-        Wx(CHF_AUTOIX[i],0) = gradVxx + gradVxx - two/three*divV0
-        Wx(CHF_AUTOIX[i],1) = gradVxy + gradVyx
-        Wy(CHF_AUTOIX[i],0) = gradVyx + gradVxy
-        Wy(CHF_AUTOIX[i],1) = gradVyy + gradVyy - two/three*divV0
-
-      endif
-
-      CHF_ENDDO
-    
-      return
-      end
-
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
 c    COMPUTE STRAIN TENSOR FOR 2D CASE
 
-      subroutine eval_strain_tensor_comps_new(
+      subroutine eval_strain_tensor_comps_twoD(
      &     CHF_BOX[gridbox],
      &     CHF_CONST_FRA1[divV],
      &     CHF_CONST_FRA[gradVx],
@@ -711,10 +1002,6 @@ c     local variables
 
       CHF_AUTOMULTIDO[gridbox;i]
 
-      if (CH_SPACEDIM==3) then
-
-      else
-
         gradVxx = gradVx(CHF_AUTOIX[i],0)
         gradVxy = gradVx(CHF_AUTOIX[i],1)
         gradVyx = gradVy(CHF_AUTOIX[i],0)
@@ -726,10 +1013,56 @@ c     local variables
         W(CHF_AUTOIX[i],2) = gradVyx + gradVxy
         W(CHF_AUTOIX[i],3) = gradVyy + gradVyy - two/three*divV0
 
-      endif
-
       CHF_ENDDO
     
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE STRAIN TENSOR FOR 3D CASE
+
+      subroutine eval_strain_tensor_comps_threeD(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[divV],
+     &     CHF_CONST_FRA[gradVx],
+     &     CHF_CONST_FRA[gradVy],
+     &     CHF_CONST_FRA[gradVz],
+     &     CHF_FRA[W],
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision divV0
+      double precision gradVxx, gradVxy, gradVxz
+      double precision gradVyx, gradVyy, gradVyz
+      double precision gradVzx, gradVzy, gradVzz
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+        gradVxx = gradVx(CHF_AUTOIX[i],0)
+        gradVxy = gradVx(CHF_AUTOIX[i],1)
+        gradVxz = gradVx(CHF_AUTOIX[i],2)
+        gradVyx = gradVy(CHF_AUTOIX[i],0)
+        gradVyy = gradVy(CHF_AUTOIX[i],1)
+        gradVyz = gradVy(CHF_AUTOIX[i],2)
+        gradVzx = gradVz(CHF_AUTOIX[i],0)
+        gradVzy = gradVz(CHF_AUTOIX[i],1)
+        gradVzz = gradVz(CHF_AUTOIX[i],2)
+        divV0  = divV(CHF_AUTOIX[i])
+
+        W(CHF_AUTOIX[i],0) = one*(gradVxx + gradVxx - two/three*divV0)
+        W(CHF_AUTOIX[i],1) = one*(gradVxy + gradVyx)
+        W(CHF_AUTOIX[i],2) = one*(gradVxz + gradVzx)
+        W(CHF_AUTOIX[i],3) = one*(gradVyx + gradVxy)
+        W(CHF_AUTOIX[i],4) = one*(gradVyy + gradVyy - two/three*divV0)
+        W(CHF_AUTOIX[i],5) = one*(gradVyz + gradVzy)
+        W(CHF_AUTOIX[i],6) = one*(gradVzx + gradVxz)
+        W(CHF_AUTOIX[i],7) = one*(gradVzy + gradVyz)
+        W(CHF_AUTOIX[i],8) = one*(gradVzz + gradVzz - two/three*divV0)
+
+      CHF_ENDDO
+
       return
       end
 

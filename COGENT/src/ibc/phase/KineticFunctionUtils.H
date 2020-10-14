@@ -3,19 +3,25 @@
 
 #include "FourthOrderUtil.H"
 
+#include "FourthOrderUtilsClass.H"
+
 #include "NamespaceHeader.H"
 
 namespace KineticFunctionUtils {
    
 inline
 void convertToCellAverage( const PhaseGeom&       a_geometry,
-                           LevelData<FArrayBox>&  a_dfn ) 
+                           LevelData<FArrayBox>&  a_dfn, 
+						   const bool useSG=false ) 
 {
    if ( !(a_dfn.ghostVect() >= IntVect::Unit) ) {
       MayDay::Error("convertToCellAverage(): Insufficient number of ghost cells");
    }
+   FourthOrderUtil mySGutils;
+   mySGutils.setSG(useSG);
 
-   fourthOrderAverage(a_dfn);
+   //fourthOrderAverage(a_dfn);
+   mySGutils.fourthOrderAverageGen(a_dfn);
 }
 
 }

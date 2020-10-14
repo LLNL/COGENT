@@ -158,7 +158,7 @@ void TwoLevelSolver<T,Ops>::solve(T& a_x, const T& a_b, int a_its)
 
     if (m_norm_based_exit) {
       m_op->residual(m_r, a_x, a_b);
-      norm = m_r.computeNorm(2);
+      norm = m_r.computeNorm();
       if (n == 0) norm0 = norm;
       if ((norm < m_atol) || (norm/norm0 < m_rtol)) break;
     }

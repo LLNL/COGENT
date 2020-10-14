@@ -19,7 +19,7 @@ class ExplicitStageJacobian: public LinearFunction<T,Ops>
     }
 
     void residual   (T& a_residual, const T& a_y, const T& a_rhs);
-    void applyOp    (T& a_F, const T& a_y);
+    void applyOp    (T& a_F, const T& a_y, int a_its = -1);
     void axby       (T& a_Z, const T& a_X, const T& a_Y, Real a_a, Real a_b);
 
     inline void preCond(T& a_Y, const T& a_X)     
@@ -39,13 +39,22 @@ class ExplicitStageJacobian: public LinearFunction<T,Ops>
       return;
     }
 
-    inline void create    (T& a_Z, const T& a_Y)              { a_Z.define(a_Y); }
+    inline void create(T& a_Z, const T& a_Y)              
+    { 
+      a_Z.define(a_Y); 
+    }
+
     inline void assign    (T& a_Z, const T& a_Y)              { a_Z.copy(a_Y); }
     inline void incr      (T& a_Z, const T& a_Y, Real a_scale){ a_Z.increment(a_Y,a_scale); } 
     inline void scale     (T& a_Y, const Real& a_scale)       { a_Y.scale(a_scale); }
     inline void setToZero (T& a_Y)                            { a_Y.zero(); }
     inline Real dotProduct(T& a_X, const T& a_Y)              { return(a_X.dotProduct(a_Y)); }
-    inline Real norm      (T& a_Y, int a_ord)                 { return(a_Y.computeNorm(a_ord)); }
+    
+    inline Real norm (T& a_Y, int a_ord)
+    { 
+      CH_assert(a_ord == 2);
+      return(a_Y.computeNorm()); 
+    }
 
     inline void setStageTime (Real a_time  ) { m_stage_time = a_time; }
 
@@ -54,7 +63,7 @@ class ExplicitStageJacobian: public LinearFunction<T,Ops>
     inline void setBaseSolution (const T& a_Y)
     { 
       m_Y0.copy(a_Y); 
-      m_normY0 = m_Y0.computeNorm(2); 
+      m_normY0 = m_Y0.computeNorm(); 
       if (m_usePreCond) m_preCond->setBaseSolution(a_Y);
     }
 
@@ -78,11 +87,23 @@ class ExplicitStageJacobian: public LinearFunction<T,Ops>
 
     void define(const T&, Ops&, const std::string&, const std::string&);
 
+    inline void setUScale(const T& a_scale)
+    {
+      m_scale_u = a_scale;
+    }
+
+    inline void setRHSScale(const T& a_scale)
+    {
+      m_scale_rhs = a_scale;
+    }
+
   private:
   
     bool m_is_Defined, m_isLinear, m_usePreCond;
     Real m_stage_time, m_epsJFNK, m_normY0;
-    T    m_Z, m_Y0, m_M0, m_M;
+
+    T m_Z, m_Y0, m_M0, m_M;
+    T m_scale_u, m_scale_rhs;
 
     Preconditioner<T,Ops> *m_preCond;
 
@@ -153,11 +174,9 @@ void ExplicitStageJacobian<T,Ops>::parseParameters( ParmParse& a_pp)
 
 /* a_residual = [L]a_Y - a_rhs */
 template <class T, class Ops>
-void ExplicitStageJacobian<T,Ops>::residual(
-                                              T& a_residual,
+void ExplicitStageJacobian<T,Ops>::residual(  T& a_residual,
                                               const T& a_Y,
-                                              const T& a_rhs
-                                           )
+                                              const T& a_rhs )
 {
   applyOp(a_residual,a_Y);
   a_residual.increment(a_rhs,-1);
@@ -174,10 +193,10 @@ void ExplicitStageJacobian<T,Ops>::residual(
  *
  * For linear problems, eps = 1.*/
 template <class T, class Ops>
-void ExplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y)
+void ExplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y, int a_its)
 {
-  CH_TIME("ExplicitStageJacobian::apllyOp()");
-  Real normY = a_y.computeNorm(2);
+  CH_TIME("ExplicitStageJacobian::applyOp()");
+  Real normY = a_y.computeNorm();
   if (normY < 1e-15) a_F.zero();
   else {
     Real eps;
@@ -195,6 +214,8 @@ void ExplicitStageJacobian<T,Ops>::applyOp(T& a_F, const T& a_y)
     a_F.increment(m_M0,-1);
     a_F.scale(1.0/eps);
   }
+
+  m_ops->scaleLHSOp(a_F);
 }
 
 template <class T, class Ops>

@@ -240,10 +240,10 @@ SingleNullPhaseBC::SingleNullPhaseBC( const std::string& a_name,
                                       const int& a_verbosity )
    : m_name(a_name),
      m_verbosity(a_verbosity),
-     m_pp(a_pp),
-     m_all_bdry_defined(false),
      m_logical_sheath(false),
-     m_flux_bc(false)
+     m_flux_bc(false),
+     m_all_bdry_defined(false),
+     m_pp(a_pp)
 {
    m_inflow_function.resize( NUM_INFLOW );
    m_bc_type.resize( NUM_INFLOW );
@@ -316,7 +316,8 @@ void SingleNullPhaseBC::fillInflowData( const Real& a_time )
    }
 }
 
-void SingleNullPhaseBC::apply( KineticSpecies& a_species_phys,
+void SingleNullPhaseBC::apply( KineticSpeciesPtrVect&  a_species,
+                               const int&  a_species_index,
                                const CFG::LevelData<CFG::FArrayBox>& a_phi,
                                const LevelData<FluxBox>& a_velocity,
                                const Real& a_time )
@@ -328,11 +329,13 @@ void SingleNullPhaseBC::apply( KineticSpecies& a_species_phys,
    CH_TIMER("setInflowOutflowBC", t_set_inflow_outflow_BC);
    CH_TIMER("setCodimBoundaryValues", t_set_codim_boundary_values);
 
-   const PhaseGeom& geometry( a_species_phys.phaseSpaceGeometry() );
+   KineticSpecies& species_physical( *(a_species[a_species_index]) );
+   
+   const PhaseGeom& geometry( species_physical.phaseSpaceGeometry() );
    const SingleNullPhaseCoordSys& coord_sys(
       dynamic_cast<const SingleNullPhaseCoordSys&>( geometry.phaseCoordSys()) );
 
-   LevelData<FArrayBox>& Bf( a_species_phys.distributionFunction() );
+   LevelData<FArrayBox>& Bf( species_physical.distributionFunction() );
    const DisjointBoxLayout& grids( Bf.disjointBoxLayout() );
    const IntVect& ghost_vect( Bf.ghostVect() );
 
@@ -347,7 +350,7 @@ void SingleNullPhaseBC::apply( KineticSpecies& a_species_phys,
       CH_START(t_define_inflow_data_storage);
       PhaseBCUtils::defineInflowDataStorage(m_all_bdry_data,
                                             m_all_bdry_layouts,
-                                            a_species_phys );
+                                            species_physical );
       CH_STOP(t_define_inflow_data_storage);
       
       CH_START(t_fill_inflow_data);
@@ -368,11 +371,11 @@ void SingleNullPhaseBC::apply( KineticSpecies& a_species_phys,
    CH_STOP(t_set_inflow_outflow_BC);
 
    if (m_logical_sheath) {
-       applySheathBC(a_species_phys, a_phi, a_velocity);
+       applySheathBC(a_species, a_species_index, a_phi, a_velocity);
    }
    
    if (m_flux_bc) {
-      applyFluxBC(a_species_phys, a_phi, a_velocity, a_time);
+      applyFluxBC(species_physical, a_phi, a_velocity, a_time);
    }
    
    CH_START(t_set_codim_boundary_values);
@@ -408,12 +411,14 @@ void SingleNullPhaseBC::setAllBcType( const BoundaryBoxLayoutPtrVect&  a_bdry_la
 }
 
 
-void SingleNullPhaseBC::applySheathBC( KineticSpecies& a_species,
+void SingleNullPhaseBC::applySheathBC( KineticSpeciesPtrVect&  a_species,
+                                       const int&  a_species_index,
                                        const CFG::LevelData<CFG::FArrayBox>& a_phi,
                                        const LevelData<FluxBox>& a_velocity)
 {
    // Get coordinate system parameters
-   const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
+   KineticSpecies& species_physical( *(a_species[a_species_index]) );
+   const PhaseGeom& geometry( species_physical.phaseSpaceGeometry() );
    const MultiBlockCoordSys& coord_sys( *(geometry.coordSysPtr()) );
    const PhaseGrid& phase_grid = geometry.phaseGrid();
    const DisjointBoxLayout& dbl = phase_grid.disjointBoxLayout();
@@ -432,7 +437,7 @@ void SingleNullPhaseBC::applySheathBC( KineticSpecies& a_species,
       const int& dir( bdry_layout.dir() );
       if (dir == POLOIDAL_DIR) {
          LogicalSheathBC sheathBC(all_bdry_layouts[i], m_pp);
-         sheathBC.applyBC(a_species, a_velocity, a_phi);
+         sheathBC.applyBC(a_species, a_species_index, a_velocity, a_phi);
       }
    }
 }

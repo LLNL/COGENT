@@ -83,7 +83,7 @@ void BandedMatrixJacobiSolver<Vec>::solve(Vec& a_x, const BandedMatrix& a_A, con
       BandedMatrixSolver<Vec>::applyOp(m_y, a_x, a_A);
       m_y *= -1.0;
       m_y += a_b;
-      Real norm = m_y.computeNorm(2);
+      Real norm = m_y.computeNorm();
       if (!procID()) {
         std::cout << "      --> (" << m_out_string << ") iteration " << n+1
                   << ", residual = " << norm << std::endl;

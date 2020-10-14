@@ -56,7 +56,19 @@ namespace SpaceUtils {
                 const FluxBox&,
                 const Box&,
                 const std::string& );
-  
+
+  void constrainedCrossProductOnEdges( LevelData<EdgeDataBox>&  a_edge_E,
+                                 const LevelData<FluxBox>&      a_face_B,
+                                 const LevelData<FArrayBox>&    a_cell_V,
+                                 const LevelData<FArrayBox>&    a_cell_Cspeed,
+                                 const std::string&             a_method );
+
+  void interpToEdges( FArrayBox&    a_Vphi,
+                const FArrayBox&    a_phi,
+                const FArrayBox&    a_V,
+                const Box&          a_box,
+                const int           a_dir,
+                const std::string&  a_method );
   
   void interpCellToEdges( LevelData<EdgeDataBox>&,
                     const LevelData<FArrayBox>&,
@@ -95,9 +107,13 @@ namespace SpaceUtils {
                           const Box&,
                           const std::string& );
 
-  void interpFacesToCell( LevelData<FArrayBox>&,
-                    const LevelData<FluxBox>&,
-                    const std::string& );
+  void interpFaceVectorToCell( LevelData<FArrayBox>&,
+                         const LevelData<FluxBox>&,
+                         const std::string& );
+  
+  void interpFaceScalarToCell( LevelData<FArrayBox>&,
+                         const LevelData<FluxBox>&,
+                         const std::string& );
   
   void interpToFacesWENO( LevelData<FluxBox>&,
                     const LevelData<FArrayBox>&,
@@ -169,11 +185,14 @@ namespace SpaceUtils {
                          const int                   );
   
   void inspectFluxBox( const LevelData<FluxBox>&,
+                       const int,
                        const int                 );
   
   void inspectEdgeDataBox( const LevelData<EdgeDataBox>&,
                            const int                     );
 
+  void exchangeFluxBox( LevelData<FluxBox>& );
+  
   void exchangeEdgeDataBox( LevelData<EdgeDataBox>& );
 
   void copyEdgeDataBox( EdgeDataBox&,

@@ -2,6 +2,7 @@
 #include "GKPoissonF_F.H"
 #include "FourthOrderUtil.H"
 #include "FluxSurface.H"
+#include "SingleNullCoordSys.H"
 #include "Directions.H"
 #include "ToroidalBlockLevelExchangeCenter.H"
 
@@ -9,6 +10,7 @@
 #define CH_SPACEDIM PDIM
 #include "Kernels.H"
 #include "MomentOp.H"
+#include "SpaceUtils.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 
@@ -26,12 +28,12 @@ GKPoisson::GKPoisson( const ParmParse&   a_pp,
    : EllipticOp(a_pp, a_geom),
      m_debye_number2(a_debye_number*a_debye_number),
      m_alpha(1.),
-     m_model("GyroPoisson"),
      m_larmor_number2(a_larmor_number*a_larmor_number),
      m_mblx_ptr(NULL),
      m_include_FLR_effects(false),
      m_phase_geom(NULL),
-     m_moment_op( PS::MomentOp::instance() )
+     m_moment_op( PS::MomentOp::instance() ),
+     m_model("GyroPoisson")
 {
 
    parseParameters( a_pp );
@@ -136,7 +138,7 @@ GKPoisson::setOperatorCoefficients( const PS::KineticSpeciesPtrVect&  a_kin_spec
      if (first_call) {
        m_FLR_integrand_factor.resize(a_kin_species.size());
        for (int s = 0; s < a_kin_species.size(); s++) {
-         m_FLR_integrand_factor[s]->define(*m_phase_grids, 1, PS::IntVect::Zero);
+         m_FLR_integrand_factor[s] = new PS::LevelData<PS::FArrayBox>(*m_phase_grids, 1, PS::IntVect::Zero);
        }
        first_call = false;
      }
@@ -180,8 +182,13 @@ GKPoisson::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_mass_densi
          FArrayBox& this_fab = ones[dit][dir];
          this_fab.setVal(0.);
          
-         if ( dir == RADIAL_DIR && block_number < 2 ) {
-            ones[dit].setVal(1.,dir);
+         if ( dir == RADIAL_DIR ) {
+
+	   if ((typeid(coords) != typeid(SingleNullCoordSys)) ||
+               ((const SingleNullCoordSys&)coords).isCORE(block_number))  {
+	     
+	     ones[dit].setVal(1.,dir);
+	   }
          }
       }
    }
@@ -684,10 +691,24 @@ GKPoisson::computeFLRIntegrandFactor()
     const PS::KineticSpecies& species = *(m_species_vec[s]);
     const PS::LevelData<PS::FArrayBox>& dfn = species.distributionFunction();
 
+    PS::IntVect ghost_vec(2*PS::IntVect::Unit);
+    PS::LevelData<PS::FArrayBox> dfn_wghosts;
+    dfn_wghosts.define(dfn.disjointBoxLayout(), dfn.nComp(), ghost_vec);
+    for (PS::DataIterator dit(dfn_wghosts.dataIterator()); dit.ok(); ++dit) {
+      dfn_wghosts[dit].setVal(0.0);
+      dfn_wghosts[dit].copy(dfn[dit]);
+    }
+    dfn_wghosts.exchange();
+    //PS::SpaceUtils::copyAndFillGhostCellsSimple(dfn_wghosts, dfn);
+
     const VEL::VelCoordSys& vel_coords = m_phase_geom->velSpaceCoordSys();
-    const VEL::ProblemDomain& vel_domain = vel_coords.domain();
     const VEL::RealVect& vel_dx = vel_coords.dx();
-    Real dmu = vel_dx[1];
+    Real dmu_inv = 1.0/vel_dx[1];
+
+    static Real c1 = 1.0/12.0,
+                c2 = -2.0/3.0,
+                c3 = 2.0/3.0,
+                c4 = -1.0/12.0;
 
     PS::LevelData<PS::FArrayBox>& factor = *(m_FLR_integrand_factor[s]);
 
@@ -701,7 +722,7 @@ GKPoisson::computeFLRIntegrandFactor()
 
     for (PS::DataIterator dit(factor.dataIterator()); dit.ok(); ++dit) {
 
-      const PS::FArrayBox& dfn_fab = dfn[dit];
+      const PS::FArrayBox& dfn_fab = dfn_wghosts[dit];
       const PS::FArrayBox& inv_bstar_par_fab = inv_bstar_par[dit];
       PS::FArrayBox& factor_fab = factor[dit];
 
@@ -711,9 +732,11 @@ GKPoisson::computeFLRIntegrandFactor()
 
         Real bstar_par = 1.0/inv_bstar_par_fab(bit(),0);
         
-        Real df_dmu = (1.0 / (2*dmu) )
-                      * (   dfn_fab(bit()+PS::BASISV(MU_DIR),0)
-                          - dfn_fab(bit()-PS::BASISV(MU_DIR),0) );
+        Real df_dmu = dmu_inv
+                      * (   c1 * dfn_fab(bit()-2*PS::BASISV(MU_DIR),0)
+                          + c2 * dfn_fab(bit()-  PS::BASISV(MU_DIR),0)
+                          + c3 * dfn_fab(bit()+  PS::BASISV(MU_DIR),0)
+                          + c4 * dfn_fab(bit()+2*PS::BASISV(MU_DIR),0) );
 
         factor_fab(bit(),0) = bstar_par * df_dmu;
 

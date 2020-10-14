@@ -21,16 +21,16 @@
 #include "NamespaceHeader.H" // has to be the last one
 
 Anomalous::Anomalous( const string& a_species_name, ParmParse& a_pptpm, const int a_verbosity )
-    : m_D_fluid(4,0),
+    : m_moment_op( MomentOp::instance() ),
+      m_D_fluid(4,0),
       m_D_kinet(4,0),
       m_DN0(0),
       m_model_only(false),
       m_const_coeff(true),
-      m_moment_op( MomentOp::instance() ),
       m_first_call(true),
+      m_first_stage(true),
       m_arbitrary_grid(true),
       m_simple_diffusion(false),
-      m_first_stage(true),
       m_update_freq(-1),
       m_it_counter(0),
       m_verbosity(0)

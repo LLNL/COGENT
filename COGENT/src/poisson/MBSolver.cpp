@@ -615,7 +615,7 @@ MBSolver::constructBoundaryStencils( const bool                        a_fourth_
 
    int order = a_fourth_order? 4: 2;
 
-   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys_ptr->boundaries();
+   //const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys_ptr->boundaries();
 
    int num_blocks = m_coord_sys_ptr->numBlocks();
    a_codim1_stencils.resize(num_blocks);
@@ -628,7 +628,7 @@ MBSolver::constructBoundaryStencils( const bool                        a_fourth_
       Box domain_box = mapping_blocks[block_number];
       RealVect dx = block_coord_sys->dx();
 
-      const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
+      //const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
 
       Vector<CoDim1Stencil>& codim1_stencil = a_codim1_stencils[block_number];      
       Vector<CoDim2Stencil>& codim2_stencil = a_codim2_stencils[block_number];      

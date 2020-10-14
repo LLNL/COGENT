@@ -1,9 +1,9 @@
 #!/bin/sh
 
 if test "MASTER_OPT" = "opt"; then
-   debug="--enable-opt";
+   debug=
 else
-   debug="--enable-debug"
+   debug=--enable-debug
 fi
 
 install_dir=$PWD/lib/MASTER_MACHINE-MASTER_CXX-MASTER_FC-MASTER_OPT
@@ -12,6 +12,7 @@ cd src
 ./configure $debug \
             CC=MASTER_CC \
             CXX=MASTER_CXX \
+            --enable-maxdim=5 \
             --prefix=$install_dir
 cd ..
 

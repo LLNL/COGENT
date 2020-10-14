@@ -117,9 +117,10 @@ void FourthOrderBC::setInflowOutflowBC( FArrayBox&               a_this_soln,
      const int ISIDE(a_side);
      IntVect ghosts = a_boundary_box.size();
      
-     FORT_FOURTH_ORDER_ODD_BC( CHF_FRA(a_this_soln),
+     int evenodd = -1; // -1 for odd
+     FORT_FOURTH_ORDER_EVENODD_BC( CHF_FRA(a_this_soln),
                                CHF_BOX(a_boundary_box),
-         	               CHF_CONST_INTVECT(ghosts),
+                               CHF_CONST_INT(evenodd),
                                CHF_CONST_INT(a_dir),
                                CHF_CONST_INT(ISIDE) );
    }
@@ -141,11 +142,11 @@ void FourthOrderBC::setInflowOutflowBC( FArrayBox&               a_this_soln,
      const int ISIDE(a_side);
      IntVect ghosts = a_boundary_box.size();
 
-     FORT_FOURTH_ORDER_NEUMANN_BC( CHF_FRA(a_this_soln),
-                                   CHF_BOX(a_boundary_box),
-				   CHF_CONST_INTVECT(ghosts),
-                                   CHF_CONST_INT(a_dir),
-                                   CHF_CONST_INT(ISIDE) );
+     FORT_FOURTH_ORDER_EVEN_BC( CHF_FRA(a_this_soln),
+                                CHF_BOX(a_boundary_box),
+				CHF_CONST_INTVECT(ghosts),
+                                CHF_CONST_INT(a_dir),
+                                CHF_CONST_INT(ISIDE) );
    }
    
    else if (a_bc_type == "symmetry") {
@@ -178,11 +179,11 @@ void FourthOrderBC::setBC( FArrayBox&       a_this_soln,
      
      for (int n=0; n<a_this_soln.nComp(); ++n) {
      
-        FORT_FOURTH_ORDER_NEUMANN_BC( CHF_FRA(a_this_soln),
-                                      CHF_BOX(a_boundary_box),
-	        	      	      CHF_CONST_INTVECT(ghosts),
-                                      CHF_CONST_INT(a_dir),
-                                      CHF_CONST_INT(ISIDE) );
+        FORT_FOURTH_ORDER_EVEN_BC( CHF_FRA(a_this_soln),
+                                   CHF_BOX(a_boundary_box),
+	                	   CHF_CONST_INTVECT(ghosts),
+                                   CHF_CONST_INT(a_dir),
+                                   CHF_CONST_INT(ISIDE) );
         
      }
   
@@ -190,18 +191,63 @@ void FourthOrderBC::setBC( FArrayBox&       a_this_soln,
 
 }
 
-void FourthOrderBC::setFluxBc( FluxBox&           a_dst,
+void FourthOrderBC::setFluxBC( FluxBox&           a_dst,
                          const Box&               a_fill_box,
                          const std::string&       a_bc_type,
-                         const FluxBox&           a_src,
                          const int                a_dir,
                          const Side::LoHiSide&    a_side )
 {
-   CH_assert( a_dst.nComp()==a_src.nComp() );
-   CH_assert( a_src.box().contains( a_fill_box ) );
+   CH_TIMERS("FourthOrderBC::setFluxBC()");
 
-   // copy at boundary
-   a_dst.copy( a_src, a_fill_box );
+   const int ISIDE(a_side);
+   for (int dir=0; dir<SpaceDim; dir++) {
+      
+      // adjust box appropriately depending on dir
+      // Note that dir data is stag in dir direction for FluxBox
+      //
+      FArrayBox& this_dst_dir(a_dst[dir]);
+      const Box& this_dst_dir_box( this_dst_dir.box() );
+      Box a_fill_box_grown = this_dst_dir_box;
+      if(ISIDE==0) a_fill_box_grown.setBig(a_dir,a_fill_box.bigEnd(a_dir));
+      if(ISIDE==1) a_fill_box_grown.setSmall(a_dir,a_fill_box.smallEnd(a_dir));
+      if(dir==a_dir && ISIDE==1) a_fill_box_grown.growLo(a_dir,-1); // dont change value on boundary
+
+      int evenodd = 1;
+      if (a_bc_type == "symmetry") {
+         if(dir == a_dir) {
+            evenodd = -1; // -1 for odd
+            FORT_FOURTH_ORDER_EVENODD_BC_STAG( CHF_FRA(this_dst_dir),
+                                               CHF_BOX(a_fill_box_grown),
+                                               CHF_CONST_INT(evenodd),
+                                               CHF_CONST_INT(a_dir),
+                                               CHF_CONST_INT(ISIDE) );
+         } else {
+            evenodd = 1; // 1 for even
+            FORT_FOURTH_ORDER_EVENODD_BC( CHF_FRA(this_dst_dir),
+                                          CHF_BOX(a_fill_box_grown),
+                                          CHF_CONST_INT(evenodd),
+                                          CHF_CONST_INT(a_dir),
+                                          CHF_CONST_INT(ISIDE) );
+         }
+      }
+      if (a_bc_type == "wall") {
+         if (dir == a_dir) {
+            int order = 4;
+            FORT_FOURTH_ORDER_EXTRAP_BC( CHF_FRA(this_dst_dir),
+                                         CHF_BOX(a_fill_box_grown),
+                                         CHF_CONST_INT(a_dir),
+                                         CHF_CONST_INT(ISIDE),
+                                         CHF_CONST_INT(order) );
+         } 
+         else {
+            FORT_FOURTH_ORDER_NEUMANN_BC( CHF_FRA(this_dst_dir),
+                                          CHF_BOX(a_fill_box_grown),
+                                          CHF_CONST_INT(a_dir),
+                                          CHF_CONST_INT(ISIDE) );
+         }
+      }
+      
+   }
 
 }
   
@@ -211,69 +257,56 @@ void FourthOrderBC::setEdgeBC( EdgeDataBox&     a_dst,
                          const int              a_dir,
                          const Side::LoHiSide&  a_side )
 {
-   // apply neumann bc to non-dir comps (tangential to edge)
-   //
-   IntVect ghosts = a_fill_box.size();
+   CH_TIMERS("FourthOrderBC::setEdgeBC()");
+
    const int ISIDE(a_side);
-   const int GROW(1);
-   Box a_fill_box_grown = a_fill_box;
-   
-   if (a_bc_type == "neumann_on_edge") {
-      a_fill_box_grown.grow(a_dir,GROW);
-      
-      for (int dir=0; dir<SpaceDim; dir++) {
-         if (dir != a_dir) {
-            FArrayBox& this_dst_dir(a_dst[dir]);
-            FORT_FOURTH_ORDER_NEUMANN_BC_ON_EDGE( CHF_FRA(this_dst_dir),
-                                                  CHF_BOX(a_fill_box_grown),
-             	              	                  CHF_CONST_INTVECT(ghosts),
-                                                  CHF_CONST_INT(a_dir),
-                                                  CHF_CONST_INT(ISIDE) );
-            //this_dst_dir.setVal(0.0,a_fill_box,0);
-         }
-      }
-
-   }
    for (int dir=0; dir<SpaceDim; dir++) {
-
-      // adjust box appropriately depending on dir
-      // Note that dir data is stag in all other dirs
-
-      // non-dir data lives on dir edge 
-      // (need to shift bdry_box lower index in a_dir direction by one)
-      //
-      if ( dir!=a_dir && ISIDE==1 ) a_fill_box_grown.shift(a_dir,1);
-   
-      // set bounds of box equal to dst box for all dir except a_dir
-      // 
-      FArrayBox& this_dst_dir(a_dst[dir]);
-      const Box& thisdstbox( this_dst_dir.box() );
-      for (int dir0=0; dir0<SpaceDim; dir0++) {
-         if(dir0!=a_dir) {
-            a_fill_box_grown.setSmall(dir0,thisdstbox.smallEnd(dir0));
-            a_fill_box_grown.setBig(dir0,thisdstbox.bigEnd(dir0));
-         } 
-      }
       
-      // set Small (Big) end of a_dir direction to that of dst box depending on ISIDE
+      // adjust box appropriately depending on dir
+      // Note that dir data is stag in all other dirs for EdgeDataBox
+      // (compliment of FluxBox)
       //
-      if(ISIDE==0) a_fill_box_grown.setSmall(a_dir,thisdstbox.smallEnd(a_dir));
-      if(ISIDE==1) a_fill_box_grown.setBig(a_dir,thisdstbox.bigEnd(a_dir));
-   
+      FArrayBox& this_dst_dir(a_dst[dir]);
+      const Box& this_dst_dir_box( this_dst_dir.box() );
+      Box a_fill_box_grown = this_dst_dir_box;
+      if(ISIDE==0) a_fill_box_grown.setBig(a_dir,a_fill_box.bigEnd(a_dir));
+      if(ISIDE==1) a_fill_box_grown.setSmall(a_dir,a_fill_box.smallEnd(a_dir));
+      if(dir!=a_dir && ISIDE==1) a_fill_box_grown.growLo(a_dir,-1); // dont change value on boundary
+
       if (a_bc_type == "natural") {
-         FORT_FOURTH_ORDER_EXTRAP_BC_ON_EDGE( CHF_FRA(this_dst_dir),
-                                              CHF_BOX(a_fill_box_grown),
-                                              CHF_CONST_INT(a_dir),
-                                              CHF_CONST_INT(ISIDE) );
+         int order = 2;
+         FORT_FOURTH_ORDER_EXTRAP_BC( CHF_FRA(this_dst_dir),
+                                      CHF_BOX(a_fill_box_grown),
+                                      CHF_CONST_INT(a_dir),
+                                      CHF_CONST_INT(ISIDE),
+                                      CHF_CONST_INT(order) );
       }
       if (a_bc_type == "symmetry") {
-         int evenodd = 1; // 1 for even
-         if(dir == a_dir) evenodd = -1; // -1 for odd
-         FORT_FOURTH_ORDER_EVENODD_BC_ON_EDGE( CHF_FRA(this_dst_dir),
+         int evenodd;
+         if(dir == a_dir) {
+            evenodd = -1; // -1 for odd
+            FORT_FOURTH_ORDER_EVENODD_BC( CHF_FRA(this_dst_dir),
+                                          CHF_BOX(a_fill_box_grown),
+                                          CHF_CONST_INT(evenodd),
+                                          CHF_CONST_INT(a_dir),
+                                          CHF_CONST_INT(ISIDE) );
+         } 
+         else {
+            evenodd = 1; // 1 for even
+            FORT_FOURTH_ORDER_EVENODD_BC_STAG( CHF_FRA(this_dst_dir),
                                                CHF_BOX(a_fill_box_grown),
                                                CHF_CONST_INT(evenodd),
                                                CHF_CONST_INT(a_dir),
                                                CHF_CONST_INT(ISIDE) );
+         }
+      }
+      if (a_bc_type == "neumann_on_edge") {
+         if (dir != a_dir) {
+            FORT_FOURTH_ORDER_NEUMANN_BC_ON_EDGE( CHF_FRA(this_dst_dir),
+                                                  CHF_BOX(a_fill_box_grown),
+                                                  CHF_CONST_INT(a_dir),
+                                                  CHF_CONST_INT(ISIDE) );
+         }
       }
       
    }
@@ -288,11 +321,11 @@ void FourthOrderBC::setNeumannBC( FArrayBox&               a_this_soln,
                                   const Side::LoHiSide&    a_side )
 {
    const int ISIDE(a_side);
-   FORT_FOURTH_ORDER_NEUMANN_BC( CHF_FRA(a_this_soln),
-                                 CHF_BOX(a_boundary_box),
-                                 CHF_CONST_INTVECT(a_ghosts),
-                                 CHF_CONST_INT(a_dir),
-                                 CHF_CONST_INT(ISIDE) );
+   FORT_FOURTH_ORDER_EVEN_BC( CHF_FRA(a_this_soln),
+                              CHF_BOX(a_boundary_box),
+                              CHF_CONST_INTVECT(a_ghosts),
+                              CHF_CONST_INT(a_dir),
+                              CHF_CONST_INT(ISIDE) );
 }
 
 void FourthOrderBC::setDirichletBC( FArrayBox&               a_this_soln,

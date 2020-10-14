@@ -23,6 +23,11 @@ class ExplicitStageFunction: public Function<T,Ops>
 
     inline void setJac(ExplicitStageJacobian<T,Ops>* a_jac) { m_jac = a_jac; }
 
+    inline Real computeStepNorm(const GKVector& a_vec) const
+    {
+      return m_ops->scaledVecNormU(a_vec);
+    }
+
   private:
     bool m_is_Defined;
     Real m_shift, m_StageTime;
@@ -69,6 +74,13 @@ void ExplicitStageFunction<T,Ops>::evalFunction(  T&        a_F,
   /* Compute (M(Y) - b) */
   a_F.copy(m_W);
   a_F.increment(a_b,-1);
+
+  if (a_its == 0) {
+    m_ops->computeUScale(a_Y);
+    m_ops->computeLHSOpScale(a_F);
+  }
+
+  m_ops->scaleLHSOp(a_F);
 
   return;
 }

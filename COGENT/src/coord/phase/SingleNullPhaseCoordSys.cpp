@@ -18,13 +18,20 @@ SingleNullPhaseCoordSys::SingleNullPhaseCoordSys( ParmParse&                    
                                                   const RefCountedPtr<CFG::SingleNullCoordSys>&  a_mag_coords,
                                                   const RefCountedPtr<VEL::VelCoordSys>&         a_vel_coords,
                                                   const Vector<ProblemDomain>&                   a_domains)
-   : PhaseCoordSys(a_mag_coords, a_vel_coords, a_domains)
+ : PhaseCoordSys(a_mag_coords, a_vel_coords, a_domains)
 {
-  defineBoundaries();
+   // Although a pointer to the coordinate system will have been set in the PhaseCoordSys
+   // base class, it will only exist there as a pointer to a PhaseCoordSys object.  We
+   // therefore save another pointer to the CFG::SingleNullCoordSys here to avoid frequent
+   // recasts back to a SingleNullCoordSys pointer in order to access its methods specific
+   // to single null geometry.
+   m_sn_coord_sys = (RefCountedPtr<CFG::SingleNullCoordSys>)a_mag_coords;
 
-  initializeBlockTransformations();
+   defineBoundaries();
 
-  getDecompositionParams( a_pp );
+   initializeBlockTransformations();
+
+   getDecompositionParams( a_pp );
 }
 
 
@@ -32,7 +39,7 @@ SingleNullPhaseCoordSys::SingleNullPhaseCoordSys( ParmParse&                    
 void
 SingleNullPhaseCoordSys::defineBoundaries()
 {
-   if ( ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->numPoloidalBlocks() == 8 ) {
+   if ( m_sn_coord_sys->numPoloidalBlocks() == 8 ) {
       defineBoundaries8();
    }
    else {
@@ -50,8 +57,8 @@ SingleNullPhaseCoordSys::defineBoundaries8()
 
    int bc_tag = 0;  // define this later
 
-   int num_poloidal_blocks = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->numPoloidalBlocks();
-   int num_toroidal_sectors = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->numToroidalSectors();
+   int num_poloidal_blocks = m_sn_coord_sys->numPoloidalBlocks();
+   int num_toroidal_sectors = m_sn_coord_sys->numToroidalSectors();
 
    for ( int block_number=0, toroidal_sector=0; toroidal_sector<num_toroidal_sectors; ++toroidal_sector ) {
       for ( int poloidal_block=0; poloidal_block<num_poloidal_blocks; ++poloidal_block, ++block_number ) {
@@ -63,15 +70,15 @@ SingleNullPhaseCoordSys::defineBoundaries8()
             = (const CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block_number);
          int block_type = mag_block_coord_sys->poloidalBlock();
 
-         int toroidal_sector = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->toroidalBlockNumber(block_number);
-         int LCORE = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::LCORE, toroidal_sector);
-         int RCORE = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::RCORE, toroidal_sector);
-         int LCSOL = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::LCSOL, toroidal_sector);
-         int RCSOL = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::RCSOL, toroidal_sector);
-         int LSOL  = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::LSOL,  toroidal_sector);
-         int RSOL  = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::RSOL,  toroidal_sector);
-         int LPF   = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::LPF,   toroidal_sector);
-         int RPF   = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::RPF,   toroidal_sector);
+         int toroidal_sector = m_sn_coord_sys->toroidalBlockNumber(block_number);
+         int LCORE = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LCORE, toroidal_sector);
+         int RCORE = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RCORE, toroidal_sector);
+         int LCSOL = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LCSOL, toroidal_sector);
+         int RCSOL = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RCSOL, toroidal_sector);
+         int LSOL  = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LSOL,  toroidal_sector);
+         int RSOL  = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RSOL,  toroidal_sector);
+         int LPF   = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LPF,   toroidal_sector);
+         int RPF   = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RPF,   toroidal_sector);
          
          if( block_type == CFG::SingleNullBlockCoordSys::LCORE ) {
 
@@ -297,8 +304,8 @@ SingleNullPhaseCoordSys::defineBoundaries10()
 
    int bc_tag = 0;  // define this later
 
-   int num_poloidal_blocks = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->numPoloidalBlocks();
-   int num_toroidal_sectors = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->numToroidalSectors();
+   int num_poloidal_blocks = m_sn_coord_sys->numPoloidalBlocks();
+   int num_toroidal_sectors = m_sn_coord_sys->numToroidalSectors();
 
    for ( int block_number=0, toroidal_sector=0; toroidal_sector<num_toroidal_sectors; ++toroidal_sector ) {
       for ( int poloidal_block=0; poloidal_block<num_poloidal_blocks; ++poloidal_block, ++block_number ) {
@@ -310,17 +317,17 @@ SingleNullPhaseCoordSys::defineBoundaries10()
             = (const CFG::SingleNullBlockCoordSys*)m_mag_coords->getCoordSys(block_number);
          int block_type = mag_block_coord_sys->poloidalBlock();
 
-         int toroidal_sector = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->toroidalBlockNumber(block_number);
-         int LCORE = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::LCORE, toroidal_sector);
-         int RCORE = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::RCORE, toroidal_sector);
-         int LCSOL = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::LCSOL, toroidal_sector);
-         int RCSOL = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::RCSOL, toroidal_sector);
-         int LSOL  = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::LSOL,  toroidal_sector);
-         int RSOL  = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::RSOL,  toroidal_sector);
-         int LPF   = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::LPF,   toroidal_sector);
-         int RPF   = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::RPF,   toroidal_sector);
-         int MCORE = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::MCORE, toroidal_sector);
-         int MCSOL = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->blockNumber(CFG::SingleNullBlockCoordSys::MCSOL, toroidal_sector);
+         int toroidal_sector = m_sn_coord_sys->toroidalBlockNumber(block_number);
+         int LCORE = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LCORE, toroidal_sector);
+         int RCORE = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RCORE, toroidal_sector);
+         int LCSOL = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LCSOL, toroidal_sector);
+         int RCSOL = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RCSOL, toroidal_sector);
+         int LSOL  = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LSOL,  toroidal_sector);
+         int RSOL  = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RSOL,  toroidal_sector);
+         int LPF   = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LPF,   toroidal_sector);
+         int RPF   = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RPF,   toroidal_sector);
+         int MCORE = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::MCORE, toroidal_sector);
+         int MCSOL = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::MCSOL, toroidal_sector);
          
          if( block_type == CFG::SingleNullBlockCoordSys::MCORE ) {
 
@@ -767,7 +774,7 @@ SingleNullPhaseCoordSys::getDecompositionParams( ParmParse& a_pp )
    }
 
 #if CFG_DIM==3
-   int num_toroidal_sectors = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->numToroidalSectors();
+   int num_toroidal_sectors = m_sn_coord_sys->numToroidalSectors();
 
    if ( decomp_mcore[TOROIDAL_DIR] % num_toroidal_sectors != 0 ) {
       MayDay::Error("Toroidal decomposition is not a multiple of the number of toroidal sectors in MCORE");
@@ -870,10 +877,10 @@ SingleNullPhaseCoordSys::displacements(const Vector<RealVect>&   a_dstCoords,
       srcCoords_config[n] = a_srcCoords[n];
    }
 
-   Vector<CFG::RealVect> dips_config = ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->displacements(dstCoords_config,
-                                                                                                             a_dstBlocks,
-                                                                                                             srcCoords_config,
-                                                                                                             a_srcBlock);
+   Vector<CFG::RealVect> dips_config = m_sn_coord_sys->displacements(dstCoords_config,
+                                                                     a_dstBlocks,
+                                                                     srcCoords_config,
+                                                                     a_srcBlock);
    for (int i=0; i<disps.size(); ++i) {
       for (int n=0; n<CFG_DIM; ++n) {
          disps[i][n] = dips_config[i][n];
@@ -901,7 +908,7 @@ SingleNullPhaseCoordSys::containsPhysicalBoundary( int                    a_bloc
    if ( a_dir == TOROIDAL_DIR ) {
 
       bool sheared_geom;
-      if ( ((RefCountedPtr<CFG::SingleNullCoordSys>)m_mag_coords)->isModelGeom() ) {
+      if ( m_sn_coord_sys->isModelGeom() ) {
          const CFG::SingleNullBlockCoordSysModel* mag_block_coord_sys
             = (const CFG::SingleNullBlockCoordSysModel*)m_mag_coords->getCoordSys(a_block_number);
          sheared_geom = mag_block_coord_sys->isFieldAlignedMapping();
@@ -929,6 +936,388 @@ SingleNullPhaseCoordSys::containsPhysicalBoundary( int                    a_bloc
    
    return contains_boundary;
 }
+
+
+void
+accumulateTuples( const Box&                  a_box,
+                  const IntVect&              a_shift_vec,
+                  const int                   a_block_number,
+                  Vector< Tuple<IntVect,2> >& a_iv_pairs,
+                  Vector<int>&                a_block_numbers,
+                  IntVectSet&                 a_ghost_ivs )
+{
+   for (BoxIterator bit(a_box); bit.ok(); ++bit) {
+      Tuple<IntVect,2> t;
+      t[0] = bit();
+      t[1] = bit() - a_shift_vec;
+      a_iv_pairs.push_back(t);
+      a_block_numbers.push_back(a_block_number);
+      a_ghost_ivs |= t[1];
+   }
+}
+
+void
+SingleNullPhaseCoordSys::defineStencilsUe( const DisjointBoxLayout&                          a_grids,
+                                           const int                                         a_nghost,
+                                           LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& a_stencil_ue,
+                                           LayoutData< IntVectSet >&                         a_ghostCells_ue)
+{
+   if ( m_sn_coord_sys->numPoloidalBlocks() == 8 ) {
+      defineStencilsUe8(a_grids, a_nghost, a_stencil_ue, a_ghostCells_ue);
+   }
+   else {
+      MayDay::Error("SingleNullPhaseCoordSys::defineStencilsUe() is only implemented for 8 poloidal blocks");
+   }
+}
+
+
+void
+SingleNullPhaseCoordSys::defineStencilsUe8( const DisjointBoxLayout&                          a_grids,
+                                            const int                                         a_nghost,
+                                            LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& a_stencil_ue,
+                                            LayoutData< IntVectSet >&                         a_ghostCells_ue)
+{
+   a_stencil_ue.define(a_grids);
+   a_ghostCells_ue.define(a_grids);
+   
+   for (DataIterator dit(a_grids); dit.ok(); ++dit) {
+      int block_number = whichBlock(a_grids[dit]);
+      const PhaseBlockCoordSys& coord_sys = dynamic_cast<const PhaseBlockCoordSys&>(*m_coordSysVect[block_number]);
+      const Box& domain_box = coord_sys.domain().domainBox();
+      
+      Vector< Tuple<IntVect,2> > iv_pairs;
+      Vector<int> block_numbers;
+      IntVectSet& ghost_ivs = a_ghostCells_ue[dit];
+      
+      Box grown_box = a_grids[dit];
+#if 0
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         grown_box.grow(dir, a_nghost);
+      }
+#else
+      grown_box.grow(a_nghost);
+#endif
+      
+      if ( !domain_box.contains(grown_box) ) {
+         
+         Box rad_shifted_box;
+         Box pol_shifted_box;
+         IntVect shift_r, shift_p;
+#if CFG_DIM==3
+         Box tor_shifted_box;
+         IntVect shift_t;
+#endif
+
+         int toroidal_sector = m_sn_coord_sys->toroidalBlockNumber(block_number);
+         int LCORE = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LCORE, toroidal_sector);
+         int RCORE = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RCORE, toroidal_sector);
+         int LCSOL = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LCSOL, toroidal_sector);
+         int RCSOL = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RCSOL, toroidal_sector);
+         int LSOL  = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LSOL,  toroidal_sector);
+         int RSOL  = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RSOL,  toroidal_sector);
+         int LPF   = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::LPF,   toroidal_sector);
+         int RPF   = m_sn_coord_sys->blockNumber(CFG::SingleNullBlockCoordSys::RPF,   toroidal_sector);
+         
+         switch ( m_sn_coord_sys->poloidalBlockNumber(block_number) )
+            {
+            case CFG::SingleNullBlockCoordSys::LCORE:
+               
+               // RCORE
+               shift_p = -POLOIDAL_BLOCK_SEP * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
+                                                m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RCORE)->domain().domainBox(), shift_p, RCORE,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               shift_p = -(POLOIDAL_BLOCK_SEP+1) * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
+                                                    m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RCORE)->domain().domainBox(), shift_p, RCORE,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // LCSOL
+               shift_r = POLOIDAL_BLOCK_SEP * m_mappingBlocks[LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               rad_shifted_box = grown_box + shift_r;
+               accumulateTuples( rad_shifted_box & getCoordSys(LCSOL)->domain().domainBox(), shift_r, LCSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // RCSOL
+               shift_p = -POLOIDAL_BLOCK_SEP * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
+                                                m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RCSOL)->domain().domainBox(), shift_r + shift_p, RCSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // LSOL
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LSOL)->domain().domainBox(), shift_r + shift_p, LSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               break;
+            case CFG::SingleNullBlockCoordSys::RCORE:
+               
+               // LCORE
+               shift_p = (POLOIDAL_BLOCK_SEP+1) * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
+                                                 + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LCORE)->domain().domainBox(), shift_p, LCORE,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               shift_p = POLOIDAL_BLOCK_SEP * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
+                                             + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LCORE)->domain().domainBox(), shift_p, LCORE,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // RCSOL
+               shift_r = POLOIDAL_BLOCK_SEP * m_mappingBlocks[RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               rad_shifted_box = grown_box + shift_r;
+               accumulateTuples( rad_shifted_box & getCoordSys(RCSOL)->domain().domainBox(), shift_r, RCSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // LCSOL
+               shift_p = POLOIDAL_BLOCK_SEP * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
+                                               m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LCSOL)->domain().domainBox(), shift_r + shift_p, LCSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // RSOL
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RSOL)->domain().domainBox(), shift_r + shift_p, RSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               break;
+            case CFG::SingleNullBlockCoordSys::LCSOL:
+               
+               // LSOL
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LSOL)->domain().domainBox(), shift_p, LSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // RCSOL
+               shift_p = -POLOIDAL_BLOCK_SEP * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
+                                                m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RCSOL)->domain().domainBox(), shift_p, RCSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // LCORE
+               shift_r = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               rad_shifted_box = grown_box + shift_r;
+               accumulateTuples( rad_shifted_box & getCoordSys(LCORE)->domain().domainBox(), shift_r, LCORE,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // RCORE
+               shift_p = -POLOIDAL_BLOCK_SEP*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
+                                              m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RCORE)->domain().domainBox(), shift_r + shift_p, RCORE,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // LPF
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LPF)->domain().domainBox(), shift_r + shift_p, LPF,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               break;
+            case CFG::SingleNullBlockCoordSys::RCSOL:
+               
+               // RSOL
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RSOL)->domain().domainBox(), shift_p, RSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // LCSOL
+               shift_p = POLOIDAL_BLOCK_SEP * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR) +
+                                               m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LCSOL)->domain().domainBox(), shift_p, LCSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // RCORE
+               shift_r = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               rad_shifted_box = grown_box + shift_r;
+               accumulateTuples( rad_shifted_box & getCoordSys(RCORE)->domain().domainBox(), shift_r, RCORE,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // LCORE
+               shift_p = POLOIDAL_BLOCK_SEP * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
+                                             + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LCORE)->domain().domainBox(), shift_r + shift_p, LCORE,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // RPF
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RPF)->domain().domainBox(), shift_r + shift_p, RPF,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               break;
+            case CFG::SingleNullBlockCoordSys::LSOL:
+               
+               // LCSOL
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LCSOL)->domain().domainBox(), shift_p, LCSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // LPF
+               shift_r = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               rad_shifted_box = grown_box + shift_r;
+               accumulateTuples( rad_shifted_box & getCoordSys(LPF)->domain().domainBox(), shift_r, LPF,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // LCORE
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LCORE)->domain().domainBox(), shift_r + shift_p, LCORE,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               break;
+            case CFG::SingleNullBlockCoordSys::RSOL:
+               
+               // RCSOL
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RCSOL)->domain().domainBox(), shift_p, RCSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // RPF
+               shift_r = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               rad_shifted_box = grown_box + shift_r;
+               accumulateTuples( rad_shifted_box & getCoordSys(RPF)->domain().domainBox(), shift_r, RPF,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // RCORE
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RCORE)->domain().domainBox(), shift_r + shift_p, RCORE,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               break;
+            case CFG::SingleNullBlockCoordSys::LPF:
+               
+               // RPF
+               shift_p = -(2*POLOIDAL_BLOCK_SEP+1)*(m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
+                                                  + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RPF)->domain().domainBox(), shift_p, RPF,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // LSOL
+               shift_r = POLOIDAL_BLOCK_SEP * m_mappingBlocks[LCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               rad_shifted_box = grown_box + shift_r;
+               accumulateTuples( rad_shifted_box & getCoordSys(LSOL)->domain().domainBox(), shift_r,  LSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // LCSOL
+               shift_p = -POLOIDAL_BLOCK_SEP * m_mappingBlocks[LCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LCSOL)->domain().domainBox(), shift_r + shift_p, LCSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               break;
+            case CFG::SingleNullBlockCoordSys::RPF:
+               
+               // LPF
+               shift_p = (2*POLOIDAL_BLOCK_SEP+1) * (m_mappingBlocks[LCORE].size(POLOIDAL_DIR)
+                                                   + m_mappingBlocks[RCORE].size(POLOIDAL_DIR)) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = grown_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(LPF)->domain().domainBox(), shift_p, LPF,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // RSOL
+               shift_r = POLOIDAL_BLOCK_SEP * m_mappingBlocks[RCORE].size(RADIAL_DIR) * BASISV(RADIAL_DIR);
+               rad_shifted_box = grown_box + shift_r;
+               accumulateTuples( rad_shifted_box & getCoordSys(RSOL)->domain().domainBox(), shift_r, RSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               // RCSOL
+               shift_p = POLOIDAL_BLOCK_SEP * m_mappingBlocks[RCORE].size(POLOIDAL_DIR) * BASISV(POLOIDAL_DIR);
+               pol_shifted_box = rad_shifted_box + shift_p;
+               accumulateTuples( pol_shifted_box & getCoordSys(RCSOL)->domain().domainBox(), shift_r + shift_p, RCSOL,
+                                 iv_pairs, block_numbers, ghost_ivs );
+               
+               break;
+            default:
+               MayDay::Error("SingleNullCoordSys::blockRemapping(): Unknown poloidal block number");
+         }
+
+#if CFG_DIM==3
+         if ( m_sn_coord_sys->numToroidalSectors() == 1 ) {
+            shift_t = m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+         }
+         else {
+            shift_t = TOROIDAL_BLOCK_SEP * m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+         }
+
+         int other_toroidal_sector = toroidal_sector;
+         int num_poloidal_blocks = m_sn_coord_sys->numPoloidalBlocks();
+
+         if ( m_sn_coord_sys->numToroidalSectors() > 1 && toroidal_sector < m_sn_coord_sys->numToroidalSectors()-1 ) {
+            other_toroidal_sector++;
+         }
+         
+         tor_shifted_box = grown_box + shift_t;
+         for (int other_pol_block_number=0; other_pol_block_number<num_poloidal_blocks; ++other_pol_block_number) {
+            int other_pol_block = m_sn_coord_sys->blockNumber(other_pol_block_number, other_toroidal_sector);
+            accumulateTuples( tor_shifted_box & getCoordSys(other_pol_block)->domain().domainBox(), shift_t,
+                              other_pol_block, iv_pairs, block_numbers, ghost_ivs );
+         }
+
+         if ( m_sn_coord_sys->numToroidalSectors() == 1 ) {
+            shift_t = - m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+         }
+         else {
+            shift_t = -TOROIDAL_BLOCK_SEP * m_mappingBlocks[block_number].size(TOROIDAL_DIR) * BASISV(TOROIDAL_DIR);
+         }
+
+         if ( m_sn_coord_sys->numToroidalSectors() > 1 && toroidal_sector > 0 ) {
+            other_toroidal_sector = toroidal_sector-1;
+         }
+
+         tor_shifted_box = grown_box + shift_t;
+         for (int other_pol_block_number=0; other_pol_block_number<num_poloidal_blocks; ++other_pol_block_number) {
+            int other_pol_block = m_sn_coord_sys->blockNumber(other_pol_block_number, other_toroidal_sector);
+            accumulateTuples( tor_shifted_box & getCoordSys(other_pol_block)->domain().domainBox(), shift_t,
+                              other_pol_block, iv_pairs, block_numbers, ghost_ivs );
+         }
+#endif
+         
+         // Now that we have all of the extrablock ghost cells, we can allocate the IVSFAB<MBStencil>
+         a_stencil_ue[dit] = RefCountedPtr< IVSFAB<MBStencil> >(new IVSFAB<MBStencil>(ghost_ivs,1));
+         IVSFAB<MBStencil>& this_ivs_fab = *a_stencil_ue[dit];
+         
+         // Make a single element stencil on each extrablock ghost cell
+         for (IVSIterator it(ghost_ivs); it.ok(); ++it) {
+            IntVect extra_block_iv = it();
+            
+            Vector<MBStencilElement> stencilVec(1);
+            
+            bool found_iv = false;
+            for (int n=0; n<iv_pairs.size(); ++n) {
+               if ( iv_pairs[n][1] == extra_block_iv ) {
+                  stencilVec[0].define(iv_pairs[n][0], block_numbers[n], 1.);
+                  found_iv = true;
+                  break;
+               }
+            }
+            CH_assert(found_iv);
+            
+            this_ivs_fab(extra_block_iv,0) = RefCountedPtr< Vector<MBStencilElement> >
+            (new Vector<MBStencilElement>(stencilVec));
+         }
+      }
+   }
+}
+
 
 
 #include "NamespaceFooter.H"

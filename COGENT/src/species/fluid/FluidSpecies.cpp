@@ -75,11 +75,16 @@ FluidSpecies::FluidSpecies( const string&     a_pp_prefix,
    if ( pp.contains("adiabatic_coefficient") ) {
       pp.get("adiabatic_coefficient", m_gamma);
    }
+   if ( pp.contains("CGL_MODEL") ) {
+      pp.get("CGL_MODEL", m_CGL);
+      CH_assert( m_CGL==0 || m_CGL==1 );
+      if(m_CGL) CH_assert( m_gamma==2.0 );
+   }
    
    addCellVar("density", 1, a_ghost_vect);
    if(m_evolve_momentumDensity)   addCellVar("momentumDensity", SpaceDim, a_ghost_vect);
-   if(m_evolve_energyDensity)     addCellVar("energyDensity",     1, a_ghost_vect);
-   if(m_evolve_energyDensity_ele) addCellVar("energyDensity_ele", 1, a_ghost_vect);
+   if(m_evolve_energyDensity)     addCellVar("energyDensity",     1+m_CGL, a_ghost_vect);
+   if(m_evolve_energyDensity_ele) addCellVar("energyDensity_ele", 1+m_CGL, a_ghost_vect);
    if(m_evolve_momentumDensity_virtual)  addCellVar("momentumDensity_virtual", 1, a_ghost_vect);
    if(m_evolve_magneticField)    addFaceVar("magneticField", 1, a_ghost_vect);
    if(m_evolve_magneticField_virtual)    addCellVar("magneticField_virtual", 1, a_ghost_vect);
@@ -93,6 +98,7 @@ FluidSpecies::FluidSpecies( const string&     a_pp_prefix,
    for (DataIterator dit(m_velocity.dataIterator()); dit.ok(); ++dit) {
       m_velocity[dit].setVal(0.);
    }
+   m_magField_cc.define(a_geometry.gridsFull(), SpaceDim, a_ghost_vect);
 
 }
 
@@ -194,8 +200,6 @@ void FluidSpecies::meanEnergy( LevelData<FArrayBox>& a_meanEnergy ) const
    
    if(m_evolve_momentumDensity) {
       LevelData<FArrayBox> a_vel(dbl, cell_var("momentumDensity").nComp(), a_meanEnergy.ghostVect());
-      //LevelData<FArrayBox> a_vel;
-      //a_vel.define( cell_var("momentumDensity") );
       velocity( a_vel );
       for (DataIterator dit( a_meanEnergy.dataIterator()); dit.ok(); ++dit ) {
          a_vel[dit].mult( cell_var("momentumDensity")[dit],0,0,SpaceDim );
@@ -207,13 +211,11 @@ void FluidSpecies::meanEnergy( LevelData<FArrayBox>& a_meanEnergy ) const
    } 
    if(m_evolve_momentumDensity_virtual) {
       LevelData<FArrayBox> a_vel_virtual(dbl, cell_var("momentumDensity_virtual").nComp(), a_meanEnergy.ghostVect());
-      //LevelData<FArrayBox> a_vel_virtual;
-      //a_vel_virtual.define( cell_var("momentumDensity_virtual") );
       velocity_virtual( a_vel_virtual );
       for (DataIterator dit( a_meanEnergy.dataIterator()); dit.ok(); ++dit ) {
          a_vel_virtual[dit].mult( cell_var("momentumDensity_virtual")[dit] );
          a_vel_virtual[dit].mult( 0.5 );
-         a_meanEnergy[dit].plus( a_vel_virtual[dit] );
+         a_meanEnergy[dit].plus( a_vel_virtual[dit],0,m_CGL,1);
       } 
    } 
 
@@ -228,14 +230,13 @@ void FluidSpecies::pressure( LevelData<FArrayBox>& a_pressure ) const
       CH_assert( dbl.compatible( a_pressure.disjointBoxLayout() ) );
    
       LevelData<FArrayBox> a_meanEnergy(dbl, a_pressure.nComp(), a_pressure.ghostVect());
-      //LevelData<FArrayBox> a_meanEnergy;
-      //a_meanEnergy.define( a_pressure );
       meanEnergy( a_meanEnergy );
 
       for (DataIterator dit( a_pressure.dataIterator()); dit.ok(); ++dit ) {
          a_pressure[dit].copy( cell_var("energyDensity")[dit] );
          a_pressure[dit].minus( a_meanEnergy[dit] );
-         a_pressure[dit].mult( m_gamma-1.0 );
+         a_pressure[dit].mult( m_gamma-1.0, 0, 1 );
+         if(m_CGL) a_pressure[dit].mult( 2.0, 1, 1 );
       }
    }
    else {
@@ -255,7 +256,8 @@ void FluidSpecies::pressure_ele( LevelData<FArrayBox>& a_pressure_ele ) const
    
       for (DataIterator dit( a_pressure_ele.dataIterator()); dit.ok(); ++dit ) {
          a_pressure_ele[dit].copy( cell_var("energyDensity_ele")[dit] );
-         a_pressure_ele[dit].mult( m_gamma-1.0 );
+         a_pressure_ele[dit].mult( m_gamma-1.0, 0, 1 );
+         if(m_CGL) a_pressure_ele[dit].mult( 2.0, 1, 1 );
       }
    }
    else {
@@ -277,6 +279,24 @@ void FluidSpecies::Bpressure( LevelData<FArrayBox>& a_Bpressure ) const
          a_Bpressure[dit].copy( cell_var("magneticField_virtual")[dit] );
          a_Bpressure[dit] *= cell_var("magneticField_virtual")[dit];
          a_Bpressure[dit].mult(0.5);
+      }
+   }
+   else if( m_evolve_magneticField ) {
+      DisjointBoxLayout dbl( face_var("magneticField").disjointBoxLayout() );
+      CH_assert( dbl.compatible( a_Bpressure.disjointBoxLayout() ) );
+
+      SpaceUtils::interpFaceVectorToCell(m_magField_cc,face_var("magneticField"),"c2");
+      m_magField_cc.exchange();
+      configurationSpaceGeometry().convertPhysToContravar(m_magField_cc,1);
+      
+      for (DataIterator dit( a_Bpressure.dataIterator()); dit.ok(); ++dit ) {
+         a_Bpressure[dit].setVal( 0.0 );
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            m_magField_cc[dit].mult( m_magField_cc[dit],dir,dir,1 );
+            a_Bpressure[dit].plus( m_magField_cc[dit],dir,0,1 );
+         }
+         a_Bpressure[dit].mult(0.5);
+         //a_Bpressure[dit].setVal( 0.0 ); // JRA !!!
       }
    }
    else {
@@ -332,6 +352,7 @@ const FluidSpecies& FluidSpecies::operator=( const FluidSpecies& a_rhs )
       m_mass    = a_rhs.m_mass;
       m_charge  = a_rhs.m_charge;
       m_gamma   = a_rhs.m_gamma;
+      m_CGL     = a_rhs.m_CGL;
       m_op_type = a_rhs.m_op_type;
       m_evolve_momentumDensity = a_rhs.m_evolve_momentumDensity;
       m_evolve_energyDensity = a_rhs.m_evolve_energyDensity;
@@ -364,6 +385,7 @@ void FluidSpecies::copy( const FluidSpecies& a_rhs )
       m_mass = a_rhs.m_mass;
       m_charge = a_rhs.m_charge;
       m_gamma   = a_rhs.m_gamma;
+      m_CGL     = a_rhs.m_CGL;
       m_op_type = a_rhs.m_op_type;
       m_evolve_momentumDensity = a_rhs.m_evolve_momentumDensity;
       m_evolve_energyDensity = a_rhs.m_evolve_energyDensity;
@@ -426,6 +448,7 @@ Real FluidSpecies::minValue() const
 void
 FluidSpecies::convertToPhysical()
 {
+   CH_TIME("FluidSpecies::convertToPhysical()");
 
    for (int n=0; n<num_cell_vars(); ++n) {
       if ( cell_var(n).isDefined() ) {
@@ -437,7 +460,8 @@ FluidSpecies::convertToPhysical()
    for (int n=0; n<num_face_vars(); ++n) {
       if ( face_var(n).isDefined() ) {
          configurationSpaceGeometry().divideJonFaces(face_var(n));
-         face_var(n).exchange();
+         //face_var(n).exchange();
+         SpaceUtils::exchangeFluxBox(face_var(n)); 
       }
    }
    
@@ -459,7 +483,7 @@ FluidSpecies::interpFaceVarToCell( LevelData<FArrayBox>&  a_cell_var,
 {
 
    CH_assert( face_var(a_face_var_name).isDefined() );
-   SpaceUtils::interpFacesToCell(a_cell_var,face_var(a_face_var_name),"c2");
+   SpaceUtils::interpFaceVectorToCell(a_cell_var,face_var(a_face_var_name),"c2");
    
 }
 
@@ -478,7 +502,8 @@ FluidSpecies::interpEdgeVarToCell( LevelData<FArrayBox>&  a_cell_var,
 void
 FluidSpecies::convertFromPhysical()
 {
-
+   CH_TIME("FluidSpecies::convertFromPhysical()");
+   
    for (int n=0; n<num_cell_vars(); ++n) {
       if ( cell_var(n).isDefined() ) {
          configurationSpaceGeometry().multJonValid(cell_var(n));
@@ -488,7 +513,8 @@ FluidSpecies::convertFromPhysical()
    for (int n=0; n<num_face_vars(); ++n) {
       if ( face_var(n).isDefined() ) {
          configurationSpaceGeometry().multJonFaces(face_var(n));
-         face_var(n).exchange();
+         //face_var(n).exchange();
+         SpaceUtils::exchangeFluxBox(face_var(n)); 
       }
    }
    for (int n=0; n<num_edge_vars(); ++n) {
