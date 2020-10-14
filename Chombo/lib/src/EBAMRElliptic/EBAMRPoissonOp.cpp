@@ -159,6 +159,26 @@ getPetscMatrix(Mat& a_petsc_mat)
 
   return 0;
 }
+
+void 
+EBAMRPoissonOp::
+getVoFStencil(VoFStencil&      a_stenc,
+              const VolIndex&  a_vof,
+              const DataIndex& a_dit) const
+{
+  LayoutData<BaseIVFAB<VoFStencil> >* ebFluxStencil = m_ebBC->getFluxStencil(0);
+  getDivFStencil(a_stenc, a_vof, a_dit, true);
+  if (ebFluxStencil != NULL)
+  {
+    const BaseIVFAB<VoFStencil>& ebfab = (*ebFluxStencil)[a_dit];
+    //only exists for irregular cells
+    if(ebfab.getIVS().contains(a_vof.gridIndex()))
+    {
+      //add in stencil due to EB boundary conditions
+      a_stenc += (*ebFluxStencil)[a_dit](a_vof,0);
+    }
+  }
+}
 /***/
 int 
 EBAMRPoissonOp::
@@ -1167,7 +1187,7 @@ EBAMRPoissonOp::
 getDivFStencil(VoFStencil&      a_vofStencil,
                const VolIndex&  a_vof,
                const DataIndex& a_dit,
-               bool             a_doFaceInterp)
+               bool             a_doFaceInterp) const
 {
   const EBISBox& ebisBox  =    m_eblg.getEBISL()[a_dit];
   const IntVectSet& cfivs = (*m_eblg.getCFIVS())[a_dit];
