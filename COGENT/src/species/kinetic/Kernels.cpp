@@ -1,10 +1,9 @@
-enum SingleNullBlockType {LCORE,RCORE,LCSOL,RCSOL,LSOL,RSOL,LPF,RPF,MCORE,MCSOL,NUM_SINGLE_NULL_BLOCKS};
-
 #include "Kernels.H"
 #include "Directions.H"
 #include "PhaseBlockCoordSys.H"
 #include "FourthOrderUtil.H"
 #include "EdgeToCell.H"
+#include "CellToEdge.H"
 #include "ConstFact.H"
 
 #include "KernelsF_F.H"
@@ -12,10 +11,149 @@ enum SingleNullBlockType {LCORE,RCORE,LCSOL,RCSOL,LSOL,RSOL,LPF,RPF,MCORE,MCSOL,
 #include "NamespaceHeader.H"
 
 
+template <> void
+Kernel<FArrayBox>::computeVelCfgComp(LevelData<FArrayBox>&      a_vel_cfg_comp,
+                                     const PhaseGeom&           a_phase_geom,
+                                     const LevelData<FluxBox>&  a_field,
+                                     const int                  a_option     ) const
+{
+   /*
+    Computes cell-centered physical components of GK velocity in configuration directions
+    */
 
-void
-DensityKernel::eval( LevelData<FArrayBox>& a_result,
-                     const KineticSpecies& a_kinetic_species ) const
+   const DisjointBoxLayout & grids = a_vel_cfg_comp.getBoxes();
+   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
+   a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, false, a_option);
+
+   for (DataIterator dit(a_vel_cfg_comp.dataIterator()); dit.ok(); ++dit) {
+     a_vel_cfg_comp[dit].setVal(0.);
+     for (int dir=0; dir<CFG_DIM; dir++) {
+          FORT_COMPUTE_VEL_CELL(CHF_FRA(a_vel_cfg_comp[dit]),
+                                CHF_FRA(pointwiseFaceVel[dit][dir]),
+                                CHF_CONST_INT(dir),
+                                CHF_BOX(a_vel_cfg_comp[dit].box()));
+     }
+   }
+}
+
+
+template <> void
+Kernel<FluxBox>::computeVelCfgComp(LevelData<FluxBox>&        a_vel_cfg_comp,
+                                   const PhaseGeom&           a_phase_geom,
+                                   const LevelData<FluxBox>&  a_field,
+                                   const int                  a_option     ) const
+{
+   /*
+    Computes face-centered physical components of GK velocity in configuration directions
+    */
+
+   const DisjointBoxLayout & grids = a_vel_cfg_comp.getBoxes();
+   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
+   a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, false, a_option);
+
+   for (DataIterator dit(a_vel_cfg_comp.dataIterator()); dit.ok(); ++dit) {
+     a_vel_cfg_comp[dit].setVal(0.);
+     for (int dir=0; dir<CFG_DIM; dir++) {
+        a_vel_cfg_comp[dit][dir].copy(pointwiseFaceVel[dit][dir]);
+     }
+   }
+}
+
+
+template <> void
+Kernel<FArrayBox>::computeVelCfgCompNormals(LevelData<FArrayBox>&      a_vel_cfg_comp,
+                                            const PhaseGeom&           a_phase_geom,
+                                            const LevelData<FluxBox>&  a_field,
+                                            const int                  a_option     ) const
+{
+   /*
+    Computes cell-centered normal components of GK velocity
+    (i.e., projection of physical velocity onto normal directions)
+    in configuration directions
+    */
+
+   const DisjointBoxLayout & grids = a_vel_cfg_comp.getBoxes();
+   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
+   a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, false, a_option);
+   a_phase_geom.multNTransposePointwise( pointwiseFaceVel );
+   
+   const CFG::MagGeom& mag_geom( a_phase_geom.magGeom() );
+   const CFG::DisjointBoxLayout& grids_cfg = mag_geom.grids();
+   CFG::LevelData<CFG::FluxBox> face_areas(grids_cfg, 1, CFG::IntVect::Unit);
+   mag_geom.getPointwiseFaceAreas(face_areas);
+
+   LevelData<FluxBox> face_areas_inj;
+   a_phase_geom.injectConfigurationToPhase(face_areas, face_areas_inj);
+   
+   for (DataIterator dit(a_vel_cfg_comp.dataIterator()); dit.ok(); ++dit) {
+     for (int dir=0; dir<CFG_DIM; dir++) {
+          
+         const PhaseBlockCoordSys& block_coord_sys = a_phase_geom.getBlockCoordSys(grids[dit]);
+         block_coord_sys.divideInjectedData(face_areas_inj[dit][dir],
+                                            pointwiseFaceVel[dit][dir]);
+
+         RealVect dx = block_coord_sys.dx();
+         Real mapped_volume = block_coord_sys.getMappedCellVolume();
+         Real mapped_volume_cfg = mapped_volume / dx[VPARALLEL_DIR] / dx[MU_DIR];
+         Real mapped_face_area_cfg = mapped_volume_cfg / dx[dir];
+         pointwiseFaceVel[dit][dir].mult(mapped_face_area_cfg);
+        
+         FORT_COMPUTE_VEL_CELL_NORMALS(CHF_FRA1(a_vel_cfg_comp[dit],dir),
+                                       CHF_FRA(pointwiseFaceVel[dit][dir]),
+                                       CHF_CONST_INT(dir),
+                                       CHF_BOX(a_vel_cfg_comp[dit].box()));
+     }
+   }
+}
+
+
+template <> void
+Kernel<FluxBox>::computeVelCfgCompNormals(LevelData<FluxBox>&        a_vel_cfg_comp,
+                                          const PhaseGeom&           a_phase_geom,
+                                          const LevelData<FluxBox>&  a_field,
+                                          const int                  a_option     ) const
+{
+   /*
+    Computes face-centered normal components of GK velocity
+    (i.e., projection of physical velocity onto normal directions)
+    in configuration directions
+    */
+
+   const DisjointBoxLayout & grids = a_vel_cfg_comp.getBoxes();
+   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
+   a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, false, a_option);
+   a_phase_geom.multNTransposePointwise( pointwiseFaceVel );
+   
+   const CFG::MagGeom& mag_geom( a_phase_geom.magGeom() );
+   const CFG::DisjointBoxLayout& grids_cfg = mag_geom.grids();
+   CFG::LevelData<CFG::FluxBox> face_areas(grids_cfg, 1, CFG::IntVect::Unit);
+   mag_geom.getPointwiseFaceAreas(face_areas);
+
+   LevelData<FluxBox> face_areas_inj;
+   a_phase_geom.injectConfigurationToPhase(face_areas, face_areas_inj);
+   
+   for (DataIterator dit(a_vel_cfg_comp.dataIterator()); dit.ok(); ++dit) {
+     for (int dir=0; dir<CFG_DIM; dir++) {
+          
+         const PhaseBlockCoordSys& block_coord_sys = a_phase_geom.getBlockCoordSys(grids[dit]);
+         block_coord_sys.divideInjectedData(face_areas_inj[dit][dir],
+                                            pointwiseFaceVel[dit][dir]);
+
+         RealVect dx = block_coord_sys.dx();
+         Real mapped_volume = block_coord_sys.getMappedCellVolume();
+         Real mapped_volume_cfg = mapped_volume / dx[VPARALLEL_DIR] / dx[MU_DIR];
+         Real mapped_face_area_cfg = mapped_volume_cfg / dx[dir];
+         pointwiseFaceVel[dit][dir].mult(mapped_face_area_cfg);
+
+         a_vel_cfg_comp[dit][dir].copy(pointwiseFaceVel[dit][dir]);
+     }
+   }
+}
+
+
+template <> void
+DensityKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                const KineticSpecies& a_kinetic_species ) const
 {
    /*
      Nothing to do.  a_result has already been initialized by the distribution function,
@@ -24,10 +162,20 @@ DensityKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
+template <> void
+DensityKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                              const KineticSpecies& a_kinetic_species ) const
+{
+   /*
+     Nothing to do.  a_result has already been initialized by the distribution function,
+     and the moment kernel is unity.
+   */
+}
 
-void
-ChargeDensityKernel::eval( LevelData<FArrayBox>& a_result,
-                           const KineticSpecies& a_kinetic_species ) const
+
+template <> void
+ChargeDensityKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                      const KineticSpecies& a_kinetic_species ) const
 {
    /*
      Nothing to do.  a_result has already been initialized by the distribution function,
@@ -37,10 +185,21 @@ ChargeDensityKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
+template <> void
+ChargeDensityKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                    const KineticSpecies& a_kinetic_species ) const
+{
+   /*
+     Nothing to do.  a_result has already been initialized by the distribution function,
+     and the moment kernel is unity.  Multiplication by the charge (the scale factor
+     for this Kernel class) is performed by the MomentOp after integrating over velocity.
+   */
+}
 
-void
-MassDensityKernel::eval( LevelData<FArrayBox>& a_result,
-                         const KineticSpecies& a_kinetic_species ) const
+
+template <> void
+MassDensityKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                    const KineticSpecies& a_kinetic_species ) const
 {
    /*
      Nothing to do.  a_result has already been initialized by the distribution function,
@@ -50,14 +209,21 @@ MassDensityKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
-MomentumDensityKernel::MomentumDensityKernel(const LevelData<FluxBox>& field)
-  : m_field(field)
+template <> void
+MassDensityKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                  const KineticSpecies& a_kinetic_species ) const
 {
+   /*
+     Nothing to do.  a_result has already been initialized by the distribution function,
+     and the moment kernel is unity.  Multiplication by the mass (the scale factor
+     for this Kernel class) is performed by the MomentOp after integrating over velocity.
+   */
 }
 
-void
-MomentumDensityKernel::eval( LevelData<FArrayBox>& a_result,
-                             const KineticSpecies& a_kinetic_species ) const
+
+template <> void
+MomentumDensityKernel<FArrayBox>::eval( LevelData<FArrayBox>&  a_result,
+                                        const KineticSpecies&  a_kinetic_species ) const
 {
   const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
@@ -65,20 +231,55 @@ MomentumDensityKernel::eval( LevelData<FArrayBox>& a_result,
 
   //Compute cell-centered velocity configurational components                                                                                                                                                     
   LevelData<FArrayBox> cellVelCFG(grids, CFG_DIM, IntVect::Unit);
-  computeCellVelCfgComp( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY);
+  computeVelCfgComp( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY);
 
   DataIterator dit = dfn.dataIterator();
   for (dit.begin(); dit.ok(); ++dit) {
-    a_result[dit].copy(dfn[dit],0,0,1);
-    a_result[dit].copy(dfn[dit],0,1,1);
-    a_result[dit].mult(cellVelCFG[dit], 0, 0, CFG_DIM);
+     for (int dir=0; dir<CFG_DIM; ++dir) {
+        a_result[dit].copy(dfn[dit],0,dir,1);
+     }
+     a_result[dit].mult(cellVelCFG[dit], 0, 0, CFG_DIM);
   }
 }
 
-void
 
-FourthMomentKernel::eval( LevelData<FArrayBox>& a_result,
-                      const KineticSpecies& a_kinetic_species ) const
+template <> void
+MomentumDensityKernel<FluxBox>::eval( LevelData<FluxBox>&    a_result,
+                                      const KineticSpecies&  a_kinetic_species ) const
+{
+   const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   const DisjointBoxLayout & grids = dfn.getBoxes();
+
+   LevelData<FluxBox> dfn_face(grids, 1, dfn.ghostVect());
+   CellToEdge(dfn, dfn_face);
+
+   // Compute face-centered velocity components in configuration directions
+   
+   LevelData<FluxBox> vel_cfg(grids, CFG_DIM, IntVect::Unit);
+   computeVelCfgComp( vel_cfg, phase_geom, m_field, PhaseGeom::FULL_VELOCITY);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      FluxBox& this_result = a_result[dit];
+      FluxBox& this_dfn = dfn_face[dit];
+      FluxBox& this_vel = vel_cfg[dit];
+
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result_dir = this_result[dir];
+         FArrayBox& this_dfn_dir = this_dfn[dir];
+
+         this_result_dir.copy(this_vel[dir], 0, 0, CFG_DIM);
+         for (int dir2=0; dir2<CFG_DIM; ++dir2) {
+            this_result_dir.mult(this_dfn_dir, 0, dir2, 1);
+         }
+      }
+   }
+}
+
+
+template <> void
+FourthMomentKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                     const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
 
@@ -123,15 +324,60 @@ FourthMomentKernel::eval( LevelData<FArrayBox>& a_result,
    }
 }
 
-PressureKernel::PressureKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
-   : m_v_parallel_shift(v_parallel_shift)
+
+template <> void
+FourthMomentKernel<FluxBox>::eval( LevelData<FluxBox>&    a_result,
+                                   const KineticSpecies&  a_kinetic_species ) const
 {
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FluxBox>& B_injected_face = geometry.getBFieldMagnitudeFace();
+   
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   double mass = a_kinetic_species.mass();
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+
+      for (int dir=0; dir<CFG_DIM; ++dir) { 
+      
+         FArrayBox& this_result = a_result[dit][dir];
+         const FArrayBox& this_B = B_injected_face[dit][dir];
+
+         const Box& Bbox = this_B.box();
+         int vp_index = Bbox.smallEnd(VPARALLEL_DIR);
+         int mu_index = Bbox.smallEnd(MU_DIR);
+
+         // Get the physical velocity coordinates for this part of phase space
+         FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+         block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+         BoxIterator bit(velocityRealCoords.box());
+         for (bit.begin(); bit.ok(); ++bit) {
+            IntVect iv = bit();
+            IntVect ivB = iv;
+            ivB[VPARALLEL_DIR] = vp_index;
+            ivB[MU_DIR] = mu_index;
+            double v_parallel = velocityRealCoords(iv,0);
+            double mu = velocityRealCoords(iv,1);
+            double v_perp2 =  mu * this_B(ivB) ;
+            double v2 = (mass * v_parallel * v_parallel + v_perp2);
+            double v4 = v2 * v2;
+            
+            // Multiply the a_result by the velocity square.
+            for (int n_comp=0; n_comp<a_result.nComp(); ++n_comp) {
+               this_result(iv,n_comp) *= v4/4.0;
+            }
+         }
+      }
+   }
 }
 
 
-void
-PressureKernel::eval( LevelData<FArrayBox>& a_result,
-                      const KineticSpecies& a_kinetic_species ) const
+template <> void
+PressureKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                 const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
 
@@ -165,14 +411,48 @@ PressureKernel::eval( LevelData<FArrayBox>& a_result,
    }
 }
 
-ParallelPressureKernel::ParallelPressureKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
-   : m_v_parallel_shift(v_parallel_shift)
+
+template <> void
+PressureKernel<FluxBox>::eval( LevelData<FluxBox>&    a_result,
+                               const KineticSpecies&  a_kinetic_species ) const
 {
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FluxBox>& B_injected_face = geometry.getBFieldMagnitudeFace();
+
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   double mass = a_kinetic_species.mass();
+
+   LevelData<FArrayBox> vpar_inj;
+   geometry.injectConfigurationToPhase( m_v_parallel_shift, vpar_inj );
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+         const FArrayBox& this_B = B_injected_face[dit][dir];
+         const FArrayBox& this_vparshift = vpar_inj[dit]; 
+
+         // Get the physical velocity coordinates for this part of phase space
+         FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+         block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+         FORT_COMPUTE_PRESSURE(CHF_FRA(this_result),
+                               CHF_CONST_FRA(velocityRealCoords),
+                               CHF_CONST_FRA1(this_vparshift,0),
+                               CHF_CONST_FRA1(this_B,0),
+                               CHF_CONST_REAL(mass),
+                               CHF_BOX(this_result.box()));
+      }
+   }
 }
 
-void
-ParallelPressureKernel::eval( LevelData<FArrayBox>& a_result,
-                             const KineticSpecies& a_kinetic_species ) const
+
+template <> void
+ParallelPressureKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                         const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
 
@@ -206,9 +486,48 @@ ParallelPressureKernel::eval( LevelData<FArrayBox>& a_result,
    }
 }
 
-void
-PerpPressureKernel::eval(LevelData<FArrayBox>& a_result,
-                         const KineticSpecies& a_kinetic_species ) const
+
+template <> void
+ParallelPressureKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                       const KineticSpecies& a_kinetic_species ) const
+{
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FluxBox>& B_injected_face = geometry.getBFieldMagnitudeFace();
+
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   double mass = a_kinetic_species.mass();
+
+   LevelData<FArrayBox> vpar_inj;
+   geometry.injectConfigurationToPhase( m_v_parallel_shift, vpar_inj );
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+         const FArrayBox& this_B = B_injected_face[dit][dir];
+         const FArrayBox& this_vparshift = vpar_inj[dit];
+
+         // Get the physical velocity coordinates for this part of phase space
+         FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+         block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+         FORT_COMPUTE_PARALLEL_PRESSURE(CHF_FRA(this_result),
+                                        CHF_CONST_FRA(velocityRealCoords),
+                                        CHF_CONST_FRA1(this_vparshift,0),
+                                        CHF_CONST_FRA1(this_B,0),
+                                        CHF_CONST_REAL(mass),
+                                        CHF_BOX(this_result.box()));
+      }
+   }
+}
+
+
+template <> void
+PerpPressureKernel<FArrayBox>::eval(LevelData<FArrayBox>& a_result,
+                                    const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
 
@@ -237,15 +556,43 @@ PerpPressureKernel::eval(LevelData<FArrayBox>& a_result,
    }
 }
 
-ParallelHeatFluxKernel::ParallelHeatFluxKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
-: m_v_parallel_shift(v_parallel_shift)
+
+template <> void
+PerpPressureKernel<FluxBox>::eval(LevelData<FluxBox>& a_result,
+                                  const KineticSpecies& a_kinetic_species ) const
 {
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FluxBox>& B_injected_face = geometry.getBFieldMagnitudeFace();
+
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   double mass = a_kinetic_species.mass();
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+         const FArrayBox& this_B = B_injected_face[dit][dir];
+
+         // Get the physical velocity coordinates for this part of phase space
+         FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+         block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+         FORT_COMPUTE_PERP_PRESSURE(CHF_FRA(this_result),
+                                    CHF_CONST_FRA(velocityRealCoords),
+                                    CHF_CONST_FRA1(this_B,0),
+                                    CHF_CONST_REAL(mass),
+                                    CHF_BOX(this_result.box()));
+      }
+   }
 }
 
 
-void
-ParallelHeatFluxKernel::eval( LevelData<FArrayBox>& a_result,
-                             const KineticSpecies& a_kinetic_species ) const
+template <> void
+ParallelHeatFluxKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                         const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
    
@@ -294,9 +641,61 @@ ParallelHeatFluxKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
-void
-EnergyKernel::eval( LevelData<FArrayBox>& a_result,
-                    const KineticSpecies& a_kinetic_species ) const
+template <> void
+ParallelHeatFluxKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                       const KineticSpecies& a_kinetic_species ) const
+{
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FluxBox>& B_injected_face = geometry.getBFieldMagnitudeFace();
+   
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   double mass = a_kinetic_species.mass();
+   
+   LevelData<FArrayBox> vpar_inj;
+   geometry.injectConfigurationToPhase( m_v_parallel_shift, vpar_inj );
+   
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+         const FArrayBox& this_B = B_injected_face[dit][dir];
+         const FArrayBox& this_vparshift = vpar_inj[dit];
+      
+         const Box& Bbox = this_B.box();
+         int vp_index = Bbox.smallEnd(VPARALLEL_DIR);
+         int mu_index = Bbox.smallEnd(MU_DIR);
+      
+         // Get the physical velocity coordinates for this part of phase space
+         FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+         block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+      
+         BoxIterator bit(velocityRealCoords.box());
+         for (bit.begin(); bit.ok(); ++bit) {
+            IntVect iv = bit();
+            IntVect ivB = iv;
+            ivB[VPARALLEL_DIR] = vp_index;
+            ivB[MU_DIR] = mu_index;
+            double v_parallel = velocityRealCoords(iv,0);
+            double mu = velocityRealCoords(iv,1);
+            double v_perp2 =  mu * this_B(ivB) ;
+            double v2 = (mass * pow(v_parallel-this_vparshift(ivB,0),2) + v_perp2);
+         
+            // Multiply the a_result by the velocity square.
+            for (int n_comp=0; n_comp<a_result.nComp(); ++n_comp) {
+               this_result(iv,n_comp) *= (v_parallel-this_vparshift(ivB,0)) * v2 / 2.0;
+            }
+         }
+      }
+   }
+}
+
+
+template <> void
+EnergyKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                               const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom&             geometry    = a_kinetic_species.phaseSpaceGeometry();
    const LevelData<FArrayBox>&  B_injected  = geometry.getBFieldMagnitude();
@@ -342,9 +741,60 @@ EnergyKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
-void
-PerpEnergyKernel::eval( LevelData<FArrayBox>& a_result,
-                      const KineticSpecies& a_kinetic_species ) const
+template <> void
+EnergyKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                             const KineticSpecies& a_kinetic_species ) const
+{
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FluxBox>& B_injected_face = geometry.getBFieldMagnitudeFace();
+
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   const Real mass = a_kinetic_species.mass();
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+         const FArrayBox& this_B = B_injected_face[dit][dir];
+
+         const Box& Bbox = this_B.box();
+         int   vp_index  = Bbox.smallEnd(VPARALLEL_DIR);
+         int   mu_index  = Bbox.smallEnd(MU_DIR);
+
+         // Get the physical velocity coordinates for this part of phase space
+         FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+         block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+         BoxIterator bit(velocityRealCoords.box());
+         for (bit.begin(); bit.ok(); ++bit) {
+
+            IntVect iv   = bit();
+            IntVect ivB  = iv;
+
+            ivB[VPARALLEL_DIR] = vp_index;
+            ivB[MU_DIR]        = mu_index;
+
+            double v_parallel  = velocityRealCoords(iv,0);
+            double mu          = velocityRealCoords(iv,1);
+            double mv_perp2     = mu * this_B(ivB) ;
+            double mv2          = mass*v_parallel*v_parallel + mv_perp2;
+
+            // Multiply the a_result by the velocity square.
+            for (int n_comp=0; n_comp<a_result.nComp(); ++n_comp) {
+               this_result(iv,n_comp) *= mv2 / 2.0;
+            }
+         }
+      }
+   }
+}
+
+
+template <> void
+PerpEnergyKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                   const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
 
@@ -385,9 +835,55 @@ PerpEnergyKernel::eval( LevelData<FArrayBox>& a_result,
    }
 }
 
-void
-ParallelEnergyKernel::eval( LevelData<FArrayBox>& a_result,
-                           const KineticSpecies& a_kinetic_species ) const
+
+template <> void
+PerpEnergyKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                 const KineticSpecies& a_kinetic_species ) const
+{
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FluxBox>& B_injected_face = geometry.getBFieldMagnitudeFace();
+
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+         const FArrayBox& this_B = B_injected_face[dit][dir];
+
+         const Box& Bbox = this_B.box();
+         int vp_index = Bbox.smallEnd(VPARALLEL_DIR);
+         int mu_index = Bbox.smallEnd(MU_DIR);
+
+         // Get the physical velocity coordinates for this part of phase space
+         FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+         block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+         BoxIterator bit(velocityRealCoords.box());
+         for (bit.begin(); bit.ok(); ++bit) {
+            IntVect iv = bit();
+            IntVect ivB = iv;
+            ivB[VPARALLEL_DIR] = vp_index;
+            ivB[MU_DIR] = mu_index;
+            double mu = velocityRealCoords(iv,1);
+            double mv_perp2 =  mu * this_B(ivB) ;
+
+            // Multiply the a_result by the velocity square.
+            for (int n_comp=0; n_comp<a_result.nComp(); ++n_comp) {
+               this_result(iv,n_comp) *= mv_perp2/2.0;
+            }
+         }
+      }
+   }
+}
+
+
+template <> void
+ParallelEnergyKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                       const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom&             geometry    = a_kinetic_species.phaseSpaceGeometry();
    const LevelData<FArrayBox>&  B_injected  = geometry.getBFieldMagnitude();
@@ -430,9 +926,59 @@ ParallelEnergyKernel::eval( LevelData<FArrayBox>& a_result,
    }
 }
 
-void
-ParallelMomKernel::eval( LevelData<FArrayBox>& a_result,
-                      const KineticSpecies& a_kinetic_species ) const
+
+template <> void
+ParallelEnergyKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                     const KineticSpecies& a_kinetic_species ) const
+{
+   const PhaseGeom&             geometry    = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FluxBox>&  B_injected_face  = geometry.getBFieldMagnitudeFace();
+
+   const LevelData<FArrayBox>&  dfn         = a_kinetic_species.distributionFunction();
+   const Real mass = a_kinetic_species.mass();
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+         const FArrayBox& this_B = B_injected_face[dit][dir];
+
+         const Box& Bbox = this_B.box();
+         int   vp_index  = Bbox.smallEnd(VPARALLEL_DIR);
+         int   mu_index  = Bbox.smallEnd(MU_DIR);
+
+         // Get the physical velocity coordinates for this part of phase space
+         FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+         block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+         BoxIterator bit(velocityRealCoords.box());
+         for (bit.begin(); bit.ok(); ++bit) {
+
+            IntVect iv   = bit();
+            IntVect ivB  = iv;
+            
+            ivB[VPARALLEL_DIR] = vp_index;
+            ivB[MU_DIR]        = mu_index;
+
+            double v_parallel  = velocityRealCoords(iv,0);
+            double mv2          = mass*v_parallel*v_parallel;
+
+            // Multiply the a_result by the velocity square.
+            for (int n_comp=0; n_comp<a_result.nComp(); ++n_comp) {
+               this_result(iv,n_comp) *= mv2 / 2.0;
+            }
+         }
+      }
+   }
+}
+
+
+template <> void
+ParallelMomKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                    const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
    const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
@@ -455,15 +1001,36 @@ ParallelMomKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
-ParticleFluxKernel::ParticleFluxKernel (const LevelData<FluxBox>& field)
-   : m_field(field)
+template <> void
+ParallelMomKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                  const KineticSpecies& a_kinetic_species ) const
 {
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+ 
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+
+         // Get the physical velocity coordinates for this part of phase space
+         FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+         block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+         FORT_COMPUTE_PAR_MOM(CHF_FRA(this_result),
+                              CHF_CONST_FRA1(velocityRealCoords,0),
+                              CHF_BOX(this_result.box()));
+      }
+   }
 }
 
 
-void
-ParticleFluxKernel::eval( LevelData<FArrayBox>& a_result,
-                      const KineticSpecies& a_kinetic_species ) const
+template <> void
+ParticleFluxKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                     const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
    const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
@@ -471,7 +1038,7 @@ ParticleFluxKernel::eval( LevelData<FArrayBox>& a_result,
 
    //Compute CFG componenents of cell-centered normal velocities
    LevelData<FArrayBox> cellVelCFG(grids, CFG_DIM, IntVect::Zero);
-   computeCellVelCfgCompNormals( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
+   computeVelCfgCompNormals( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
 
    //Compute radial particle flux
    DataIterator dit = dfn.dataIterator();
@@ -481,17 +1048,33 @@ ParticleFluxKernel::eval( LevelData<FArrayBox>& a_result,
    }
 }
 
-HeatFluxKernel::HeatFluxKernel (const LevelData<FluxBox>& field,
-                                const LevelData<FArrayBox>& phi )
-   : m_field(field),
-     m_phi(phi)
+
+template <> void
+ParticleFluxKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                   const KineticSpecies& a_kinetic_species ) const
 {
+   const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   const DisjointBoxLayout & grids = dfn.getBoxes();
+
+   //Compute CFG componenents of face-centered normal velocities
+   LevelData<FluxBox> vel_cfg(grids, CFG_DIM, IntVect::Zero);
+   computeVelCfgCompNormals( vel_cfg, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
+
+   //Compute radial particle flux
+   DataIterator dit = dfn.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+         this_result.mult(vel_cfg[dit][dir], RADIAL_DIR, 0, 1);
+      }
+   }
 }
 
 
-void
-HeatFluxKernel::eval( LevelData<FArrayBox>& a_result,
-                      const KineticSpecies& a_kinetic_species ) const
+template <> void
+HeatFluxKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                 const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
 
@@ -505,7 +1088,7 @@ HeatFluxKernel::eval( LevelData<FArrayBox>& a_result,
    
    //Compute CFG componenents of cell-centered normal velocities
    LevelData<FArrayBox> cellVelCFG(grids, CFG_DIM, IntVect::Zero);
-   computeCellVelCfgCompNormals( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
+   computeVelCfgCompNormals( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
    
    //Compute radial heat flux
    DataIterator dit = grids.dataIterator();
@@ -547,15 +1130,68 @@ HeatFluxKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
-PerpCurrentDensityKernel::PerpCurrentDensityKernel(const LevelData<FluxBox>& field)
-: m_field(field)
+template <> void
+HeatFluxKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                               const KineticSpecies& a_kinetic_species ) const
 {
+   const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FluxBox>& B_injected_face = phase_geom.getBFieldMagnitudeFace();
+
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   double mass = a_kinetic_species.mass();
+   double charge = a_kinetic_species.charge();
+
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   
+   //Compute CFG componenents of face-centered normal velocities
+   LevelData<FluxBox> vel_cfg(grids, CFG_DIM, IntVect::Zero);
+   computeVelCfgCompNormals( vel_cfg, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
+   
+   //Compute radial heat flux
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = phase_geom.getBlockCoordSys(grids[dit]);
+
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+
+         const FArrayBox& this_B = B_injected_face[dit][dir];
+         const FArrayBox& this_m_phi = m_phi[dit]; 
+
+         const Box& Bbox = this_B.box();
+         int vp_index = Bbox.smallEnd(VPARALLEL_DIR);
+         int mu_index = Bbox.smallEnd(MU_DIR);
+
+         // Get the physical velocity coordinates for this part of phase space
+         FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+         block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+
+         BoxIterator bit(velocityRealCoords.box());
+         for (bit.begin(); bit.ok(); ++bit) {
+            IntVect iv = bit();
+            IntVect ivB = iv;
+            ivB[VPARALLEL_DIR] = vp_index;
+            ivB[MU_DIR] = mu_index;
+            double v_parallel = velocityRealCoords(iv,0);
+            double mu = velocityRealCoords(iv,1);
+            double v_perp2 =  mu * this_B(ivB) ;
+            double v2 = (mass * v_parallel * v_parallel + v_perp2);
+
+            // Multiply the distribution function by the velocity square.
+            for (int n_comp=0; n_comp<a_result.nComp(); ++n_comp) {
+               this_result(iv,n_comp) *= (v2 / 2.0 + charge*this_m_phi(ivB,0));
+            }
+         }
+
+         this_result.mult(vel_cfg[dit][dir], RADIAL_DIR, 0, 1);
+      }
+   }
 }
 
 
-void
-PerpCurrentDensityKernel::eval( LevelData<FArrayBox>& a_result,
-                                const KineticSpecies& a_kinetic_species ) const
+template <> void
+PerpCurrentDensityKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                           const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
    const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
@@ -563,26 +1199,45 @@ PerpCurrentDensityKernel::eval( LevelData<FArrayBox>& a_result,
    
    //Compute cell-centered velocity configurational components
    LevelData<FArrayBox> cellVelCFG(grids, CFG_DIM, IntVect::Unit);
-   computeCellVelCfgComp( cellVelCFG, phase_geom, m_field, true );
+   computeVelCfgComp( cellVelCFG, phase_geom, m_field, true );
    
    DataIterator dit = dfn.dataIterator();
    for (dit.begin(); dit.ok(); ++dit) {
-     a_result[dit].copy(dfn[dit],0,0,1);
-     a_result[dit].copy(dfn[dit],0,1,1);
-     a_result[dit].mult(cellVelCFG[dit], 0, 0, CFG_DIM);
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         a_result[dit].copy(dfn[dit],0,dir,1);
+      }
+      a_result[dit].mult(cellVelCFG[dit], 0, 0, CFG_DIM);
    }
 }
 
 
-GuidingCenterPoloidalMomKernel::GuidingCenterPoloidalMomKernel(const LevelData<FluxBox>& field)
-   : m_field(field)
+template <> void
+PerpCurrentDensityKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                         const KineticSpecies& a_kinetic_species ) const
 {
+   const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   const DisjointBoxLayout & grids = dfn.getBoxes();
+   
+   //Compute face-centered velocity configurational components
+   LevelData<FluxBox> vel_cfg(grids, CFG_DIM, IntVect::Unit);
+   computeVelCfgComp( vel_cfg, phase_geom, m_field, true );
+   
+   DataIterator dit = dfn.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         for (int dir=0; dir<CFG_DIM; ++dir) {
+            a_result[dit][dir].copy(dfn[dit], 0, dir, 1);
+         }
+         a_result[dit][dir].mult(vel_cfg[dit][dir], 0, 0, CFG_DIM);
+      }
+   }
 }
 
 
-void
-GuidingCenterPoloidalMomKernel::eval( LevelData<FArrayBox>& a_result,
-                                      const KineticSpecies& a_kinetic_species ) const
+template <> void
+GuidingCenterPoloidalMomKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                                 const KineticSpecies& a_kinetic_species ) const
 {
 
    const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
@@ -591,7 +1246,7 @@ GuidingCenterPoloidalMomKernel::eval( LevelData<FArrayBox>& a_result,
    
    //Compute cell-centered velocity configuration components
    LevelData<FArrayBox> cellVelCFG(grids, CFG_DIM, IntVect::Zero);
-   computeCellVelCfgComp( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
+   computeVelCfgComp( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
    
    //Compute poloidal velocity
    LevelData<FArrayBox> cellVel_theta(grids, 1, IntVect::Zero);
@@ -609,9 +1264,39 @@ GuidingCenterPoloidalMomKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
-void
-MagnetizationKernel::eval( LevelData<FArrayBox>& a_result,
-                           const KineticSpecies& a_kinetic_species ) const
+template <> void
+GuidingCenterPoloidalMomKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                               const KineticSpecies& a_kinetic_species ) const
+{
+
+   const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   const DisjointBoxLayout & grids = dfn.getBoxes();
+   
+   //Compute cell-centered velocity configuration components
+   LevelData<FluxBox> cellVelCFG(grids, CFG_DIM, IntVect::Zero);
+   computeVelCfgComp( cellVelCFG, phase_geom, m_field, PhaseGeom::FULL_VELOCITY );
+   
+   //Compute poloidal velocity
+   LevelData<FluxBox> faceVel_theta(grids, 1, IntVect::Zero);
+   phase_geom.computePoloidalProjection( faceVel_theta, cellVelCFG );
+   
+   //Compute radial particle flux
+   DataIterator dit = dfn.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+         FArrayBox& this_vtheta = faceVel_theta[dit][dir];
+      
+         this_result.mult(this_vtheta, 0, 0, 1);
+      }
+   }
+}
+
+
+template <> void
+MagnetizationKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                      const KineticSpecies& a_kinetic_species ) const
 {
    
    const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
@@ -643,20 +1328,45 @@ MagnetizationKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
-DeltaFKernel::DeltaFKernel (const CFG::LevelData<CFG::FArrayBox>& density,
-                            const CFG::LevelData<CFG::FArrayBox>& temperature,
-                            const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
-   : m_density(density),
-     m_temperature(temperature),
-     m_v_parallel_shift(v_parallel_shift)
-
+template <> void
+MagnetizationKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                    const KineticSpecies& a_kinetic_species ) const
 {
+   
+   const PhaseGeom& geometry = a_kinetic_species.phaseSpaceGeometry();
+   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
+   
+   const DisjointBoxLayout& grids = dfn.disjointBoxLayout();
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys& block_coord_sys = geometry.getBlockCoordSys(grids[dit]);
+      
+      for (int dir=0; dir<CFG_DIM; ++dir) {
+         FArrayBox& this_result = a_result[dit][dir];
+      
+         // Get the physical velocity coordinates for this part of phase space
+         FArrayBox velocityRealCoords(this_result.box(), VEL_DIM);
+         block_coord_sys.getVelocityRealCoords(velocityRealCoords);
+      
+         BoxIterator bit(velocityRealCoords.box());
+         for (bit.begin(); bit.ok(); ++bit) {
+            IntVect iv = bit();
+            double mu = velocityRealCoords(iv,1);
+         
+            // Multiply the a_result by the velocity square.
+            for (int n_comp=0; n_comp<a_result.nComp(); ++n_comp) {
+               this_result(iv,n_comp) *= -mu;
+            }
+         }
+      }
+   }
+   
 }
 
 
-void
-DeltaFKernel::eval( LevelData<FArrayBox>& a_result,
-                    const KineticSpecies& a_kinetic_species ) const
+template <> void
+DeltaFKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                               const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
    const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
@@ -762,20 +1472,18 @@ DeltaFKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
-MaxwellianKernel::MaxwellianKernel (const CFG::LevelData<CFG::FArrayBox>& density,
-                                    const CFG::LevelData<CFG::FArrayBox>& temperature,
-                                    const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
-   : m_density(density),
-     m_temperature(temperature),
-     m_v_parallel_shift(v_parallel_shift)
-
+template <> void
+DeltaFKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                             const KineticSpecies& a_kinetic_species ) const
 {
+   // Implementation of this function requires BStarParallel on faces
+   MayDay::Error("DeltaFKernel<FluxBox>::eval() has not been implemented");
 }
 
 
-void
-MaxwellianKernel::eval( LevelData<FArrayBox>& a_result,
-                        const KineticSpecies& a_kinetic_species ) const
+template <> void
+MaxwellianKernel<FArrayBox>::eval( LevelData<FArrayBox>& a_result,
+                                   const KineticSpecies& a_kinetic_species ) const
 {
    const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
    const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
@@ -856,74 +1564,12 @@ MaxwellianKernel::eval( LevelData<FArrayBox>& a_result,
 }
 
 
-void
-Kernel::computeCellVelCfgComp(LevelData<FArrayBox>&      a_velCellCfgComp,
-                              const PhaseGeom&           a_phase_geom,
-                              const LevelData<FluxBox>&  a_field,
-                              const int                  a_option     ) const
+template <> void
+MaxwellianKernel<FluxBox>::eval( LevelData<FluxBox>& a_result,
+                                 const KineticSpecies& a_kinetic_species ) const
 {
-   /*
-    Computes cell-centered physical components of GK velocity
-    */
-
-   const DisjointBoxLayout & grids = a_velCellCfgComp.getBoxes();
-   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
-   a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, false, a_option);
-
-   for (DataIterator dit(a_velCellCfgComp.dataIterator()); dit.ok(); ++dit) {
-     a_velCellCfgComp[dit].setVal(0.);
-     for (int dir=0; dir<CFG_DIM; dir++) {
-          FORT_COMPUTE_VEL_CELL(CHF_FRA(a_velCellCfgComp[dit]),
-                                CHF_FRA(pointwiseFaceVel[dit][dir]),
-                                CHF_CONST_INT(dir),
-                                CHF_BOX(a_velCellCfgComp[dit].box()));
-     }
-   }
-}
-
-void
-Kernel::computeCellVelCfgCompNormals(LevelData<FArrayBox>&      a_velCellCfgComp,
-                                     const PhaseGeom&           a_phase_geom,
-                                     const LevelData<FluxBox>&  a_field,
-                                     const int                  a_option     ) const
-{
-   /*
-    Computes cell-centered normal components of GK velocity
-    (i.e., projection of physical velocity onto normal directions)
-    */
-
-   const DisjointBoxLayout & grids = a_velCellCfgComp.getBoxes();
-   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
-   a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, false, a_option);
-   a_phase_geom.multNTransposePointwise( pointwiseFaceVel );
-   
-   const CFG::MagGeom& mag_geom( a_phase_geom.magGeom() );
-   const CFG::DisjointBoxLayout& grids_cfg = mag_geom.grids();
-   CFG::LevelData<CFG::FluxBox> face_areas(grids_cfg, 1, CFG::IntVect::Unit);
-   mag_geom.getPointwiseFaceAreas(face_areas);
-
-   LevelData<FluxBox> face_areas_inj;
-   a_phase_geom.injectConfigurationToPhase(face_areas, face_areas_inj);
-   
-   for (DataIterator dit(a_velCellCfgComp.dataIterator()); dit.ok(); ++dit) {
-     for (int dir=0; dir<CFG_DIM; dir++) {
-          
-         const PhaseBlockCoordSys& block_coord_sys = a_phase_geom.getBlockCoordSys(grids[dit]);
-         block_coord_sys.divideInjectedData(face_areas_inj[dit][dir],
-                                            pointwiseFaceVel[dit][dir]);
-
-         RealVect dx = block_coord_sys.dx();
-         Real mapped_volume = block_coord_sys.getMappedCellVolume();
-         Real mapped_volume_cfg = mapped_volume / dx[VPARALLEL_DIR] / dx[MU_DIR];
-         Real mapped_face_area_cfg = mapped_volume_cfg / dx[dir];
-         pointwiseFaceVel[dit][dir].mult(mapped_face_area_cfg);
-        
-         FORT_COMPUTE_VEL_CELL_NORMALS(CHF_FRA1(a_velCellCfgComp[dit],dir),
-                                       CHF_FRA(pointwiseFaceVel[dit][dir]),
-                                       CHF_CONST_INT(dir),
-                                       CHF_BOX(a_velCellCfgComp[dit].box()));
-     }
-   }
+   // Implementation of this function requires BStarParallel on faces
+   MayDay::Error("MaxwellianKernel<FluxBox>::eval() has not been implemented");
 }
 
 #include "NamespaceFooter.H"

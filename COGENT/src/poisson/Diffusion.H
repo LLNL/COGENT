@@ -60,11 +60,6 @@ public:
    virtual void updateImExPreconditioner( const LevelData<FArrayBox>&      mshift,
                                           const EllipticOpBC&              bc );
 
-   virtual void setPreconditionerConvergenceParams( const double  tol,
-                                                    const int     max_iter,
-                                                    const double  precond_tol,
-                                                    const int     precond_max_iter );
-
    virtual void setImExPreconditionerConvergenceParams( const double  tol,
                                                         const int     max_iter,
                                                         const double  precond_tol,
@@ -78,6 +73,11 @@ public:
 
    virtual void multiplyCoefficients( LevelData<FluxBox>&  data,
                                       const bool           mapped_coeff ) const;
+
+   const string getPrecondMethod() const {return m_preconditioner->getMethod();}
+   const Real   getPrecondTol() const {return m_preconditioner->getTol();}
+   const Real   getPrecondMaxIter() const {return m_preconditioner->getMaxIter();}
+   const bool   getPrecondVerbose() const {return m_preconditioner->getVerbose();}
 
    /// ParmParse object name
    /**
@@ -103,6 +103,9 @@ protected:
    LevelData<FArrayBox> m_volume_reciprocal;
    
    MagFluxAlignedMBLEXCenter* m_mblx_ptr;
+
+   bool m_precond_verbose;
+   bool m_precond_precond_verbose;
 };
 
 

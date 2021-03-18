@@ -255,7 +255,6 @@ namespace FluidBCUtils {
             //const int dir=1;
             const Box fill_box( bdry_grids[dit] );
             FArrayBox& this_a_dst( a_dst[bdry_layout.dataIndex(dit)] );
-            const DataIndex& interior_dit( bdry_layout.dataIndex(dit) );
             //if(this_bc_type=="natural") {
                 
                FourthOrderBC::setBC( this_a_dst,
@@ -284,7 +283,6 @@ namespace FluidBCUtils {
             
             const Box fill_box( bdry_grids[dit] );
             EdgeDataBox& this_a_dst( a_dst[bdry_layout.dataIndex(dit)] );
-            const DataIndex& interior_dit( bdry_layout.dataIndex(dit) );
             
             if(this_bc_type=="zero_on_edge") {
                for (int dir=0; dir<SpaceDim; dir++) {

@@ -16,17 +16,44 @@ namespace CFG = CFG_NAMESPACE;
 typedef pair<CFG::IntVect,Real> StencilPoint;
 typedef std::vector<StencilPoint> Stencil;
 
+namespace StencilUtils{
+  void compress(Stencil& a_stencil);
+}
+
 namespace UnstructuredInterpUtils {
 
   void bilinearInterpStencil( Stencil&,
                               const CFG::FArrayBox&,
                               const std::vector<CFG::IntVect>&,
-                              const CFG::RealVect& );
+                              const CFG::RealVect&,
+                              const Real );
+
+  void bicubicInterpStencil(  Stencil&,
+                              const CFG::FArrayBox&,
+                              const std::vector<CFG::IntVect>&,
+                              const CFG::RealVect&,
+                              const Real );
+
+  void biquarticInterpStencil(Stencil&,
+                              const CFG::FArrayBox&,
+                              const std::vector<CFG::IntVect>&,
+                              const CFG::RealVect&,
+                              const Real );
 
   void trilinearInterpStencil(  Stencil&,
                                 const CFG::FArrayBox&,
                                 const std::vector<CFG::IntVect>&,
-                                const CFG::RealVect& );
+                                const CFG::RealVect&,
+                                const Real );
+
+  void tricubicInterpStencil( Stencil&,
+                              const CFG::FArrayBox&,
+                              const std::vector<CFG::IntVect>&,
+                              const CFG::RealVect&,
+                              const Real );
+
+  Real determinant( const std::vector<Real>&,
+                    const std::vector<Real>& );
 
 }
 

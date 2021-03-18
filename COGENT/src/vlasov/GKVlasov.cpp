@@ -1,6 +1,8 @@
 #include "GKVlasov.H"
 #include "CONSTANTS.H"
 #include "Directions.H"
+#include "MomentOp.H"
+#include "Kernels.H"
 
 #include "FourthOrderUtil.H"
 #include "CellToEdge.H"
@@ -172,6 +174,15 @@ GKVlasov::GKVlasov( ParmParse&                      a_pp,
 }
 
 
+GKVlasov::~GKVlasov()
+{
+   for (int n=0; n<m_pc_vec.size(); ++n) {
+      if (m_pc_vec[n]) delete m_pc_vec[n];
+   }
+   m_pc_vec.resize(0);
+}
+
+
 void GKVlasov::accumulateRHS( GKRHSData&                            a_rhs,
                               const KineticSpeciesPtrVect&          a_kinetic_phys,
                               const CFG::LevelData<CFG::FArrayBox>& a_phi,
@@ -188,45 +199,21 @@ void GKVlasov::accumulateRHS( GKRHSData&                            a_rhs,
    for (int s(0); s<rhs_kinetic.size(); s++) {
       const KineticSpecies& soln_species( *(a_kinetic_phys[s]) );
       KineticSpecies& rhs_species( *(rhs_kinetic[s]) );
-      const PhaseGeom& phase_geom = rhs_species.phaseSpaceGeometry();
-      if ( phase_geom.divFreeVelocity() ) {
-         bool fourth_order_Efield = !a_E_field.secondOrder();
-         if (a_implicit) {
-           evalRHSImplicit( rhs_species, 
-                            soln_species, 
-                            a_phi,
-                            a_E_field.getCellCenteredField(), 
-                            a_E_field.getPhiNode(),
-                            fourth_order_Efield, 
-                            PhaseGeom::FULL_VELOCITY, 
-                            a_time );
-         } else {
-           evalRHSExplicit( rhs_species, 
-                            soln_species, 
-                            a_phi,
-                            a_E_field.getCellCenteredField(), 
-                            a_E_field.getPhiNode(),
-                            fourth_order_Efield, 
-                            PhaseGeom::FULL_VELOCITY, 
-                            a_time );
-         }
-      }
-      else {
-        if (a_implicit) {
-          evalRHSImplicit( rhs_species,
-                           soln_species,
-                           a_phi,
-                           a_E_field,
-                           PhaseGeom::FULL_VELOCITY,
-                           a_time );
-        } else {
-          evalRHSExplicit( rhs_species,
-                           soln_species,
-                           a_phi,
-                           a_E_field,
-                           PhaseGeom::FULL_VELOCITY,
-                           a_time );
-        }
+      if (a_implicit) {
+         evalRHSImplicit(rhs_species,
+                         soln_species,
+                         a_phi,
+                         a_E_field,
+                         PhaseGeom::FULL_VELOCITY,
+                         a_time );
+         
+      } else {
+         evalRHSExplicit(rhs_species,
+                         soln_species,
+                         a_phi,
+                         a_E_field,
+                         PhaseGeom::FULL_VELOCITY,
+                         a_time );
       }
    }
 }
@@ -290,9 +277,90 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
      Evaluates the (negated) phase space divergence:
         rhs = - divergence_R ( R_dot soln ) - divergence_v ( v_dot soln )
    */
+   LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
+   
    const LevelData<FArrayBox>& soln_dfn( a_soln_species.distributionFunction() );
    const DisjointBoxLayout& dbl( soln_dfn.getBoxes() );
+
    const PhaseGeom& geometry( a_rhs_species.phaseSpaceGeometry() );
+   IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
+
+   if ( geometry.divFreeVelocity() ) {
+      bool fourth_order_Efield = !a_E_field.secondOrder();
+      
+      if ( !m_flux_normal.isDefined()) {
+         m_flux_normal.define( dbl, 1, ghostVect );
+      }
+   
+      computeIntegratedFluxNormals(m_flux_normal,
+                                   a_soln_species,
+                                   a_phi,
+                                   a_E_field.getCellCenteredField(),
+                                   a_E_field.getPhiNode(),
+                                   fourth_order_Efield,
+                                   a_velocity_option,
+                                   a_time);
+   
+      geometry.mappedGridDivergenceFromIntegratedFluxNormals( rhs_dfn, m_flux_normal );
+   }
+   
+   else {
+      if ( !m_flux.isDefined()) {
+         m_flux.define( dbl, SpaceDim, ghostVect );
+      }
+   
+      computePhysicalFlux(m_flux,
+                          a_soln_species,
+                          a_phi,
+                          a_E_field,
+                          a_velocity_option,
+                          a_time,
+                          true);
+   
+
+      const bool OMIT_NT(false);
+      geometry.mappedGridDivergence( rhs_dfn, m_flux, OMIT_NT );
+   }
+
+   // Divide by cell volume and negate
+   for (DataIterator dit( rhs_dfn.dataIterator() ); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys&
+         block_coord_sys( geometry.getBlockCoordSys( dbl[dit] ) );
+      double fac( -1.0 / block_coord_sys.getMappedCellVolume() );
+      rhs_dfn[dit].mult( fac );
+   }
+
+#ifdef TEST_ZERO_DIVERGENCE
+   if ( phase_geom.divFreeVelocity() ) {
+      testZeroDivergence(m_velocity_normal, geometry);
+   }
+   else {
+      testZeroDivergence(m_velocity, geometry);
+   }
+
+#endif
+}
+
+void
+GKVlasov::computePhysicalFlux( LevelData<FluxBox>&                    a_flux,
+                               const KineticSpecies&                  a_soln_species,
+                               const CFG::LevelData<CFG::FArrayBox>&  a_phi,
+                               const CFG::EField&                     a_E_field,
+                               const int                              a_velocity_option,
+                               const Real                             a_time,
+                               const bool                             a_apply_axisymmetric_correction)
+{
+   CH_TIME("GKVlasov::computePhysicalFlux");
+
+   /*
+     Evaluates the physical phase space flux: R_dot soln + v_dot soln
+     modified by axisymmetric corrections. NB:: the corrections
+     are not applied for the case of pointwise metrics
+   */
+   
+   const LevelData<FArrayBox>& soln_dfn( a_soln_species.distributionFunction() );
+   const DisjointBoxLayout& dbl( soln_dfn.getBoxes() );
+   const PhaseGeom& geometry( a_soln_species.phaseSpaceGeometry() );
 
    IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
    if ( !m_velocity.isDefined()) {
@@ -305,30 +373,28 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
      LevelData<FluxBox> gyroaveraged_E_field;
      int order (a_E_field.secondOrder() ? 2 : 4);
      a_soln_species.gyroaveragedEField( gyroaveraged_E_field,
-                                        a_phi, 
+                                        a_phi,
                                         order );
 
-     a_soln_species.computeVelocity(  m_velocity, 
-                                      gyroaveraged_E_field, 
-                                      true, 
-                                      a_velocity_option, 
-                                      a_time );
+     a_soln_species.computeVelocity(  m_velocity,
+                                      gyroaveraged_E_field,
+                                      true,
+                                      a_velocity_option,
+                                      a_time,
+                                      a_apply_axisymmetric_correction);
 
    } else {
-     a_soln_species.computeVelocity(  m_velocity, 
-                                      a_E_field.getInjectedField(), 
-                                      false, 
-                                      a_velocity_option, 
-                                      a_time );
-   }
-
-   if ( !m_flux.isDefined()) {
-      m_flux.define( dbl, SpaceDim, ghostVect );
+     a_soln_species.computeVelocity(  m_velocity,
+                                      a_E_field.getInjectedField(),
+                                      false,
+                                      a_velocity_option,
+                                      a_time,
+                                      a_apply_axisymmetric_correction);
    }
 
    // Compute Vlasov_flux[dfn]
    if (!m_subtract_maxwellian) {
-      computeFlux( soln_dfn, m_velocity, m_flux, geometry );
+      computeAdvectionFluxPhys( soln_dfn, m_velocity, a_flux, geometry );
    }
    
    // Compute Vlasov_flux[dfn-F0] + Vlasov_flux_high_order[F0]
@@ -356,7 +422,7 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
       if (!m_delta_flux.isDefined()) {
          m_delta_flux.define( dbl, SpaceDim, ghostVect );
       }
-      computeFlux( m_delta_dfn, m_velocity, m_delta_flux, geometry );
+      computeAdvectionFluxPhys( m_delta_dfn, m_velocity, m_delta_flux, geometry );
       
       // Update gk-velocity to include no zero-order terms
       if (a_soln_species.isGyrokinetic() && m_include_FLR_effects) {
@@ -367,141 +433,53 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
                                             a_phi,
                                             order );
 
-        a_soln_species.computeVelocity( m_velocity, 
-                                        gyroaveraged_E_field, 
-                                        true, 
-                                        PhaseGeom::NO_ZERO_ORDER_TERMS, 
+        a_soln_species.computeVelocity( m_velocity,
+                                        gyroaveraged_E_field,
+                                        true,
+                                        PhaseGeom::NO_ZERO_ORDER_TERMS,
                                         a_time );
       
       } else {
 
-        a_soln_species.computeVelocity( m_velocity, 
-                                        a_E_field.getInjectedField(), 
-                                        false, 
-                                        PhaseGeom::NO_ZERO_ORDER_TERMS, 
+        a_soln_species.computeVelocity( m_velocity,
+                                        a_E_field.getInjectedField(),
+                                        false,
+                                        PhaseGeom::NO_ZERO_ORDER_TERMS,
                                         a_time );
 
       }
 
       geometry.multBStarParallel(m_maxwellian_dfn);
-      computeFlux( m_maxwellian_dfn, m_velocity, m_flux, geometry);
+      computeAdvectionFluxPhys( m_maxwellian_dfn, m_velocity, a_flux, geometry);
   
       for (DataIterator dit(dbl); dit.ok(); ++dit) {
-         m_flux[dit] += m_delta_flux[dit];
+         a_flux[dit] += m_delta_flux[dit];
       }
    }
-
-   LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
-   const bool OMIT_NT(false);
-   geometry.mappedGridDivergence( rhs_dfn, m_flux, OMIT_NT );
-
-#ifdef TEST_ZERO_DIVERGENCE
-   LevelData<FArrayBox> velocity_divergence(dbl, 1, IntVect::Zero);
-   geometry.mappedGridDivergence( velocity_divergence, m_velocity, OMIT_NT );
-#endif
-
-   // Divide by cell volume and negate
-   for (DataIterator dit( rhs_dfn.dataIterator() ); dit.ok(); ++dit) {
-      const PhaseBlockCoordSys&
-         block_coord_sys( geometry.getBlockCoordSys( dbl[dit] ) );
-      double fac( -1.0 / block_coord_sys.getMappedCellVolume() );
-      rhs_dfn[dit].mult( fac );
-#ifdef TEST_ZERO_DIVERGENCE
-      velocity_divergence[dit].mult( fac );
-#endif
-   }
-
-#ifdef TEST_ZERO_DIVERGENCE
-   double veldiv_norm = MaxNorm(velocity_divergence);
-   double rhs_norm = MaxNorm(rhs_dfn);
-   if (procID()==0) cout << "velocity divergence norm = " << veldiv_norm << ", rhs norm = " << rhs_norm << endl;
-#endif
 }
 
-
 void
-GKVlasov::evalRHSExplicit( KineticSpecies&                        a_rhs_species,
-                           const KineticSpecies&                  a_soln_species,
-                           const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                           const CFG::LevelData<CFG::FArrayBox>&  a_Efield_cell,
-                           const CFG::LevelData<CFG::FArrayBox>&  a_phi_node,
-                           const bool                             a_fourth_order_Efield,
-                           const int                              a_velocity_option,
-                           const Real                             a_time )
-{
-  const std::string& name = a_soln_species.name();
-
-  std::map<std::string, tiType>::const_iterator it;
-  it = m_ti_type.find(name);
-  if (it == m_ti_type.end()) {
-    MayDay::Error("in GKVlasov::evalRHSExplicit - m_ti_type does not contain species info.");
-  }
-
-  if (m_ti_type[name] == _explicit_) {
-    evalRHS(  a_rhs_species, 
-              a_soln_species, 
-              a_phi,
-              a_Efield_cell, 
-              a_phi_node, 
-              a_fourth_order_Efield, 
-              a_velocity_option, 
-              a_time);
-  }
-}
-
-
-void
-GKVlasov::evalRHSImplicit( KineticSpecies&                        a_rhs_species,
-                           const KineticSpecies&                  a_soln_species,
-                           const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                           const CFG::LevelData<CFG::FArrayBox>&  a_Efield_cell,
-                           const CFG::LevelData<CFG::FArrayBox>&  a_phi_node,
-                           const bool                             a_fourth_order_Efield,
-                           const int                              a_velocity_option,
-                           const Real                             a_time )
-{
-  const std::string& name = a_soln_species.name();
-
-  std::map<std::string, tiType>::const_iterator it;
-  it = m_ti_type.find(name);
-  if (it == m_ti_type.end()) {
-    MayDay::Error("in GKVlasov::evalRHSImplicit - m_ti_type does not contain species info.");
-  }
-
-  if (m_ti_type[name] == _implicit_) {
-    evalRHS(  a_rhs_species, 
-              a_soln_species, 
-              a_phi,
-              a_Efield_cell, 
-              a_phi_node, 
-              a_fourth_order_Efield, 
-              a_velocity_option, 
-              a_time);
-  }
-}
-
-
-void
-GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
-                   const KineticSpecies&                  a_soln_species,
-                   const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                   const CFG::LevelData<CFG::FArrayBox>&  a_Efield_cell,
-                   const CFG::LevelData<CFG::FArrayBox>&  a_phi_node,
-                   const bool                             a_fourth_order_Efield,
-                   const int                              a_velocity_option,
-                   const Real                             a_time )
+GKVlasov::computeIntegratedFluxNormals(LevelData<FluxBox>&                    a_flux_normal,
+                                       const KineticSpecies&                  a_soln_species,
+                                       const CFG::LevelData<CFG::FArrayBox>&  a_phi,
+                                       const CFG::LevelData<CFG::FArrayBox>&  a_Efield_cell,
+                                       const CFG::LevelData<CFG::FArrayBox>&  a_phi_node,
+                                       const bool                             a_fourth_order_Efield,
+                                       const int                              a_velocity_option,
+                                       const Real                             a_time )
 {
    /*
-     Evaluates the (negated) phase space divergence:
-        rhs = - divergence_R ( R_dot soln ) - divergence_v ( v_dot soln )
+     Evaluates the normal component of the mapped
+     phase space flux integrated over a cell face
+     NT * (R_dot soln + v_dot soln) * face_area
    */
 
-   CH_TIME("GKVlasov::evalRHS");
-  
+   CH_TIME("GKVlasov::computeIntegratedFluxNormals");
+   
    const LevelData<FArrayBox>& soln_dfn( a_soln_species.distributionFunction() );
    const DisjointBoxLayout& dbl( soln_dfn.getBoxes() );
 
-   const PhaseGeom& geometry( a_rhs_species.phaseSpaceGeometry() );
+   const PhaseGeom& geometry( a_soln_species.phaseSpaceGeometry() );
    const CFG::MagGeom& mag_geom = geometry.magGeom();
    
    if ( !m_dfn_no_bstar.isDefined()) {
@@ -518,19 +496,16 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
      m_velocity_normal.define( dbl, 1, ghostVect );
    }
 
-   a_soln_species.computeMappedVelocityNormals( m_velocity_normal, 
-                                                a_Efield_cell, 
-                                                a_phi_node, 
-                                                a_fourth_order_Efield, 
+   a_soln_species.computeMappedVelocityNormals( m_velocity_normal,
+                                                a_Efield_cell,
+                                                a_phi_node,
+                                                a_fourth_order_Efield,
                                                 a_velocity_option );
    
-   if ( !m_flux_normal.isDefined()) {
-     m_flux_normal.define( dbl, 1, ghostVect );
-   }
-      
+     
    // Compute normals of Vlasov_flux[dfn]
    if (!m_subtract_maxwellian) {
-      computeFluxNormal( m_dfn_no_bstar, m_velocity_normal, m_flux_normal, geometry );
+      computeAdvectionFluxMapped( m_dfn_no_bstar, m_velocity_normal, a_flux_normal, geometry );
    }
    
    // Compute normals of Vlasov_flux[dfn-F0] + Vlasov_flux_high_order[F0]
@@ -549,176 +524,34 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
          m_delta_flux_normal.define( dbl, 1, ghostVect );
       }
       
-      computeFluxNormal( m_delta_dfn, m_velocity_normal, m_delta_flux_normal, geometry );
+      computeAdvectionFluxMapped( m_delta_dfn, m_velocity_normal, m_delta_flux_normal, geometry );
        
-      a_soln_species.computeMappedVelocityNormals(  m_velocity_normal, 
-                                                    a_Efield_cell, 
-                                                    a_phi_node, 
+      a_soln_species.computeMappedVelocityNormals(  m_velocity_normal,
+                                                    a_Efield_cell,
+                                                    a_phi_node,
                                                     a_fourth_order_Efield,
                                                     PhaseGeom::NO_ZERO_ORDER_TERMS );
 
-      computeFluxNormal( m_maxwellian_dfn, m_velocity_normal, m_flux_normal, geometry);
+      computeAdvectionFluxMapped( m_maxwellian_dfn, m_velocity_normal, a_flux_normal, geometry);
 
       for (DataIterator dit(dbl); dit.ok(); ++dit) {
-         m_flux_normal[dit] += m_delta_flux_normal[dit];
+         a_flux_normal[dit] += m_delta_flux_normal[dit];
       }
    }
 
    // Enforce conservation
    if (!mag_geom.extrablockExchange()) {
-      geometry.averageAtBlockBoundaries(m_flux_normal);
+      geometry.averageAtBlockBoundaries(a_flux_normal);
    }
-   
-   LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
-   geometry.mappedGridDivergenceFromIntegratedFluxNormals( rhs_dfn, m_flux_normal );
-
-#ifdef TEST_ZERO_DIVERGENCE
-   LevelData<FArrayBox> velocity_divergence(dbl, 1, IntVect::Zero);
-   geometry.mappedGridDivergenceFromIntegratedFluxNormals( velocity_divergence, velocity_normal );
-#endif
-
-   // Divide by cell volume and negate
-   for (DataIterator dit( rhs_dfn.dataIterator() ); dit.ok(); ++dit) {
-      const PhaseBlockCoordSys&
-         block_coord_sys( geometry.getBlockCoordSys( dbl[dit] ) );
-      double fac( -1.0 / block_coord_sys.getMappedCellVolume() );
-      rhs_dfn[dit].mult( fac );
-#ifdef TEST_ZERO_DIVERGENCE
-      velocity_divergence[dit].mult( fac );
-#endif
-   }
-
-#ifdef TEST_ZERO_DIVERGENCE
-   double veldiv_norm = MaxNorm(velocity_divergence);
-   double rhs_norm = MaxNorm(rhs_dfn);
-   if (procID()==0) cout << "velocity divergence norm = " << veldiv_norm << ", rhs norm = " << rhs_norm << endl;
-#endif
-
 }
 
-
 void
-GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
-                   const KineticSpecies&                  a_soln_species,
-                   const CFG::LevelData<CFG::FArrayBox>&  a_Efield_cell,
-                   const CFG::LevelData<CFG::FArrayBox>&  a_phi_node,
-                   const bool                             a_fourth_order_Efield,
-                   const int                              a_velocity_option,
-                   const Real                             a_time )
+GKVlasov::computeAdvectionFluxPhys( const LevelData<FArrayBox>& a_dist_fn,
+                                    const LevelData<FluxBox>&   a_velocity,
+                                    LevelData<FluxBox>&         a_flux,
+                                    const PhaseGeom&            a_phase_geom )
 {
-   CH_TIME("GKVlasov::evalRHS");
-   
-   /*
-     Evaluates the (negated) phase space divergence:
-        rhs = - divergence_R ( R_dot soln ) - divergence_v ( v_dot soln )
-   */
-   const LevelData<FArrayBox>& soln_dfn( a_soln_species.distributionFunction() );
-   const DisjointBoxLayout& dbl( soln_dfn.getBoxes() );
-
-   const PhaseGeom& geometry( a_rhs_species.phaseSpaceGeometry() );
-   const CFG::MagGeom& mag_geom = geometry.magGeom();
-   
-   if ( !m_dfn_no_bstar.isDefined()) {
-     m_dfn_no_bstar.define( dbl, soln_dfn.nComp(), soln_dfn.ghostVect() );
-   }
-   for (DataIterator dit(dbl); dit.ok(); ++dit) {
-      m_dfn_no_bstar[dit].copy(soln_dfn[dit]);
-   }
-   geometry.divideBStarParallel(m_dfn_no_bstar);
-   
-   IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
-
-   if ( !m_velocity_normal.isDefined()) {
-     m_velocity_normal.define( dbl, 1, ghostVect );
-   }
-   
-   a_soln_species.computeMappedVelocityNormals( m_velocity_normal, 
-                                                a_Efield_cell, 
-                                                a_phi_node, 
-                                                a_fourth_order_Efield, 
-                                                a_velocity_option );
-   
-   if ( !m_flux_normal.isDefined()) {
-     m_flux_normal.define( dbl, 1, ghostVect );
-   }
-
-   // Compute normals of Vlasov_flux[dfn]
-   if (!m_subtract_maxwellian) {
-      computeFluxNormal( m_dfn_no_bstar, m_velocity_normal, m_flux_normal, geometry );
-   }
-
-   // Compute normals of Vlasov_flux[dfn-F0] + Vlasov_flux_high_order[F0]
-   else {
-      
-      if (!m_maxwellian_dfn.isDefined()) {
-        m_maxwellian_dfn.define(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
-      }
-      if (!m_delta_dfn.isDefined()) {
-         m_delta_dfn.define(dbl, soln_dfn.nComp(), soln_dfn.ghostVect());
-      }
-      
-      computeDeltaF(a_soln_species, m_dfn_no_bstar, m_delta_dfn, m_maxwellian_dfn);
-      
-      if (!m_delta_flux_normal.isDefined()) {
-         m_delta_flux_normal.define( dbl, 1, ghostVect );
-      }
- 
-      computeFluxNormal( m_delta_dfn, m_velocity_normal, m_delta_flux_normal, geometry );
- 
-      a_soln_species.computeMappedVelocityNormals(  m_velocity_normal, 
-                                                    a_Efield_cell, 
-                                                    a_phi_node, 
-                                                    a_fourth_order_Efield,
-                                                    PhaseGeom::NO_ZERO_ORDER_TERMS );
-
-      computeFluxNormal( m_maxwellian_dfn, m_velocity_normal, m_flux_normal, geometry);
-      
-      for (DataIterator dit(dbl); dit.ok(); ++dit) {
-         m_flux_normal[dit] += m_delta_flux_normal[dit];
-      }
-
-   }
-
-   // Enforce conservation
-   if (!mag_geom.extrablockExchange()) {
-      geometry.averageAtBlockBoundaries(m_flux_normal);
-   }
-   
-   LevelData<FArrayBox>& rhs_dfn( a_rhs_species.distributionFunction() );
-   geometry.mappedGridDivergenceFromIntegratedFluxNormals( rhs_dfn, m_flux_normal );
-
-#ifdef TEST_ZERO_DIVERGENCE
-   LevelData<FArrayBox> velocity_divergence(dbl, 1, IntVect::Zero);
-   geometry.mappedGridDivergenceFromIntegratedFluxNormals( velocity_divergence, m_velocity_normal );
-#endif
-
-   // Divide by cell volume and negate
-   for (DataIterator dit( rhs_dfn.dataIterator() ); dit.ok(); ++dit) {
-      const PhaseBlockCoordSys&
-         block_coord_sys( geometry.getBlockCoordSys( dbl[dit] ) );
-      double fac( -1.0 / block_coord_sys.getMappedCellVolume() );
-      rhs_dfn[dit].mult( fac );
-#ifdef TEST_ZERO_DIVERGENCE
-      velocity_divergence[dit].mult( fac );
-#endif
-   }
-
-#ifdef TEST_ZERO_DIVERGENCE
-   double veldiv_norm = MaxNorm(velocity_divergence);
-   double rhs_norm = MaxNorm(rhs_dfn);
-   if (procID()==0) cout << "velocity divergence norm = " << veldiv_norm << ", rhs norm = " << rhs_norm << endl;
-#endif
-
-}
-
-
-void
-GKVlasov::computeFlux( const LevelData<FArrayBox>& a_dist_fn,
-                       const LevelData<FluxBox>&   a_velocity,
-                       LevelData<FluxBox>&         a_flux,
-                       const PhaseGeom&            a_phase_geom )
-{
-   CH_TIMERS("GKVlasov::computeFlux");
+   CH_TIMERS("GKVlasov::computeAdvectionFluxPhys");
    CH_TIMER("compFaceAver", t_face_aver);
 
    /*
@@ -787,18 +620,18 @@ GKVlasov::computeFlux( const LevelData<FArrayBox>& a_dist_fn,
 
 
 void
-GKVlasov::computeFluxNormal( const LevelData<FArrayBox>& a_dist_fn,
-                             const LevelData<FluxBox>&   a_velocity_normal,
-                             LevelData<FluxBox>&         a_flux_normal,
-                             const PhaseGeom&            a_phase_geom )
+GKVlasov::computeAdvectionFluxMapped( const LevelData<FArrayBox>& a_dist_fn,
+                                      const LevelData<FluxBox>&   a_velocity_normal,
+                                      LevelData<FluxBox>&         a_flux_normal,
+                                      const PhaseGeom&            a_phase_geom )
 {
 
    /*
-      Compute the phase space flux normal given the input phase space advection
-      velocity normal.   This is where the hyperbolic stuff connects.
+      Compute the phase space flux normal integrated over a cell face.
+      This is where the hyperbolic stuff connects.
    */
 
-   CH_TIME("GKVlasov::computeFluxNormal");
+   CH_TIME("GKVlasov::computeAdvectionFluxMapped");
 
    // Construct appropriately accurate face-averages of phi and advVel
    IntVect ghostVect = (a_phase_geom.secondOrder()) ? IntVect::Zero : IntVect::Unit;
@@ -2364,7 +2197,7 @@ void GKVlasov::testPC( const GKVlasovAMG*         a_pc,
    LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Zero);
 
    // Compute Vlasov_flux[dfn]
-   computeFlux( vec_phys, a_velocity, flux, a_geometry );
+   computeAdvectionFluxPhys( vec_phys, a_velocity, flux, a_geometry );
    
    const bool OMIT_NT(false);
    a_geometry.mappedGridDivergence( pc_operator, flux, OMIT_NT );
@@ -2591,5 +2424,125 @@ GKVlasov::constructStencils( const LevelData<FluxBox>&               a_physical_
 
    }
 }
+
+void
+GKVlasov::computeIntegratedParticleFluxNormals(CFG::LevelData<CFG::FluxBox>&          a_flux_normal,
+                                               const KineticSpecies&                  a_soln_species,
+                                               const CFG::LevelData<CFG::FArrayBox>&  a_phi,
+                                               const CFG::EField&                     a_E_field,
+                                               const int                              a_velocity_option,
+                                               const Real                             a_time)
+{
+   /*
+      Computes normal particel flux integrated over a cell face
+    */
+   
+   const LevelData<FArrayBox>& soln_dfn( a_soln_species.distributionFunction() );
+   const DisjointBoxLayout& dbl( soln_dfn.getBoxes() );
+
+   const PhaseGeom& geometry( a_soln_species.phaseSpaceGeometry() );
+   const CFG::MagGeom& mag_geom = geometry.magGeom();
+   const CFG::DisjointBoxLayout& config_grids = a_flux_normal.getBoxes();
+   
+   IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
+   
+   MomentOp& moment_op = MomentOp::instance();
+   
+   if ( geometry.divFreeVelocity() ) {
+      bool fourth_order_Efield = !a_E_field.secondOrder();
+      
+      if ( !m_flux_normal.isDefined()) {
+         m_flux_normal.define( dbl, 1, ghostVect );
+      }
+   
+      computeIntegratedFluxNormals(m_flux_normal,
+                                   a_soln_species,
+                                   a_phi,
+                                   a_E_field.getCellCenteredField(),
+                                   a_E_field.getPhiNode(),
+                                   fourth_order_Efield,
+                                   a_velocity_option,
+                                   a_time);
+      
+      moment_op.compute( a_flux_normal, a_soln_species, m_flux_normal, DensityKernel<FluxBox>() );
+
+      const VEL::VelCoordSys& vel_coords = geometry.velSpaceCoordSys();
+      double vel_area = vel_coords.pointwiseJ(VEL::RealVect::Zero) * vel_coords.dx().product();
+
+      for (CFG::DataIterator dit(config_grids); dit.ok(); ++dit) {
+         a_flux_normal[dit] *= (1./vel_area);
+      }
+   }
+   
+   else {
+      if ( !m_flux.isDefined()) {
+         m_flux.define( dbl, SpaceDim, ghostVect );
+      }
+   
+      computePhysicalFlux(m_flux,
+                          a_soln_species,
+                          a_phi,
+                          a_E_field,
+                          a_velocity_option,
+                          a_time,
+                          true);
+      
+      const CFG::IntVect& ghosts = a_flux_normal.ghostVect();
+      
+      CFG::LevelData<CFG::FluxBox> phys_flux(config_grids, SpaceDim, ghosts);
+      moment_op.compute( phys_flux, a_soln_species, m_flux, DensityKernel<FluxBox>() );
+      
+      CFG::LevelData<CFG::FluxBox> phys_flux_cfg(config_grids, CFG_DIM, ghosts);
+      for (CFG::DataIterator dit(config_grids); dit.ok(); ++dit) {
+         for (int dir=0; dir<CFG_DIM; ++dir) {
+            phys_flux_cfg[dit][dir].copy(phys_flux[dit][dir],0,0,CFG_DIM);
+         }
+      }
+
+      // Compute NT * phys_flux * face_area
+      bool fourth_order = (mag_geom.secondOrder()) ? false : true;
+      
+      // computeMetricTermProductAverage will only work correctly if
+      // the assertions below are satisfied
+      if (fourth_order) {
+	CH_assert(a_flux_normal.ghostVect() == CFG::IntVect::Unit);
+	CH_assert(!geometry.secondOrder());
+      }
+      mag_geom.computeMetricTermProductAverage(a_flux_normal, phys_flux_cfg, fourth_order);
+   }
+}
+
+void
+GKVlasov::testZeroDivergence(const LevelData<FluxBox>&  a_velocity,
+                             const PhaseGeom&           a_geometry) const
+{
+   const DisjointBoxLayout& dbl = a_velocity.disjointBoxLayout();
+   LevelData<FArrayBox> velocity_divergence(dbl, 1, IntVect::Zero);
+   
+   // Test old velocity calculation
+   if (a_velocity.nComp() == SpaceDim) {
+      a_geometry.mappedGridDivergence( velocity_divergence, m_velocity, false );
+   }
+   // Test new velocity (a.k.a. divfree) calculation
+   else if (a_velocity.nComp() == 1) {
+      a_geometry.mappedGridDivergenceFromIntegratedFluxNormals( velocity_divergence, a_velocity );
+   }
+   else {
+      MayDay::Error("GKVlasov::testZeroDivergence: numer of velocity components must be either 1 or SpaceDim");
+   }
+
+   // Divide by mapped cell volume and negate to bring on the same footing as
+   // the RHS flux divergence
+   for (DataIterator dit( a_velocity.dataIterator() ); dit.ok(); ++dit) {
+      const PhaseBlockCoordSys&
+         block_coord_sys( a_geometry.getBlockCoordSys( dbl[dit] ) );
+      double fac( -1.0 / block_coord_sys.getMappedCellVolume() );
+      velocity_divergence[dit].mult( fac );
+   }
+
+   double veldiv_norm = MaxNorm(velocity_divergence);
+   if (procID()==0) cout << "velocity divergence norm = " << veldiv_norm << endl;
+}
+
 
 #include "NamespaceFooter.H"

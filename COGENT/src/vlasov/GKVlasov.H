@@ -40,7 +40,7 @@ public:
    /// Destructor.
    /**
     */
-   virtual ~GKVlasov() {};
+   virtual ~GKVlasov();
 
    virtual void accumulateRHS( GKRHSData&                             rhs,
                                const KineticSpeciesPtrVect&           kinetic_phys,
@@ -70,10 +70,6 @@ public:
                           const KineticSpeciesPtrVect& soln,
                           const Real&                  time );
 
-   void computeFluxNormal( const LevelData<FArrayBox>& dist_fn,
-                           const LevelData<FluxBox>&   velocity_normal,
-                           LevelData<FluxBox>&         flux_normal,
-                           const PhaseGeom&            phase_geom);
 
    static const char* pp_name;
    
@@ -110,43 +106,31 @@ public:
                          const Real                             time );
 
 
-   // Operator evaluation using a divergence-free phase space velocity computed from
-   // the cell-centered field (Efield_cell) and nodal potential (phi_node)
-   void evalRHSExplicit( KineticSpecies&                        rhs,
-                         const KineticSpecies&                  soln,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
-                         const bool                             fourth_order_Efield,
-                         const int                              velocity_option,
-                         const Real                             time );
+   void computePhysicalFlux(  LevelData<FluxBox>&                    flux_phys,
+                              const KineticSpecies&                  soln_species,
+                              const CFG::LevelData<CFG::FArrayBox>&  phi,
+                              const CFG::EField&                     E_field,
+                              const int                              velocity_option,
+                              const Real                             time,
+                              const bool                             apply_axisym_corr);
 
-   void evalRHSImplicit( KineticSpecies&                        rhs,
-                         const KineticSpecies&                  soln,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
-                         const bool                             fourth_order_Efield,
-                         const int                              velocity_option,
-                         const Real                             time );
-
-   void evalRHS(         KineticSpecies&                        rhs,
-                         const KineticSpecies&                  soln,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
-                         const bool                             fourth_order_Efield,
-                         const int                              velocity_option,
-                         const Real                             time );
-
-   void evalRHS(         KineticSpecies&                        rhs,
-                         const KineticSpecies&                  soln,
-                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
-                         const bool                             fourth_order_Efield,
-                         const int                              velocity_option,
-                         const Real                             time );
-
+   void computeIntegratedFluxNormals(LevelData<FluxBox>&                    flux_normal,
+                                     const KineticSpecies&                  soln_species,
+                                     const CFG::LevelData<CFG::FArrayBox>&  phi,
+                                     const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
+                                     const CFG::LevelData<CFG::FArrayBox>&  phi_node,
+                                     const bool                             fourth_order_Efield,
+                                     const int                              velocity_option,
+                                     const Real                             time );
+   
+   
+   void computeIntegratedParticleFluxNormals(CFG::LevelData<CFG::FluxBox>&          flux_normal,
+                                             const KineticSpecies&                  soln_species,
+                                             const CFG::LevelData<CFG::FArrayBox>&  phi,
+                                             const CFG::EField&                     E_field,
+                                             const int                              velocity_option,
+                                             const Real                             time);
+   
    void defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>&,
                              std::vector<DOFList>&,
                              const KineticSpeciesPtrVect&,
@@ -215,11 +199,16 @@ public:
 
   protected:
 
-   void computeFlux( const LevelData<FArrayBox>& dist_fn,
-                     const LevelData<FluxBox>&   velocity,
-                     LevelData<FluxBox>&         flux,
-                     const PhaseGeom&            phase_geom);
+   void computeAdvectionFluxPhys( const LevelData<FArrayBox>& dist_fn,
+                                  const LevelData<FluxBox>&   velocity,
+                                  LevelData<FluxBox>&         flux,
+                                  const PhaseGeom&            phase_geom);
 
+   void computeAdvectionFluxMapped( const LevelData<FArrayBox>& dist_fn,
+                                    const LevelData<FluxBox>&   velocity_normal,
+                                    LevelData<FluxBox>&         flux_normal,
+                                    const PhaseGeom&            phase_geom);
+   
    void applyMappedLimiter( LevelData<FluxBox>&         facePhi,
                             const LevelData<FArrayBox>& cellPhi,
                             const LevelData<FluxBox>&   faceVel,
@@ -247,6 +236,9 @@ public:
                       LevelData<FArrayBox>&         a_maxwellian_dfn);
    
    double globalMax(const double data) const;
+   
+   void testZeroDivergence(const LevelData<FluxBox>&  velocity,
+                           const PhaseGeom&           geometry) const;
 
    /// Initializes the kinetic species data.
    /**

@@ -23,7 +23,7 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
                                         const Real                  a_larmor_number,
                                         const Real                  a_debye_number,
                                         const LevelData<FArrayBox>& a_initial_ion_charge_density )
-   : GKPoisson(a_pp, a_geom, a_larmor_number, a_debye_number),
+   : GKPoisson(a_pp, a_geom, a_larmor_number, a_debye_number, true),
      m_flux_surface(a_geom),
      m_Zni_outer_plate(NULL),
      m_Zni_inner_plate(NULL),
@@ -62,28 +62,41 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
       }
 
 #ifdef with_petsc
-      m_precond_Qsolver = new MBPETScSolver(a_geom, precond_order, m_mblex_ptr);
+      m_precond_Qsolver = new MBPETScSolver(a_geom, 1, precond_order, m_mblex_ptr);
 #else
-      m_precond_Qsolver = new MBHypreSolver(a_geom, precond_order, m_mblex_ptr);
+      m_precond_Qsolver = new MBHypreSolver(a_geom, 1, precond_order, m_mblex_ptr);
 #endif
 
-      m_precond_Qsolver->setMethodParams(m_precond_method, m_precond_precond_method);
+      m_precond_Qsolver->setMethodParams(a_pp);
+      m_precond_Qsolver->setConvergenceParams(a_pp);
 
-      // Defaults; overridden if present in ParmParse object
-      string method = "AMG";
-      double tol = 0.;
-      int max_iter = 1;
-      bool verbose = false;
       ParmParse pp_Qsolver( ((string)a_pp.prefix() + ".Qsolver").c_str() );
-      parseMethodAndParams( pp_Qsolver, method, tol, max_iter, verbose);
 
-      // Defaults; overridden if present in ParmParse object
-      string precond_method;
-      double precond_tol = 0.;
-      int precond_max_iter = 0;
-      bool precond_verbose = false;
+      string method;
+      if ( pp_Qsolver.query("precond_method", method) == 0 ) method = "AMG";
+
+      double tol;
+      if ( pp_Qsolver.query("precond_tol", tol) == 0 ) tol = 0.;
+
+      int max_iter;
+      if ( pp_Qsolver.query("precond_max_iter", max_iter) == 0 ) max_iter = 1;
+
+      bool verbose;
+      if ( pp_Qsolver.query("precond_verbose", verbose) == 0 ) verbose = false;
+
       ParmParse pp_Qsolver_precond( ((string)pp_Qsolver.prefix() + ".precond").c_str() );
-      parseMethodAndParams( pp_Qsolver_precond, precond_method, precond_tol, precond_max_iter, precond_verbose);
+
+      string precond_method;
+      if ( pp_Qsolver_precond.query("precond_method", precond_method) == 0 ) precond_method = "AMG";
+
+      double precond_tol;
+      if ( pp_Qsolver_precond.query("precond_tol", precond_tol) == 0 ) precond_tol = 0.;
+
+      int precond_max_iter;
+      if ( pp_Qsolver_precond.query("precond_max_iter", precond_max_iter) == 0 ) precond_max_iter = 1;
+
+      bool precond_verbose;
+      if ( pp_Qsolver_precond.query("precond_verbose", precond_verbose) == 0 ) precond_verbose = false;
 
       m_precond_Qsolver->setConvergenceParams(tol, max_iter, verbose, precond_tol, precond_max_iter, precond_verbose);
    }

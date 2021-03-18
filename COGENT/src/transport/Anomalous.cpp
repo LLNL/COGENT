@@ -87,6 +87,7 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
       // get coordinate system parameters
       const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
       const CFG::MagGeom& mag_geom = phase_geom.magGeom();
+      const CFG::DisjointBoxLayout& mag_grids = mag_geom.grids();
       const LevelData<FArrayBox>& inj_B = phase_geom.getBFieldMagnitude();
       const ProblemDomain& phase_domain = phase_geom.domain();
       const Box& domain_box = phase_domain.domainBox();
@@ -117,24 +118,24 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
 
 
       if (m_simple_diffusion) {
-  	 CH_START(t_get_moments);
+         CH_START(t_get_moments);
          // Create density, mean parallel velocity, temperature, and fourth moment coefficient
-         CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-         CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-         CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-         CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-         CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_grids, 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_grids, 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_grids, 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> four_cfg(mag_grids, 1, cfg_ghostVect);
+         CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_grids, 1, cfg_ghostVect);
          
          phase_geom.injectConfigurationToPhase(dens_cfg, m_density);
          phase_geom.injectConfigurationToPhase(Upar_cfg, m_Upar);
          phase_geom.injectConfigurationToPhase(temp_cfg, m_temperature);
          phase_geom.injectConfigurationToPhase(four_cfg, m_fourth_coef);
          phase_geom.injectConfigurationToPhase(perp_cfg, m_perp_coef);
-	 CH_STOP(t_get_moments);
+         CH_STOP(t_get_moments);
       }
          
       else if ((m_update_freq < 0) || (m_it_counter % m_update_freq == 0 && m_first_stage) || m_first_call) {
-	 CH_START(t_get_moments);
+         CH_START(t_get_moments);
          // Update density, mean parallel velocity, temperature, and fourth moment coefficient
          CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, cfg_ghostVect);
          CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, cfg_ghostVect);
@@ -142,15 +143,15 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
          CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, cfg_ghostVect);
          CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
 
-         m_moment_op.compute(dens_cfg, soln_species, m_fB, DensityKernel());
-         m_moment_op.compute(Upar_cfg, soln_species, m_fB, ParallelMomKernel());
-         m_moment_op.compute(four_cfg, soln_species, m_fB, FourthMomentKernel());
-         m_moment_op.compute(perp_cfg, soln_species, m_fB, PerpEnergyKernel());
+         m_moment_op.compute(dens_cfg, soln_species, m_fB, DensityKernel<FArrayBox>());
+         m_moment_op.compute(Upar_cfg, soln_species, m_fB, ParallelMomKernel<FArrayBox>());
+         m_moment_op.compute(four_cfg, soln_species, m_fB, FourthMomentKernel<FArrayBox>());
+         m_moment_op.compute(perp_cfg, soln_species, m_fB, PerpEnergyKernel<FArrayBox>());
          CFG::DataIterator cfg_dit = dens_cfg.dataIterator();
          for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
             Upar_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
          }
-         m_moment_op.compute(temp_cfg, soln_species, m_fB, PressureKernel(Upar_cfg));
+         m_moment_op.compute(temp_cfg, soln_species, m_fB, PressureKernel<FArrayBox>(Upar_cfg));
 
          for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
             four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by pressure
@@ -163,12 +164,31 @@ void Anomalous::evalTpmRHS( KineticSpecies&               rhs_species,
             four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by temperature
          }
 
-	 phase_geom.injectConfigurationToPhase(dens_cfg, m_density);
+         // Perform extrapolation into ghosts to avoid possible division by zero
+         // (can occur for some BC choices, e.g., zero inflow BC)
+         for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+            const CFG::MagBlockCoordSys& cfg_block_coord_sys = mag_geom.getBlockCoordSys(mag_grids[cfg_dit]);
+            const CFG::ProblemDomain& cfg_domain = cfg_block_coord_sys.domain();
+                     
+            secondOrderCellExtrapAtDomainBdry(dens_cfg[cfg_dit], mag_grids[cfg_dit], cfg_domain);
+            secondOrderCellExtrapAtDomainBdry(Upar_cfg[cfg_dit], mag_grids[cfg_dit], cfg_domain);
+            secondOrderCellExtrapAtDomainBdry(temp_cfg[cfg_dit], mag_grids[cfg_dit], cfg_domain);
+            secondOrderCellExtrapAtDomainBdry(four_cfg[cfg_dit], mag_grids[cfg_dit], cfg_domain);
+            secondOrderCellExtrapAtDomainBdry(perp_cfg[cfg_dit], mag_grids[cfg_dit], cfg_domain);
+         }
+         mag_geom.fillInternalGhosts( dens_cfg );
+         mag_geom.fillInternalGhosts( Upar_cfg );
+         mag_geom.fillInternalGhosts( temp_cfg );
+         mag_geom.fillInternalGhosts( four_cfg );
+         mag_geom.fillInternalGhosts( perp_cfg );
+         
+         //Inject into phase-space
+         phase_geom.injectConfigurationToPhase(dens_cfg, m_density);
          phase_geom.injectConfigurationToPhase(Upar_cfg, m_Upar);
          phase_geom.injectConfigurationToPhase(temp_cfg, m_temperature);
          phase_geom.injectConfigurationToPhase(four_cfg, m_fourth_coef);
          phase_geom.injectConfigurationToPhase(perp_cfg, m_perp_coef);
-	 CH_STOP(t_get_moments);
+         CH_STOP(t_get_moments);
       }
       
       if (m_first_call) {
@@ -855,7 +875,8 @@ Anomalous::computeBeta(LevelData<FArrayBox>& a_beta,
    const LevelData<FArrayBox>& soln_fB = a_soln_species.distributionFunction();
    const DisjointBoxLayout& dbl = soln_fB.getBoxes();
    const PhaseGeom& phase_geom = a_soln_species.phaseSpaceGeometry();
-   const CFG::MultiBlockLevelGeom & mag_geom = phase_geom.magGeom();
+   const CFG::MagGeom & mag_geom = phase_geom.magGeom();
+   const CFG::DisjointBoxLayout& mag_grids = mag_geom.grids();
    const LevelData<FArrayBox>& inj_B = phase_geom.getBFieldMagnitude();
    double mass = a_soln_species.mass();
    const ProblemDomain& phase_domain = phase_geom.domain();
@@ -873,21 +894,21 @@ Anomalous::computeBeta(LevelData<FArrayBox>& a_beta,
    if ((m_update_freq < 0) || (m_it_counter % m_update_freq == 0) || m_first_call) {
       
       CFG::IntVect	cfg_ghostVect =	CFG::IntVect::Unit;
-      CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-      CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-      CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-      CFG::LevelData<CFG::FArrayBox> four_cfg(mag_geom.grids(), 1, cfg_ghostVect);
-      CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> dens_cfg(mag_grids, 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_grids, 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> temp_cfg(mag_grids, 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> four_cfg(mag_grids, 1, cfg_ghostVect);
+      CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_grids, 1, cfg_ghostVect);
 
-      m_moment_op.compute(dens_cfg, a_soln_species, m_fB_beta, DensityKernel());
-      m_moment_op.compute(Upar_cfg, a_soln_species, m_fB_beta, ParallelMomKernel());
-      m_moment_op.compute(four_cfg, a_soln_species, m_fB_beta, FourthMomentKernel());
-      m_moment_op.compute(perp_cfg, a_soln_species, m_fB_beta, PerpEnergyKernel());
+      m_moment_op.compute(dens_cfg, a_soln_species, m_fB_beta, DensityKernel<FArrayBox>());
+      m_moment_op.compute(Upar_cfg, a_soln_species, m_fB_beta, ParallelMomKernel<FArrayBox>());
+      m_moment_op.compute(four_cfg, a_soln_species, m_fB_beta, FourthMomentKernel<FArrayBox>());
+      m_moment_op.compute(perp_cfg, a_soln_species, m_fB_beta, PerpEnergyKernel<FArrayBox>());
       CFG::DataIterator cfg_dit = dens_cfg.dataIterator();
       for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
          Upar_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
       }
-      m_moment_op.compute(temp_cfg, a_soln_species, m_fB_beta, PressureKernel(Upar_cfg));
+      m_moment_op.compute(temp_cfg, a_soln_species, m_fB_beta, PressureKernel<FArrayBox>(Upar_cfg));
 
       for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
          four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by pressure
@@ -900,6 +921,24 @@ Anomalous::computeBeta(LevelData<FArrayBox>& a_beta,
          four_cfg[cfg_dit].divide(temp_cfg[cfg_dit]); // dividing by temperature
       }
 
+      // Perform extrapolation into ghosts to avoid division by zero
+      // (can occur for some BC choises)
+      for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
+         const CFG::MagBlockCoordSys& cfg_block_coord_sys = mag_geom.getBlockCoordSys(mag_grids[cfg_dit]);
+         const CFG::ProblemDomain& cfg_domain = cfg_block_coord_sys.domain();
+                  
+         secondOrderCellExtrapAtDomainBdry(dens_cfg[cfg_dit], mag_grids[cfg_dit], cfg_domain);
+         secondOrderCellExtrapAtDomainBdry(Upar_cfg[cfg_dit], mag_grids[cfg_dit], cfg_domain);
+         secondOrderCellExtrapAtDomainBdry(temp_cfg[cfg_dit], mag_grids[cfg_dit], cfg_domain);
+         secondOrderCellExtrapAtDomainBdry(four_cfg[cfg_dit], mag_grids[cfg_dit], cfg_domain);
+         secondOrderCellExtrapAtDomainBdry(perp_cfg[cfg_dit], mag_grids[cfg_dit], cfg_domain);
+      }
+      mag_geom.fillInternalGhosts( dens_cfg );
+      mag_geom.fillInternalGhosts( Upar_cfg );
+      mag_geom.fillInternalGhosts( temp_cfg );
+      mag_geom.fillInternalGhosts( four_cfg );
+      mag_geom.fillInternalGhosts( perp_cfg );
+      
       phase_geom.injectConfigurationToPhase(dens_cfg, m_density_beta);
       phase_geom.injectConfigurationToPhase(Upar_cfg, m_Upar_beta);
       phase_geom.injectConfigurationToPhase(temp_cfg, m_temperature_beta);

@@ -725,7 +725,8 @@ void GKOps::explicitOp( GKRHSData&      a_rhs,
    }
 
    if (m_neutrals_model_on) {
-      applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
+      applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys,
+                             m_fluid_species_phys, a_time );
    }
 
    applyCollisionOperator( a_rhs.dataKinetic(), a_state_comp.dataKinetic(), unsplit, a_time );
@@ -754,7 +755,8 @@ void GKOps::explicitOpImEx( GKRHSData&      a_rhs,
    applyCollisionOperator( a_rhs.dataKinetic(), a_state_comp.dataKinetic(), imex_exp, a_time );
 
    if (m_neutrals_model_on && (!m_neutrals_imex_implicit) ) {
-      applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
+      applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys,
+                             m_fluid_species_phys, a_time );
    }
 
    applyFluidOperator( a_rhs.dataFluid(), m_kinetic_species_phys, m_fluid_species_phys,
@@ -790,7 +792,8 @@ void GKOps::implicitOpImEx( GKRHSData&      a_rhs,
    applyCollisionOperator( a_rhs.dataKinetic(), a_state_comp.dataKinetic(), imex_imp, a_time );
 
    if (m_neutrals_model_on && (m_neutrals_imex_implicit) ) {
-      applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
+      applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys,
+                             m_fluid_species_phys, a_time );
    }
     
    applyFluidOperator( a_rhs.dataFluid(), m_kinetic_species_phys, m_fluid_species_phys,
@@ -852,7 +855,8 @@ void GKOps::explicitPC( GKRHSData&     a_rhs,
    }
 
    if (m_neutrals_model_on) {
-      applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys, a_time );
+      applyNeutralsOperator( a_rhs.dataKinetic(), m_kinetic_species_phys,
+                             m_fluid_species_phys, a_time );
    }
 
    applyCollisionOperator( a_rhs.dataKinetic(), a_state.dataKinetic(), unsplit, a_time );
@@ -1268,12 +1272,13 @@ void GKOps::applyTransportOperator( KineticSpeciesPtrVect&       a_rhs,
 }
 
 inline
-void GKOps::applyNeutralsOperator( KineticSpeciesPtrVect&       a_rhs,
-                                   const KineticSpeciesPtrVect& a_soln,
-                                   const Real&                  a_time )
+void GKOps::applyNeutralsOperator( KineticSpeciesPtrVect&            a_rhs,
+                                   const KineticSpeciesPtrVect&      a_kinetic_species_phys,
+                                   const CFG::FluidSpeciesPtrVect&   a_fluid_species_phys,
+                                   const Real&                       a_time )
 {
     m_count_neutrals++;
-    m_neutrals->accumulateRHS( a_rhs, a_soln, a_time );
+    m_neutrals->accumulateRHS( a_rhs, a_kinetic_species_phys, a_fluid_species_phys, a_time );
     
 }
 
@@ -1742,7 +1747,7 @@ void GKOps::plotExBData(const std::string& a_filename,
       ExB_drift[dit].mult(larmor_number);
    }
    
-   CFG::LevelData<CFG::FArrayBox> ExB_data( grids, 3, CFG::IntVect::Zero);
+   CFG::LevelData<CFG::FArrayBox> ExB_data( grids, 4, CFG::IntVect::Zero);
    CFG::LevelData<CFG::FArrayBox> tmp( grids, 1, CFG::IntVect::Zero);
    
    // Compute radial component of ExB velocity
@@ -1769,6 +1774,15 @@ void GKOps::plotExBData(const std::string& a_filename,
       ExB_data[dit].mult(-1.0,2,1);
    }
 
+   // Compute flux surface average of the ExB shear
+   CFG::FluxSurface flux_surface(mag_geom);
+   CFG::LevelData<CFG::FArrayBox> negative_ExB_shear_axisym( grids, 1, CFG::IntVect::Zero);
+   flux_surface.averageAndSpread(tmp, negative_ExB_shear_axisym);
+   for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
+      ExB_data[dit].copy(negative_ExB_shear_axisym[dit],0,3,1);
+      ExB_data[dit].mult(-1.0,3,1);
+   }
+   
    phase_geometry.plotConfigurationData( a_filename.c_str(), ExB_data, a_time );
 }
 
@@ -1896,7 +1910,7 @@ void GKOps::plotDeltaF( const std::string&    a_filename,
 
    const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
    LevelData<FArrayBox> deltaF( species_geometry.gridsFull(), 1, IntVect::Zero );
-   DeltaFKernel DeltaF_Kernel(density, pressure, ParallelMom);
+   DeltaFKernel<FArrayBox> DeltaF_Kernel(density, pressure, ParallelMom);
    DeltaF_Kernel.eval(deltaF, a_soln_species);
 
    species_geometry.plotData( a_filename.c_str(), deltaF, a_time );

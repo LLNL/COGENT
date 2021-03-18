@@ -27,14 +27,18 @@ class VorticityOp
 {
 public:
 
+  /// Null constructor (used for state variable creation) 
+  VorticityOp( const MagGeom&  geometry )
+     : m_geometry(geometry) {};
+   
   /// Constructor with initialization.
   /**
    *  @param[in] pp the input database.
    */
-  VorticityOp( const ParmParse&   a_pp,
-               const MagGeom&     a_geometry,
-               const double       a_larmor,
-               const int          a_verbosity );
+  VorticityOp( const ParmParse&   pp,
+               const MagGeom&     geometry,
+               const double       larmor,
+               const int          verbosity );
 
   /// Destructor.
   /**
@@ -228,8 +232,11 @@ private:
    bool m_sigma_div_e_coefs_set;
    bool	m_reynolds_stress;
    bool m_ExB_current_model;
-   bool m_include_pol_den_corrections;
-   bool m_include_pol_den_corrections_to_pe;
+   bool m_include_pol_den_correction;
+   bool m_include_pol_den_correction_precond;
+   bool m_include_pol_den_correction_to_pe;
+   bool m_second_order;
+   bool m_low_pollution;
    bool m_remove_axisymmetric_phi;
    bool m_consistent_lower_bc_only;
    bool m_consistent_upper_bc_only;

@@ -42,30 +42,86 @@ public:
 
    virtual void dumpMatrix(const string& file_name) const = 0;
 
+   virtual void initializeMatrix() = 0;
+
+   virtual void finalizeMatrix() = 0;
+
+   virtual void setMethodParams( const ParmParse&  pp ) = 0;
+
+   void setConvergenceParams( const ParmParse&  pp );
+
+   void setConvergenceParams( const double  method_tol,
+                              const int     method_max_iter,
+                              const bool    method_verbose,
+                              const double  precond_tol,
+                              const int     precond_max_iter,
+                              const bool    precond_verbose );
+
    void constructMatrix( LevelData<FluxBox>&   tensor_coefficient,
                          const EllipticOpBC&   bc );
+
+   void constructMatrixBlock( const int             block_row,
+                              const int             block_column,
+                              LevelData<FluxBox>&   tensor_coefficient,
+                              const EllipticOpBC&   bc );
 
    void constructMatrix( LevelData<FArrayBox>& alpha_coefficient,
                          LevelData<FluxBox>&   tensor_coefficient,
                          const EllipticOpBC&   bc );
 
+   void constructMatrixBlock( const int             block_row,
+                              const int             block_column,
+                              LevelData<FArrayBox>& alpha_coefficient,
+                              LevelData<FluxBox>&   tensor_coefficient,
+                              const EllipticOpBC&   bc );
+
    void constructMatrix( LevelData<FluxBox>&   tensor_coefficient,
                          LevelData<FArrayBox>& beta_coefficient,
                          const EllipticOpBC&   bc );
+
+   void constructMatrixBlock( const int             block_row,
+                              const int             block_column,
+                              LevelData<FluxBox>&   tensor_coefficient,
+                              LevelData<FArrayBox>& beta_coefficient,
+                              const EllipticOpBC&   bc );
 
    void constructMatrix( LevelData<FArrayBox>& alpha_coefficient,
                          LevelData<FluxBox>&   tensor_coefficient,
                          LevelData<FArrayBox>& beta_coefficient,
                          const EllipticOpBC&   bc );
+
+   void constructMatrixBlock( const int             block_row,
+                              const int             block_column,
+                              LevelData<FArrayBox>& alpha_coefficient,
+                              LevelData<FluxBox>&   tensor_coefficient,
+                              LevelData<FArrayBox>& beta_coefficient,
+                              const EllipticOpBC&   bc );
 
    const LevelData<FArrayBox>& getBCRhsContrib() const {return m_rhs_from_bc;}
 
+   string getMethod() const {return m_method;}
+   double getTol() const {return m_method_tol;}
+   int getMaxIter() const {return m_method_max_iter;}
+   bool getVerbose() const {return m_method_verbose;}
+
+   string getPrecondMethod() const {return m_precond_method;}
+   double getPrecondTol() const {return m_precond_tol;}
+   int getPrecondMaxIter() const {return m_precond_max_iter;}
+   bool getPrecondVerbose() const {return m_precond_verbose;}
+
 protected:
 
-   virtual void constructMatrixGeneral( LevelData<FArrayBox>& alpha_coefficient,
-                                        LevelData<FluxBox>&   tensor_coefficient,
-                                        LevelData<FArrayBox>& beta_coefficient,
-                                        const EllipticOpBC&   bc ) = 0;
+   virtual void constructMatrixGeneral( LevelData<FArrayBox>&  alpha_coefficient,
+                                        LevelData<FluxBox>&    tensor_coefficient,
+                                        LevelData<FArrayBox>&  beta_coefficient,
+                                        const EllipticOpBC&    bc ) = 0;
+
+   virtual void constructMatrixBlockGeneral( const int              block_row,
+                                             const int              block_column,
+                                             LevelData<FArrayBox>&  alpha_coefficient,
+                                             LevelData<FluxBox>&    tensor_coefficient,
+                                             LevelData<FArrayBox>&  beta_coefficient,
+                                             const EllipticOpBC&    bc ) = 0;
 
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
@@ -147,6 +203,19 @@ protected:
    LevelData<FArrayBox> m_rhs_from_bc;
 
    int m_discretization_order;
+
+   string m_method;
+   double m_method_tol;
+   int m_method_max_iter;
+   bool m_method_verbose;
+
+   string m_precond_method;
+   double m_precond_tol;
+   int m_precond_max_iter;
+   bool m_precond_verbose;
+
+   bool m_method_params_set;
+   bool m_convergence_params_set;
 
    bool m_mblex_defined_locally;
    bool m_flux_average[SpaceDim];

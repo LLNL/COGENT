@@ -5,6 +5,7 @@
 #include "SingleNullConfigurationBC.H"
 #include "SNCoreConfigurationBC.H"
 #include "LogRectConfigurationBC.H"
+#include "SingleNullBlockCoordSys.H"
 
 #include <string>
 
@@ -52,7 +53,8 @@ FluidVarBC* FluidVarBCFactory::create( const std::string&  a_species_name,
    FluidVarBC* result(NULL);
 
    if (a_coord_sys_type == "SingleNull" ) {
-      result = new SingleNullConfigurationBC( a_species_name, a_variable_name, a_verbosity );
+      int poloidal_blocks_per_sector = SingleNullBlockCoordSys::NUM_POLOIDAL_BLOCKS;
+      result = new SingleNullConfigurationBC( a_species_name, a_variable_name, poloidal_blocks_per_sector, a_verbosity );
    }
    else if (a_coord_sys_type == "SNCore" ) {
       result = new SNCoreConfigurationBC( a_species_name, a_variable_name, a_verbosity );
@@ -60,9 +62,6 @@ FluidVarBC* FluidVarBCFactory::create( const std::string&  a_species_name,
    else if (a_coord_sys_type == "LogicallyRectangular" ) {
       result = new LogRectConfigurationBC( a_species_name, a_variable_name, a_verbosity );
    }
-   //   else if (a_coord_sys_type == ... ) {
-   //      result = new ...
-   //   }
    else {
       MayDay::Error( "FluidVarBCFactory: Unimplemented boundary condition for given coordinate system type" );
    }

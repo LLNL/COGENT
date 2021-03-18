@@ -9,18 +9,21 @@
 
 #include "NamespaceHeader.H"
 
+
 class KineticSpecies;
 
 /// Kernel interface.
 /**
  * This is a function object that is used to compute the moment integrand.
  */
+
+template <class T>
 class Kernel
 {
    public:
   
       /// virtual destructor to prevent compiler complaints (DFM 2/4/09)
-      virtual ~Kernel() {;}
+      virtual ~Kernel<T>() {;}
 
       /// Computes the kernel.
       /**
@@ -40,7 +43,7 @@ class Kernel
        * @param[out] result Cell-averaged integrand
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const = 0;
 
       /// Returns the kernel scale.
@@ -61,29 +64,32 @@ class Kernel
        */
       virtual int nComponents() const = 0;
     
-      ///Computes cell-centered physical velocity components (e.g., V_R, V_Z)
-      virtual void computeCellVelCfgComp(LevelData<FArrayBox>&     velCell,
-                                         const PhaseGeom&          phase_geom,
-                                         const LevelData<FluxBox>& field,
-                                         const int                 option) const;
+      ///Computes physical velocity components (e.g., V_R, V_Z) in configuration directions
 
-      ///Computes cell-centered projections of the physical velocity components onto normals
-      virtual void computeCellVelCfgCompNormals(LevelData<FArrayBox>&     velCell,
-                                                const PhaseGeom&          phase_geom,
-                                                const LevelData<FluxBox>& field,
-                                                const int                 option) const;
+      virtual void computeVelCfgComp(LevelData<T>&             vel_cfg_comp,
+                                     const PhaseGeom&          phase_geom,
+                                     const LevelData<FluxBox>& field,
+                                     const int                 option) const;
+
+      ///Computes projections of the physical velocity components onto normals in configuration directions
+
+      virtual void computeVelCfgCompNormals(LevelData<T>&             vel_cfg_comp,
+                                            const PhaseGeom&          phase_geom,
+                                            const LevelData<FluxBox>& field,
+                                            const int                 option) const;
 
 };
 
 /// Density kernel.
 /**
  */
-class DensityKernel : public Kernel
+template <class T>
+class DensityKernel : public Kernel<T>
 {
    public:
 
       /// destructor to prevent compiler from complaining (DFM 2/4/09)
-      virtual ~DensityKernel() {;}
+      virtual ~DensityKernel<T>() {;}
 
       /// Computes the kernel.
       /**
@@ -93,7 +99,7 @@ class DensityKernel : public Kernel
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
       */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -119,7 +125,8 @@ class DensityKernel : public Kernel
 /// Charge density kernel.
 /**
  */
-class ChargeDensityKernel : public Kernel
+template <class T>
+class ChargeDensityKernel : public Kernel<T>
 {
    public:
 
@@ -133,7 +140,7 @@ class ChargeDensityKernel : public Kernel
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -159,7 +166,8 @@ class ChargeDensityKernel : public Kernel
 /// Mass density kernel.
 /**
  */
-class MassDensityKernel : public Kernel
+template <class T>
+class MassDensityKernel : public Kernel<T>
 {
    public:
 
@@ -173,7 +181,7 @@ class MassDensityKernel : public Kernel
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -199,7 +207,8 @@ class MassDensityKernel : public Kernel
 /// Momentum kernel.
 /**
  */
-class MomentumDensityKernel : public Kernel
+template <class T>
+class MomentumDensityKernel : public Kernel<T>
 {
    public:
 
@@ -208,7 +217,8 @@ class MomentumDensityKernel : public Kernel
       *  Initialized with field, which is used to get phase-velocity
       */
 
-      MomentumDensityKernel( const LevelData<FluxBox>& field );
+      MomentumDensityKernel( const LevelData<FluxBox>& field )
+         : m_field(field) {;}
       
       /// virtual destructor added to silence compiler complaints (MAD 1/5/18)
       virtual ~MomentumDensityKernel() {;}
@@ -223,7 +233,7 @@ class MomentumDensityKernel : public Kernel
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -253,7 +263,8 @@ private:
 /// 4th Moment kernel (used for transport models).
 /**
  */
-class FourthMomentKernel : public Kernel
+template <class T>
+class FourthMomentKernel : public Kernel<T>
 {
    public:
 
@@ -279,7 +290,7 @@ class FourthMomentKernel : public Kernel
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -304,11 +315,13 @@ class FourthMomentKernel : public Kernel
 /// Pressure kernel.
 /**
  */
-class PressureKernel : public Kernel
+template <class T>
+class PressureKernel : public Kernel<T>
 {
    public:
 
-      PressureKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift);
+      PressureKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
+         : m_v_parallel_shift(v_parallel_shift) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
       virtual ~PressureKernel() {;}
@@ -331,7 +344,7 @@ class PressureKernel : public Kernel
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -358,11 +371,13 @@ class PressureKernel : public Kernel
 
 };
 
-class ParallelPressureKernel : public Kernel
+template <class T>
+class ParallelPressureKernel : public Kernel<T>
 {
    public:
 
-      ParallelPressureKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift);
+      ParallelPressureKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
+         : m_v_parallel_shift(v_parallel_shift) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
       virtual ~ParallelPressureKernel() {;}
@@ -385,7 +400,7 @@ class ParallelPressureKernel : public Kernel
        * @param[out] result Cell-averaged integrand.
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -412,7 +427,8 @@ class ParallelPressureKernel : public Kernel
 
 };
 
-class PerpPressureKernel : public Kernel
+template <class T>
+class PerpPressureKernel : public Kernel<T>
 {
    public:
 
@@ -437,7 +453,7 @@ class PerpPressureKernel : public Kernel
        * @param[out] result Cell-averaged integrand.
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -463,11 +479,13 @@ class PerpPressureKernel : public Kernel
 /// Parallel heat flux kernel.
 /**
  */
-class ParallelHeatFluxKernel : public Kernel
+template <class T>
+class ParallelHeatFluxKernel : public Kernel<T>
 {
 public:
    
-   ParallelHeatFluxKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift);
+   ParallelHeatFluxKernel(const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
+      : m_v_parallel_shift(v_parallel_shift) {;}
    
    /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
    virtual ~ParallelHeatFluxKernel() {;}
@@ -491,7 +509,7 @@ public:
     * @param[out] result Cell-averaged integrand.
     * @param[in] kinetic_species Kinetic species object.
     */
-   virtual void eval( LevelData<FArrayBox>& result,
+   virtual void eval( LevelData<T>& result,
                      const KineticSpecies& kinetic_species ) const;
    
    /// Returns the kernel scale.
@@ -521,7 +539,8 @@ private:
 /// Energy kernel.
 /**
  */
-class EnergyKernel : public Kernel
+template <class T>
+class EnergyKernel : public Kernel<T>
 {
    public:
 
@@ -546,7 +565,7 @@ class EnergyKernel : public Kernel
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -572,7 +591,8 @@ class EnergyKernel : public Kernel
 /// perp energy kernel.
 /**
  */
-class PerpEnergyKernel : public Kernel
+template <class T>
+class PerpEnergyKernel : public Kernel<T>
 {
    public:
 
@@ -587,7 +607,7 @@ class PerpEnergyKernel : public Kernel
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -612,7 +632,8 @@ class PerpEnergyKernel : public Kernel
 /// Parallel Energy kernel.
 /**
  */
-class ParallelEnergyKernel : public Kernel
+template <class T>
+class ParallelEnergyKernel : public Kernel<T>
 {
    public:
 
@@ -637,7 +658,7 @@ class ParallelEnergyKernel : public Kernel
        * @param[out] result Cell-averaged integrand.
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -663,7 +684,8 @@ class ParallelEnergyKernel : public Kernel
 /// Parallel momentum kernel.
 /**
  */
-class ParallelMomKernel : public Kernel
+template <class T>
+class ParallelMomKernel : public Kernel<T>
 {
    public:
 
@@ -688,7 +710,7 @@ class ParallelMomKernel : public Kernel
        * @param[out] result Cell-averaged integrand.
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -713,14 +735,16 @@ class ParallelMomKernel : public Kernel
 /// Particle flux kernel.
 /**
  */
-class ParticleFluxKernel : public Kernel
+template <class T>
+class ParticleFluxKernel : public Kernel<T>
 {
    public:
        /// Constructor with initialization.
        /**
         *  Initialized with potentail, which is used to get phase-velocity
         */
-       ParticleFluxKernel( const LevelData<FluxBox>& field );
+       ParticleFluxKernel( const LevelData<FluxBox>& field )
+          : m_field(field) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
       virtual ~ParticleFluxKernel() {;}
@@ -743,7 +767,7 @@ class ParticleFluxKernel : public Kernel
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -772,7 +796,8 @@ class ParticleFluxKernel : public Kernel
 /// Heat flux kernel.
 /**
  */
-class HeatFluxKernel : public Kernel
+template <class T>
+class HeatFluxKernel : public Kernel<T>
 {
    public:
        /// Constructor with initialization.
@@ -780,7 +805,9 @@ class HeatFluxKernel : public Kernel
         *  Initialized with potentail, which is used to get phase-velocity
         */
        HeatFluxKernel( const LevelData<FluxBox>& field,
-                       const LevelData<FArrayBox>& phi);
+                       const LevelData<FArrayBox>& phi)
+          : m_field(field),
+            m_phi(phi) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
       virtual ~HeatFluxKernel() {;}
@@ -803,7 +830,7 @@ class HeatFluxKernel : public Kernel
        * @param[out] result Cell-averaged integrand.
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -834,14 +861,16 @@ class HeatFluxKernel : public Kernel
 /// Perpendicular current density kernel.
 /**
  */
-class PerpCurrentDensityKernel : public Kernel
+template <class T>
+class PerpCurrentDensityKernel : public Kernel<T>
 {
 public:
    /// Constructor with initialization.
    /**
     *  Initialized with potentail, which is used to get phase-velocity
     */
-   PerpCurrentDensityKernel( const LevelData<FluxBox>& field );
+   PerpCurrentDensityKernel( const LevelData<FluxBox>& field )
+      : m_field(field) {;}
    
    /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
    virtual ~PerpCurrentDensityKernel() {;}
@@ -864,7 +893,7 @@ public:
     * @param[out] result Cell-averaged integrand.
     * @param[in] kinetic_species Kinetic species object.
     */
-   virtual void eval( LevelData<FArrayBox>& result,
+   virtual void eval( LevelData<T>& result,
                      const KineticSpecies& kinetic_species ) const;
    
    /// Returns the kernel scale.
@@ -894,14 +923,16 @@ private:
 /// Guding Center Poloidal Momentum moment.
 /**
  */
-class GuidingCenterPoloidalMomKernel : public Kernel
+template <class T>
+class GuidingCenterPoloidalMomKernel : public Kernel<T>
 {
    public:
        /// Constructor with initialization.
        /**
         *  Initialized with potentail, which is used to get phase-velocity
         */
-       GuidingCenterPoloidalMomKernel( const LevelData<FluxBox>& field );
+       GuidingCenterPoloidalMomKernel( const LevelData<FluxBox>& field )
+          : m_field(field) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
       virtual ~GuidingCenterPoloidalMomKernel() {;}
@@ -924,7 +955,7 @@ class GuidingCenterPoloidalMomKernel : public Kernel
        * @param[out] result Cell-averaged integrand.
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -953,7 +984,8 @@ class GuidingCenterPoloidalMomKernel : public Kernel
 /// Magnetization kernel.
 /**
  */
-class MagnetizationKernel : public Kernel
+template <class T>
+class MagnetizationKernel : public Kernel<T>
 {
 public:
    
@@ -978,7 +1010,7 @@ public:
     * @param[out] result Cell-averaged integrand.
     * @param[in] kinetic_species Kinetic species object.
     */
-   virtual void eval( LevelData<FArrayBox>& result,
+   virtual void eval( LevelData<T>& result,
                       const KineticSpecies& kinetic_species ) const;
    
    /// Returns the kernel scale.
@@ -1003,7 +1035,8 @@ public:
 /// Delta F kernel.
 /**
  */
-class DeltaFKernel : public Kernel
+template <class T>
+class DeltaFKernel : public Kernel<T>
 {
    public:
        /// Constructor with initialization.
@@ -1011,9 +1044,11 @@ class DeltaFKernel : public Kernel
         *  Initialized with potentail, which is used to get phase-velocity
         */
        DeltaFKernel(const CFG::LevelData<CFG::FArrayBox>& density,
-                    const CFG::LevelData<CFG::FArrayBox>& temeprature,
-                    const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift);
-
+                    const CFG::LevelData<CFG::FArrayBox>& temperature,
+                    const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
+          : m_density(density),
+            m_temperature(temperature),
+            m_v_parallel_shift(v_parallel_shift) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
       virtual ~DeltaFKernel() {;}
@@ -1035,7 +1070,7 @@ class DeltaFKernel : public Kernel
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.
@@ -1067,7 +1102,8 @@ class DeltaFKernel : public Kernel
 /// Maxwellian kernel.
 /**
  */
-class MaxwellianKernel : public Kernel
+template <class T>
+class MaxwellianKernel : public Kernel<T>
 {
    public:
        /// Constructor with initialization.
@@ -1076,8 +1112,10 @@ class MaxwellianKernel : public Kernel
         */
        MaxwellianKernel(const CFG::LevelData<CFG::FArrayBox>& density,
                         const CFG::LevelData<CFG::FArrayBox>& temperature,
-                        const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift);
-
+                        const CFG::LevelData<CFG::FArrayBox>& v_parallel_shift)
+          : m_density(density),
+            m_temperature(temperature),
+            m_v_parallel_shift(v_parallel_shift) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
       virtual ~MaxwellianKernel() {;}
@@ -1099,7 +1137,7 @@ class MaxwellianKernel : public Kernel
        * @param[out] result Cell-averaged integrand. 
        * @param[in] kinetic_species Kinetic species object.
        */
-      virtual void eval( LevelData<FArrayBox>& result,
+      virtual void eval( LevelData<T>& result,
                          const KineticSpecies& kinetic_species ) const;
 
       /// Returns the kernel scale.

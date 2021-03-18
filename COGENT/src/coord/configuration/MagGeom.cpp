@@ -1038,7 +1038,6 @@ void MagGeom::multNTransposePointwise(LevelData<FluxBox>& a_data) const
    CH_TIME("MagGeom::multNTransposePointwise");
    CH_assert(a_data.nComp() == SpaceDim);
 
-   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
    const IntVect ghosts = a_data.ghostVect();
    //setPointwiseN(grids,ghosts); // need to create this function
 
@@ -2317,38 +2316,17 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
 
          poisson->setOperatorCoefficients( m_coord_sys->getDivergenceCleaningBC() );
 
-         string method;  // dummy variable
-
-         // Defaults; over-ridden if in ParmParse object
-         double tol = 1.e-12;
-         int max_iter = 50;
-         bool verbose = false;
-         ParmParse pp_linear_solver( ((string)pp.prefix() + ".linear_solver").c_str());
-         poisson->parseMethodAndParams(pp_linear_solver, method, tol, max_iter, verbose);
-
-         // Defaults; over-ridden if in ParmParse object
-         double precond_tol = 0.;
-         int precond_max_iter = 1;
-         bool precond_verbose = false;
-         ParmParse pp_ls_precond( ((string)pp_linear_solver.prefix() + ".precond").c_str());
-         poisson->parseMethodAndParams(pp_ls_precond, method, precond_tol, precond_max_iter, precond_verbose);
-
-         // Defaults; over-ridden if in ParmParse object
-         double precond_precond_tol = 0.;
-         int precond_precond_max_iter = 0;
-         bool precond_precond_verbose = false;
-         ParmParse pp_ls_precond_precond( ((string)pp_ls_precond.prefix() + ".precond").c_str());
-         poisson->parseMethodAndParams(pp_ls_precond_precond, method, precond_precond_tol,
-                                       precond_precond_max_iter, precond_precond_verbose);
-
-         poisson->setConvergenceParams(tol, max_iter, verbose,
-                                       precond_tol, precond_max_iter, precond_verbose,
-                                       precond_precond_tol, precond_precond_max_iter, precond_precond_verbose);
-
          LevelData<FArrayBox> phi( grids, 1, 4*IntVect::Unit );
          for (DataIterator dit(grids); dit.ok(); ++dit) {
             phi[dit].setVal(0.);
          }
+
+         // a_pp should contain the solver method and convergence parameters, but if not then
+         // set some defaults
+         if ( !pp.contains("method") ) poisson->setMethod("BiCGStab");
+         if ( !pp.contains("max_iter") ) poisson->setMaxIter(50);
+         if ( !pp.contains("tol") ) poisson->setTol(1.e-12);
+         if ( !pp.contains("verbose") ) poisson->setVerbose(false);
 
          poisson->solve( uncorrected_divergence, phi );
 
@@ -2988,7 +2966,8 @@ MagGeom::plotMagneticFieldData(const double& a_time) const
       
 #if CFG_DIM == 3
       // convert to cylindrical from cartesian frame
-      getBfieldCylindrical(BField_cyl);
+      convertCartesianToCylindrical(BField_cyl, m_BFieldDir_cc);
+      plotCellData( string("BField_cyl"), BField_cyl, a_time );
 #endif
 
       const DisjointBoxLayout& grids = gridsFull();
@@ -3723,6 +3702,37 @@ MagGeom::fillTransverseGhosts( LevelData<FluxBox>& a_data,
    }
 }
 
+void
+MagGeom::extrapolateToPhysicalGhosts( LevelData<FArrayBox>&  a_data,
+                                      const bool             a_fourth_order) const
+{
+   /*
+    Fill two layers (for 4th order) or one layer (for 2nd order)
+    of codim-1 ghost cells at physical block boundaries
+    */
+   
+   if (a_fourth_order) CH_assert(a_data.ghostVect() >= 2*IntVect::Unit);
+   if (!a_fourth_order) CH_assert(a_data.ghostVect() >= IntVect::Unit);
+   
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+   
+   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+      const ProblemDomain& block_domain = block_coord_sys.domain();
+      
+      if (a_fourth_order) {
+         // Fill two codim-1 ghosts cell layers at each block boundary
+         fourthOrderCellExtrapAtDomainBdry(a_data[dit], block_domain, grids[dit]);
+      }
+      else {
+         // Fill a single layer of codim-1 ghosts cell at each block boundary
+         secondOrderCellExtrapAtDomainBdry(a_data[dit], grids[dit], block_domain);
+      }
+   }
+   
+   // This fills extrablock ghosts and performs an exchange.
+   fillInternalGhosts( a_data );
+}
 
 
 const MagBlockCoordSys&
@@ -5023,41 +5033,52 @@ MagGeom::computeParallelProjection( LevelData<FArrayBox>& a_parComp,
 }
 
 void
-MagGeom::computeRadialProjection( LevelData<FArrayBox>& a_radComp,
-                                  const LevelData<FArrayBox>& a_vector) const
+MagGeom::computeRadialProjection(LevelData<FArrayBox>& a_radComp,
+                                 const LevelData<FArrayBox>& a_vector) const
 {
-   if (!m_BFieldDirCyl_cc.isDefined()) {
-      m_BFieldDirCyl_cc.define(m_BFieldDir_cc);
-      getBfieldDirCylindrical(m_BFieldDirCyl_cc);
-   }
-   
+   // These are slow operatrions, but we
+   // hopefully use this routines for diagnostics only
+   LevelData<FArrayBox> bunit_cyl;
+   bunit_cyl.define(m_BFieldDir_cc);
+   convertCartesianToCylindrical(bunit_cyl, m_BFieldDir_cc);
+
+   LevelData<FArrayBox> vector_cyl;
+   vector_cyl.define(a_vector);
+   convertCartesianToCylindrical(vector_cyl, a_vector);
+
+   CH_assert(bunit_cyl.ghostVect() >= vector_cyl.ghostVect());
+
    for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
-         
+            
       FORT_COMPUTE_RADIAL_PROJECTION(CHF_BOX(a_radComp[dit].box()),
-                                     CHF_CONST_FRA(m_BFieldDirCyl_cc[dit]),
-                                     CHF_CONST_FRA(a_vector[dit]),
+                                     CHF_CONST_FRA(bunit_cyl[dit]),
+                                     CHF_CONST_FRA(vector_cyl[dit]),
                                      CHF_FRA1(a_radComp[dit],0));
-      
    }
 }
 
 void
-MagGeom::computeRadialProjection( LevelData<FluxBox>& a_radComp,
-                                  const LevelData<FluxBox>& a_vector) const
+MagGeom::computeRadialProjection(LevelData<FluxBox>& a_radComp,
+                                 const LevelData<FluxBox>& a_vector) const
 {
-   //Assumes that radComp box structure is within vector box structure
-   
-   if (!m_BFieldDirCyl_fc.isDefined()) {
-      m_BFieldDirCyl_fc.define(m_BFieldDir_fc);
-      getBfieldDirCylindrical(m_BFieldDirCyl_fc);
-   }
-   
+   // These are slow operatrions, but we
+   // hopefully use this routines for diagnostics only
+   LevelData<FluxBox> bunit_cyl;
+   bunit_cyl.define(m_BFieldDir_fc);
+   convertCartesianToCylindrical(bunit_cyl, m_BFieldDir_fc);
+ 
+   LevelData<FluxBox> vector_cyl;
+   vector_cyl.define(a_vector);
+   convertCartesianToCylindrical(vector_cyl, a_vector);
+
+   CH_assert(bunit_cyl.ghostVect() >= vector_cyl.ghostVect());
+
    for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
       for (int dir=0; dir<CFG_DIM; ++dir) {
             
          FORT_COMPUTE_RADIAL_PROJECTION(CHF_BOX(a_radComp[dit][dir].box()),
-                                        CHF_CONST_FRA(m_BFieldDirCyl_fc[dit][dir]),
-                                        CHF_CONST_FRA(a_vector[dit][dir]),
+                                        CHF_CONST_FRA(bunit_cyl[dit][dir]),
+                                        CHF_CONST_FRA(vector_cyl[dit][dir]),
                                         CHF_FRA1(a_radComp[dit][dir],0));
       }
    }
@@ -5065,110 +5086,101 @@ MagGeom::computeRadialProjection( LevelData<FluxBox>& a_radComp,
 
 void
 MagGeom::computePoloidalProjection( LevelData<FArrayBox>& a_polComp,
-                                  const LevelData<FArrayBox>& a_vector) const
+                                    const LevelData<FArrayBox>& a_vector) const
 {
+   // These are slow operatrions, but we
+   // hopefully use this routines for diagnostics only
+   LevelData<FArrayBox> bunit_cyl;
+   bunit_cyl.define(m_BFieldDir_cc);
+   convertCartesianToCylindrical(bunit_cyl, m_BFieldDir_cc);
 
-   if (!m_BFieldDirCyl_cc.isDefined()) {
-      m_BFieldDirCyl_cc.define(m_BFieldDir_cc);
-      getBfieldDirCylindrical(m_BFieldDirCyl_cc);
-   }
-   
+   LevelData<FArrayBox> vector_cyl;
+   vector_cyl.define(a_vector);
+   convertCartesianToCylindrical(vector_cyl, a_vector);
+  
+   CH_assert(bunit_cyl.ghostVect() >= vector_cyl.ghostVect());
+    
    for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
-         
+            
       FORT_COMPUTE_POLOIDAL_PROJECTION(CHF_BOX(a_polComp[dit].box()),
-                                       CHF_CONST_FRA(m_BFieldDirCyl_cc[dit]),
-                                       CHF_CONST_FRA(a_vector[dit]),
+                                       CHF_CONST_FRA(bunit_cyl[dit]),
+                                       CHF_CONST_FRA(vector_cyl[dit]),
                                        CHF_FRA1(a_polComp[dit],0));
-         
    }
 }
-   
+
+
 void
 MagGeom::computePoloidalProjection( LevelData<FluxBox>& a_polComp,
                                     const LevelData<FluxBox>& a_vector) const
 {
-   if (!m_BFieldDirCyl_fc.isDefined()) {
-      m_BFieldDirCyl_fc.define(m_BFieldDir_fc);
-      getBfieldDirCylindrical(m_BFieldDirCyl_fc);
-   }
-      
+   // These are slow operatrions, but we
+   // hopefully use this routines for diagnostics only
+   LevelData<FluxBox> bunit_cyl;
+   bunit_cyl.define(m_BFieldDir_fc);
+   convertCartesianToCylindrical(bunit_cyl, m_BFieldDir_fc);
+   
+   LevelData<FluxBox> vector_cyl;
+   vector_cyl.define(a_vector);
+   convertCartesianToCylindrical(vector_cyl, a_vector);
+   
+   CH_assert(bunit_cyl.ghostVect() >= vector_cyl.ghostVect());
+    
    for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
       for (int dir=0; dir<CFG_DIM; ++dir) {
             
          FORT_COMPUTE_POLOIDAL_PROJECTION(CHF_BOX(a_polComp[dit][dir].box()),
-                                          CHF_CONST_FRA(m_BFieldDirCyl_fc[dit][dir]),
-                                          CHF_CONST_FRA(a_vector[dit][dir]),
+                                          CHF_CONST_FRA(bunit_cyl[dit][dir]),
+                                          CHF_CONST_FRA(vector_cyl[dit][dir]),
                                           CHF_FRA1(a_polComp[dit][dir],0));
       }
    }
 }
 
 void
-MagGeom::getBfieldDirCylindrical(LevelData<FArrayBox>& a_BfieldDir_cyl) const
+MagGeom::convertCartesianToCylindrical(LevelData<FArrayBox>& a_vect_cyl,
+                                       const LevelData<FArrayBox>& a_vect_cart) const
 {
 
-   // Computes cylindrical (bR, bphi, bZ) components of the unit vector
-   // for non-slab 3D geometries, for which B is Cartesian 
+   // Computes cylindrical (a_R, a_phi, a_Z) components of a vector
    for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
                
       const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(m_gridsFull[dit]);
       
       if (SpaceDim == 3 && block_coord_sys.geometryType() != "Slab") {
       
-         FArrayBox coords(a_BfieldDir_cyl[dit].box(), SpaceDim);
+         FArrayBox coords(a_vect_cyl[dit].box(), SpaceDim);
          block_coord_sys.getCellCenteredRealCoords(coords);
       
-         FORT_CONVERT_CARTESIAN_TO_CYLINDRICAL(CHF_BOX(a_BfieldDir_cyl[dit].box()),
-                                               CHF_CONST_FRA(m_BFieldDir_cc[dit]),
+         FORT_CONVERT_CARTESIAN_TO_CYLINDRICAL(CHF_BOX(a_vect_cyl[dit].box()),
+                                               CHF_CONST_FRA(a_vect_cart[dit]),
                                                CHF_CONST_FRA(coords),
-                                               CHF_FRA(a_BfieldDir_cyl[dit]));
+                                               CHF_FRA(a_vect_cyl[dit]));
       }
    }
 }
 
 void
-MagGeom::getBfieldDirCylindrical(LevelData<FluxBox>& a_BfieldDir_cyl) const
+MagGeom::convertCartesianToCylindrical(LevelData<FluxBox>& a_vect_cyl,
+                                       const LevelData<FluxBox>& a_vect_cart) const
 {
-
+   // Computes cylindrical (a_R, a_phi, a_Z) components of a vector
    for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
       
       const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(m_gridsFull[dit]);
-
+      
       if (SpaceDim == 3 && block_coord_sys.geometryType() != "Slab") {
 
          for (int dir=0; dir<CFG_DIM; ++dir) {
          
-            FArrayBox coords(a_BfieldDir_cyl[dit][dir].box(), SpaceDim);
+            FArrayBox coords(a_vect_cyl[dit][dir].box(), SpaceDim);
             block_coord_sys.getFaceCenteredRealCoords(dir, coords);
-         
-            FORT_CONVERT_CARTESIAN_TO_CYLINDRICAL(CHF_BOX(a_BfieldDir_cyl[dit][dir].box()),
-                                                  CHF_CONST_FRA(m_BFieldDir_fc[dit][dir]),
+
+            FORT_CONVERT_CARTESIAN_TO_CYLINDRICAL(CHF_BOX(a_vect_cyl[dit][dir].box()),
+                                                  CHF_CONST_FRA(a_vect_cart[dit][dir]),
                                                   CHF_CONST_FRA(coords),
-                                                  CHF_FRA(a_BfieldDir_cyl[dit][dir]));
+                                                  CHF_FRA(a_vect_cyl[dit][dir]));
          }
-      }
-   }
-}
-
-void
-MagGeom::getBfieldCylindrical(LevelData<FArrayBox>& a_Bfield_cyl) const
-{
-
-   // Computes cylindrical (BR, Bphi, BZ) components of the B-field vector
-   // for non-slab 3D geometries, for which B is Cartesian
-   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
-               
-      const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(m_gridsFull[dit]);
-      
-      if (SpaceDim == 3 && block_coord_sys.geometryType() != "Slab") {
-      
-         FArrayBox coords(a_Bfield_cyl[dit].box(), SpaceDim);
-         block_coord_sys.getCellCenteredRealCoords(coords);
-      
-         FORT_CONVERT_CARTESIAN_TO_CYLINDRICAL(CHF_BOX(a_Bfield_cyl[dit].box()),
-                                               CHF_CONST_FRA(m_BField_cc[dit]),
-                                               CHF_CONST_FRA(coords),
-                                               CHF_FRA(a_Bfield_cyl[dit]));
       }
    }
 }

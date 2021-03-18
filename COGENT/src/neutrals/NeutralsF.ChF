@@ -119,3 +119,29 @@ c     Multiply by the temperature dependence in the charge-exchange coefficient 
 
       end
 
+      subroutine mult_ni(
+     &     CHF_BOX[box],
+     &     CHF_FRA1[fn],
+     &     CHF_CONST_FRA1[fmaxw],
+     &     CHF_CONST_FRA1[ni]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+
+       fn(CHF_IX[i;j;k;l]) = ni(i,j,CHF_LBOUND[ni;2],CHF_LBOUND[ni;3]) * fmaxw(CHF_IX[i;j;k;l])
+#else
+
+       fn(CHF_IX[i;j;k;l;m]) = ni(i,j,k,CHF_LBOUND[ni;3],CHF_LBOUND[ni;4]) * fmaxw(CHF_IX[i;j;k;l;m])
+
+#endif
+     
+      CHF_ENDDO
+
+      return
+
+      end

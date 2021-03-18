@@ -387,6 +387,9 @@ public:
                      const int              max_codim ) const;
 
    const LevelData<FArrayBox>& getBFieldMagnitude() const {return *m_BMagCell;}
+   const LevelData<FArrayBox>& getBField() const {return *m_BCell;}
+
+   const LevelData<FluxBox>& getBFieldMagnitudeFace() const {return *m_BMagFace;}
 
    const LevelData<FArrayBox>& getCellCenteredRealCoords() const {return *m_cell_centered_real_coords;}
 
@@ -425,6 +428,9 @@ public:
 
    void injectConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& src,
                                     LevelData<FArrayBox>&                 dst ) const;
+
+   void injectAndExpandConfigurationToPhase(  const CFG::LevelData<CFG::FArrayBox>& src,
+                                              LevelData<FArrayBox>&                 dst ) const;
 
    void injectConfigurationToPhaseNoExchange( const CFG::LevelData<CFG::FArrayBox>& src,
                                               LevelData<FArrayBox>&                 dst ) const;
@@ -642,6 +648,9 @@ public:
    void computePoloidalProjection( LevelData<FArrayBox>& poloidalComp,
                                    const LevelData<FArrayBox>& vector) const;
 
+   void computePoloidalProjection( LevelData<FluxBox>& poloidalComp,
+                                   const LevelData<FluxBox>& vector) const;
+
    enum velocity_option {FULL_VELOCITY, PARALLEL_STREAMING_VELOCITY, DRIFT_VELOCITY, EXB_DRIFT_VELOCITY,
                          MAGNETIC_DRIFT_VELOCITY, NO_ZERO_ORDER_TERMS};
    
@@ -704,6 +713,8 @@ public:
    }
 
    DisjointBoxLayout getGhostDBL(const LevelData<FArrayBox>& a_data) const;
+  
+   DisjointBoxLayout getGhostDBL(const LevelData<FluxBox>& a_data) const;
   
    void interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const;
 

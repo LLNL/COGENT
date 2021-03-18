@@ -8,6 +8,7 @@
 #include "CoDim2Stencil.H"
 #include "SpaceUtils.H"
 
+
 #include "NamespaceHeader.H"
 
 
@@ -21,7 +22,12 @@ public:
    /**
     *  @param[in] pp the input database.
     */
-   EllipticOp(const ParmParse& pp, const MagGeom& geom);
+   EllipticOp(const ParmParse&  pp,
+              const MagGeom&  geometry);
+   EllipticOp( const ParmParse&  pp,
+               const MagGeom&    geometry,
+               const bool        second_order,
+               const bool        low_pollution );
       
    /// Destructor.
    /**
@@ -45,36 +51,41 @@ public:
     *
     * @param[in] a_pp  ParmParse object reference
     */
-   void defineLinearSolver( const ParmParse& a_pp );
+   void defineSolver( const ParmParse& a_pp );
 
-   /// Computes the potential given the species.
+   // Defines the linear solver from the argument list
+   void defineSolver( const string&  a_method,
+                      const double   a_tol,
+                      const int      a_max_iter,
+                      const bool     a_verbose );
+
+   // Accessors to set the solver method, convergence params
+   // and verbosity for subsequent solves.  These are normally
+   // set upon object construction using the ParmParse version
+   // above, but can be reset on the fly.
+   void setMethod(const string& a_method) 
+         {defineSolver(a_method, m_tol, m_max_iter, m_verbose);}
+   void setTol(const double a_tol) {m_tol = a_tol;}
+   void setMaxIter(const int a_max_iter) {m_max_iter = a_max_iter;}
+   void setVerbose(const bool a_verbose) {m_verbose = a_verbose;}
+
+   /// Solves the elliptic operator given a right-hand side and bcs
    /**
-    * Computes the pointwise, cell-centered potential field given the
-    * charge density.
+    * Solves the elliptic operator given a right-hand side and bcs
     *
-    * @param[in] charge_density charge density
-    * @param[out] phi the pointwise, cell-centered potential.
+    * @param[in] rhs   right-hand side
+    * @param[out] solution the pointwise, cell-centered solution
     */
-   void computePotential( LevelData<FArrayBox>&       phi,
-                          const LevelData<FArrayBox>& charge_density );
+   void solveWithBCs( LevelData<FArrayBox>&        solution,
+                      const LevelData<FArrayBox>&  rhs );
 
-   void setConvergenceParams( const double tol,
-                              const int    max_iter,
-                              const bool   verbose,
-                              const double precond_tol,
-                              const int    precond_max_iter,
-                              const bool   precond_verbose,
-                              const double precond_precond_tol,
-                              const int    precond_precond_max_iter,
-                              const bool   precond_precond_verbose )
-   {
-      m_tol = tol; m_max_iter = max_iter; m_verbose = verbose;
-      m_precond_tol = precond_tol; m_precond_max_iter = precond_max_iter;
-      m_precond_verbose = precond_verbose; m_precond_precond_tol = precond_precond_tol;
-      m_precond_precond_max_iter = precond_precond_max_iter;
-      m_precond_precond_verbose = precond_precond_verbose;
-   }
-
+   /// Solves the elliptic operator given a right-hand side only
+   /**
+    * Solves the elliptic operator given a right-hand side only
+    *
+    * @param[in] rhs   right-hand side
+    * @param[out] solution the pointwise, cell-centered solution
+    */
    void solve( const LevelData<FArrayBox>& rhs,
                LevelData<FArrayBox>&       solution );
 
@@ -189,12 +200,6 @@ public:
                                 const int                 dir,
                                 LevelData<FluxBox>&       out ) const;
 
-   void parseMethodAndParams( const ParmParse& pp,
-                              string&          method,
-                              double&          tol,
-                              int&             max_iter,
-                              bool&            verbose ) const;
-
    void interpToNodes( const LevelData<FArrayBox>& a_phi,
                        LevelData<FArrayBox>&       a_phi_node ) const;
 
@@ -204,22 +209,10 @@ public:
 
    // ----> Begin *this virtuals
    
-   virtual void setPreconditionerConvergenceParams( const double tol,
-                                                    const int    max_iter,
-                                                    const double precond_tol,
-                                                    const int    precond_max_iter ) = 0;
-
    virtual void solvePreconditioner( const LevelData<FArrayBox>& in, LevelData<FArrayBox>& out ) = 0;
 
    virtual void multiplyCoefficients( LevelData<FluxBox>& data,
                                       const bool mapped_coeff ) const = 0;
-
-   virtual void multiplyCoefficients( LevelData<FluxBox>& data,
-                                      const bool mapped_coeff,
-                                      const bool apply_op )
-   {
-     multiplyCoefficients( data, mapped_coeff);
-   }
 
    // <---- End *this virtuals
 
@@ -273,11 +266,6 @@ public:
    // <---- End LinOp virtuals
 
    double L2Norm( const LevelData<FArrayBox>& data );
-
-   const string getPrecondMethod() const {return m_precond_method;}
-   const Real   getPrecondTol() const {return m_precond_tol;}
-   const Real   getPrecondMaxIter() const {return m_precond_max_iter;}
-   const bool   getPrecondVerbose() const {return m_precond_verbose;}
 
 protected:
 
@@ -335,16 +323,6 @@ protected:
    int m_max_iter;
    bool m_verbose;
 
-   string m_precond_method;
-   double m_precond_tol;
-   int m_precond_max_iter;
-   bool m_precond_verbose;
-
-   string m_precond_precond_method;
-   double m_precond_precond_tol;
-   int m_precond_precond_max_iter;
-   bool m_precond_precond_verbose;
-
    bool m_second_order;
    bool m_low_pollution;
    int m_num_potential_ghosts;
@@ -353,6 +331,10 @@ protected:
 
    Vector< Vector<CoDim1Stencil> > m_codim1_stencils;
    Vector< Vector<CoDim2Stencil> > m_codim2_stencils;
+
+private:
+
+   void init( const ParmParse& pp );
 };
 
 

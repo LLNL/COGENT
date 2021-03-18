@@ -139,7 +139,7 @@ void Linearized::addConservativeTerms(KineticSpecies& a_rhs_species,
       zero_cfg[cfg_dit].setVal(0.);
    }
    CFG::LevelData<CFG::FArrayBox> energ_rest( mag_geom.grids(), 1, CFG::IntVect::Zero );
-   m_moment_op.compute(energ_rest, a_rhs_species, a_tp_rhs_coll, PressureKernel(zero_cfg));
+   m_moment_op.compute(energ_rest, a_rhs_species, a_tp_rhs_coll, PressureKernel<FArrayBox>(zero_cfg));
    for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
       energ_rest[cfg_dit].mult(3.0);
       energ_rest[cfg_dit].divide(a_rhs_species.mass());
@@ -147,7 +147,7 @@ void Linearized::addConservativeTerms(KineticSpecies& a_rhs_species,
 
    // Compute momentum restoring factor
    CFG::LevelData<CFG::FArrayBox> moment_rest( mag_geom.grids(), 1, CFG::IntVect::Zero );
-   m_moment_op.compute(moment_rest, a_rhs_species, a_tp_rhs_coll, ParallelMomKernel());
+   m_moment_op.compute(moment_rest, a_rhs_species, a_tp_rhs_coll, ParallelMomKernel<FArrayBox>());
 
    //Calculate normalizing factors
    if (m_first_step) {
@@ -159,13 +159,13 @@ void Linearized::addConservativeTerms(KineticSpecies& a_rhs_species,
       m_norm_momentum.define( mag_geom.grids(), 1, CFG::IntVect::Zero );
       m_norm_energy.define( mag_geom.grids(), 1, CFG::IntVect::Zero );
       
-      m_moment_op.compute(m_norm_energy, a_rhs_species, kern_energ_norm, PressureKernel(zero_cfg));
+      m_moment_op.compute(m_norm_energy, a_rhs_species, kern_energ_norm, PressureKernel<FArrayBox>(zero_cfg));
       for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
          m_norm_energy[cfg_dit].mult(3.0);
          m_norm_energy[cfg_dit].divide(a_rhs_species.mass());
       }
       
-      m_moment_op.compute(m_norm_momentum, a_rhs_species, kern_moment_norm, ParallelMomKernel());
+      m_moment_op.compute(m_norm_momentum, a_rhs_species, kern_moment_norm, ParallelMomKernel<FArrayBox>());
    }
 
    // Calculate field-particle (FP) collisional RHS
@@ -424,7 +424,7 @@ void Linearized::evaluateNormKern( LevelData<FArrayBox>& a_kern_moment_norm,
       const FArrayBox& this_B = B_injected[dit];
 
       flux_norm_ERest[dit].setVal(0.);
-      for (int dir=0; dir<SpaceDim; dir++) {
+      for (int dir=CFG_DIM; dir<SpaceDim; dir++) {
          FArrayBox& this_flux_NormERest = flux_norm_ERest[dit][dir];
 
          FORT_EVALUATE_NORM_ER_FLUX(CHF_CONST_INT(dir),

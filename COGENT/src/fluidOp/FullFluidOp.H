@@ -30,6 +30,10 @@ class FullFluidOp
 {
 public:
 
+  /// Null constructor (used for state variable creation) 
+  FullFluidOp( const MagGeom&  geometry )
+     : m_geometry(geometry) {};
+
   /// Constructor with initialization.
   /**
    *  @param[in] pp the input database.

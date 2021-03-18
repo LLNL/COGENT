@@ -784,9 +784,10 @@ private:
                                 const opType                 op_type,
                                 const Real&                  time );
 
-   void applyNeutralsOperator(   KineticSpeciesPtrVect&      rhs,
-                                const KineticSpeciesPtrVect& soln,
-                                const Real&                  time );
+   void applyNeutralsOperator( KineticSpeciesPtrVect&          rhs,
+                               const KineticSpeciesPtrVect&    kinetic_species_phys,
+                               const CFG::FluidSpeciesPtrVect& fluid_species,
+                               const Real&                     time );
     
 
    void applyTransportOperator( KineticSpeciesPtrVect&       rhs,

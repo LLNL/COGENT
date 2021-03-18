@@ -55,6 +55,19 @@ MBTridiagonalSolver::constructMatrixGeneral( LevelData<FArrayBox>&  a_alpha_coef
 
 
 void
+MBTridiagonalSolver::constructMatrixBlockGeneral( const int              a_block_row,
+                                                  const int              a_block_column,
+                                                  LevelData<FArrayBox>&  a_alpha_coefficient,
+                                                  LevelData<FluxBox>&    a_tensor_coefficient,
+                                                  LevelData<FArrayBox>&  a_beta_coefficient,
+                                                  const EllipticOpBC&    a_bc )
+{
+   MayDay::Error("MBTridiagonalSolver::constructMatrixBlockGeneral() is not implemented");
+}
+
+
+
+void
 MBTridiagonalSolver::multiplyMatrix( const LevelData<FArrayBox>&  a_in,
                                      LevelData<FArrayBox>&        a_out ) const
 {

@@ -4,6 +4,7 @@
 #include "FluidOpInterface.H"
 #include "FluidVarBC.H"
 #include "Diffusion.H"
+#include "OneFieldNeutralsOp.H"
 #include "SpaceUtils.H"
 
 #include "NamespaceHeader.H"
@@ -12,18 +13,24 @@
  * Single fluid operator class.
 */
 class TwoFieldNeutralsOp
-   : public FluidOpInterface
+   : public OneFieldNeutralsOp
 {
 public:
+
+  /// Null constructor (used for state variable creation) 
+  TwoFieldNeutralsOp( const MagGeom&  geometry )
+     :OneFieldNeutralsOp(geometry),
+      m_geometry(geometry) {};
 
   /// Constructor with initialization.
   /**
    *  @param[in] pp the input database.
    */
-  TwoFieldNeutralsOp( const string&   pp_str,
-              const string&   species_name,
-              const MagGeom&  geometry,
-              const int       verbosity );
+  TwoFieldNeutralsOp(const string&   pp_str,
+                     const string&   species_name,
+                     const MagGeom&  geometry,
+                     const Real      a_larmor,
+                     const int       verbosity );
 
   /// Destructor.
   /**
@@ -87,6 +94,12 @@ public:
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
                              const FluidSpeciesPtrVect&        fluid_species_rhs,
                              const int                         component );
+   
+   virtual void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
+                           const FluidSpeciesPtrVect&         fluid_species,
+                           const PS::ScalarPtrVect&           scalars,
+                           const EField&                      E_field,
+                           const double                       time );
 
    virtual bool trivialSolutionOp() const {return true;}
 
@@ -101,14 +114,26 @@ public:
    virtual void fillGhostCells( FluidSpecies&  species_phys,
                                 const double   time );
 
+   
    /// Compute a stable time step.
-   /**
-    * Computes and returns an estimate of the maximum stable time step.
-    */
    Real computeDt( const FluidSpeciesPtrVect&  fluid_species );
+   
+   /// Set LevelData<FArrayBox> object for plotting
+   virtual void getMemberVar(LevelData<FArrayBox>&   a_Var,
+                             const FluidSpecies&     a_fluid_species,
+                             const string&           a_name ) const;
    
    static const char* pp_name;
 
+protected:
+   
+   virtual void getPlasmaParameters(const Real time);
+
+   virtual void computeDiffusionCoefficients(LevelData<FluxBox>& D_tensor,
+                                             LevelData<FluxBox>& D_tensor_mapped,
+                                             const Real          mass,
+                                             const Real          time) const;
+   
 private:
 
   
@@ -126,39 +151,6 @@ private:
     * Private method to print parameters.
     */
    void printParameters();
-
-   const MagGeom& m_geometry;
-   
-   int m_verbosity;
-   int m_my_pc_idx;
-
-   Real m_bckgr_density;
-
-   bool m_is_time_implicit;
-   bool m_prescribed_plasma_bckrg;
-   
-   std::string m_advScheme;
-   std::string m_opt_string;
-   
-   Diffusion*        m_diffusion_op;
-   EllipticOpBC*     m_diffusion_bc;
-
-   Diffusion*        m_viscosity_op;
-   EllipticOpBC*     m_viscosity_bc;
-
-   std::vector<FluidVarBC*>  m_fluid_bc;
-   
-   LevelData<FArrayBox> m_ionization_rate;
-   LevelData<FArrayBox> m_recombination_rate;
-   LevelData<FArrayBox> m_chx_rate;
-   LevelData<FArrayBox> m_neutral_temperature;
-   LevelData<FArrayBox> m_ion_parallel_vel;
-   LevelData<FArrayBox> m_pc_density;
-   
-   RefCountedPtr<GridFunction> m_ntr_temp;
-   RefCountedPtr<GridFunction> m_electron_dens;
-   RefCountedPtr<GridFunction> m_electron_temp;
-   RefCountedPtr<GridFunction> m_ion_velocity;
 
    virtual void accumulateRHS(FluidSpeciesPtrVect&               rhs,
                               const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
@@ -187,8 +179,10 @@ private:
    
    void computeAdvectionRHS(LevelData<FArrayBox>&        div,
                             const LevelData<FArrayBox>&  dist,
-                            const LevelData<FluxBox>&    velocity) const;
-   
+                            const LevelData<FluxBox>&    velocity,
+                            const bool                   recycling_bc,
+                            const bool                   homogeneous_flux_bc,
+                            const Real                   time) const;
    
    void computeFlux(LevelData<FluxBox>&       flux,
                     const LevelData<FluxBox>& faceDist,
@@ -203,14 +197,10 @@ private:
                                     const LevelData<FArrayBox>&   soln_density,
                                     const Real                    mass) const;
    
-   void computeDiffusiveCoefficients(LevelData<FluxBox>& ellip_coeff,
-                                     LevelData<FluxBox>& ellip_coeff_mapped,
-                                     const Real          mass,
-                                     const Real          time) const;
    
    void computeViscosityCoefficients(LevelData<FluxBox>&         ellip_coeff,
                                      LevelData<FluxBox>&         ellip_coeff_mapped,
-				     const LevelData<FArrayBox>& density,
+                                     const LevelData<FArrayBox>& density,
                                      const Real                  mass,
                                      const Real                  time) const;
    
@@ -219,9 +209,47 @@ private:
                            LevelData<FArrayBox>&   chx_rate,
                            const Real              time) const;
 
+   void computeIntegratedNormalPrescribedFlux(LevelData<FluxBox>&         flux,
+                                              const LevelData<FArrayBox>& ne,
+                                              const LevelData<FArrayBox>& Vi) const;
+   
 
+   const MagGeom& m_geometry;
+   
+   int m_verbosity;
+   int m_my_pc_idx;
 
+   Real m_bckgr_density;
 
+   bool m_is_time_implicit;
+   bool m_include_advection_bc;
+   bool m_dens_recycling_bc;
+   bool m_mom_recycling_bc;
+   bool m_consistent_velocity;
+   bool m_fixed_recycling;
+   bool m_first_call;
+   bool m_extrapolate_density;
+   
+   std::string m_advScheme;
+   std::string m_opt_string;
+   
+   Diffusion*        m_diffusion_op;
+   EllipticOpBC*     m_diffusion_bc;
+
+   Diffusion*        m_viscosity_op;
+   mutable EllipticOpBC*     m_viscosity_bc;
+
+   std::vector<FluidVarBC*>  m_fluid_bc;
+   
+   LevelData<FArrayBox> m_ionization_rate;
+   LevelData<FArrayBox> m_recombination_rate;
+   LevelData<FArrayBox> m_chx_rate;
+   LevelData<FArrayBox> m_ion_parallel_vel;
+   LevelData<FluxBox>   m_ion_parallel_vel_face;
+   LevelData<FArrayBox> m_pc_density;
+   
+   RefCountedPtr<GridFunction> m_ion_parallel_vel_func;
+   
 };
 
 

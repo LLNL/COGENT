@@ -9,9 +9,15 @@ void
 SpaceUtils::upWindToFaces( LevelData<FluxBox>&    a_face_phi,
                      const LevelData<FArrayBox>&  a_cell_phi,
                      const LevelData<FluxBox>&    a_norm_vel,
-                     const std::string&           a_method )
+                     const std::string&           a_method,
+                     const bool&                  a_fourth_order)
 {
    CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit );
+   
+   if (a_fourth_order) {
+      CH_assert( a_cell_phi.ghostVect() >= 2*IntVect::Unit );
+      CH_assert( a_face_phi.ghostVect() >= IntVect::Unit );
+   }
 
    const DisjointBoxLayout& grids( a_face_phi.getBoxes() );
    for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -20,7 +26,7 @@ SpaceUtils::upWindToFaces( LevelData<FluxBox>&    a_face_phi,
       const FArrayBox& this_cell_phi( a_cell_phi[dit] );
       const FluxBox& this_norm_vel( a_norm_vel[dit] );
       const Box& this_dbl_box( grids[dit] ); // this box has no ghost cells
-      upWindToFaces( this_face_phi, this_cell_phi, this_norm_vel, this_dbl_box, a_method );
+      upWindToFaces( this_face_phi, this_cell_phi, this_norm_vel, this_dbl_box, a_method, a_fourth_order );
        
    } 
 
@@ -31,7 +37,8 @@ SpaceUtils::upWindToFaces( FluxBox&      this_face_phi,
                      const FArrayBox&    this_cell_phi,
                      const FluxBox&      a_norm_vel,
                      const Box&          a_dbl_box,
-                     const std::string&  a_method )
+                     const std::string&  a_method,
+                     const bool&         a_fourth_order)
 {
    CH_TIME("SpaceUtils::upWindToFaces()");
    CH_assert( a_method=="c2" ||
@@ -55,16 +62,17 @@ SpaceUtils::upWindToFaces( FluxBox&      this_face_phi,
       Box face_box( a_dbl_box ); 
     
       // for 4th order, need extra face in mapped-grid,
-      // transverse direction to handle 4th-order products  
-      //for (int tdir(0); tdir<SpaceDim; tdir++) {
-      //   if (tdir!=dir) {
-      //      const int TRANSVERSE_GROW(1);
-      //      face_box.grow( tdir, TRANSVERSE_GROW );
-      //   }
-      //}
+      // transverse direction to handle 4th-order products
+      if (a_fourth_order) {
+         for (int tdir(0); tdir<SpaceDim; tdir++) {
+            if (tdir!=dir) {
+               const int TRANSVERSE_GROW(1);
+               face_box.grow( tdir, TRANSVERSE_GROW );
+            }
+         }
+      }
       
       face_box.surroundingNodes( dir );
-      //face_box.grow( dir, 1 );
 
       //  now compute limited face values
          
@@ -176,7 +184,6 @@ SpaceUtils::constrainedCrossProductOnEdges( LevelData<EdgeDataBox>&  a_edge_E,
          
          signB = -1*signB;
          for(int Vdir=0; Vdir<SpaceDim; Vdir++) {
-            int edgeComp = 0;
             if(Vdir!=Bdir) {
                signV = -1*signV;
                // Interpolate Vdir comp of V at cell to Bdir face and 
@@ -507,7 +514,6 @@ SpaceUtils::interpCellToEdges( LevelData<EdgeDataBox>&   a_edge_phi,
          }
          
          FArrayBox& this_edge_phi_dir( this_edge_phi[dir] );
-         const FArrayBox& this_norm_vel_dir( a_norm_vel[dit][dir] );
          if(SpaceDim==2) {
             FORT_C2_CELL_TO_EDGE_2D( CHF_FRA( this_edge_phi_dir ),
                                      CHF_CONST_FRA( this_cell_phi ),
@@ -1512,7 +1518,6 @@ SpaceUtils::exchangeFluxBox( LevelData<FluxBox>& a_Face )
 
    for (dit.begin(); dit.ok(); ++dit) {
 
-      const Box& gridBox = grids[dit];
       FluxBox& thisTemp = tmp_Face[dit];
       FluxBox& thisFace = a_Face[dit];
 
@@ -1561,7 +1566,6 @@ SpaceUtils::exchangeEdgeDataBox( LevelData<EdgeDataBox>& a_Edge )
    // to be the "correct" value
 
    for (dit.begin(); dit.ok(); ++dit) {
-      const Box& gridBox = grids[dit];
       EdgeDataBox& thisTemp = tmp_Edge[dit];
       EdgeDataBox& thisEdge = a_Edge[dit];
 

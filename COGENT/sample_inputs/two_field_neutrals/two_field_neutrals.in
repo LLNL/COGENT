@@ -182,7 +182,7 @@ BC.neutrals.density.radial_core.type = "neumann"
 BC.neutrals.density.radial_sol.type = "neumann"
 BC.neutrals.density.radial_pf.type = "neumann"
 BC.neutrals.density.poloidal_inner_div.type = "dirichlet"
-BC.neutrals.density.poloidal_inner_div.type = "dirichlet"
+BC.neutrals.density.poloidal_outer_div.type = "dirichlet"
 
 
 BC.neutrals.momentumDensity_virtual.radial_core.function = "zero_grid_func"
@@ -195,7 +195,7 @@ BC.neutrals.momentumDensity_virtual.radial_core.type = "neumann"
 BC.neutrals.momentumDensity_virtual.radial_sol.type = "neumann"
 BC.neutrals.momentumDensity_virtual.radial_pf.type = "neumann"
 BC.neutrals.momentumDensity_virtual.poloidal_inner_div.type = "dirichlet"
-BC.neutrals.momentumDensity_virtual.poloidal_inner_div.type = "dirichlet"
+BC.neutrals.momentumDensity_virtual.poloidal_outer_div.type = "dirichlet"
 
 #####################################################
 # Collisions Definitions

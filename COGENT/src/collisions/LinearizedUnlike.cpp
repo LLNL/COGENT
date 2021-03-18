@@ -311,7 +311,7 @@ void LinearizedUnlike::fieldPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
    
    //Compute int(vpar*CTP_ba(delta_f_b),d3v)
    CFG::LevelData<CFG::FArrayBox> tmp_cfg( mag_geom.grids(), 1, CFG::IntVect::Zero);
-   m_moment_op.compute(tmp_cfg, a_species_b, m_tmp_dfn_noGhosts, ParallelMomKernel());
+   m_moment_op.compute(tmp_cfg, a_species_b, m_tmp_dfn_noGhosts, ParallelMomKernel<FArrayBox>());
    
    LevelData<FArrayBox> injected_data_R;
    phase_geom.injectConfigurationToPhase(tmp_cfg, injected_data_R);
@@ -343,7 +343,7 @@ void LinearizedUnlike::fieldPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
    for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
       zero_cfg[cfg_dit].setVal(0.);
    }
-   m_moment_op.compute(tmp_cfg, a_species_b, m_tmp_dfn_noGhosts, PressureKernel(zero_cfg));
+   m_moment_op.compute(tmp_cfg, a_species_b, m_tmp_dfn_noGhosts, PressureKernel<FArrayBox>(zero_cfg));
    
    LevelData<FArrayBox> injected_data_Q;
    phase_geom.injectConfigurationToPhase(tmp_cfg, injected_data_Q);
@@ -408,7 +408,7 @@ void LinearizedUnlike::computeRandQTerms(LevelData<FArrayBox>&       a_R,
       
    //Compute int(vpar*CTP_ab(ma*vpar*F0a),d3v)
    CFG::LevelData<CFG::FArrayBox> tmp_cfg(mag_geom.grids(), 1, CFG::IntVect::Zero);
-   m_moment_op.compute(tmp_cfg, a_species, a_R, ParallelMomKernel());
+   m_moment_op.compute(tmp_cfg, a_species, a_R, ParallelMomKernel<FArrayBox>());
       
    LevelData<FArrayBox> injected_data_R;
    phase_geom.injectConfigurationToPhase(tmp_cfg, injected_data_R);
@@ -453,7 +453,7 @@ void LinearizedUnlike::computeRandQTerms(LevelData<FArrayBox>&       a_R,
       zero_cfg[cfg_dit].setVal(0.);
    }
 
-   m_moment_op.compute(tmp_cfg, a_species, a_Q, PressureKernel(zero_cfg));
+   m_moment_op.compute(tmp_cfg, a_species, a_Q, PressureKernel<FArrayBox>(zero_cfg));
    
    LevelData<FArrayBox> injected_data_Q;
    phase_geom.injectConfigurationToPhase(tmp_cfg, injected_data_Q);
@@ -508,7 +508,7 @@ void LinearizedUnlike::computeMaxwellianFit(LevelData<FArrayBox>&             a_
        zero_cfg[cfg_dit].setVal(0.);
     }
    
-    MaxwellianKernel maxwellian(a_density, a_temperature, zero_cfg);
+    MaxwellianKernel<FArrayBox> maxwellian(a_density, a_temperature, zero_cfg);
     maxwellian.eval(a_F0,a_species);
     phase_geom.multJonValid(a_F0);
    

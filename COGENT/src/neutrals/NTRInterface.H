@@ -5,6 +5,12 @@
 #include "ParmParse.H"
 #include "KineticSpecies.H"
 
+#undef CH_SPACEDIM
+#define CH_SPACEDIM CFG_DIM
+#include "FluidSpecies.H"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM PDIM
+
 #include "NamespaceHeader.H"
 
 /**
@@ -32,10 +38,11 @@ class NTRInterface
        *  @param[in] species - species to which neutral model is applied.
        *  @param[in] time the time at which the collison RHS is to be evaluated
        */
-      virtual void evalNtrRHS( KineticSpecies&              rhs_species,
-                               const KineticSpeciesPtrVect& soln,
-                               const int                    species,
-                               const Real                   time ) = 0;
+      virtual void evalNtrRHS( KineticSpecies&                 rhs_species,
+                               const KineticSpeciesPtrVect&    kinetic_species_phys,
+                               const CFG::FluidSpeciesPtrVect& fluid_species_phys,
+                               const int                       species,
+                               const Real                      time ) = 0;
 
       virtual Real computeDtExplicitTI(const KineticSpeciesPtrVect& soln, const int i) { return DBL_MAX; }
       virtual Real computeDtImExTI(const KineticSpeciesPtrVect& soln, const int i) { return DBL_MAX; }

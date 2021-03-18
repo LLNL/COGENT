@@ -120,8 +120,8 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        rhs,
           Ushift[cfg_dit].divide(dens[cfg_dit]);
       }
 
-      moment_op.compute(vpar_moms, soln_species, Jpsi, ParallelMomKernel());
-      moment_op.compute(pres_moms, soln_species, Jpsi, PressureKernel(Ushift));
+      moment_op.compute(vpar_moms, soln_species, Jpsi, ParallelMomKernel<FArrayBox>());
+      moment_op.compute(pres_moms, soln_species, Jpsi, PressureKernel<FArrayBox>(Ushift));
       LevelData<FArrayBox> inj_vpar_moms;
       LevelData<FArrayBox> inj_pres_moms;
       phase_geom.injectConfigurationToPhase(vpar_moms, inj_vpar_moms);

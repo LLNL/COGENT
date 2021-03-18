@@ -472,6 +472,8 @@ PhaseGeom::~PhaseGeom()
       delete m_velocity_tangrad_metrics;
       delete m_velocity_metrics;
 
+      delete m_cell_centered_real_coords;
+
       if (m_sheared_remapped_index) delete m_sheared_remapped_index;
       if (m_sheared_interp_stencil) delete m_sheared_interp_stencil;
       if (m_sheared_interp_stencil_offsets) delete m_sheared_interp_stencil_offsets;
@@ -504,12 +506,15 @@ PhaseGeom::~PhaseGeom()
       delete m_BMagFace;
       delete m_bdotcurlbFace;
 
-      delete m_cell_centered_real_coords;
       delete m_configuration_face_areas;
       delete m_configuration_J;
       delete m_configuration_volumes;
       delete m_configuration_tangrad_metrics;
       delete m_configuration_metrics;
+      delete m_configuration_poloidal_J;
+      delete m_configuration_metrics_pointwise;
+      delete m_normalized_magnetic_flux_cell;
+      delete m_normalized_magnetic_flux_face;
 
       if (m_exchange_transverse_block_register) delete m_exchange_transverse_block_register;
       if (m_mblexPtr) delete m_mblexPtr;
@@ -2900,6 +2905,39 @@ PhaseGeom::injectConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& a_s
 }
 
 void
+PhaseGeom::injectAndExpandConfigurationToPhase( const CFG::LevelData<CFG::FArrayBox>& a_src,
+                                                LevelData<FArrayBox>&                 a_dst ) const
+{
+  LevelData<FArrayBox> src_phase_flat;
+  injectConfigurationToPhase(a_src, src_phase_flat);
+
+  if (!a_dst.isDefined()) {
+    a_dst.define( m_gridsFull, src_phase_flat.nComp(), IntVect::Zero);
+  }
+  for (DataIterator dit(m_gridsFull.dataIterator()); dit.ok(); ++dit) {
+    const FArrayBox& src_phase_flat_fab = src_phase_flat[dit];
+    const Box& flat_box = src_phase_flat_fab.box();
+    FArrayBox& dst_fab = a_dst[dit];
+    const Box& big_box = dst_fab.box();
+
+    VEL::IntVect vel_idx;
+    for (int d = VPARALLEL_DIR; d <= MU_DIR; d++) {
+      int imin = flat_box.smallEnd(d);
+      int imax = flat_box.bigEnd(d);
+      CH_assert(imin == imax);
+      vel_idx[d-VPARALLEL_DIR] = imin;
+    }
+    for (int n = 0; n < dst_fab.nComp(); n++) {
+      for (BoxIterator bit(big_box); bit.ok(); ++bit) {
+        CFG::IntVect cfg_idx = config_restrict(bit());
+        IntVect idx = tensorProduct( cfg_idx, vel_idx );
+        dst_fab(bit(), n) = src_phase_flat_fab(idx, n);
+      }
+    }
+  }
+}
+
+void
 PhaseGeom::injectConfigurationToPhaseNoExchange(  const CFG::LevelData<CFG::FArrayBox>& a_src,
                                                   LevelData<FArrayBox>&                 a_dst ) const
 {
@@ -4418,6 +4456,28 @@ PhaseGeom::computePoloidalProjection( LevelData<FArrayBox>& a_polComp,
 }
 
 void
+PhaseGeom::computePoloidalProjection( LevelData<FluxBox>& a_polComp,
+                                      const LevelData<FluxBox>& a_vector) const
+{
+   CH_assert(a_vector.nComp() == CFG_DIM);
+   
+   const CFG::LevelData<CFG::FluxBox>& unit_b_cfg = m_mag_geom->getFCBFieldDir();
+   
+   LevelData<FluxBox> unit_b;
+   injectConfigurationToPhase(unit_b_cfg, unit_b);
+   
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      for (int dir=0; dir<SpaceDim; ++dir) {
+      
+         FORT_COMPUTE_POLOIDAL_PROJECTION(CHF_BOX(a_polComp[dit][dir].box()),
+                                          CHF_CONST_FRA(unit_b[dit][dir]),
+                                          CHF_CONST_FRA(a_vector[dit][dir]),
+                                          CHF_FRA1(a_polComp[dit][dir],0));
+      }
+   }
+}
+
+void
 PhaseGeom::unmapGradient( const LevelData<FArrayBox>& a_mapped_grad_var,
                           LevelData<FArrayBox>&       a_grad_var,
                           const int                   a_max_dim ) const
@@ -4911,6 +4971,48 @@ PhaseGeom::fillTransversePhysicalGhosts( LevelData<FluxBox>& a_var, int a_max_di
 
 
 DisjointBoxLayout PhaseGeom::getGhostDBL(const LevelData<FArrayBox>& a_data) const
+{
+  CH_TIME("PhaseGeom::getGhostDBL");
+  CH_assert(a_data.isDefined());
+  const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+  const IntVect& ghosts = a_data.ghostVect();
+
+  DisjointBoxLayout ghost_dbl;
+  ghost_dbl.deepCopy(grids);
+
+  const PhaseCoordSys& phase_coord_sys = phaseCoordSys();
+  
+  for (int block=0; block<phase_coord_sys.numBlocks(); ++block) {
+    const PhaseBlockCoordSys& block_coord_sys = (const PhaseBlockCoordSys&)(*phase_coord_sys.getCoordSys(block));
+    const ProblemDomain& domain = block_coord_sys.domain();
+    const Box& domain_box = domain.domainBox();
+
+    for (int i=0; i<ghost_dbl.rawPtr()->size(); ++i) {
+      Box& new_box = *const_cast<Box*>(&((*ghost_dbl.rawPtr())[i].box));
+      Box original_box = new_box;
+
+      if ( domain_box.contains(original_box) ) {
+	for (int dir=0; dir<CFG_DIM; ++dir) {
+	  if ( !domain.isPeriodic(dir) ) {
+	    if ( original_box.smallEnd(dir) == domain_box.smallEnd(dir) ) {
+	      new_box.growLo(dir,ghosts[dir]);
+	    }
+	    if ( original_box.bigEnd(dir) == domain_box.bigEnd(dir) ) {
+	      new_box.growHi(dir,ghosts[dir]);
+	    }
+	  }
+	}
+      }
+    }
+  }
+
+  ghost_dbl.closeNoSort();
+  
+  return ghost_dbl;
+}
+
+
+DisjointBoxLayout PhaseGeom::getGhostDBL(const LevelData<FluxBox>& a_data) const
 {
   CH_TIME("PhaseGeom::getGhostDBL");
   CH_assert(a_data.isDefined());

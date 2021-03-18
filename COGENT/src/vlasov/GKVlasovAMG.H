@@ -70,6 +70,8 @@ class GKVlasovAMG
    
     void createHypreData();
 
+    void destroyHypreData();
+
     void AMGSetup( const HYPRE_SStructMatrix&  matrix );
 
     void AMG( const HYPRE_SStructMatrix&  matrix,

@@ -84,7 +84,7 @@ void EFieldSelfConsistentBC::computeEField( const PS::GKState&                a_
                LevelData<FArrayBox> gkPoissonRHS( grids, 1, IntVect::Zero );
                computeTotalChargeDensity( gkPoissonRHS, a_kinetic_species, a_fluid_species );
 
-               m_poisson->computePotential( a_phi, gkPoissonRHS );
+               m_poisson->solveWithBCs( a_phi, gkPoissonRHS );
             }
             else {
 

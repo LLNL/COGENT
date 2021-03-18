@@ -35,10 +35,11 @@ class NullNTR
        * @param[in] species index of species to which neutral is applied.
        * @param[in] time current time.
        */
-      virtual void evalNtrRHS( KineticSpecies&              rhs_species,
-                               const KineticSpeciesPtrVect& soln,
-                               const int                    species,
-                               const Real                   time ) {;}
+      virtual void evalNtrRHS( KineticSpecies&                 rhs_species,
+                               const KineticSpeciesPtrVect&    kinetic_species_phys,
+                               const CFG::FluidSpeciesPtrVect& fluid_species_phys,
+                               const int                       species,
+                               const Real                      time ) {;}
   
       /// Compute a stable time step.
       /**

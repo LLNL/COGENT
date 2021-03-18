@@ -3,6 +3,8 @@
 #include "Directions.H"
 #include "MBStencilIterator.H"
 
+#include "_hypre_sstruct_ls.h"
+
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "MagGeom.H"
@@ -83,10 +85,12 @@ GKVlasovAMG::GKVlasovAMG( const ParmParse&  a_pp,
 
 GKVlasovAMG::~GKVlasovAMG()
 {
+   destroyHypreData();
+
    if (m_mb_coupling) delete m_mb_coupling;
 
    for (int n=0; n<m_stencil_size; ++n) delete [] m_offsets[n];
-   delete m_offsets;
+   delete [] m_offsets;
 
    if (m_block_register) delete m_block_register;
 }
@@ -269,6 +273,28 @@ void GKVlasovAMG::createHypreData()
    }
 
    m_hypre_allocated = true;
+}
+
+
+void GKVlasovAMG::destroyHypreData()
+{
+   if (m_hypre_allocated) {
+      if (m_AMG_solver_allocated) {
+         HYPRE_BoomerAMGDestroy(m_par_AMG_solver);
+         m_AMG_solver_allocated = false;
+      }
+      if (m_A) {
+         HYPRE_SStructMatrixDestroy(m_A);
+         m_A = NULL;
+      }
+      HYPRE_SStructVectorDestroy(m_x);
+      HYPRE_SStructVectorDestroy(m_b);
+      HYPRE_SStructGraphDestroy(m_A_graph);
+      HYPRE_SStructStencilDestroy(m_A_stencil);
+      HYPRE_SStructGridDestroy(m_grid);
+
+      m_hypre_allocated = false;
+   }
 }
 
 

@@ -16,7 +16,7 @@ void EField::define( const double                      a_larmor,
                      const int                         a_cur_step )
 {
    if ( m_defined ) {
-      MayDay::Error("EField::define(): GKPoisson has already been created");
+      MayDay::Error("EField::define(): Efield has already been created");
    }
 
    m_boltzmann_electron = a_boltzmann_electron;
@@ -44,8 +44,12 @@ void EField::define( const double                      a_larmor,
    else {
       ParmParse pp( GKPoisson::pp_name );
       parseParameters(pp);
-      m_poisson = new GKPoisson( pp, mag_geom, a_larmor, a_debye );
-      dynamic_cast<GKPoisson*>(m_poisson)->setPhaseSpaceObjs(a_kinetic_species);
+      m_poisson = new GKPoisson(  pp, 
+                                  mag_geom, 
+                                  a_kinetic_species, 
+                                  a_larmor, 
+                                  a_debye, 
+                                  true );
    }
 
    if ( a_support_divfree_phase_vel ) {
@@ -83,7 +87,9 @@ void EField::computeEField( const PS::GKState&                a_state,
          // Update the potential and field, if not fixed_efield
          if ( a_update_potential ) {
 
-            LevelData<FArrayBox> ion_mass_density( grids, 1, IntVect::Zero );
+            // ion_mass_density has two components: first one is this quantity summed
+            // over *all* species; second one is this quantity summed over non-FLR species
+            LevelData<FArrayBox> ion_mass_density( grids, 2, IntVect::Zero );
             computePolarizationMassDensity( ion_mass_density, a_kinetic_species, a_fluid_species );
             m_poisson->setOperatorCoefficients( a_kinetic_species, ion_mass_density, a_bc, true );
             
@@ -93,7 +99,7 @@ void EField::computeEField( const PS::GKState&                a_state,
                computeTotalChargeDensity( total_charge_density, a_kinetic_species, a_fluid_species );
                
                if (!m_fixed_krho2) {
-                  m_poisson->computePotential( a_phi, total_charge_density );
+                  m_poisson->solveWithBCs( a_phi, total_charge_density );
                }
                else {
                   for (DataIterator dit(a_phi.dataIterator()); dit.ok(); ++dit) {
@@ -336,6 +342,12 @@ void EField::computePolarizationMassDensity(LevelData<FArrayBox>&             a_
                                             const PS::KineticSpeciesPtrVect&  a_kinetic_species,
                                             const FluidSpeciesPtrVect&        a_fluid_species) const
 {
+   /* If a_mass_density has 2 components,
+    * GKPoisson with FLR effects needs both the total mass density over all species
+    * and a total mass density for all non-gyrokinetic species; the 2nd component
+    * will contain the latter. */
+   int nc = a_mass_density.nComp();
+
    // Container for individual species charge density
    const MagGeom& mag_geom = configurationSpaceGeometry();
    const DisjointBoxLayout& mag_grids = mag_geom.gridsFull();
@@ -357,7 +369,10 @@ void EField::computePolarizationMassDensity(LevelData<FArrayBox>&             a_
       
       DataIterator dit( a_mass_density.dataIterator() );
       for (dit.begin(); dit.ok(); ++dit) {
-         a_mass_density[dit].plus( species_mass_density[dit] );
+         a_mass_density[dit].plus( species_mass_density[dit], 0, 0 );
+         if ((!this_species.isGyrokinetic()) && (nc == 2)) {
+          a_mass_density[dit].plus( species_mass_density[dit], 0, 1 );
+         }
       }
    }
 
@@ -374,7 +389,10 @@ void EField::computePolarizationMassDensity(LevelData<FArrayBox>&             a_
       
          DataIterator dit( a_mass_density.dataIterator() );
          for (dit.begin(); dit.ok(); ++dit) {
-            a_mass_density[dit].plus( species_mass_density[dit] );
+            a_mass_density[dit].plus( species_mass_density[dit], 0, 0 );
+            if (nc == 2) {
+              a_mass_density[dit].plus( species_mass_density[dit], 0, 1 );
+            }
          }
       }
    }

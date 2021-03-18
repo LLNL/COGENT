@@ -1,5 +1,6 @@
 #include "LogRectEllipticOpBC.H"
 #include "Directions.H"
+#include "GridFunctionLibrary.H"
 
 #include "NamespaceHeader.H"
 
@@ -21,7 +22,6 @@ LogRectEllipticOpBC::LogRectEllipticOpBC( const std::string&  a_name,
    setNames();
    parseParameters( a_pp );
 }
-
 
 
 void
@@ -428,6 +428,8 @@ void LogRectEllipticOpBC::printParameters() const
 inline
 void LogRectEllipticOpBC::parseParameters( ParmParse& a_pp )
 {
+   GridFunctionLibrary* library = GridFunctionLibrary::getInstance();
+   
    for (int i=0; i<m_bc_type.size(); i++) {
       std::string prefix( a_pp.prefix() );
       prefix += "." + m_bdry_name[i];
@@ -456,13 +458,26 @@ void LogRectEllipticOpBC::parseParameters( ParmParse& a_pp )
          MayDay::Error("LogRectEllipticOpBC::parseParameter(): Illegal potential bc type");
       }
 
+      bool value_specified = fpp.contains("value");
+      
       if (fpp.contains("value")) {
          fpp.query("value", m_bc_value[i]);
       }
       else {
          m_bc_value[i] = 0.;
       }
-
+      
+      bool function_specified = fpp.contains("function");
+      
+      if (fpp.contains("function")) {
+         std::string function_name;
+         fpp.query( "function", function_name );
+         m_bc_function[i] = library->find( function_name );
+      }
+      
+      if (value_specified && function_specified) {
+         MayDay::Error("LogRectEllipticOpBC::parseParameters(): Please specify either a value or a function, but not both");
+      }
    }
 
    if (m_verbosity) {

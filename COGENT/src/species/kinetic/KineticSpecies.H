@@ -14,7 +14,6 @@
 namespace CFG = CFG_NAMESPACE;
 namespace VEL = VEL_NAMESPACE;
 
-class Kernel;
 class MomentOp;
 
 /// Kinetic species interface.

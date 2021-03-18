@@ -16,7 +16,6 @@
 
 #include "NamespaceHeader.H"
 
-class Kernel;
 class MomentOp;
 
 /**

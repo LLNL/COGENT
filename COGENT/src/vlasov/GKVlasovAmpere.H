@@ -83,45 +83,9 @@ public:
                          const Real                             time );
 
 
-   // Operator evaluation using a divergence-free phase space velocity computed from
-   // the cell-centered field (Efield_cell) and nodal potential (phi_node)
-   void evalRHSExplicit( KineticSpecies&                        rhs_species,
-                         double&                                lo_value,
-                         double&                                hi_value,
-                         CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
-                         const KineticSpecies&                  soln_species,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
-                         const bool                             fourth_order_Efield,
-                         const int                              velocity_option,
-                         const Real                             time );
-   void evalRHSImplicit( KineticSpecies&                        rhs_species,
-                         double&                                lo_value,
-                         double&                                hi_value,
-                         CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
-                         const KineticSpecies&                  soln_species,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
-                         const bool                             fourth_order_Efield,
-                         const int                              velocity_option,
-                         const Real                             time );
-   void evalRHS(         KineticSpecies&                        rhs_species,
-                         double&                                lo_value,
-                         double&                                hi_value,
-                         CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
-                         const KineticSpecies&                  soln_species,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi_node,
-                         const bool                             fourth_order_Efield,
-                         const int                              velocity_option,
-                         const Real                             time );
-
-   /// Computes FS_averaged particle flux normalized by the shell_volume (i.e., <Flux*grad(Psi)>/Shell_volume).
 protected:
-
+   
+   /// Computes FS_averaged particle flux normalized by the shell_volume (i.e., <Flux*grad(Psi)>/Shell_volume).
    /**
     * Computes <grad(psi) * Flux> * S/(one-cell wide shell volume) 
     * radial_flux_divergence_average does not have ghost cells, and stores the data in the radial direction  as follows

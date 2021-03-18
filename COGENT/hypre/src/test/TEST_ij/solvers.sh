@@ -9,7 +9,7 @@ RTOL=$1
 ATOL=$2
 
 #=============================================================================
-# IJ: Run multiplicative and mult_additive cycle and compare results 
+# IJ: Run multiplicative and mult_additive cycle and compare results
 #                    should be the same
 #=============================================================================
 
@@ -21,7 +21,7 @@ tail -17 ${TNAME}.out.110 | head -6 > ${TNAME}.testdata.temp
 diff ${TNAME}.testdata ${TNAME}.testdata.temp >&2
 
 #=============================================================================
-# IJ: MGR case nlevels < 1 and bsize < 2 should be the same 
+# IJ: MGR case nlevels < 1 and bsize < 2 should be the same
 #                    compare results
 #=============================================================================
 
@@ -45,6 +45,22 @@ FILES="\
  ${TNAME}.out.5\
  ${TNAME}.out.6\
  ${TNAME}.out.7\
+ ${TNAME}.out.900\
+ ${TNAME}.out.901\
+ ${TNAME}.out.902\
+ ${TNAME}.out.903\
+ ${TNAME}.out.904\
+ ${TNAME}.out.905\
+ ${TNAME}.out.906\
+ ${TNAME}.out.910\
+ ${TNAME}.out.911\
+ ${TNAME}.out.912\
+ ${TNAME}.out.913\
+ ${TNAME}.out.914\
+ ${TNAME}.out.915\
+ ${TNAME}.out.916\
+ ${TNAME}.out.917\
+ ${TNAME}.out.918\
 "
 
 for i in $FILES
@@ -129,6 +145,40 @@ FILES="\
  ${TNAME}.out.211\
  ${TNAME}.out.212\
  ${TNAME}.out.213\
+"
+
+for i in $FILES
+do
+  echo "# Output file: $i"
+  tail -3 $i
+done >> ${TNAME}.out
+
+FILES="\
+ ${TNAME}.out.300\
+ ${TNAME}.out.301\
+ ${TNAME}.out.302\
+ ${TNAME}.out.303\
+ ${TNAME}.out.304\
+ ${TNAME}.out.305\
+ ${TNAME}.out.306\
+ ${TNAME}.out.307\
+ ${TNAME}.out.308\
+ ${TNAME}.out.309\
+ ${TNAME}.out.310\
+ ${TNAME}.out.311\
+ ${TNAME}.out.312\
+ ${TNAME}.out.313\
+ ${TNAME}.out.314\
+ ${TNAME}.out.315\
+ ${TNAME}.out.316\
+ ${TNAME}.out.317\
+ ${TNAME}.out.318\
+ ${TNAME}.out.319\
+ ${TNAME}.out.320\
+ ${TNAME}.out.321\
+ ${TNAME}.out.322\
+ ${TNAME}.out.323\
+ ${TNAME}.out.324\
 "
 
 for i in $FILES

@@ -2,6 +2,7 @@
 
 #include "NTRInterface.H"
 #include "FixedBckgr.H"
+#include "FluidNeutrals.H"
 #include "NullNTR.H"
 
 #include <float.h>
@@ -35,6 +36,10 @@ GKNeutrals::GKNeutrals( const int a_verbose )
             
             if (ntr_type == "FixedBckgr") {
                ntr = new FixedBckgr( ppntr, m_verbose );
+            }
+
+            if (ntr_type == "FluidNeutrals") {
+               ntr = new FluidNeutrals( ppntr, m_verbose );
             }
          }
          else {
@@ -75,15 +80,20 @@ NTRInterface& GKNeutrals::neutralModel( const std::string& a_name )
 }
 
 
-void GKNeutrals::accumulateRHS( KineticSpeciesPtrVect&       a_rhs,
-                                  const KineticSpeciesPtrVect& a_soln,
-                                  const Real                   a_time )
+void GKNeutrals::accumulateRHS( KineticSpeciesPtrVect&            a_rhs,
+                                const KineticSpeciesPtrVect&      a_kinetic_species_phys,
+                                const CFG::FluidSpeciesPtrVect&   a_fluid_species_phys,
+                                const Real                        a_time )
 {
    for (int species(0); species<a_rhs.size(); species++) {
       KineticSpecies& rhs_species( *(a_rhs[species]) );
       const std::string species_name( rhs_species.name() );
       NTRInterface& NTR( neutralModel( species_name ) );
-      NTR.evalNtrRHS( rhs_species, a_soln, species, a_time );
+      NTR.evalNtrRHS( rhs_species,
+                      a_kinetic_species_phys,
+                      a_fluid_species_phys,
+                      species,
+                      a_time );
    }
 }
 

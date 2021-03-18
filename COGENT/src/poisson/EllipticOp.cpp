@@ -19,16 +19,43 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 
-#include "inspect.H"
-
 #include "NamespaceHeader.H"
 
 #undef INTERP_TO_NODES_WITH_BCS
 
 
 EllipticOp::EllipticOp( const ParmParse& a_pp,
-                        const MagGeom&   a_geom )
-   : m_geometry(a_geom)
+                        const MagGeom&   a_geometry )
+   : m_geometry(a_geometry)
+{
+   if ( a_pp.query("second_order", m_second_order) == 0 ) m_second_order = false;
+   if ( a_pp.query("low_pollution", m_low_pollution) == 0 ) m_low_pollution = false;
+
+   init(a_pp);
+}
+      
+
+EllipticOp::EllipticOp( const ParmParse&  a_pp,
+                        const MagGeom&    a_geometry,
+                        const bool        a_second_order,
+                        const bool        a_low_pollution )
+   : m_geometry(a_geometry),
+     m_second_order(a_second_order),
+     m_low_pollution(a_low_pollution)
+{
+   init(a_pp);
+}
+      
+
+EllipticOp::~EllipticOp()
+{
+   if (m_Chombo_solver) delete m_Chombo_solver;
+   if (m_mblex_potential_Ptr) delete m_mblex_potential_Ptr;
+}
+
+
+void
+EllipticOp::init( const ParmParse& a_pp )
 {
    const DisjointBoxLayout& grids = m_geometry.grids();
 
@@ -41,20 +68,6 @@ EllipticOp::EllipticOp( const ParmParse& a_pp,
       }
    }
 
-   if (a_pp.contains("second_order")) {
-     a_pp.get("second_order", m_second_order);
-   }
-   else {
-     m_second_order = false;
-   }
-
-   if (a_pp.contains("low_pollution")) {
-     a_pp.get("low_pollution", m_low_pollution);
-   }
-   else {
-     m_low_pollution = false;
-   }
-
    if (m_second_order) {
       m_num_potential_ghosts = 2;
    }
@@ -62,14 +75,15 @@ EllipticOp::EllipticOp( const ParmParse& a_pp,
       m_num_potential_ghosts = 3;
    }
 
+   m_Chombo_solver = NULL;
    ParmParse pp_linear_solver( ((string)a_pp.prefix() + ".linear_solver").c_str());
-   defineLinearSolver( pp_linear_solver );
+   defineSolver( pp_linear_solver );
 
    // If there is more than one block, construct the multiblock exchange object
    if ( (m_geometry.coordSysPtr()->numBlocks() > 1) && !m_geometry.extrablockExchange() && !m_geometry.shearedMBGeom()) {
      m_mblex_potential_Ptr = new MultiBlockLevelExchangeCenter();
      int spaceOrder = 4;
-     m_mblex_potential_Ptr->define(&a_geom, m_num_potential_ghosts, spaceOrder);
+     m_mblex_potential_Ptr->define(&m_geometry, m_num_potential_ghosts, spaceOrder);
    }
    else {
      m_mblex_potential_Ptr = NULL;
@@ -87,44 +101,39 @@ EllipticOp::EllipticOp( const ParmParse& a_pp,
 }
       
 
-
-EllipticOp::~EllipticOp()
+void
+EllipticOp::defineSolver( const ParmParse& a_pp )
 {
-   if (m_Chombo_solver) delete m_Chombo_solver;
-   if (m_mblex_potential_Ptr) delete m_mblex_potential_Ptr;
+   // Defines the linear solver from ParmParse data or defaults
+
+   string method;
+   if ( a_pp.query("method", method) == 0 ) method = "BiCGStab";
+
+   double tol;
+   if ( a_pp.query("tol", tol) == 0 ) tol = 1.e-6;
+
+   int max_iter;
+   if ( a_pp.query("max_iter", max_iter) == 0 ) max_iter = 20;
+
+   bool verbose;
+   if ( a_pp.query("verbose", verbose) == 0 ) verbose = false;
+
+   defineSolver(method, tol, max_iter, verbose);
 }
 
 
-
 void
-EllipticOp::defineLinearSolver( const ParmParse& a_pp )
+EllipticOp::defineSolver( const string&  a_method,
+                          const double   a_tol,
+                          const int      a_max_iter,
+                          const bool     a_verbose )
 {
-   // Defaults; over-ridden if present in ParmParse object
-   m_method   = "BiCGStab";
-   m_tol      = 1.e-6;
-   m_max_iter = 20;
-   m_verbose  = false;
-   parseMethodAndParams(a_pp, m_method, m_tol, m_max_iter, m_verbose);
+   if ( m_Chombo_solver ) delete m_Chombo_solver;
 
-   ParmParse pp_precond( ((string)a_pp.prefix() + ".precond").c_str());
-
-   // Defaults; over-ridden if present in ParmParse object
-   m_precond_method   = "AMG";
-   m_precond_tol      = 0.;
-   m_precond_max_iter = 1;
-   m_precond_verbose  = false;
-   parseMethodAndParams(pp_precond, m_precond_method, m_precond_tol,
-                        m_precond_max_iter, m_precond_verbose);
-
-   ParmParse pp_precond_precond( ((string)pp_precond.prefix() + ".precond").c_str());
-
-   // Defaults; over-ridden if present in ParmParse object
-   m_precond_precond_method   = "";
-   m_precond_precond_tol      = 0.;
-   m_precond_precond_max_iter = 0;
-   m_precond_precond_verbose  = false;
-   parseMethodAndParams(pp_precond_precond, m_precond_precond_method, m_precond_precond_tol,
-                        m_precond_precond_max_iter, m_precond_precond_verbose);
+   m_method = a_method;
+   m_tol = a_tol;
+   m_max_iter = a_max_iter;
+   m_verbose = a_verbose;
 
    if ( m_method == "BiCGStab" ) {
       m_Chombo_solver = new BiCGStabSolver< LevelData<FArrayBox> >;
@@ -137,46 +146,18 @@ EllipticOp::defineLinearSolver( const ParmParse& a_pp )
 }
 
 
-
 void
-EllipticOp::parseMethodAndParams( const ParmParse&  a_pp,
-                                  string&           a_method,
-                                  double&           a_tol,
-                                  int&              a_max_iter,
-                                  bool&             a_verbose ) const
+EllipticOp::solveWithBCs( LevelData<FArrayBox>&        a_solution,
+                          const LevelData<FArrayBox>&  a_rhs )
 {
-   if (a_pp.contains("method")) {
-      a_pp.get("method", a_method);
-   }
-
-   if (a_pp.contains("tol")) {
-      a_pp.get("tol", a_tol);
-   }
-
-   if (a_pp.contains("max_iter")) {
-      a_pp.get("max_iter", a_max_iter);
-   }
-
-   if (a_pp.contains("verbose")) {
-      a_pp.get("verbose", a_verbose);
-   }
-}
-
-
-
-void
-EllipticOp::computePotential( LevelData<FArrayBox>&        a_phi,
-                              const LevelData<FArrayBox>&  a_charge_density )
-{
-   LevelData<FArrayBox> rhs;
-   rhs.define(a_charge_density);
+   LevelData<FArrayBox> rhs_with_bcs;
+   rhs_with_bcs.define(a_rhs);
 
    // Add any inhomogeneous boundary values to the right-hand side
-   subtractBcDivergence(rhs);
+   subtractBcDivergence(rhs_with_bcs);
 
-   solve( rhs, a_phi );
+   solve( rhs_with_bcs, a_solution );
 }
-
 
 
 void
@@ -194,9 +175,6 @@ EllipticOp::solve( const LevelData<FArrayBox>&  a_rhs,
       ((GMRESSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_verbosity = m_verbose? 5: 0;
    }
 
-   setPreconditionerConvergenceParams(m_precond_tol, m_precond_max_iter,
-                                      m_precond_precond_tol, m_precond_precond_max_iter);
-
    setToZero(a_solution);
    m_Chombo_solver->solve(a_solution, a_rhs);
 
@@ -204,23 +182,31 @@ EllipticOp::solve( const LevelData<FArrayBox>&  a_rhs,
       if ( m_method == "BiCGStab" ) {
          int exit_status = ((BiCGStabSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_exitStatus;
          if ( exit_status == 1 ) {
-            cout << "      --> BiCGStab converged successfully" << endl;
+            cout << "      --> BiCGStab converged to residual norm " 
+                 << ((BiCGStabSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_residual << " in " 
+                 << ((BiCGStabSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_iter << " iterations" 
+                 << endl;
          }
          else {
-            cout << "      --> BiCGStab solver returned " << exit_status << endl;
+            cout << "      --> BiCGStab solver did not converge, returning " << exit_status << endl;
          }
       }
       else if ( m_method == "GMRES" ) {
          int exit_status = ((GMRESSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_exitStatus;
          if ( exit_status == 1 ) {
-            cout << "      --> GMRES converged successfully" << endl;
+            cout << "      --> GMRES converged to residual norm " 
+                 << ((GMRESSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_residual << " in " 
+                 << ((GMRESSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_iter << " iterations" 
+                 << endl;
          }
          else {
-            cout << "      --> GMRES solver returned " << exit_status << endl;
+            cout << "      --> GMRES solver did not converge, returning " << exit_status << endl;
          }
       }
    }
 }
+
+
 
 void
 EllipticOp::compute3DFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
@@ -235,7 +221,6 @@ EllipticOp::compute3DFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
 
    m_geometry.unmap3DGradient(mapped_field, a_field);
 }
-
 
 
 void
@@ -285,6 +270,7 @@ EllipticOp::computeMapped3DFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
 
 }
 
+
 void
 EllipticOp::computeMappedPoloidalFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
                                                LevelData<FluxBox>&          a_field,
@@ -317,7 +303,6 @@ EllipticOp::computeMappedPoloidalFieldWithBCs( const LevelData<FArrayBox>&  a_ph
 }
 
 
-
 void
 EllipticOp::computePoloidalField( const LevelData<FArrayBox>&  a_phi,
                                   LevelData<FArrayBox>&        a_field ) const
@@ -330,7 +315,6 @@ EllipticOp::computePoloidalField( const LevelData<FArrayBox>&  a_phi,
 
    m_geometry.unmapPoloidalGradient(mapped_field, a_field);
 }
-
 
 
 void
@@ -402,7 +386,6 @@ EllipticOp::computeMapped3DField( const LevelData<FArrayBox>&  a_phi,
 }
 
 
-
 void
 EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
                                         LevelData<FArrayBox>&        a_field ) const
@@ -459,7 +442,6 @@ EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
 }
 
 
-
 void
 EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
                                         LevelData<FluxBox>&          a_field ) const
@@ -513,7 +495,6 @@ EllipticOp::computeMappedPoloidalField( const LevelData<FArrayBox>&  a_phi,
       
    computeMappedPoloidalFieldWithGhosts(phi_cell, a_field, order);
 }
-
 
 
 void
@@ -600,7 +581,6 @@ EllipticOp::computeField( const LevelData<FArrayBox>&  a_phi,
 }
 
 
-
 void
 EllipticOp::computeMappedField( const LevelData<FArrayBox>&  a_phi,
                                 LevelData<FArrayBox>&        a_field ) const
@@ -619,7 +599,6 @@ EllipticOp::computeMappedField( const LevelData<FArrayBox>&  a_phi,
 #endif
 
 }
-
 
 
 void
@@ -641,12 +620,11 @@ EllipticOp::computeMappedField( const LevelData<FArrayBox>&  a_phi,
 }
 
 
-
 void
 EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
                                    LevelData<FArrayBox>&        a_out,
                                    const bool                   a_homogeneous_bcs,
-                                   const bool                   a_extrap_to_ghosts)
+                                   const bool                   a_extrap_to_ghosts )
 {
    CH_TIME("EllipticOp::computeFluxDivergence");
    const DisjointBoxLayout& grids = a_in.disjointBoxLayout();
@@ -672,7 +650,7 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
      }
 
      // Multiply the field by the unmapped, face-centered GKP coefficients
-     multiplyCoefficients(flux, false, true);
+     multiplyCoefficients(flux, false);
 
      m_geometry.fillTransversePhysicalGhosts(flux);
 
@@ -697,7 +675,7 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
      }
 
      // Multiply the field by the mapped, face-centered GKP coefficients
-     multiplyCoefficients(flux, true, true);
+     multiplyCoefficients(flux, true);
 
      m_geometry.fillTransversePhysicalGhosts(flux);
 
@@ -727,7 +705,6 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
       a_out[dit] /= m_volume[dit];
    }
 }
-
 
 
 void
@@ -801,7 +778,6 @@ EllipticOp::computeBcDivergence( LevelData<FArrayBox>& a_out )
 }
 
 
-
 void
 EllipticOp::setBc( const EllipticOpBC& a_bc )
 {
@@ -809,7 +785,6 @@ EllipticOp::setBc( const EllipticOpBC& a_bc )
    m_codim2_stencils.clear();
    constructBoundaryStencils(!m_second_order, a_bc, m_codim1_stencils, m_codim2_stencils );
 }
-
 
 
 void
@@ -821,7 +796,6 @@ EllipticOp::addBcDivergence( LevelData<FArrayBox>& a_data ) const
 }
 
 
-
 void
 EllipticOp::subtractBcDivergence( LevelData<FArrayBox>& a_data ) const
 {
@@ -829,7 +803,6 @@ EllipticOp::subtractBcDivergence( LevelData<FArrayBox>& a_data ) const
       a_data[dit] -= m_bc_divergence[dit];
    }
 }
-
 
 
 void
@@ -990,6 +963,7 @@ EllipticOp::computeRadialFSAverage( const LevelData<FluxBox>&  a_in,
    a_hi_value = globalMax(a_hi_value);
 }
 
+
 void
 EllipticOp::fillInternalGhosts( LevelData<FArrayBox>& a_phi ) const
 {
@@ -1024,6 +998,7 @@ EllipticOp::fillInternalGhosts( LevelData<FArrayBox>& a_phi ) const
   }
 }
 
+
 void
 EllipticOp::extractNormalComponent( const LevelData<FluxBox>&  a_in,
                                     const int                  a_dir,
@@ -1040,7 +1015,6 @@ EllipticOp::extractNormalComponent( const LevelData<FluxBox>&  a_in,
 }
 
 
-
 // ----> Begin LinOp virtuals
 
 
@@ -1052,7 +1026,6 @@ EllipticOp::preCond( LevelData<FArrayBox>&        a_cor,
    setToZero(a_cor);
    solvePreconditioner(a_residual, a_cor);
 }
-
 
 
 void
@@ -1067,7 +1040,6 @@ EllipticOp::applyOp( LevelData<FArrayBox>&        a_out,
 
    computeFluxDivergence(a_in, a_out, a_homogeneous);
 }
-
 
 
 void
@@ -1089,14 +1061,12 @@ EllipticOp::residual(  LevelData<FArrayBox>&        a_lhs,
 }
 
 
-
 void
 EllipticOp::create( LevelData<FArrayBox>&        a_lhs,
                     const LevelData<FArrayBox>&  a_rhs )
 {
    a_lhs.define(a_rhs.disjointBoxLayout(), a_rhs.nComp(), a_rhs.ghostVect());
 }
-
 
 
 void
@@ -1107,7 +1077,6 @@ EllipticOp::assign( LevelData<FArrayBox>&        a_lhs,
       a_lhs[dit].copy(a_rhs[dit]);
    }
 }
-
 
 
 Real
@@ -1133,7 +1102,6 @@ EllipticOp::dotProduct( const LevelData<FArrayBox>&  a_1,
 }
 
 
-
 void
 EllipticOp::incr( LevelData<FArrayBox>&        a_lhs,
                   const LevelData<FArrayBox>&  a_x,
@@ -1143,7 +1111,6 @@ EllipticOp::incr( LevelData<FArrayBox>&        a_lhs,
       a_lhs[dit].plus(a_x[dit], a_scale);
    }
 }
-
 
 
 void
@@ -1162,7 +1129,6 @@ EllipticOp::axby( LevelData<FArrayBox>&        a_lhs,
 }
 
 
-
 void
 EllipticOp::scale( LevelData<FArrayBox>&  a_lhs,
                    const Real&            a_scale )
@@ -1171,7 +1137,6 @@ EllipticOp::scale( LevelData<FArrayBox>&  a_lhs,
       a_lhs[dit] *= a_scale;
    }
 }
-
 
 
 Real
@@ -1183,7 +1148,6 @@ EllipticOp::norm( const LevelData<FArrayBox>&  a_rhs,
 }
 
 
-
 void
 EllipticOp::setToZero( LevelData<FArrayBox>& a_lhs )
 {
@@ -1191,7 +1155,6 @@ EllipticOp::setToZero( LevelData<FArrayBox>& a_lhs )
       a_lhs[dit].setVal(0.);
    }
 }
-
 
 
 // <---- End LinOp virtuals
@@ -1257,6 +1220,7 @@ EllipticOp::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
       a_field.exchange();
    }
 }
+
 
 void
 EllipticOp::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
@@ -1429,6 +1393,7 @@ EllipticOp::computeMapped3DFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
 
 }
 
+
 void
 EllipticOp::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>&  a_phi,
                                                   LevelData<FluxBox>&          a_field,
@@ -1534,7 +1499,6 @@ EllipticOp::computeMappedPoloidalFieldWithGhosts( const LevelData<FArrayBox>&  a
       a_field.exchange();
    }
 }
-
 
 
 void
@@ -1728,7 +1692,6 @@ EllipticOp::constructBoundaryStencils( const bool                         a_four
 }
 
 
-
 void
 EllipticOp::accumPhysicalGhosts( const Vector< Vector<CoDim1Stencil> >&   a_codim1_stencils,
                                  const Vector< Vector<CoDim2Stencil> >&   a_codim2_stencils,
@@ -1798,7 +1761,6 @@ EllipticOp::accumPhysicalGhosts( const Vector< Vector<CoDim1Stencil> >&   a_codi
       }
    }
 }
-
 
 
 void
@@ -1901,13 +1863,11 @@ EllipticOp::interpToNodes( const LevelData<FArrayBox>&  a_phi,
 }
 
 
-
 double
 EllipticOp::L2Norm( const LevelData<FArrayBox>& a_data )
 {
    return sqrt(dotProduct(a_data, a_data));
 }
-
 
 
 double

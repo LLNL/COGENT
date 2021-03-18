@@ -1166,7 +1166,7 @@ void FokkerPlanck::computeReferenceSolution(const KineticSpeciesPtrVect& a_soln,
       pressure[dit].divide(density[dit]);
     }
   
-    MaxwellianKernel maxwellian(density,pressure,ParallelMom);
+    MaxwellianKernel<FArrayBox> maxwellian(density,pressure,ParallelMom);
     maxwellian.eval(m_F0,soln_species);
     phase_geom.multJonValid(m_F0);
     convertToCellCenters(phase_geom, m_F0);

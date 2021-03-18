@@ -2,7 +2,7 @@
 #define _FLUIDOPVARFACTORY_H_
 
 #include "CellVar.H"
-#include "OneFieldOp.H"
+#include "OneFieldNeutralsOp.H"
 #include "BurgersOp.H"
 #include "IdealMhdOp.H"
 #include "ExtendedMhdOp.H"
@@ -55,32 +55,31 @@ CFGVars* FluidOpVarFactory::create( const string&      a_pp_prefix,
    const std::string prefix( "fluid_model." + a_species_name );
 
    if ( a_op_type == "VorticityOp" ) {
-      VorticityOp op(prefix, a_geometry, 0., false);
+      VorticityOp op(a_geometry);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
    }
-   else if (a_op_type == "OneFieldOp" ) {
-      OneFieldOp op(prefix, a_species_name, a_geometry, false);
+   else if (a_op_type == "OneFieldNeutralsOp" ) {
+      OneFieldNeutralsOp op(a_geometry);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
    }
    else if (a_op_type == "BurgersOp" ) {
-      BurgersOp op(prefix, a_species_name, a_geometry, true);
+      BurgersOp op(a_geometry);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
    }
    else if (a_op_type == "IdealMhdOp" ) {
-      IdealMhdOp op(prefix, a_species_name, a_geometry, true);
+      IdealMhdOp op(a_geometry);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
    }
    else if (a_op_type == "ExtendedMhdOp" ) {
-      ExtendedMhdOp op(prefix, a_species_name, a_geometry, 
-                       0.0, 0.0, 0.0, 0.0, false);
+      ExtendedMhdOp op(a_geometry);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
    }
    else if (a_op_type == "FullFluidOp" ) {
-      FullFluidOp op(prefix, a_species_name, a_geometry, true);
+      FullFluidOp op(a_geometry);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
    }
    else if (a_op_type == "TwoFieldNeutralsOp" ) {
-      TwoFieldNeutralsOp op(prefix, a_species_name, a_geometry, true);
+      TwoFieldNeutralsOp op(a_geometry);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
    }
    else if ( a_op_type == "AmpereErAverageOp" ) {

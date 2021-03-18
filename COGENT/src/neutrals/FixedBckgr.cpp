@@ -34,10 +34,11 @@ FixedBckgr::~FixedBckgr()
 }
 
 
-void FixedBckgr::evalNtrRHS(KineticSpecies&              a_rhs_species,
-                            const KineticSpeciesPtrVect& a_soln,
-                            const int                    a_species,
-                            const Real                   a_time )
+void FixedBckgr::evalNtrRHS(KineticSpecies&                   a_rhs_species,
+                            const KineticSpeciesPtrVect&      a_soln,
+                            const CFG::FluidSpeciesPtrVect&   a_fluid_species_phys,
+                            const int                         a_species,
+                            const Real                        a_time )
 {
    /*
     Evaluates the ionization and charge-exchange contribution to the RHS as
@@ -95,7 +96,7 @@ void FixedBckgr::evalNtrRHS(KineticSpecies&              a_rhs_species,
               neutral_temperature_cfg[dit].divide(temp_norm);
            }
          
-           MaxwellianKernel maxwellian(m_neutral_density_cfg, neutral_temperature_cfg, m_neutral_velocity_cfg);
+           MaxwellianKernel<FArrayBox> maxwellian(m_neutral_density_cfg, neutral_temperature_cfg, m_neutral_velocity_cfg);
            maxwellian.eval(m_neutral_dfn,soln_species);
 
         }
@@ -150,7 +151,7 @@ void FixedBckgr::evalNtrRHS(KineticSpecies&              a_rhs_species,
       if (!m_chx_model_friction) {
          //Compute neutral dfn using the ion temperature
          if (m_neutr_temp == NULL) {
-            MaxwellianKernel maxwellian(m_neutral_density_cfg, ion_temperature_cfg, m_neutral_velocity_cfg);
+            MaxwellianKernel<FArrayBox> maxwellian(m_neutral_density_cfg, ion_temperature_cfg, m_neutral_velocity_cfg);
             maxwellian.eval(m_neutral_dfn, soln_species);
          }
 
@@ -168,7 +169,7 @@ void FixedBckgr::evalNtrRHS(KineticSpecies&              a_rhs_species,
          }
       
          LevelData<FArrayBox> ion_unshifted_maxw( phase_geom.gridsFull(), 1, IntVect::Zero );
-         MaxwellianKernel maxwellian(ion_density_cfg, ion_temperature_cfg, zero_vel_cfg);
+         MaxwellianKernel<FArrayBox> maxwellian(ion_density_cfg, ion_temperature_cfg, zero_vel_cfg);
          maxwellian.eval(ion_unshifted_maxw, soln_species);
          
          LevelData<FArrayBox> u_par;

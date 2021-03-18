@@ -34,9 +34,10 @@ class GKNeutrals
        * @param[in] soln current solution with which to evaluate RHS.
        * @param[in] time current time.
        */
-      virtual void accumulateRHS( KineticSpeciesPtrVect&       rhs,
-                                  const KineticSpeciesPtrVect& soln,
-                                  const Real                   time );
+      virtual void accumulateRHS( KineticSpeciesPtrVect&          rhs,
+                                  const KineticSpeciesPtrVect&    kinetic_species_phys,
+                                  const CFG::FluidSpeciesPtrVect& fluid_species_phys,
+                                  const Real                      time );
 
       /// Compute a stable time step.
       /**

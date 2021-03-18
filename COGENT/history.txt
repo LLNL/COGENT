@@ -1,4 +1,175 @@
 ------------------------------------------------------------------------
+r1719 | debo | 2021-03-17 18:36:54 -0700 (Wed, 17 Mar 2021) | 1 line
+
+1) Implemented handling of multiple species by FLR-Poisson where all the species may not include FLR effects; 2) Implemented a switch function that allows gradual switching from FLR to long-wavelength-limit near the boundaries (or anywhere else) - this function can be specified through the grid function library; 3) Calculation of gyroaveraged E-Field uses full-sized phase space objects since using optimized computeGradient for flat phase space objects still has a bug
+------------------------------------------------------------------------
+r1716 | mdorf | 2021-03-16 11:27:44 -0700 (Tue, 16 Mar 2021) | 1 line
+
+Fixed a bug introduced in r1714
+------------------------------------------------------------------------
+r1715 | mdorf | 2021-03-14 20:36:31 -0700 (Sun, 14 Mar 2021) | 1 line
+
+Fixed input inconsistency (outer plate BC type was not set for fluid BCs)
+------------------------------------------------------------------------
+r1714 | mdorf | 2021-03-14 20:34:13 -0700 (Sun, 14 Mar 2021) | 1 line
+
+Additional refactoring of the configuraiton BC classes
+------------------------------------------------------------------------
+r1713 | mdorf | 2021-03-14 19:02:35 -0700 (Sun, 14 Mar 2021) | 1 line
+
+Initial clean-up and reorganization of the configuration BC classes
+------------------------------------------------------------------------
+r1712 | mdorf | 2021-03-08 20:08:03 -0800 (Mon, 08 Mar 2021) | 1 line
+
+Updated sample inputs for the fluid neutral tests
+------------------------------------------------------------------------
+r1711 | mdorf | 2021-03-08 20:03:03 -0800 (Mon, 08 Mar 2021) | 1 line
+
+Added recycling BCs for TwoFieldNeutrals model. Also performed some refactoring of both one-field and two-field neutral model classes
+------------------------------------------------------------------------
+r1710 | debo | 2021-03-04 21:42:25 -0800 (Thu, 04 Mar 2021) | 1 line
+
+Fixed a bug in computing mu in the gyroaverage operator; other changes: added an inject-and-expand-configuration-to-phase function that will create full-sized phase space objects from configuration space objects, cleaned up some code, in debug mode of gyroaverage operator, save and plot the computed gyroradii at all points and mu values.
+------------------------------------------------------------------------
+r1709 | debo | 2021-02-24 18:02:25 -0800 (Wed, 24 Feb 2021) | 1 line
+
+1) Implemented 3rd order (tricubic) interpolation for gyro-orbit points in 3D, 2) Bugfix in the way gyro-orbit points are computed in 3D, 3) added stencil compression, 4) added interpolation for gyroaveraging in the mapped space and made it the default, 5) Cleaned up a bunch of code in FLR GKPoisson
+------------------------------------------------------------------------
+r1708 | mdorf | 2021-02-21 13:20:52 -0800 (Sun, 21 Feb 2021) | 1 line
+
+Added the missing mass factor to the OneFieldOp self-consistent diffusion model; added diagnostics to TwoFieldNeutralModel
+------------------------------------------------------------------------
+r1707 | mdorf | 2021-02-20 13:14:37 -0800 (Sat, 20 Feb 2021) | 1 line
+
+Added a conservative recycling BC (and removed a non-consiervative option). Renamed recenty-added functions in the Vlasov class and added some comments to improve code readability
+------------------------------------------------------------------------
+r1706 | mdorf | 2021-02-19 21:31:05 -0800 (Fri, 19 Feb 2021) | 1 line
+
+Miscellaneous updates to fluid neutral models
+------------------------------------------------------------------------
+r1705 | mdorf | 2021-02-17 21:15:18 -0800 (Wed, 17 Feb 2021) | 1 line
+
+Additional clean-up of Vlasov classes
+------------------------------------------------------------------------
+r1704 | mdorr | 2021-02-16 21:11:26 -0800 (Tue, 16 Feb 2021) | 3 lines
+
+Added face moments
+
+
+------------------------------------------------------------------------
+r1703 | mdorf | 2021-02-15 13:21:42 -0800 (Mon, 15 Feb 2021) | 1 line
+
+Included additional revisions omitted at the previous commit (r1702)
+------------------------------------------------------------------------
+r1702 | mdorf | 2021-02-15 12:05:52 -0800 (Mon, 15 Feb 2021) | 1 line
+
+Cleaned up Vlasov classes
+------------------------------------------------------------------------
+r1701 | mdorr | 2021-02-14 19:05:34 -0800 (Sun, 14 Feb 2021) | 3 lines
+
+Fixed ParmParse prefix
+
+
+------------------------------------------------------------------------
+r1700 | debo | 2021-02-12 16:41:02 -0800 (Fri, 12 Feb 2021) | 1 line
+
+Corrected a mass factor in the gyro-Poisson equation with FLR effects
+------------------------------------------------------------------------
+r1699 | debo | 2021-02-10 16:53:19 -0800 (Wed, 10 Feb 2021) | 1 line
+
+Implemented 3rd and 4th order order interpolation for gyroaveraging in 2D; cleaned up the FLR code in GKPoisson
+------------------------------------------------------------------------
+r1698 | mdorr | 2021-02-10 11:52:21 -0800 (Wed, 10 Feb 2021) | 5 lines
+
+Reorganizing and cleaning up the handling of solver parameters.
+
+Adding null constructors for some fluid operators so that they can be used to create their state variables without constructing everything else (e.g. solvers).
+
+
+------------------------------------------------------------------------
+r1697 | mdorf | 2021-02-08 14:05:32 -0800 (Mon, 08 Feb 2021) | 1 line
+
+Updated fluid_diffusion_sn_impl test input to be consistent with changes introduced in r1696
+------------------------------------------------------------------------
+r1696 | mdorf | 2021-02-08 14:01:02 -0800 (Mon, 08 Feb 2021) | 1 line
+
+1. Added recycling BC for a single-null geometry. 2.Misc. updates to fluid neutral models. 3. Added second-order extrapolation of moment quantities to ghosts to avoid division by zero for certain BC choices
+------------------------------------------------------------------------
+r1695 | mdorf | 2021-02-05 13:30:22 -0800 (Fri, 05 Feb 2021) | 1 line
+
+Fixed index out of bound issue occuring in the debug mode
+------------------------------------------------------------------------
+r1694 | debo | 2021-01-29 15:05:39 -0800 (Fri, 29 Jan 2021) | 1 line
+
+bugfix in trilinear interpolation and squashed a bunch of compiler warnings by reordering initializations and removing unused variables
+------------------------------------------------------------------------
+r1693 | debo | 2021-01-29 15:03:46 -0800 (Fri, 29 Jan 2021) | 1 line
+
+1) Fixed the bilinear and trilinear interpolation for gyro-orbit points for cases where the cell is "degenerate", 2) Corrected the nondimensionalized polarization density term in gyro-Poisson equation, 3) Other fixes in the gyroaveraging operator and gyro-Poisson equation implementation
+------------------------------------------------------------------------
+r1692 | mdorr | 2021-01-27 18:25:00 -0800 (Wed, 27 Jan 2021) | 3 lines
+
+Refactored the vorticity model input and modified the sample inputs accordingly
+
+
+------------------------------------------------------------------------
+r1691 | mdorf | 2021-01-26 15:57:19 -0800 (Tue, 26 Jan 2021) | 1 line
+
+Added self-consistent fluid neutrals (presently, only a simple diffusion model is implemented)
+------------------------------------------------------------------------
+r1690 | mdorr | 2021-01-25 13:23:50 -0800 (Mon, 25 Jan 2021) | 3 lines
+
+Fixed some memory leaks
+
+
+------------------------------------------------------------------------
+r1689 | mdorr | 2021-01-20 10:26:19 -0800 (Wed, 20 Jan 2021) | 3 lines
+
+Added cout writing of the GMRES and BiCGStab final residuals and number of iterations taken
+
+
+------------------------------------------------------------------------
+r1688 | mdorr | 2021-01-12 11:23:38 -0800 (Tue, 12 Jan 2021) | 12 lines
+
+Extended MBHypreSolver to accommodate block systems in which each block is an elliptic operator. Added interfaces to the Hypre ILU and MGR solvers (requires Hypre v2.20.0 placed in the hypre directory in the r1687 commit). The available input options are now GMRES, AMG, ILU or MGR.  For example:
+
+gkpoisson.linear_solver.precond.method = "MGR"
+
+Modified GKVorticity to specify the inclusion of the polarization density correction only through a constructor argument (i.e., not ParmParsed as previously).  When the correction is specified, a block system is constructed and solved using the MBHypreSolver block solver.
+
+Performed some minor refactoring of GKPoisson to support the above that propagated small changes to its derived classes.
+
+Modified VorticityOp to pass in the polarization density correction flag through the constructor.  The use of the correction for the IMEX option is still being investigated, but should be working for the old vorticity option.
+
+
+
+------------------------------------------------------------------------
+r1687 | mdorr | 2021-01-07 11:26:39 -0800 (Thu, 07 Jan 2021) | 3 lines
+
+Adding Hypre version 2.20.0 to access the latest versions of the ILU and MGR solvers.  This required the addition of an internal Hypre header to MBHypreSolver.cpp and GKVlasovAMG.cpp
+
+
+------------------------------------------------------------------------
+r1686 | mdorr | 2021-01-07 11:17:39 -0800 (Thu, 07 Jan 2021) | 3 lines
+
+Removing Hypre version 2.18.2 in preparation for replacement by version 2.20,0
+
+
+------------------------------------------------------------------------
+r1685 | mdorf | 2020-12-14 21:43:19 -0800 (Mon, 14 Dec 2020) | 1 line
+
+Added recycling BCs and generalized OneFieldOp class to include kinetic ions
+------------------------------------------------------------------------
+r1684 | mdorf | 2020-12-04 20:12:22 -0800 (Fri, 04 Dec 2020) | 1 line
+
+Improved and extended ExBdata diagnostics
+------------------------------------------------------------------------
+r1683 | mdorr | 2020-12-02 15:16:58 -0800 (Wed, 02 Dec 2020) | 3 lines
+
+Adding use_old_amg_setup initialization to constructor from header
+
+
+------------------------------------------------------------------------
 r1682 | angus1 | 2020-10-08 12:58:38 -0700 (Thu, 08 Oct 2020) | 1 line
 
 updating idealMhdOp to work in 3D

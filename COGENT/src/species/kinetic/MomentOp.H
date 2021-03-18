@@ -47,13 +47,19 @@ class MomentOp
        */
       void compute( CFG::LevelData<CFG::FArrayBox>& result,
                     const KineticSpecies& kinetic_species,
-                    const Kernel& kernel ) const;
+                    const Kernel<FArrayBox>& kernel ) const;
 
       // modified compute to take moments of arbitrary LevelData<FArrayBox>
       void compute( CFG::LevelData<CFG::FArrayBox>& result,
                     const KineticSpecies& kinetic_species,
                     const LevelData<FArrayBox>& a_function,
-                    const Kernel& kernel ) const;
+                    const Kernel<FArrayBox>& kernel ) const;
+
+      // modified compute to take moments of arbitrary LevelData<FluxBox>
+      void compute( CFG::LevelData<CFG::FluxBox>& result,
+                    const KineticSpecies& kinetic_species,
+                    const LevelData<FluxBox>& a_function,
+                    const Kernel<FluxBox>& kernel ) const;
    private:
 
       /// Default Constructor.
@@ -85,14 +91,19 @@ class MomentOp
        */
       void computeIntegrand( LevelData<FArrayBox>&  integrand,
                              const KineticSpecies&  kinetic_species,
-                             const Kernel&          kernel ) const;
+                             const Kernel<FArrayBox>&          kernel ) const;
 
       // modifed computeIntegrand to work for arbitrary LevelData<FArrayBox>
       void computeIntegrand( LevelData<FArrayBox>&       integrand,
                              const KineticSpecies&       kinetic_species,
                              const LevelData<FArrayBox>& function,
-                             const Kernel&               kernel ) const;
+                             const Kernel<FArrayBox>&               kernel ) const;
 
+      // modifed computeIntegrand to work for arbitrary LevelData<FluxBox>
+      void computeIntegrand( LevelData<FluxBox>&       integrand,
+                             const KineticSpecies&       kinetic_species,
+                             const LevelData<FluxBox>& function,
+                             const Kernel<FluxBox>&               kernel ) const;
 
       /// Partial integration over \f$\mu\f$ direction.
       /**
@@ -106,6 +117,10 @@ class MomentOp
                               const LevelData<FArrayBox>& integrand,
                               const ProblemDomain& domain,
                               const SliceSpec& slice_mu) const;
+      void partialIntegralMu( CP1::LevelData<CP1::FluxBox>& result,
+                              const LevelData<FluxBox>& integrand,
+                              const ProblemDomain& domain,
+                              const SliceSpec& slice_mu) const;
 
       /// Partial integration over \f$v_{\parallel}\f$ direction.
       /**
@@ -117,6 +132,10 @@ class MomentOp
        */
       void partialIntegralVp( CFG::LevelData<CFG::FArrayBox>& result,
                               const CP1::LevelData<CP1::FArrayBox>& integrand,
+                              const CP1::ProblemDomain& domain,
+                              const CP1::SliceSpec& slice_vp) const;
+      void partialIntegralVp( CFG::LevelData<CFG::FluxBox>& result,
+                              const CP1::LevelData<CP1::FluxBox>& integrand,
                               const CP1::ProblemDomain& domain,
                               const CP1::SliceSpec& slice_vp) const;
 };

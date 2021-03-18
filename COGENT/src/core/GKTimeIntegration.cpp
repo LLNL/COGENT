@@ -130,7 +130,7 @@ void setVarScalingArray(  Real* const                       a_scales_arr,
       if (!procID()) {
         printf("      Kinetic Species %d (%s):\n", s, (a_kinetic_species[s]->name()).c_str());
         for (int n = 0; n<scales.size(); n++) {
-          printf("        component %3d - %1.6e\n", scales[n]);
+          printf("        component %3d - %1.6e\n", n, scales[n]);
         }
       }
 
@@ -152,7 +152,7 @@ void setVarScalingArray(  Real* const                       a_scales_arr,
          if (!procID()) {
            printf("      Fluid Species %d (%s) (cell var %d):\n", s, (a_fluid_species[s]->name()).c_str(), n);
            for (int v = 0; v<scales.size(); v++) {
-             printf("        component %3d - %1.6e\n", scales[v]);
+             printf("        component %3d - %1.6e\n", v, scales[v]);
            }
          }
 
@@ -173,7 +173,7 @@ void setVarScalingArray(  Real* const                       a_scales_arr,
          if (!procID()) {
            printf("      Fluid Species %d (%s) (face var %d):\n", s, (a_fluid_species[s]->name()).c_str(), n);
            for (int v = 0; v<scales.size(); v++) {
-             printf("      component %3d - %1.6e\n", scales[v]);
+             printf("      component %3d - %1.6e\n", v, scales[v]);
            }
          }
 
@@ -194,7 +194,7 @@ void setVarScalingArray(  Real* const                       a_scales_arr,
          if (!procID()) {
            printf("      Fluid Species %d (%s) (edge var %d):\n", s, (a_fluid_species[s]->name()).c_str(), n);
            for (int v = 0; v<scales.size(); v++) {
-             printf("      component %3d - %1.6e\n", scales[v]);
+             printf("      component %3d - %1.6e\n", v, scales[v]);
            }
          }
 

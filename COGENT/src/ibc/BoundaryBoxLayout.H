@@ -43,12 +43,15 @@ class BoundaryBoxLayout
 
       const Side::LoHiSide& side() const;
 
+      const int& block() const;
+   
       bool hasBoxes() const;
 
    private:
 
       int                   m_dir;
       Side::LoHiSide        m_side;
+      int                   m_block;
       bool                  m_has_boxes;
       bool                  m_is_defined;
       DisjointBoxLayout     m_bdry_grids;
@@ -66,6 +69,7 @@ inline
 BoundaryBoxLayout::BoundaryBoxLayout()
    : m_dir(-1),
      m_side(Side::Invalid),
+     m_block(-1),
      m_has_boxes(false),
      m_is_defined(false)
 {
@@ -81,6 +85,7 @@ BoundaryBoxLayout::BoundaryBoxLayout( const DisjointBoxLayout&  a_grids,
                                       const IntVect&            a_nghosts )
    : m_dir(-1),
      m_side(Side::Invalid),
+     m_block(-1),
      m_has_boxes(false),
      m_is_defined(false)
 {
@@ -128,6 +133,12 @@ const Side::LoHiSide& BoundaryBoxLayout::side() const
    return m_side;
 }
 
+inline
+const int& BoundaryBoxLayout::block() const
+{
+   CH_assert(m_is_defined);
+   return m_block;
+}
 
 inline
 bool BoundaryBoxLayout::hasBoxes() const

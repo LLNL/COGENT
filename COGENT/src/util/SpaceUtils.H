@@ -49,13 +49,15 @@ namespace SpaceUtils {
   void upWindToFaces( LevelData<FluxBox>&,
                 const LevelData<FArrayBox>&,
                 const LevelData<FluxBox>&,
-                const std::string& );
+                const std::string&,
+                const bool& fourth_order = false);
   
   void upWindToFaces( FluxBox&,
                 const FArrayBox&,
                 const FluxBox&,
                 const Box&,
-                const std::string& );
+                const std::string&,
+                const bool& fourth_order = false);
 
   void constrainedCrossProductOnEdges( LevelData<EdgeDataBox>&  a_edge_E,
                                  const LevelData<FluxBox>&      a_face_B,

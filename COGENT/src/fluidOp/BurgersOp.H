@@ -19,6 +19,10 @@ class BurgersOp
 {
 public:
 
+  /// Null constructor (used for state variable creation) 
+  BurgersOp( const MagGeom&  geometry )
+     : m_geometry(geometry) {};
+
   /// Constructor with initialization.
   /**
    *  @param[in] pp the input database.

@@ -31,6 +31,27 @@ public:
                                         LevelData<FArrayBox>&  beta_coefficient,
                                         const EllipticOpBC&    bc );
 
+   virtual void constructMatrixGeneral( LevelData<FArrayBox>&  alpha_coefficient,
+                                        LevelData<FluxBox>&    tensor_coefficient,
+                                        LevelData<FluxBox>&    tensor_coefficient2,
+                                        LevelData<FArrayBox>&  beta_coefficient,
+                                        const EllipticOpBC&    bc ) {};
+
+   virtual void constructMatrixBlockGeneral( const int              block_row,
+                                             const int              block_column,
+                                             LevelData<FArrayBox>&  alpha_coefficient,
+                                             LevelData<FluxBox>&    tensor_coefficient,
+                                             LevelData<FArrayBox>&  beta_coefficient,
+                                             const EllipticOpBC&    bc );
+
+   virtual void constructMatrixBlockGeneral( const int              block_row,
+                                             const int              block_column,
+                                             LevelData<FArrayBox>&  alpha_coefficient,
+                                             LevelData<FluxBox>&    tensor_coefficient,
+                                             LevelData<FluxBox>&    tensor_coefficient2,
+                                             LevelData<FArrayBox>&  beta_coefficient,
+                                             const EllipticOpBC&    bc ) {};
+
    virtual void multiplyMatrix( const LevelData<FArrayBox>& in,
                                 LevelData<FArrayBox>&       out ) const;
 
@@ -39,6 +60,12 @@ public:
                        bool                         homogeneous_bcs );
 
    virtual void dumpMatrix(const string& file_name) const;
+
+   virtual void initializeMatrix() {;}
+
+   virtual void finalizeMatrix() {;}
+
+   virtual void setMethodParams( const ParmParse&  pp ) {m_method_params_set = true;}
 
 protected:
 

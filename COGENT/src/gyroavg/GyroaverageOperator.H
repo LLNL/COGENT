@@ -45,6 +45,9 @@ class GyroaverageOperator
     void applyOp(LevelData<FArrayBox>&, 
                  const LevelData<FArrayBox>& ) const;
 
+    void applyOpTwice(LevelData<FArrayBox>&, 
+                      const LevelData<FArrayBox>& ) const;
+
     void gyroaveragedEField(  LevelData<FArrayBox>&,
                               const CFG::LevelData<CFG::FArrayBox>&,
                               const int ) const;
@@ -52,6 +55,12 @@ class GyroaverageOperator
     void gyroaveragedEField(  LevelData<FluxBox>&,
                               const CFG::LevelData<CFG::FArrayBox>&,
                               const int ) const;
+
+    inline const LevelData<FArrayBox>& gyroradius() const
+    {
+      CH_assert(m_debug_mode);
+      return m_gyroradius;
+    }
 
     inline const LevelData< BaseFab<Stencil> >& op() const
     {
@@ -72,12 +81,24 @@ class GyroaverageOperator
     Real        m_mass;
     Real        m_charge;
     Real        m_tolerance;
+    int         m_max_muidx;
+    Real        m_max_gyroradius;
+    int         m_interp_order;
+    bool        m_reduce_interp_order;
+    bool        m_interp_mode_mapped;
 
     const PhaseGeom* m_phase_geom;
 
     DisjointBoxLayout m_grids;
 
+    LevelData<FArrayBox>          m_gyroradius;
     LevelData< BaseFab<Stencil> > m_gyroavg_op;
+
+    /* some debug and testing stuff while we are still verifying
+     * this operator - one day, they'll disappear. */
+    bool m_debug_mode;
+    bool m_debug_fakegyroradius;
+    Real m_debug_fakegyroradius_dr;
 
     void parseParams(const ParmParse&);
     void printParams() const;
@@ -86,7 +107,9 @@ class GyroaverageOperator
                           const CFG::FArrayBox&, 
                           const std::vector<CFG::IntVect>&, 
                           const CFG::RealVect&,
-                          bool& );
+                          const int,
+                          bool&,
+                          Real& );
 
     void applyOp( FArrayBox&, 
                   const FArrayBox&, 
@@ -100,7 +123,7 @@ class GyroaverageOperator
                                  ) const
     {
       if ((a_B == 0) || (a_charge == 0)) return(0.0);
-      else return( a_La * sqrt(a_mass * a_mu / (a_charge*a_charge * a_B) ) );
+      else return( (a_La/a_charge) * sqrt(a_mass * a_mu / a_B ) );
     }
 
     inline void evalStencil(std::vector<Real>&,
@@ -112,7 +135,6 @@ class GyroaverageOperator
                                   const CFG::IntVect&   a_i,
                                   const CFG::RealVect&  a_x0 ) const
     {
-      CH_assert(a_coords.nComp() == CFG_DIM);
       const CFG::Box& bx = a_coords.box();
       CH_assert(bx.contains(a_i));
 

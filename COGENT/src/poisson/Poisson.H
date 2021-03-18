@@ -46,11 +46,6 @@ public:
 
    void computeCoefficients( LevelData<FluxBox>& coefficients );
 
-   virtual void setPreconditionerConvergenceParams( const double tol,
-                                                    const int    max_iter,
-                                                    const double precond_tol,
-                                                    const int    precond_max_iter );
-
    virtual void solvePreconditioner( const LevelData<FArrayBox>& in,
                                      LevelData<FArrayBox>&       out );
 
@@ -76,6 +71,9 @@ protected:
    LevelData<FluxBox> m_mapped_coefficients;
 
    MagFluxAlignedMBLEXCenter* m_mblx_ptr;
+
+   bool m_precond_verbose;
+   bool m_precond_precond_verbose;
 };
 
 

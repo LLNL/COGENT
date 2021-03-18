@@ -30,20 +30,19 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
                         const MagGeom&  a_geometry,
                         const int       a_verbosity )
    : m_verbosity(a_verbosity),
+     m_courant_time_step(DBL_MAX),
      m_geometry(a_geometry),
      //m_is_time_implicit(true),
      m_implicitMhd(false),
      m_implicitViscosity(false),
-     m_tau(0.0),
-     m_etaMin(0.0),
      m_advScheme("c2"),
      m_species_name(a_species_name),
      m_CGL(0),
      m_initializeBfromVectorPotential(0),
-     m_courant_time_step(DBL_MAX),
      m_opt_string(a_pp_str),
-     m_my_pc_idx(-1)
-
+     m_my_pc_idx(-1),
+     m_tau(0.0),
+     m_etaMin(0.0)
 {
    ParmParse pp(a_pp_str.c_str());
    parseParameters( pp );
@@ -528,8 +527,6 @@ void IdealMhdOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
 {
    CH_TIME("IdealMhdOp::updatePCImEx()");
    
-   const DisjointBoxLayout& grids( m_geometry.grids() );
-
    // Get computational fluid species data
    //
    const FluidSpecies& fluid_species = static_cast<const FluidSpecies&>(*a_fluid_species[a_component]);
@@ -805,7 +802,6 @@ void IdealMhdOp::computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
    const DisjointBoxLayout& grids( m_geometry.grids() );
    LevelData<FluxBox>& JaB_contra_cf(m_dummyFlux_oneComp);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const Box& face_box(a_B_contra_cf[dit].box());
       JaB_contra_cf[dit].copy(a_B_contra_cf[dit]);
    } 
    m_geometry.multJonFaces(JaB_contra_cf);
@@ -918,7 +914,6 @@ void IdealMhdOp::fillGhostCells( FluidSpecies&  a_species_phys,
 {
    CH_TIME("IdealMhdOp::fillGhostCells()");
    for (int n=0; n<a_species_phys.num_cell_vars(); ++n) {
-      LevelData<FArrayBox>& fld( a_species_phys.cell_var(n) );
       // Fill ghost cells except for those on physical boundaries
       //m_geometry.fillInternalGhosts( fld );
       //if(!procID()) cout << "JRA: fillGhostCells() n = " << n << endl;
@@ -937,8 +932,8 @@ void IdealMhdOp::parseParameters( ParmParse& a_pp )
    a_pp.query( "implicitViscosity", m_implicitViscosity);
    a_pp.query( "implicitMhd", m_implicitMhd);
 
-   GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-   std::string grid_function_name;
+   //GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
+   //std::string grid_function_name;
    
    if (a_pp.contains("advScheme")) {
       a_pp.get("advScheme", m_advScheme );
@@ -2227,11 +2222,6 @@ void IdealMhdOp::initializeWithBC( FluidSpecies&  a_species_comp,
 
          // solve nabla^2 Az = -Jz
          //
-         double tol = 1.0e-12;
-         double max_iter = 100;
-         double precond_tol = 1.e-12;
-         double precond_max_iter = 100;
-         m_diffusionOp_Apar->setPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
          m_diffusionOp_Apar->solvePreconditioner(Jz_cc, m_Apar_cc); // physical Apar ?
 
          // interpolate Az to edges and set BCs there

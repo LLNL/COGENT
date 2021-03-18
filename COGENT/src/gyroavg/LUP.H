@@ -3,6 +3,12 @@
 
 #include <math.h>
 
+/* 
+ * This piece of code is taken from Wikipedia.
+ * https://en.wikipedia.org/wiki/LU_decomposition#C_code_example
+*/
+
+
 namespace LUP {
     /* INPUT: A - array of pointers to rows of a square matrix having dimension N
      *        Tol - small tolerance number to detect failure when the matrix is near degenerate

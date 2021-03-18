@@ -344,6 +344,9 @@ public:
    void fillTransversePhysicalGhosts( LevelData<FluxBox>& data ) const;
 
    void fillTransverseGhosts( LevelData<FluxBox>& data, const bool do_block_exchange ) const;
+   
+   void extrapolateToPhysicalGhosts(LevelData<FArrayBox>&   data,
+                                    const bool              fourth_order) const;
 
    void defineEllipticOpBC( EllipticOpBC& bc ) const {m_coord_sys->defineEllipticOpBC(bc);}
 
@@ -437,11 +440,12 @@ public:
    void computePoloidalProjection( LevelData<FluxBox>& polComp,
                                    const LevelData<FluxBox>& vector) const;
    
-   void getBfieldDirCylindrical(LevelData<FArrayBox>& BfieldDir_cyl_cc) const;
+   // Compute cylyndrical components of a Cartesian vector
+   void convertCartesianToCylindrical(LevelData<FArrayBox>& vect_cyl,
+                                      const LevelData<FArrayBox>& vect_cart) const;
    
-   void getBfieldDirCylindrical(LevelData<FluxBox>& BfieldDir_cyl_fc) const;
-   
-   void getBfieldCylindrical(LevelData<FArrayBox>& Bfield_cyl) const;
+   void convertCartesianToCylindrical(LevelData<FluxBox>& vect_cyl,
+                                      const LevelData<FluxBox>& vect_cart) const;
    
    void computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& phi,
                                                  LevelData<FArrayBox>&       field,
@@ -617,9 +621,6 @@ private:
    LevelData<FluxBox> m_gradBFieldMag_fc;
    LevelData<FluxBox> m_curlBFieldDir_fc;
    LevelData<FluxBox> m_BFieldDirdotcurlBFieldDir_fc;
-   
-   mutable LevelData<FArrayBox> m_BFieldDirCyl_cc;
-   mutable LevelData<FluxBox> m_BFieldDirCyl_fc;
    
    mutable LevelData<FArrayBox> m_nodal_integrals;
    mutable LevelData<FluxBox> m_face_Binverse_integrals;

@@ -19,8 +19,8 @@
 #define HYPRE_NEWBOXLOOP_HEADER
 
 #ifdef HYPRE_USING_OPENMP
-#define HYPRE_BOX_REDUCTION 
-#ifdef WIN32
+#define HYPRE_BOX_REDUCTION
+#if defined(WIN32) && defined(_MSC_VER)
 #define Pragma(x) __pragma(HYPRE_XSTR(x))
 #else
 #define Pragma(x) _Pragma(HYPRE_XSTR(x))
@@ -247,8 +247,6 @@ typedef struct hypre_Boxloop_struct
 }
 
 #define hypre_newBoxLoopGetIndex zypre_BoxLoopGetIndex
-#define hypre_BoxLoopGetIndex    zypre_BoxLoopGetIndex
-#define hypre_BoxLoopSetOneBlock zypre_BoxLoopSetOneBlock
 #define hypre_BoxLoopBlock       zypre_BoxLoopBlock
 #define hypre_BoxLoop0Begin      zypre_newBoxLoop0Begin
 #define hypre_BoxLoop0End        zypre_newBoxLoop0End

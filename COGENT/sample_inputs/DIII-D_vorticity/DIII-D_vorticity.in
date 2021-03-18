@@ -121,21 +121,7 @@ gksystem.fixed_efield = false
 
 gksystem.consistent_potential_bcs = true
 
-#gkpoisson.linear_solver.method = "BiCGStab"
-gkpoisson.linear_solver.method = "GMRES"
-gkpoisson.linear_solver.max_iter = 80
-gkpoisson.linear_solver.tol = 1.e-6
-gkpoisson.linear_solver.verbose = true
-gkpoisson.linear_solver.precond.method = "AMG"
-gkpoisson.linear_solver.precond.max_iter = 20
-gkpoisson.linear_solver.precond.tol = 1.e-6
-gkpoisson.linear_solver.precond.verbose = true
 gkpoisson.second_order = true
-gkpoisson.low_pollution = true
-
-gkpoisson.electron_temperature = "electr_temp"
-gkpoisson.parallel_conductivity = "CondShape"
-gkpoisson.charge_exchange_coefficient = "ViscShape"
 
 #####################################################
 # Species Definitions
@@ -147,11 +133,26 @@ kinetic_species.1.charge = 1.0
 kinetic_species.1.cls    = "FokkerPlanck"
 kinetic_species.1.tpm    = "Anomalous"
 
-scalar.1.name = "Er_boundary"
-scalar.1.operator_type = "SelfConsistentBCOp"
-
 fluid_species.1.name = "potential"
 fluid_species.1.operator_type = "VorticityOp"
+fluid_species.1.operator_opt.second_order = true
+fluid_species.1.operator_opt.low_pollution = true
+fluid_species.1.operator_opt.include_pol_den_correction = false
+fluid_species.1.operator_opt.include_pol_den_correction_precond = false
+fluid_species.1.operator_opt.electron_temperature = "electr_temp"
+fluid_species.1.operator_opt.parallel_conductivity = "CondShape"
+fluid_species.1.operator_opt.charge_exchange_coefficient = "ViscShape"
+fluid_species.1.operator_opt.pc_imex.linear_solver.precond.method = "AMG"
+fluid_species.1.operator_opt.pc_imex.linear_solver.precond.max_iter = 1
+fluid_species.1.operator_opt.pc_imex.linear_solver.precond.tol = 1.e-12
+fluid_species.1.operator_opt.pc_imex.linear_solver.precond.verbose = true
+fluid_species.1.operator_opt.soln_op.linear_solver.precond.method = "AMG"
+fluid_species.1.operator_opt.soln_op.linear_solver.precond.max_iter = 1
+fluid_species.1.operator_opt.soln_op.linear_solver.precond.tol = 1.e-12
+fluid_species.1.operator_opt.soln_op.linear_solver.precond.verbose = true
+
+scalar.1.name = "Er_boundary"
+scalar.1.operator_type = "SelfConsistentBCOp"
 
 #####################################################
 # Initial Condition Definitions

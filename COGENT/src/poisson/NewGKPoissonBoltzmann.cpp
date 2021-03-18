@@ -14,7 +14,7 @@ NewGKPoissonBoltzmann::NewGKPoissonBoltzmann( ParmParse&                  a_pp,
                                               const Real                  a_larmor_number,
                                               const Real                  a_debye_number,
                                               const LevelData<FArrayBox>& a_initial_ion_charge_density )
-   : GKPoisson(a_pp, a_geom, a_larmor_number, a_debye_number),
+   : GKPoisson(a_pp, a_geom, a_larmor_number, a_debye_number, true),
      m_Zni_outer_plate(NULL),
      m_Zni_inner_plate(NULL),
      m_phi_outer_plate(NULL),

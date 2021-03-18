@@ -42,7 +42,9 @@ MBSolver::MBSolver( const MultiBlockLevelGeom&      a_geom,
    : m_geometry(a_geom),
      m_coord_sys_ptr(m_geometry.coordSysPtr()),
      m_mblex_potential_Ptr(a_mblex_ptr),
-     m_discretization_order(a_discretization_order)
+     m_discretization_order(a_discretization_order),
+     m_method_params_set(false),
+     m_convergence_params_set(false)
 {
    CH_assert(m_discretization_order == 2 || m_discretization_order == 4);
 
@@ -85,11 +87,58 @@ MBSolver::~MBSolver()
 
 
 void
+MBSolver::setConvergenceParams( const ParmParse&  a_pp )
+{
+   if ( a_pp.query("tol", m_method_tol) == 0 ) m_method_tol = 0.;
+   if ( a_pp.query("max_iter", m_method_max_iter) == 0 ) m_method_max_iter = 1;
+   if ( a_pp.query("verbose", m_method_verbose) == 0 ) m_method_verbose = false;
+
+   ParmParse pp_precond( ((string)a_pp.prefix() + ".precond").c_str());
+   if ( pp_precond.query("tol", m_precond_tol) == 0 ) m_precond_tol = 0.;
+   if ( pp_precond.query("max_iter", m_precond_max_iter) == 0 ) m_precond_max_iter = 0;
+   if ( pp_precond.query("verbose", m_precond_verbose) == 0 ) m_precond_verbose = false;
+
+   m_convergence_params_set = true;
+}
+
+
+void
+MBSolver::setConvergenceParams( const double  a_method_tol,
+                                const int     a_method_max_iter,
+                                const bool    a_method_verbose,
+                                const double  a_precond_tol,
+                                const int     a_precond_max_iter,
+                                const bool    a_precond_verbose )
+{
+   m_method_tol       = a_method_tol;
+   m_method_max_iter  = a_method_max_iter;
+   m_method_verbose   = a_method_verbose;
+   m_precond_tol      = a_precond_tol;
+   m_precond_max_iter = a_precond_max_iter;
+   m_precond_verbose  = a_precond_verbose;
+
+   m_convergence_params_set = true;
+}
+
+
+void
 MBSolver::constructMatrix( LevelData<FluxBox>&  a_tensor_coefficient,
                            const EllipticOpBC&  a_bc )
 {
    LevelData<FArrayBox> dummy;
    constructMatrixGeneral(dummy, a_tensor_coefficient, dummy, a_bc );
+}
+
+
+
+void
+MBSolver::constructMatrixBlock( const int            a_block_row,
+                                const int            a_block_column,
+                                LevelData<FluxBox>&  a_tensor_coefficient,
+                                const EllipticOpBC&  a_bc )
+{
+   LevelData<FArrayBox> dummy;
+   constructMatrixBlockGeneral(a_block_row, a_block_column, dummy, a_tensor_coefficient, dummy, a_bc);
 }
 
 
@@ -106,6 +155,20 @@ MBSolver::constructMatrix( LevelData<FArrayBox>&  a_alpha_coefficient,
 
 
 void
+MBSolver::constructMatrixBlock( const int              a_block_row,
+                                const int              a_block_column,
+                                LevelData<FArrayBox>&  a_alpha_coefficient,
+                                LevelData<FluxBox>&    a_tensor_coefficient,
+                                const EllipticOpBC&    a_bc )
+{
+   LevelData<FArrayBox> dummy;
+   constructMatrixBlockGeneral(a_block_row, a_block_column, a_alpha_coefficient, a_tensor_coefficient,
+                               dummy, a_bc);
+}
+
+
+
+void
 MBSolver::constructMatrix( LevelData<FluxBox>&    a_tensor_coefficient,
                            LevelData<FArrayBox>&  a_beta_coefficient,
                            const EllipticOpBC&    a_bc )
@@ -117,12 +180,39 @@ MBSolver::constructMatrix( LevelData<FluxBox>&    a_tensor_coefficient,
 
 
 void
+MBSolver::constructMatrixBlock( const int              a_block_row,
+                                const int              a_block_column,
+                                LevelData<FluxBox>&    a_tensor_coefficient,
+                                LevelData<FArrayBox>&  a_beta_coefficient,
+                                const EllipticOpBC&    a_bc )
+{
+   LevelData<FArrayBox> dummy;
+   constructMatrixBlockGeneral(a_block_row, a_block_column, dummy, a_tensor_coefficient, a_beta_coefficient, a_bc );
+}
+
+
+
+void
 MBSolver::constructMatrix( LevelData<FArrayBox>& a_alpha_coefficient,
                            LevelData<FluxBox>&   a_tensor_coefficient,
                            LevelData<FArrayBox>& a_beta_coefficient,
                            const EllipticOpBC&   a_bc )
 {
-   constructMatrixGeneral( a_alpha_coefficient, a_tensor_coefficient, a_beta_coefficient, a_bc );
+   constructMatrixGeneral( a_alpha_coefficient, a_tensor_coefficient, a_beta_coefficient, a_bc);
+}
+
+
+
+void
+MBSolver::constructMatrixBlock( const int             a_block_row,
+                                const int             a_block_column,
+                                LevelData<FArrayBox>& a_alpha_coefficient,
+                                LevelData<FluxBox>&   a_tensor_coefficient,
+                                LevelData<FArrayBox>& a_beta_coefficient,
+                                const EllipticOpBC&   a_bc )
+{
+   constructMatrixBlockGeneral(a_block_row, a_block_column, a_alpha_coefficient, a_tensor_coefficient,
+                               a_beta_coefficient, a_bc);
 }
 
 
@@ -615,8 +705,6 @@ MBSolver::constructBoundaryStencils( const bool                        a_fourth_
 
    int order = a_fourth_order? 4: 2;
 
-   //const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys_ptr->boundaries();
-
    int num_blocks = m_coord_sys_ptr->numBlocks();
    a_codim1_stencils.resize(num_blocks);
    a_codim2_stencils.resize(num_blocks);
@@ -627,8 +715,6 @@ MBSolver::constructBoundaryStencils( const bool                        a_fourth_
       const NewCoordSys* block_coord_sys = m_coord_sys_ptr->getCoordSys(block_number);
       Box domain_box = mapping_blocks[block_number];
       RealVect dx = block_coord_sys->dx();
-
-      //const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
 
       Vector<CoDim1Stencil>& codim1_stencil = a_codim1_stencils[block_number];      
       Vector<CoDim2Stencil>& codim2_stencil = a_codim2_stencils[block_number];      
@@ -697,9 +783,11 @@ MBSolver::constructBoundaryStencils( const bool                        a_fourth_
                      for (SideIterator sit2; sit2.ok(); ++sit2) {
                         Side::LoHiSide side2 = sit2();
 
-                        // Determine if the codim2 stencil we are about to create overlaps a physical boundary in the tdir direction on side2
+                        // Determine if the codim2 stencil we are about to create overlaps a
+                        // physical boundary in the tdir direction on side2
 
-                        Vector<Box> transverse_boundary_boxes = ((MagGeom&)m_geometry).getBoundaryBoxes(block_number, tdir, side2);
+                        Vector<Box> transverse_boundary_boxes 
+                           = ((MagGeom&)m_geometry).getBoundaryBoxes(block_number, tdir, side2);
 
                         bool transverse_boundary = transverse_boundary_boxes.size() > 0;
 
@@ -777,8 +865,8 @@ MBSolver::constructBoundaryStencils( const bool                        a_fourth_
                                     codim2_stencil.resize(--num_codim2_neighbors);
                                  }
                                  else if ( overlap.ok() ) {
-                                    // Codim2 box partially overlaps a valid block.  Need to exit and figure out
-                                    // what to do about it.
+                                    // Codim2 box partially overlaps a valid block.  Need to exit
+                                    // and figure out what to do about it.
                                     MayDay::Error("MBSolver::constructBoundaryStencils(): codim2 box partially overlaps a valid block");
                                  }
                               }

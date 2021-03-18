@@ -43,8 +43,15 @@ bool buildBoxLayout( DisjointBoxLayout&            a_bdry_grids,
       }
    }
 
+   Box boundary_domain_box = adjCellBox(a_domain_box,
+                                        a_dir,
+                                        a_side,
+                                        a_nghosts[a_dir]);
+   
+   ProblemDomain boundary_domain(boundary_domain_box);
+   
    if (boxes.size()>0) {
-      a_bdry_grids.define( boxes, proc_ids );
+     a_bdry_grids.define( boxes, proc_ids, boundary_domain );
       return true;
    }
    return false;
@@ -60,6 +67,7 @@ void BoundaryBoxLayout::define( const DisjointBoxLayout&  a_grids,
 {
    m_dir = a_dir;
    m_side = a_side;
+   m_block = a_coord_sys.whichBlock(a_domain_box);
 
    std::map<Box,LayoutIterator> box_map;
    m_has_boxes = buildBoxLayout( m_bdry_grids,

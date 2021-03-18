@@ -43,6 +43,10 @@ class IdealMhdOp
 {
 public:
 
+  /// Null constructor (used for state variable creation) 
+  IdealMhdOp( const MagGeom&  geometry )
+     : m_geometry(geometry) {};
+
   /// Constructor with initialization.
   /**
    *  @param[in] pp the input database.

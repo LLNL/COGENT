@@ -25,13 +25,20 @@ Poisson::Poisson( const ParmParse& a_pp,
    }
 
 #ifdef with_petsc
-      m_preconditioner = new MBPETScSolver(a_geom, discretization_order, m_mblx_ptr);
+   m_preconditioner = new MBPETScSolver(a_geom, 1, discretization_order, m_mblx_ptr);
 #else
-      m_preconditioner = new MBHypreSolver(a_geom, discretization_order, m_mblx_ptr);
+   m_preconditioner = new MBHypreSolver(a_geom, 1, discretization_order, m_mblx_ptr);
 #endif
 
-   m_preconditioner->setMethodParams(m_precond_method, m_precond_precond_method);
+   ParmParse pp_precond( ((string)a_pp.prefix() + ".linear_solver.precond").c_str());
+   m_preconditioner->setMethodParams(pp_precond);
+   m_preconditioner->setConvergenceParams(pp_precond);
 
+   if ( pp_precond.query("verbose", m_precond_verbose) == 0 ) m_precond_verbose = false;
+
+   ParmParse pp_precond_precond( ((string)pp_precond.prefix() + ".precond").c_str());
+   if ( pp_precond_precond.query("verbose", m_precond_precond_verbose) == 0 ) m_precond_precond_verbose = false;
+   
    // We give the mapped coefficients one ghost cell layer so that the
    // usual second-order centered difference formula can be used to compute
    // the transverse gradients needed for the fourth-order formulas even
@@ -106,19 +113,6 @@ Poisson::computeCoefficients(LevelData<FluxBox>& a_coefficients)
    for (DataIterator dit(grids); dit.ok(); ++dit) {
      m_mapped_coefficients[dit].copy(grown_coefficients[dit]);
    }
-}
-
-
-
-void
-Poisson::setPreconditionerConvergenceParams( const double a_tol,
-                                             const int    a_max_iter,
-                                             const double a_precond_tol,
-                                             const int    a_precond_max_iter )
-{
-   m_preconditioner->setConvergenceParams(a_tol, a_max_iter, m_precond_verbose,
-                                          a_precond_tol, a_precond_max_iter,
-                                          m_precond_precond_verbose);
 }
 
 

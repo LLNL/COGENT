@@ -76,6 +76,11 @@ gksystem.fixed_efield = true
 #gksystem.neutrals_model_on = true
 gksystem.transport_model_on = true
 
+field_correction.linear_solver.method = "BiCGStab"
+field_correction.linear_solver.max_iter = 50
+field_correction.linear_solver.tol = 1.e-12
+field_correction.linear_solver.verbose = false
+
 #####################################################
 # Phase Space Geometry Definitions
 #####################################################

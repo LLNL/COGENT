@@ -21,7 +21,7 @@ ark_pc.type = "multiphysicsPC"
 #####################################################
 # Time Stepping Definitions
 #####################################################
-simulation.max_step            = 20
+simulation.max_step            = 2
 simulation.max_time            = 4.0
 #simulation.max_dt_grow         = 1.1
 #simulation.initial_dt_fraction = 1.0
@@ -112,12 +112,13 @@ gkpoisson.second_order = true
 fluid_species.1.name   = "neutrals"
 fluid_species.1.mass   = 1.0
 fluid_species.1.charge = 0.0
-fluid_species.1.operator_type = "OneFieldOp"
+fluid_species.1.operator_type = "OneFieldNeutralsOp"
 
 fluid_model.neutrals.D_perp = "Dshape"
 fluid_model.neutrals.D_par = "Dshape"
 
-
+fluid_model.neutrals.neutral_temperature = "Tg"
+fluid_model.neutrals.consistent_density = false
 #####################################################
 # Initial Condition Definitions
 #####################################################
@@ -138,7 +139,8 @@ BC.potential.radial_sol.value = 0.
 BC.potential.radial_pf.type = "dirichlet"
 BC.potential.radial_pf.value = 0.0
 
-BC.neutrals_diffusion.second_order = true
+neutrals_diffusion.second_order = true
+
 BC.neutrals_diffusion.poloidal_inner_div.type = "dirichlet"
 BC.neutrals_diffusion.poloidal_inner_div.value = 0.0
 BC.neutrals_diffusion.poloidal_outer_div.type = "dirichlet"
@@ -173,9 +175,9 @@ BC.neutrals.poloidal_inner_div.type = "dirichlet"
 #####################################################
 # Grid Function Definitions
 #####################################################
-grid_function_library.number = 4
+grid_function_library.number = 5
 grid_function_library.verbosity = 1
-grid_function_library.list = "zero_grid_func" "neutrals_IC" "Dshape" "source"
+grid_function_library.list = "zero_grid_func" "neutrals_IC" "Dshape" "source" "Tg"
 
 grid_function_library.zero_grid_func.type = "zero" 
 
@@ -194,6 +196,8 @@ grid_function_library.Dshape.function = "1.0" #"(1.0+sin(x/2.0)*sin(x/2.0))*(1+0
 grid_function_library.source.type = "arbitrary"
 grid_function_library.source.function = "0.0" #"(1.0+sin(x/2.0)*sin(x/2.0))*(1+0.001*cos(2*y))"
 
+grid_function_library.Tg.type = "constant"
+grid_function_library.Tg.value = 1.0
 
 #####################################################
 # Units Definitions

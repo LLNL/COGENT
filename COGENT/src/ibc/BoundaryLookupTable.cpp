@@ -69,6 +69,13 @@ BoundaryLookupTable::BoundaryLookupTable()
 
 BoundaryLookupTable::~BoundaryLookupTable()
 {
+   for (int i=0; i<m_side_table.size(); ++i) {
+      for (int j=0; j<m_side_table[i].size(); ++j) {
+         m_side_table[i][j].clear();
+      }
+      m_side_table[i].clear();
+   }
+   m_side_table.clear();
 }
 
 

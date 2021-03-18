@@ -1,5 +1,5 @@
 #include "GKFluidOp.H"
-#include "OneFieldOp.H"
+#include "OneFieldNeutralsOp.H"
 #include "BurgersOp.H"
 #include "IdealMhdOp.H"
 #include "ExtendedMhdOp.H"
@@ -23,10 +23,12 @@ GKFluidOp::GKFluidOp( const MagGeom&      a_geometry,
    int count(0);
    while (more_fluid_species) {
 
-      // look for data specifying another kinetic species
+      // look for data specifying another fluid species
       std::stringstream s;
       s << "fluid_species." << count+1;
       ParmParse ppspecies( s.str().c_str() );
+
+      std::string operator_opt_prefix = s.str() + std::string(".operator_opt");
 
       std::string species_name("Invalid");
       if (ppspecies.contains("name")) {
@@ -44,13 +46,14 @@ GKFluidOp::GKFluidOp( const MagGeom&      a_geometry,
             }
             else if (op_type == "VorticityOp") {
                const double larmor( a_units.larmorNumber() );
-               model = new VorticityOp( prefix, a_geometry, larmor, m_verbose );
+               model = new VorticityOp( operator_opt_prefix, a_geometry, larmor, m_verbose );
             }
             else if (op_type == "AmpereErAverageOp") {
                model = new AmpereErAverageOp();
             }
-            else if (op_type == "OneFieldOp") {
-               model = new OneFieldOp( prefix, species_name, a_geometry, m_verbose );
+            else if (op_type == "OneFieldNeutralsOp") {
+               const double larmor( a_units.larmorNumber() );
+               model = new OneFieldNeutralsOp( prefix, species_name, a_geometry, larmor, m_verbose );
             }
             else if (op_type == "BurgersOp") {
                model = new BurgersOp( prefix, species_name, a_geometry, m_verbose );
@@ -71,7 +74,8 @@ GKFluidOp::GKFluidOp( const MagGeom&      a_geometry,
                model = new FullFluidOp( prefix, species_name, a_geometry, m_verbose );
             }
             else if (op_type == "TwoFieldNeutralsOp") {
-               model = new TwoFieldNeutralsOp( prefix, species_name, a_geometry, m_verbose );
+               const double larmor( a_units.larmorNumber() );
+               model = new TwoFieldNeutralsOp( prefix, species_name, a_geometry, larmor, m_verbose );
             }
             else {
                MayDay::Error("Unknown fluid operator type specified for a fluid species");

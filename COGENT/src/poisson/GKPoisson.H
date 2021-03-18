@@ -24,6 +24,9 @@
 namespace PS = PS_NAMESPACE;
 namespace VEL = VEL_NAMESPACE;
 
+typedef enum { gkp_ct_no_flr, gkp_ct_flr1, gkp_ct_flr2 } LHSTermType;
+
+
 /// Gyrokintic Poisson operator class.
 /**
  * This operator class solves the mapped gyrokinetic Poisson equation:
@@ -54,12 +57,38 @@ public:
    GKPoisson( const ParmParse&   pp,
               const MagGeom&     geom,
               const Real         larmor_number,
-              const Real         debye_number );
+              const Real         debye_number,
+              const bool         allocate_precond );
+
+   GKPoisson( const ParmParse&,
+              const MagGeom&,
+              const PS::KineticSpeciesPtrVect&,
+              const Real,
+              const Real,
+              const bool );
+
+   GKPoisson( const ParmParse&   pp,
+              const MagGeom&     geom,
+              const Real         larmor_number,
+              const Real         debye_number,
+              const bool         allocate_precond,
+              const bool         second_order,
+              const bool         low_pollution );
       
    /// Destructor.
    /**
     */
    virtual ~GKPoisson();
+
+#ifdef with_petsc
+   virtual MBPETScSolver* allocatePreconditioner( const MagGeom&                  geom,
+                                                  const int                       discretization_order,
+                                                  MultiBlockLevelExchangeCenter*  mblx_ptr );
+#else
+   virtual MBHypreSolver* allocatePreconditioner( const MagGeom&                  geom,
+                                                  const int                       discretization_order,
+                                                  MultiBlockLevelExchangeCenter*  mblx_ptr );
+#endif
 
    virtual void updateBoundaries( const EllipticOpBC&  bc );
 
@@ -88,47 +117,35 @@ public:
                                          double&                     hi_value,
                                          LevelData<FArrayBox>&       radial_gkp_divergence_average);
    
-   virtual void computeCoefficients(const LevelData<FArrayBox>& ni,
-                                    LevelData<FluxBox>& mapped_coefficients,
-                                    LevelData<FluxBox>& unmapped_coefficients );
+   virtual void computeCoefficients( const LevelData<FArrayBox>&,
+                                     LevelData<FluxBox>&,
+                                     LevelData<FluxBox>& );
 
-   void computeCoefficientsGK( LevelData<FluxBox>& mapped_coefficients_gk,
-                               LevelData<FluxBox>& unmapped_coefficients_gk );
+   void computeCoefficientsFLR_1( const LevelData<FArrayBox>&,
+                                  LevelData<FluxBox>&,
+                                  LevelData<FluxBox>& );
 
-   virtual void setPreconditionerConvergenceParams( const double tol,
-                                                    const int    max_iter,
-                                                    const double precond_tol,
-                                                    const int    precond_max_iter );
+   void computeCoefficientsFLR_2( const LevelData<FArrayBox>&,
+                                  LevelData<FluxBox>&,
+                                  LevelData<FluxBox>& );
+
+   virtual void updatePreconditioner( MBSolver*              preconditioner,
+                                      LevelData<FArrayBox>&  volume_reciprocal,
+                                      LevelData<FluxBox>&    mapped_coefficients,
+                                      const EllipticOpBC&    bc );
 
    virtual void solvePreconditioner( const LevelData<FArrayBox>& in,
                                      LevelData<FArrayBox>&       out );
 
    virtual void multiplyCoefficients( LevelData<FluxBox>& data,
-                                      const bool mapped_coeff ) const
-   {
-     multiplyCoefficients(  data, mapped_coeff, false);
-   }
-
-   virtual void multiplyCoefficients( LevelData<FluxBox>& data,
-                                      const bool mapped_coeff,
-                                      const bool apply_op ) const;
+                                      const bool mapped_coeff ) const;
 
    virtual void applyOp(  LevelData<FArrayBox>& out,
                           const LevelData<FArrayBox>& in,
                           bool homogeneous = false);
 
-   inline void setPhaseSpaceObjs( const PS::KineticSpeciesPtrVect& a_species)
-   {
-     if (a_species.size() > 0) {
-       m_species_vec = a_species;
-       m_phase_geom = &(a_species[0]->phaseSpaceGeometry());
-       const PS::LevelData<PS::FArrayBox>& dfn(a_species[0]->distributionFunction());
-       m_phase_grids = &(dfn.disjointBoxLayout());
-     } else {
-       CH_assert(m_include_FLR_effects == false);
-     }
-   }
-   
+   void setFLRObjects( const PS::KineticSpeciesPtrVect&);
+
    inline void setModel(const std::string& model) {m_model = model;};
 
    /// parseParameters function
@@ -174,12 +191,22 @@ protected:
    Real m_larmor_number2;
 
    int m_density_interp_ghosts;
+   int m_discretization_order;
    
    LevelData<FluxBox> m_mapped_coefficients;
-   LevelData<FluxBox> m_mapped_coefficients_gk;
    LevelData<FluxBox> m_unmapped_coefficients;
-   LevelData<FluxBox> m_unmapped_coefficients_gk;
+
+   LevelData<FluxBox> m_mapped_coeffs_FLR_1;
+   LevelData<FluxBox> m_mapped_coeffs_FLR_2;
+   LevelData<FluxBox> m_unmapped_coeffs_FLR_1;
+   LevelData<FluxBox> m_unmapped_coeffs_FLR_2;
+
    std::vector<PS::LevelData<PS::FArrayBox>* > m_FLR_integrand_factor;
+
+   RefCountedPtr<GridFunction> m_FLR_switch_func;
+   LevelData<FArrayBox> m_FLR_bc_factor;
+   int m_FLR_bc_buffer;
+   bool m_plot_FLR_switch;
    
    MultiBlockLevelExchangeCenter* m_mblx_ptr;
 
@@ -191,9 +218,33 @@ protected:
 
    void computeFLRIntegrandFactor();
 
+   string m_precond_method;
+   double m_precond_tol;
+   int m_precond_max_iter;
+   bool m_precond_verbose;
+
+   string m_precond_precond_method;
+   double m_precond_precond_tol;
+   int m_precond_precond_max_iter;
+   bool m_precond_precond_verbose;
+
 private:
+   void init( const ParmParse& pp,
+              const Real       larmor_number,
+              const Real       debye_number,
+              const bool       initialize_precond );
    int m_verbosity;
    std::string m_model;
+
+   LHSTermType m_LHS_term_type;
+
+   inline void setLHSTermType(const LHSTermType a_arg) 
+   { 
+      m_LHS_term_type = a_arg; 
+   }
+   inline void unsetLHSTermType() { m_LHS_term_type = gkp_ct_no_flr; }
+   inline LHSTermType lhsTermType() const { return m_LHS_term_type; }
+
 };
 
 
