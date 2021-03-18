@@ -326,9 +326,9 @@ void FaceSumOp::setScale(const Real& a_scale)
 }
 
 void FaceSumOp::linearIn(FluxBox       & a_arg  ,  
-                      void*           a_buf  , 
-                      const Box     & a_R    ,
-                      const Interval& a_comps) const
+                         void*           a_buf  , 
+                         const Box     & a_R    ,
+                         const Interval& a_comps) const
 {
   // pout()<<"Beginning LinearIn"<<endl;
   //pout()<<"sumDir = "<<m_summingDir<<endl;
@@ -336,12 +336,13 @@ void FaceSumOp::linearIn(FluxBox       & a_arg  ,
   // use temp to call linearIn before summing over directions
   
   Box reducedBox = a_R;
-  reducedBox.setSmall(m_summingDir,0);
-  reducedBox.setBig  (m_summingDir,0);
+  int lo = reducedBox.smallEnd(m_summingDir);
+  reducedBox.setSmall(m_summingDir,lo);
+  reducedBox.setBig  (m_summingDir,lo);
   
   //pout()<<"reducedBox = "<< reducedBox<<endl;
   CH_assert(a_R == reducedBox);
-  FluxBox temp(reducedBox);
+  FluxBox temp(reducedBox, a_arg.nComp());
   temp.setVal(12345);
   temp.linearIn(a_buf     , 
                 reducedBox, 
@@ -367,9 +368,9 @@ void FaceSumOp::linearIn(FluxBox       & a_arg  ,
 }
 
 void FaceSumOp::linearOut(const FluxBox       & a_arg  ,  
-                       void*                 a_buf  , 
-                       const Box           & a_R    ,
-                       const Interval      & a_comps) const
+                          void*                 a_buf  , 
+                          const Box           & a_R    ,
+                          const Interval      & a_comps) const
 {
   
 //  pout()<<"Beginning LinearOut"<<endl;
@@ -377,13 +378,14 @@ void FaceSumOp::linearOut(const FluxBox       & a_arg  ,
  // pout()<<"Box = "<< a_R<<endl;
   
   Box reducedBox = a_R;
-  reducedBox.setSmall(m_summingDir,0);
-  reducedBox.setBig  (m_summingDir,0);
+  int lo = reducedBox.smallEnd(m_summingDir);
+  reducedBox.setSmall(m_summingDir,lo);
+  reducedBox.setBig  (m_summingDir,lo);
   
   pout()<<"reducedBox = "<< reducedBox<<endl;
   
   // use temp to call op before writing to buffer
-  FluxBox temp(reducedBox);
+  FluxBox temp(reducedBox, a_arg.nComp());
   temp.setVal(0.0);
    
   // reduce a face
@@ -404,11 +406,11 @@ void FaceSumOp::linearOut(const FluxBox       & a_arg  ,
 }
 
 void FaceSumOp::op(FluxBox       & a_dataTo    ,
-                const Box     & a_regionFrom,
-                const Interval& a_compTo    ,
-                const Box     & a_regionTo  ,
-                const FluxBox & a_dataFrom  ,
-                const Interval& a_compFrom  ) const
+                   const Box     & a_regionFrom,
+                   const Interval& a_compTo    ,
+                   const Box     & a_regionTo  ,
+                   const FluxBox & a_dataFrom  ,
+                   const Interval& a_compFrom  ) const
 {
   // Before calling this function, one must
   //a)Construct a LevelData<FluxBox> weights using the same layout as a_dataFrom
@@ -480,14 +482,15 @@ void FaceSumOp::op(FluxBox       & a_dataTo    ,
 
 
 int FaceSumOp::size(const FluxBox & a_fluxBox,
-                 const Box     & a_bx     , 
-                 const Interval& a_comps  ) const
+                    const Box     & a_bx     , 
+                    const Interval& a_comps  ) const
 {
   //pout()<<"Using FaceSumOp::size()"<<endl;
   int totalSize = 0;
   Box reducedBox = a_bx;
-  reducedBox.setSmall(m_summingDir,0);
-  reducedBox.setBig  (m_summingDir,0);
+  int lo = reducedBox.smallEnd(m_summingDir);  
+  reducedBox.setSmall(m_summingDir,lo);
+  reducedBox.setBig  (m_summingDir,lo);
   // pout()<<"reducedBox = "<< reducedBox<<endl;
  
   return totalSize = a_fluxBox.size(reducedBox,

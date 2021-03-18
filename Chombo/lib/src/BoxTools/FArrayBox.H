@@ -76,11 +76,17 @@ public:
   }
   #endif
 
+  ///
+  /**
+     Constructs an initial FArrayBox with the data space allocated but not
+     initialized. a_ncomp is the number of components (variables) at each
+     data point in the Box.
+  */  
   FArrayBox(const Box& a_box,
             int        a_ncomp);
   ///
   /**
-     Construct an aliaed FArrayBox.  See BaseFab class for details.
+     Construct an aliased FArrayBox.  See BaseFab class for details.
   */
   FArrayBox(const Interval& a_comps,
             FArrayBox&      a_original)
@@ -91,7 +97,7 @@ public:
   ///
   /**
      Defines FArrayBox with the data space allocated but not
-     inititialized. a_ncomp is the number of components (variables) at each
+     initialized. a_ncomp is the number of components (variables) at each
      data point in the Box.
   */
   virtual void define(const Box& a_box,

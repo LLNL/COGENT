@@ -1284,6 +1284,8 @@ extrapolateBCG(EBFluxFAB&                       a_flux,
   CH_TIMER("taylor_extrapolation",t2);
   CH_TIMER("solve_riemann",t3);
 
+  m_bc->setCurDataIndex(a_dit);
+
   CH_START(t1);
   EBCellFAB primMinu[SpaceDim];
   EBCellFAB primPlus[SpaceDim];

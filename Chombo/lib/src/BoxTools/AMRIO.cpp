@@ -861,6 +861,29 @@ viewBFI(const BaseFab<int>* a_dataPtr)
 }
 
 void
+writeBFCname(const BaseFab<char>* a_dataPtr,
+             const char*          a_filename)
+{
+  if (a_dataPtr == NULL)
+  {
+    return;
+  }
+
+  FArrayBox fab(a_dataPtr->box(), a_dataPtr->nComp());
+  BoxIterator bit(fab.box());
+  for (bit.begin(); bit.ok(); bit.next())
+    {
+      const IntVect& iv = bit();
+      for (int ivar = 0; ivar < fab.nComp(); ivar++)
+        {
+          fab(iv, ivar) = a_dataPtr->operator()(iv, ivar);
+        }
+    }
+
+  writeFABname(&fab, a_filename);
+}
+
+void
 viewBFIV(const BaseFab<IntVect>* a_dataPtr)
 {
   if (a_dataPtr == NULL)
@@ -1063,6 +1086,24 @@ writeBFR(const BaseFab<Real>* a_dataPtr)
   char fname[12];
   sprintf(fname,"fab.%dd.hdf5", SpaceDim);
   writeFABname(&fab, fname);
+}
+
+void
+writeBFRname(const BaseFab<Real>* a_dataPtr,
+             const char*          a_filename)
+{
+  if (a_dataPtr == NULL)
+  {
+    return;
+  }
+
+  //copy the BaseFab over to a FArrayBox
+  Box fabBox = (*a_dataPtr).box();
+  int  ncomp = (*a_dataPtr).nComp();
+  FArrayBox fab(fabBox,ncomp);
+  fab.copy(*a_dataPtr);
+
+  writeFABname(&fab, a_filename);
 }
 
 void
