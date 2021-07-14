@@ -1313,7 +1313,7 @@ void AMRPoissonOp::levelMultiColor(LevelData<FArrayBox>&       a_phi,
 
           for (int idir = 0; idir < SpaceDim; idir++)
             {
-              if (loIV[idir] % 2 != color[idir])
+              if (abs(loIV[idir]) % 2 != color[idir])
                 {
                   loIV[idir]++;
                 }
@@ -1559,7 +1559,7 @@ void AMRPoissonOp::levelGSRBLazy( LevelData<FArrayBox>&       a_phi,
 
           for (int idir = 0; idir < SpaceDim; idir++)
             {
-              if (loIV[idir] % 2 != color[idir])
+              if (abs(loIV[idir]) % 2 != color[idir])
                 {
                   loIV[idir]++;
                 }

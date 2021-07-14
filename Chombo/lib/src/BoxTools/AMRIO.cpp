@@ -390,21 +390,27 @@ ReadAMRHierarchyHDF5(const string& filename,
                      Real& a_time,
                      Vector<int>& a_refRatio,
                      int& a_numLevels)
-{
+{ CH_TIME("ReadAMRHierarchyHDF5 long with filename");
   HDF5Handle handle;
+  { CH_TIME("open handle");
   int err = handle.open(filename.c_str(),  HDF5Handle::OPEN_RDONLY);
   if ( err < 0)
     {
       return -4;
     }
+  }
   int eekflag = ReadAMRHierarchyHDF5(handle, a_vectGrids, a_vectData,
                                      a_vectNames, a_domain, a_dx, a_dt,
                                      a_time, a_refRatio, a_numLevels);
 
 #ifdef CH_MPI
+  { CH_TIME("barrier");
   MPI_Barrier(Chombo_MPI::comm);
+  }
 #endif
+  { CH_TIME("close handle");
   handle.close();
+  }
 
   return (eekflag);
 }
@@ -420,10 +426,11 @@ ReadAMRHierarchyHDF5(HDF5Handle& handle,
                      Real& a_time,
                      Vector<int>& a_refRatio,
                      int& a_numLevels)
-{
-
+{ CH_TIME("ReadAMRHierarchyHDF5 long with handle");
   HDF5HeaderData header;
+  { CH_TIME("read header");
   header.readFromFile(handle);
+  }
 
   a_numLevels = header.m_int["num_levels"];
   if (a_numLevels <= 0)
@@ -487,7 +494,7 @@ ReadAMRHierarchyHDF5(const string& filename,
                      Box& a_domain,
                      Vector<int>& a_refRatio,
                      int& a_numLevels)
-{
+{ CH_TIME("ReadAMRHierarchyHDF5 with filename");
   HDF5Handle handle;
   int err = handle.open(filename.c_str(),  HDF5Handle::OPEN_RDONLY);
   if ( err < 0)
@@ -512,7 +519,7 @@ ReadAMRHierarchyHDF5(HDF5Handle& handle,
                      Box& a_domain,
                      Vector<int>& a_refRatio,
                      int& a_numLevels)
-{
+{ CH_TIME("ReadAMRHierarchyHDF5 with handle");
   HDF5HeaderData header;
   header.readFromFile(handle);
 

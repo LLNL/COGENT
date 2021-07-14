@@ -115,8 +115,9 @@ ifeq (00,$(shell test $(_gppmajorver) -ge 4 ; echo $$?)$(shell test $(_gppminorv
 endif
 
 ################################################################
-
-_g77version := $(subst ., ,$(shell $(FC) -dumpversion))
+# As we did for the cppversion above, switch to using -dumpfullversion to 
+# ensure we also get the minor version correctly
+_g77version := $(subst ., ,$(shell $(FC) -dumpfullversion -dumpversion))
 _g77majorver:= $(word 1,$(_g77version))
 _g77minorver:= $(word 2,$(_g77version))
 

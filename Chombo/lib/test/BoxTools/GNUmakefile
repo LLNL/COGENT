@@ -15,7 +15,9 @@ ebase = transformTest ldIVSFABCopyTest ldIVSFABCopyTestInt interiorExchangeTest 
   testPeriodic ivsfabTest testRealVect codimensionBoundaryTest        \
   testTreeIntVectSet scopingTest reductionTest testRealTensor         \
   testCHArray mortonTest testIndicesTransformation matrixTest stdIVSTest \
-  boxCountThreadTest edgeAndCellTest FaceSumOpTest testMDArrayMacros
+  boxCountThreadTest edgeAndCellTest FaceSumOpTest testMDArrayMacros \
+  testWriteCenterings
+
 
 LibNames = BoxTools
 

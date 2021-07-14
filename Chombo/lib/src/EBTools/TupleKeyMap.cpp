@@ -8,6 +8,7 @@
  */
 #endif
 
+#include "CH_assert.H"
 #include "TupleKeyMapI.H"
 #include "NamespaceHeader.H"
 

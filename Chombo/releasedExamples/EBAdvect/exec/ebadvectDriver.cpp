@@ -307,11 +307,6 @@ void  computeDt(Real                 & a_dt,
                 LevelData<EBCellFAB> & a_ccVel, 
                 Real a_dx, Real a_cfl)
 {
-  //debug
-  dumpEB1(NULL);
-  dumpBlob(NULL);
-  dumpFace1(NULL);
-  //end debug
   Real maxval = 0;
   for(int idir = 0; idir < SpaceDim; idir++)
   {
