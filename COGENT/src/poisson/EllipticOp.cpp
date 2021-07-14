@@ -1627,7 +1627,7 @@ EllipticOp::constructBoundaryStencils( const bool                         a_four
                               codim2_stencil.resize(++num_codim2_neighbors);
 
                               codim2_stencil[num_codim2_neighbors-1].
-                                 define(restricted_codim1_box, dx, dir, side, tdir, side2, order, this_transverse_boundary);
+                                 define(restricted_codim1_box, bc_type, dx, dir, side, tdir, side2, order, this_transverse_boundary);
 
                               // Check to see if the new codim2 box overlaps another block
 
@@ -1658,7 +1658,7 @@ EllipticOp::constructBoundaryStencils( const bool                         a_four
                            codim2_stencil.resize(++num_codim2_neighbors);
 
                            codim2_stencil[num_codim2_neighbors-1].
-                              define(codim1_box, dx, dir, side, tdir, side2, order, transverse_boundary);
+                              define(codim1_box, bc_type, dx, dir, side, tdir, side2, order, transverse_boundary);
 
                            // Check to see if the new codim2 box overlaps another block
 

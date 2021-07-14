@@ -17,7 +17,7 @@ public:
                            const bool        spectral_field,
                            double            RB_toroidal );
 
-   ~SingleNullPoloidalUtil() {;}
+   ~SingleNullPoloidalUtil();
 
    void setRZInterp( const ParmParse&  pp,
                      const string&     interp_method,

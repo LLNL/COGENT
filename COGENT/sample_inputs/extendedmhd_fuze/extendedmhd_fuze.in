@@ -12,27 +12,17 @@ gksystem.hdf_fluids = true
 # Time Stepping Definitions
 #####################################################
 simulation.max_step            = 200
-#simulation.max_step            = 10000000000
 simulation.max_time            = 2.6
-#simulation.max_dt_grow         = .1
 simulation.initial_dt_fraction = 0.1
 simulation.cfl_number          = 0.7
-#simulation.fixed_dt            = 0.00084872
 simulation.checkpoint_interval = 100000000
 simulation.checkpoint_prefix   = "chk"
-#simulation.restart_file = "chk3200.4d.hdf5"
 #simulation.plot_interval       = 10
 simulation.plot_time_interval  = 1.0e-1
 simulation.plot_prefix         = "plt"
 
 gksystem.ti_class = "rk"
 gksystem.ti_method = "2"
-#gksystem.ti_class = "ark"
-#gksystem.ti_method = "2c"
-#ark_jacobian.with_pc = true
-#ark_pc.type = "multiphysicsPC"
-#ark_newton.rtol = 1.0e-6
-#ark_gmres.rtol = 1.0e-6
 
 #####################################################
 # Computational Grid Definitions
@@ -87,7 +77,7 @@ gkpoisson.verbose = true
 #####################################################
 # Species Definitions
 #####################################################
-fluid_species.1.name   = "neutrals"
+fluid_species.1.name   = "plasma"
 fluid_species.1.mass   = 1.0
 fluid_species.1.charge = 0.0
 fluid_species.1.operator_type = "ExtendedMhdOp"
@@ -110,105 +100,92 @@ fluid_species.1.plotMemberVars.list = "chargeDensity"
 #                                      "kappai" "kappae" 
 #                                      "qi_wedge"
 
-#fluid_model.neutrals.advScheme = "uw1"
-#fluid_model.neutrals.advScheme = "quick"
-#fluid_model.neutrals.advScheme = "c2"
-fluid_model.neutrals.advScheme = "weno5"
-#fluid_model.neutrals.advScheme = "TVDminmod"
+#fluid_model.plasma.advScheme = "uw1"
+#fluid_model.plasma.advScheme = "quick"
+#fluid_model.plasma.advScheme = "c2"
+fluid_model.plasma.advScheme = "weno5"
+#fluid_model.plasma.advScheme = "TVDminmod"
 
-fluid_model.neutrals.modelDriftTerms = true
-fluid_model.neutrals.initializeJfromAmperesLaw = true
-fluid_model.neutrals.initializeEfromOhmsLaw = true
+fluid_model.plasma.modelDriftTerms = true
+fluid_model.plasma.initializeJfromAmperesLaw = true
+fluid_model.plasma.initializeEfromOhmsLaw = true
 
-fluid_model.neutrals.useJ0forJcc = 0
-fluid_model.neutrals.advSchemeHall = "c2"
-#fluid_model.neutrals.advSchemeHall = "uw1c2minmod"
-fluid_model.neutrals.fullyImplicitJ = 1
-fluid_model.neutrals.iterHallMax = 1
-fluid_model.neutrals.HallResTol = 1.0e-6
+fluid_model.plasma.useJ0forJcc = 0
+fluid_model.plasma.advSchemeHall = "c2"
+#fluid_model.plasma.advSchemeHall = "uw1c2minmod"
+fluid_model.plasma.fullyImplicitJ = 1
+fluid_model.plasma.iterHallMax = 1
+fluid_model.plasma.HallResTol = 1.0e-6
 
-fluid_model.neutrals.epRel = 10.0
-fluid_model.neutrals.meRel = 10.0
-fluid_model.neutrals.useRelaxedOhmsLaw = 1
+fluid_model.plasma.epRel = 10.0
+fluid_model.plasma.meRel = 10.0
+fluid_model.plasma.useRelaxedOhmsLaw = 1
 
-fluid_model.neutrals.useRelaxedViscosity = 1
-fluid_model.neutrals.etaVis_ele = 1.0e-3
-fluid_model.neutrals.etaResMin = 1.0e-4
-fluid_model.neutrals.etaMin = 1.0e-3
-fluid_model.neutrals.viscLimiter = 1.0e-4
-fluid_model.neutrals.gyroViscLimiter = 1.0e20
-#fluid_model.neutrals.gyroHeatViscCoeff = 0.1
+fluid_model.plasma.useRelaxedViscosity = 1
+fluid_model.plasma.etaVis_ele = 1.0e-3
+fluid_model.plasma.etaResMin = 1.0e-4
+fluid_model.plasma.etaMin = 1.0e-3
+fluid_model.plasma.viscLimiter = 1.0e-4
+fluid_model.plasma.gyroViscLimiter = 1.0e20
+#fluid_model.plasma.gyroHeatViscCoeff = 0.1
 
-fluid_model.neutrals.useRelaxedHeatFlux = 1
-fluid_model.neutrals.tauiMin = 1.0e-20
-fluid_model.neutrals.taueMin = 1.0e-20
-fluid_model.neutrals.kappaMin = 1.0e-3
-fluid_model.neutrals.heatLimiter = 1.0e-1
-fluid_model.neutrals.gyroHeatLimiter = 1.0e20
+fluid_model.plasma.useRelaxedHeatFlux = 1
+fluid_model.plasma.tauiMin = 1.0e-20
+fluid_model.plasma.taueMin = 1.0e-20
+fluid_model.plasma.kappaMin = 1.0e-3
+fluid_model.plasma.heatLimiter = 1.0e-1
+fluid_model.plasma.heatLimiter_ele = 1.0e-1
+fluid_model.plasma.gyroHeatLimiter = 1.0e20
 
-fluid_model.neutrals.xionFactor = 3.0e2
-fluid_model.neutrals.xeleFactor = 1.0
+fluid_model.plasma.xionFactor = 3.0e2
+fluid_model.plasma.xeleFactor = 1.0
 
 
 #####################################################
 # Initial Condition Definitions
 #####################################################
 IC.potential.function = "zero_grid_func"
-IC.neutrals.density.function = "neutrals_IC"
-IC.neutrals.momentumDensity_0.function = "zero_grid_func"
-IC.neutrals.momentumDensity_1.function = "momDeny_IC"
-IC.neutrals.energyDensity.function = "energyDensity_IC"
-IC.neutrals.energyDensity_ele.function = "energyDensity_ele_IC"
-IC.neutrals.magneticField_virtual.function = "By_IC"
-IC.neutrals.electricField_0.function = "electricField_IC"
-IC.neutrals.electricField_1.function = "zero_grid_func"
-IC.neutrals.currentDensity_0.function = "zero_grid_func"
-IC.neutrals.currentDensity_1.function = "currentDensity_IC"
+IC.plasma.density.function = "plasma_IC"
+IC.plasma.momentumDensity_0.function = "zero_grid_func"
+IC.plasma.momentumDensity_1.function = "momDeny_IC"
+IC.plasma.energyDensity.function = "energyDensity_IC"
+IC.plasma.energyDensity_ele.function = "energyDensity_ele_IC"
+IC.plasma.magneticField_virtual.function = "By_IC"
+IC.plasma.electricField_0.function = "electricField_IC"
+IC.plasma.electricField_1.function = "zero_grid_func"
+IC.plasma.currentDensity_0.function = "zero_grid_func"
+IC.plasma.currentDensity_1.function = "currentDensity_IC"
 
 #####################################################
 # Boundary Condition Definitions
 #####################################################
-BC.neutrals.density.radial_lower.function = "zero_grid_func"
-BC.neutrals.density.radial_upper.function = "zero_grid_func"
-BC.neutrals.density.radial_lower.type = "neumann"
-BC.neutrals.density.radial_upper.type = "neumann"
+BC.plasma.density.radial_lower.type = "neumann"
+BC.plasma.density.radial_upper.type = "neumann"
 
-BC.neutrals.momentumDensity.radial_lower.function = "zero_grid_func"
-BC.neutrals.momentumDensity.radial_upper.function = "zero_grid_func"
-BC.neutrals.momentumDensity.radial_lower.type = "symmetry"
-BC.neutrals.momentumDensity.radial_upper.type = "symmetry"
+BC.plasma.momentumDensity.radial_lower.type = "symmetry"
+BC.plasma.momentumDensity.radial_upper.type = "symmetry"
 
-BC.neutrals.energyDensity.radial_lower.function = "zero_grid_func"
-BC.neutrals.energyDensity.radial_upper.function = "zero_grid_func"
-BC.neutrals.energyDensity.radial_lower.type = "neumann"
-BC.neutrals.energyDensity.radial_upper.type = "neumann"
+BC.plasma.energyDensity.radial_lower.type = "neumann"
+BC.plasma.energyDensity.radial_upper.type = "neumann"
 
-BC.neutrals.energyDensity_ele.radial_lower.function = "zero_grid_func"
-BC.neutrals.energyDensity_ele.radial_upper.function = "zero_grid_func"
-BC.neutrals.energyDensity_ele.radial_lower.type = "neumann"
-BC.neutrals.energyDensity_ele.radial_upper.type = "neumann"
+BC.plasma.energyDensity_ele.radial_lower.type = "neumann"
+BC.plasma.energyDensity_ele.radial_upper.type = "neumann"
 
-BC.neutrals.magneticField_virtual.radial_lower.function = "zero_grid_func"
-BC.neutrals.magneticField_virtual.radial_upper.function = "zero_grid_func"
-BC.neutrals.magneticField_virtual.radial_lower.type = "odd"
-BC.neutrals.magneticField_virtual.radial_upper.type = "neumannJ"
+BC.plasma.magneticField_virtual.radial_lower.type = "odd"
+BC.plasma.magneticField_virtual.radial_upper.type = "neumannJ"
 
-BC.neutrals.electricField.radial_lower.function = "zero_grid_func"
-BC.neutrals.electricField.radial_upper.function = "zero_grid_func"
-BC.neutrals.electricField.radial_lower.type = "symmetry"
-BC.neutrals.electricField.radial_upper.type = "natural"
+BC.plasma.electricField.radial_lower.type = "symmetry"
+BC.plasma.electricField.radial_upper.type = "natural"
 
-BC.neutrals.currentDensity.radial_lower.function = "zero_grid_func"
-BC.neutrals.currentDensity.radial_upper.function = "zero_grid_func"
-BC.neutrals.currentDensity.radial_lower.type = "symmetry"
-BC.neutrals.currentDensity.radial_upper.type = "natural"
+BC.plasma.currentDensity.radial_lower.type = "symmetry"
+BC.plasma.currentDensity.radial_upper.type = "natural"
 
 #####################################################
 # Grid Function Definitions
 #####################################################
 grid_function_library.number = 8
 grid_function_library.verbosity = 1
-grid_function_library.list = "zero_grid_func" "momDeny_IC" "neutrals_IC" 
+grid_function_library.list = "zero_grid_func" "momDeny_IC" "plasma_IC" 
                              "energyDensity_IC" "energyDensity_ele_IC" 
                              "electricField_IC" "currentDensity_IC"
                              "By_IC"
@@ -219,9 +196,9 @@ grid_function_library.momDeny_IC.type = "arbitrary"
 grid_function_library.momDeny_IC.coordinate_type = "physical"
 grid_function_library.momDeny_IC.function = "0.3*x*(0.05 + 0.855*exp(-x^2/0.32-x^4/0.0177)*(1-1.0e-4*cos(2*pi*y/0.6283)*exp(-(x-0.6)^2*9/2)))"
 
-grid_function_library.neutrals_IC.type = "arbitrary"
-grid_function_library.neutrals_IC.coordinate_type = "physical"
-grid_function_library.neutrals_IC.function = "0.05 + 0.855*exp(-x^2/0.32-x^4/0.0177)*(1-1.0e-4*cos(2*pi*y/0.6283)*exp(-(x-0.6)^2*9/2))"
+grid_function_library.plasma_IC.type = "arbitrary"
+grid_function_library.plasma_IC.coordinate_type = "physical"
+grid_function_library.plasma_IC.function = "0.05 + 0.855*exp(-x^2/0.32-x^4/0.0177)*(1-1.0e-4*cos(2*pi*y/0.6283)*exp(-(x-0.6)^2*9/2))"
 
 grid_function_library.energyDensity_IC.type = "arbitrary"
 grid_function_library.energyDensity_IC.coordinate_type = "physical"

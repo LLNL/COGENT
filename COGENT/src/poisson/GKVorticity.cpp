@@ -6,7 +6,6 @@
 #include "ToroidalBlockLevelExchangeCenter.H"
 
 //#define VERIFY_MATRIX
-#define SYMMETRIC
 
 
 #include "NamespaceHeader.H"
@@ -123,6 +122,7 @@ void
 GKVorticity::init( const ParmParse&  a_pp,
                    const ParmParse&  a_pp_base )
 {
+   m_symmetrized_preconditioner = false;
    if ( m_include_pol_den_correction ) {
       ParmParse pp( ((string)a_pp_base.prefix() + ".linear_solver.precond").c_str());
       if ( pp.contains("method") ) {
@@ -131,6 +131,12 @@ GKVorticity::init( const ParmParse&  a_pp,
          if ( method != "MGR" ) {
             MayDay::Warning("GKVorticity::init(): include_pol_den_correction option needs MGR preconditioner");
          }
+      }
+      if (pp.contains("symmetrized")) {
+         pp.get( "symmetrized", m_symmetrized_preconditioner );
+      }
+      else {
+         m_symmetrized_preconditioner = true;
       }
    }
 
@@ -165,6 +171,13 @@ GKVorticity::init( const ParmParse&  a_pp,
       m_parallel_conductivity = grid_library->find( grid_function_name );
    }
 
+   if (a_pp.contains("parallel_conductivity_limit")) {
+     a_pp.get("parallel_conductivity_limit",m_parallel_conductivity_limit );
+   }
+   else {
+     m_parallel_conductivity_limit = DBL_MAX;
+   }
+   
    if (a_pp.contains("electron_temperature")) {
       GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
       std::string grid_function_name;
@@ -178,9 +191,9 @@ GKVorticity::init( const ParmParse&  a_pp,
       m_perp_coeff_unmapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
       m_par_coeff_mapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
       m_par_coeff_unmapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
-#ifdef SYMMETRIC
-      m_ne_over_Te.define(grids, 1, IntVect::Zero);
-#endif
+      if ( m_symmetrized_preconditioner ) {
+         m_ne_over_Te.define(grids, 1, IntVect::Zero);
+      }
    }
 
    if ( m_preconditioner == NULL ) {
@@ -200,18 +213,6 @@ GKVorticity::init( const ParmParse&  a_pp,
 }
 
 
-#ifdef with_petsc
-MBPETScSolver* GKVorticity::allocatePreconditioner( const MagGeom&                  a_geom,
-                                                    const int                       a_discretization_order,
-                                                    MultiBlockLevelExchangeCenter*  a_mblx_ptr )
-{
-   int nvar = m_include_pol_den_correction? 2: 1;
-   MBPETScSolver* solver(NULL);
-   solver = new MBPETScSolver(a_geom, nvar, a_discretization_order, a_mblx_ptr);
-   CH_assert(solver != NULL);
-   return solver;
-}
-#else
 MBHypreSolver* GKVorticity::allocatePreconditioner( const MagGeom&                  a_geom,
                                                     const int                       a_discretization_order,
                                                     MultiBlockLevelExchangeCenter*  a_mblx_ptr )
@@ -222,7 +223,6 @@ MBHypreSolver* GKVorticity::allocatePreconditioner( const MagGeom&              
    CH_assert(solver != NULL);
    return solver;
 }
-#endif
 
 
 void
@@ -296,6 +296,7 @@ GKVorticity::computeCoefficients(const LevelData<FArrayBox>& a_ion_mass_density,
    //Assign parallel conductivity
    if (!m_parallel_cond_face.isDefined() ) {
       if (m_parallel_conductivity == NULL) {
+  	 m_parallel_cond_face.define( grids, 1, IntVect::Zero );
          computeParallelConductivity(m_electron_temperature_face, m_parallel_cond_face);
       }
       else {
@@ -461,7 +462,7 @@ void
 GKVorticity::updatePreconditioner( MBSolver*              a_preconditioner,
                                    LevelData<FArrayBox>&  a_volume_reciprocal,
                                    LevelData<FluxBox>&    a_mapped_coefficients,
-                                   const EllipticOpBC&    a_bc )
+                                   const EllipticOpBC&    a_potential_bc )
 {
    CH_TIME("GKVorticity::updatePreconditioner");
 
@@ -471,52 +472,53 @@ GKVorticity::updatePreconditioner( MBSolver*              a_preconditioner,
 
    if (m_include_pol_den_correction) {
 
+      bool use_extrapolated_bcs = true;
+      RefCountedPtr<EllipticOpBC> vorticity_bc = a_potential_bc.clone(use_extrapolated_bcs);
+
       LevelData<FluxBox> zero(grids, SpaceDim*SpaceDim, IntVect::Unit);
       LevelData<FluxBox> negative_par_cond(grids, SpaceDim*SpaceDim, IntVect::Unit);
 
-#ifndef SYMMETRIC
-      LevelData<FArrayBox> Te_reciprocal(grids, 1, IntVect::Zero);
-#endif
-
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          zero[dit].setVal(0.);
-
          negative_par_cond[dit].copy(m_par_coeff_mapped[dit]);
          negative_par_cond[dit].negate();
-
-#ifndef SYMMETRIC
-         Te_reciprocal[dit].setVal(1.);
-         // Don't need the 1/T_e factor (yet), since Te is included in the coefficient
-         //         Te_reciprocal[dit] /= m_electron_temperature_cell[dit];
-         
-#endif
       }
 
       // Upper-left block
-      a_preconditioner->constructMatrixBlock(0, 0, a_volume_reciprocal, a_mapped_coefficients, a_bc);
+      a_preconditioner->constructMatrixBlock(0, 0, a_volume_reciprocal, a_mapped_coefficients, a_potential_bc);
 
-#ifdef SYMMETRIC
-      // Upper-right block
-      a_preconditioner->constructMatrixBlock(0, 1, a_volume_reciprocal, m_perp_coeff_mapped, a_bc);
+      if ( m_symmetrized_preconditioner ) {
 
-      // Lower-left block
-      a_preconditioner->constructMatrixBlock(1, 0, a_volume_reciprocal, m_perp_coeff_mapped, a_bc);
+         // Upper-right block
+         a_preconditioner->constructMatrixBlock(0, 1, a_volume_reciprocal, m_perp_coeff_mapped, a_potential_bc);
 
-      // Lower-right block
-      a_preconditioner->constructMatrixBlock(1, 1, a_volume_reciprocal, m_perp_coeff_mapped, m_ne_over_Te, a_bc);
-#else
-      // Upper-right block
-      a_preconditioner->constructMatrixBlock(0, 1, a_volume_reciprocal, negative_par_cond, a_bc);
+         // Lower-left block
+         a_preconditioner->constructMatrixBlock(1, 0, a_volume_reciprocal, m_perp_coeff_mapped, a_potential_bc);
 
-      // Lower-left block
-      a_preconditioner->constructMatrixBlock(1, 0, a_volume_reciprocal, m_perp_coeff_mapped, a_bc);
+         // Lower-right block
+         a_preconditioner->constructMatrixBlock(1, 1, a_volume_reciprocal, m_perp_coeff_mapped, m_ne_over_Te, a_potential_bc);
+      }
+      else {
 
-      // Lower-right block
-      a_preconditioner->constructMatrixBlock(1, 1, zero, Te_reciprocal, a_bc);
-#endif
+         LevelData<FArrayBox> Te_reciprocal(grids, 1, IntVect::Zero);
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            Te_reciprocal[dit].setVal(1.);
+            // Don't need the 1/T_e factor (yet), since Te is included in the coefficient
+            // Te_reciprocal[dit] /= m_electron_temperature_cell[dit];
+         }
+
+         // Upper-right block
+         a_preconditioner->constructMatrixBlock(0, 1, a_volume_reciprocal, negative_par_cond, *vorticity_bc);
+
+         // Lower-left block
+         a_preconditioner->constructMatrixBlock(1, 0, a_volume_reciprocal, m_perp_coeff_mapped, a_potential_bc);
+
+         // Lower-right block
+         a_preconditioner->constructMatrixBlock(1, 1, zero, Te_reciprocal, *vorticity_bc);
+      }
    }
    else {
-      a_preconditioner->constructMatrixBlock(0, 0, a_volume_reciprocal, a_mapped_coefficients, a_bc);
+      a_preconditioner->constructMatrixBlock(0, 0, a_volume_reciprocal, a_mapped_coefficients, a_potential_bc);
    }
 
    a_preconditioner->finalizeMatrix();
@@ -560,27 +562,26 @@ GKVorticity::verifyMatrix( const MBSolver*  a_matrix )
       computeFluxDivergenceWithCoeff(Mu, u, m_perp_coeff_mapped, true, false);
    }
       
-#ifdef SYMMETRIC
+   if ( m_symmetrized_preconditioner ) {
 
-   LevelData<FArrayBox> Dv(grids, 1, IntVect::Zero);
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      Dv[dit].copy(Mu[dit]);
-      Dv[dit] /= m_ne_over_Te[dit];
-      Dv[dit].negate();
+      LevelData<FArrayBox> Dv(grids, 1, IntVect::Zero);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         Dv[dit].copy(Mu[dit]);
+         Dv[dit] /= m_ne_over_Te[dit];
+         Dv[dit].negate();
 
-      // Set the vector (ubar,Dv) = (u - Dv, Dv)
-      in_vec[dit].minus(Dv[dit],0,0,1);
-      in_vec[dit].copy(Dv[dit],0,1,1);
+         // Set the vector (ubar,Dv) = (u - Dv, Dv)
+         in_vec[dit].minus(Dv[dit],0,0,1);
+         in_vec[dit].copy(Dv[dit],0,1,1);
+      }
    }
+   else {
 
-#else
-
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      Mu[dit].negate();
-      in_vec[dit].copy(Mu[dit],0,1,1);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         Mu[dit].negate();
+         in_vec[dit].copy(Mu[dit],0,1,1);
+      }
    }
-
-#endif
 
    LevelData<FArrayBox> matvec(grids, 2, IntVect::Zero);
    a_matrix->multiplyMatrix(in_vec, matvec);
@@ -634,9 +635,12 @@ GKVorticity::solvePreconditioner( const LevelData<FArrayBox>& a_r,
 
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          a_z[dit].copy(block_out[dit],0,0,1);
-#ifdef SYMMETRIC
-         a_z[dit].plus(block_out[dit],1,0,1);
-#endif
+      }
+
+      if ( m_symmetrized_preconditioner ) {
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            a_z[dit].plus(block_out[dit],1,0,1);
+         }
       }
    }
    else {
@@ -670,11 +674,14 @@ GKVorticity::setPolDenCorrectionCoeff(const LevelData<FArrayBox>& a_ion_charge_d
    LevelData<FluxBox> density_sum_face( grids, 1, IntVect::Zero );
    fourthOrderCellToFaceCenters(density_sum_face, density_sum_cell);
 
+   if ( m_symmetrized_preconditioner ) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_ne_over_Te[dit].copy(density_sum_cell[dit]);
+         m_ne_over_Te[dit] /= m_electron_temperature_cell[dit];
+      }
+   }
+
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-#ifdef SYMMETRIC
-      m_ne_over_Te[dit].copy(density_sum_cell[dit]);
-      m_ne_over_Te[dit] /= m_electron_temperature_cell[dit];
-#endif
       for (int n=0; n<SpaceDim*SpaceDim; ++n) {
          m_par_coeff_mapped[dit].divide(density_sum_face[dit], grids[dit], 0, n);
          m_par_coeff_unmapped[dit].divide(density_sum_face[dit], grids[dit], 0, n);
@@ -1039,7 +1046,7 @@ GKVorticity::computeParallelConductivity(const LevelData<FluxBox>& a_Te,
    double sigma_norm = sigma_e * norm_coeff;
    
    //In case we need to limit the value of sigma for numerical purposes
-   double sigma_max = DBL_MAX;
+   double sigma_max = m_parallel_conductivity_limit;
    
    //Compute parallel conductivity
    const DisjointBoxLayout& grids = a_parallel_conductivity.disjointBoxLayout();

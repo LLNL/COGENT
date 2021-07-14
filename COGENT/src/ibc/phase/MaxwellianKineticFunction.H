@@ -161,6 +161,8 @@ class MaxwellianKineticFunction : public KineticFunction
       RefCountedPtr<CFG::GridFunction> m_ic_density;
    
       bool m_enforce_input_density_profile;
+
+      bool m_useSG; //whether to use sparse grid-friendly stencils
 };
 
 #include "NamespaceFooter.H"

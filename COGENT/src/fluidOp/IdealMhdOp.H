@@ -89,10 +89,10 @@ public:
                                       const int                          component,
                                       const Real                         time);
    
-   virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+   virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                std::vector<PS::DOFList>&,
-                               const PS::GKVector&,
-                               PS::GKOps&,
+                               const PS::ODEVector&,
+                               void*,
                                const std::string&,
                                const std::string&,
                                bool,
@@ -100,10 +100,12 @@ public:
                                const PS::GlobalDOFFluidSpecies&,
                                int );
 
-   virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+   virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 const PS::KineticSpeciesPtrVect&,
                                 const FluidSpeciesPtrVect&,
                                 const Real,
+                                const int,
+                                const int,
                                 const Real,
                                 const bool,
                                 const int );
@@ -111,6 +113,8 @@ public:
    virtual void updatePCImEx( const FluidSpeciesPtrVect&        fluid_species,
                               const PS::KineticSpeciesPtrVect&  kinetic_species,
                               const double                      time,
+                              const int                         step,
+                              const int                         stage,
                               const double                      shift,
                               const int                         component );
 
@@ -190,7 +194,6 @@ private:
    LevelData<FArrayBox> m_rhoDen_cc;
    LevelData<FArrayBox> m_momDen_cc;
    LevelData<FArrayBox> m_eneDen_cc;
-   LevelData<FluxBox>   m_magField_cf;
    LevelData<FArrayBox> m_momDen_virtual_cc;
    LevelData<FArrayBox> m_magField_virtual_cc;
    
@@ -312,6 +315,13 @@ private:
    EllipticOpBC*  m_bc_Apar;
    std::vector<FluidVarBC*>  m_fluid_bc;
    std::vector<FluidVarBC*>  m_fluid_face_var_bc;
+   
+   int m_density_cbc;
+   int m_momentumDensity_cbc;
+   int m_energyDensity_cbc;
+   int m_momentumDensity_virtual_cbc;
+   int m_magneticField_virtual_cbc;
+   int m_magneticField_fbc;
   
    void accumulateMhdRHS( FluidSpecies&  a_rhs_fluid,
                     const FluidSpecies&  a_soln_fluid,
@@ -369,9 +379,8 @@ private:
    void setFaceCenteredFlux( LevelData<FluxBox>&    a_Flux_norm,
                        const LevelData<FArrayBox>&  a_Flux_phys_cc );
    
-   void enforceFluxBCs( FluidSpecies&  a_rhs_fluid,
-                  const FluidSpecies&  a_soln_fluid,
-                  const Real           a_time );
+   void enforceFluxBCs( const FluidSpecies&  a_soln_fluid,
+                        const Real           a_time );
    
    void setViscosityCoefficient( LevelData<FArrayBox>&  a_etaVisc,
                                  LevelData<FluxBox>&    a_etaVisc_cf,

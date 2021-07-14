@@ -175,7 +175,8 @@ class KineticSpecies
       /// Returns species energy density.
       /**
        */
-      virtual void energyMoment( CFG::LevelData<CFG::FArrayBox>& energy ) const;
+      virtual void energyMoment( CFG::LevelData<CFG::FArrayBox>& energy,
+                                 const CFG::LevelData<CFG::FArrayBox>& phi) const;
 
       /// Returns species parallel energy density.
       /**
@@ -187,11 +188,16 @@ class KineticSpecies
        */
       virtual void perpEnergyDensity( CFG::LevelData<CFG::FArrayBox>& energy ) const;
 
-      /// Returns species energy for an arbitrary FArrayBox
+      /// Returns species kinetic energy density
       /**
        */
-      virtual void energyMoment( CFG::LevelData<CFG::FArrayBox>& energy,
-                                 const LevelData<FArrayBox>& dfn) const;
+      virtual void kineticEnergyMoment(CFG::LevelData<CFG::FArrayBox>& energy) const;
+
+      /// Returns species kinetic energy for an arbitrary FArrayBox
+      /**
+       */
+      virtual void kineticEnergyMoment(CFG::LevelData<CFG::FArrayBox>& energy,
+                                       const LevelData<FArrayBox>& dfn) const;
 
       /// Returns species fourth velocity space moment.
       /**

@@ -1,12 +1,13 @@
 #include "LogRectEllipticOpBC.H"
 #include "Directions.H"
 #include "GridFunctionLibrary.H"
+#include "DataArray.H"
 
 #include "NamespaceHeader.H"
 
 
-LogRectEllipticOpBC::LogRectEllipticOpBC()
-   : EllipticOpBC(NUM_BOUNDARIES)
+LogRectEllipticOpBC::LogRectEllipticOpBC(const int& a_nblocks)
+   : EllipticOpBC(NUM_BOUNDARIES, a_nblocks)
 {
    setNames();
 }
@@ -14,13 +15,21 @@ LogRectEllipticOpBC::LogRectEllipticOpBC()
 
 LogRectEllipticOpBC::LogRectEllipticOpBC( const std::string&  a_name,
                                           ParmParse&          a_pp,
+                                          const int&          a_nblocks,
                                           const int&          a_verbosity )
-   : EllipticOpBC(NUM_BOUNDARIES),
+   : EllipticOpBC(NUM_BOUNDARIES, a_nblocks),
      m_name(a_name),
      m_verbosity(a_verbosity)
 {
    setNames();
    parseParameters( a_pp );
+   
+   if (hasCoupledBoundary()) {
+      for (int i=0; i<m_bc_block_data.size(); ++i) {
+         int verbosity = 0;
+         m_bc_block_data[i] = RefCountedPtr<GridFunction>( new DataArray( verbosity ) );
+      }
+   }
 }
 
 
@@ -136,6 +145,54 @@ LogRectEllipticOpBC::getBCType( const int  a_block_number,
    return bc_type;
 }
 
+std::string
+LogRectEllipticOpBC::getBCSubType(const int  a_block_number,
+                                  const int  a_dir,
+                                  const int  a_side ) const
+{
+   std::string bc_subtype;
+
+   if ( a_dir == RADIAL_DIR ) {
+      if ( a_side == 0 ) {
+         bc_subtype = m_bc_subtype[RADIAL_LOWER];
+      }
+      else if ( a_side == 1 ) {
+         bc_subtype = m_bc_subtype[RADIAL_UPPER];
+      }
+      else {
+         MayDay::Error("LogRectEllipticOpBC::getBCSubType(): Invalid side argument");
+      }
+   }
+   else if ( a_dir == POLOIDAL_DIR ) {
+      if ( a_side == 0 ) {
+         bc_subtype = m_bc_subtype[POLOIDAL_LOWER];
+      }
+      else if ( a_side == 1 ) {
+         bc_subtype = m_bc_subtype[POLOIDAL_UPPER];
+      }
+      else {
+         MayDay::Error("LogRectEllipticOpBC::getBCSubType(): Invalid side argument");
+      }
+   }
+#if CFG_DIM==3
+   else if ( a_dir == TOROIDAL_DIR ) {
+      if ( a_side == 0 ) {
+         bc_subtype = m_bc_subtype[TOROIDAL_LOWER];
+      }
+      else if ( a_side == 1 ) {
+         bc_subtype = m_bc_subtype[TOROIDAL_UPPER];
+      }
+      else {
+         MayDay::Error("LogRectEllipticOpBC::getBCSubType(): Invalid side argument");
+      }
+   }
+#endif
+   else {
+      MayDay::Error("LogRectEllipticOpBC::getBCSubType(): Invalid direction argument");
+   }
+
+   return bc_subtype;
+}
 
 
 void
@@ -292,45 +349,50 @@ LogRectEllipticOpBC::getBCFunction( const int  a_block_number,
 {
    RefCountedPtr<GridFunction> function;
 
-   if ( a_dir == RADIAL_DIR ) {
-      if ( a_side == 0 ) {
-         function = m_bc_function[RADIAL_LOWER];
-      }
-      else if ( a_side == 1 ) {
-         function = m_bc_function[RADIAL_UPPER];
-      }
-      else {
-         MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid side argument");
-      }
+   if (getBCSubType(a_block_number, a_dir, a_side) == "coupled" ) {
+      function = getBlockBCData(a_block_number, a_dir, a_side);
    }
-   else if ( a_dir == POLOIDAL_DIR ) {
-      if ( a_side == 0 ) {
-         function = m_bc_function[POLOIDAL_LOWER];
-      }
-      else if ( a_side == 1 ) {
-         function = m_bc_function[POLOIDAL_UPPER];
-      }
-      else {
-         MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid side argument");
-      }
-   }
-#if CFG_DIM==3
-   else if ( a_dir == TOROIDAL_DIR ) {
-      if ( a_side == 0 ) {
-         function = m_bc_function[TOROIDAL_LOWER];
-      }
-      else if ( a_side == 1 ) {
-         function = m_bc_function[TOROIDAL_UPPER];
-      }
-      else {
-         MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid side argument");
-      }
-   }
-#endif
+   
    else {
-      MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid direction argument");
+      if ( a_dir == RADIAL_DIR ) {
+         if ( a_side == 0 ) {
+            function = m_bc_function[RADIAL_LOWER];
+         }
+         else if ( a_side == 1 ) {
+            function = m_bc_function[RADIAL_UPPER];
+         }
+         else {
+            MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid side argument");
+         }
+      }
+      else if ( a_dir == POLOIDAL_DIR ) {
+         if ( a_side == 0 ) {
+            function = m_bc_function[POLOIDAL_LOWER];
+         }
+         else if ( a_side == 1 ) {
+            function = m_bc_function[POLOIDAL_UPPER];
+         }
+         else {
+            MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid side argument");
+         }
+      }
+#if CFG_DIM==3
+      else if ( a_dir == TOROIDAL_DIR ) {
+         if ( a_side == 0 ) {
+            function = m_bc_function[TOROIDAL_LOWER];
+         }
+         else if ( a_side == 1 ) {
+            function = m_bc_function[TOROIDAL_UPPER];
+         }
+         else {
+            MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid side argument");
+         }
+      }
+#endif
+      else {
+         MayDay::Error("LogRectEllipticOpBC::getBCFunction(): Invalid direction argument");
+      }
    }
-
    return function;
 }
 
@@ -458,6 +520,8 @@ void LogRectEllipticOpBC::parseParameters( ParmParse& a_pp )
          MayDay::Error("LogRectEllipticOpBC::parseParameter(): Illegal potential bc type");
       }
 
+      fpp.query( "subtype", m_bc_subtype[i] );
+      
       bool value_specified = fpp.contains("value");
       
       if (fpp.contains("value")) {
@@ -486,5 +550,28 @@ void LogRectEllipticOpBC::parseParameters( ParmParse& a_pp )
 }
 
 
+RefCountedPtr<EllipticOpBC>
+LogRectEllipticOpBC::clone( const bool a_extrapolated ) const
+{
+   RefCountedPtr<LogRectEllipticOpBC> result
+      = RefCountedPtr<LogRectEllipticOpBC>(new LogRectEllipticOpBC(m_num_blocks));
+
+   result->m_name = m_name;
+
+   for (int i=0; i<m_bc_type.size(); ++i) {
+      result->m_bc_type[i] = a_extrapolated? EXTRAPOLATED: m_bc_type[i];
+   }
+   for (int i=0; i<m_bc_value.size(); ++i) {
+      (result->m_bc_value)[i] = m_bc_value[i];
+   }
+   for (int i=0; i<m_bc_subtype.size(); ++i) {
+      (result->m_bc_subtype)[i] = m_bc_subtype[i];
+   }
+   for (int i=0; i<m_bc_block_data.size(); ++i) {
+      (result->m_bc_block_data)[i] = m_bc_block_data[i];
+   }
+
+   return result;
+}
 
 #include "NamespaceFooter.H"

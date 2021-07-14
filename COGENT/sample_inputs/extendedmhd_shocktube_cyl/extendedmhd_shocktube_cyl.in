@@ -12,13 +12,9 @@ gksystem.hdf_fluids = true
 #simulation.max_step            = 2
 simulation.max_step            = 80000
 simulation.max_time            = 0.02 # 0.2
-#simulation.max_dt_grow         = .1
-#simulation.initial_dt_fraction = 1.0
 simulation.cfl_number          = 0.75
-#simulation.fixed_dt            = 0.0005
 simulation.checkpoint_interval = 10000
 simulation.checkpoint_prefix   = "chk"
-#simulation.restart_file = "chk3200.4d.hdf5"
 simulation.plot_interval       = 80
 simulation.plot_time_interval  = 0.02
 simulation.plot_prefix         = "plt"
@@ -96,6 +92,8 @@ fluid_model.plasma.meRel = 1.0
 fluid_model.plasma.epRel = 10000000.0
 
 fluid_model.plasma.modelDriftTerms = false
+fluid_model.plasma.Nmin = 1.0e-4
+fluid_model.plasma.Tmin = 1.0e-10
 
 fluid_model.plasma.useRelaxedViscosity = 1
 fluid_model.plasma.etaMin = 1.0e-3
@@ -125,37 +123,21 @@ IC.plasma.energyDensity_ele.function = "energyDensity_ele_IC"
 #####################################################
 # Boundary Condition Definitions
 #####################################################
-BC.plasma.density.radial_lower.function = "plasma_IC"
-BC.plasma.density.radial_upper.function = "plasma_IC"
-BC.plasma.density.poloidal_lower.function = "plasma_IC"
-BC.plasma.density.poloidal_upper.function = "plasma_IC"
 BC.plasma.density.radial_lower.type = "neumann"
 BC.plasma.density.radial_upper.type = "neumann"
 BC.plasma.density.poloidal_lower.type = "neumann"
 BC.plasma.density.poloidal_upper.type = "neumann"
 
-BC.plasma.momentumDensity.radial_lower.function = "zero_grid_func"
-BC.plasma.momentumDensity.radial_upper.function = "zero_grid_func"
-BC.plasma.momentumDensity.poloidal_lower.function = "zero_grid_func"
-BC.plasma.momentumDensity.poloidal_upper.function = "zero_grid_func"
 BC.plasma.momentumDensity.radial_lower.type = "symmetry"
 BC.plasma.momentumDensity.radial_upper.type = "symmetry"
 BC.plasma.momentumDensity.poloidal_lower.type = "symmetry"
 BC.plasma.momentumDensity.poloidal_upper.type = "symmetry"
 
-BC.plasma.energyDensity.radial_lower.function = "energyDensity_IC"
-BC.plasma.energyDensity.radial_upper.function = "energyDensity_IC"
-BC.plasma.energyDensity.poloidal_lower.function = "energyDensity_IC"
-BC.plasma.energyDensity.poloidal_upper.function = "energyDensity_IC"
 BC.plasma.energyDensity.radial_lower.type = "neumann"
 BC.plasma.energyDensity.radial_upper.type = "neumann"
 BC.plasma.energyDensity.poloidal_lower.type = "neumann"
 BC.plasma.energyDensity.poloidal_upper.type = "neumann"
 
-BC.plasma.energyDensity_ele.radial_lower.function = "energyDensity_ele_IC"
-BC.plasma.energyDensity_ele.radial_upper.function = "energyDensity_ele_IC"
-BC.plasma.energyDensity_ele.poloidal_lower.function = "energyDensity_ele_IC"
-BC.plasma.energyDensity_ele.poloidal_upper.function = "energyDensity_ele_IC"
 BC.plasma.energyDensity_ele.radial_lower.type = "neumann"
 BC.plasma.energyDensity_ele.radial_upper.type = "neumann"
 BC.plasma.energyDensity_ele.poloidal_lower.type = "neumann"

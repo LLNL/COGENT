@@ -42,8 +42,9 @@ void CodimBC::fillCodimGhostCells(
    const int&                    a_codim )
 {
    Vector<int> sides( a_sides.size() );
-   for (int i(0); i<sides.size(); i++)
+   for (int i(0); i<sides.size(); i++) {
       sides[i] = static_cast<int>(a_sides[i]);
+   }
    FORT_FILL_CODIM_GHOST_CELLS( CHF_FRA(a_this_soln),
                                 CHF_BOX(a_boundary_box),
                                 CHF_CONST_I1D(&(a_dirs[0]),a_dirs.size()),
@@ -91,6 +92,7 @@ void CodimBC::setCodimBoundaryValues(
    LevelData<FArrayBox>&     a_u,
    const MultiBlockCoordSys& a_coord_sys )
 {
+   CH_TIME("CodimBC::setCodimBoundaryValues()");
    const BoundaryLookupTable& boundaries( BoundaryLookupTable::getLookupTable() );
    const DisjointBoxLayout& grids( a_u.disjointBoxLayout() );
    for (DataIterator dit( a_u.dataIterator() ); dit.ok(); ++dit) {
@@ -120,6 +122,40 @@ void CodimBC::setCodimBoundaryValues(
    }
 }
 #endif
+
+void CodimBC::setCodimCornerValues(
+   LevelData<FArrayBox>&     a_u,
+   const MultiBlockCoordSys& a_coord_sys )
+{
+   CH_TIME("CodimBC::setCodimCornerValues()");
+   const BoundaryLookupTable& boundaries( BoundaryLookupTable::getLookupTable() );
+   const DisjointBoxLayout& grids( a_u.disjointBoxLayout() );
+   for (DataIterator dit( a_u.dataIterator() ); dit.ok(); ++dit) {
+      for (int codim(2); codim<=SpaceDim; codim++) {
+         for (int m(0); m<boundaries.numberOfBoundaryCases(codim); m++) {
+
+            const Vector<int>& dirs( boundaries.getDirections( m, codim ) );
+            const Vector<Side::LoHiSide>& sides( boundaries.getSides( m, codim ) );
+            const Box& box( grids[dit] );
+            if (isPhysicalCorner( a_coord_sys, box, dirs, sides, codim )) {
+               int CURRENT_INDEX(0);
+               const Box& domain_box( BCUtils::blockDomain( box, a_coord_sys ) );
+
+               Box boundary_box( CodimBC::getGhostBox( codim,
+                                                       CURRENT_INDEX,
+                                                       box,
+                                                       domain_box,
+                                                       dirs,
+                                                       sides,
+                                                       a_u.ghostVect() ) );
+               if (!boundary_box.isEmpty()) {
+                  fillCodimGhostCells( a_u[dit], boundary_box, dirs, sides, codim );
+               }
+            }
+         }
+      }
+   }
+}
 
 #include "NamespaceFooter.H"
 

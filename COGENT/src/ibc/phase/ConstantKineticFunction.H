@@ -36,9 +36,20 @@ class ConstantKineticFunction : public KineticFunction
        * @param[in] verbosity Flag to turn on additional levels of output
        */
      ConstantKineticFunction( const Real& value, const int& verbosity )
-         : m_value(value), m_verbosity(verbosity) {;}
+         : m_value(value), m_verbosity(verbosity), m_useSG(false) {;}
 
-      /// Constructor using a database.
+	  /// Constructor using a value and that decides whether to use sparse grid stencils
+	  /**
+		* Constructs the object using a passed-in parameter.
+		*
+		* @param[in] value Real value to set
+		* @param[in] verbosity Flag to turn on additional levels of output
+		* @param[in] useSG whether to use sparse grid-friendly stencils
+		*/
+     ConstantKineticFunction( const Real& value, const int& verbosity, const bool& useSG )
+         : m_value(value), m_verbosity(verbosity), m_useSG(useSG) {;}
+     
+	  /// Constructor using a database.
       /**
        * Constructs the object by getting parameter from a ParmParse database.
        *
@@ -115,10 +126,16 @@ class ConstantKineticFunction : public KineticFunction
          if (m_verbosity) {
             printParameters();
          }
+		 ParmParse ppsg("sparsegrid");
+		 
+		 m_useSG = false;  //Don't use sparse grids by default
+		 ppsg.query( "useSGstencils", m_useSG );
+
       }
 
       Real m_value;
       int m_verbosity;
+      bool m_useSG; // whether to use sparse grid-friendly stencils
 };
 
 #include "NamespaceFooter.H"

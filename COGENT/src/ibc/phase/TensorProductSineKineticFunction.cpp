@@ -73,11 +73,14 @@ void TensorProductSineKineticFunction::assign( KineticSpecies& a_species,
       setPointValues( dfn_tmp[dit], coord_sys, a_time );
    }
 //   geometry.multBStarParallel( dfn_tmp, a_bdry_layout );
+   FourthOrderUtil FourthOrderOperators; //object that holds various fourth-order operators
+   FourthOrderOperators.setSG(m_useSG); //whether to use SG version of fourth-order stencils
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       Box domain_box( dfn_tmp[dit].box() );
       domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
       ProblemDomain domain( domain_box );
-      fourthOrderAverageCell( dfn_tmp[dit], domain, grids[dit] );
+      //fourthOrderAverageCell( dfn_tmp[dit], domain, grids[dit] );
+      FourthOrderOperators.fourthOrderAverageCellGen( dfn_tmp[dit], domain, grids[dit] ); //convert point values to cell averages
    }
    dfn_tmp.copyTo( dfn );
    dfn.exchange();
@@ -95,6 +98,10 @@ void TensorProductSineKineticFunction::parseParameters( ParmParse& a_pp )
    a_pp.queryarr( "wavevector", temp, 0, PDIM );
    m_wavevector = RealVect( temp );
 
+   ParmParse ppsg("sparsegrid");
+   m_useSG = false; // Don't use sparse grids by default
+   ppsg.query( "useSGstencils", m_useSG);
+   
    if (m_verbosity) {
       printParameters();
    }

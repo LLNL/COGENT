@@ -19,7 +19,7 @@ void ConstantKineticFunction::assign( KineticSpecies& a_species,
    const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
    geometry.multBStarParallel( data );
    if ( !(geometry.secondOrder()) )  {
-     KineticFunctionUtils::convertToCellAverage( geometry, data );
+     KineticFunctionUtils::convertToCellAverage( geometry, data, m_useSG );
    }
    geometry.multJonValid( data );
    data.exchange();
@@ -43,11 +43,13 @@ void ConstantKineticFunction::assign( KineticSpecies& a_species,
    const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
    geometry.multBStarParallel( data_tmp, a_bdry_layout );
    if ( !(geometry.secondOrder()) )  {
+     FourthOrderUtil FourthOrderOperators; //Object that holds various fourth-order operatiosns 
+     FourthOrderOperators.setSG(m_useSG); //Whether to use the SG versions of fourth order stencils
      for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
        Box domain_box( data_tmp[dit].box() );
        domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
        ProblemDomain domain( domain_box );
-       fourthOrderAverageCell( data_tmp[dit], domain, grids[dit] );
+       FourthOrderOperators.fourthOrderAverageCellGen(data_tmp[dit], domain, grids[dit]);
      }
    }
    data_tmp.copyTo( data );

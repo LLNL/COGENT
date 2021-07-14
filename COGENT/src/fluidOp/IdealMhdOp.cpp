@@ -12,7 +12,6 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 //#include "FluidOpF_F.H"
-#include "GKOps.H"
 #include "FluidOpPreconditioner.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -61,6 +60,7 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
    //
    variable_name = "density";
    CH_assert( ppic.contains("density.function") );
+   m_density_cbc = m_fluid_bc.size();
    parseInitialConditions(a_species_name, variable_name);
    m_fluid_bc.push_back( fluid_var_bc_factory.create(a_species_name, variable_name, 
                          a_geometry.getCoordSys()->type(), false) );
@@ -75,6 +75,7 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
    if (ppic.contains("momentumDensity_2.function")) {
       parseInitialConditions(a_species_name, "momentumDensity_2");
    }
+   m_momentumDensity_cbc = m_fluid_bc.size();
    m_fluid_bc.push_back( fluid_var_bc_factory.create(a_species_name, variable_name, 
                          a_geometry.getCoordSys()->type(), false) );
  
@@ -152,6 +153,7 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
       parseInitialConditions(a_species_name, "energyDensity_1");
       m_CGL = 1;
    }
+   m_energyDensity_cbc = m_fluid_bc.size();
    m_fluid_bc.push_back( fluid_var_bc_factory.create(a_species_name, variable_name, 
                          a_geometry.getCoordSys()->type(), false) );
    
@@ -166,6 +168,7 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
       if (ppic.contains("magneticField_2.function")) {
          parseInitialConditions(a_species_name, "magneticField_2");
       }
+      m_magneticField_fbc = m_fluid_face_var_bc.size();
       m_fluid_face_var_bc.push_back( fluid_var_bc_factory.create(a_species_name, variable_name,
                                      a_geometry.getCoordSys()->type(), false) );
    }
@@ -175,6 +178,7 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
    if (ppic.contains("momentumDensity_virtual.function")) {
       variable_name = "momentumDensity_virtual";
       parseInitialConditions(a_species_name, variable_name);
+      m_momentumDensity_virtual_cbc = m_fluid_bc.size();
       m_fluid_bc.push_back( fluid_var_bc_factory.create(a_species_name, variable_name, 
                             a_geometry.getCoordSys()->type(), false) );
    }
@@ -182,17 +186,20 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
    if (ppic.contains("magneticField_virtual.function")) {
       variable_name = "magneticField_virtual";
       parseInitialConditions(a_species_name, variable_name);
+      m_magneticField_virtual_cbc = m_fluid_bc.size();
       m_fluid_bc.push_back( fluid_var_bc_factory.create(a_species_name, variable_name, 
                             a_geometry.getCoordSys()->type(), false) );
    }
    
-   const DisjointBoxLayout& grids( m_geometry.grids() );
-   IntVect ghostVect = 2*IntVect::Unit;
-   //const IntVect& ghostVect = m_geometry.m_num_ghosts*IntVect::Unit;
+   // get fluid ghost cells and define member LevelData's
+   Real ghosts = 4;
+   ParmParse ppgksys("gksystem");
+   ppgksys.query( "fluid_ghost_width", ghosts );
+   IntVect ghostVect = ghosts*IntVect::Unit;
    if(m_advScheme == "weno5" || m_advScheme == "bweno" || m_advScheme == "uw5") {
-      //CH_assert(m_geometry.m_num_ghosts>=3);
-      ghostVect = 4*IntVect::Unit;
+      CH_assert(ghosts >= 3);
    }
+   const DisjointBoxLayout& grids( m_geometry.grids() );
    defineLevelDatas( grids, ghostVect );
   
 }
@@ -270,7 +277,7 @@ void IdealMhdOp::accumulateMhdRHS( FluidSpecies&  a_rhs_fluid,
    
    setFaceCenteredFluxes( a_soln_fluid );
 
-   enforceFluxBCs( a_rhs_fluid, a_soln_fluid, a_time );
+   enforceFluxBCs( a_soln_fluid, a_time );
 
    updateRHSs( a_rhs_fluid, a_soln_fluid );
     
@@ -382,9 +389,9 @@ void IdealMhdOp::getMemberVar( LevelData<FArrayBox>&  a_Var,
          m_dummyFlux_oneComp[dit].copy(magField_contra_cf[dit]);
       }
       SpaceUtils::exchangeFluxBox(m_dummyFlux_oneComp);
-      int this_fvc = a_fluid_species.face_var_component("magneticField");
       const double dummy_time = 0.0;
-      m_fluid_face_var_bc.at(this_fvc)->applyFluxBC( a_fluid_species, m_dummyFlux_oneComp, dummy_time );
+      int this_fbc = m_magneticField_fbc;
+      m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( a_fluid_species, m_dummyFlux_oneComp, dummy_time );
       computeMappedCurrentDensity( a_Var, m_dummyFlux_oneComp ); // Ja*curl(B)
       //for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
       //   a_Var[dit].copy(m_JaJ0_cc[dit]); // off by time stage
@@ -434,16 +441,16 @@ void IdealMhdOp::getMemberVar( LevelData<FArrayBox>&  a_Var,
 
 }
 
-void IdealMhdOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
-                                 std::vector<PS::DOFList>&                                 a_dof_list,
-                                 const PS::GKVector&                                       a_soln_vec,
-                                 PS::GKOps&                                                a_gkops,
-                                 const std::string&                                        a_out_string,
-                                 const std::string&                                        a_opt_string,
-                                 bool                                                      a_im,
-                                 const FluidSpecies&                                       a_fluid_species,
-                                 const PS::GlobalDOFFluidSpecies&                          a_global_dofs,
-                                 int                                                       a_species_idx )
+void IdealMhdOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>& a_pc,
+                                 std::vector<PS::DOFList>&                                    a_dof_list,
+                                 const PS::ODEVector&                                         a_soln_vec,
+                                 void*                                                        a_gkops,
+                                 const std::string&                                           a_out_string,
+                                 const std::string&                                           a_opt_string,
+                                 bool                                                         a_im,
+                                 const FluidSpecies&                                          a_fluid_species,
+                                 const PS::GlobalDOFFluidSpecies&                             a_global_dofs,
+                                 int                                                          a_species_idx )
 {
   if (a_im && (m_implicitViscosity || m_implicitMhd)) {
     CH_assert(a_pc.size() == a_dof_list.size());
@@ -455,11 +462,11 @@ void IdealMhdOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS:
                 << " (index = " << a_pc.size() << ").\n";
     }
   
-    PS::Preconditioner<PS::GKVector, PS::GKOps> *pc;
-    pc = new PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>;
-    dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+    PS::Preconditioner<PS::ODEVector,PS::AppCtxt> *pc;
+    pc = new PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>;
+    dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
-    dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+    dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->speciesIndex(a_species_idx);
   
     PS::DOFList dof_list(0);
@@ -493,13 +500,15 @@ void IdealMhdOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS:
 }
 
 
-void IdealMhdOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
-                              const PS::KineticSpeciesPtrVect&                          a_kin_species_phys,
-                              const FluidSpeciesPtrVect&                                a_fluid_species,
-                              const Real                                                a_time,
-                              const Real                                                a_shift,
-                              const bool                                                a_im,
-                              const int                                                 a_species_idx )
+void IdealMhdOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>& a_pc,
+                              const PS::KineticSpeciesPtrVect&                                a_kin_species_phys,
+                              const FluidSpeciesPtrVect&                                      a_fluid_species,
+                              const Real                                                      a_time,
+                              const int                                                       a_step,
+                              const int                                                       a_stage,
+                              const Real                                                      a_shift,
+                              const bool                                                      a_im,
+                              const int                                                       a_species_idx )
 {
   if (a_im && (m_implicitViscosity || m_implicitMhd)) {
     CH_assert(m_my_pc_idx >= 0);
@@ -510,10 +519,17 @@ void IdealMhdOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS:
                 << " for IdealMhd fluid species " << a_species_idx << ".\n";
     }
   
-    PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps> *pc 
-      = dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>(a_pc[m_my_pc_idx]);
+    PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt> *pc 
+      = dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>(a_pc[m_my_pc_idx]);
     CH_assert(pc != NULL);
-    pc->update(a_kin_species_phys, a_fluid_species, a_time, a_shift, a_im, a_species_idx);
+    pc->update( a_kin_species_phys, 
+                a_fluid_species, 
+                a_time, 
+                a_step,
+                a_stage,
+                a_shift, 
+                a_im, 
+                a_species_idx );
   }
   return;
 }
@@ -522,6 +538,8 @@ void IdealMhdOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS:
 void IdealMhdOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species, 
                               const PS::KineticSpeciesPtrVect& a_kinetic_species,
                               const double                     a_time,
+                              const int                        a_step,
+                              const int                        a_stage,
                               const double                     a_shift,
                               const int                        a_component)
 {
@@ -720,11 +738,6 @@ void IdealMhdOp::computeNTFfaceArea( LevelData<FluxBox>&    a_Flux_norm,
       //   fluxL = 0.5*(flux - Cspeed*fun),
       //   Cspeed = abs(max(eigenValue of Flux Jacobian))
       //
-      /*
-      FArrayBox FluxL_cc;
-      FArrayBox FluxR_cc;
-      SpaceUtils::computeLaxSplitting(FluxR_cc,FluxL_cc,a_Flux_mapped_cc,a_Cspeed_cc[dit],a_Jf_cc[dit]);
-      */
 
       const Box& cell_box( a_Jf_cc[dit].box() );
       FArrayBox FluxL_cc(cell_box, SpaceDim);
@@ -741,9 +754,6 @@ void IdealMhdOp::computeNTFfaceArea( LevelData<FluxBox>&    a_Flux_norm,
                                CHF_CONST_FRA1(Jf_on_patch,0) );
 
       const Box& grid_box( grids[dit] );             // this box has no ghost
-      //const Box& grid_box2( grids2[dit] );           // this box has no ghost
-      //cout << "grid_box()  = " << grid_box << endl;
-      //cout << "grid_box2() = " << grid_box2 << endl;
       const Box& flux_box( a_Flux_norm[dit].box() ); // this box has ghost
       FluxBox thisFluxL_norm( flux_box, 1 );  // need box with ghosts here
       FluxBox thisFluxR_norm( flux_box, 1 );
@@ -778,8 +788,6 @@ void IdealMhdOp::computeNTFfaceArea( LevelData<FluxBox>&    a_Flux_norm,
       for (int dir=0; dir<SpaceDim; dir++) {
          FArrayBox& this_face = a_Flux_norm[dit][dir];
          this_face.mult(faceArea[dir]);
-         //cout << "faceArea[0] " << faceArea[0] << endl;
-         //cout << "faceArea[1] " << faceArea[1] << endl;
       }
    }
    //a_Flux_norm.exchange();
@@ -809,9 +817,6 @@ void IdealMhdOp::computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
    // compute constrained covariant E on cell edges
    //
    string this_advScheme = m_advScheme;
-   //this_advScheme = "c2";
-   //this_advScheme = "uw1";
-   //this_advScheme = "quick";
    SpaceUtils::constrainedCrossProductOnEdges( a_Edge_covar, JaB_contra_cf,
                                                a_V_phys_cc, a_Cspeed_cc, this_advScheme );
    
@@ -853,7 +858,6 @@ void IdealMhdOp::computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
       FArrayBox JaVB_covar_cc(cell_box, a_V_phys_cc.nComp());
       FArrayBox JaB_contr_cc(cell_box, a_B_contr_cc.nComp());
       convertPhysFluxToMappedFlux(JaVB_covar_cc,a_V_phys_cc[dit],m_Nmatrix[dit]);
-      //m_geometry.convertPhysToContravar(JaVB_covar_cc,0);
       for (int n=0; n<SpaceDim; n++) {
          JaVB_covar_cc.mult(a_B_contr_cc[dit],cell_box,cell_box,0,n,1);
       }
@@ -862,19 +866,13 @@ void IdealMhdOp::computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
   
       // compute Lax splitting and interpolate FluxL and FluxR to face norms
       //
-      /*
-      FArrayBox FluxL_cc;
-      FArrayBox FluxR_cc;
-      SpaceUtils::computeLaxSplitting(FluxR_cc,FluxL_cc,JaVB_covar_cc,a_Cspeed_cc[dit],JaB_contr_cc);
-      */
-      
       FArrayBox FluxL_cc(cell_box, SpaceDim);
       FArrayBox FluxR_cc(cell_box, SpaceDim);
       const FArrayBox& Cspeed_on_patch = a_Cspeed_cc[dit];
 
       FORT_LAX_FLUX_SPLITTING( CHF_BOX(cell_box), 
-                               CHF_CONST_FRA(FluxL_cc),
-                               CHF_CONST_FRA(FluxR_cc),
+                               CHF_FRA(FluxL_cc),
+                               CHF_FRA(FluxR_cc),
                                CHF_CONST_FRA(JaVB_covar_cc),
                                CHF_CONST_FRA(Cspeed_on_patch),
                                CHF_CONST_FRA1(JaB_contr_cc,0) );
@@ -914,13 +912,12 @@ void IdealMhdOp::fillGhostCells( FluidSpecies&  a_species_phys,
 {
    CH_TIME("IdealMhdOp::fillGhostCells()");
    for (int n=0; n<a_species_phys.num_cell_vars(); ++n) {
-      // Fill ghost cells except for those on physical boundaries
-      //m_geometry.fillInternalGhosts( fld );
-      //if(!procID()) cout << "JRA: fillGhostCells() n = " << n << endl;
       m_fluid_bc.at(n)->apply( a_species_phys, a_time );
    }
    
    for (int n=0; n<a_species_phys.num_face_vars(); ++n) {
+      const std::string& this_var_name = a_species_phys.face_var_name(n);
+      CH_assert(m_fluid_face_var_bc.at(n)->isForVariable(this_var_name));
       LevelData<FluxBox>& faceVar( a_species_phys.face_var(n) );
       m_fluid_face_var_bc.at(n)->applyFluxBC( a_species_phys, faceVar, a_time );
    }
@@ -1165,7 +1162,6 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
    m_rhoDen_cc.define(a_grids, 1, a_ghostVect);
    m_momDen_cc.define(a_grids, SpaceDim, a_ghostVect);
    m_eneDen_cc.define(a_grids, 1+m_CGL, a_ghostVect);
-   m_magField_cf.define(a_grids, 1, a_ghostVect);
    m_momDen_virtual_cc.define(a_grids, 1, a_ghostVect);
    m_magField_virtual_cc.define(a_grids, 1, a_ghostVect);
    //
@@ -1187,14 +1183,14 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
    m_CspeedL_norm.define(a_grids, 1, a_ghostVect);
    m_CspeedR_norm.define(a_grids, 1, a_ghostVect);
    //
-   m_rhoFlux_norm.define(a_grids, 1, 1*IntVect::Unit);
-   m_mxFlux_norm.define(a_grids, 1, 1*IntVect::Unit);
-   m_myFlux_norm.define(a_grids, 1, 1*IntVect::Unit);
-   m_mzFlux_norm.define(a_grids, 1, 1*IntVect::Unit);
-   m_enFlux_norm.define(a_grids, 1, 1*IntVect::Unit);
-   m_enParFlux_norm.define(a_grids, 1, 1*IntVect::Unit);
-   m_momFlux_norm.define(a_grids, SpaceDim, 1*IntVect::Unit);
-   m_mvFlux_norm.define(a_grids, 1, 1*IntVect::Unit);
+   m_rhoFlux_norm.define(a_grids, 1, 0*IntVect::Unit);
+   m_mxFlux_norm.define(a_grids, 1, 0*a_ghostVect);
+   m_myFlux_norm.define(a_grids, 1, 0*a_ghostVect);
+   m_mzFlux_norm.define(a_grids, 1, 0*a_ghostVect);
+   m_enFlux_norm.define(a_grids, 1, 0*IntVect::Unit);
+   m_enParFlux_norm.define(a_grids, 1, 0*IntVect::Unit);
+   m_momFlux_norm.define(a_grids, SpaceDim, 0*a_ghostVect);
+   m_mvFlux_norm.define(a_grids, 1, 0*IntVect::Unit);
    m_div_IdentFlux_R.define(a_grids, 1, IntVect::Zero);
    m_div_IdentFlux_Z.define(a_grids, 1, IntVect::Zero);
    LevelData<FluxBox> IdentFlux_phys_R( a_grids, SpaceDim, 1*IntVect::Unit );
@@ -1232,17 +1228,16 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
    m_JaJcrossB.define(a_grids, SpaceDim, a_ghostVect); // Jacobian*J\timesB
    //
    m_EdgeBC_zeros.define(a_grids, 1, a_ghostVect);
-   m_FluxBC_zeros.define(a_grids, 1, a_ghostVect);
-   m_rhoFluxBC_norm.define(a_grids, 1, a_ghostVect);
-   m_mxFluxBC_norm.define(a_grids, 1, a_ghostVect);
-   m_myFluxBC_norm.define(a_grids, 1, a_ghostVect);
-   m_mzFluxBC_norm.define(a_grids, 1, a_ghostVect);
-   m_enFluxBC_norm.define(a_grids, 1, a_ghostVect);
-   m_enParFluxBC_norm.define(a_grids, 1, a_ghostVect);
-   m_mvFluxBC_norm.define(a_grids, 1, a_ghostVect);
-   m_momFluxBC_norm.define(a_grids, SpaceDim, a_ghostVect);
+   m_FluxBC_zeros.define(a_grids, 1, 0*a_ghostVect);
+   m_rhoFluxBC_norm.define(a_grids, 1, 0*a_ghostVect);
+   m_mxFluxBC_norm.define(a_grids, 1, 0*a_ghostVect);
+   m_myFluxBC_norm.define(a_grids, 1, 0*a_ghostVect);
+   m_mzFluxBC_norm.define(a_grids, 1, 0*a_ghostVect);
+   m_enFluxBC_norm.define(a_grids, 1, 0*IntVect::Unit);
+   m_enParFluxBC_norm.define(a_grids, 1, 0*IntVect::Unit);
+   m_mvFluxBC_norm.define(a_grids, 1, 0*IntVect::Unit);
+   m_momFluxBC_norm.define(a_grids, SpaceDim, 0*a_ghostVect);
    for (DataIterator dit(a_grids); dit.ok(); ++dit) {
-      //m_EdgeBC_zeros[dit].setVal(0.0,1);
       m_EdgeBC_zeros[dit].setVal(0.0);
       m_FluxBC_zeros[dit].setVal(0.0);
    }
@@ -1285,15 +1280,6 @@ void IdealMhdOp::setCellCenterValues( const FluidSpecies&  a_soln_fluid )
          m_magField_virtual_cc[dit].copy( soln_magField_virtual[dit] );
       }
    }  
-   if(a_soln_fluid.m_evolve_magneticField) {
-      const LevelData<FluxBox>& soln_magField( a_soln_fluid.face_var("magneticField") );
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         m_magField_cf[dit].copy( soln_magField[dit] );
-      }
-   }  
-   //if(procID()==0) SpaceUtils::inspectFluxBox(m_magField_cf,0,1);
-   //if(procID()==0) SpaceUtils::inspectFluxBox(m_magField_cf,1,1);
-   //if(procID()==0) SpaceUtils::inspectFluxBox(m_magField_cf,2,1);
    
    // set physical derived variables for fluid species
    //
@@ -1301,7 +1287,7 @@ void IdealMhdOp::setCellCenterValues( const FluidSpecies&  a_soln_fluid )
    a_soln_fluid.Bpressure(m_Bpressure);
    a_soln_fluid.velocity(m_velocity);                 // in-plane velocity vector
    a_soln_fluid.velocity_virtual(m_velocity_virtual); // out-of-plane velocity vector
-   
+  
 }   
 
 void IdealMhdOp::setCellCenterFluxes( const FluidSpecies&  a_soln_fluid )
@@ -1460,16 +1446,17 @@ void IdealMhdOp::setMagneticFieldTerms( const FluidSpecies&  a_soln_fluid )
    //
    if(a_soln_fluid.m_evolve_magneticField) {
       CH_assert(!a_soln_fluid.m_evolve_magneticField_virtual); // don't work together yet !!!
+      const LevelData<FluxBox>& soln_magField_cf( a_soln_fluid.face_var("magneticField") );
       CH_assert(SpaceDim==3); // only works in 2D for now !!!
  
       // compute Ja*curl(B)_phys (aka mapped)
       //
-      computeMappedCurrentDensity(m_JaJ0_cc,m_magField_cf);
+      computeMappedCurrentDensity(m_JaJ0_cc,soln_magField_cf);
   
       // compute physical B at cell center
       //
       LevelData<FArrayBox>& B_phys_cc = m_dummyFArray_spaceDim;
-      SpaceUtils::interpFaceVectorToCell(B_phys_cc,m_magField_cf,"c2");
+      SpaceUtils::interpFaceVectorToCell(B_phys_cc,soln_magField_cf,"c2");
       m_geometry.convertPhysToContravar(B_phys_cc,1);
       
       // compute physical E=BxV at cell center
@@ -1509,11 +1496,10 @@ void IdealMhdOp::setMagneticFieldTerms( const FluidSpecies&  a_soln_fluid )
 void IdealMhdOp::setFaceCenteredFluxes( const FluidSpecies&  a_soln_fluid )
 {
    CH_TIME("IdealMhdOp::setFaceCenteredFluxes()");
+   const DisjointBoxLayout& grids( m_geometry.grids() );
    
    // Get mapped flux normals on each face multiplied by face area (NTFlux*faceArea)
    //
-   //
-   const DisjointBoxLayout& grids( m_geometry.grids() );
    LevelData<FArrayBox>& thisJf = m_dummyFArray_oneComp;
    LevelData<FArrayBox>& thisFlux_mapped = m_dummyFArray_spaceDim;
    for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -1634,24 +1620,23 @@ void IdealMhdOp::setFaceCenteredFlux( LevelData<FluxBox>&    a_Flux_norm,
 
 }
 
-void IdealMhdOp::enforceFluxBCs( FluidSpecies&  a_rhs_fluid, 
-                           const FluidSpecies&  a_soln_fluid, 
-                           const Real           a_time )
+void IdealMhdOp::enforceFluxBCs( const FluidSpecies&  a_soln_fluid, 
+                                 const Real           a_time )
 {
    CH_TIME("IdealMhdOp::enforceFluxBCs()");
+   const DisjointBoxLayout& grids( m_geometry.grids() );
    
    // enforce flux BC for mass density flux
    //
    setFaceCenteredFlux(m_rhoFluxBC_norm, m_rhoFlux_cc);
-   m_fluid_bc.at(0)->setFluxBC( a_rhs_fluid, m_rhoFlux_norm, m_rhoFluxBC_norm, a_time );
-   //m_fluid_bc.at(0)->setFluxBC( a_rhs_fluid, m_rhoFlux_norm, m_FluxBC_zeros, a_time );
+   m_fluid_bc.at(0)->setFluxBC( a_soln_fluid, m_rhoFlux_norm, m_rhoFluxBC_norm, a_time );
+   //m_fluid_bc.at(0)->setFluxBC( a_soln_fluid, m_rhoFlux_norm, m_FluxBC_zeros, a_time );
    
    // enforce flux BC for momentum density flux
    //
-   int this_cvc;
+   int this_cbc;
    setFaceCenteredFlux(m_mxFluxBC_norm, m_mxFlux_cc);
    setFaceCenteredFlux(m_myFluxBC_norm, m_myFlux_cc);
-   const DisjointBoxLayout& grids( m_geometry.grids() );
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       m_momFluxBC_norm[dit].copy( m_mxFluxBC_norm[dit],0,0,1 );
       m_momFluxBC_norm[dit].copy( m_myFluxBC_norm[dit],0,1,1 );
@@ -1662,45 +1647,42 @@ void IdealMhdOp::enforceFluxBCs( FluidSpecies&  a_rhs_fluid,
          m_momFluxBC_norm[dit].copy( m_mzFluxBC_norm[dit],0,2,1 );
       }
    }
-   this_cvc = a_soln_fluid.cell_var_component("momentumDensity");
-   m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_momFlux_norm, m_momFluxBC_norm, a_time );
+   this_cbc = m_momentumDensity_cbc;
+   m_fluid_bc.at(this_cbc)->setFluxBC( a_soln_fluid, m_momFlux_norm, m_momFluxBC_norm, a_time );
   
    // enforce flux BC for energy density flux
    //
    setFaceCenteredFlux(m_enFluxBC_norm, m_enFlux_cc);
-   this_cvc = a_soln_fluid.cell_var_component("energyDensity");
-   m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_enFlux_norm, m_enFluxBC_norm, a_time );
-   //m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_enFlux_norm, m_FluxBC_zeros, a_time );
-   //if(!procID()) SpaceUtils::inspectFluxBox(m_enFluxBC_norm,0);
-   //if(!procID()) SpaceUtils::inspectFluxBox(m_enFlux_norm,0);
-   //if(!procID()) SpaceUtils::inspectFluxBox(m_rhoFluxBC_norm,0);
+   this_cbc = m_energyDensity_cbc;
+   m_fluid_bc.at(this_cbc)->setFluxBC( a_soln_fluid, m_enFlux_norm, m_enFluxBC_norm, a_time );
+   //m_fluid_bc.at(this_cbc)->setFluxBC( a_soln_fluid, m_enFlux_norm, m_FluxBC_zeros, a_time );
    
    // enforce flux BC for parallel energy density flux if using CGL
    //
    if(m_CGL) {
       setFaceCenteredFlux(m_enParFluxBC_norm, m_enParFlux_cc);
-      this_cvc = a_soln_fluid.cell_var_component("energyDensity");
-      m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_enParFlux_norm, m_enParFluxBC_norm, a_time );
+      this_cbc = m_energyDensity_cbc;
+      m_fluid_bc.at(this_cbc)->setFluxBC( a_soln_fluid, m_enParFlux_norm, m_enParFluxBC_norm, a_time );
    }
 
    // enforce flux BC for virtual momentum density flux
    //
    if(a_soln_fluid.m_evolve_momentumDensity_virtual) {
       setFaceCenteredFlux(m_mvFluxBC_norm, m_mvFlux_cc);
-      this_cvc = a_soln_fluid.cell_var_component("momentumDensity_virtual");
-      m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_mvFlux_norm, m_mvFluxBC_norm, a_time );
+      this_cbc = m_momentumDensity_virtual_cbc;
+      m_fluid_bc.at(this_cbc)->setFluxBC( a_soln_fluid, m_mvFlux_norm, m_mvFluxBC_norm, a_time );
    }
    
    // enforce edge BC for virtual magnetic field
    //
    if(a_soln_fluid.m_evolve_magneticField_virtual) {
       computeIdealEatEdges(m_E0_ce,m_velocity,m_By_contr_cc,m_Cspeed_cc);
-      this_cvc = a_soln_fluid.cell_var_component("magneticField_virtual");
-      m_fluid_bc.at(this_cvc)->setEdgeBC( a_rhs_fluid, m_E0_ce, m_EdgeBC_zeros, a_time );
-      m_geometry.mappedGridCurlFromEdgeTans(m_E0_ce,2,m_curlE0_virtual); // takes covar E and returns J*curl(E)dot(g^y)
+      this_cbc = m_magneticField_virtual_cbc;
+      m_fluid_bc.at(this_cbc)->setEdgeBC( a_soln_fluid, m_E0_ce, m_EdgeBC_zeros, a_time );
+      m_geometry.mappedGridCurlFromEdgeTans(m_E0_ce,2,m_curlE0_virtual); // takes covar E and returns Ja*curl(E)dot(g^y)
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          if(m_twoDaxisymm) {
-            m_curlE0_virtual[dit].mult(m_g_y[dit]); // g^y*g_y = 1
+            m_curlE0_virtual[dit].mult(m_g_y[dit]); // g^y*g_y = 1 (Ja*curlE_phys)
          }
       }
    }
@@ -1708,9 +1690,10 @@ void IdealMhdOp::enforceFluxBCs( FluidSpecies&  a_rhs_fluid,
    // compute E0 (should do this elsewhere) and enforce boundary conditions
    //
    if(a_soln_fluid.m_evolve_magneticField) {
-      computeIdealEatEdges(m_E0_ce,m_velocity,m_magField_cf,m_Cspeed_cc);
-      this_cvc = a_soln_fluid.face_var_component("magneticField");
-      m_fluid_bc.at(this_cvc)->setEdgeBC( a_rhs_fluid, m_E0_ce, m_EdgeBC_zeros, a_time );
+      const LevelData<FluxBox>& soln_magField_cf( a_soln_fluid.face_var("magneticField") );
+      computeIdealEatEdges(m_E0_ce,m_velocity,soln_magField_cf,m_Cspeed_cc);
+      int this_fbc = m_magneticField_fbc;
+      m_fluid_face_var_bc.at(this_fbc)->setEdgeBC( a_soln_fluid, m_E0_ce, m_EdgeBC_zeros, a_time );
       SpaceUtils::exchangeEdgeDataBox(m_E0_ce); // call exchange after setBC !!!!!
       m_geometry.mappedGridCurl3D(m_curlE0_cf,m_E0_ce);
    }
@@ -1864,12 +1847,6 @@ void IdealMhdOp::updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
       m_m1JaFluxVisc_cf[dit].negate(); 
       if(SpaceDim==3) m_m2JaFluxVisc_cf[dit].negate(); 
    }
-   //SpaceUtils::inspectFArrayBox(m_velocity,1,0);
-   //SpaceUtils::inspectFluxBox(m_m1JaFluxVisc_cf,1);
-   //SpaceUtils::inspectFArrayBox(m_velocity,2,0);
-   //SpaceUtils::inspectFluxBox(m_m2JaFluxVisc_cf,2);
-   //SpaceUtils::inspectFArrayBox(m_velocity,0,0);
-   //SpaceUtils::inspectFluxBox(m_m0JaFluxVisc_cf,0);
 
    // calculate viscosity flux for energy density equation
    // and source term for momentum flux for axisymmetric
@@ -1958,7 +1935,7 @@ void IdealMhdOp::updateRHSs( FluidSpecies&  a_rhs_fluid,
    CH_TIME("IdealMhdOp::updateRHSs()");
    
    // compute divergence of Fluxes and add (subtract) to RHS 
-   // Note that J/cellVol = 1/mapVol
+   // Note that Ja/cellVol = 1/mapVol
    //
 
    // update RHS for mass density
@@ -2064,9 +2041,9 @@ void IdealMhdOp::updateRHSs( FluidSpecies&  a_rhs_fluid,
    //
    if(a_soln_fluid.m_evolve_momentumDensity_virtual){
       LevelData<FArrayBox>& rhs_momV( a_rhs_fluid.cell_var("momentumDensity_virtual") );
+      m_geometry.mappedGridDivergenceFromFluxNorms(m_mvFlux_norm, m_dummyDiv);
       for (DataIterator dit(rhs_momV.dataIterator()); dit.ok(); ++dit) {
-         FArrayBox div_mvFlux(grids[dit], 1);
-         m_geometry.mappedGridDivergenceFromFluxNorms(m_mvFlux_norm[dit], div_mvFlux);
+         FArrayBox& div_mvFlux(m_dummyDiv[dit]);
          div_mvFlux /= m_cellVol[dit];
          div_mvFlux.mult(m_Jacobian[dit]);
          rhs_momV[dit].minus( div_mvFlux );
@@ -2197,22 +2174,18 @@ void IdealMhdOp::initializeWithBC( FluidSpecies&  a_species_comp,
    if(a_species_comp.m_evolve_magneticField && m_initializeBfromVectorPotential) {
          
       LevelData<FluxBox>& contravar_B_withBCs( a_species_phys.face_var("magneticField") );
-      int this_fvc = a_species_phys.face_var_component("magneticField");
+      int this_fbc = m_magneticField_fbc;
       
       // compute Ja*curlB_phys at cell center using input B field
-      //
       computeMappedCurrentDensity( m_JaJ0_cc, contravar_B_withBCs );
       
       //   B = nabla x (Apar z_hat) ==> nabla^2 Apar = -Jz
-      //
       if(SpaceDim==3) { // Solve for Apar
 
          // set mapped coefficients and BCs for Poisson solver
-         //
          m_diffusionOp_Apar->setOperatorCoefficients(*m_bc_Apar);
      
          // fill dummy with Jz at cell center
-         //
          LevelData<FArrayBox>& Jz_cc = m_dummyFArray_oneComp;
          for (DataIterator dit(grids); dit.ok(); ++dit) {
             Jz_cc[dit].copy(m_JaJ0_cc[dit],2,0,1); 
@@ -2221,11 +2194,9 @@ void IdealMhdOp::initializeWithBC( FluidSpecies&  a_species_comp,
          m_geometry.divideJonValid(Jz_cc); // physical Jz at cell center
 
          // solve nabla^2 Az = -Jz
-         //
          m_diffusionOp_Apar->solvePreconditioner(Jz_cc, m_Apar_cc); // physical Apar ?
 
          // interpolate Az to edges and set BCs there
-         //
          LevelData<FArrayBox> A_cc;
          A_cc.define(grids,SpaceDim,2*IntVect::Unit);
          for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -2236,47 +2207,38 @@ void IdealMhdOp::initializeWithBC( FluidSpecies&  a_species_comp,
          LevelData<EdgeDataBox> Az_ce;
          Az_ce.define(grids,1,m_dummyFArray_oneComp.ghostVect());
          SpaceUtils::interpCellToEdges(Az_ce,A_cc,Az_ce,"c2"); // covariant Apar at ce
-         m_fluid_bc.at(this_fvc)->setEdgeBC( a_species_phys, Az_ce, m_EdgeBC_zeros, a_time );
+         m_fluid_face_var_bc.at(this_fbc)->setEdgeBC( a_species_phys, Az_ce, m_EdgeBC_zeros, a_time );
          SpaceUtils::exchangeEdgeDataBox(Az_ce);
          //
          //
 
          // compute B = curlA (divergence free and satisfies BCs)
-         //
          m_geometry.mappedGridCurl3D(contravar_B_withBCs,Az_ce);
          m_geometry.divideJonFaces(contravar_B_withBCs);
          SpaceUtils::exchangeFluxBox(contravar_B_withBCs); // must exchange before applyBC !!!!
-         m_fluid_face_var_bc.at(this_fvc)->applyFluxBC( a_species_phys, contravar_B_withBCs, a_time );
+         m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( a_species_phys, contravar_B_withBCs, a_time );
          LevelData<FluxBox>& mapped_contravar_B_noBCs( a_species_comp.face_var("magneticField") );
          for (DataIterator dit(grids); dit.ok(); ++dit) {
             mapped_contravar_B_noBCs[dit].copy(contravar_B_withBCs[dit]);
-            m_magField_cf[dit].copy(contravar_B_withBCs[dit]); 
          }
          m_geometry.multJonFaces(mapped_contravar_B_noBCs);         
    
-         //if(procID()==0) SpaceUtils::inspectFluxBox(m_magField_cf,0,1);
-         //if(procID()==0) SpaceUtils::inspectFluxBox(m_magField_cf,1,1);
-         //if(procID()==0) SpaceUtils::inspectFluxBox(m_magField_cf,2,1);
-   
-
       }
       //
       //
       ////////////////////////////////////////////////
 
       // compute Ja time contravariant curlE0 on faces
-      //
       setCellCenterValues( a_species_phys );
       const double gamma = a_species_phys.m_gamma;
       setMappedCspeed( gamma, 1, 1 );
       
       computeIdealEatEdges(m_E0_ce,m_velocity,contravar_B_withBCs,m_Cspeed_cc); // Ja*E0_covar
-      m_fluid_bc.at(this_fvc)->setEdgeBC( a_species_phys, m_E0_ce, m_EdgeBC_zeros, a_time );
+      m_fluid_face_var_bc.at(this_fbc)->setEdgeBC( a_species_phys, m_E0_ce, m_EdgeBC_zeros, a_time );
       SpaceUtils::exchangeEdgeDataBox(m_E0_ce); // call exchange after setBC !!!!!
       m_geometry.mappedGridCurl3D(m_curlE0_cf,m_E0_ce);
 
       // compute physical E0 at cell center
-      //
       SpaceUtils::interpEdgesToCell(m_E0_cc,m_E0_ce,"c2"); // covar at cell center
       m_geometry.convertPhysToCovar(m_E0_cc,1);            // phys at cell center
       

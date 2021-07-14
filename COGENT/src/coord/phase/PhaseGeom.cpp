@@ -137,23 +137,25 @@ PhaseGeom::PhaseGeom( ParmParse&                              a_parm_parse,
    else {
       m_exchange_ghosts = a_ghosts;
    }
-   
+
    define();
 }
 
 
 
-PhaseGeom::PhaseGeom( const PhaseGeom&                        a_phase_geom,
-                      const RefCountedPtr<PhaseCoordSys>&     a_coord_sys,
-                      const RefCountedPtr<VEL::VelCoordSys>&  a_vel_coords,
-                      double                                  a_mass,
-                      double                                  a_charge,
-                      bool                                    a_is_gyrokinetic )
+PhaseGeom::PhaseGeom( const PhaseGeom&                            a_phase_geom,
+                      const RefCountedPtr<PhaseCoordSys>&         a_coord_sys,
+                      const RefCountedPtr<VEL::VelCoordSys>&      a_vel_coords,
+                      const RefCountedPtr<VelocityNormalization>& a_vel_normalization,
+                      double                                      a_mass,
+                      double                                      a_charge,
+                      bool                                        a_is_gyrokinetic )
 
 : MultiBlockLevelGeom(a_coord_sys,a_phase_geom.gridsFull(),a_phase_geom.ghosts(),Interval(CFG_DIM,SpaceDim-1),Vector<int>(VEL_DIM,0)),
      m_ghostVect(a_phase_geom.m_ghostVect),
      m_mag_geom(a_phase_geom.m_mag_geom),
      m_vel_coords(a_vel_coords),
+     m_vel_normalization(a_vel_normalization),
      m_phase_coords(a_coord_sys),
      m_phase_grid(a_phase_geom.m_phase_grid),
      m_domain(a_phase_geom.m_domain),
@@ -372,6 +374,7 @@ PhaseGeom::defineSpeciesState( double a_mass,
    CH_TIMER("construct_shearedMB_objects",t_construct_shearedMB_objects);
    CH_TIMER("construct_metrics",t_construct_metrics);
      
+   int spaceOrder = m_second_order? 2: 4;
    m_mass = a_mass;
    m_charge_state = a_charge_state;
    
@@ -408,10 +411,61 @@ PhaseGeom::defineSpeciesState( double a_mass,
    m_velocity_face_areas = new LevelData<FluxBox>;
    injectVelocityToPhase(vel_face_areas, *m_velocity_face_areas);
    CH_STOP(t_construct_metrics);
-   
-   // Compute and cache the physical cell centers.  We need to do this here in case
-   // velocity renormalization is being used.
+
+
+   m_sheared_remapped_index = NULL;                                                                                                               
+   m_sheared_interp_stencil = NULL;                                                                                                               
+   m_sheared_interp_stencil_offsets = NULL;                                                                                                       
+                                                                                                                                                  
+#if CFG_DIM == 3
+   //Set objects for multiblock data exchange and ghost filling in the toroidal direction
+   CH_START(t_construct_shearedMB_objects);  
+   if (m_mag_geom->shearedMBGeom()) {
+     m_sheared_remapped_index = new LevelData<FArrayBox>;
+     const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedRemappedIndex = m_mag_geom->getShearedRemappedIndex();
+     injectConfigurationToPhase(cfg_ShearedRemappedIndex, *m_sheared_remapped_index);
+
+     m_sheared_interp_stencil = new LevelData<FArrayBox>;
+     const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedInterpStencil = m_mag_geom->getShearedInterpStencil();
+     injectConfigurationToPhase(cfg_ShearedInterpStencil, *m_sheared_interp_stencil);
+
+     m_sheared_interp_stencil_offsets = new LevelData<FArrayBox>;
+     const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedInterpStencilOffsets = m_mag_geom->getShearedInterpStencilOffsets();
+     injectConfigurationToPhase(cfg_ShearedInterpStencilOffsets, *m_sheared_interp_stencil_offsets);
+
+     getShearedGhostBoxLayout();
+   }                                                                                                                                              
+   CH_STOP(t_construct_shearedMB_objects);                                                                                                        
+#endif                 
+
+   // Get the velocity normalization data and inject it into the phase space
+   m_use_spatial_vel_norm = (m_vel_normalization->get_velocity_norm_type() == "local") ? 1 : 0;
+   if (m_use_spatial_vel_norm) {
+     // Inject the cfg cell-centered velocity normalization functions and derivatives
+     m_vel_norm = new LevelData<FArrayBox>;
+
+     // Use injectAndExpand instead of siple inject to avoid issues with
+     // the EBE classes that stash objects without a check for dbl. FIX LATER. 
+     //injectConfigurationToPhase(m_vel_normalization->get_norm_vels(),*m_vel_norm);
+     injectAndExpandConfigurationToPhase(m_vel_normalization->get_norm_vels(),*m_vel_norm);
+     
+     // Inject the cfg face-centered velocity normalization functions and derivatives
+     m_vel_norm_face = new LevelData<FluxBox>;
+     injectConfigurationToPhase(m_vel_normalization->get_norm_vels_face(),
+                                m_vel_normalization->get_norm_vels(),
+                                *m_vel_norm_face);
+     
+     // Compute cell-centered velocity normalization logarthmic gradients
+     m_grad_log_vpar_norm = new LevelData<FArrayBox>;
+     m_grad_log_mu_norm = new LevelData<FArrayBox>;
+     computeVelNormGradients(spaceOrder);
+   }
+
+   // Compute and cache the physical cell center coordinates.
    setCellCenteredRealCoords();
+   
+   // Set alias to the velocity components of the real coordinates
+   aliasLevelData(m_velocity_real_coords, m_cell_centered_real_coords, Interval( SpaceDim-2,SpaceDim-1 ));
 
    // Since BStar never changes, we precompute and store it here.
    m_BStar.define(m_gridsFull, 3, m_ghostVect);
@@ -427,38 +481,15 @@ PhaseGeom::defineSpeciesState( double a_mass,
                 *m_bdotcurlbCell,
                 m_BStar,
                 m_BStarParallel);
-
+   
    m_BStarParallel_cell_averaged.define(m_gridsFull, 1, m_ghostVect);
    for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
-      m_BStarParallel_cell_averaged[dit].copy(m_BStarParallel[dit]);
+     m_BStarParallel_cell_averaged[dit].copy(m_BStarParallel[dit]);
    }
    if (!m_second_order) fourthOrderAverage(m_BStarParallel_cell_averaged);
 
    m_speciesDefined = true;
 
-   m_sheared_remapped_index = NULL;
-   m_sheared_interp_stencil = NULL;
-   m_sheared_interp_stencil_offsets = NULL;
-
-#if CFG_DIM ==3
-   CH_START(t_construct_shearedMB_objects);
-   if (m_mag_geom->shearedMBGeom()) {
-      m_sheared_remapped_index = new LevelData<FArrayBox>;
-      const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedRemappedIndex = m_mag_geom->getShearedRemappedIndex();
-      injectConfigurationToPhase(cfg_ShearedRemappedIndex, *m_sheared_remapped_index);
-
-      m_sheared_interp_stencil = new LevelData<FArrayBox>;
-      const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedInterpStencil = m_mag_geom->getShearedInterpStencil();
-      injectConfigurationToPhase(cfg_ShearedInterpStencil, *m_sheared_interp_stencil);
-
-      m_sheared_interp_stencil_offsets = new LevelData<FArrayBox>;
-      const CFG::LevelData<CFG::FArrayBox>& cfg_ShearedInterpStencilOffsets = m_mag_geom->getShearedInterpStencilOffsets();
-      injectConfigurationToPhase(cfg_ShearedInterpStencilOffsets, *m_sheared_interp_stencil_offsets);
-
-      getShearedGhostBoxLayout();
-   }
-   CH_STOP(t_construct_shearedMB_objects);
-#endif
 }
 
 
@@ -477,6 +508,12 @@ PhaseGeom::~PhaseGeom()
       if (m_sheared_remapped_index) delete m_sheared_remapped_index;
       if (m_sheared_interp_stencil) delete m_sheared_interp_stencil;
       if (m_sheared_interp_stencil_offsets) delete m_sheared_interp_stencil_offsets;
+      if (m_use_spatial_vel_norm){
+        delete m_vel_norm;
+        delete m_vel_norm_face;
+        delete m_grad_log_vpar_norm;
+        delete m_grad_log_mu_norm;
+      }
 
       for (int dir=0; dir<SpaceDim; ++dir) {
          for (int codim=1; codim<=PHASE_MAX_EBE_CODIM; ++codim) {
@@ -489,6 +526,10 @@ PhaseGeom::~PhaseGeom()
          }
       }
 
+      list<CoDimCopyManager<FArrayBox>*>::iterator it;
+      for (it = m_ebe_copy_manager_cache.begin(); it != m_ebe_copy_manager_cache.end(); ++it) {
+         if(*it) delete *it;
+      }
       m_ebe_copy_manager_cache.clear();
 
       m_speciesDefined = false;
@@ -521,7 +562,50 @@ PhaseGeom::~PhaseGeom()
    }
 }
 
+void
+PhaseGeom::computeVelNormGradients(const int a_spaceorder)
+{
+  /*
+   Compute cell-centered velocity normalization logarthmic gradients
+   since these gradients will only be used to calculate the gk velocities
+   in the vparallel and mu directions
+   */
+  
+  //Create aliases to the separate components of m_vel_norm for vparnorm, munorm
+  LevelData<FArrayBox> vpar_norm;
+  aliasLevelData(vpar_norm, m_vel_norm, Interval(0,0));
 
+  LevelData<FArrayBox> mu_norm;
+  aliasLevelData(mu_norm, m_vel_norm, Interval(1,1));
+
+  // Define the leveldatas to hold the cell-centered gradients
+  const DisjointBoxLayout& injgrids = m_vel_norm->getBoxes();
+
+  // Grad_ghosts should be in configuration dimensions only.
+  IntVect grad_ghosts = ((a_spaceorder-2)/2)*IntVect::Unit ;
+  grad_ghosts.setVal(VPARALLEL_DIR,0);
+  grad_ghosts.setVal(MU_DIR,0);
+
+  m_grad_log_vpar_norm->define( injgrids, CFG_DIM, grad_ghosts );
+  m_grad_log_mu_norm->define( injgrids, CFG_DIM, grad_ghosts );
+
+  // Calculate the gradients of the normalization velocities
+  computeGradientCfgSpace(vpar_norm, *m_grad_log_vpar_norm, a_spaceorder);
+  computeGradientCfgSpace(mu_norm, *m_grad_log_mu_norm, a_spaceorder);
+
+  // Divide the calculated vnorm gradients by the functions to create logarithmic gradients
+  for (DataIterator dit(injgrids); dit.ok(); ++dit) {
+    FArrayBox & this_grad_log_vpar_norm = (*m_grad_log_vpar_norm)[dit];
+    FArrayBox & this_grad_log_mu_norm = (*m_grad_log_mu_norm)[dit];
+    const FArrayBox & this_vnorm = (*m_vel_norm)[dit];
+    for (int grad_dir=0; grad_dir<CFG_DIM; grad_dir++){
+      this_grad_log_vpar_norm.divide(this_vnorm,0,grad_dir,1);
+      this_grad_log_mu_norm.divide(this_vnorm,1,grad_dir,1);
+    }
+  }
+  
+  return;
+}
 
 void
 PhaseGeom::updateVelocities( const LevelData<FluxBox>& a_Efield,
@@ -594,9 +678,27 @@ PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
       const FluxBox& this_gradB = (*m_gradBFace)[dit];
       const FluxBox& this_curlb = (*m_curlbFace)[dit];
       FluxBox& this_velocity = a_velocity[dit];
-
+      const FArrayBox* this_velnormptr;
+      const FArrayBox* this_gradlogvparnormptr;
+      const FArrayBox* this_gradlogmunormptr;
+       
       for (int dir=0; dir<SpaceDim; ++dir) {
+
          FArrayBox& this_velocity_dir = this_velocity[dir];
+         
+         // Create a dummy to be used in Fortran if no velocity normalization 
+         FArrayBox dummy(this_velocity_dir.box(),1);
+         
+         if (m_use_spatial_vel_norm){
+            this_velnormptr = &(((*m_vel_norm_face)[dit])[dir]);
+            this_gradlogvparnormptr = &((*m_grad_log_vpar_norm)[dit]);
+            this_gradlogmunormptr = &((*m_grad_log_mu_norm)[dit]);
+         }
+         else{
+            this_velnormptr = &dummy;
+            this_gradlogvparnormptr = &dummy;
+            this_gradlogmunormptr = &dummy;
+         }
 
          FORT_COMPUTE_GK_VELOCITY(
                                   CHF_CONST_INT(dir),
@@ -611,18 +713,20 @@ PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
                                   CHF_CONST_INT(include_mag_drifts),
                                   CHF_CONST_INT(mag_drifts_only),
                                   CHF_CONST_INT(use_field_alignment),
+                                  CHF_CONST_INT(m_use_spatial_vel_norm),
                                   CHF_CONST_FRA(this_Efield[dir]),
                                   CHF_CONST_FRA(this_B[dir]),
                                   CHF_CONST_FRA(this_gradB[dir]),
                                   CHF_CONST_FRA(this_curlb[dir]),
+                                  CHF_CONST_FRA((*this_velnormptr)),
+                                  CHF_CONST_FRA((*this_gradlogvparnormptr)),
+                                  CHF_CONST_FRA((*this_gradlogmunormptr)),
                                   CHF_FRA(this_velocity_dir),
                                   CHF_CONST_INT(is_gyrokinetic)
                                  );
       }
    }
 }
-
-
 
 void
 PhaseGeom::computeTestVelocities( LevelData<FluxBox>& a_velocity ) const
@@ -928,7 +1032,7 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
    injectConfigurationToPhase(cfg_volume_integrals, injected_volume_integrals);
    CH_STOP(t_inject_integral_quantities);
 
-   int no_parallel_streaming = (   (a_velocity_option == DRIFT_VELOCITY) 
+   int no_parallel_streaming = (   (a_velocity_option == DRIFT_VELOCITY)
                                 || (a_velocity_option == EXB_DRIFT_VELOCITY)
                                 || (a_velocity_option == MAGNETIC_DRIFT_VELOCITY)
                                 || (a_velocity_option == NO_ZERO_ORDER_TERMS))? 1: 0;
@@ -990,7 +1094,7 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
                              CHF_CONST_FRA1(tmp,0));
                   
             tmp.shiftHalf(VPARALLEL_DIR, -sign(side));
-            this_XStarOmega_dir.plus(tmp,0,comp,1);               
+            this_XStarOmega_dir.plus(tmp,0,comp,1);
             comp++;
          }
       }
@@ -1024,7 +1128,7 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
 
                tmp.shiftHalf(tdir, -sign(side));
                if (tdir == 1) tmp.negate();
-               this_XStarOmega_dir.plus(tmp,0,comp,1);               
+               this_XStarOmega_dir.plus(tmp,0,comp,1);
                comp++;
             }
          }
@@ -1049,8 +1153,6 @@ PhaseGeom::computeXStarOmega( const CFG::LevelData<CFG::FArrayBox>& a_Efield_cel
    }
    CH_STOP(t_compute_Qs);
 }
-
-
 
 void
 PhaseGeom::applyAxisymmetricCorrection( LevelData<FluxBox>& a_data ) const
@@ -1123,6 +1225,13 @@ PhaseGeom::computeBStar(bool                        a_no_drifts,
                         LevelData<FArrayBox>&       a_BStar,
                         LevelData<FArrayBox>&       a_BStarParallel) const
 {
+   
+   /*
+      This function computes BstarParallel. Note that if we are using
+      locally renormalized velocity coefficients, BstarParallel gets multiplied
+      by mu_norm times vparallel_norm.
+    */
+
    CH_TIME("PhaseGeom::computeBStar");
   
    double prefactor = a_no_drifts? 0.: a_larmor_number * a_mass / a_charge_state;
@@ -1132,21 +1241,75 @@ PhaseGeom::computeBStar(bool                        a_no_drifts,
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
       const RealVect& dx = block_coord_sys.dx();
-
-      FORT_COMPUTE_BSTAR(CHF_BOX(a_BStar[dit].box()),
-                         CHF_CONST_REALVECT(dx),
-                         CHF_CONST_REAL(prefactor),
-                         CHF_CONST_FRA(a_B[dit]),
-                         CHF_CONST_FRA1(a_BMag[dit],0),
-                         CHF_CONST_FRA(a_curlb[dit]),
-                         CHF_CONST_FRA1(a_bdotcurlb[dit],0),
-                         CHF_FRA(a_BStar[dit]),
-                         CHF_FRA1(a_BStarParallel[dit],0));
+      const FArrayBox& this_BMag = a_BMag[dit];
+      if (m_use_spatial_vel_norm) {
+	      FArrayBox& this_velnorm = (*m_vel_norm)[dit];
+        const FArrayBox& this_bdotcurlb = a_bdotcurlb[dit];
+        const Box box = this_BMag.box();
+        FArrayBox prodtimesBMag(box, 1);
+        FArrayBox prodtimesbdotcurlb(box,1);
+	
+        multFieldQuantitiesByNorms(prodtimesBMag,
+                                   prodtimesbdotcurlb,
+                                   this_BMag,
+                                   this_bdotcurlb,
+                                   this_velnorm);
+        
+        FORT_COMPUTE_BSTAR(CHF_BOX(a_BStar[dit].box()),
+                           CHF_CONST_REALVECT(dx),
+                           CHF_CONST_REAL(prefactor),
+                           CHF_CONST_FRA(a_B[dit]),
+                           CHF_CONST_FRA1(prodtimesBMag,0),
+                           CHF_CONST_FRA(a_curlb[dit]),
+                           CHF_CONST_FRA1(prodtimesbdotcurlb,0),
+                           CHF_FRA(a_BStar[dit]),
+                           CHF_FRA1(a_BStarParallel[dit],0),
+                           CHF_CONST_INT(m_use_spatial_vel_norm),
+                           CHF_CONST_FRA(this_velnorm));
+	
+      }
+      else{
+        // a dummy reference is passed to Fortran for this_velnorm,
+        // which is not used for m_use_locanormalized_vels = 0
+        FArrayBox dummy(a_BStar[dit].box(),1);
+        FORT_COMPUTE_BSTAR(CHF_BOX(a_BStar[dit].box()),
+                           CHF_CONST_REALVECT(dx),
+                           CHF_CONST_REAL(prefactor),
+                           CHF_CONST_FRA(a_B[dit]),
+                           CHF_CONST_FRA1(this_BMag,0),
+                           CHF_CONST_FRA(a_curlb[dit]),
+                           CHF_CONST_FRA1(a_bdotcurlb[dit],0),
+                           CHF_FRA(a_BStar[dit]),
+                           CHF_FRA1(a_BStarParallel[dit],0),
+                           CHF_CONST_INT(m_use_spatial_vel_norm),
+                           CHF_CONST_FRA(dummy));
+      }
    }
+
+   // In principle this shold be replaced with fillInternalGhosts
+   // but, apperantly these exchanges are overwritten later anyways
+   // and since BstarParallel is cashed this should not matter
    a_BStar.exchange();
    a_BStarParallel.exchange();
 }
 
+void
+PhaseGeom::multFieldQuantitiesByNorms(FArrayBox& a_BMagProduct,
+                                      FArrayBox& a_bdotcurlbProduct,
+                                      const FArrayBox& a_BMag,
+                                      const FArrayBox& a_bdotcurlb,
+                                      const FArrayBox& a_velnorm) const
+{
+    // Calculate product = vparnorm*munorm in a box;
+    //store in thisBmagProduct and a copy in a_bdotcurlbProduct
+    a_BMagProduct.copy(a_velnorm,0,0,1);
+    a_BMagProduct.mult(a_velnorm,1,0,1);
+    a_bdotcurlbProduct.copy(a_BMagProduct,0,0,1);
+
+    //Now multiply product by Bmag and bdotcurlb
+    a_BMagProduct.mult(a_BMag,0,0,1);
+    a_bdotcurlbProduct.mult(a_bdotcurlb,0,0,1);
+}
 
 
 void
@@ -1752,22 +1915,26 @@ PhaseGeom::setCellCenteredRealCoords()
          iv_inj[MU_DIR] = mu_index;
 
          for (int dir=0; dir<CFG_DIM; dir++) {
-	   (*m_cell_centered_real_coords)[dit](iv,dir) = cfg_real_coords_inj[dit](iv_inj,dir);
+           (*m_cell_centered_real_coords)[dit](iv,dir) = cfg_real_coords_inj[dit](iv_inj,dir);
          }
 
          for (int dir=0; dir<VEL_DIM; dir++) {
             (*m_cell_centered_real_coords)[dit](iv,CFG_DIM+dir) = vel_coord_real[dir];
+           // If doing local normalization divide by appropriate component of velnorm
+           if (m_use_spatial_vel_norm){
+              (*m_cell_centered_real_coords)[dit](iv,CFG_DIM+dir) *= (*m_vel_norm)[dit](iv_inj,dir);
+           }
          }
       }
    }
+}
 
-#if 0
-   //Old method, which did not used cashed cfg_coords (therefore was slow)
-   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
-      const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(m_gridsFull[dit]);
-      block_coord_sys.getCellCenteredRealCoords((*m_cell_centered_real_coords)[dit]);
-   }
-#endif
+void
+PhaseGeom::getFaceCenteredRealCoords(LevelData<FluxBox>& a_face_centered_real_coords) const
+{
+   // Presently use it for diagnostic purposes only and assert zero ghost vector
+   CH_assert(a_face_centered_real_coords.ghostVect()==IntVect::Zero);
+   fourthOrderCellToFaceCenters(a_face_centered_real_coords, *m_cell_centered_real_coords );
 }
 
 void
@@ -2218,10 +2385,14 @@ PhaseGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt ) 
          IntVect toroidal_dir_only = BASISV(TOROIDAL_DIR);
          IntVect no_toroidal_exchange = IntVect::Unit - toroidal_dir_only;
 
-         for (int codim=1; codim<=PHASE_MAX_EBE_CODIM; ++codim) {
+         for (int codim=2; codim<=PHASE_MAX_EBE_CODIM; ++codim) {
             exchangeExtraBlockGhosts(a_data, codim, toroidal_dir_only, no_toroidal_exchange);
          }
       }
+
+      // Perform data exchange in corner ghost cells that might be needed
+      // for high-order calculations 
+      fillCorners(a_data, nghost, PHASE_MAX_EBE_CODIM);
    }
 #endif
 }
@@ -2911,8 +3082,11 @@ PhaseGeom::injectAndExpandConfigurationToPhase( const CFG::LevelData<CFG::FArray
   LevelData<FArrayBox> src_phase_flat;
   injectConfigurationToPhase(a_src, src_phase_flat);
 
+  IntVect ghostVect = config_inject(a_src.ghostVect());
+  
   if (!a_dst.isDefined()) {
-    a_dst.define( m_gridsFull, src_phase_flat.nComp(), IntVect::Zero);
+    //a_dst.define( m_gridsFull, src_phase_flat.nComp(), IntVect::Zero);
+    a_dst.define( m_gridsFull, src_phase_flat.nComp(), ghostVect);
   }
   for (DataIterator dit(m_gridsFull.dataIterator()); dit.ok(); ++dit) {
     const FArrayBox& src_phase_flat_fab = src_phase_flat[dit];
@@ -3868,6 +4042,7 @@ PhaseGeom::setVelocityData( const CFG::IntVect &                  a_cspace_index
 
 #endif
 }
+
 
 /*
   Plotting (MOVE THIS ELSEWHERE)
@@ -4935,6 +5110,8 @@ PhaseGeom::fillTransversePhysicalGhosts( LevelData<FArrayBox>& a_var, int a_max_
   return;
 }
 
+
+
 void
 PhaseGeom::fillTransversePhysicalGhosts( LevelData<FluxBox>& a_var, int a_max_dim ) const
 {
@@ -4968,7 +5145,6 @@ PhaseGeom::fillTransversePhysicalGhosts( LevelData<FluxBox>& a_var, int a_max_di
 
   return;
 }
-
 
 DisjointBoxLayout PhaseGeom::getGhostDBL(const LevelData<FArrayBox>& a_data) const
 {
@@ -5011,7 +5187,6 @@ DisjointBoxLayout PhaseGeom::getGhostDBL(const LevelData<FArrayBox>& a_data) con
   return ghost_dbl;
 }
 
-
 DisjointBoxLayout PhaseGeom::getGhostDBL(const LevelData<FluxBox>& a_data) const
 {
   CH_TIME("PhaseGeom::getGhostDBL");
@@ -5052,6 +5227,5 @@ DisjointBoxLayout PhaseGeom::getGhostDBL(const LevelData<FluxBox>& a_data) const
   
   return ghost_dbl;
 }
-
 
 #include "NamespaceFooter.H"

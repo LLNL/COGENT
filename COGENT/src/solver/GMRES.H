@@ -410,7 +410,7 @@ void GMRESSolver<T,Ops>::CycleGMRES( T &a_xx, const T &a_bb,
   if ( (a_reason!=0 || a_itcount>=m_maxits) )
   {
     if (m_verbose_pout>0) pout() << a_itcount << ") GMRES residual = " << res << endl;
-    if (!procID()) {
+    if (m_verbose && !procID()) {
       printf("     --> (%s) iteration %3d, residual = %1.6e (abs.), %1.6e (rel.)\n",
               m_outPrefix.c_str(), a_itcount, res, res / a_rnorm0);
     }

@@ -1,6 +1,7 @@
 #include "GridFunction.H"
 #include "MagGeom.H"
 #include "FourthOrderUtil.H"
+#include "FourthOrderUtilsClass.H"
 
 #include "NamespaceHeader.H"
 
@@ -164,11 +165,15 @@ void GridFunction::assign(LevelData<FArrayBox>&       a_data,
    }
    
    if (!((MagGeom&)a_geometry).secondOrder()) {
+      FourthOrderUtil FourthOrderOperators; //Object that holds various fourth-order operatiosns 
+      const bool useSG = ((MagGeom&)a_geometry).useSG(); // decide whether to use SG based on MagGeom
+      FourthOrderOperators.setSG(useSG); //Whether to use the SG versions of fourth order stencils
       for (DataIterator dit( grids ); dit.ok(); ++dit) {
          Box domain_box( data_tmp[dit].box() );
          domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
          ProblemDomain domain( domain_box );
          fourthOrderAverageCell( data_tmp[dit], domain, grids[dit] );
+         FourthOrderOperators.fourthOrderAverageCellGen( data_tmp[dit], domain, grids[dit] );
       }
    }
    data_tmp.copyTo( a_data );
@@ -189,7 +194,11 @@ void GridFunction::setCellAverages(FArrayBox&                  a_data,
    setPointwise( tmp, a_geometry, a_real_coords, a_normalized_flux, a_block_number );
    
    const MagBlockCoordSys& coord_sys = getCoordSys(a_geometry, a_block_number);
+   //FourthOrderUtil FourthOrderOperators; //Object that holds various fourth-order operatiosns
+   //const bool useSG = ((MagGeom&)a_geometry).useSG(); // decide whether to use SG stenciles based on MagGeom 
+   //FourthOrderOperators.setSG(false);
    fourthOrderAverageCell( tmp, coord_sys.domain(), box );
+   //FourthOrderOperators.fourthOrderAverageCellGen( tmp, coord_sys.domain(), box );
    
    a_data.copy( tmp, box );
 }

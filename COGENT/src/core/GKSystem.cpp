@@ -7,6 +7,7 @@
 #include "LogRectPhaseCoordSys.H"
 #include "SingleNullPhaseCoordSys.H"
 #include "SNCorePhaseCoordSys.H"
+#include "VelocityNormalization.H"
 #include "Directions.H"
 
 #undef CH_SPACEDIM
@@ -37,17 +38,14 @@
 using namespace CH_MultiDim;
 
 
-GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
-   :
-     m_using_electrons(false),
+GKSystem::GKSystem( ParmParse& a_pp )
+   : m_using_electrons(false),
      m_enforce_stage_positivity(false),
      m_enforce_step_positivity(false),
      m_enforce_step_floor(false),
      m_max_grid_size(0),
      m_kinetic_ghosts(4),
      m_fluid_ghosts(4),
-     m_ti_class("rk"),
-     m_ti_method("4"),
      m_gk_ops(NULL),
      m_hdf_potential(false),
      m_hdf_potential_non_zonal(false),
@@ -59,6 +57,7 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
      m_hdf_PoloidalMomentum(false),
      m_hdf_ParallelVelocity(false),
      m_hdf_energyDensity(false),
+     m_hdf_kineticEnergyDensity(false),
      m_hdf_perpEnergyDensity(false),
      m_hdf_parallelEnergyDensity(false),
      m_hdf_pressure(false),
@@ -80,12 +79,14 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
      m_hdf_dfn_at_mu(false),
      m_hdf_fluids(false),
      m_hdf_vpartheta(false),
+     m_hdf_bfvpartheta(false),
      m_hdf_rtheta(false),
      m_hdf_vparmu(false),
      m_verbosity(0),
-     m_use_native_time_integrator( !a_use_external_TI ),
-     m_compute_op_matrices(false),
-     m_op_matrices_tolerance(1e-6)
+     m_ti_class("rk"),
+     m_ti_method("4"),
+     m_use_scales(false),
+     m_scale_tol(1e-12)
 {
    ParmParse ppgksys("gksystem");
 
@@ -107,27 +108,10 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
    createGlobalDOF();
    m_state_comp.setGlobalDOF(&m_global_dof);
 
-   const Real BASE_DT( 1.0 );
-   if (!m_use_native_time_integrator) {
-      m_gk_ops = new GKOps;
-      m_gk_ops->define( m_state_comp, BASE_DT );
-      m_rhs.define( m_state_comp );
-   }
-   else {
-      m_U.define(m_state_comp);
-      m_U_old.define(m_state_comp);
-      if (m_ti_class == _TI_RK_) {
-         m_integrator = new TiRK<GKVector, GKOps>;
-      }
-      else if (m_ti_class == _TI_ARK_) {
-         m_integrator = new TiARK<GKVector, GKOps>;
-      } 
-      else {
-         MayDay::Error("Unrecognized input for m_ti_class.");
-      }
-      m_integrator->define( a_pp, m_ti_method, m_U, BASE_DT );
-      m_gk_ops = &( m_integrator->getOperators() );
-   }
+   m_gk_ops = new GKOps;
+   m_gk_ops->define( m_state_comp );
+   m_rhs.define( m_state_comp );
+
    giveSpeciesTheirGyroaverageOps();
    
    if ( m_using_electrons && m_gk_ops->usingBoltzmannElectrons() ) {
@@ -145,10 +129,6 @@ GKSystem::GKSystem( ParmParse& a_pp, bool a_use_external_TI )
    //      MayDay::Warning( "Not using electrons with dynamic E field" );
    
    setupFieldHistories();
-
-   if (m_compute_op_matrices && m_use_native_time_integrator) {
-     m_op_matrices.define(m_gk_ops, m_U, m_op_matrices_tolerance);
-   }
 }
 
 
@@ -173,8 +153,10 @@ GKSystem::initialize( const int     a_cur_step,
    }
 
    // Initialize physical kinetic & fluid species used in fluidOp (has ghost cells)
-   m_gk_ops->initializeKineticSpeciesPhysical( m_state_comp.dataKinetic(), a_cur_time );
-   m_gk_ops->initializeFluidSpeciesPhysical( m_state_comp.dataFluid(), a_cur_time );
+   m_gk_ops->initializeKineticSpeciesPhysical(  m_state_comp.dataKinetic(), 
+                                                a_cur_time );
+   m_gk_ops->initializeFluidSpeciesPhysical(  m_state_comp.dataFluid(), 
+                                              a_cur_time );
    
    // Initialize the physical state variables
    m_gk_ops->convertToPhysical( m_state_comp, m_state_phys, a_cur_time );
@@ -187,21 +169,27 @@ GKSystem::initialize( const int     a_cur_step,
    //     associated field are computed.
    m_gk_ops->initializeElectricField( m_state_phys, a_cur_step, a_cur_time );
 
+   m_gk_ops->initializeTI(  a_cur_step, 
+                            a_cur_time, 
+                            m_rhs,
+                            m_state_comp, 
+                            m_state_phys  );
+
+   m_scale_u.define(m_state_comp); m_scale_u.ones();
+   m_scale_rhsop.define(m_state_comp); m_scale_rhsop.ones();
+   if (!trivialSolutionOp()) {
+     m_scale_lhsop.define(m_state_comp); m_scale_lhsop.ones();
+   }
+
+   return;
 }
 
 
 
 GKSystem::~GKSystem()
 {
-   delete m_integrator;
-
    delete m_units;
-
-#ifdef with_petsc
-   if (!m_use_native_time_integrator) {
-      delete m_gk_ops;
-   }
-#endif
+   delete m_gk_ops;
 }
 
 
@@ -277,7 +265,8 @@ void GKSystem::createConfigurationSpace()
   else if (   m_mag_geom_type == "miller"
            || m_mag_geom_type == "slab"
            || m_mag_geom_type == "cylindrical"
-           || m_mag_geom_type == "toroidal")   {
+           || m_mag_geom_type == "toroidal"
+           || m_mag_geom_type == "oneblock" )   {
      
     string prefix = mag_geom_prefix + string(".") + m_mag_geom_type;
      
@@ -382,7 +371,8 @@ GKSystem::getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids 
   CFG::ProblemDomain prob_domain;
 
   if (   m_mag_geom_type == "miller" || m_mag_geom_type == "slab"
-      || m_mag_geom_type == "cylindrical" || m_mag_geom_type == "toroidal") {
+      || m_mag_geom_type == "cylindrical" || m_mag_geom_type == "toroidal"
+      || m_mag_geom_type == "oneblock") {
  
      CFG::Box bounding_box;
      for (int n=0; n<boxes.size(); n++) {
@@ -567,7 +557,8 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
   // Construct the multiblock phase space coordinate system
 
   if (   m_mag_geom_type == "miller" || m_mag_geom_type == "slab"
-      || m_mag_geom_type == "cylindrical" || m_mag_geom_type == "toroidal" ) {
+      || m_mag_geom_type == "cylindrical" || m_mag_geom_type == "toroidal"
+      || m_mag_geom_type == "oneblock" ) {
      
      m_phase_coords = RefCountedPtr<PhaseCoordSys>(new LogRectPhaseCoordSys(a_ppgksys,
                                                                             m_mag_geom_coords,
@@ -891,8 +882,13 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
       }
 
       bool include_velocity_renormalization(false);
+      string velocity_normalization_type("None");
       if ( ppspecies.contains("velocity_renormalization") ) {
-	ppspecies.get("velocity_renormalization", include_velocity_renormalization);
+         ppspecies.get("velocity_renormalization", include_velocity_renormalization);
+      }
+      // NOTE Retaining boolian include_velocity_renormalization for backward compatibility of input files.
+      if ( ppspecies.contains("velocity_normalization") ) {
+         ppspecies.get("velocity_normalization", velocity_normalization_type);
       }
 
       bool is_gyrokinetic(false);
@@ -902,7 +898,8 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
          if ( procID() == 0 && m_verbosity ) {
             cout << "   " << (is_gyrokinetic ? "Gyrokinetic" : "Drift-kinetic") << " species "
                  << name << ": mass = " << mass << ", charge = "
-                 << charge << ", velocity renormalization = " << include_velocity_renormalization <<endl;
+                 << charge << ", velocity renormalization = " << include_velocity_renormalization
+                 << ", velocity normalization = " << velocity_normalization_type <<endl;
          }
 
          //Construct species-depended velocity space
@@ -915,15 +912,26 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
          getVelocitySpaceDisjointBoxLayout( domain, grids );
 
          VEL::RealVect dv(m_dv);
-         if (include_velocity_renormalization) dv[0] = m_dv[0] / sqrt(mass);
+         if (include_velocity_renormalization || (velocity_normalization_type == "global")) {
+            dv[0] = m_dv[0] / sqrt(mass);
+         }
+         RefCountedPtr<VEL::VelCoordSys> velocity_coords = RefCountedPtr<VEL::VelCoordSys>(new VEL::VelCoordSys(pp_vel,
+                                                                                                                grids,
+                                                                                                                domain,
+                                                                                                                dv));
+         
 
-         RefCountedPtr<VEL::VelCoordSys> velocity_coords = RefCountedPtr<VEL::VelCoordSys>(new VEL::VelCoordSys(pp_vel, grids, domain, dv));
-         
+         // Construct the species-dependent velocity normalization 
+         RefCountedPtr<VelocityNormalization> velocity_normalization;
+         velocity_normalization = RefCountedPtr<VelocityNormalization>(new VelocityNormalization(m_mag_geom,
+                                                                                                 velocity_coords,
+                                                                                                 ppspecies));
+
          // Construct the multiblock species-dependent phase space coordinate system
-         
          RefCountedPtr<PhaseCoordSys> phase_coords;
          if (   m_mag_geom_type == "miller" || m_mag_geom_type == "slab"
-             || m_mag_geom_type == "cylindrical" || m_mag_geom_type == "toroidal") {
+             || m_mag_geom_type == "cylindrical" || m_mag_geom_type == "toroidal"
+             || m_mag_geom_type == "oneblock" ) {
             ParmParse pp("gksystem");
             phase_coords = RefCountedPtr<PhaseCoordSys>(new LogRectPhaseCoordSys(pp,
                                                                                  m_mag_geom_coords,
@@ -946,8 +954,13 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
          }
          
          // Get the species geometry
-         RefCountedPtr<PhaseGeom> species_geom 
-            = RefCountedPtr<PhaseGeom>(new PhaseGeom(*m_phase_geom, phase_coords, velocity_coords, mass, charge, is_gyrokinetic));
+         RefCountedPtr<PhaseGeom> species_geom = RefCountedPtr<PhaseGeom>(new PhaseGeom(*m_phase_geom,
+                                                                                        phase_coords,
+                                                                                        velocity_coords,
+                                                                                        velocity_normalization,
+                                                                                        mass,
+                                                                                        charge,
+                                                                                        is_gyrokinetic));
 
          // Create the species object
          KineticSpecies* kin_spec = new KineticSpecies( name, mass, charge, species_geom, is_gyrokinetic );
@@ -976,27 +989,22 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
 
 
 
-Real GKSystem::stableDt( const int a_step_number )
+Real GKSystem::stableDt(  const int                 a_step_number,
+                          const TimeIntegratorType  a_ti_type )
 {
-  if (m_use_native_time_integrator) {
-    if ( m_integrator->isExplicit() ) {
-      return m_gk_ops->stableDtExpl( m_state_comp, a_step_number );
-    } else if ( m_integrator->isImEx() ) {
-      return m_gk_ops->stableDtImEx( m_state_comp, a_step_number );
-    } else {
-      /* if fully implicit time integration, then there is not really a maximum
-       * stable dt. So using 1000 times the explicit stable dt as a limit, because
-       * systems get really stiff to solve for larger time steps.
-       * January 2019: this is not really important right now since we are not
-       * considering fully implicit time integration in the near future. */
-      return (1000.0*m_gk_ops->stableDtExpl( m_state_comp, a_step_number ));
-    }
-  } else {
+  if ( a_ti_type == ti_explicit ) {
     return m_gk_ops->stableDtExpl( m_state_comp, a_step_number );
+  } else if ( a_ti_type == ti_imex ) {
+    return m_gk_ops->stableDtImEx( m_state_comp, a_step_number );
+  } else {
+    /* if fully implicit time integration, then there is not really a maximum
+     * stable dt. So using 1000 times the explicit stable dt as a limit, 
+     * because systems get really stiff to solve for larger time steps.
+     * January 2019: this is not really important right now since we are not
+     * considering fully implicit time integration in the near future. */
+    return (1000.0*m_gk_ops->stableDtExpl( m_state_comp, a_step_number ));
   }
-  return DBL_MAX;
 }
-
 
 
 void GKSystem::enforcePositivity( KineticSpeciesPtrVect& a_soln )
@@ -1007,53 +1015,6 @@ void GKSystem::enforcePositivity( KineticSpeciesPtrVect& a_soln )
                                            kinetic_species->maxValue() );
    }
 }
-
-
-
-void GKSystem::advance( Real& a_cur_time,
-                        Real& a_dt,
-                        int&  a_step_number)
-{
-   CH_TIME("GKSystem::advance()");
-   CH_assert(m_use_native_time_integrator);
-   m_integrator->setTimeStepSize( a_dt );
-
-   m_state_comp.copyTo  ( m_U.data() );
-   if (m_compute_op_matrices) {
-     m_op_matrices.computeMatrices(m_U,a_cur_time,0);
-   }
-
-
-   m_U_old = m_U;
-   Real ref_norm = m_U_old.computeNorm();
-
-   m_integrator->advance( a_cur_time, m_U );
-
-   m_U_old -= m_U;
-   m_step_norm_abs = m_U_old.computeNorm();
-   if (ref_norm > 1e-15) {
-     m_step_norm_rel = m_step_norm_abs / ref_norm;
-   } else {
-     m_step_norm_rel = m_step_norm_abs;
-   }
-
-   m_state_comp.copyFrom( m_U.data() );
-
-   m_integrator->getCurrentTime( a_cur_time );
-   m_integrator->getTimeStep( a_step_number );
-   m_integrator->getTimeStepSize( a_dt );
-
-   if (m_enforce_step_positivity) {
-      enforcePositivity( m_state_comp.dataKinetic() );
-   }
-   
-   if (m_enforce_step_floor) {
-      m_floor_post_processor.enforce( m_state_comp.dataFluid() );
-   }
-   
-   m_gk_ops->convertToPhysical( m_state_comp, m_state_phys, a_cur_time );
-}
-
 
 
 inline
@@ -1213,6 +1174,15 @@ void GKSystem::writePlotFile(const char    *prefix,
          m_gk_ops->plotVParallelTheta( filename, soln_species, radial_index, toroidal_index, mu_index, cur_time );
       }
 
+      if (m_hdf_bfvpartheta) {
+         std::string filename( plotFileName( prefix,
+                                             "bfvpar_poloidal",
+                                             soln_species.name(),
+                                             cur_step,
+                                             species + 1) );
+         m_gk_ops->plotbfVParallelTheta( filename, soln_species, radial_index, toroidal_index, mu_index, cur_time );
+      }
+
       // Distribution function r versus theta at specified velocity space point
 
       if (m_hdf_rtheta) {
@@ -1306,6 +1276,18 @@ void GKSystem::writePlotFile(const char    *prefix,
          m_gk_ops->plotEnergyDensity( filename, soln_species, cur_time );
       }
 
+      // Kinetic energy density
+
+       if (m_hdf_energyDensity) {
+          std::string filename( plotFileName( prefix,
+                                              "kieticEnergyDensity",
+                                              soln_species.name(),
+                                              cur_step,
+                                              species + 1) );
+
+          m_gk_ops->plotKineticEnergyDensity( filename, soln_species, cur_time );
+       }
+      
       // Parallel energy density
 
       if (m_hdf_parallelEnergyDensity) {
@@ -1756,7 +1738,8 @@ void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
          sprintf( buff, "fluid_%d_%s", species + 1, var_name.c_str() );
          a_handle.setGroup( buff );
          read( a_handle, injected_fluid_data, "data", injected_fluid_data.disjointBoxLayout() );
-         m_phase_geom->projectPhaseToConfiguration(injected_fluid_data, fluid_data);
+         m_phase_geom->projectPhaseToConfiguration( injected_fluid_data, 
+                                                    fluid_data);
       }
 
       // NEED TO ADD FACE DATA
@@ -1774,7 +1757,9 @@ void GKSystem::setupFieldHistories()
 }
 
 
-void GKSystem::writeFieldHistory(int cur_step, double cur_time, bool startup_flag)
+void GKSystem::writeFieldHistory( int     cur_step, 
+                                  double  cur_time, 
+                                  bool    startup_flag)
 {
   m_gk_ops->writeFieldHistory( cur_step, cur_time, startup_flag );
 }
@@ -1795,7 +1780,11 @@ void GKSystem::printDiagnostics()
       pout() << "    Species " << n << ":\t"
              << maximum << " [max]\t" << minimum << " [min]" << std::endl;
       if (procID()==0) {
-         cout << "    Species " << n << ":\t" << maximum << " [max]\t" << minimum << " [min]" << std::endl;
+         cout << "    Species " 
+              << n << ":\t" 
+              << maximum << " [max]\t" 
+              << minimum << " [min]" 
+              << std::endl;
       }
    }
    pout() << std::endl;
@@ -1804,18 +1793,6 @@ void GKSystem::printDiagnostics()
    }
 }
 
-void GKSystem::preTimeStep(int a_cur_step, Real a_cur_time)
-{
-   CH_TIME("GKSystem::preTimeStep()");
-   if (m_use_native_time_integrator) {
-      m_integrator->setCurrentTime( a_cur_time );
-      m_integrator->setTimeStep( a_cur_step );
-   }
-   m_gk_ops->preTimeStep( a_cur_step, a_cur_time, m_state_comp, m_state_phys );
-}
-
-
-inline
 void printTimeStep( const Real& a_dt,
                     const std::string& a_name,
                     const Real& a_dt_current  )
@@ -1826,25 +1803,75 @@ void printTimeStep( const Real& a_dt,
    }
 }
 
-void GKSystem::postTimeStep(int a_cur_step, Real a_dt, Real a_cur_time)
+void GKSystem::preTimeStep( const ODEVector&  a_vec, 
+                            int               a_cur_step, 
+                            Real              a_cur_time  )
 {
-  CH_TIME("postTimeStep");
+   CH_TIME("GKSystem::preTimeStep()");
+   copyStateFromArray( a_vec );
+   m_gk_ops->convertToPhysical( m_state_comp, m_state_phys, a_cur_time ); 
+   m_gk_ops->preTimeStep( a_cur_step, 
+                          a_cur_time, 
+                          m_state_comp, 
+                          m_state_phys );
+}
+
+void GKSystem::postTimeStep(ODEVector&  a_vec,
+                            int         a_cur_step, 
+                            Real        a_dt, 
+                            Real        a_cur_time )
+{
+  CH_TIME("GKSystem::postTimeStep");
+
+  copyStateFromArray( a_vec );
+
+  if (m_enforce_step_positivity) {
+     enforcePositivity( m_state_comp.dataKinetic() );
+  }
+  
+  if (m_enforce_step_floor) {
+     m_floor_post_processor.enforce( m_state_comp.dataFluid() );
+  }
+
   m_gk_ops->postTimeStep( a_cur_step, a_dt, a_cur_time, m_state_comp );
+  m_gk_ops->convertToPhysical( m_state_comp, m_state_phys, a_cur_time );
+
   if (procID() == 0) {
+
     cout << "  ----\n";
     cout << "  dt: " << a_dt << std::endl;
+
     Real dt_vlasov = m_gk_ops->dtScaleVlasov( m_state_comp, a_cur_step );
     printTimeStep( dt_vlasov, "    Vlasov    : ", a_dt ); 
-    Real dt_collisions = m_gk_ops->dtScaleCollisions( m_state_comp, a_cur_step);
+    Real dt_collisions = m_gk_ops->dtScaleCollisions( m_state_comp, 
+                                                      a_cur_step);
+
     printTimeStep( dt_collisions, "    Collisions: ", a_dt ); 
-    Real dt_transport = m_gk_ops->dtScaleTransport( m_state_comp, a_cur_step );
+    Real dt_transport = m_gk_ops->dtScaleTransport( m_state_comp, 
+                                                    a_cur_step );
+
     printTimeStep( dt_transport, "    Transport : ", a_dt ); 
-    Real dt_neutrals = m_gk_ops->dtScaleNeutrals( m_state_comp, a_cur_step );
+    Real dt_neutrals = m_gk_ops->dtScaleNeutrals( m_state_comp, 
+                                                  a_cur_step );
+
     printTimeStep( dt_neutrals, "    Neutrals  : ", a_dt ); 
     cout << "  ----\n";
   }
+
+  copyStateToArray( a_vec );
 }
 
+void GKSystem::postTimeStage( const int   a_cur_step, 
+                              const Real  a_dt, 
+                              const Real  a_cur_time,
+                              const int   a_stage )
+{
+   m_gk_ops->postTimeStage( a_cur_step, 
+                            a_cur_time, 
+                            a_dt, 
+                            m_state_comp, 
+                            a_stage );
+}
 
 inline void GKSystem::printParameters() const
 {
@@ -1898,7 +1925,7 @@ inline void GKSystem::printParameters() const
 }
 
 
-void GKSystem::parseParameters( ParmParse&         a_ppgksys )
+void GKSystem::parseParameters( ParmParse& a_ppgksys )
 {
    
    // Get kinetic ghost layer width
@@ -1962,11 +1989,6 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
    a_ppgksys.query("ti_class",m_ti_class);
    a_ppgksys.query("ti_method",m_ti_method);
 
-   // compute linearized operator matrices?
-   // Caution: a *very* slow process
-   a_ppgksys.query("compute_op_matrices",m_compute_op_matrices);
-   a_ppgksys.query("op_matrices_tolerance",m_op_matrices_tolerance);
-
    // Should we make an hdf file for the potential?
    a_ppgksys.query("hdf_potential",m_hdf_potential);
 
@@ -1994,6 +2016,9 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
    // Should we make hdf files for f versus vparallel and poloidal angle?
    a_ppgksys.query("hdf_vpartheta",m_hdf_vpartheta);
 
+   // Should we make hdf files for bstarparalel*f versus vparallel and poloidal angle?
+   a_ppgksys.query("hdf_bfvpartheta",m_hdf_bfvpartheta);
+
    // Should we make hdf files for f versus radius and poloidal angle at a specified vpar, mu?
    a_ppgksys.query("hdf_rtheta",m_hdf_rtheta);
 
@@ -2016,41 +2041,44 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
    a_ppgksys.query("hdf_PoloidalMomentum",m_hdf_PoloidalMomentum);
 
    // Should we make hdf files for ParallelMomentum?
-   a_ppgksys.query("hdf_ParallelVelocity",m_hdf_ParallelVelocity);
+    a_ppgksys.query("hdf_ParallelVelocity",m_hdf_ParallelVelocity);
 
-   // Should we make hdf files for pressure?
+   // Should we make hdf files for energy density?
    a_ppgksys.query("hdf_energyDensity",m_hdf_energyDensity);
 
-   // Should we make hdf files for temperature?
+   // Should we make hdf files for kinetic energy density?
+   a_ppgksys.query("hdf_kineticEnergyDensity",m_hdf_kineticEnergyDensity);
+    
+   // Should we make hdf files for parallel energy density?
    a_ppgksys.query("hdf_parallelEnergyDensity",m_hdf_parallelEnergyDensity);
 
-   // Should we make hdf files for temperature?
+   // Should we make hdf files for perpendicular energy density?
    a_ppgksys.query("hdf_perpEnergyDensity",m_hdf_perpEnergyDensity);
-   
+    
    // Should we make hdf files for pressure?
    a_ppgksys.query("hdf_pressure",m_hdf_pressure);
 
-   // Should we make hdf files for temperature?
+   // Should we make hdf files for parallel pressure?
    a_ppgksys.query("hdf_parallelPressure",m_hdf_parallelPressure);
 
-   // Should we make hdf files for temperature?
+   // Should we make hdf files for perpendicular pressure?
    a_ppgksys.query("hdf_perpPressure",m_hdf_perpPressure);
 
-   // Should we make hdf files for gradPoverN?                                                       
+   // Should we make hdf files for gradPoverN?
    a_ppgksys.query("hdf_gradPoverN",m_hdf_gradPoverN);
-   
+    
    // Should we make hdf files for parallel heat flux?
    a_ppgksys.query("hdf_parallelHeatFlux",m_hdf_parallelHeatFlux);
 
    // Should we make hdf files for temperature?
    a_ppgksys.query("hdf_temperature",m_hdf_temperature);
 
-   // Should we make hdf files for temperature?
+   // Should we make hdf files for parallel temperature?
    a_ppgksys.query("hdf_parallelTemperature",m_hdf_parallelTemperature);
 
-   // Should we make hdf files for temperature?
+   // Should we make hdf files for perpendicular temperature?
    a_ppgksys.query("hdf_perpTemperature",m_hdf_perpTemperature);
-
+   
    // Should we make hdf files for parallel heat flux?
    a_ppgksys.query("hdf_parallelHeatFlux",m_hdf_parallelHeatFlux);
 
@@ -2168,13 +2196,6 @@ void GKSystem::parseParameters( ParmParse&         a_ppgksys )
 }
 
 
-
-void GKSystem::postStageAdvance( KineticSpeciesPtrVect& a_soln )
-{
-   if (m_enforce_stage_positivity) {
-      enforcePositivity( a_soln );
-   }
-}
 
 void GKSystem::giveSpeciesTheirGyroaverageOps()
 {

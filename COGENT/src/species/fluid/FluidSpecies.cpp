@@ -32,7 +32,10 @@ FluidSpecies::FluidSpecies( const string&     a_pp_prefix,
    else {
       MayDay::Error("FluidSpecies::FluidSpecies(): operator_type not specified");
    }
- 
+   
+   if ( pp.contains("electronDensity") ) {
+      pp.get("electronDensity", m_evolve_electronDensity);
+   }
    if ( pp.contains("momentumDensity") ) {
       pp.get("momentumDensity", m_evolve_momentumDensity);
    }
@@ -75,6 +78,9 @@ FluidSpecies::FluidSpecies( const string&     a_pp_prefix,
    if ( pp.contains("adiabatic_coefficient") ) {
       pp.get("adiabatic_coefficient", m_gamma);
    }
+   if ( pp.contains("Zmin") ) {
+      pp.get("Zmin", m_Zmin);
+   }
    if ( pp.contains("CGL_MODEL") ) {
       pp.get("CGL_MODEL", m_CGL);
       CH_assert( m_CGL==0 || m_CGL==1 );
@@ -82,6 +88,7 @@ FluidSpecies::FluidSpecies( const string&     a_pp_prefix,
    }
    
    addCellVar("density", 1, a_ghost_vect);
+   if(m_evolve_electronDensity)   addCellVar("electronDensity", 1, a_ghost_vect);
    if(m_evolve_momentumDensity)   addCellVar("momentumDensity", SpaceDim, a_ghost_vect);
    if(m_evolve_energyDensity)     addCellVar("energyDensity",     1+m_CGL, a_ghost_vect);
    if(m_evolve_energyDensity_ele) addCellVar("energyDensity_ele", 1+m_CGL, a_ghost_vect);
@@ -128,6 +135,21 @@ FluidSpecies::FluidSpecies( const FluidSpecies& a_foo )
    }
 }
 
+void FluidSpecies::setVelocityOnFaces( LevelData<FluxBox>& a_velocity_cf )
+{
+   CH_TIME("FluidSpecies::setVelocityOnFaces()");
+   DisjointBoxLayout dbl( m_velocity.disjointBoxLayout() );
+   //CH_assert( dbl.compatible( a_velocity_cf.disjointBoxLayout() ) );
+   CH_assert( a_velocity_cf.nComp()==0);
+
+   // set the velocity on cell faces to be used in boundary conditions
+   for (DataIterator dit(dbl); dit.ok(); ++dit ) {
+      for (int dir=0; dir<SpaceDim; dir++) {
+         m_velocity[dit][dir].copy( a_velocity_cf[dit][dir],0,0,1 );
+      }
+   }  
+}
+
 
 void FluidSpecies::numberDensity( LevelData<FArrayBox>& a_rho ) const
 {
@@ -151,6 +173,20 @@ void FluidSpecies::massDensity( LevelData<FArrayBox>& a_rho ) const
    for (DataIterator dit( a_rho.dataIterator()); dit.ok(); ++dit ) {
       //a_rho[dit].copy( cell_var(0)[dit] );
       a_rho[dit].copy( cell_var("density")[dit] );
+   }
+}
+
+void FluidSpecies::electronDensity( LevelData<FArrayBox>& a_eleDen ) const
+{
+   if(m_evolve_electronDensity) {
+      DisjointBoxLayout dbl( cell_var("electronDensity").disjointBoxLayout() );
+      CH_assert( dbl.compatible( a_eleDen.disjointBoxLayout() ) );
+      for (DataIterator dit( a_eleDen.dataIterator()); dit.ok(); ++dit ) {
+         a_eleDen[dit].copy( cell_var("electronDensity")[dit] );
+      }
+   }
+   else {
+      massDensity(a_eleDen);
    }
 }
 
@@ -352,8 +388,10 @@ const FluidSpecies& FluidSpecies::operator=( const FluidSpecies& a_rhs )
       m_mass    = a_rhs.m_mass;
       m_charge  = a_rhs.m_charge;
       m_gamma   = a_rhs.m_gamma;
+      m_Zmin    = a_rhs.m_Zmin;
       m_CGL     = a_rhs.m_CGL;
       m_op_type = a_rhs.m_op_type;
+      m_evolve_electronDensity = a_rhs.m_evolve_electronDensity;
       m_evolve_momentumDensity = a_rhs.m_evolve_momentumDensity;
       m_evolve_energyDensity = a_rhs.m_evolve_energyDensity;
       m_evolve_energyDensity_ele = a_rhs.m_evolve_energyDensity_ele;
@@ -385,8 +423,10 @@ void FluidSpecies::copy( const FluidSpecies& a_rhs )
       m_mass = a_rhs.m_mass;
       m_charge = a_rhs.m_charge;
       m_gamma   = a_rhs.m_gamma;
+      m_Zmin    = a_rhs.m_Zmin;
       m_CGL     = a_rhs.m_CGL;
       m_op_type = a_rhs.m_op_type;
+      m_evolve_electronDensity = a_rhs.m_evolve_electronDensity;
       m_evolve_momentumDensity = a_rhs.m_evolve_momentumDensity;
       m_evolve_energyDensity = a_rhs.m_evolve_energyDensity;
       m_evolve_energyDensity_ele = a_rhs.m_evolve_energyDensity_ele;
@@ -402,15 +442,15 @@ void FluidSpecies::copy( const FluidSpecies& a_rhs )
    }
 }
 
-Real FluidSpecies::maxValue() const
+Real FluidSpecies::maxValue( const int cvc ) const
 {
-   const LevelData<FArrayBox>& density = cell_var(0);
+   const LevelData<FArrayBox>& this_cell_var = cell_var(cvc);
 
-   const DisjointBoxLayout& grids(density.getBoxes());
+   const DisjointBoxLayout& grids(this_cell_var.getBoxes());
    Real local_maximum( -CH_BADVAL );
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       Box box( grids[dit] );
-      Real box_max( density[dit].max( box ) );
+      Real box_max( this_cell_var[dit].max( box ) );
       local_maximum = Max( local_maximum, box_max );
    }
 
@@ -423,17 +463,17 @@ Real FluidSpecies::maxValue() const
 }
 
 
-Real FluidSpecies::minValue() const
+Real FluidSpecies::minValue( const int cvc ) const
 {
-   const LevelData<FArrayBox>& density = cell_var(0);
+   const LevelData<FArrayBox>& this_cell_var = cell_var(cvc);
 
-   const DisjointBoxLayout& grids(density.getBoxes());
+   const DisjointBoxLayout& grids(this_cell_var.getBoxes());
    Real local_minimum( CH_BADVAL );
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       Box box( grids[dit] );
-      Real box_min(density[dit].min( box ) );
+      Real box_min(this_cell_var[dit].min( box ) );
       if (box_min<0.0) {
-         IntVect box_min_loc = density[dit].minIndex( box );
+         IntVect box_min_loc = this_cell_var[dit].minIndex( box );
          pout() << box_min_loc << ":  " << box_min << endl;
       }
       local_minimum = Min( local_minimum, box_min );
@@ -442,6 +482,7 @@ Real FluidSpecies::minValue() const
 #ifdef CH_MPI
    MPI_Allreduce( &local_minimum, &minimum, 1, MPI_CH_REAL, MPI_MIN, MPI_COMM_WORLD );
 #endif
+
    return minimum;
 }
 
@@ -469,7 +510,7 @@ FluidSpecies::convertToPhysical()
       if ( edge_var(n).isDefined() ) {
          //configurationSpaceGeometry().divideJonEdges(edge_var(n));
          //edge_var(n).exchange();
-         SpaceUtils::exchangeEdgeDataBox(edge_var(n)); 
+         SpaceUtils::exchangeEdgeDataBox(edge_var(n));
       }
    }
 
@@ -521,6 +562,7 @@ FluidSpecies::convertFromPhysical()
       if ( edge_var(n).isDefined() ) {
          //configurationSpaceGeometry().multJonEdges(edge_var(n));
          //edge_var(n).exchange();
+         SpaceUtils::exchangeEdgeDataBox(edge_var(n)); 
       }
    }
    
@@ -565,6 +607,13 @@ FluidSpecies::clone( const IntVect& a_ghost_vect,
       LevelData<FArrayBox>& result_density(result->cell_var(0));
       for (DataIterator dit(result_density.dataIterator() ); dit.ok(); ++dit) {
          result_density[dit].copy(this_density[dit] );
+      }
+      if(m_evolve_electronDensity) {
+         const LevelData<FArrayBox>& this_electronDensity = cell_var("electronDensity");
+         LevelData<FArrayBox>& result_electronDensity(result->cell_var("electronDensity"));
+         for (DataIterator dit(result_electronDensity.dataIterator() ); dit.ok(); ++dit) {
+            result_electronDensity[dit].copy(this_electronDensity[dit] );
+         }
       }
       if(m_evolve_energyDensity) {
          const LevelData<FArrayBox>& this_energyDensity = cell_var("energyDensity");

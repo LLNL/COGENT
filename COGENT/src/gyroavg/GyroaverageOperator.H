@@ -123,7 +123,7 @@ class GyroaverageOperator
                                  ) const
     {
       if ((a_B == 0) || (a_charge == 0)) return(0.0);
-      else return( (a_La/a_charge) * sqrt(a_mass * a_mu / a_B ) );
+      else return( a_La * sqrt(a_mass * a_mu / (a_B * a_charge * a_charge) ) );
     }
 
     inline void evalStencil(std::vector<Real>&,

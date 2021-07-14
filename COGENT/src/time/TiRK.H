@@ -8,7 +8,8 @@
 #include "ExplicitStageFunction.H"
 #include "ExplicitStageJacobian.H"
 #include "NewtonSolver.H"
-#include "Checkpoints.H"
+#include "TiDefinitions.H"
+#include "TiButcherTables.H"
 
 #define _TI_RK_ "rk"
 
@@ -24,7 +25,13 @@ class TiRK : public TimeIntegrator<Vector,Ops>
     /**
      * Constructor: set m_is_Defined to false.
      */ 
-   TiRK<Vector,Ops>() : m_is_Defined(false) {}
+    TiRK<Vector,Ops>() : m_is_Defined(false) 
+    {
+      m_A = m_b = m_c = m_b_emb = NULL;
+      m_rhsStage = NULL;
+      m_Efunction = NULL;
+      m_EJacobian = NULL;
+    }
 
     /// Destructor
     /*
@@ -38,7 +45,13 @@ class TiRK : public TimeIntegrator<Vector,Ops>
      *
      * @param[in] a_name string containing the method name
      */
-    virtual void define( ParmParse&, std::string, Vector&, Real );
+    virtual void define(  ParmParse&, 
+                          const std::string&, 
+                          const Vector&, 
+                          Ops* const );
+
+    /// Initialize
+    virtual void initialize( const Real, const Vector& );
 
     /// Advance one time step
     /**
@@ -61,7 +74,7 @@ class TiRK : public TimeIntegrator<Vector,Ops>
      * get the operators for the time integrator
      *
      */
-    virtual Ops& getOperators() { return m_Operators; }
+    virtual Ops& getOperators() { return *m_Operators; }
 
     /// Set the time step size
     /**
@@ -111,26 +124,14 @@ class TiRK : public TimeIntegrator<Vector,Ops>
      */ 
     virtual void getCurrentTime( Real& a_time ) const { a_time = m_time; }
 
-    /// Set Butcher tableaux coefficients
-    /*
-     * set the Butcher tableaux coefficients for the method
-     *
-     * @param[in] a_nstages Number of stages
-     * @param[in] a_A Stage calculation coefficients
-     * @param[in] a_b Step completion coefficients
-     */ 
-    virtual void setCoefficients(int a_nstages, const Real* a_A, const Real* a_b);
-
-    virtual bool isExplicit() const { return true; }
-   
-    virtual bool isImEx() const { return false; }
+    virtual TimeIntegratorType type() const { return ti_explicit; }
 
     virtual void printCounts() const
       {
         if (!procID()) {
           cout << "  Time integrator counts:-\n";
           cout << "    Time steps          : " << m_count << "\n";
-          if (!m_Operators.trivialSolutionOp()) {
+          if (!m_Operators->trivialSolutionOp()) {
             cout << "    Nonlinear iterations: " 
                  << m_ExplicitStageSolver.getCount()
                  << "\n";
@@ -147,9 +148,10 @@ private:
     bool        m_isLinear;
     std::string m_name;
     int         m_nstages;
-    Real        *m_A, *m_b, *m_c;
+    int         m_order, m_order_emb;
+    Real        *m_A, *m_b, *m_c, *m_b_emb;
     Vector      m_YStage, *m_rhsStage, m_R;
-    Ops         m_Operators;
+    Ops*        m_Operators;
     Real        m_time;
     Real        m_dt;
     Real        m_epsJFNK;
@@ -162,110 +164,24 @@ private:
 };
 
 template <class Vector, class Ops>
-void TiRK<Vector,Ops>::define( ParmParse& a_pp,
-                               std::string a_name, Vector& a_Y,
-                               Real a_dt )
+void TiRK<Vector,Ops>::define( ParmParse&         a_pp,
+                               const std::string& a_name,
+                               const Vector&      a_Y,
+                               Ops* const         a_ops )
 {
-  m_dt = a_dt;
+  m_dt = 1.0;
   m_epsJFNK = 1e-6;
+
+  m_name = a_name;
+  TiButcherTables::getButcherTableRK( a_name,
+                                      m_nstages,
+                                      m_order,
+                                      m_order_emb,
+                                      &m_A,
+                                      &m_b,
+                                      &m_c,
+                                      &m_b_emb );
   
-  /* set Butcher coefficients */
-  if (a_name == "1fe") {
-
-    /* forward Euler */
-    m_name = a_name;
-    m_nstages = 1;
-
-    const Real
-      A[1][1] = {{0.0}},
-      b[1]    = {1.0};
-    setCoefficients(m_nstages,&A[0][0],&b[0]);
-
-  } else if (a_name == "2") {
-
-    /* 2nd order, 2-stage Runge-Kutta */
-    m_name = a_name;
-    m_nstages = 2;
-    
-    const Real
-      A[2][2]     = {{0.0,0.0},
-                    {0.5,0.0}},
-      b[2]        = {0.0,1.0};
-    setCoefficients(m_nstages,&A[0][0],&b[0]); 
-
-  } else if (a_name == "2a") {
-
-    /* 2nd order, 2-stage Runge-Kutta */
-    m_name = a_name;
-    m_nstages = 2;
-    
-    const Real
-      A[2][2]     = {{0.0,0.0},
-                    {1.0,0.0}},
-      b[2]        = {0.5,0.5};
-    setCoefficients(m_nstages,&A[0][0],&b[0]); 
-
-  } else if (a_name == "3") {
-
-    /* 3rd order, 3-stage Runge-Kutta */
-    m_name = a_name;
-    m_nstages = 3;
-    
-    const Real
-      A[3][3] = {{0,0,0},
-                 {2.0/3.0,0,0},
-                 {-1.0/3.0,1.0,0}},
-      b[3]    = {0.25,0.5,0.25};
-    setCoefficients(m_nstages,&A[0][0],&b[0]); 
-
-  } else if (a_name == "4") {
-    
-    /* 4th order, 4-stage Runge-Kutta */
-    m_name = a_name;
-    m_nstages = 4;
-    
-    const Real
-      A[4][4] = {{0,0,0,0},
-                 {0.5,0,0,0},
-                 {0,0.5,0,0},
-                 {0,0,1.0,0}},
-      b[4]    = {1.0/6.0,1.0/3.0,1.0/3.0,1.0/6.0};
-    setCoefficients(m_nstages,&A[0][0],&b[0]); 
-
-  } else if (a_name == "5dp") {
-
-    /* 5th order, 7-stage Dormand-Prince */
-    m_name = a_name;
-    m_nstages = 7;
-
-    const Real
-      A[7][7]   = {{0,0,0,0,0,0,0},
-                   {1.0/5.0,0,0,0,0,0,0},
-                   {3.0/40.0,9.0/40.0,0,0,0,0,0},
-                   {44.0/45.0,-56.0/15.0,32.0/9.0,0,0,0,0},
-                   {19372.0/6561.0,-25360.0/2187.0,64448.0/6561.0,-212.0/729.0,0,0,0},
-                   {9017.0/3168.0,-355.0/33.0,46732.0/5247.0,49.0/176.0,-5103.0/18656.0,0,0},
-                   {35.0/384.0,0,500.0/1113.0,125.0/192.0,-2187.0/6784.0,11.0/84.0,0}},
-      b[7]      = {35.0/384.0,0,500.0/1113.0,125.0/192.0,-2187.0/6784.0,11.0/84.0,0};
-    setCoefficients(m_nstages,&A[0][0],&b[0]);
-
-  } else {
-    
-    /* default: RK4 */
-    if (!procID()) cout << "Warning: unknown RK method specified " << a_name << ". Using default.\n";
-    m_name = "4";
-    m_nstages = 4;
-    
-    const Real
-      A[4][4] = {{0,0,0,0},
-                 {0.5,0,0,0},
-                 {0,0.5,0,0},
-                 {0,0,1.0,0}},
-      b[4]    = {1.0/6.0,1.0/3.0,1.0/3.0,1.0/6.0};
-    setCoefficients(m_nstages,&A[0][0],&b[0]); 
-
-  }
-
   /* allocate RHS */
   m_rhsStage  = new Vector[m_nstages];
 
@@ -274,14 +190,14 @@ void TiRK<Vector,Ops>::define( ParmParse& a_pp,
   for (int i=0; i<m_nstages; i++) {
     m_rhsStage[i].define(a_Y);
   }
-  m_Operators.define((*a_Y.getState()), m_dt);
+  m_Operators = a_ops;
   m_isLinear = false; 
 
   /* define string prefixes for options parsing */
   std::string esolverOutPrefix = "TiRK.e";
   std::string solverOptPrefix = "rk";
 
-  if (!m_Operators.trivialSolutionOp()) {
+  if (!m_Operators->trivialSolutionOp()) {
     Function<Vector,Ops>       
       **ExplicitStageSolverFunction = m_ExplicitStageSolver.getFunction();
     LinearFunction<Vector,Ops> 
@@ -295,8 +211,8 @@ void TiRK<Vector,Ops>::define( ParmParse& a_pp,
     m_EJacobian = dynamic_cast<ExplicitStageJacobian<Vector,Ops>*>
                     (*ExplicitStageSolverJacobian);
   
-    m_Efunction->define(m_R,m_Operators);
-    m_EJacobian->define(m_R,m_Operators,esolverOutPrefix,solverOptPrefix);
+    m_Efunction->define(m_R,*m_Operators);
+    m_EJacobian->define(m_R,*m_Operators,esolverOutPrefix,solverOptPrefix);
     m_Efunction->setJac(m_EJacobian);
     m_EJacobian->setIsLinear(m_isLinear);
     m_EJacobian->setJFNKEps(m_epsJFNK);
@@ -313,36 +229,25 @@ void TiRK<Vector,Ops>::define( ParmParse& a_pp,
 }
 
 template <class Vector, class Ops>
-void TiRK<Vector, Ops>::setCoefficients( int a_nstages,
-                                         const Real* a_A, 
-                                         const Real* a_b
-                                       )
+void TiRK<Vector,Ops>::initialize(const Real a_time, const Vector& a_Y)
 {
-  CH_assert(!isDefined());
-  CH_assert(a_nstages == m_nstages);
-
-  /* allocate Butcher tableaux coefficients 
-   * deallocated in destructor */
-  m_A = new Real[m_nstages*m_nstages];
-  m_b = new Real[m_nstages];
-  m_c = new Real[m_nstages];
-
-  int i, j;
-  for (i=0; i<m_nstages*m_nstages; i++) m_A[i] = a_A[i];
-  for (i=0; i<m_nstages;           i++) m_b[i] = a_b[i];
-  for (i=0; i<m_nstages; i++) {
-    m_c[i] = 0.0; for(j=0; j<m_nstages; j++) m_c[i] += a_A[i*m_nstages+j]; 
+  if (!m_Operators->trivialSolutionOp()) {
+    m_Efunction->setStageTime(a_time);
+    m_EJacobian->setStageTime(a_time);
+    m_EJacobian->updatePreCondMat(a_Y, -1, -1);
   }
+  return;
 }
 
 template <class Vector, class Ops>
 TiRK<Vector, Ops>::~TiRK()
 {
-  delete[] m_A;
-  delete[] m_b;
-  delete[] m_c;
-  delete[] m_rhsStage;
-  if (!m_Operators.trivialSolutionOp()) {
+  if (m_A) delete[] m_A;
+  if (m_b) delete[] m_b;
+  if (m_c) delete[] m_c;
+  if (m_b_emb) delete[] m_b_emb;
+  if (m_rhsStage) delete[] m_rhsStage;
+  if (!m_Operators->trivialSolutionOp()) {
     delete m_Efunction;
     delete m_EJacobian;
   }
@@ -354,7 +259,14 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
   CH_TIMERS("TiRK::advance");
   CH_assert(isDefined());
   CH_assert(m_time == a_time);
+
   m_YStage.copy(a_Y);
+
+  if (!m_Operators->trivialSolutionOp()) {
+    m_Efunction->setStageTime(a_time);
+    m_EJacobian->setStageTime(a_time);
+    m_EJacobian->updatePreCondMat(m_YStage, m_cur_step, -1);
+  }
 
   /* Stage calculations */
 
@@ -363,7 +275,7 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
 
     Real stage_time = m_time+m_c[i]*m_dt;
 
-    if (m_Operators.trivialSolutionOp()) {
+    if (m_Operators->trivialSolutionOp()) {
 
       m_YStage.copy(a_Y);
       for (j=0; j<i; j++) m_YStage.increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
@@ -375,23 +287,23 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
   
       /* first stage - a_Y
        * subsequent stages - m_YStage from previous stage */
-      m_EJacobian->updatePreCondMat(m_YStage);
+      m_EJacobian->updatePreCondMat(m_YStage, m_cur_step, i);
   
-      m_Operators.preSolutionOpEval(a_Y,m_time,chkpt_ti_advance_1);
-      m_Operators.solutionOp(m_R,stage_time,a_Y);
-      for (j=0; j<i; j++) m_R.increment(m_rhsStage[j],(m_dt*m_A[i*m_nstages+j]));
-  
+      m_Operators->preSolutionOpEval(a_Y,m_time,chkpt_ti_advance_1);
+      m_Operators->solutionOp(m_R,stage_time,a_Y);
+      for (j=0; j<i; j++) m_R.increment(  m_rhsStage[j],
+                                          (m_dt*m_A[i*m_nstages+j]) );
       m_ExplicitStageSolver.solve(m_YStage,m_R);
 
     }
 
-    m_Operators.postTimeStage(m_cur_step,stage_time,m_c[i]*m_dt,m_YStage,i);
-    m_Operators.preOpEval(m_YStage,stage_time,chkpt_ti_advance_2);
-    m_Operators.explicitOp(m_rhsStage[i],stage_time,m_YStage);
+    m_Operators->postTimeStage(m_cur_step,stage_time,m_c[i]*m_dt,m_YStage,i);
+    m_Operators->preOpEval(m_YStage,stage_time,chkpt_ti_advance_2);
+    m_Operators->explicitOp(m_rhsStage[i],stage_time,m_YStage);
   }
 
   /* Step completion */
-  if (m_Operators.trivialSolutionOp()) {
+  if (m_Operators->trivialSolutionOp()) {
 
     for (i = 0; i < m_nstages; i++) {
       a_Y.increment(m_rhsStage[i],(m_dt*m_b[i]));
@@ -401,10 +313,10 @@ void TiRK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
 
     m_Efunction->setStageTime(m_time+m_dt);
     m_EJacobian->setStageTime(m_time+m_dt);
-    m_EJacobian->updatePreCondMat(a_Y);
+    m_EJacobian->updatePreCondMat(a_Y, m_cur_step, m_nstages);
 
-    m_Operators.preSolutionOpEval(a_Y,(m_time+m_dt),chkpt_ti_advance_3);
-    m_Operators.solutionOp(m_R,(m_time+m_dt),a_Y);
+    m_Operators->preSolutionOpEval(a_Y,(m_time+m_dt),chkpt_ti_advance_3);
+    m_Operators->solutionOp(m_R,(m_time+m_dt),a_Y);
     for (i = 0; i < m_nstages; i++) {
       m_R.increment(m_rhsStage[i],(m_dt*m_b[i]));
     }

@@ -56,15 +56,18 @@ EllipticOpBC* EllipticOpBCFactory::create( const std::string&  a_name,
                                            const int&          a_verbosity )
 {
    EllipticOpBC* result(NULL);
+   
+   int nblocks = a_coord_sys.numBlocks();
+   
    if (a_coord_sys.type() == "LogicallyRectangular" ) {
-      result = new LogRectEllipticOpBC( a_name, a_pp, a_verbosity );
+      result = new LogRectEllipticOpBC( a_name, a_pp, nblocks, a_verbosity );
    }
    else if (a_coord_sys.type() == "SingleNull" ) {
       int poloidal_blocks_per_sector = ((const SingleNullCoordSys&)a_coord_sys).numPoloidalBlocks();
-      result = new SingleNullEllipticOpBC( a_name, a_pp, poloidal_blocks_per_sector, a_verbosity );
+      result = new SingleNullEllipticOpBC( a_name, a_pp, nblocks, poloidal_blocks_per_sector, a_verbosity );
    }
    else if (a_coord_sys.type() == "SNCore" ) {
-      result = new SNCoreEllipticOpBC( a_name, a_pp, a_verbosity );
+      result = new SNCoreEllipticOpBC( a_name, a_pp, nblocks, a_verbosity );
    }
    else {
       MayDay::Error( "EllipticOpBCFactory: Unimplemented boundary condition for given coordinate system type" );

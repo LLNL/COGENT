@@ -12,7 +12,6 @@
 #define CH_SPACEDIM PDIM
 #include "PhaseGeom.H"
 #include "MomentOp.H"
-#include "GKOps.H"
 #include "FluidOpPreconditioner.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -42,9 +41,13 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
      m_second_order(false),
      m_low_pollution(false),
      m_remove_axisymmetric_phi(false),
-     m_update_pc_freq(1),
+     m_update_pc_freq_oldmodel(1),
      m_it_counter(0),
-     m_electron_temperature_func(NULL)
+     m_electron_temperature_func(NULL),
+     m_update_pc_freq_e(1),
+     m_update_pc_freq_i(1),
+     m_update_pc_skip_stage_e(false),
+     m_update_pc_skip_stage_i(false)
 {
    const std::string name("potential");
    const std::string prefix( "BC." + name );
@@ -362,16 +365,16 @@ void VorticityOp::evalSolutionOp( FluidSpeciesPtrVect&               a_rhs,
    m_gyropoisson_op->computeFluxDivergence(sol, rhs, false, false);
 }
 
-void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
-                                  std::vector<PS::DOFList>&                                 a_dof_list,
-                                  const PS::GKVector&                                       a_soln_vec,
-                                  PS::GKOps&                                                a_gkops,
-                                  const std::string&                                        a_out_string,
-                                  const std::string&                                        a_opt_string,
-                                  bool                                                      a_im,
-                                  const FluidSpecies&                                       a_fluid_species,
-                                  const PS::GlobalDOFFluidSpecies&                          a_global_dofs,
-                                  int                                                       a_species_idx )
+void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&  a_pc,
+                                  std::vector<PS::DOFList>&                                     a_dof_list,
+                                  const PS::ODEVector&                                          a_soln_vec,
+                                  void*                                                         a_gkops,
+                                  const std::string&                                            a_out_string,
+                                  const std::string&                                            a_opt_string,
+                                  bool                                                          a_im,
+                                  const FluidSpecies&                                           a_fluid_species,
+                                  const PS::GlobalDOFFluidSpecies&                              a_global_dofs,
+                                  int                                                           a_species_idx )
 {
   
   CH_assert(a_pc.size() == a_dof_list.size());
@@ -390,11 +393,11 @@ void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS
     }
   }
 
-  PS::Preconditioner<PS::GKVector, PS::GKOps> *pc;
-  pc = new PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>;
-  dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+  PS::Preconditioner<PS::ODEVector,PS::AppCtxt> *pc;
+  pc = new PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>;
+  dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
     (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
-  dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+  dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
     (pc)->speciesIndex(a_species_idx);
 
   PS::DOFList dof_list(0);
@@ -427,33 +430,55 @@ void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS
   return;
 }
 
-void VorticityOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
-                                  const PS::KineticSpeciesPtrVect&                          a_kin_species_phys,
-                                  const FluidSpeciesPtrVect&                                a_fluid_species,
-                                  const Real                                                a_time,
-                                  const Real                                                a_shift,
-                                  const bool                                                a_im,
-                                  const int                                                 a_species_idx )
+void VorticityOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&  a_pc,
+                                  const PS::KineticSpeciesPtrVect&                              a_kin_species_phys,
+                                  const FluidSpeciesPtrVect&                                    a_fluid_species,
+                                  const Real                                                    a_time,
+                                  const int                                                     a_step,
+                                  const int                                                     a_stage,
+                                  const Real                                                    a_shift,
+                                  const bool                                                    a_im,
+                                  const int                                                     a_species_idx )
 {
   if (a_im) {
     CH_assert(m_my_pc_idx_i >= 0);
     CH_assert(a_pc.size() > m_my_pc_idx_i);
+    /* see if this update can be skipped */
+    if (a_step >= 0) {
+      if (a_step%m_update_pc_freq_i != 0) return;
+      if ((a_stage >= 0) && m_update_pc_skip_stage_i) return; 
+      if ((a_stage < 0) && (!m_update_pc_skip_stage_i)) return;
+    }
   } else {
     CH_assert(m_my_pc_idx_e >= 0);
     CH_assert(a_pc.size() > m_my_pc_idx_e);
+    /* see if this update can be skipped */
+    if (a_step >= 0) {
+      if (a_step%m_update_pc_freq_e != 0) return;
+      if ((a_stage >= 0) && m_update_pc_skip_stage_e) return; 
+      if ((a_stage < 0) && (!m_update_pc_skip_stage_e)) return;
+    }
   }
 
   if (!procID()) {
     std::cout << "    ==> Updating " << _FLUID_OP_PC_ << " preconditioner " 
               << " for VorticityOp " << (a_im ? "RHS " : "LHS ")
-              << "of fluid species " << a_species_idx << ".\n";
+              << "of fluid species " << a_species_idx 
+              << ".\n";
   }
 
-  PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps> *pc 
-    = dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+  PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt> *pc 
+    = dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (a_pc[(a_im ? m_my_pc_idx_i : m_my_pc_idx_e)]);
   CH_assert(pc != NULL);
-  pc->update(a_kin_species_phys, a_fluid_species, a_time, a_shift, a_im, a_species_idx);
+  pc->update( a_kin_species_phys, 
+              a_fluid_species, 
+              a_time, 
+              a_step,
+              a_stage,
+              a_shift, 
+              a_im, 
+              a_species_idx );
 
   return;
 }
@@ -477,6 +502,8 @@ void VorticityOp::solveSolutionPC( FluidSpeciesPtrVect&              a_fluid_spe
 void VorticityOp::updatePCImEx( const FluidSpeciesPtrVect&       a_fluid_species,
                                 const PS::KineticSpeciesPtrVect& a_kinetic_species,
                                 const double                     a_time,
+                                const int                        a_step,
+                                const int                        a_stage,
                                 const double                     a_shift,
                                 const int                        a_component)
 {
@@ -538,7 +565,6 @@ void VorticityOp::computeDivPerpIonMagCurrentDensity( LevelData<FArrayBox>&     
       rhs_dfn.define( this_species.distributionFunction().getBoxes(), 1, PS::IntVect::Zero);
       
       // Compute the divergence of -Jperp due to magnetic drifts for this species
-      bool fourth_order = !m_parallel_current_divergence_op->secondOrder();
       
       //Gyroaverage calculation requires phi. Pass zero phi for now. Fix later
       LevelData<FArrayBox> phi_tmp(grids, 1, IntVect::Zero);
@@ -1023,7 +1049,7 @@ void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_p
       
    if (a_scalar_data.size() > 0) setCoreBC( a_scalar_data[0], -a_scalar_data[1], *m_imex_pc_op_bcs );
 
-   bool update_precond = (m_it_counter % m_update_pc_freq == 0) ? true : false;
+   bool update_precond = (m_it_counter % m_update_pc_freq_oldmodel == 0) ? true : false;
    m_imex_pc_op->setVorticityOperatorCoefficients(m_ion_mass_density, m_ion_charge_density, *m_imex_pc_op_bcs,
                                                   update_precond);
 
@@ -1064,8 +1090,24 @@ void VorticityOp::parseParameters( const ParmParse& a_pp )
    a_pp.query( "include_pol_den_correction_to_pe", m_include_pol_den_correction_to_pe );
    a_pp.query( "second_order", m_second_order );
    a_pp.query( "low_pollution", m_low_pollution );
-   a_pp.query( "update_precond_interval", m_update_pc_freq );
    a_pp.query( "remove_axisymmetric_phi", m_remove_axisymmetric_phi );
+
+   if (a_pp.contains("update_precond_interval")) {
+      a_pp.get( "update_precond_interval", m_update_pc_freq_oldmodel );
+      m_update_pc_freq_e = m_update_pc_freq_oldmodel;
+      m_update_pc_freq_i = m_update_pc_freq_oldmodel;
+   } else {
+      a_pp.query( "update_precond_interval_LHS", m_update_pc_freq_e);
+      a_pp.query( "update_precond_interval_RHS", m_update_pc_freq_i);
+   }
+   if (a_pp.contains("update_precond_skip_stage")) {
+      a_pp.get( "update_precond_skip_stage", m_update_pc_skip_stage_e );
+      m_update_pc_skip_stage_i = m_update_pc_skip_stage_e;
+   } else {
+      a_pp.query( "update_precond_skip_stage_LHS", m_update_pc_skip_stage_e );
+      a_pp.query( "update_precond_skip_stage_RHS", m_update_pc_skip_stage_i );
+   }
+   
    
    if (a_pp.contains("consistent_upper_bc_only")) {
      a_pp.get("consistent_upper_bc_only", m_consistent_upper_bc_only);

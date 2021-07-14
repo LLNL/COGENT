@@ -56,6 +56,11 @@ class FluidSpecies
        */
       virtual void massDensity( LevelData<FArrayBox>& rho ) const;
       
+      /// Returns species electron density.
+      /**
+       */
+      virtual void electronDensity( LevelData<FArrayBox>& eleDen ) const;
+      
       /// Returns species velocity in virtual direction
       /**
        */
@@ -103,7 +108,8 @@ class FluidSpecies
        */
       virtual void temperature( LevelData<FArrayBox>& temperature ) const;
 
-
+      void setVelocityOnFaces( LevelData<FluxBox>& a_velocity_cf );
+     
       void interpFaceVarToCell( LevelData<FArrayBox>&  a_cell_var,
                           const string&                a_face_var_name ) const;
       
@@ -147,9 +153,10 @@ class FluidSpecies
 
    //      int cell_component(const string& variable_name) const;
 
-      Real maxValue() const;
-      Real minValue() const;
+      Real maxValue( const int cvc=0 ) const;
+      Real minValue( const int cvc=0 ) const;
 
+      int m_evolve_electronDensity=0;
       int m_evolve_momentumDensity=0, m_evolve_momentumDensity_virtual=0; 
       int m_evolve_energyDensity=0, m_evolve_energyDensity_ele=0;
       int m_evolve_magneticField=0, m_evolve_magneticField_virtual=0;
@@ -160,6 +167,7 @@ class FluidSpecies
       std::vector<string> m_plotMemberVarNames;
     
       Real m_gamma = 5.0/3.0;
+      Real m_Zmin = 1.0;
       int  m_CGL = 0;
 
 private:

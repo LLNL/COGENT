@@ -3,7 +3,7 @@
 
 #include "Function.H"
 #include "ImplicitStageJacobian.H"
-#include "Checkpoints.H"
+#include "TiDefinitions.H"
 
 #include "NamespaceHeader.H"
 
@@ -23,7 +23,7 @@ class ImplicitStageFunction: public Function<T,Ops>
 
     inline void setJac(ImplicitStageJacobian<T,Ops>* a_jac) { m_jac = a_jac; }
 
-    inline Real computeStepNorm(const GKVector& a_vec) const
+    inline Real computeStepNorm(const ODEVector& a_vec) const
     {
       return m_ops->scaledVecNormU(a_vec);
     }

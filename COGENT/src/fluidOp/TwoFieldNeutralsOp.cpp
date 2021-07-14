@@ -10,7 +10,6 @@
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
-#include "GKOps.H"
 #include "FluidOpPreconditioner.H"
 //#include "altFaceAverages.H"
 #undef CH_SPACEDIM
@@ -34,12 +33,14 @@ TwoFieldNeutralsOp::TwoFieldNeutralsOp(const string&   a_pp_str,
      m_my_pc_idx(-1),
      m_bckgr_density(1.0e-7),
      m_is_time_implicit(true),
+     m_include_advection_bc(true),
      m_fixed_recycling(false),
+     m_first_call(true),
+     m_extrapolate_density(false),
      m_advScheme("uw3"),
      m_opt_string(a_pp_str),
-     m_include_advection_bc(true),
-     m_extrapolate_density(false),
-     m_first_call(true)
+     m_analytic_pc(false),
+     m_twofieldneutrals_pc(nullptr)
 {
 
    // Overwrite the base class value with
@@ -56,6 +57,10 @@ TwoFieldNeutralsOp::TwoFieldNeutralsOp(const string&   a_pp_str,
    std::string prefixBC;
    EllipticOpBCFactory elliptic_op_bc_factory;
 
+   // Construct the preconditioner
+   name_op = "neutrals_pc";
+   ParmParse pppc( name_op.c_str() );
+   m_twofieldneutrals_pc = new TwoFieldNeutralsPC(pppc, a_geometry);
 
    // Construct diffusion elliptic operator
    name_op = "neutrals_diffusion";
@@ -269,6 +274,9 @@ void TwoFieldNeutralsOp::accumulateDiffusiveTerms(FluidSpecies&        a_fluid_r
    computeDiffusionCoefficients(ellip_coeff, ellip_coeff_mapped, species_mass, a_time);
 
    m_diffusion_op->setOperatorCoefficients(ellip_coeff, ellip_coeff_mapped, *m_diffusion_bc);
+   if (m_analytic_pc) {
+      m_twofieldneutrals_pc->updateTopLeftCoefficients(ellip_coeff, ellip_coeff_mapped);
+   }
 
    if (!m_dens_recycling_bc) {
       m_diffusion_op->computeFluxDivergence( neutr_pressure, flux_div, false, false);
@@ -299,6 +307,9 @@ void TwoFieldNeutralsOp::accumulateDiffusiveTerms(FluidSpecies&        a_fluid_r
    }
 
    m_viscosity_op->setOperatorCoefficients(ellip_coeff, ellip_coeff_mapped, *m_viscosity_bc);
+   if (m_analytic_pc) {
+      m_twofieldneutrals_pc->updateBottomRightCoefficients(ellip_coeff, ellip_coeff_mapped);
+   }
    
    m_viscosity_op->computeFluxDivergence( parallel_velocity, flux_div, false, false);
    m_geometry.multJonValid(flux_div);
@@ -983,16 +994,16 @@ TwoFieldNeutralsOp::computeIntegratedNormalPrescribedFlux(LevelData<FluxBox>&   
    MayDay::Error( "TwoFieldNeutralsOp::computeIntegratedNormalPrescribedFlux: not implemented!!! " );
 }
 
-void TwoFieldNeutralsOp::defineBlockPC(std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
-                                       std::vector<PS::DOFList>&                                 a_dof_list,
-                                       const PS::GKVector&                                       a_soln_vec,
-                                       PS::GKOps&                                                a_gkops,
-                                       const std::string&                                        a_out_string,
-                                       const std::string&                                        a_opt_string,
-                                       bool                                                      a_im,
-                                       const FluidSpecies&                                       a_fluid_species,
-                                       const PS::GlobalDOFFluidSpecies&                          a_global_dofs,
-                                       int                                                       a_species_idx )
+void TwoFieldNeutralsOp::defineBlockPC(std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>& a_pc,
+                                       std::vector<PS::DOFList>&                                    a_dof_list,
+                                       const PS::ODEVector&                                         a_soln_vec,
+                                       void*                                                        a_gkops,
+                                       const std::string&                                           a_out_string,
+                                       const std::string&                                           a_opt_string,
+                                       bool                                                         a_im,
+                                       const FluidSpecies&                                          a_fluid_species,
+                                       const PS::GlobalDOFFluidSpecies&                             a_global_dofs,
+                                       int                                                          a_species_idx )
 {
   if (a_im && m_is_time_implicit) {
     CH_assert(a_pc.size() == a_dof_list.size());
@@ -1004,11 +1015,11 @@ void TwoFieldNeutralsOp::defineBlockPC(std::vector<PS::Preconditioner<PS::GKVect
                 << " (index = " << a_pc.size() << ").\n";
     }
   
-    PS::Preconditioner<PS::GKVector, PS::GKOps> *pc;
-    pc = new PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>;
-    dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+    PS::Preconditioner<PS::ODEVector,PS::AppCtxt> *pc;
+    pc = new PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>;
+    dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
-    dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+    dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->speciesIndex(a_species_idx);
   
     PS::DOFList dof_list(0);
@@ -1042,13 +1053,15 @@ void TwoFieldNeutralsOp::defineBlockPC(std::vector<PS::Preconditioner<PS::GKVect
 }
 
 
-void TwoFieldNeutralsOp::updateBlockPC(std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
-                                       const PS::KineticSpeciesPtrVect&                          a_kin_species_phys,
-                                       const FluidSpeciesPtrVect&                                a_fluid_species,
-                                       const Real                                                a_time,
-                                       const Real                                                a_shift,
-                                       const bool                                                a_im,
-                                       const int                                                 a_species_idx )
+void TwoFieldNeutralsOp::updateBlockPC(std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>& a_pc,
+                                       const PS::KineticSpeciesPtrVect&                             a_kin_species_phys,
+                                       const FluidSpeciesPtrVect&                                   a_fluid_species,
+                                       const Real                                                   a_time,
+                                       const int                                                    a_step,
+                                       const int                                                    a_stage,
+                                       const Real                                                   a_shift,
+                                       const bool                                                   a_im,
+                                       const int                                                    a_species_idx )
 {
   if (a_im && m_is_time_implicit) {
     CH_assert(m_my_pc_idx >= 0);
@@ -1059,10 +1072,17 @@ void TwoFieldNeutralsOp::updateBlockPC(std::vector<PS::Preconditioner<PS::GKVect
                 << " for TwoFieldNeutralsOp of fluid species " << a_species_idx << ".\n";
     }
   
-    PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps> *pc 
-      = dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>(a_pc[m_my_pc_idx]);
+    PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt> *pc 
+      = dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>(a_pc[m_my_pc_idx]);
     CH_assert(pc != NULL);
-    pc->update(a_kin_species_phys, a_fluid_species, a_time, a_shift, a_im, a_species_idx);
+    pc->update( a_kin_species_phys, 
+                a_fluid_species, 
+                a_time, 
+                a_step,
+                a_stage,
+                a_shift, 
+                a_im, 
+                a_species_idx);
   }
   return;
 }
@@ -1071,6 +1091,8 @@ void TwoFieldNeutralsOp::updateBlockPC(std::vector<PS::Preconditioner<PS::GKVect
 void TwoFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
                                       const PS::KineticSpeciesPtrVect& a_kinetic_species,
                                       const double                     a_time,
+                                      const int                        a_step,
+                                      const int                        a_stage,
                                       const double                     a_shift,
                                       const int                        a_component)
 {
@@ -1110,7 +1132,9 @@ void TwoFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
       beta_diffusion[dit].divide(m_Tg[dit]);
 
    }
-   m_diffusion_op->updateImExPreconditioner( beta_diffusion, *m_diffusion_bc );
+   if (!m_analytic_pc) {
+      m_diffusion_op->updateImExPreconditioner( beta_diffusion, *m_diffusion_bc );
+   }
    
    // Compute linear coefficients (beta) and update velocity elliptic solver
    LevelData<FArrayBox> beta_viscosity(grids, 1, IntVect::Zero);
@@ -1120,7 +1144,10 @@ void TwoFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
       beta_viscosity[dit].plus(m_chx_rate[dit]);
       beta_viscosity[dit].mult(density_phys[dit]);
    }
-   m_viscosity_op->updateImExPreconditioner( beta_viscosity, *m_viscosity_bc );
+   
+   if (!m_analytic_pc) {
+      m_viscosity_op->updateImExPreconditioner( beta_viscosity, *m_viscosity_bc );
+   }
    
    // Save density for the use in solvePCImEx function
    if ( !m_pc_density.isDefined() ) {
@@ -1128,6 +1155,19 @@ void TwoFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
    }
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
       m_pc_density[dit].copy(density_phys[dit]);
+   }
+
+   // If using the analytic preconditioner, we update here instead of the
+   // two previous calls to m_diffusion_op and m_viscosity_op
+   if (m_analytic_pc) {
+      LevelData<FArrayBox> zero_beta(grids, 1, IntVect::Zero);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+	 zero_beta[dit].setVal(0.);
+      }
+      m_twofieldneutrals_pc->updateSourceTermComponents(beta_diffusion,
+							zero_beta,
+						        beta_viscosity);
+      m_twofieldneutrals_pc->updatePreconditioner(*m_diffusion_bc, *m_viscosity_bc);
    }
 }
 
@@ -1178,17 +1218,26 @@ void TwoFieldNeutralsOp::solvePCImEx(FluidSpeciesPtrVect&              a_fluid_s
    double precond_tol = 0.;
    double precond_max_iter = 1;
 
-   // Solve for z_density = rho_g * T_g
-   m_diffusion_op->setImExPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
-   m_diffusion_op->solveImExPreconditioner(rhs_density_phys, z_density);
+   if (m_analytic_pc) {
+      m_twofieldneutrals_pc->setImExPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
+      m_twofieldneutrals_pc->solvePreconditioner(rhs_density_phys, rhs_par_mom_phys, z_density, z_par_mom);
+   }
+   else
+   {
+      // Solve for z_density = rho_g * T_g
+      m_diffusion_op->setImExPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
+      m_diffusion_op->solveImExPreconditioner(rhs_density_phys, z_density);
 
-   // Get convergence parameters for viscosity MBSolver
-   tol = m_viscosity_op->getPrecondTol();
-   max_iter = m_viscosity_op->getPrecondMaxIter();
+      // Get convergence parameters for viscosity MBSolver
+      tol = m_viscosity_op->getPrecondTol();
+      max_iter = m_viscosity_op->getPrecondMaxIter();
 
-   // Solve for z_par_mom = par_mom / rho_g
-   m_viscosity_op->setImExPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
-   m_viscosity_op->solveImExPreconditioner(rhs_par_mom_phys, z_par_mom);
+      // Solve for z_par_mom = par_mom / rho_g
+      m_viscosity_op->setImExPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
+      m_viscosity_op->solveImExPreconditioner(rhs_par_mom_phys, z_par_mom);
+
+   }
+
 
    // Convert the elliptic solutions to the state vector components
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
@@ -1255,6 +1304,8 @@ void TwoFieldNeutralsOp::parseParameters( ParmParse& a_pp )
    //when OneFieldNeutralsOp base class is initialized
    
    a_pp.query( "time_implicit", m_is_time_implicit);
+
+   a_pp.query( "use_analytic_pc", m_analytic_pc);
    
    if (a_pp.contains("advScheme")) {
       a_pp.get("advScheme", m_advScheme );

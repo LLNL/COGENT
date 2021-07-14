@@ -198,7 +198,6 @@ void
       
       void getEdgeCentereddXdxi(EdgeDataBox& dXdxi) const;
 
-
       /**
        * Fill argument with the metric quantity N evaluated at cell centers
        *
@@ -226,6 +225,13 @@ void
        * @param[out] NJInverse  Product of N and JInverse
       */
       void getPointwiseNJInverse(FluxBox& NJInverse) const;
+      
+      /**
+       * Fill argument with the metric quantity NJInverse evaluated at edge centers
+       *
+       * @param[out] NJInverse  Product of N and JInverse
+      */
+      void getPointwiseNJInverse(EdgeDataBox& NJInverse) const;
 
       /**
        * Fill argument with the metric quantity NJInverse evaluated at a given mapped coordinate
@@ -287,9 +293,6 @@ void
        */
       double mappingError( const Box& box ) const;
 
-      virtual void getNormMagneticFlux( const FArrayBox& a_physical_coordinates,
-                                        FArrayBox&       a_magnetic_flux ) const {};
-
    /// Computes the flux surface unit tangent vector
       /**
        * @param[out] data  flux surface unit tangent vector
@@ -350,7 +353,15 @@ void
       virtual void getMagneticFlux( const FArrayBox& physical_coordinates,
                                     FArrayBox&       magnetic_flux ) const = 0;
 
-      virtual double getMagneticFlux( const RealVect& a_physical_coordinate ) const = 0;
+      virtual double getMagneticFlux( const RealVect& physical_coordinate ) const = 0;
+  
+      virtual void getNormMagneticFlux(const FArrayBox& physical_coordinates,
+                                       FArrayBox&       magnetic_flux ) const {};
+
+      virtual double getNormMagneticFlux( const RealVect& a_physical_coordinate ) const {return 0.;}
+  
+      /// Returns magnetic axis location, for 3D geometries corresponds to X,0,Z; defaulted to RealVect::Zero
+      virtual RealVect getMagAxis() const {return RealVect::Zero;}
 
       virtual void getNodalFieldData(FArrayBox& points,
                                      FArrayBox& A,
@@ -361,6 +372,7 @@ void
       bool isFieldAligned() const {return m_field_aligned;}
       bool isPointwiseMetrics() const {return m_pointwise_metrics;}
       bool isSubGridGeom() const {return m_subgrid_geometry;}
+      bool providesFlux() const {return m_provides_flux;}
       IntVect getSubGridData() const {return m_N_mr;}
    
       virtual bool isFieldAlignedMapping() const {return false;}
@@ -375,6 +387,13 @@ void
       const Vector<Box>& getBoundaryBoxes( const int              dir,
                                            const Side::LoHiSide&  side ) const
         {return m_boundary_boxes[dir + side*SpaceDim];}
+  
+  
+      void  getToroidalCoords(FArrayBox&  coords,
+                              const bool  use_flux_coord) const;
+   
+      void convertPhysicalCoordToToroidal(RealVect&   coord,
+                                          const bool  use_flux_coord) const;
 
    private:
    
@@ -423,6 +442,7 @@ void
       bool m_pointwise_metrics;
       bool m_verbose;
       bool m_subgrid_geometry;
+      bool m_provides_flux;
       IntVect m_N_mr;
 
       Vector<Box> m_boundary_boxes[2*SpaceDim];

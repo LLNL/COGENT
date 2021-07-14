@@ -1,4 +1,5 @@
 #include "CoDim1Stencil.H"
+#include "EllipticOpBC.H"
 
 #include "NamespaceHeader.H"
 
@@ -70,7 +71,7 @@ CoDim1Stencil::define( const FArrayBox&      a_boundary_values,
       // Neumann boundary conditions are specified relative to the outward
       // normal, so we need to flip the sign on low side boundaries to
       // convert to non-directional derivatives.
-      if (a_value_type == DERIVATIVE) {
+      if (a_value_type == EllipticOpBC::NEUMANN) {
          m_boundary_values->negate();
       }
    }
@@ -97,7 +98,7 @@ CoDim1Stencil::getStencil( const IntVect&   a_iv,
 
    if ( m_box.contains(a_iv) ) {
 
-      if ( m_value_type == VALUE ) {
+      if ( m_value_type == EllipticOpBC::DIRICHLET ) {
 
          if ( m_order == 2 ) {
 
@@ -181,7 +182,7 @@ CoDim1Stencil::getStencil( const IntVect&   a_iv,
             MayDay::Error("CoDim1Stencil::getStencil(): unknown order");
          }
       }
-      else if (m_value_type == DERIVATIVE) {
+      else if (m_value_type == EllipticOpBC::NEUMANN) {
 
          if ( m_order == 2 ) {
 
@@ -265,12 +266,40 @@ CoDim1Stencil::getStencil( const IntVect&   a_iv,
             MayDay::Error("CoDim1Stencil::getStencil(): unknown order");
          }
       }
+      else if (m_value_type == EllipticOpBC::EXTRAPOLATED) {
+         
+         if ( m_order == 2 ) {
+            int num_points = 2;
+            double weights[] = {2., -1.};
+         
+            IntVect point = a_iv;
+            if (m_side == Side::LoHiSide::Lo) {
+               for (int i=0; i<num_points; ++i) {
+                  point[m_dir]++;
+                  a_points.push_back(point);
+                  a_weights.push_back(weights[i]);
+               }
+            }
+            else {
+               for (int i=0; i<num_points; ++i) {
+                  point[m_dir]--;
+                  a_points.push_back(point);
+                  a_weights.push_back(weights[i]);
+               }
+            }
+         }
+         else if ( m_order == 4 ) {
+            MayDay::Error("CoDim1Stencil::getStencil(): fourth-order extrapolation option not implemented");
+         }
+         else {
+            MayDay::Error("CoDim1Stencil::getStencil(): unknown order");
+         }
+      }
       else {
          MayDay::Error("CoDim1Stencil::getStencil(): unknown value type");
       }
    }
 }
-
 
 
 #include "NamespaceFooter.H"

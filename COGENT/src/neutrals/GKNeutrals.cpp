@@ -2,6 +2,7 @@
 
 #include "NTRInterface.H"
 #include "FixedBckgr.H"
+#include "PrescribedSources.H"
 #include "FluidNeutrals.H"
 #include "NullNTR.H"
 
@@ -38,6 +39,10 @@ GKNeutrals::GKNeutrals( const int a_verbose )
                ntr = new FixedBckgr( ppntr, m_verbose );
             }
 
+           if (ntr_type == "PrescribedSources") {
+              ntr = new PrescribedSources( ppntr, m_verbose );
+           }
+           
             if (ntr_type == "FluidNeutrals") {
                ntr = new FluidNeutrals( ppntr, m_verbose );
             }

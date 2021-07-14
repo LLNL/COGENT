@@ -157,7 +157,7 @@ class EvalOpMatrix
       m_tolerance = a_tolerance;
       m_epsJFNK = 1e-6;
 
-      m_is_defined = m_ops->preallocatePCMatrixImEx((void*)&m_precon_matrix_imex, a_vec); 
+      m_is_defined = true;
       return;
     }
 
@@ -179,12 +179,6 @@ class EvalOpMatrix
                   << ndof << ").\n";
       }
       computeOpMatrix(a_X, m_implicit_imex, a_t, a_i, m_fname_implicit_imex, op_flag);
-      if (!procID()) {
-        std::cout << "  Assembling preconditioning matrix for implicit part of RHS (IMEX) (NDOF = " 
-                  << m_precon_matrix_imex.nRows() << ").\n";
-      }
-      m_ops->assemblePCImEx(true, (void*)&m_precon_matrix_imex, a_X, a_t, 0.);
-      m_precon_matrix_imex.writeToFile(m_fname_pc_imex, op_flag);
     }
 
   private:
@@ -193,8 +187,6 @@ class EvalOpMatrix
     Ops*    m_ops;
     Vector  m_Y, m_F0, m_F;
     Real    m_tolerance, m_epsJFNK;
-
-    BandedMatrix  m_precon_matrix_imex;
 
     EvalExplicitFunction<Vector,Ops>      m_explicit;
     EvalExplicitFunctionImEx<Vector,Ops>  m_explicit_imex;

@@ -289,7 +289,47 @@ FluxSurface::averageAndSpread( const LevelData<FArrayBox>& a_src,
 
 }
 
+void
+FluxSurface::integrateAndSpread(const LevelData<FArrayBox>& a_src,
+                                LevelData<FArrayBox>&       a_dst ) const
+{
+   LevelData<FArrayBox> flux_aver_tmp(m_grids, a_src.nComp(), a_src.ghostVect());
+   integrate(a_src, flux_aver_tmp);
+   spread(flux_aver_tmp, a_dst);
 
+   if (m_single_null) {
+
+     int ncomp = a_src.nComp();
+     CH_assert(a_src.nComp() == a_dst.nComp());
+
+     LevelData<FArrayBox> src_tmp(a_src.disjointBoxLayout(),ncomp, a_src.ghostVect());
+     LevelData<FArrayBox> dst_tmp(a_dst.disjointBoxLayout(),ncomp, a_dst.ghostVect());
+     LevelData<FArrayBox> flux_aver_tmp(m_grids, ncomp, a_src.ghostVect());
+
+     DataIterator dit = a_dst.dataIterator();
+
+     //Perform the integrate-and-spreading in the core region
+     zeroBlockData(PF, a_src, src_tmp);
+     integrate(src_tmp, flux_aver_tmp);
+     spread(flux_aver_tmp, dst_tmp);
+     zeroBlockData(PF, dst_tmp, src_tmp);
+     //Add flux-surface averages from the core region
+     for (dit.begin(); dit.ok(); ++dit) {
+         a_dst[dit].copy(src_tmp[dit]);
+     }
+
+     //Perform the integrate-and-spreading in the private flux region
+     zeroBlockData(CORE, a_src, src_tmp);
+     integrate(src_tmp, flux_aver_tmp);
+     spread(flux_aver_tmp, dst_tmp);
+     zeroBlockData(SOL, dst_tmp, src_tmp);
+     zeroBlockData(CORE, src_tmp, dst_tmp);
+     //Add flux-surface averages from the prvate-flux region
+     for (dit.begin(); dit.ok(); ++dit) {
+         a_dst[dit].plus(dst_tmp[dit]);
+     }
+   }
+}
 
 void
 FluxSurface::add( const LevelData<FArrayBox>& a_flux_surface_data,
@@ -371,20 +411,20 @@ FluxSurface::zeroBlockData( const int                   region_type,
      switch (region_type) 
       { 
       case CORE:
-	if ( ((const SingleNullCoordSys&)coord_sys).isCORE(block_number) ) {
-	  a_dst[dit].setVal(0.0);
-	}
-        break;
+         if ( ((const SingleNullCoordSys&)coord_sys).isCORE(block_number) ) {
+            a_dst[dit].setVal(0.0);
+         }
+      break;
       case PF:
-	if ( ((const SingleNullCoordSys&)coord_sys).isPF(block_number) ) {
-          a_dst[dit].setVal(0.0);
-        }
-	break;    
+         if ( ((const SingleNullCoordSys&)coord_sys).isPF(block_number) ) {
+            a_dst[dit].setVal(0.0);
+         }
+      break;
       case SOL:
-	if ( ((const SingleNullCoordSys&)coord_sys).isSOL(block_number) ) {
-          a_dst[dit].setVal(0.0);
-        }
-        break;    
+         if ( ((const SingleNullCoordSys&)coord_sys).isSOL(block_number) ) {
+            a_dst[dit].setVal(0.0);
+         }
+      break;
       default:
          MayDay::Error("FluxSurface::zeroBlockData(): Invalid region_type encountered");
       }

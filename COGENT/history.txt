@@ -1,4 +1,208 @@
 ------------------------------------------------------------------------
+r1766 | debo | 2021-07-14 11:45:48 -0700 (Wed, 14 Jul 2021) | 1 line
+
+Small corrections to the external time integrator interfaces
+------------------------------------------------------------------------
+r1765 | jchristopher | 2021-07-13 15:11:44 -0700 (Tue, 13 Jul 2021) | 1 line
+
+Initial construction of analytic preconditioner. It currently solves the existing preconditioner but now as a 2x2 block matrix instead of two 1x1 matrices. Adds a new inputs file parameter 'fluid_model.neutrals.use_analytic_pc' that can be set to true to enable the analytic preconditioner or set to false to use the existing preconditioner. The default is false (using the existing preconditioner).
+------------------------------------------------------------------------
+r1764 | mdorf | 2021-07-06 20:18:00 -0700 (Tue, 06 Jul 2021) | 1 line
+
+Removed cashing of face-coordinates (introduced in r1763) to save memory; also small revisions in energy-conservation diagnostics
+------------------------------------------------------------------------
+r1763 | mdorf | 2021-07-03 11:16:18 -0700 (Sat, 03 Jul 2021) | 1 line
+
+Improved some diagnostics capabilities; added 1/B option to mu normalization
+------------------------------------------------------------------------
+r1762 | debo | 2021-07-01 19:46:21 -0700 (Thu, 01 Jul 2021) | 1 line
+
+SUNDIALS interface: fixed the solution time written to plot files
+------------------------------------------------------------------------
+r1761 | debo | 2021-07-01 17:19:09 -0700 (Thu, 01 Jul 2021) | 1 line
+
+added a README that describes how to run COGENT with SUNDIALS and PETSc, added reporting of step norm and wall time
+------------------------------------------------------------------------
+r1760 | debo | 2021-07-01 11:06:31 -0700 (Thu, 01 Jul 2021) | 1 line
+
+added the option to use SUNDIALS' adaptive timestepping and a small bugfix
+------------------------------------------------------------------------
+r1759 | debo | 2021-06-29 21:36:34 -0700 (Tue, 29 Jun 2021) | 1 line
+
+Implemented the SUNDIALS interface: it can be used to simulate cases without the vorticity model; has no preOpEval-based optimizations; seems to be working well for explicit and IMEX simulations; will get compiled and included automatically if SUNDIALS is available and SUNDIALS_DIR is set as an environment var pointing to the SUNDIALS installation dir; add "ti_implementation = sundials" in input file to use this; can use ARKODE's own methods as well as the ARK/RK methods implemented in COGENT
+------------------------------------------------------------------------
+r1758 | mdorr | 2021-06-27 12:19:10 -0700 (Sun, 27 Jun 2021) | 4 lines
+
+Adding support for constructing Hypre matrices using stencils with extrapolated boundary conditions (needed by the electron vorticity preconditioner with the polarization density correction).
+
+
+
+------------------------------------------------------------------------
+r1757 | debo | 2021-06-25 14:55:03 -0700 (Fri, 25 Jun 2021) | 1 line
+
+added Makefile screen output on whether compiling with PETSc or not.
+------------------------------------------------------------------------
+r1756 | debo | 2021-06-24 18:57:37 -0700 (Thu, 24 Jun 2021) | 1 line
+
+Some further streamlining of the high-level time integration and simulation interfaces; resuscitated the PETSc interface - it now works for cases without vorticity model and without the preOpEval optimizations, and it uses the native multiphysics preconditioner; compilation with PETSc is now very easy - if PETSc exists and PETSC_DIR is defined in the environment, COGENT will automatically compile with the PETSc interface
+------------------------------------------------------------------------
+r1755 | debo | 2021-06-24 17:15:14 -0700 (Thu, 24 Jun 2021) | 1 line
+
+Removed a bunch of compile warnings (unused vars and reorders)
+------------------------------------------------------------------------
+r1754 | mdorf | 2021-06-20 19:59:42 -0700 (Sun, 20 Jun 2021) | 1 line
+
+Refined full energy density and kinetic energy density diagnostics; added energy conservation check
+------------------------------------------------------------------------
+r1753 | mdorf | 2021-06-18 14:58:51 -0700 (Fri, 18 Jun 2021) | 1 line
+
+Fixed out-of-bound Fortran debug-type error
+------------------------------------------------------------------------
+r1752 | mdorf | 2021-06-17 11:30:06 -0700 (Thu, 17 Jun 2021) | 1 line
+
+Updated GKVorticity model to compute self-consistent conductivity; extended calculation of flux function to larger radii for toroidal annulus case
+------------------------------------------------------------------------
+r1751 | debo | 2021-06-14 19:41:25 -0700 (Mon, 14 Jun 2021) | 1 line
+
+Moved time integrators from GKSystem to the main driver level; GKSystem is now the interface between native and external time integrators and COGENT physics; some changes in class names - Simulation is now COGENTTimeIntegration, GKVector is now ODEVector; inheriting GKSystem from a purely virtual class called AppCtxt so that low-level code (eg, fluid ops) don't need to include GKSystem.H for preconditioner functions
+------------------------------------------------------------------------
+r1750 | mdorf | 2021-06-10 19:05:34 -0700 (Thu, 10 Jun 2021) | 1 line
+
+Added an option for an explicit update of consistent BCs while using implicit Vlasov
+------------------------------------------------------------------------
+r1749 | mdorf | 2021-06-07 14:16:23 -0700 (Mon, 07 Jun 2021) | 1 line
+
+Fixed a bug in prescribed sources (showed up for local velocity normalization); added Krook relaxation option
+------------------------------------------------------------------------
+r1748 | mdorr | 2021-06-03 00:21:13 -0700 (Thu, 03 Jun 2021) | 3 lines
+
+Fixing some memory leaks
+
+
+------------------------------------------------------------------------
+r1747 | debo | 2021-05-28 16:58:47 -0700 (Fri, 28 May 2021) | 1 line
+
+Cleaned up the preconditioner interface - multiphysicsPC is the only PC at the higher level including single-implicit-term cases, streamlined initializing preconditioners and the logic behind skipping their updates at time steps and stages, simplified the setting up of Fokker-Planck and Vlasov preconditioners
+------------------------------------------------------------------------
+r1746 | mdorr | 2021-05-25 12:21:10 -0700 (Tue, 25 May 2021) | 4 lines
+
+Removing accidentally commited diagnostic.
+
+
+
+------------------------------------------------------------------------
+r1745 | mdorr | 2021-05-25 12:03:03 -0700 (Tue, 25 May 2021) | 3 lines
+
+Exposing an MGR solver option specifying the method to be used for the A_ff solve.  Also changed the AMG A_FF solver default max iterations to 2.
+
+
+------------------------------------------------------------------------
+r1744 | mdorf | 2021-05-18 21:09:51 -0700 (Tue, 18 May 2021) | 1 line
+
+Added flux-integrated diagnostics; removed double evaluation of executeInernalExchanges for mixedBoundariesCase (which is current 2nd order)
+------------------------------------------------------------------------
+r1743 | mdorf | 2021-05-17 21:58:53 -0700 (Mon, 17 May 2021) | 1 line
+
+Cleaned-up some utilities used for diagnostics and initialization
+------------------------------------------------------------------------
+r1742 | mdorf | 2021-05-16 09:59:27 -0700 (Sun, 16 May 2021) | 1 line
+
+Cleaned-up debugging code from Anomalous.cpp
+------------------------------------------------------------------------
+r1741 | mdorf | 2021-05-16 09:56:01 -0700 (Sun, 16 May 2021) | 1 line
+
+Extended to 5D and cleaned up anomalous transport model; fix a bug in a prescribed sources model
+------------------------------------------------------------------------
+r1740 | mdorr | 2021-05-15 14:03:49 -0700 (Sat, 15 May 2021) | 3 lines
+
+Adding FillCorners to PhaseGeom::fillInternalGhosts() and fixing codim loop index.  Moving exchange in MagGeom to be consistent with PhaseGeom analog.
+
+
+------------------------------------------------------------------------
+r1739 | debo | 2021-05-08 16:23:15 -0700 (Sat, 08 May 2021) | 1 line
+
+small bugfix to stage-skipping logic while lagging Vlasov preconditioner
+------------------------------------------------------------------------
+r1738 | debo | 2021-05-07 18:12:06 -0700 (Fri, 07 May 2021) | 1 line
+
+Passing time step and stage number to preconditioner update functions to allow for lagging; Implemented preconditioner update lagging for implicit Vlasov; two tiny fixes/cleanups - removed m_shift from ExplicitStageFunction and fixed a GMRES screen op thing
+------------------------------------------------------------------------
+r1737 | mdorr | 2021-05-07 14:00:45 -0700 (Fri, 07 May 2021) | 3 lines
+
+Exposing more MGR solver parameters to input
+
+
+------------------------------------------------------------------------
+r1736 | mdorr | 2021-05-06 16:43:20 -0700 (Thu, 06 May 2021) | 7 lines
+
+Added MGR solver frelax_amg_threshold parameter to specify the strong threshold coarsening parameter when using AMG to solve the fine grid (A_FF) block.
+
+Changed MGR to use a prescribed A_FF block AMG smoother rather than the built in (and possibly broken) single V-cycle default
+
+Added input option to enable/disable GKVorticity block preconditioner symmetrization (defaulted true)
+
+
+------------------------------------------------------------------------
+r1735 | angus1 | 2021-05-03 08:27:12 -0700 (Mon, 03 May 2021) | 1 line
+
+new OneBlockCoordSys, major refactoring to fluid BCs, extendedMhdOp works for non-orthogonal coords
+------------------------------------------------------------------------
+r1734 | mdorf | 2021-04-27 13:40:55 -0700 (Tue, 27 Apr 2021) | 1 line
+
+Added heat sources; also did some performance optimization of ConsDragDiff collision model
+------------------------------------------------------------------------
+r1733 | mdorf | 2021-04-20 20:16:31 -0700 (Tue, 20 Apr 2021) | 1 line
+
+Fixed bugs in the 5D implementation of the ConsDragDiff collision model
+------------------------------------------------------------------------
+r1732 | mdorf | 2021-04-19 12:18:51 -0700 (Mon, 19 Apr 2021) | 1 line
+
+Removed run-terminating diagnostics that were left in r1730
+------------------------------------------------------------------------
+r1731 | mdorf | 2021-04-17 17:16:30 -0700 (Sat, 17 Apr 2021) | 1 line
+
+Updated anomalous.in test case to be consistent with r1730
+------------------------------------------------------------------------
+r1730 | mdorf | 2021-04-17 17:14:19 -0700 (Sat, 17 Apr 2021) | 1 line
+
+Extended ConsDragDiff model to work in 5D and with local velocity normalization; revised ExBdata diagnostics; revised LocalizedKineticFunction to work with local velocity normalization
+------------------------------------------------------------------------
+r1729 | ricketson1 | 2021-04-15 15:01:04 -0700 (Thu, 15 Apr 2021) | 1 line
+
+Initial condition functions now have options to use classical stencils or new sparse grids stencils when computing cell averages
+------------------------------------------------------------------------
+r1728 | mdorf | 2021-04-13 12:04:04 -0700 (Tue, 13 Apr 2021) | 1 line
+
+Extended velocity normalization to support 5D multiblock
+------------------------------------------------------------------------
+r1727 | ricketson1 | 2021-04-12 11:32:19 -0700 (Mon, 12 Apr 2021) | 1 line
+
+Fixing bug that had sparse grid stencils turned on by default in LocalizedKineticFunction... now turned off by default
+------------------------------------------------------------------------
+r1726 | angus1 | 2021-04-08 10:37:14 -0700 (Thu, 08 Apr 2021) | 1 line
+
+fixed some box issues in fortran calls from MhdOps
+------------------------------------------------------------------------
+r1725 | debo | 2021-04-02 18:17:24 -0700 (Fri, 02 Apr 2021) | 1 line
+
+Optimized the calculation of the Poisson LHS when including FLR effects
+------------------------------------------------------------------------
+r1724 | debo | 2021-04-01 18:45:36 -0700 (Thu, 01 Apr 2021) | 1 line
+
+Implemented the FLR switching in the Vlasov E-Field calculation
+------------------------------------------------------------------------
+r1723 | mdorf | 2021-03-20 13:18:00 -0700 (Sat, 20 Mar 2021) | 1 line
+
+Merged some of the local velocity normalization code from the norm branch into the trunk to support collisionless simulations
+------------------------------------------------------------------------
+r1722 | debo | 2021-03-19 16:32:21 -0700 (Fri, 19 Mar 2021) | 1 line
+
+small bugfix in gyroradius calculation: use absolute value of charge because electrons exist
+------------------------------------------------------------------------
+r1720 | mdorf | 2021-03-18 11:18:52 -0700 (Thu, 18 Mar 2021) | 1 line
+
+Updated EllipticOpBC classes to support recycling BCs for the two-field neutral model
+------------------------------------------------------------------------
 r1719 | debo | 2021-03-17 18:36:54 -0700 (Wed, 17 Mar 2021) | 1 line
 
 1) Implemented handling of multiple species by FLR-Poisson where all the species may not include FLR effects; 2) Implemented a switch function that allows gradual switching from FLR to long-wavelength-limit near the boundaries (or anywhere else) - this function can be specified through the grid function library; 3) Calculation of gyroaveraged E-Field uses full-sized phase space objects since using optimized computeGradient for flat phase space objects still has a bug

@@ -2,7 +2,7 @@
 #define _ExplicitStageJacobian_H_
 
 #include "PreconditionerLibrary.H"
-#include "Checkpoints.H"
+#include "TiDefinitions.H"
 
 #include "NamespaceHeader.H"
 
@@ -33,9 +33,14 @@ class ExplicitStageJacobian: public LinearFunction<T,Ops>
       return;
     }
 
-    inline void updatePreCondMat(const T& a_X)
+    inline void updatePreCondMat( const T&  a_X, 
+                                  int       a_step,
+                                  int       a_stage )
     {
-      if (m_usePreCond) m_preCond->update(a_X, m_stage_time);
+      if (m_usePreCond) m_preCond->update(  a_X, 
+                                            m_stage_time, 
+                                            a_step, 
+                                            a_stage );
       return;
     }
 
@@ -108,7 +113,7 @@ class ExplicitStageJacobian: public LinearFunction<T,Ops>
     Preconditioner<T,Ops> *m_preCond;
 
     Ops *m_ops;
-    std::string m_optPrefix, m_outPrefix, m_pc_type;
+    std::string m_optPrefix, m_outPrefix;
     
     void parseParameters( ParmParse& );
 };
@@ -128,7 +133,6 @@ void ExplicitStageJacobian<T,Ops>::define(  const T&            a_state,
   /* default values */
   m_epsJFNK = 1e-6;
   m_usePreCond = true;
-  m_pc_type = _MULTIPHYSICS_PC_;
 
   m_outPrefix = a_outPrefix;
   m_optPrefix = a_optPrefix;
@@ -138,27 +142,10 @@ void ExplicitStageJacobian<T,Ops>::define(  const T&            a_state,
 
   m_preCond = NULL;
   if (m_usePreCond) {
-
-     std::string pc_outPrefix = a_outPrefix + ".PC";
-     std::string pc_optPrefix = a_optPrefix + "_pc";
-
-     ParmParse pp_pc(pc_optPrefix.c_str());
-     pp_pc.query("type", m_pc_type);
-
-    if (m_pc_type == _BASIC_GK_PC_) {
-      m_preCond = new BasicGKPreconditioner<T,Ops>;
-    } else if (m_pc_type == _GK_VLASOV_PC_) {
-      m_preCond = new GKVlasovPreconditioner<T,Ops>;
-    } else if (m_pc_type == _MULTIPHYSICS_PC_) {
-      m_preCond = new MultiPhysicsPreconditioner<T,Ops>;
-    } else {
-      std::cout << "Error in ExplicitStageJacobian::define() - "
-                << m_pc_type << " "
-                << "is not a valid type of preconditioner.\n";
-      m_preCond = NULL;
-    }
-    CH_assert(m_preCond != NULL);
-    m_preCond->define(a_state, a_ops, pc_outPrefix, pc_optPrefix, false);
+    std::string pc_outPrefix = a_outPrefix + ".PC";
+    std::string pc_optPrefix = a_optPrefix + "_pc";
+    m_preCond = new MultiPhysicsPreconditioner<T,Ops>;
+    m_preCond->define(a_state, (void*) &a_ops, pc_outPrefix, pc_optPrefix, false);
   }
 
   m_is_Defined = true;

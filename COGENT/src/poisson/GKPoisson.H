@@ -3,11 +3,7 @@
 
 #include "EllipticOp.H"
 #include "MultiBlockLevelExchangeAverage.H"
-#ifdef with_petsc
-#include "MBPETScSolver.H"
-#else
 #include "MBHypreSolver.H"
-#endif
 
 #include "MagFluxAlignedMBLEXCenter.H"
 
@@ -80,15 +76,9 @@ public:
     */
    virtual ~GKPoisson();
 
-#ifdef with_petsc
-   virtual MBPETScSolver* allocatePreconditioner( const MagGeom&                  geom,
-                                                  const int                       discretization_order,
-                                                  MultiBlockLevelExchangeCenter*  mblx_ptr );
-#else
    virtual MBHypreSolver* allocatePreconditioner( const MagGeom&                  geom,
                                                   const int                       discretization_order,
                                                   MultiBlockLevelExchangeCenter*  mblx_ptr );
-#endif
 
    virtual void updateBoundaries( const EllipticOpBC&  bc );
 
@@ -181,12 +171,7 @@ protected:
    void computeParallelConductivity(const LevelData<FluxBox>& Te,
                                     LevelData<FluxBox>&       parallel_conductivity ) const;
    
-
-#ifdef with_petsc
-   MBPETScSolver* m_preconditioner;
-#else
    MBHypreSolver* m_preconditioner;
-#endif
 
    Real m_larmor_number2;
 

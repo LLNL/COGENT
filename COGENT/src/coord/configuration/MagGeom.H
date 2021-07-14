@@ -97,6 +97,11 @@ public:
    void getPointwisePoloidalJ( LevelData<FArrayBox>& a_data ) const;
 
    void getPointwiseN( LevelData<FluxBox>& N ) const;
+   
+   void getPointwiseNJInverse( LevelData<EdgeDataBox>& NJinverse ) const;
+   
+   void setPointwiseNJInverseOnEdges( const DisjointBoxLayout&, 
+                                      const IntVect&           ) const;
 
    void getPointwiseNJInverse( LevelData<FluxBox>& NJinverse ) const;
    
@@ -130,9 +135,6 @@ public:
    
    void divideJonEdges( LevelData<EdgeDataBox>& dfn ) const;
 
-   void applyOnAxisCurlCorrection( LevelData<EdgeDataBox>& a_Curl,
-                             const LevelData<FArrayBox>&   a_val) const;
-
    void multPointwiseJ( LevelData<FArrayBox>& dfn,
                         const BoundaryBoxLayout& bdry_layout ) const;
    
@@ -159,9 +161,6 @@ public:
    void mappedGridDivergenceFromFluxNorms( const LevelData<FluxBox>&    F,
                                                  LevelData<FArrayBox>&  divergence) const;
 
-   void mappedGridDivergenceFromFluxNorms( const FluxBox&    F,
-                                                 FArrayBox&  divergence ) const;
-   
    void physicalDivergenceFromEdgeTans( LevelData<NodeFArrayBox>&  divF, 
                                   const LevelData<EdgeDataBox>&    covar_F ) const;
 
@@ -178,6 +177,9 @@ public:
    void mappedGridCurlFromEdgeTans( const LevelData<EdgeDataBox>&  E,
                                     const int                      face_dir,
                                           LevelData<FArrayBox>&    face_curl) const;
+   
+   void mappedCovarCurlofVirtComp( LevelData<EdgeDataBox>&  a_JaCurlF_covar,
+                             const LevelData<FluxBox>&      a_gradF_covar) const;
    
    void mappedGridCurlofVirtComp( LevelData<EdgeDataBox>&  edge_curl, 
                             const LevelData<FArrayBox>&    F ) const;
@@ -210,28 +212,8 @@ public:
    void convertContravarToCovar( LevelData<FluxBox>&  a_F,
                            const int                  a_inverse ) const;
    
-   void convertContravarToCovar( FluxBox&    a_F,
-                           const DataIndex&  a_dit,
-                           const int         a_inverse ) const;
-   
    void computeJaStrainTensorPhys( LevelData<FluxBox>&    a_JaW_phys, 
                              const LevelData<FArrayBox>&  a_velocity_phys ) const;
-   
-   // Project the vector from phys directions to unit normal
-   // coord sys with 0-component normal to the a_dir direction 
-   // (or inverse)
-   //
-   void projectOntoFluxSurfaceDir( FArrayBox&  a_data,
-                             const DataIndex&  a_dit,
-                             const int         a_dir,
-                             const int         a_inverse ) const;
-
-   void multJ( FArrayBox&  a_data,
-         const DataIndex&  a_dit ) const;
-   
-   void divideJ( FArrayBox&  a_data,
-           const DataIndex&  a_dit ) const;
-
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
    void exchangeTransverseAtBlockBoundaries(LevelData<FluxBox>& data) const;
@@ -249,10 +231,20 @@ public:
    void getMagneticFlux(LevelData<FluxBox>& psi) const;
    
    const LevelData<FArrayBox>& getCellCenteredRealCoords() const {return m_cell_centered_real_coords;}
+   
+   const LevelData<FArrayBox>& getCellCenteredJacobian() const {return m_J;}
+
+   const LevelData<FArrayBox>& getCellCentereddXdxi() const {return m_dXdxi;}
+
+   const LevelData<FArrayBox>& getCellCentereddxidX() const {return m_NJinverse_cell_centered;}
 
    const LevelData<FluxBox>& getFaceCenteredRealCoords() const {return m_face_centered_real_coords;}
-   
+
+   const LevelData<FluxBox>& getFaceCentereddXdxi() const {return m_dXdxi_onFaces;}
+
    const LevelData<EdgeDataBox>& getEdgeCenteredRealCoords() const {return m_edge_centered_real_coords;}
+
+   const LevelData<EdgeDataBox>& getEdgeCentereddXdxi() const {return m_dXdxi_onEdges;}
 
    const LevelData<FArrayBox>& getNormalizedMagneticFluxCell() const {return m_normalized_magnetic_flux_cell;}
 
@@ -458,6 +450,11 @@ public:
    void computeMappedGradient( const LevelData<FArrayBox>&  phi,
                                      LevelData<FluxBox>&    field,
                                const int                    order ) const;
+  
+  
+   double volumeIntegrate( const LevelData<FArrayBox>& data ) const;
+ 
+   double volumeAverage( const LevelData<FArrayBox>& data ) const;
 
    bool shearedMBGeom() const {return m_sheared_mb_geom;}
   
@@ -466,6 +463,8 @@ public:
    bool secondOrder() const {return m_second_order;}
 
    bool mixedBoundaries() const;
+
+   bool useSG() const {return m_useSG;}
    
 #if CFG_DIM == 3
 
@@ -484,10 +483,11 @@ public:
          return m_coord_sys->getBoundaryBoxes(block_number, dir, side);
       }
 
-   bool providesFlux() const {return m_coord_sys->providesFlux();}
-   
    void multiplyMatrix(LevelData<FluxBox>&       a_data,
                        const LevelData<FluxBox>& a_mat) const;
+  
+   void convertCellToFace(LevelData<FluxBox>&         face_data,
+                          const LevelData<FArrayBox>& cell_data) const;
    
 private:
 
@@ -591,6 +591,7 @@ private:
    mutable LevelData<FluxBox> m_metrics;
    mutable LevelData<FluxBox> m_N_face_centered;
    mutable LevelData<FluxBox> m_NJinverse_face_centered;
+   mutable LevelData<EdgeDataBox> m_NJinverse_edge_centered;
    mutable LevelData<FArrayBox> m_NJinverse_cell_centered;
    mutable LevelData<FArrayBox> m_poloidal_J;
 
@@ -637,6 +638,7 @@ private:
    bool m_dealignment_corrections;
    bool m_model_flux_function; 
    bool m_second_order;
+   bool m_useSG; // whether to use sparse grid-friendly stencils
    
    //Copier m_exchangeCopier2nd;
 

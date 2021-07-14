@@ -18,6 +18,7 @@ public:
    virtual ~CoDim2Stencil() {};
    
    virtual void define( const Box&            box,
+                        const int             value_type,
                         const RealVect&       dx,
                         const int&            dir,
                         const Side::LoHiSide& side,
@@ -47,6 +48,7 @@ private:
    bool               m_transverse_boundary;
    Box                m_box;
    RealVect           m_dx;
+   int                m_value_type;
    bool               m_defined;
 };
 

@@ -48,10 +48,10 @@ public:
    * @param[in] species index of species to which tranpsport is applied.
    * @param[in] time current time.
    */
-  void evalTpmRHS( KineticSpecies&              rhs_species,
-                           const KineticSpeciesPtrVect& soln,
-                           const int                    species,
-                           const Real                   time );
+  void evalTpmRHS(KineticSpecies&              rhs_species,
+                  const KineticSpeciesPtrVect& soln,
+                  const int                    species,
+                  const Real                   time );
 
   /// Compute a stable time step.
   /**
@@ -79,6 +79,7 @@ private:
   bool m_first_call;
   bool m_first_stage;
   bool m_arbitrary_grid;
+  bool m_flux_aligned_grid;
   bool m_simple_diffusion;
   int m_update_freq;
   int m_it_counter;
@@ -94,6 +95,7 @@ private:
   LevelData<FluxBox> m_lame_faces, m_inj_bunit, m_inj_pointwiseNJinv;
   LevelData<FluxBox> m_D_kinet_faces;
   LevelData<FluxBox> m_flux, m_fluxNorm;
+  LevelData<FluxBox> m_inj_coords_fc;
 
   LevelData<FArrayBox> m_density, m_density_beta;
   LevelData<FArrayBox> m_Upar, m_Upar_beta;
@@ -118,44 +120,69 @@ private:
    * Private method to print parameters.
    */
   void printParameters(const KineticSpecies& soln_species);
+  
+  
+  void computeRhsOrthogonalGrid(LevelData<FArrayBox>&  rhs,
+                                const PhaseGeom&       phase_geom,
+                                const double           mass);
 
+  
+  void computeRhsArbtryGrid(LevelData<FArrayBox>&  rhs,
+                            const PhaseGeom&       phase_geom,
+                            const double           mass);
+
+  void computeRhs3D(LevelData<FArrayBox>&  rhs,
+                    const PhaseGeom&       phase_geom);
+
+  void initializeData(const PhaseGeom&       phase_geom,
+                      const Real             time);
+  
+
+  void computeDfDmu(LevelData<FArrayBox>&        dfBdmu_cc,
+                    const LevelData<FArrayBox>&  soln_fB,
+                    const PhaseGeom&             phase_geom);
+  
+  
+  void computeCfgMoments(const LevelData<FArrayBox>& fB,
+                         const KineticSpecies&       soln_species);
+  
   /**
    * Private method to get lame coefficients on cell faces.
    */
-  void getFaceCenteredLameCoefficients( LevelData<FluxBox>&      a_lame_faces,
-                                        const PhaseGeom&         a_phase_geom,
-                                        const DisjointBoxLayout& a_dbl);
+  void getFaceCenteredLameCoefficients( LevelData<FluxBox>&      lame_faces,
+                                        const PhaseGeom&         phase_geom,
+                                        const DisjointBoxLayout& dbl);
 
   /**
    * Private method to get lame coefficients on cell centers.
    */
-  void getCellCenteredLameCoefficients( FArrayBox&             a_lame_cells,
-                                        const PhaseGeom&       a_phase_geom,
-                                        const Box&             a_dbl);
+  void getCellCenteredLameCoefficients( FArrayBox&             lame_cells,
+                                        const PhaseGeom&       phase_geom,
+                                        const Box&             dbl);
 
 
   /**
    * Private method for setting the spatial dependence of the transport coefficients
    */
-  void setTransportCoeffSpatialDependence( CFG::LevelData<CFG::FArrayBox>&   a_D_kinet_cfg,
-                                           const CFG::MagGeom&             a_mag_geom,
-                                           const Real                      a_time );
+  void setTransportCoeffSpatialDependence( CFG::LevelData<CFG::FArrayBox>&  D_kinet_cfg,
+                                           const CFG::MagGeom&              mag_geom,
+                                           const Real                       time );
 
   
   /// Compute the preconditioner coeffficient for the implicit solver
-  void computePrecondCoefficient( CFG::LevelData<CFG::FluxBox>&            a_D,
-                                  const CFG::MagGeom&                      a_phase_geom,
-                                  const CFG::LevelData<CFG::FluxBox>&      a_D_faces );
+  void computePrecondCoefficient( CFG::LevelData<CFG::FluxBox>&            D,
+                                  const CFG::MagGeom&                      phase_geom,
+                                  const CFG::LevelData<CFG::FluxBox>&      D_faces );
  
    /// Compute cell-centered beta = U_psi^2/D_psi
    void computeBeta(LevelData<FArrayBox>& beta,
                     const KineticSpecies& soln_species );
    
    /// Pre time step calculation
-   inline void preTimeStep  ( const KineticSpeciesPtrVect& soln_mapped,
-                              const int species,
-                              const Real time,
-                              const KineticSpeciesPtrVect& soln_physical);
+   inline void preTimeStep(const KineticSpeciesPtrVect& soln_mapped,
+                           const int species,
+                           const Real time,
+                           const KineticSpeciesPtrVect& soln_physical);
 
    
 };

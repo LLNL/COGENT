@@ -440,34 +440,6 @@ c     local variables
 
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
    
-      subroutine on_axis_curl_correction(
-     &     CHF_BOX[box],
-     &     CHF_CONST_REAL[dX],
-     &     CHF_CONST_FRA1[Xphys],
-     &     CHF_CONST_FRA1[B],
-     &     CHF_FRA1[curlB])
-c     local variables
-      integer CHF_DDECL[i;j;k]
-
-      CHF_MULTIDO[box;i;j;k]
-     
-         if(Xphys(CHF_IX[i;j;k])==0.0) then
-            curlB(CHF_IX[i;j;k]) = 4.0*B(CHF_IX[i;j;k])/dX;
-c            print*, "dX = ", dX 
-c            print*, "i = ", i 
-c            print*, "j = ", j 
-         endif
-
-c            print*, "shape(B) = ", shape(B)
-c            print*, "Xphys(i,j)   = ", Xphys(CHF_IX[i;j;k])
-c            print*, "B(i,j)   = ", B(CHF_IX[i;j;k])
-
-      CHF_ENDDO
-
-      return
-      end
-      
-
       subroutine phys_to_covar(
      &     CHF_BOX[box],
      &     CHF_CONST_FRA[dXdxi],
@@ -612,7 +584,53 @@ c            print*, "B(i,j)   = ", B(CHF_IX[i;j;k])
 
       return
       end
+
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine covar_curl_from_grad(
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[dir],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_CONST_FRA[gradF],
+     &     CHF_FRA1[curlF])
       
+      integer CHF_DDECL[i;j;k], l0, l1, l2 
+      double precision e11, e12, e21, e22
+      double precision g11, g12, g21, g22
+      double precision gradF0, gradF1, curlF0, curlF1      
+
+      CHF_MULTIDO[box;i;j;k]
+      
+c   compute metric terms
+         e11 = dXdxi(CHF_IX[i;j;k],0)
+         e12 = dXdxi(CHF_IX[i;j;k],1)
+         e21 = dXdxi(CHF_IX[i;j;k],2)
+         e22 = dXdxi(CHF_IX[i;j;k],3)
+  
+         g11 = e11*e11 + e12*e12
+         g12 = e11*e21 + e12*e22
+         g21 = g12
+         g22 = e21*e21 + e22*e22
+
+c   compute contravariant curl of virtual F
+         gradF0 = gradF(CHF_IX[i;j;k],0)
+         gradF1 = gradF(CHF_IX[i;j;k],1)
+         curlF0 = -gradF1
+         curlF1 = gradF0
+
+c   convert contravariant to covariant
+         if(dir==0) then
+            curlF(CHF_IX[i;j;k]) = g11*curlF0 + g12*curlF1
+         else
+            curlF(CHF_IX[i;j;k]) = g21*curlF0 + g22*curlF1
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+      
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       subroutine contra_to_covar(
      &     CHF_BOX[box],
@@ -648,9 +666,6 @@ c            print*, "B(i,j)   = ", B(CHF_IX[i;j;k])
 
          endif
         
-c        print*, "CHF_IX[i;j;k]  = ", CHF_IX[i;j;k]
-c        print*, "glsq  = ", glsq
-
          if (inverse==0) then
             F(CHF_IX[i;j;k]) = F(CHF_IX[i;j;k])*glsq
          else

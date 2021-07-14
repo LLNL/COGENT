@@ -7,6 +7,13 @@
 #include "ParmParse.H"
 #include <sstream>
 
+#undef CH_SPACEDIM
+#define CH_SPACEDIM CFG_DIM
+#include "GridFunction.H"
+#include "GridFunctionLibrary.H"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM PDIM
+
 #include "NamespaceHeader.H"
 
 class MomentOp;
@@ -75,16 +82,30 @@ public:
 
 private:
 
-  Real cls_freq;
-  bool cls_only;
-  string species_name;
+  bool m_cls_only;
+  string m_species_name;
   MomentOp& moment_op;
-  bool m_first_step;
+  bool m_first_call;
+  bool m_first_stage;
+  int m_it_counter;
+  int m_update_freq;
   bool m_time_implicit;
+  bool m_diagnostics;
 
-  int verbosity;
-  ParmParse ppcls;
+  int m_verbosity;
+  ParmParse m_ppcls;
+  
+  void computeSelfConsistFreq(LevelData<FArrayBox>&       cls_freq,
+                              const LevelData<FArrayBox>& density,
+                              const LevelData<FArrayBox>& temperature,
+                              const double                mass,
+                              const double                charge      ) const;
 
+  inline void preTimeStep  ( const KineticSpeciesPtrVect& soln_mapped,
+                             const int species,
+                             const Real time,
+                             const KineticSpeciesPtrVect& soln_physical);
+  
   /// Parse parameters.
   /**
    * Private method to obtain control parameters from "CLS.species" section
@@ -92,14 +113,26 @@ private:
    *
    * \param[in] ppcls CLS.species input database.
    */
-  void ParseParameters();
+  void ParseParameters(const ParmParse& a_pp);
 
   /// Print parameters.
   /**
    * Private method to print parameters.
    */
   void printParameters( const KineticSpeciesPtrVect&  soln );
-
+  
+  
+  void diagnostics(const LevelData<FArrayBox>& rhs,
+                   const KineticSpecies&       rhs_species,
+                   const double                time) const;
+  
+  RefCountedPtr<CFG::GridFunction> m_cls_freq_func;
+  LevelData<FArrayBox> m_cls_freq;
+  LevelData<FArrayBox> m_fBJ_vel_ghost;
+  
+  CFG::LevelData<CFG::FArrayBox> m_dens;
+  CFG::LevelData<CFG::FArrayBox> m_ushift;
+  
 };
 
 

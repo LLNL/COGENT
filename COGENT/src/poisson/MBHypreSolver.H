@@ -212,10 +212,19 @@ public:
    // MGR parameters
    HYPRE_Solver m_par_MGR_solver;
    bool m_MGR_solver_allocated;
+   HYPRE_Solver m_MGR_aff_solver;
+   bool m_MGR_aff_solver_allocated;
    int m_MGR_print_level;
    int m_MGR_amg_print_level;
    int m_MGR_cpoint;
    int m_MGR_amg_max_iter;
+   double m_MGR_frelax_amg_threshold;
+   int m_MGR_frelax_method;
+   int m_MGR_interp_type;
+   int m_MGR_restrict_type;
+   int m_MGR_relax_type;
+   int m_MGR_aff_amg_max_iter;
+   double m_MGR_aff_amg_tol;
 
    HYPRE_Int* m_mgr_num_cindexes;
    HYPRE_Int** m_mgr_cindexes;

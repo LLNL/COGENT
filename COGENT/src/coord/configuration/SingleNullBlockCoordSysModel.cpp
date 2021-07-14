@@ -138,7 +138,7 @@ SingleNullBlockCoordSysModel::init( ParmParse& a_pp )
    else if (interp_method == "spline") {
       m_RZ_interp = new POL::SplineInterp(a_pp, interp_node_coords, RZ_data);
    }
- 
+   m_provides_flux = true;
 }
 
 
@@ -435,9 +435,9 @@ void
 SingleNullBlockCoordSysModel::getMagneticFlux( const FArrayBox& a_physical_coordinates,
                                                FArrayBox&       a_magnetic_flux ) const
 {
-   const Box& box(a_physical_coordinates.box());
-   CH_assert(a_magnetic_flux.box().contains(box));
-
+   const Box& box(a_magnetic_flux.box());
+   CH_assert(a_physical_coordinates.box().contains(box));
+   
    for (BoxIterator bit(box); bit.ok(); ++bit) {
       IntVect iv = bit();
       

@@ -161,9 +161,6 @@ class SingleNullBlockCoordSys
       virtual double getMagneticFlux( const RealVect& a_physical_coordinate ) const;
    
       virtual void getNodalFieldData(FArrayBox& points, FArrayBox& A, FArrayBox& b, FArrayBox& Bmag) const;
-
-      ///Return toroidal coordinates
-      void getToroidalCoords(FArrayBox& coords) const;
   
       //Computes normalized magnetic flux
       virtual void getNormMagneticFlux( const FArrayBox& a_physical_coordinates,
@@ -214,8 +211,6 @@ class SingleNullBlockCoordSys
 
       void convertCylindricalToCartesian( const FArrayBox&  cartesian_coord,
                                           FArrayBox&        coord ) const;
-
-      void convertCartesianToToroidal(RealVect& coord) const;
 
       // Removes the toroidal component of the input if there is one, otherwise just copies
       virtual POL::IntVect restrictToPoloidal( const IntVect& v ) const;

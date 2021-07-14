@@ -10,16 +10,12 @@ gksystem.hdf_fluids = true
 #####################################################
 # Time Stepping Definitions
 #####################################################
-#simulation.max_step            = 2
 simulation.max_step            = 235650
 simulation.max_time            = 1.0 # 10.0
-#simulation.max_dt_grow         = .1
 simulation.initial_dt_fraction = 1.0
 simulation.cfl_number          = 0.7
-#simulation.fixed_dt            = 0.00084872
 simulation.checkpoint_interval = 100000
 simulation.checkpoint_prefix   = "chk"
-#simulation.restart_file = "chk3200.4d.hdf5"
 #simulation.plot_interval       = 80
 simulation.plot_time_interval  = 1.0
 simulation.plot_prefix         = "plt"
@@ -115,8 +111,6 @@ IC.neutrals.density.function = "neutrals_IC"
 IC.neutrals.momentumDensity_0.function = "zero_grid_func"
 IC.neutrals.momentumDensity_1.function = "momDeny_IC"
 IC.neutrals.energyDensity.function = "energyDensity_IC"
-#IC.neutrals.energyDensity_0.function = "energyDensityPerp_IC"
-#IC.neutrals.energyDensity_1.function = "energyDensityPar_IC"
 IC.neutrals.magneticField_virtual.function = "By_IC"
 
 #####################################################
@@ -128,41 +122,17 @@ BC.mom0_visc.radial_upper.type = "dirichlet"
 BC.mom1_visc.radial_lower.type = "neumann"
 BC.mom1_visc.radial_upper.type = "neumann"
 
-BC.neutrals.density.radial_lower.function = "zero_grid_func"
-BC.neutrals.density.radial_upper.function = "zero_grid_func"
-#BC.neutrals.density.poloidal_lower.function = "neutrals_IC"
-#BC.neutrals.density.poloidal_upper.function = "neutrals_IC"
 BC.neutrals.density.radial_lower.type = "neumann"
 BC.neutrals.density.radial_upper.type = "neumann"
-#BC.neutrals.density.poloidal_lower.type = "neumann"
-#BC.neutrals.density.poloidal_upper.type = "neumann"
 
-BC.neutrals.momentumDensity.radial_lower.function = "zero_grid_func"
-BC.neutrals.momentumDensity.radial_upper.function = "zero_grid_func"
-#BC.neutrals.momentumDensity.poloidal_lower.function = "zero_grid_func"
-#BC.neutrals.momentumDensity.poloidal_upper.function = "zero_grid_func"
 BC.neutrals.momentumDensity.radial_lower.type = "symmetry"
 BC.neutrals.momentumDensity.radial_upper.type = "symmetry"
-#BC.neutrals.momentumDensity.poloidal_lower.type = "symmetry"
-#BC.neutrals.momentumDensity.poloidal_upper.type = "symmetry"
 
-BC.neutrals.energyDensity.radial_lower.function = "zero_grid_func"
-BC.neutrals.energyDensity.radial_upper.function = "zero_grid_func"
-#BC.neutrals.energyDensity.poloidal_lower.function = "energyDensity_IC"
-#BC.neutrals.energyDensity.poloidal_upper.function = "energyDensity_IC"
 BC.neutrals.energyDensity.radial_lower.type = "neumann"
 BC.neutrals.energyDensity.radial_upper.type = "neumann"
-#BC.neutrals.energyDensity.poloidal_lower.type = "neumann"
-#BC.neutrals.energyDensity.poloidal_upper.type = "neumann"
 
-BC.neutrals.magneticField_virtual.radial_lower.function = "zero_grid_func"
-BC.neutrals.magneticField_virtual.radial_upper.function = "zero_grid_func"
-#BC.neutrals.magneticField_virtual.poloidal_lower.function = "By_IC"
-#BC.neutrals.magneticField_virtual.poloidal_upper.function = "By_IC"
 BC.neutrals.magneticField_virtual.radial_lower.type = "odd"
 BC.neutrals.magneticField_virtual.radial_upper.type = "neumannJ"
-#BC.neutrals.magneticField_virtual.poloidal_lower.type = "neumann"
-#BC.neutrals.magneticField_virtual.poloidal_upper.type = "neumann"
 
 #####################################################
 ## Preconditioner Solver Definitions

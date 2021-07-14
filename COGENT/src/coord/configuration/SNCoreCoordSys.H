@@ -48,7 +48,7 @@ public:
 
    virtual IntVect getDecomposition(int block) const;
 
-   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return m_divergence_cleaning_bc;}
+   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return *m_divergence_cleaning_bc;}
 
    virtual void defineEllipticOpBC( EllipticOpBC& a_bc ) const;
 
@@ -146,7 +146,7 @@ protected:
    POL::RealVect m_ray[SNCoreBlockCoordSys::NUM_SNCORE_BLOCKS+1];
    int m_sector_block[SNCoreBlockCoordSys::NUM_SNCORE_BLOCKS];
 
-   SNCoreEllipticOpBC m_divergence_cleaning_bc;
+   SNCoreEllipticOpBC* m_divergence_cleaning_bc;
 
    Vector<MagBlockCoordSys *> m_coord_vec;
 };

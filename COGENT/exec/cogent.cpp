@@ -1,14 +1,11 @@
+#include <string.h>
 #include "ParmParse.H"
 
-//#define CH_SPACEDIM 4
 #define CH_SPACEDIM CFG_DIM+2
 
-#include "GKSystem.H"
-#include "Simulation.H"
-
-#ifdef with_petsc
-#include "PETScTimeIntegration.H"
-#endif
+#include "ODEVector.H"
+#include "AppCtxtLibrary.H"
+#include "SimulationLibrary.H"
 
 #include "parstream.H"
 #ifdef CH_MPI
@@ -30,15 +27,27 @@ inline int checkCommandLineArgs( int a_argc, char* a_argv[] )
 
 #ifdef with_petsc
 static const char help[] = "COGENT";
-
-bool parseParams( ParmParse &a_pp)
-{
-  /* default: don't use PETSc */
-  bool flag = false;
-  a_pp.query("use_petsc_ts",flag);
-  return flag;
-}
 #endif
+
+typedef enum {native, petsc, sundials} TimeIntegrationImplementation;
+
+TimeIntegrationImplementation parseParams( ParmParse &a_pp)
+{
+  /* default: use native time integrator */
+  TimeIntegrationImplementation ti_impl = native;
+
+  std::string ti_impl_name = "native";
+  a_pp.query("ti_implementation", ti_impl_name);
+
+  if      (ti_impl_name == "native")    ti_impl = native;
+  else if (ti_impl_name == "petsc")     ti_impl = petsc;
+  else if (ti_impl_name == "sundials")  ti_impl = sundials;
+  else {
+    MayDay::Error("Invalid value for ti_implementation");
+  }
+
+  return ti_impl;
+}
 
 int main( int a_argc, char* a_argv[] )
 {
@@ -57,21 +66,33 @@ int main( int a_argc, char* a_argv[] )
    if (status==0) {
 
       ParmParse pp( a_argc-2, a_argv+2, NULL, a_argv[1] );
+      auto ti_impl = parseParams(pp);
 
+      AppCtxt* system = new GKSystem(pp);
+
+      Simulation<ODEVector,AppCtxt>* simulation(NULL); 
+      if (ti_impl == petsc) {
 #ifdef with_petsc
-      bool usePetsc = parseParams(pp);
-      if (usePetsc) {
-        PetscTimeIntegrator<GKSystem> petsc(pp,usePetsc);
-        petsc.solve();
-        petsc.finalize();
+        simulation = new PetscTimeIntegrator<ODEVector,AppCtxt>;
+#else
+        MayDay::Error("Not compiled with PETSc");
+#endif
+      } else if (ti_impl == sundials) {
+#ifdef with_sundials
+        simulation = new SundialsTimeIntegrator<ODEVector,AppCtxt>;
+#else
+        MayDay::Error("Not compiled with SUNDIALS");
+#endif
       } else {
-#endif
-        Simulation<GKSystem> simulation( pp );
-        while ( simulation.notDone() ) simulation.advance();
-        simulation.finalize();
-#ifdef with_petsc
+        simulation = new COGENTTimeIntegration<ODEVector,AppCtxt>;
       }
-#endif
+
+      simulation->initialize( pp, system );
+      simulation->solve();
+      simulation->finalize();
+
+      delete simulation;
+      delete system;
    }
 
 #ifdef with_petsc
@@ -84,9 +105,3 @@ int main( int a_argc, char* a_argv[] )
 
    return status;
 }
-
-#include "Simulation.cpp"
-
-#include "NamespaceHeader.H"
-template class Simulation<GKSystem>;
-#include "NamespaceFooter.H"

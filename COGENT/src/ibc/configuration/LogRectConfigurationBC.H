@@ -2,6 +2,8 @@
 #define  _LOGRECTCONFIGURATIONBC_H_
 
 #include "FluidVarBC.H"
+#include "InsulatorConductorBC.H"
+
 #include "NamespaceHeader.H"
 
 /**

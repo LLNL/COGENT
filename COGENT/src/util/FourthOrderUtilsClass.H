@@ -9,6 +9,31 @@
 
 #include "NamespaceHeader.H"
 
+/**
+ * A class for holding lots of operators that move between point values, face averages, and cell averages
+ * at fourth-order accuracy.  The only data member is m_useSG, which decides whether to use the (more expensive)
+ * tensor product stencils that have an error expansion that is compatible with the sparse grid combination technique,
+ * or to use the cheaper stencils implemented in Chombo.  
+ *
+ * Naming conventions: This class is FourthOrder... with a capital F to distinguish it from the numerous Chombo
+ * utility functions that start with fourthOrder.  
+ *
+ * fourthOrder{foo}Gen: A wrapper that calls the Chombo function fourthOrder{foo} if !m_useSG, and calls fourthOrder{foo}SG 
+ *    otherwise
+ *
+ * fourthOrder{foo}SG: Performs the analogous operation to the Chombo function fourthOrder{foo}, but using the sparse grid-friendly 
+ *    stencils.  
+ *
+ * The hope is that with this naming convention, anywhere in COGENT a call to fourthOrder{foo} is made, it can just be replaced with
+ * a call to fourthOrder{foo}Gen.
+ *
+ * The plan is for a class that uses FourthOrderUtil to have its own version of m_useSG that gets set by a parm parse of the input
+ * parameter
+ *
+ * sparsegrids.useSGstencils
+ *
+ */
+
 class FourthOrderUtil
 {
 public:
@@ -36,6 +61,7 @@ public:
 
    void fourthOrderAverageGen( LevelData<FArrayBox>& a_phi, 
                                int a_sgn = 1);
+
 
    //void fourthOrderAverageGen( LevelData<FArrayBox>& a_phi, 
    //                         const ProblemDomain& a_domain, 
@@ -74,7 +100,12 @@ public:
 
    /****************************************************************************************/
 
-   
+   void fourthOrderAverageCellGen( FArrayBox& a_phi, 
+								   const ProblemDomain& a_domain, 
+								   const Box& 			a_bx, 
+								   int a_sgn = 1);
+     
+
    // Used by fourthOrderAverage when applied to face-(centered/averaged) LevelData<FluxBox>
    void fourthOrderAverageFaceSG(FluxBox& a_phi, 
                                int a_sgn = 1);

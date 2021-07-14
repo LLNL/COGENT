@@ -113,6 +113,8 @@ class ArbitraryKineticFunction : public KineticFunction
 
       std::string m_function;
       std::string m_coord_type;
+
+      bool m_useSG; // whether to use sparse grid-friendly stencils
 };
 
 #include "NamespaceFooter.H"

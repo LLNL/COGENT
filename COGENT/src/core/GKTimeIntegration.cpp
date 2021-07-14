@@ -282,7 +282,7 @@ inline
 void addFromArray( KineticSpeciesPtrVect&     a_kinetic_species,
                    CFG::FluidSpeciesPtrVect&  a_fluid_species,
                    ScalarPtrVect&             a_scalars,
-                   Real*                      a_src,
+                   const Real* const          a_src,
                    const Real&                a_factor )
 {
    int offset(0);
@@ -317,10 +317,14 @@ void addFromArray( KineticSpeciesPtrVect&     a_kinetic_species,
    }
 }
 
-void GKState::addFrom( Real* a_vector, const Real& a_factor )
+void GKState::addFrom( const Real* const a_vector, const Real& a_factor )
 {
    CH_assert( isDefined() );
-   addFromArray( m_kinetic_species, m_fluid_species, m_scalars, a_vector, a_factor );
+   addFromArray(  m_kinetic_species, 
+                  m_fluid_species, 
+                  m_scalars, 
+                  a_vector, 
+                  a_factor );
 }
 
 ////////////////////////////////////////////////////////////////////

@@ -13,7 +13,8 @@ const std::string SingleNullCoordSys::pp_name = "singlenull";
 SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
                                         ParmParse& a_pp_geom )
    : m_model_geometry(false),
-     m_num_toroidal_sectors(1)
+     m_num_toroidal_sectors(1),
+     m_divergence_cleaning_bc(NULL)
 {
    readParams(a_pp_grid, a_pp_geom);
 
@@ -92,7 +93,8 @@ SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
    setXPointNeighborhood();
 
    // Define the boundary conditions for divergence cleaning (whether or not they're used)
-   m_divergence_cleaning_bc.setPoloidalBlocksPerSector(numPoloidalBlocks());
+   m_divergence_cleaning_bc = new SingleNullEllipticOpBC(num_blocks);
+   m_divergence_cleaning_bc->setPoloidalBlocksPerSector(numPoloidalBlocks());
    for (int block = 0; block < num_blocks; block++) {
       for (int dir=0; dir<SpaceDim; ++dir) {
          for (int side=0; side<2; ++side) {
@@ -100,8 +102,8 @@ SingleNullCoordSys::SingleNullCoordSys( ParmParse& a_pp_grid,
                double bc_value = 0.;
                int bc_type = EllipticOpBC::DIRICHLET;     // Homogeneous Dirichlet
                int poloidal_block = poloidalBlockNumber(block);
-               m_divergence_cleaning_bc.setBCType(poloidal_block, dir, side, bc_type);
-               m_divergence_cleaning_bc.setBCValue(poloidal_block, dir, side, bc_value);
+               m_divergence_cleaning_bc->setBCType(poloidal_block, dir, side, bc_type);
+               m_divergence_cleaning_bc->setBCValue(poloidal_block, dir, side, bc_value);
             }
          }
       }
@@ -128,6 +130,7 @@ SingleNullCoordSys::~SingleNullCoordSys()
    for (int i=0; i<m_coord_vec.size(); ++i) {
       delete m_coord_vec[i];
    }
+   if (m_divergence_cleaning_bc) delete m_divergence_cleaning_bc;
 }
 
 
@@ -2399,7 +2402,6 @@ SingleNullCoordSys::readParams( ParmParse& a_pp_grid,
 
    a_pp_geom.query( "model_geometry", m_model_geometry);
 
-   m_provides_flux = a_pp_geom.contains("field_coefficients_file");
 }
 
 

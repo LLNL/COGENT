@@ -15,14 +15,16 @@ class SNCoreEllipticOpBC
 {
 public:
 
-   SNCoreEllipticOpBC();
+   SNCoreEllipticOpBC(const int& nblocks);
 
    SNCoreEllipticOpBC( const std::string&  name,
                        ParmParse&          pp,
+                       const int&          nblocks,
                        const int&          verbosity );
 
    SNCoreEllipticOpBC( const SingleNullEllipticOpBC&  bc,
-                       const int                      outer_radial_bc_type );
+                       const int                      outer_radial_bc_type,
+                       const int                      num_blocks );
 
    virtual ~SNCoreEllipticOpBC() {};
 
@@ -34,6 +36,10 @@ public:
    virtual int getBCType( const int block_number,
                           const int dir,
                           const int side ) const;
+   
+   virtual std::string getBCSubType(const int block_number,
+                                    const int dir,
+                                    const int side ) const;
 
    virtual void setBCValue( const int block_number,
                             const int dir,
@@ -59,6 +65,8 @@ public:
                        const int                  a_dir,
                        const int                  a_side,
                        FArrayBox&                 a_phi ) const;
+
+   virtual RefCountedPtr<EllipticOpBC> clone( const bool extrapolated = false ) const;
 
    virtual void printParameters() const;
 

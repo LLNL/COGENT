@@ -178,8 +178,8 @@ void KineticSpecies::ParallelVelocity( CFG::LevelData<CFG::FArrayBox>& a_Paralle
 
 
 void KineticSpecies::PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& a_PoloidalMom,
-                                       const LevelData<FluxBox>& field,
-                                       const double larmor  ) const 
+                                       const LevelData<FluxBox>& a_field,
+                                       const double a_larmor  ) const
 {
 
 
@@ -188,7 +188,7 @@ void KineticSpecies::PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& a_Poloida
 
    CFG::LevelData<CFG::FArrayBox> guidingCenterPoloidalMom;
    guidingCenterPoloidalMom.define(a_PoloidalMom); 
-   m_moment_op.compute( guidingCenterPoloidalMom, *this, GuidingCenterPoloidalMomKernel<FArrayBox>(field) );
+   m_moment_op.compute( guidingCenterPoloidalMom, *this, GuidingCenterPoloidalMomKernel<FArrayBox>(a_field) );
    
    CFG::LevelData<CFG::FArrayBox> magnetization;
    magnetization.define(a_PoloidalMom);
@@ -227,7 +227,7 @@ void KineticSpecies::PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& a_Poloida
    mag_geom.computePoloidalProjection(curlb_pol, curlb);
 
    
-   double fac = larmor / 2.0 / m_charge;
+   double fac = a_larmor / 2.0 / m_charge;
 
    for (CFG::DataIterator dit(a_PoloidalMom.dataIterator()); dit.ok(); ++dit) {
       
@@ -252,31 +252,63 @@ void KineticSpecies::ParticleFlux( CFG::LevelData<CFG::FArrayBox>& a_ParticleFlu
 {
    m_moment_op.compute( a_ParticleFlux, *this, ParticleFluxKernel<FArrayBox>(field) );
 
-   //Calculate flux average
    const CFG::MagGeom& mag_geom = m_geometry->magGeom();
-   CFG::FluxSurface m_flux_surface(mag_geom, false);
-   CFG::LevelData<CFG::FArrayBox> FluxAver_tmp;
-   FluxAver_tmp.define(a_ParticleFlux);
-   m_flux_surface.averageAndSpread(a_ParticleFlux, FluxAver_tmp);
-   m_flux_surface.averageAndSpread(FluxAver_tmp,a_ParticleFlux);
+   CFG::FluxSurface flux_surface(mag_geom, false);
+   CFG::LevelData<CFG::FArrayBox> particle_flux_tmp(mag_geom.grids(), 1, CFG::IntVect::Zero);
+   CFG::LevelData<CFG::FArrayBox> particle_loc_tmp(mag_geom.grids(), 1, CFG::IntVect::Zero);
 
+   // Get flux-surfaced averaged component
+   for (CFG::DataIterator dit(a_ParticleFlux.dataIterator()); dit.ok(); ++dit) {
+     particle_loc_tmp[dit].copy(a_ParticleFlux[dit], 0, 0, 1);
+   }
+   flux_surface.averageAndSpread(particle_loc_tmp, particle_flux_tmp);
+   
+   for (CFG::DataIterator dit(a_ParticleFlux.dataIterator()); dit.ok(); ++dit) {
+     a_ParticleFlux[dit].copy(particle_flux_tmp[dit], 0, 0, 1);
+   }
+   
+   // Get flux-surface integrated component
+   for (CFG::DataIterator dit(a_ParticleFlux.dataIterator()); dit.ok(); ++dit) {
+     particle_loc_tmp[dit].copy(a_ParticleFlux[dit], 1, 0, 1);
+   }
+   flux_surface.integrateAndSpread(particle_loc_tmp, particle_flux_tmp);
+   
+   for (CFG::DataIterator dit(a_ParticleFlux.dataIterator()); dit.ok(); ++dit) {
+     a_ParticleFlux[dit].copy(particle_flux_tmp[dit], 0, 1, 1);
+   }
 }
 
-void KineticSpecies::HeatFlux( CFG::LevelData<CFG::FArrayBox>& a_HeatFlux,
-                                   const LevelData<FluxBox>& field,
-                                   const LevelData<FArrayBox>& phi  ) const
+void KineticSpecies::HeatFlux(CFG::LevelData<CFG::FArrayBox>& a_HeatFlux,
+                              const LevelData<FluxBox>& a_field,
+                              const LevelData<FArrayBox>& a_phi  ) const
 
 {
-   m_moment_op.compute( a_HeatFlux, *this, HeatFluxKernel<FArrayBox>(field, phi) );
+   m_moment_op.compute( a_HeatFlux, *this, HeatFluxKernel<FArrayBox>(a_field, a_phi) );
 
-   //Calculate flux average
    const CFG::MagGeom& mag_geom = m_geometry->magGeom();
-   CFG::FluxSurface m_flux_surface(mag_geom, false);
-   CFG::LevelData<CFG::FArrayBox> FluxAver_tmp;
-   FluxAver_tmp.define(a_HeatFlux);
-   m_flux_surface.averageAndSpread(a_HeatFlux, FluxAver_tmp);
-   m_flux_surface.averageAndSpread(FluxAver_tmp,a_HeatFlux);
+   CFG::FluxSurface flux_surface(mag_geom, false);
+   CFG::LevelData<CFG::FArrayBox> heat_flux_tmp(mag_geom.grids(), 1, CFG::IntVect::Zero);
+   CFG::LevelData<CFG::FArrayBox> heat_loc_tmp(mag_geom.grids(), 1, CFG::IntVect::Zero);
 
+   // Get flux-surfaced averaged component
+   for (CFG::DataIterator dit(a_HeatFlux.dataIterator()); dit.ok(); ++dit) {
+     heat_loc_tmp[dit].copy(a_HeatFlux[dit], 0, 0, 1);
+   }
+   flux_surface.averageAndSpread(heat_loc_tmp, heat_flux_tmp);
+  
+   for (CFG::DataIterator dit(a_HeatFlux.dataIterator()); dit.ok(); ++dit) {
+     a_HeatFlux[dit].copy(heat_flux_tmp[dit], 0, 0, 1);
+   }
+  
+   // Get flux-surface integrated component
+   for (CFG::DataIterator dit(a_HeatFlux.dataIterator()); dit.ok(); ++dit) {
+     heat_loc_tmp[dit].copy(a_HeatFlux[dit], 1, 0, 1);
+   }
+   flux_surface.integrateAndSpread(heat_loc_tmp, heat_flux_tmp);
+  
+   for (CFG::DataIterator dit(a_HeatFlux.dataIterator()); dit.ok(); ++dit) {
+     a_HeatFlux[dit].copy(heat_flux_tmp[dit], 0, 1, 1);
+   }
 }
 
 void KineticSpecies::parallelHeatFluxMoment( CFG::LevelData<CFG::FArrayBox>& a_parallelHeatFlux,
@@ -286,9 +318,9 @@ void KineticSpecies::parallelHeatFluxMoment( CFG::LevelData<CFG::FArrayBox>& a_p
 }
 
 void KineticSpecies::perpCurrentDensity( CFG::LevelData<CFG::FArrayBox>& a_PerpCurrentDensity,
-                                         const LevelData<FluxBox>& field  ) const
+                                         const LevelData<FluxBox>& a_field  ) const
 {
-   m_moment_op.compute( a_PerpCurrentDensity, *this, PerpCurrentDensityKernel<FArrayBox>(field) );
+   m_moment_op.compute( a_PerpCurrentDensity, *this, PerpCurrentDensityKernel<FArrayBox>(a_field) );
    
 }
 
@@ -379,16 +411,21 @@ void KineticSpecies::perpTemperature( CFG::LevelData<CFG::FArrayBox>& a_temperat
    }
 }
 
-
-void KineticSpecies::energyMoment( CFG::LevelData<CFG::FArrayBox>& a_energy ) const
+void KineticSpecies::energyMoment( CFG::LevelData<CFG::FArrayBox>& a_energy,
+                                   const CFG::LevelData<CFG::FArrayBox>& a_phi) const
 {
-   m_moment_op.compute( a_energy, *this, EnergyKernel<FArrayBox>() );
+   m_moment_op.compute( a_energy, *this, EnergyKernel<FArrayBox>(a_phi) );
 }
 
-void KineticSpecies::energyMoment( CFG::LevelData<CFG::FArrayBox>&  a_energy,
-                                   const LevelData<FArrayBox>&      a_function ) const
+void KineticSpecies::kineticEnergyMoment( CFG::LevelData<CFG::FArrayBox>& a_energy) const
 {
-   m_moment_op.compute( a_energy, *this, a_function, EnergyKernel<FArrayBox>() );
+   m_moment_op.compute( a_energy, *this, KineticEnergyKernel<FArrayBox>() );
+}
+
+void KineticSpecies::kineticEnergyMoment( CFG::LevelData<CFG::FArrayBox>&  a_energy,
+                                          const LevelData<FArrayBox>&      a_function) const
+{
+   m_moment_op.compute( a_energy, *this, a_function, KineticEnergyKernel<FArrayBox>() );
 }
 
 void KineticSpecies::perpEnergyDensity( CFG::LevelData<CFG::FArrayBox>& a_energy ) const
@@ -654,20 +691,44 @@ Real KineticSpecies::minValue() const
 {
    const DisjointBoxLayout& grids( m_dist_func.getBoxes() );
    Real local_minimum( CH_BADVAL );
+   IntVect local_index(IntVect::Zero);
    DataIterator dit( m_dist_func.dataIterator() );
    for (dit.begin(); dit.ok(); ++dit) {
       Box box( grids[dit] );
       Real box_min( m_dist_func[dit].min( box ) );
+      IntVect box_min_loc(IntVect::Zero);
       if (box_min<0.0) {
-         IntVect box_min_loc = m_dist_func[dit].minIndex( box );
+         box_min_loc = m_dist_func[dit].minIndex( box );
          pout() << box_min_loc << ":  " << box_min << endl;
       }
-      local_minimum = Min( local_minimum, box_min );
+      if (box_min < local_minimum) {
+	local_minimum = box_min;
+	local_index = box_min_loc;  
+      }
    }
+
    Real minimum(local_minimum);
+   Real minimum_global(local_minimum);
+   IntVect index(local_index);
+   struct {
+     double val;
+     int rank;
+   } pair_in, pair_out;
+
+
 #ifdef CH_MPI
+   pair_in.val = local_minimum;
+   pair_in.rank	= procID();
+
+   MPI_Allreduce( &pair_in, &pair_out, 1, MPI_DOUBLE_INT, MPI_MINLOC, MPI_COMM_WORLD );
+   minimum_global = pair_out.val;
+   MPI_Bcast(index.dataPtr(), SpaceDim, MPI_INT, pair_out.rank, MPI_COMM_WORLD);
+   
    MPI_Allreduce( &local_minimum, &minimum, 1, MPI_CH_REAL, MPI_MIN, MPI_COMM_WORLD );
+   
 #endif
+
+   pout() << index << ":  " << minimum_global << endl;
    return minimum;
 }
 

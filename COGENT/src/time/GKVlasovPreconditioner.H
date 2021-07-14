@@ -1,6 +1,9 @@
 #ifndef _GK_VLASOV_PC_H_
 #define _GK_VLASOV_PC_H_
 
+#include "Preconditioner.H"
+#include "GKVlasovAMG.H"
+
 #define _GK_VLASOV_PC_ "GKVlasovPC"
 
 #include "NamespaceHeader.H"
@@ -15,36 +18,45 @@ class GKVlasovPreconditioner : public Preconditioner<T,Ops>
        : m_is_defined(false),
          m_species_idx(-1),
          m_ops(NULL),
-         m_shift(0.0) {};
+         m_shift(0.0),
+         m_amg_pc(NULL) {}
 
-    ~GKVlasovPreconditioner<T,Ops>() {};
+    ~GKVlasovPreconditioner<T,Ops>() 
+    {
+      delete m_amg_pc;
+    }
 
     inline bool isDefined() const 
     { 
-      return (m_is_defined && (m_ops != NULL)); 
+      return (      m_is_defined 
+                &&  (m_ops != NULL) 
+                &&  (m_species_idx >= 0) ); 
     }
 
-    void define(const T&, Ops&, const std::string&, const std::string&, bool);
+    void define(  const T&, 
+                  void*, 
+                  const std::string&, 
+                  const std::string&, 
+                  bool  );
 
-    inline void update(const T& a_X, const Real a_time, const Real a_shift = 0.0)
-    {
-      CH_assert(isDefined());
-      if (m_im) m_ops->assembleVlasovOpPCImEx(NULL, a_X, a_time, a_shift);
-      else      m_ops->assembleSolPC(false, NULL, a_X, a_time);
-      return;
-    }
+    void defineAMGPC(const ParmParse&, const PhaseGeom& );
 
     inline void apply(T& a_Y, const T& a_X)
     {
       CH_assert(isDefined());
-      if (m_im) m_ops->solveVlasovOpPCImEx(a_Y, a_X, m_species_idx);
-      else      m_ops->solveSolutionPC(a_Y, a_X, m_species_idx);
+      CH_assert(m_im);
+      m_ops->solveVlasovOpPCImEx( this,
+                                  a_Y, 
+                                  a_X, 
+                                  m_species_idx );
       return;
     }
 
     inline const std::string typeName() { return _GK_VLASOV_PC_; }
 
     inline void speciesIndex(int a_idx) { m_species_idx = a_idx; }
+
+    inline GKVlasovAMG* getAMGPC() { return m_amg_pc; }
 
   protected:
 
@@ -55,22 +67,33 @@ class GKVlasovPreconditioner : public Preconditioner<T,Ops>
     Ops*  m_ops;
     Real  m_shift;
     bool  m_im;
+
+    GKVlasovAMG *m_amg_pc;
 };
 
 
 template <class T, class Ops>
 void GKVlasovPreconditioner<T,Ops>::define(const T&            a_x,
-                                           Ops&                a_ops,
+                                           void*               a_ops,
                                            const std::string&  a_out_string,
                                            const std::string&  a_opt_string,
                                            bool                a_im )
 {
   CH_assert(!isDefined());
 
-  m_ops = &a_ops;
+  m_ops = (Ops*) a_ops;
   m_im = a_im;
 
-  m_is_defined = true;
+  m_is_defined = false; //not yet
+}
+
+template <class T, class Ops>
+void GKVlasovPreconditioner<T,Ops>::defineAMGPC(const ParmParse&  a_pp,
+                                                const PhaseGeom&  a_geom )
+{
+  CH_assert(!isDefined());
+  m_amg_pc = new GKVlasovAMG(a_pp, a_geom);
+  m_is_defined = true; //now it's defined
 }
 
 

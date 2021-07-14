@@ -103,10 +103,13 @@ void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&           
    for (int s_index(0); s_index<a_species.size(); s_index++) {
 
       // It is important to fill internal ghosts prior to physical
-      // as they amay be reqired for co-dim ghost evaluation 
+      // as they may be reqired for co-dim ghost evaluation 
       CH_START(t_execute_exchanges);
       KineticSpecies& species_physical( *(a_species[s_index]) );
-      executeInternalExchanges( species_physical );
+      const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
+      if (!mag_geom.mixedBoundaries()) {
+        executeInternalExchanges( species_physical );
+      }
       CH_STOP(t_execute_exchanges);
 
       CH_START(t_compute_mapped_velocity);
@@ -121,7 +124,7 @@ void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&           
       // For the case of a SN sheared geoemtry need to
       // refill internal ghosts again to handle the saw-tooth BCs
       //const MultiBlockCoordSys& coord_sys( *(m_phase_geometry.coordSysPtr()) );
-      const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
+      //const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
       if (mag_geom.mixedBoundaries()) {
 	executeInternalExchanges( species_physical );
       }

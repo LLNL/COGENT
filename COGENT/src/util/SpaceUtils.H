@@ -191,7 +191,8 @@ namespace SpaceUtils {
                        const int                 );
   
   void inspectEdgeDataBox( const LevelData<EdgeDataBox>&,
-                           const int                     );
+                           const int,
+                           const int                 );
 
   void exchangeFluxBox( LevelData<FluxBox>& );
   

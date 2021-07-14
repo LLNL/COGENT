@@ -65,10 +65,10 @@ public:
                                       const int                          component,
                                       const Real                         time);
    
-   virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+   virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                std::vector<PS::DOFList>&,
-                               const PS::GKVector&,
-                               PS::GKOps&,
+                               const PS::ODEVector&,
+                               void*,
                                const std::string&,
                                const std::string&,
                                bool,
@@ -76,10 +76,12 @@ public:
                                const PS::GlobalDOFFluidSpecies&,
                                int );
 
-   virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+   virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 const PS::KineticSpeciesPtrVect&,
                                 const FluidSpeciesPtrVect&,
                                 const Real,
+                                const int,
+                                const int,
                                 const Real,
                                 const bool,
                                 const int );
@@ -87,6 +89,8 @@ public:
    virtual void updatePCImEx( const FluidSpeciesPtrVect&        fluid_species,
                               const PS::KineticSpeciesPtrVect&  kinetic_species,
                               const double                      time,
+                              const int                         step,
+                              const int                         stage,
                               const double                      shift,
                               const int                         component);
 

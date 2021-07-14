@@ -124,6 +124,8 @@ class TensorProductSineKineticFunction : public KineticFunction
       Real m_amplitude;
       RealVect m_wavevector;
 
+	  bool m_useSG; //whether or not to use new sparse grid-friendly stencils
+
 };
 
 #include "NamespaceFooter.H"

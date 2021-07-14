@@ -52,13 +52,6 @@ class ExplicitStagePC: public IMEXStagePCFunction<T,Ops>
     void define(const T&, Ops&, const std::string&, const std::string&);
     inline void setIsLinear(bool a_isLinear) { m_isLinear = a_isLinear; }
 
-    inline void update(const T& a_X, const Real a_time, const Real a_a = 0.0) 
-    {
-      m_stage_time = a_time;
-      m_P.zeroEntries();
-      m_ops->assembleSolPC(true, (void*)&m_P, a_X, a_time);
-    }
-
     inline void getDiagonal(std::vector<Real>& a_D) const
     {
       return m_P.getDiagonal(a_D);
@@ -99,7 +92,7 @@ void ExplicitStagePC<T,Ops>::define(  const T&            a_state,
   ParmParse pp_IPreCond( a_optPrefix.c_str() );
   parseParameters( pp_IPreCond );
 
-  m_is_Defined = m_ops->preallocateSolPCMatrix((void*)&m_P, a_state);
+  m_is_Defined = true;
 }
 
 template <class T,class Ops>

@@ -20,8 +20,7 @@ public:
   /** Default constructor.
   */
    MagCoordSys()
-      : m_provides_flux(false),
-        m_sheared_geometry(false) {;}
+      : m_sheared_geometry(false) {;}
 
   ///
   /** Destructor.
@@ -58,6 +57,8 @@ public:
    virtual void postProcessMetricData( LevelData<FArrayBox>& data ) const {;}
 
    virtual void postProcessMetricData( LevelData<FluxBox>& data ) const {;}
+   
+   virtual void postProcessMetricData( LevelData<EdgeDataBox>& data ) const {;}
 
    virtual const EllipticOpBC& getDivergenceCleaningBC() const = 0;
 
@@ -96,11 +97,8 @@ public:
 
 #endif
 
-   bool providesFlux() const {return m_provides_flux;}
 
 protected:
-
-   bool m_provides_flux;
 
    bool m_sheared_geometry;
 

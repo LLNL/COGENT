@@ -14,12 +14,16 @@
 #include "KineticFunctionLibrary.H"
 #include "GKVlasovPreconditioner.H"
 
-#include "GKVector.H"
-#include "GKOps.H"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM CFG_DIM
+#include "SimpleDivergence.H"
+#include "FluxSurface.H"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM PDIM
+
 
 #undef TEST_ZERO_DIVERGENCE
-
-#define AMG_PRECOND
+#undef TEST_ENERGY_CONSERVATION
 
 #include "NamespaceHeader.H"
 
@@ -50,8 +54,6 @@ MaxNorm( const LevelData<FArrayBox>& a )
    return global_max;
 }
 
-
-
 GKVlasov::GKVlasov( ParmParse&                      a_pp,
                     const Real                      a_larmor_number )
   : m_larmor_number(a_larmor_number),
@@ -59,8 +61,9 @@ GKVlasov::GKVlasov( ParmParse&                      a_pp,
     m_dt_dim_factor(1.0),
     m_first_call(true),
     m_include_FLR_effects(false),
-    m_it_counter(0),
-    m_update_pc_freq(1)
+    m_plot_FLR_switch(false),
+    m_update_pc_freq(1),
+    m_update_pc_skip_stage(false)
 {
    if (a_pp.contains("limiter")) {
       if ( procID()==0 ) MayDay::Warning("GKVlasov: Use of input flag 'limiter' deprecated");
@@ -74,9 +77,22 @@ GKVlasov::GKVlasov( ParmParse&                      a_pp,
    }
 
    a_pp.query("include_FLR_effects", m_include_FLR_effects);
+   if (m_include_FLR_effects) {
+     a_pp.query("FLR_plot_switch_func", m_plot_FLR_switch);
+     if (a_pp.contains("FLR_switch_func")) {
+       CFG::GridFunctionLibrary* grid_library = CFG::GridFunctionLibrary::getInstance();
+       std::string func_name;
+       a_pp.get("FLR_switch_func", func_name);
+       m_FLR_switch_func = grid_library->find(func_name);
+     }
+   }
    a_pp.query("update_precond_interval", m_update_pc_freq);
+   if (m_update_pc_freq > 1) {
+      m_update_pc_skip_stage = true;
+      a_pp.query("update_precond_skip_stage", m_update_pc_skip_stage);
+   }
 
-   m_ti_type.clear();
+   m_ti_op_type.clear();
    
    if (a_pp.contains("subtract_maxwellian_background")) {
       a_pp.get("subtract_maxwellian_background", m_subtract_maxwellian);
@@ -163,23 +179,19 @@ GKVlasov::GKVlasov( ParmParse&                      a_pp,
                     const std::vector<std::string>& a_name_list )
   : GKVlasov(a_pp, a_larmor_number) 
 {
-   m_ti_type.clear();
+   m_ti_op_type.clear();
    for (int n=0; n<a_name_list.size(); n++) {
      std::string species_name = a_name_list[n];
      std::string key = species_name + ".time_implicit";
      bool flag = false;
      a_pp.query(key.c_str(), flag);
-     m_ti_type[species_name] = (flag ? _implicit_ : _explicit_);
+     m_ti_op_type[species_name] = (flag ? _implicit_op_ : _explicit_op_);
    }
 }
 
 
 GKVlasov::~GKVlasov()
 {
-   for (int n=0; n<m_pc_vec.size(); ++n) {
-      if (m_pc_vec[n]) delete m_pc_vec[n];
-   }
-   m_pc_vec.resize(0);
 }
 
 
@@ -229,13 +241,13 @@ GKVlasov::evalRHSExplicit( KineticSpecies&                        a_rhs_species,
 {
   const std::string& name = a_soln_species.name();
 
-  std::map<std::string, tiType>::const_iterator it;
-  it = m_ti_type.find(name);
-  if (it == m_ti_type.end()) {
-    MayDay::Error("in GKVlasov::evalRHSExplicit - m_ti_type does not contain species info.");
+  std::map<std::string, tiOpType>::const_iterator it;
+  it = m_ti_op_type.find(name);
+  if (it == m_ti_op_type.end()) {
+    MayDay::Error("in GKVlasov::evalRHSExplicit - m_ti_op_type does not contain species info.");
   }
 
-  if (m_ti_type[name] == _explicit_) {
+  if (m_ti_op_type[name] == _explicit_op_) {
     evalRHS(a_rhs_species, a_soln_species, a_phi, a_E_field, a_velocity_option, a_time);
   }
 }
@@ -251,13 +263,13 @@ GKVlasov::evalRHSImplicit( KineticSpecies&                        a_rhs_species,
 {
   const std::string& name = a_soln_species.name();
 
-  std::map<std::string, tiType>::const_iterator it;
-  it = m_ti_type.find(name);
-  if (it == m_ti_type.end()) {
-    MayDay::Error("in GKVlasov::evalRHSImplicit - m_ti_type does not contain species info.");
+  std::map<std::string, tiOpType>::const_iterator it;
+  it = m_ti_op_type.find(name);
+  if (it == m_ti_op_type.end()) {
+    MayDay::Error("in GKVlasov::evalRHSImplicit - m_ti_op_type does not contain species info.");
   }
 
-  if (m_ti_type[name] == _implicit_) {
+  if (m_ti_op_type[name] == _implicit_op_) {
     evalRHS(a_rhs_species, a_soln_species, a_phi, a_E_field, a_velocity_option, a_time);
   }
 }
@@ -337,7 +349,10 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
    else {
       testZeroDivergence(m_velocity, geometry);
    }
+#endif
 
+#ifdef TEST_ENERGY_CONSERVATION
+   testEnergyConservation(rhs_dfn, a_soln_species, a_phi, a_E_field);
 #endif
 }
 
@@ -371,11 +386,7 @@ GKVlasov::computePhysicalFlux( LevelData<FluxBox>&                    a_flux,
    if (a_soln_species.isGyrokinetic() && m_include_FLR_effects) {
 
      LevelData<FluxBox> gyroaveraged_E_field;
-     int order (a_E_field.secondOrder() ? 2 : 4);
-     a_soln_species.gyroaveragedEField( gyroaveraged_E_field,
-                                        a_phi,
-                                        order );
-
+     getEFieldwFLR(gyroaveraged_E_field, a_soln_species, a_phi, a_E_field);
      a_soln_species.computeVelocity(  m_velocity,
                                       gyroaveraged_E_field,
                                       true,
@@ -428,11 +439,7 @@ GKVlasov::computePhysicalFlux( LevelData<FluxBox>&                    a_flux,
       if (a_soln_species.isGyrokinetic() && m_include_FLR_effects) {
 
         LevelData<FluxBox> gyroaveraged_E_field;
-        int order (a_E_field.secondOrder() ? 2 : 4);
-        a_soln_species.gyroaveragedEField(  gyroaveraged_E_field,
-                                            a_phi,
-                                            order );
-
+        getEFieldwFLR(gyroaveraged_E_field, a_soln_species, a_phi, a_E_field);
         a_soln_species.computeVelocity( m_velocity,
                                         gyroaveraged_E_field,
                                         true,
@@ -828,13 +835,13 @@ GKVlasov::computeDtImExTI( const CFG::EField&            a_E_field,
          const KineticSpecies& species( *(a_species_vect[s]) );
          const std::string& name = species.name();
 
-         std::map<std::string, tiType>::const_iterator it;
-         it = m_ti_type.find(name);
-         if (it == m_ti_type.end()) {
-           MayDay::Error("in GKVlasov::computeDtImExTI - m_ti_type does not contain species info.");
+         std::map<std::string, tiOpType>::const_iterator it;
+         it = m_ti_op_type.find(name);
+         if (it == m_ti_op_type.end()) {
+           MayDay::Error("in GKVlasov::computeDtImExTI - m_ti_op_type does not contain species info.");
          }
 
-         if (m_ti_type[name] == _explicit_) {
+         if (m_ti_op_type[name] == _explicit_op_) {
 
            const LevelData<FArrayBox>& dfn( species.distributionFunction() );
   
@@ -863,13 +870,13 @@ GKVlasov::computeDtImExTI( const CFG::EField&            a_E_field,
          const KineticSpecies& species( *(a_species_vect[s]) );
          const std::string& name = species.name();
 
-         std::map<std::string, tiType>::const_iterator it;
-         it = m_ti_type.find(name);
-         if (it == m_ti_type.end()) {
-           MayDay::Error("in GKVlasov::computeDtImExTI - m_ti_type does not contain species info.");
+         std::map<std::string, tiOpType>::const_iterator it;
+         it = m_ti_op_type.find(name);
+         if (it == m_ti_op_type.end()) {
+           MayDay::Error("in GKVlasov::computeDtImExTI - m_ti_op_type does not contain species info.");
          }
 
-         if (m_ti_type[name] == _explicit_) {
+         if (m_ti_op_type[name] == _explicit_op_) {
 
            const LevelData<FArrayBox>& dfn( species.distributionFunction() );
            const PhaseGeom& geometry( species.phaseSpaceGeometry() );
@@ -1799,15 +1806,15 @@ GKVlasov::globalMax( const double a_data ) const
 
 
 void 
-GKVlasov::defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
-                               std::vector<DOFList>&                         a_dof_list,
-                               const KineticSpeciesPtrVect&                  a_soln,
-                               const GlobalDOFKineticSpeciesPtrVect&         a_gdofs,
-                               const GKVector&                               a_x,
-                               GKOps&                                        a_ops,
-                               const std::string&                            a_out_string,
-                               const std::string&                            a_opt_string,
-                               bool                                          a_im )
+GKVlasov::defineMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
+                               std::vector<DOFList>&                            a_dof_list,
+                               const KineticSpeciesPtrVect&                     a_soln,
+                               const GlobalDOFKineticSpeciesPtrVect&            a_gdofs,
+                               const ODEVector&                                 a_x,
+                               void*                                            a_ops,
+                               const std::string&                               a_out_string,
+                               const std::string&                               a_opt_string,
+                               bool                                             a_im )
 {
   for (int species(0); species<a_soln.size(); species++) {
     const KineticSpecies&           soln_species(*(a_soln[species]));
@@ -1829,88 +1836,77 @@ GKVlasov::defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_p
 
 
 void 
-GKVlasov::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
-                         std::vector<DOFList>&                         a_dof_list,
-                         const GKVector&                               a_X,
-                         GKOps&                                        a_ops,
-                         const std::string&                            a_out_string,
-                         const std::string&                            a_opt_string,
-                         bool                                          a_im,
-                         const KineticSpecies&                         a_species,
-                         const GlobalDOFKineticSpecies&                a_global_dofs,
-                         const int                                     a_species_index )
+GKVlasov::defineBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
+                         std::vector<DOFList>&                            a_dof_list,
+                         const ODEVector&                                 a_X,
+                         void*                                            a_ops,
+                         const std::string&                               a_out_string,
+                         const std::string&                               a_opt_string,
+                         bool                                             a_im,
+                         const KineticSpecies&                            a_species,
+                         const GlobalDOFKineticSpecies&                   a_global_dofs,
+                         const int                                        a_species_index )
 {
   const std::string& name = a_species.name();
 
   {
-    std::map<std::string, tiType>::const_iterator it;
-    it = m_ti_type.find(name);
-    if (it == m_ti_type.end()) {
-      MayDay::Error("in GKVlasov::defineBlockPC - m_ti_type does not contain species info.");
+    std::map<std::string, tiOpType>::const_iterator it;
+    it = m_ti_op_type.find(name);
+    if (it == m_ti_op_type.end()) {
+      MayDay::Error("in GKVlasov::defineBlockPC - m_ti_op_type does not contain species info.");
     }
   }
 
-  if ( a_im && (m_ti_type[name] == _implicit_) ) {
+  if ( a_im && (m_ti_op_type[name] == _implicit_op_) ) {
   
     CH_assert(a_pc.size() == a_dof_list.size());
 
     if (!procID()) {
       std::cout << "  Kinetic Species " << a_species_index
                 << " - Vlasov term: "
-#ifdef AMG_PRECOND
                 << " creating " << _GK_VLASOV_PC_ << " preconditioner "
-#else
-                << " creating " << _BASIC_GK_PC_ << " preconditioner "
-#endif
                 << " (index = " << a_pc.size() << ").\n";
     }
 
-    Preconditioner<GKVector, GKOps> *pc;
-#ifdef AMG_PRECOND
-    pc = new GKVlasovPreconditioner<GKVector,GKOps>;
-
-    string precond_prefix = string(pp_name) + ".precond";
-    ParmParse pp_precond(precond_prefix.c_str());
-
-    GKVlasovAMG* amg_pc = new GKVlasovAMG(pp_precond, a_species.phaseSpaceGeometry());
-
-    m_vlasov_pc_idx[name] = m_pc_vec.size();
-    m_pc_vec.push_back(amg_pc);
-
-#else
-    pc = new BasicGKPreconditioner<GKVector,GKOps>;
-#endif
-    DOFList dof_list(0);
-
-    const LevelData<FArrayBox>& soln_dfn    (a_species.distributionFunction());
-    const DisjointBoxLayout&    grids       (soln_dfn.disjointBoxLayout());
-    const int                   n_comp      (soln_dfn.nComp());
-    const LevelData<FArrayBox>& pMapping    (a_global_dofs.data()); 
-  
-    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
-      const Box& grid = grids[dit];
-      const FArrayBox& pMap = pMapping[dit];
-      for (BoxIterator bit(grid); bit.ok(); ++bit) {
-        IntVect ic = bit();
-        for (int n(0); n < n_comp; n++) {
-          dof_list.push_back((int) pMap.get(ic ,n) - a_global_dofs.mpiOffset());
-        }
-      }
-    }
+    Preconditioner<ODEVector,AppCtxt> *pc;
+    pc = new GKVlasovPreconditioner<ODEVector,AppCtxt>;
 
     m_my_pc_idx[name] = a_pc.size();
 
     std::string out_string = pp_name + std::string(".") + name;
     std::string opt_string = pp_name + std::string(".") + name;
-#ifdef AMG_PRECOND
-    dynamic_cast<GKVlasovPreconditioner<GKVector,GKOps>*>
+    dynamic_cast<GKVlasovPreconditioner<ODEVector,AppCtxt>*>
        (pc)->define(a_X, a_ops, out_string, opt_string, a_im);
-#else
-    dynamic_cast<BasicGKPreconditioner<GKVector,GKOps>*>
-       (pc)->define(a_X, a_ops, out_string, opt_string, a_im, dof_list);
-#endif
+    dynamic_cast<GKVlasovPreconditioner<ODEVector,AppCtxt>*>
+       (pc)->speciesIndex(a_species_index);
+
+    std::string precond_prefix = string(pp_name) + ".precond";
+    ParmParse pp_precond(precond_prefix.c_str());
+    dynamic_cast<GKVlasovPreconditioner<ODEVector,AppCtxt>*>
+       (pc)->defineAMGPC(pp_precond, a_species.phaseSpaceGeometry());
+
     a_pc.push_back(pc);
-    a_dof_list.push_back(dof_list);
+
+    {
+      DOFList dof_list(0);
+  
+      const LevelData<FArrayBox>& soln_dfn(a_species.distributionFunction());
+      const DisjointBoxLayout&    grids   (soln_dfn.disjointBoxLayout());
+      const int                   n_comp  (soln_dfn.nComp());
+      const LevelData<FArrayBox>& pMapping(a_global_dofs.data()); 
+    
+      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+        const Box& grid = grids[dit];
+        const FArrayBox& pMap = pMapping[dit];
+        for (BoxIterator bit(grid); bit.ok(); ++bit) {
+          IntVect ic = bit();
+          for (int n(0); n < n_comp; n++) {
+            dof_list.push_back((int) pMap.get(ic ,n) - a_global_dofs.mpiOffset());
+          }
+        }
+      }
+      a_dof_list.push_back(dof_list);
+    }
 
   }
 
@@ -1919,141 +1915,141 @@ GKVlasov::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
 
 
 void 
-GKVlasov::updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
-                               const KineticSpeciesPtrVect&                  a_soln,
-                               const CFG::LevelData<CFG::FArrayBox>&         a_phi,
-                               const CFG::EField&                            a_E_field,
-                               const GlobalDOFKineticSpeciesPtrVect&         a_gdofs,
-                               const Real                                    a_time,
-                               const Real                                    a_shift,
-                               const bool                                    a_im )
+GKVlasov::updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
+                               const KineticSpeciesPtrVect&                     a_soln,
+                               const CFG::LevelData<CFG::FArrayBox>&            a_phi,
+                               const CFG::EField&                               a_E_field,
+                               const GlobalDOFKineticSpeciesPtrVect&            a_gdofs,
+                               const Real                                       a_time,
+                               const int                                        a_step,
+                               const int                                        a_stage,
+                               const Real                                       a_shift,
+                               const bool                                       a_im )
 {
    for (int species(0); species<a_soln.size(); species++) {
       const KineticSpecies&           soln_species(*(a_soln[species]));
       const GlobalDOFKineticSpecies&  gdofs_species(*(a_gdofs[species]));
       const std::string               species_name(soln_species.name());
 
-      if (m_it_counter % m_update_pc_freq == 0) {
-	updateBlockPC(a_pc, soln_species, a_phi, a_E_field, gdofs_species, a_time, a_shift, a_im, species);
-      }
+      updateBlockPC( a_pc, 
+                     soln_species, 
+                     a_phi, 
+                     a_E_field, 
+                     gdofs_species, 
+                     a_time, 
+                     a_step,
+                     a_stage,
+                     a_shift, 
+                     a_im, 
+                     species);
    }
-   m_it_counter++;
 }
 
 
 void 
-GKVlasov::updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
-                         const KineticSpecies&                         a_species,
-                         const CFG::LevelData<CFG::FArrayBox>&         a_phi,
-                         const CFG::EField&                            a_E_field,
-                         const GlobalDOFKineticSpecies&                a_global_dofs,
-                         const Real                                    a_time,
-                         const Real                                    a_shift,
-                         const bool                                    a_im,
-                         const int                                     a_species_index )
+GKVlasov::updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
+                         const KineticSpecies&                            a_species,
+                         const CFG::LevelData<CFG::FArrayBox>&            a_phi,
+                         const CFG::EField&                               a_E_field,
+                         const GlobalDOFKineticSpecies&                   a_global_dofs,
+                         const Real                                       a_time,
+                         const int                                        a_step,
+                         const int                                        a_stage,
+                         const Real                                       a_shift,
+                         const bool                                       a_im,
+                         const int                                        a_species_index )
 {
    CH_TIMERS("GKVlasov::updateBlockPC");
-   CH_TIMER("compute_velocity", t_compute_velocity);
-   CH_TIMER("construct_matrix", t_construct_matrix);
    const LevelData<FArrayBox>& dfn( a_species.distributionFunction() );
-   const DisjointBoxLayout& dbl( dfn.getBoxes() );
-   const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
-
-   IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
-   if ( !m_velocity.isDefined()) {
-      m_velocity.define( dbl, SpaceDim, ghostVect );
-   }
-
-   // Compute full gyrokinetic velocity
-   CH_START(t_compute_velocity);
-   if (a_species.isGyrokinetic() && m_include_FLR_effects) {
-
-      LevelData<FluxBox> gyroaveraged_E_field;
-      int order (a_E_field.secondOrder() ? 2 : 4);
-      a_species.gyroaveragedEField( gyroaveraged_E_field,
-                                    a_phi, 
-                                    order );
-
-      a_species.computeVelocity(  m_velocity, 
-                                  gyroaveraged_E_field, 
-                                  true,
-                                  PhaseGeom::FULL_VELOCITY, 
-                                  0.);
-   } else {
-      a_species.computeVelocity(  m_velocity, 
-                                  a_E_field.getInjectedField(), 
-                                  false,
-                                  PhaseGeom::FULL_VELOCITY, 
-                                  0. );
-   }
-   CH_STOP(t_compute_velocity);
 
    const std::string& name = a_species.name();
 
-  {
-    std::map<std::string, tiType>::const_iterator it;
-    it = m_ti_type.find(name);
-    if (it == m_ti_type.end()) {
-      MayDay::Error("in GKVlasov::updateBlockPC - m_ti_type does not contain species info.");
-    }
-  }
+   {
+     std::map<std::string, tiOpType>::const_iterator it;
+     it = m_ti_op_type.find(name);
+     if (it == m_ti_op_type.end()) {
+       MayDay::Error("in GKVlasov::updateBlockPC - m_ti_op_type does not contain species info.");
+     }
+   }
 
-  {
-    std::map<std::string, int>::iterator it;
-    it = m_my_pc_idx.find(name);
-    if ( (it == m_my_pc_idx.end()) && (m_ti_type[name] == _implicit_) ) {
-       MayDay::Error("in GKVlasov::updateBlockPC - m_my_pc_idx does not contain species info.");
-    }
-  }
+   {
+     std::map<std::string, int>::iterator it;
+     it = m_my_pc_idx.find(name);
+     if ( (it == m_my_pc_idx.end()) && (m_ti_op_type[name] == _implicit_op_) ) {
+        MayDay::Error("in GKVlasov::updateBlockPC - m_my_pc_idx does not contain species info.");
+     }
+   }
 
-  if ( a_im && (m_ti_type[name] == _implicit_) ) {
+   if ( a_im && (m_ti_op_type[name] == _implicit_op_) ) {
+
+     /* see if this update can be skipped */
+     if (a_step >= 0) {
+      if (a_step%m_update_pc_freq != 0) return;
+      if ((a_stage >= 0) && m_update_pc_skip_stage) return; 
+      if ((a_stage < 0) && (!m_update_pc_skip_stage)) return;
+     }
+
      CH_assert(m_my_pc_idx[name] >= 0);
      CH_assert(a_pc.size() > m_my_pc_idx[name]);
+ 
+     if (!procID()) {
+       std::cout << "    ==> Updating " << _GK_VLASOV_PC_ << " preconditioner "
+                 << " for Vlasov term of kinetic species " << a_species_index << ".\n";
+     }
 
-    if (!procID()) {
-#ifdef AMG_PRECOND
-      std::cout << "    ==> Updating " << _GK_VLASOV_PC_ << " preconditioner "
-#else
-      std::cout << "    ==> Updating " << _BASIC_GK_PC_ << " preconditioner "
-#endif
-                << " for Vlasov term of kinetic species " << a_species_index << ".\n";
-    }
+     CH_TIMER("compute_velocity", t_compute_velocity);
+     CH_TIMER("construct_matrix", t_construct_matrix);
+     const DisjointBoxLayout& dbl( dfn.getBoxes() );
+     const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
+  
+     IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
+     if ( !m_velocity.isDefined()) {
+        m_velocity.define( dbl, SpaceDim, ghostVect );
+     }
+     // Compute full gyrokinetic velocity
+     CH_START(t_compute_velocity);
+     if (a_species.isGyrokinetic() && m_include_FLR_effects) {
+  
+        LevelData<FluxBox> gyroaveraged_E_field;
+        getEFieldwFLR(gyroaveraged_E_field, a_species, a_phi, a_E_field);
+        a_species.computeVelocity(  m_velocity, 
+                                    gyroaveraged_E_field, 
+                                    true,
+                                    PhaseGeom::FULL_VELOCITY, 
+                                    0.);
+     } else {
+        a_species.computeVelocity(  m_velocity, 
+                                    a_E_field.getInjectedField(), 
+                                    false,
+                                    PhaseGeom::FULL_VELOCITY, 
+                                    0. );
+     }
+     CH_STOP(t_compute_velocity);
 
-#ifdef AMG_PRECOND
-    const PhaseGeom& geometry = a_species.phaseSpaceGeometry();
-    //    const MultiBlockCoordSys* coord_sys = geometry.coordSysPtr();
-    const DisjointBoxLayout& grids = geometry.gridsFull();
+     //    const MultiBlockCoordSys* coord_sys = geometry.coordSysPtr();
+     const DisjointBoxLayout& grids = geometry.gridsFull();
+ 
+     int coupling_comps = 2*(CFG_DIM+1);
+     IntVect coupling_ghosts = IntVect::Unit - BASISV(MU_DIR);  // No coupling in MU
+     LevelData<BaseFab<Vector<IntVect> > > couplings(grids, coupling_comps, coupling_ghosts);
+     LevelData<BaseFab<Vector<Real> > > weights(grids, coupling_comps, coupling_ghosts);
+ 
+     constructStencils( m_velocity, geometry, couplings, weights);
+ 
+     GKVlasovAMG* this_pc = dynamic_cast<GKVlasovPreconditioner<ODEVector,AppCtxt>*>
+                              (a_pc[m_my_pc_idx[name]])->getAMGPC();
+ 
+     CH_START(t_construct_matrix);
+     this_pc->constructMatrix(m_precond_face_avg_type, a_shift, couplings, weights);
+     CH_STOP(t_construct_matrix);
+ 
+     if ( m_precond_build_test ) {
+        testPC(this_pc, geometry, m_velocity, a_shift);
+     }
 
-    int coupling_comps = 2*(CFG_DIM+1);
-    IntVect coupling_ghosts = IntVect::Unit - BASISV(MU_DIR);  // No coupling in MU
-    LevelData<BaseFab<Vector<IntVect> > > couplings(grids, coupling_comps, coupling_ghosts);
-    LevelData<BaseFab<Vector<Real> > > weights(grids, coupling_comps, coupling_ghosts);
+   }
 
-    constructStencils( m_velocity, geometry, couplings, weights);
-
-    GKVlasovAMG* this_pc = m_pc_vec[m_vlasov_pc_idx[name]];
-
-    CH_START(t_construct_matrix);
-    this_pc->constructMatrix(m_precond_face_avg_type, a_shift, couplings, weights);
-    CH_STOP(t_construct_matrix);
-
-    if ( m_precond_build_test ) {
-       testPC(this_pc, geometry, m_velocity, a_shift);
-    }
-
-#else
-    BasicGKPreconditioner<GKVector,GKOps> *pc = dynamic_cast<BasicGKPreconditioner<GKVector,GKOps>*>
-                                                  (a_pc[m_my_pc_idx[name]]);
-    CH_assert(pc != NULL);
-    BandedMatrix *pc_mat((BandedMatrix*)pc->getBandedMatrix());
-    pc_mat->setToIdentityMatrix();
-    pc_mat->scaleEntries(a_shift);
-    //assemblePrecondMatrix((void*)pc_mat, a_species, a_global_dofs, a_shift);
-    pc_mat->finalAssembly();
-#endif
-  }
-
-  return;
+   return;
 }
 
 
@@ -2239,40 +2235,24 @@ void GKVlasov::testPC( const GKVlasovAMG*         a_pc,
 }
 
 
-void GKVlasov::solvePCImEx( KineticSpeciesPtrVect&           a_kinetic_species_solution,
-                            const KineticSpeciesPtrVect&     a_kinetic_species_rhs,
-                            const CFG::FluidSpeciesPtrVect&  a_fluid_species_rhs,
-                            int                              a_idx ) const
+void GKVlasov::solvePCImEx( Preconditioner<ODEVector,AppCtxt>* const  a_pc,
+                            KineticSpeciesPtrVect&                    a_kinetic_species_solution,
+                            const KineticSpeciesPtrVect&              a_kinetic_species_rhs,
+                            const CFG::FluidSpeciesPtrVect&           a_fluid_species_rhs,
+                            int                                       a_idx ) const
 {
    CH_TIME("GKVlasov::solvePCImEx");
-   if (a_idx < 0 ) {
-      for (int species(0); species<a_kinetic_species_solution.size(); species++) {
-         KineticSpecies& kinetic_species_soln( static_cast<KineticSpecies&>(*(a_kinetic_species_solution[species])) );
-         const std::string species_name( kinetic_species_soln.name() );
+   CH_assert(a_idx >= 0);
 
-         std::map<std::string, int>::const_iterator it = m_vlasov_pc_idx.find(species_name);
-         if ( it != m_vlasov_pc_idx.end() ) {
-            GKVlasovAMG* this_pc = m_pc_vec[it->second];
-
-            KineticSpecies& kinetic_species_rhs( static_cast<KineticSpecies&>(*(a_kinetic_species_rhs[species])) );
-
-            this_pc->solve(kinetic_species_rhs.distributionFunction(), kinetic_species_soln.distributionFunction());
-         }
-      }
+   KineticSpecies& kinetic_species_soln( static_cast<KineticSpecies&>(*(a_kinetic_species_solution[a_idx])) );
+   {
+     const std::string& species_name( kinetic_species_soln.name() );
+     CH_assert(m_ti_op_type.at(species_name) == _implicit_op_);
    }
-   else {
-      KineticSpecies& kinetic_species_soln( static_cast<KineticSpecies&>(*(a_kinetic_species_solution[a_idx])) );
-      const std::string& species_name( kinetic_species_soln.name() );
-
-      std::map<std::string, int>::const_iterator it = m_vlasov_pc_idx.find(species_name);
-      if ( it != m_vlasov_pc_idx.end() ) {
-         GKVlasovAMG* this_pc = m_pc_vec[it->second];
-
-         KineticSpecies& kinetic_species_rhs( static_cast<KineticSpecies&>(*(a_kinetic_species_rhs[a_idx])) );
-
-         this_pc->solve(kinetic_species_rhs.distributionFunction(), kinetic_species_soln.distributionFunction());
-      }
-   }
+   GKVlasovAMG* this_pc = dynamic_cast<GKVlasovPreconditioner<ODEVector,AppCtxt>*>
+                            (a_pc)->getAMGPC();
+   KineticSpecies& kinetic_species_rhs( static_cast<KineticSpecies&>(*(a_kinetic_species_rhs[a_idx])) );
+   this_pc->solve(kinetic_species_rhs.distributionFunction(), kinetic_species_soln.distributionFunction());
 }
 
 
@@ -2426,15 +2406,16 @@ GKVlasov::constructStencils( const LevelData<FluxBox>&               a_physical_
 }
 
 void
-GKVlasov::computeIntegratedParticleFluxNormals(CFG::LevelData<CFG::FluxBox>&          a_flux_normal,
-                                               const KineticSpecies&                  a_soln_species,
-                                               const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                                               const CFG::EField&                     a_E_field,
-                                               const int                              a_velocity_option,
-                                               const Real                             a_time)
+GKVlasov::computeIntegratedMomentFluxNormals(CFG::LevelData<CFG::FluxBox>&          a_flux_normal,
+                                             const KineticSpecies&                  a_soln_species,
+                                             const CFG::LevelData<CFG::FArrayBox>&  a_phi,
+                                             const CFG::EField&                     a_E_field,
+                                             const int                              a_velocity_option,
+                                             const string&                          a_moment_type,
+                                             const Real                             a_time)
 {
    /*
-      Computes normal particel flux integrated over a cell face
+      Computes normal component of a moment flux integrated over a cell face
     */
    
    const LevelData<FArrayBox>& soln_dfn( a_soln_species.distributionFunction() );
@@ -2463,8 +2444,16 @@ GKVlasov::computeIntegratedParticleFluxNormals(CFG::LevelData<CFG::FluxBox>&    
                                    fourth_order_Efield,
                                    a_velocity_option,
                                    a_time);
-      
-      moment_op.compute( a_flux_normal, a_soln_species, m_flux_normal, DensityKernel<FluxBox>() );
+
+      if ( a_moment_type == "particle" ) {
+        moment_op.compute( a_flux_normal, a_soln_species, m_flux_normal, DensityKernel<FluxBox>() );
+      }
+      else if ( a_moment_type == "energy" ) {
+       moment_op.compute( a_flux_normal, a_soln_species, m_flux_normal, EnergyKernel<FluxBox>(a_phi) );
+      }
+      else {
+       MayDay::Error("GKVlasov::computeIntegratedMomentFluxNormals:: unknwn moment option");
+      }
 
       const VEL::VelCoordSys& vel_coords = geometry.velSpaceCoordSys();
       double vel_area = vel_coords.pointwiseJ(VEL::RealVect::Zero) * vel_coords.dx().product();
@@ -2490,7 +2479,15 @@ GKVlasov::computeIntegratedParticleFluxNormals(CFG::LevelData<CFG::FluxBox>&    
       const CFG::IntVect& ghosts = a_flux_normal.ghostVect();
       
       CFG::LevelData<CFG::FluxBox> phys_flux(config_grids, SpaceDim, ghosts);
-      moment_op.compute( phys_flux, a_soln_species, m_flux, DensityKernel<FluxBox>() );
+      if ( a_moment_type == "particle" ) {
+        moment_op.compute( phys_flux, a_soln_species, m_flux, DensityKernel<FluxBox>() );
+      }
+      else if ( a_moment_type == "energy" ) {
+        moment_op.compute( phys_flux, a_soln_species, m_flux, EnergyKernel<FluxBox>(a_phi) );
+      }
+      else {
+        MayDay::Error("GKVlasov::computeIntegratedMomentFluxNormals:: unknwn moment option");
+      }
       
       CFG::LevelData<CFG::FluxBox> phys_flux_cfg(config_grids, CFG_DIM, ghosts);
       for (CFG::DataIterator dit(config_grids); dit.ok(); ++dit) {
@@ -2505,8 +2502,8 @@ GKVlasov::computeIntegratedParticleFluxNormals(CFG::LevelData<CFG::FluxBox>&    
       // computeMetricTermProductAverage will only work correctly if
       // the assertions below are satisfied
       if (fourth_order) {
-	CH_assert(a_flux_normal.ghostVect() == CFG::IntVect::Unit);
-	CH_assert(!geometry.secondOrder());
+        CH_assert(a_flux_normal.ghostVect() == CFG::IntVect::Unit);
+        CH_assert(!geometry.secondOrder());
       }
       mag_geom.computeMetricTermProductAverage(a_flux_normal, phys_flux_cfg, fourth_order);
    }
@@ -2544,5 +2541,181 @@ GKVlasov::testZeroDivergence(const LevelData<FluxBox>&  a_velocity,
    if (procID()==0) cout << "velocity divergence norm = " << veldiv_norm << endl;
 }
 
+void
+GKVlasov::testEnergyConservation(const LevelData<FArrayBox>&            a_rhs,
+                                 const KineticSpecies&                  a_soln_species,
+                                 const CFG::LevelData<CFG::FArrayBox>&  a_phi,
+                                 const CFG::EField&                     a_E_field)
+{
+  
+  /*
+   This function compares the energy moment of the Vlasov RHS (\int d^3 {Q * div_phase(Flux_phase)}),
+   with the configuration divergence of the transport power ( div_cfg( \int {d^3 Q * Flux_cfg} )
+   */
+  
+  const PhaseGeom& geometry( a_soln_species.phaseSpaceGeometry() );
+  const CFG::MagGeom& mag_geom = geometry.magGeom();
+    
+  CFG::IntVect ghostVect = (geometry.secondOrder()) ? CFG::IntVect::Zero : CFG::IntVect::Unit;
+  const CFG::DisjointBoxLayout& grids_cfg = mag_geom.grids();
+  
+  // Compute the configuration divergence of the transport power
+  CFG::LevelData<CFG::FluxBox> flux_normal(grids_cfg, 1, ghostVect);
+  
+  computeIntegratedMomentFluxNormals(flux_normal,
+                                     a_soln_species,
+                                     a_phi,
+                                     a_E_field,
+                                     PhaseGeom::FULL_VELOCITY,
+                                     "energy",
+                                     0.);
+  
+  CFG::LevelData<CFG::FArrayBox> div_transport_power(grids_cfg, 1, CFG::IntVect::Zero);
+  CFG::LevelData<CFG::FArrayBox> cell_voll_cfg(grids_cfg, 1, CFG::IntVect::Zero);
+  mag_geom.getCellVolumes(cell_voll_cfg);
+  
+  CFG::RealVect fakeDx = CFG::RealVect::Unit;
+  for (CFG::DataIterator dit(grids_cfg); dit.ok(); ++dit) {
+    simpleDivergence(div_transport_power[dit], flux_normal[dit], grids_cfg[dit], fakeDx);
+    div_transport_power[dit].divide(cell_voll_cfg[dit]);
+  }
+  
+  // Compute the energy moment of the Vlasov RHS
+  CFG::LevelData<CFG::FArrayBox> rhs_energy_mom(grids_cfg, 1, CFG::IntVect::Zero);
+
+  MomentOp& moment_op = MomentOp::instance();
+  moment_op.compute( rhs_energy_mom, a_soln_species, a_rhs, EnergyKernel<FArrayBox>(a_phi) );
+  mag_geom.divideJonValid(rhs_energy_mom);
+  for (CFG::DataIterator dit(grids_cfg); dit.ok(); ++dit) {
+    rhs_energy_mom[dit].mult(-1.0);
+  }
+
+  mag_geom.plotCellData("rhs_energy_mom", rhs_energy_mom, 0.);
+  mag_geom.plotCellData("div_transport_power", div_transport_power, 0.);
+
+  // Compare fs-integrals
+  CFG::FluxSurface fs_shell(mag_geom);
+  
+  CFG::LevelData<CFG::FArrayBox> rhs_energy_mom_fs(grids_cfg, 1, CFG::IntVect::Zero);
+  fs_shell.averageAndSpread(rhs_energy_mom, rhs_energy_mom_fs);
+
+  CFG::LevelData<CFG::FArrayBox> div_transport_power_fs(grids_cfg, 1, CFG::IntVect::Zero);
+  fs_shell.averageAndSpread(div_transport_power, div_transport_power_fs);
+  
+  mag_geom.plotCellData("rhs_energy_mom_fs", rhs_energy_mom_fs, 0.);
+  mag_geom.plotCellData("div_transport_power_fs", div_transport_power_fs, 0.);
+  
+  // Obtain fs-integrated transport power
+  CFG::LevelData<CFG::FArrayBox> face_areas(grids_cfg, CFG_DIM, CFG::IntVect::Zero);
+  mag_geom.getPointwiseFaceAreas(face_areas);
+
+  CFG::LevelData<CFG::FArrayBox> flux_normal_cc(grids_cfg, 1, CFG::IntVect::Zero);
+  for (CFG::DataIterator dit(grids_cfg); dit.ok(); ++dit) {
+    CFG::BoxIterator bit(flux_normal_cc[dit].box());
+    for (bit.begin(); bit.ok(); ++bit) {
+      CFG::IntVect iv = bit();
+      CFG::IntVect ivR(iv);
+      ivR[RADIAL_DIR] += 1;
+      flux_normal_cc[dit](iv,0) = 0.5*(flux_normal[dit][RADIAL_DIR](iv,0) + flux_normal[dit][RADIAL_DIR](ivR,0));
+    }
+    flux_normal_cc[dit].divide(face_areas[dit],RADIAL_DIR,0,1);
+  }
+  
+  CFG::FluxSurface fs_face(mag_geom, false);
+  CFG::LevelData<CFG::FArrayBox> heat_flux_fs(grids_cfg, 1, CFG::IntVect::Zero);
+  fs_face.averageAndSpread(flux_normal_cc, heat_flux_fs);
+  mag_geom.plotCellData("heat_flux_fs", heat_flux_fs, 0.);
+  
+  // Obtain difference between FS-integrated radial heat fluxes
+  CFG::LevelData<CFG::FluxBox> flux_normal_rad;
+  flux_normal_rad.define(flux_normal);
+  for (CFG::DataIterator dit(grids_cfg); dit.ok(); ++dit) {
+    for (int dir=0; dir<CFG_DIM; ++dir) {
+      if (dir != RADIAL_DIR) flux_normal_rad[dit][dir].setVal(0.);
+    }
+  }
+  CFG::LevelData<CFG::FArrayBox> energy_src_loc(grids_cfg, 1, CFG::IntVect::Zero);
+  for (CFG::DataIterator dit(grids_cfg); dit.ok(); ++dit) {
+     simpleDivergence(energy_src_loc[dit], flux_normal_rad[dit], grids_cfg[dit], fakeDx);
+     energy_src_loc[dit].divide(cell_voll_cfg[dit]);
+  }
+  CFG::LevelData<CFG::FArrayBox> energy_src_fs(grids_cfg, 1, CFG::IntVect::Zero);
+  fs_shell.averageAndSpread(energy_src_loc, energy_src_fs);
+  mag_geom.plotCellData("energy_src_fs", energy_src_fs, 0.);
+
+  exit(1);
+}
+
+
+void
+GKVlasov::getEFieldwFLR(  LevelData<FluxBox>&                   a_E_wFLR,
+                          const KineticSpecies&                 a_species,
+                          const CFG::LevelData<CFG::FArrayBox>& a_phi,
+                          const CFG::EField&                    a_Efield )
+{
+  CH_assert(  a_species.isGyrokinetic() && m_include_FLR_effects );
+  static const int ncomp_Efield = 3;
+
+  int order (a_Efield.secondOrder() ? 2 : 4);
+  const PhaseGeom& phase_geom( a_species.phaseSpaceGeometry() );
+  a_species.gyroaveragedEField( a_E_wFLR, a_phi, order );
+
+  if (m_FLR_switch_func != NULL) {
+
+
+    if (!m_FLR_bc_factor.isDefined()) {
+      const CFG::MagGeom& mag_geom( phase_geom.magGeom() );
+      CFG::LevelData<CFG::FluxBox> FLR_bc_factor_cfg;
+      FLR_bc_factor_cfg.define( mag_geom.grids(), 
+                                1, 
+                                phase_geom.config_restrict(a_E_wFLR.ghostVect()) );
+      m_FLR_switch_func->assign( FLR_bc_factor_cfg, mag_geom, 0.0 );
+
+      if (m_plot_FLR_switch) {
+        mag_geom.plotFaceData("FLR_switch_var", FLR_bc_factor_cfg, 0.0);
+      }
+
+
+      phase_geom.injectConfigurationToPhase(  FLR_bc_factor_cfg,
+                                              m_FLR_bc_factor );
+    }
+
+    const LevelData<FluxBox>& E_field_noFLR = a_Efield.getInjectedField();
+
+    for (DataIterator dit(a_E_wFLR.dataIterator()); dit.ok(); ++dit) {
+      for (int dir = 0 ; dir < SpaceDim; dir++) {
+
+        FArrayBox& efield_wFLR = a_E_wFLR[dit][dir];
+        const FArrayBox& efield_noFLR = E_field_noFLR[dit][dir];
+        const FArrayBox& switch_fac = m_FLR_bc_factor[dit][dir];
+
+        const Box& box = efield_wFLR.box();
+        const Box& flat_box = efield_noFLR.box();
+
+        int vpar_idx = flat_box.smallEnd(VPARALLEL_DIR);
+        int mu_idx = flat_box.smallEnd(MU_DIR);
+
+        VEL::IntVect vel_idx(vpar_idx, mu_idx);
+
+        for (BoxIterator bit(box); bit.ok(); ++bit) {
+          IntVect iv(bit());
+
+          CFG::IntVect iv_cfg = phase_geom.config_restrict(iv);
+          IntVect iv_flat = phase_geom.tensorProduct(iv_cfg, vel_idx);
+
+          Real alpha = switch_fac(iv_flat, 0);
+          for (int n=0; n < ncomp_Efield; n++) {
+            Real e_wflr = efield_wFLR(iv,n);
+            Real e_noflr = efield_noFLR(iv_flat,n);
+            efield_wFLR(iv,n) = alpha*e_wflr + (1.0-alpha)*e_noflr;
+          }
+        }
+      }
+    }
+
+  }
+
+  return;
+}
 
 #include "NamespaceFooter.H"

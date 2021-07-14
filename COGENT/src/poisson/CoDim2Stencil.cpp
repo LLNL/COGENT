@@ -1,4 +1,5 @@
 #include "CoDim2Stencil.H"
+#include "EllipticOpBC.H"
 
 #include "NamespaceHeader.H"
 
@@ -13,6 +14,7 @@ CoDim2Stencil::CoDim2Stencil( const CoDim2Stencil& a_bc_stencil_coupling )
      m_transverse_boundary(a_bc_stencil_coupling.m_transverse_boundary),
      m_box(a_bc_stencil_coupling.m_box),
      m_dx(a_bc_stencil_coupling.m_dx),
+     m_value_type(a_bc_stencil_coupling.m_value_type),
      m_defined(true)
 {
 }
@@ -21,6 +23,7 @@ CoDim2Stencil::CoDim2Stencil( const CoDim2Stencil& a_bc_stencil_coupling )
 
 void
 CoDim2Stencil::define( const Box&            a_codim1_box,
+                       const int             a_value_type,
                        const RealVect&       a_dx,
                        const int&            a_dir,
                        const Side::LoHiSide& a_side,
@@ -40,6 +43,7 @@ CoDim2Stencil::define( const Box&            a_codim1_box,
    }
 
    m_box = adjCellBox(a_codim1_box, a_transverse_dir, a_transverse_side, nghosts);
+   m_value_type = a_value_type;
    m_dx = a_dx;
    m_dir = a_dir;
    m_side = a_side;
@@ -72,8 +76,18 @@ CoDim2Stencil::getStencil( const IntVect&   a_iv,
       IntVect point = a_iv;
 
       for (int i=0; i<num_weights; ++i) {
-         point[m_transverse_dir] += (1 - 2*m_transverse_side);
 
+         if ( m_value_type == EllipticOpBC::EXTRAPOLATED ) {
+            if (m_side == Side::LoHiSide::Lo) {
+               point[m_dir]++;
+            }
+            else if (m_side == Side::LoHiSide::Hi) {
+               point[m_dir]--;
+            }
+         }
+         else {
+            point[m_transverse_dir] += (1 - 2*m_transverse_side);
+         }
          a_points.push_back(point);
          a_weights.push_back(weights[i]*fac);
       }

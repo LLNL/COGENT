@@ -1,3 +1,52 @@
+ccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE FLUX-FREEZING SPEED WITH LIGHT WAVES
+
+      subroutine eval_flux_freezing_speed_emhd(
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_FRA1[rho],
+     &     CHF_CONST_FRA1[P],
+     &     CHF_CONST_FRA1[magP],
+     &     CHF_CONST_FRA[dxidX_row_mag],
+     &     CHF_CONST_REAL[gamma],
+     &     CHF_CONST_REAL[delta],
+     &     CHF_CONST_INT[includeP],
+     &     CHF_CONST_INT[includePmag],
+     &     CHF_FRA[Cspeed]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], n
+      double precision rho0, P0, magP0, Vn, C0, CsSq, VaSq
+      double precision frac, cvacSq, dxidX_row_mag0
+
+      CHF_AUTOMULTIDO[gridbox;i]
+
+         rho0  = rho(CHF_AUTOIX[i])
+         P0    = P(CHF_AUTOIX[i])
+         magP0 = magP(CHF_AUTOIX[i])
+
+         CsSq = includeP*gamma*P0/rho0
+         VaSq = includePmag*two*magP0/rho0
+         cvacSq = one/delta       
+
+         frac = one
+         if(VaSq.gt.zero) then
+            frac = cvacSq/(cvacSq+VaSq)
+         endif
+         C0  = sqrt( (CsSq+VaSq)*frac )
+
+         do n=0, (CH_SPACEDIM-1)
+            Vn = Cspeed(CHF_AUTOIX[i],n)
+            dxidX_row_mag0 = dxidX_row_mag(CHF_AUTOIX[i],n)
+            Cspeed(CHF_AUTOIX[i],n) = abs(Vn) + dxidX_row_mag0*C0
+         enddo
+ 
+      CHF_ENDDO
+
+      return
+      end
+
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
 c    compute collision terms
@@ -17,7 +66,9 @@ c    compute collision terms
      &     CHF_CONST_REAL[NvacC],
      &     CHF_CONST_REAL[NvacP],
      &     CHF_CONST_FRA1[By],
-     &     CHF_CONST_FRA1[den],
+     &     CHF_CONST_FRA1[Nh],
+     &     CHF_CONST_FRA1[Ne],
+     &     CHF_CONST_FRA1[nue_neu],
      &     CHF_CONST_FRA1[Pele],
      &     CHF_CONST_FRA1[Pion],
      &     CHF_FRA1[taui],
@@ -30,36 +81,133 @@ c    compute collision terms
 
 c     local variables
       integer n, CHF_AUTODECL[i]
-      double precision By0, den0, Ti_eV, Te_eV, Clogii, Clogei
-      double precision Pion0, Pele0
-      double precision tauVac
+      double precision By0, Nh0, Ne0, Ti_eV, Te_eV, Clogii, Clogei
+      double precision Pion0, Pele0, nue_spi0, nue_neu0, nue_vac0
 
       CHF_AUTOMULTIDO[cellbox;i]
 
          By0   = By(CHF_AUTOIX[i])
-         den0  = den(CHF_AUTOIX[i])
+         Nh0  = Nh(CHF_AUTOIX[i])
+         Ne0  = Ne(CHF_AUTOIX[i])
          Pion0 = Pion(CHF_AUTOIX[i])
          Pele0 = Pele(CHF_AUTOIX[i])
-         Ti_eV = Tscale_eV*Pion0/den0
-         Te_eV = Tscale_eV*Pele0/den0
+         Ti_eV = Tscale_eV*Pion0/Nh0
+         Te_eV = Tscale_eV*Pele0/Ne0
+         nue_neu0 = nue_neu(CHF_AUTOIX[i])
          Clogii = 10.0
          Clogei = 10.0
 
-         taui(CHF_AUTOIX[i]) = tauiscale1eV_s*10.0/Clogii*Ti_eV*sqrt(Ti_eV)/den0/tscale_s
-         taue(CHF_AUTOIX[i]) = tauescale1eV_s*10.0/Clogei*Te_eV*sqrt(Te_eV)/den0/tscale_s
-         tauVac = tauescale1eV_s*10.0/Clogei/den0/tscale_s/(0.01*(NvacC/den0)**NvacP)
+         taui(CHF_AUTOIX[i]) = tauiscale1eV_s*10.0/Clogii*Ti_eV*sqrt(Ti_eV)/Nh0/tscale_s
+c         taui(CHF_AUTOIX[i]) = tauiscale1eV_s*10.0/Clogii*Ti_eV*sqrt(Ti_eV)/Ne0/tscale_s ?
+         taue(CHF_AUTOIX[i]) = tauescale1eV_s*10.0/Clogei*Te_eV*sqrt(Te_eV)/Ne0/tscale_s
+
+         nue_vac0 = (0.01*(NvacC/Nh0)**NvacP)*Clogei*Ne0*tscale_s/(10.0*tauescale1eV_s)
+
+         nue_spi0 = 1.0/taue(CHF_AUTOIX[i])
+         taue(CHF_AUTOIX[i]) = 1.0/(nue_spi0 + nue_neu0)
 
          if(etaResMin>0.0) then
-            etaRes(CHF_AUTOIX[i]) = Le0sq/taue(CHF_AUTOIX[i])/den0 + etaResMin
-c            etaRes(CHF_AUTOIX[i]) = Le0sq/den0*(1.0/taue(CHF_AUTOIX[i])+1.0/tauVac) + etaResMin
+            etaRes(CHF_AUTOIX[i]) = Le0sq/Ne0*(nue_spi0 + nue_neu0 + nue_vac0) + etaResMin
+c            etaRes(CHF_AUTOIX[i]) = Le0sq/taue(CHF_AUTOIX[i])/Ne0 + etaResMin
          else
             etaRes(CHF_AUTOIX[i]) = 0.0
          endif
 
-         Qie(CHF_AUTOIX[i]) = 2.0/(gamma-1.0)*mM*( 1.0/taue(CHF_AUTOIX[i]) )*(Pele0 - Pion0)
+         Qie(CHF_AUTOIX[i]) = 2.0/(gamma-1.0)*mM*( nue_spi0 + nue_neu0 )*(Pele0 - Ne0/Nh0*Pion0)
+c         Qie(CHF_AUTOIX[i]) = 2.0/(gamma-1.0)*mM*( 1.0/taue(CHF_AUTOIX[i]) )*(Pele0 - Pion0)
 
          xi(CHF_AUTOIX[i]) = wciscale_Hz*By0*tscale_s*taui(CHF_AUTOIX[i])
          xe(CHF_AUTOIX[i]) = wcescale_Hz*By0*tscale_s*taue(CHF_AUTOIX[i])
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    add anomalous resitivity to resistivity
+
+      subroutine add_anomalous_resistivity(
+     &     CHF_BOX[cellbox],
+     &     CHF_CONST_REAL[anomFactor],
+     &     CHF_CONST_REAL[tscale_s],
+     &     CHF_CONST_REAL[gamma],
+     &     CHF_CONST_REAL[m_wpiscale_Hz],
+     &     CHF_CONST_REAL[wciscale_Hz],
+     &     CHF_CONST_REAL[wcescale_Hz],
+     &     CHF_CONST_REAL[Le0sq],
+     &     CHF_CONST_FRA[Vhall],
+     &     CHF_CONST_FRA1[By],
+     &     CHF_CONST_FRA1[Nh],
+     &     CHF_CONST_FRA1[Ne],
+     &     CHF_CONST_FRA1[Pele],
+     &     CHF_CONST_FRA1[Pion],
+     &     CHF_CONST_FRA1[xe],
+     &     CHF_CONST_FRA1[taue],
+     &     CHF_FRA1[etaRes]
+     &     )
+
+c     local variables
+      integer n, CHF_AUTODECL[i]
+      double precision By0, Nh0, Ne0, Pion0, Pele0, VtiSq, VteSq
+      double precision omegaLH, taue0, xe0, VdoViSq
+      double precision nuAnom0, nuAnom, denom
+      double precision CsSq, Cc, fc, VdoCs, omegapi
+
+      Cc = 0.1*AnomFactor
+      fc = 3.0
+
+      CHF_AUTOMULTIDO[cellbox;i]
+
+         By0   = abs(By(CHF_AUTOIX[i]))
+         Nh0   = Nh(CHF_AUTOIX[i])
+         Ne0   = Ne(CHF_AUTOIX[i])
+         Pion0 = Pion(CHF_AUTOIX[i])
+         Pele0 = Pele(CHF_AUTOIX[i])
+         taue0 = taue(CHF_AUTOIX[i])
+         xe0   = abs(xe(CHF_AUTOIX[i]))
+         VtiSq = Pion0/Nh0
+         VteSq = Pele0/Ne0
+         CsSq = gamma*(VtiSq + VteSq)
+
+cccccccccccccccccccccccccccccccccccc
+c
+c   lower hybrid based
+c
+ccccccccccccccccccccccccccccccccccc
+
+         VdoViSq = 0.0
+         do n=0, (CH_SPACEDIM-1)
+            VdoViSq = VdoViSq + Vhall(CHF_AUTOIX[i],n)*Vhall(CHF_AUTOIX[i],n)/VtiSq
+         enddo
+
+         omegaLH = sqrt(wciscale_Hz*wcescale_Hz*By0*By0)*tscale_s
+         nuAnom0 = anomFactor*2.4*omegaLH*VdoViSq
+         denom = xe0 + nuAnom0*taue0
+         if(denom.gt.zero) then
+            nuAnom = nuAnom0*xe0/denom*(1.0-exp(-xe0))
+         else
+            nuAnom = 0.0
+         endif
+
+cccccccccccccccccccccccccccccccccccc
+c
+c   Chodura
+c
+cccccccccccccccccccccccccccccccccccc
+
+c         omegapi = wciscale_Hz*sqrt(Ne0)*tscale_s
+c         VdoCs = 0.0
+c         do n=0, (CH_SPACEDIM-1)
+c            VdoCs = VdoCs + Vhall(CHF_AUTOIX[i],n)*Vhall(CHF_AUTOIX[i],n)/CsSq
+c         enddo
+c         VdoCs = sqrt(VdoCs)
+c         nuAnom = Cc*omegapi*(1-exp(-VdoCs/fc))
+
+cccccccccccccccccccccccccccccccccccc
+
+         etaRes(CHF_AUTOIX[i]) = etaRes(CHF_AUTOIX[i]) + Le0sq*nuAnom/Ne0
 
       CHF_ENDDO
 
@@ -77,7 +225,8 @@ c    compute source terms for energy equations
      &     CHF_CONST_FRA1[Ja],
      &     CHF_CONST_FRA1[eta],
      &     CHF_CONST_FRA1[Qie],
-     &     CHF_CONST_FRA1[den],
+     &     CHF_CONST_FRA1[Nh],
+     &     CHF_CONST_FRA1[Ne],
      &     CHF_CONST_FRA[JaJxB],
      &     CHF_CONST_FRA[gradPe],
      &     CHF_CONST_FRA[gradTeeff],
@@ -90,35 +239,36 @@ c    compute source terms for energy equations
 
 c     local variables
       integer n, CHF_AUTODECL[i]
-      double precision Ja0, eta0, NU0, Ecc0, Jcc0, JdotE0, NUdotE0
-      double precision Qie0, den0, gradPe0, gradTeeff0, JxB0 
+      double precision Ja0, eta0, U0, Ecc0, Jcc0, JdotE0, NeUdotE0
+      double precision Qie0, Nh0, Ne0, gradPe0, gradTeeff0, JxB0 
 
       CHF_AUTOMULTIDO[cellbox;i]
 
          Ja0   = Ja(CHF_AUTOIX[i])
          eta0  = eta(CHF_AUTOIX[i])
          Qie0  = Qie(CHF_AUTOIX[i])
-         den0  = den(CHF_AUTOIX[i])
+         Nh0  = Nh(CHF_AUTOIX[i])
+         Ne0  = Ne(CHF_AUTOIX[i])
 
          JdotE0  = 0.0
-         NUdotE0 = 0.0
+         NeUdotE0 = 0.0
          do n=0, (CH_SPACEDIM-1)
             JxB0  = JaJxB(CHF_AUTOIX[i],n)/Ja0
             gradPe0 = gradPe(CHF_AUTOIX[i],n)
             gradTeeff0 = gradTeeff(CHF_AUTOIX[i],n)
             Ecc0 = Ecc(CHF_AUTOIX[i],n)
             Jcc0 = Jcc(CHF_AUTOIX[i],n)
-            NU0  = NU(CHF_AUTOIX[i],n)
+            U0  = NU(CHF_AUTOIX[i],n)/Nh0
             if(useFiniteIon.eq.zero) then
                JdotE0  = JdotE0  + Jcc0*Ecc0
-               NUdotE0 = NUdotE0 + NU0*(JxB0 - gradPe0)/den0
+               NeUdotE0 = NeUdotE0 + U0*(JxB0 - gradPe0)
             else
                JdotE0  = JdotE0  + Jcc0*( Ecc0 + gradTeeff0*lambdai )
-               NUdotE0 = NUdotE0 + NU0*(Ecc0 - eta0*Jcc0)/lambdai
+               NeUdotE0 = NeUdotE0 + Ne0*U0*(Ecc0 - eta0*Jcc0)/lambdai
             endif
          enddo
 
-         JaSion(CHF_AUTOIX[i]) = Ja0*(NUdotE0 + Qie0)
+         JaSion(CHF_AUTOIX[i]) = Ja0*(NeUdotE0 + Qie0)
          JaSele(CHF_AUTOIX[i]) = Ja0*JdotE0 - JaSion(CHF_AUTOIX[i])
 
       CHF_ENDDO
@@ -845,28 +995,32 @@ c   exponential factor (relaxes)
 
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
-c   set contravarient hall drift speed: VhallDrift = Li0*BcrossGrad(N)/N^2 
+c   set contravarient hall drift speed: VhallDrift = Li0*BcrossGrad(Ne)/Ne^2 
 
       subroutine eval_hall_drift_speed(
      &     CHF_BOX[box],
-     &     CHF_CONST_FRA[gradN],
-     &     CHF_CONST_FRA1[N],
+     &     CHF_CONST_FRA[gradNe],
+     &     CHF_CONST_FRA1[Ne],
      &     CHF_CONST_FRA1[By_covar],
-     &     CHF_CONST_FRA1[J],
+     &     CHF_CONST_FRA1[Ja],
+     &     CHF_CONST_FRA1[hdSF],
      &     CHF_CONST_REAL[lambdai],
-     &     CHF_FRA[Vhd]
-     &     )
+     &     CHF_FRA[Vhd] )
 
 c     local variables
       integer CHF_AUTODECL[i]
-      double precision Val
-
+      double precision hdsF0, Ne0, Ja0, By0, Val
 
       CHF_AUTOMULTIDO[box;i]
+
+        Ja0 = Ja(CHF_AUTOIX[i])
+        Ne0 = Ne(CHF_AUTOIX[i])
+        By0 = By_covar(CHF_AUTOIX[i])
+        hdSF0 = hdSF(CHF_AUTOIX[i])
         
-        Val = lambdai*By_covar(CHF_AUTOIX[i])/N(CHF_AUTOIX[i])/N(CHF_AUTOIX[i])/J(CHF_AUTOIX[i])
-        Vhd(CHF_AUTOIX[i],0) =  Val*gradN(CHF_AUTOIX[i],1)
-        Vhd(CHF_AUTOIX[i],1) = -Val*gradN(CHF_AUTOIX[i],0)
+        Val = hdSF0*lambdai*By0/Ne0/Ne0/Ja0
+        Vhd(CHF_AUTOIX[i],0) =  Val*gradNe(CHF_AUTOIX[i],1)
+        Vhd(CHF_AUTOIX[i],1) = -Val*gradNe(CHF_AUTOIX[i],0)
 
       CHF_ENDDO
 
@@ -961,39 +1115,44 @@ c    compute alpha and g on edges for implicit Hall solve
 
       subroutine compute_gfun_edges(
      &     CHF_BOX[edgebox],
+     &     CHF_CONST_INT[useFiniteIon],
      &     CHF_CONST_REAL[dt],
      &     CHF_CONST_REAL[epsilon],
      &     CHF_CONST_REAL[delta],
      &     CHF_CONST_REAL[lambdai],
      &     CHF_CONST_FRA1[Eideal],
      &     CHF_CONST_FRA1[gradPe],
-     &     CHF_CONST_FRA1[betaHall],
+     &     CHF_CONST_FRA1[gammaHallold],
+     &     CHF_CONST_FRA1[divJStress],
      &     CHF_CONST_FRA1[J0],
-     &     CHF_CONST_FRA1[den],
+     &     CHF_CONST_FRA1[Ne],
      &     CHF_CONST_FRA1[Eold],
      &     CHF_CONST_FRA1[Jold],
-     &     CHF_FRA1[gfun]
-     &     )
+     &     CHF_FRA1[gfun] )
 
 c     local variables
       integer CHF_AUTODECL[i]
-      double precision dtNoe, wpedtsq, dtod, Eboltz, gfun0
-      double precision betaHallsq, gamma
+      double precision Ne0, dtNoe, wpedtsq, dtod, Eboltz, gfun0
+      double precision gammaHallold0, dtdivJStress0
 
       dtod = dt/delta
 
       CHF_AUTOMULTIDO[edgebox;i]
 
-        betaHallsq = betaHall(CHF_AUTOIX[i])**2
-        betaHallsq = min(betaHallsq,0.9999)
-        gamma = 1.0/sqrt(1-betaHallsq)
+        gammaHallold0 = gammaHallold(CHF_AUTOIX[i])
+c        gammaHallold0 = 1.0
 
-        dtNoe = dt*den(CHF_AUTOIX[i])/epsilon/gamma
+        Ne0 = Ne(CHF_AUTOIX[i])
+        dtdivJStress0 = dt*divJStress(CHF_AUTOIX[i])
+        dtNoe = dt*Ne0/epsilon/gammaHallold0
         wpedtsq = dtod*dtNoe
-        Eboltz = -lambdai*gradPe(CHF_AUTOIX[i])/den(CHF_AUTOIX[i])
+        Eboltz = zero
+        if(useFiniteIon.eq.one) then
+           Eboltz = -lambdai*gradPe(CHF_AUTOIX[i])/Ne0
+        endif
 
-        gfun0 = Jold(CHF_AUTOIX[i]) + wpedtsq*J0(CHF_AUTOIX[i])
-     &        + dtNoe*(Eold(CHF_AUTOIX[i]) - Eideal(CHF_AUTOIX[i]) - Eboltz)
+        gfun0 = gammaHallold0*(Jold(CHF_AUTOIX[i]) - dtdivJStress0 + wpedtsq*J0(CHF_AUTOIX[i])
+     &        + dtNoe*(Eold(CHF_AUTOIX[i]) - Eideal(CHF_AUTOIX[i]) - Eboltz))
 
         gfun(CHF_AUTOIX[i]) = gfun0
 
@@ -1010,97 +1169,442 @@ c    ADVANCE E AND J USING RELAXATION SCHEME (BACKWARD EULER)
      &     CHF_BOX[edgebox],
      &     CHF_CONST_INT[dir],
      &     CHF_CONST_INT[method],
+     &     CHF_CONST_INT[useFiniteIon],
      &     CHF_CONST_REAL[dt],
      &     CHF_CONST_REAL[epsilon],
      &     CHF_CONST_REAL[delta],
      &     CHF_CONST_REAL[lambdai],
+     &     CHF_CONST_FRA[dxidX],
      &     CHF_CONST_FRA1[Eideal],
      &     CHF_CONST_FRA1[etaRes],
      &     CHF_CONST_FRA1[Ehall],
+     &     CHF_CONST_FRA1[EhallOp],
      &     CHF_CONST_FRA1[etaHall],
+     &     CHF_CONST_FRA1[etaHallOp],
      &     CHF_CONST_FRA1[gfun],
      &     CHF_CONST_FRA1[gfunOp],
      &     CHF_CONST_FRA1[gradPe],
-     &     CHF_CONST_FRA1[betaHall],
-c     &     CHF_CONST_FRA1[divStress],
+     &     CHF_CONST_FRA1[gammaHallold],
      &     CHF_CONST_FRA1[J0],
-     &     CHF_CONST_FRA1[den],
+     &     CHF_CONST_FRA1[Ne],
      &     CHF_CONST_FRA1[Eold],
      &     CHF_CONST_FRA1[Jold],
+     &     CHF_FRA1[gammaHall],
+     &     CHF_FRA1[hallDriftSF],
      &     CHF_FRA1[Esoln],
-     &     CHF_FRA1[Jsoln]
-     &     )
+     &     CHF_FRA1[Jsoln] )
 
 c     local variables
       integer CHF_AUTODECL[i]
       double precision dtod, dtNoe, Eboltz, Estress, E0
-      double precision alpha, wpedtsq, gfun0, gfun02, gfunOp0, dirSign, wlhdt
-      double precision nudt, error
-      double precision eta0, etamin, betaHallsq, gamma
+      double precision alpha, wpedtsq, gfun0, gfunOp0, wlhdt, wlhdtOp, wlhdt_x, wlhdt_z
+      double precision Ne0, nudt, eta0, etamin
+      double precision dxidX0, dxidX1, dxidX2, dxidX3
+      double precision gx, gz, Jx, Jz, Ehallx, Ehallz
+      double precision gammaHallold0, gammabetaHallsqNew, gammaNew
+      double precision denom, hallDriftSF0
 
       dtod = dt/delta
       etamin = 0.0e-4
 
       CHF_AUTOMULTIDO[edgebox;i]
 
-        betaHallsq = betaHall(CHF_AUTOIX[i])**2
-        betaHallsq = min(betaHallsq,0.9999)
-        gamma = 1.0/sqrt(1-betaHallsq)
+        dxidX0 = dxidX(CHF_AUTOIX[i],0)
+        dxidX1 = dxidX(CHF_AUTOIX[i],1)
+        dxidX2 = dxidX(CHF_AUTOIX[i],2)
+        dxidX3 = dxidX(CHF_AUTOIX[i],3)
 
-        dtNoe = dt*den(CHF_AUTOIX[i])/epsilon/gamma
+        gammaHallold0 = gammaHallold(CHF_AUTOIX[i])
+c        gammaHalloldld0 = 1.0
+
+        Ne0 = Ne(CHF_AUTOIX[i])
+
+        dtNoe = dt*Ne0/epsilon/gammaHallold0
         eta0 = etaRes(CHF_AUTOIX[i]) + etamin
         nudt = dtNoe*eta0
         wpedtsq = dtod*dtNoe
         alpha = 1.0 + wpedtsq + nudt
-        dirSign = 1.0-2.0*dir
-        wlhdt = dtNoe*etaHall(CHF_AUTOIX[i])*dirSign
+        wlhdt = dtNoe*etaHall(CHF_AUTOIX[i])
+        wlhdtOp = dtNoe*etaHallOp(CHF_AUTOIX[i])
 
-        Eboltz = -lambdai*gradPe(CHF_AUTOIX[i])/den(CHF_AUTOIX[i])
-c        Estress = divStress(CHF_AUTOIX[i])/den(CHF_AUTOIX[i])
-        E0 = Eideal(CHF_AUTOIX[i]) + Ehall(CHF_AUTOIX[i]) + Eboltz
-c     &     + Estress
+        E0 = Eideal(CHF_AUTOIX[i])
+        if(useFiniteIon.eq.one) then
+c           Eboltz = zero
+           Eboltz = -lambdai*gradPe(CHF_AUTOIX[i])/Ne0
+           E0 = E0 + Ehall(CHF_AUTOIXi]) + Eboltz
+        endif
 
-
-        gfun0 = Jold(CHF_AUTOIX[i]) + wpedtsq*J0(CHF_AUTOIX[i])
-     &        + dtNoe*(Eold(CHF_AUTOIX[i]) - Eideal(CHF_AUTOIX[i]) - Eboltz)
-        gfun02 = gfun(CHF_AUTOIX[i])
-        error = abs(gfun0-gfun02)
+        gfun0 = gfun(CHF_AUTOIX[i])
         gfunOp0 = gfunOp(CHF_AUTOIX[i])
+        if(dir.eq.zero) then
+          gx = gfun0
+          gz = gfunOp0
+          wlhdt_x = wlhdtOp
+          wlhdt_z = wlhdt
+          Ehallx = Ehall(CHF_AUTOIX[i])
+          Ehallz = EhallOp(CHF_AUTOIX[i])
+        else
+          gx = gfunOp0
+          gz = gfun0
+          wlhdt_x = wlhdt
+          wlhdt_z = wlhdtOp
+          Ehallx = EhallOp(CHF_AUTOIX[i])
+          Ehallz = Ehall(CHF_AUTOIX[i])
+        endif
 
-      if(method.eq.two) then
-         Jsoln(CHF_AUTOIX[i]) = J0(CHF_AUTOIX[i])
-         Esoln(CHF_AUTOIX[i]) = E0
-      else
+        if(method.eq.two) then
 
-      if(method.eq.zero) then
-        Jsoln(CHF_AUTOIX[i]) = (gfun02 - dtNoe*Ehall(CHF_AUTOIX[i]))/alpha
-      else
-        Jsoln(CHF_AUTOIX[i]) = (alpha*gfun02 + wlhdt*gfunOp0)/(alpha*alpha + wlhdt*wlhdt)
-      endif
+          Jsoln(CHF_AUTOIX[i]) = J0(CHF_AUTOIX[i])
+          Esoln(CHF_AUTOIX[i]) = E0
+          hallDriftSF(CHF_AUTOIX[i]) = 1.0
+          gammaHall(CHF_AUTOIX[i]) = 1.0
 
-        Esoln(CHF_AUTOIX[i]) = Eold(CHF_AUTOIX[i])
-     &                       + dtod*( J0(CHF_AUTOIX[i]) - Jsoln(CHF_AUTOIX[i]) )
+        else
 
-      endif
+          hallDriftSF0 = wpedtsq*wpedtsq/alpha/alpha
+          if(method.eq.zero) then
+            Jx = (gx - gammaHallold0*dtNoe*Ehallx)/alpha
+            Jz = (gz - gammaHallold0*dtNoe*Ehallz)/alpha
+          else
+            denom = alpha*alpha + wlhdt_x*wlhdt_z
+            Jx = (alpha*gx + wlhdt_z*gz)/denom
+            Jz = (alpha*gz - wlhdt_x*gx)/denom
+            hallDriftSF0 = hallDriftSF0*alpha*alpha/denom
+          endif
 
-      if(error > 1.0e-15 ) then
-c        print*, "CHF_AUTOIX[i] = ", CHF_AUTOIX[i]
-c        print*, "dir = ", dir
-c        print*, "Boxlo0 = ", iedgeBoxlo0
-c        print*, "Boxhi0 = ", iedgeBoxhi0
-c        print*, "Boxlo1 = ", iedgeBoxlo1
-c        print*, "Boxhi1 = ", iedgeBoxhi1
-c        print*, "error    = ", error
-c        print*, "gfun0    = ", gfun0
-c        print*, "gfun02   = ", gfun02
-      endif
-c        Esoln(CHF_AUTOIX[i]) = E0
-c        Jsoln(CHF_AUTOIX[i]) = J0(CHF_AUTOIX[i])
-c        print*, "CHF_AUTOIX[i]    = ", CHF_AUTOIX[i]
-c        print*, "Eold(i,j)  = ", Eold(CHF_AUTOIX[i])
-c        print*, "E0(i,j)    = ", E0
-c        print*, "J0(i,j)    = ", J0(CHF_AUTOIX[i])
-c        print*, "Jsoln(i,j) = ", Jsoln(CHF_AUTOIX[i])
+c   add relativistic corrections
+          gammabetaHallsqNew = (dxidX0*Jx + dxidX1*Jz)**2 + (dxidX2*Jx + dxidX3*Jz)**2
+          gammabetaHallsqNew = lambdai*lambdai*gammabetaHallsqNew/Ne0/Ne0*delta
+          gammaNew = sqrt(1.0 + gammabetaHallsqNew)
+          Jx = Jx/gammaNew
+          Jz = Jz/gammaNew
+
+c  define solutions
+          Jsoln(CHF_AUTOIX[i]) = Jx*(one-dir) + Jz*dir
+          Esoln(CHF_AUTOIX[i]) = Eold(CHF_AUTOIX[i])
+     &                         + dtod*( J0(CHF_AUTOIX[i]) - Jsoln(CHF_AUTOIX[i]) )
+          hallDriftSF(CHF_AUTOIX[i]) = hallDriftSF0
+          gammaHall(CHF_AUTOIX[i]) = gammaNew
+
+        endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c   set density floor value
+
+      subroutine set_density_floor(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REAL[rhoThresh],
+     &     CHF_CONST_FRA1[Jacobian],
+     &     CHF_FRA1[Jrho]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision J0, Jrho0, JrhoThresh
+
+      CHF_AUTOMULTIDO[box;i]
+        
+         J0     = Jacobian(CHF_AUTOIX[i])
+         Jrho0  = Jrho(CHF_AUTOIX[i])
+         JrhoThresh = J0*rhoThresh
+
+         if(Jrho0<=JrhoThresh) then
+            Jrho(CHF_AUTOIX[i]) = JrhoThresh
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+         
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c   set electron density floor value
+
+      subroutine set_zbar_limits(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REAL[Zmin],
+     &     CHF_CONST_FRA1[JaNh],
+     &     CHF_FRA1[JaNe]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision JaNh0, JaNe0, Zbar, Zmax
+
+      Zmax = 1.0
+
+      CHF_AUTOMULTIDO[box;i]
+        
+         JaNh0  = JaNh(CHF_AUTOIX[i])
+         JaNe0  = JaNe(CHF_AUTOIX[i])
+         Zbar = JaNe0/JaNh0
+
+         if(Zbar.lt.Zmin) then
+            JaNe(CHF_AUTOIX[i]) = Zmin*JaNh0
+         endif
+         
+         if(Zbar.gt.Zmax) then
+            JaNe(CHF_AUTOIX[i]) = JaNh0
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+         
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c   set energy density floor value
+
+      subroutine set_energy_floor(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REAL[tempMin],
+     &     CHF_CONST_REAL[tempMax],
+     &     CHF_CONST_REAL[gamma],
+     &     CHF_CONST_FRA1[Jacobian],
+     &     CHF_CONST_FRA1[JNh],
+     &     CHF_CONST_FRA1[JNe],
+     &     CHF_CONST_FRA[Jmom],
+     &     CHF_FRA1[Jenei],
+     &     CHF_FRA1[Jenee]
+     &     )
+
+c     local variables
+      integer n, CHF_AUTODECL[i]
+      double precision J0, JNh0, JNe0, JpresMin, JpresMax, JeneeMax, JeneiMax
+      double precision JmeanE, val, JeneiMin, JeneeMin
+
+      CHF_AUTOMULTIDO[box;i]
+        
+         J0    = Jacobian(CHF_AUTOIX[i])
+         JNh0  = JNh(CHF_AUTOIX[i])
+         JNe0  = JNe(CHF_AUTOIX[i])
+         
+         JmeanE = 0.0
+         do n=0, (CH_SPACEDIM-1)
+            JmeanE = JmeanE + Jmom(CHF_AUTOIX[i],n)*Jmom(CHF_AUTOIX[i],n)
+         enddo
+         JmeanE = JmeanE/JNh0/2.0
+
+c    set electron energy density min and max values
+
+         JpresMin = JNh0*tempMin
+         JpresMax = JNh0*tempMax
+         JeneiMin = JpresMin/(gamma-1.0) + JmeanE
+         JeneiMax = JpresMax/(gamma-1.0) + JmeanE
+         
+         val = Jenei(CHF_AUTOIX[i])
+         if(val.lt.JeneiMin) then
+            Jenei(CHF_AUTOIX[i]) = JeneiMin
+         endif
+         
+         if(val.gt.JeneiMax) then
+            Jenei(CHF_AUTOIX[i]) = JeneiMax
+         endif
+        
+c    set electron energy density min and max values
+ 
+         JpresMin = JNe0*tempMin
+         JpresMax = JNe0*tempMax
+         JeneeMin = JpresMin/(gamma-1.0)
+         JeneeMax = JpresMax/(gamma-1.0)
+
+         val = Jenee(CHF_AUTOIX[i])
+         if(val.lt.JeneeMin) then
+            Jenee(CHF_AUTOIX[i]) = JeneeMin
+         endif
+         
+         if(val.gt.JeneeMax) then
+            Jenee(CHF_AUTOIX[i]) = JeneeMax
+         endif
+         
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+      
+      subroutine set_div_mass_flux_binary(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REAL[Nmin],
+     &     CHF_CONST_FRA1[Nh],
+     &     CHF_CONST_FRA1[divMF],
+     &     CHF_FRA1[divMFB]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision Nh0, divMF0
+
+      CHF_AUTOMULTIDO[box;i]
+        
+         Nh0     = Nh(CHF_AUTOIX[i])
+         divMF0  = divMF(CHF_AUTOIX[i])
+
+         divMFB(CHF_AUTOIX[i]) = one
+         if(Nh0<=Nmin) then
+            if(divMF0.gt.zero) then
+               divMFB(CHF_AUTOIX[i]) = zero
+            endif
+         endif
+
+      CHF_ENDDO
+      
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c   set Fout to max of Fout and Fin
+
+      subroutine set_min_val(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[Fin],
+     &     CHF_FRA1[Fout]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision Fin0, Fout0
+
+      CHF_AUTOMULTIDO[box;i]
+
+         Fin0  = Fin(CHF_AUTOIX[i])
+         Fout0 = Fout(CHF_AUTOIX[i])
+
+         if(Fout0.gt.Fin0) then
+            Fout(CHF_AUTOIX[i]) = Fin(CHF_AUTOIX[i])
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c   set Fout to max of Fout and Fin
+
+      subroutine set_max_val(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA1[Fin],
+     &     CHF_FRA1[Fout]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision Fin0, Fout0
+
+      CHF_AUTOMULTIDO[box;i]
+
+         Fin0  = Fin(CHF_AUTOIX[i])
+         Fout0 = Fout(CHF_AUTOIX[i])
+
+         if(Fout0.lt.Fin0) then
+            Fout(CHF_AUTOIX[i]) = Fin(CHF_AUTOIX[i])
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+c
+c   set ionization source term for electron density and
+c   add ele energy density source term from ionization to ele
+c   energy density source term
+
+      subroutine add_ionization_source_terms(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REAL[Uizn_eV],
+     &     CHF_CONST_REAL[Tscale_eV],
+     &     CHF_CONST_FRA1[Ja],
+     &     CHF_CONST_FRA1[Ne],
+     &     CHF_CONST_FRA1[nue_izn],
+     &     CHF_FRA1[JaSeleDen],
+     &     CHF_FRA1[JaSeneDene]
+     &     )
+
+c     local variables
+      integer n, CHF_AUTODECL[i]
+      double precision Ja0, Ne0, nue_izn0, Se0, JaSeneDene0
+
+      CHF_AUTOMULTIDO[box;i]
+
+         Ja0      = Ja(CHF_AUTOIX[i])
+         Ne0      = Ne(CHF_AUTOIX[i])
+         nue_izn0 = nue_izn(CHF_AUTOIX[i])
+         Se0      = Ja0*nue_izn0*Ne0
+         JaSeneDene0  = JaSeneDene(CHF_AUTOIX[i])
+
+         JaSeleDen(CHF_AUTOIX[i])  = Se0
+         JaSeneDene(CHF_AUTOIX[i]) = JaSeneDene0 - Uizn_eV/Tscale_eV*Se0
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+c
+c   set neutral interaction rates
+c
+c
+
+      subroutine eval_neutral_rates(
+     &     CHF_BOX[box],
+     &     CHF_CONST_REAL[Nscale_SI],
+     &     CHF_CONST_REAL[tscale_s],
+     &     CHF_CONST_REAL[Uizn_eV],
+     &     CHF_CONST_REAL[Tscale_eV],
+     &     CHF_CONST_FRA1[Nh],
+     &     CHF_CONST_FRA1[Ne],
+     &     CHF_CONST_FRA1[Pe],
+     &     CHF_FRA1[nue_izn],
+     &     CHF_FRA1[nue_neu]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i]
+      double precision Nh0, Ne0, Pe0, Nn, Te_eV
+      double precision TeoU, kizn, K3br, g0, g1, kmom, nue_neu0
+
+      g0 = 2.0
+      g1 = 1.0
+
+      CHF_AUTOMULTIDO[box;i]
+
+         Nh0 = Nh(CHF_AUTOIX[i])
+         Ne0 = Ne(CHF_AUTOIX[i])
+         Pe0 = Pe(CHF_AUTOIX[i])
+         Te_eV = Tscale_eV*Pe0/Ne0
+         Nn  = Nh0 - Ne0
+         Nn  = max(Nn,0.0)
+
+c     compute ionization and 3-body recombination rate constant [cm^3/s, cm^6/s]
+c     and set normalized ionization rate
+
+         TeoU = Te_eV/Uizn_eV
+         kizn = 1.0e-5*sqrt(TeoU)/Uizn_eV/sqrt(Uizn_eV)/(6.0+TeoU)*exp(-1.0/TeoU)
+         K3br = kizn*1.66e-22*g1/g0/Te_eV/sqrt(Te_eV)*exp(1.0/TeoU)
+
+         nue_izn(CHF_AUTOIX[i])  = (kizn - K3br*Ne0*Nscale_SI/1.0e6)*Nn*Nscale_SI/1.0e6*tscale_s
+
+c     compute momentum-exchange rate constant [cm^3/s]
+c     and set normalzied neutral momentum exchange rate
+
+         kmom = 1.0e-7
+         nue_neu0 = kmom*Nn*Nscale_SI/1.0e6*tscale_s
+         nue_neu(CHF_AUTOIX[i]) = nue_neu0 + nue_izn(CHF_AUTOIX[i])
 
       CHF_ENDDO
 

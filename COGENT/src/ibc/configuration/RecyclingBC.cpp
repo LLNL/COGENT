@@ -70,7 +70,6 @@ void RecyclingBC::applyBC(EllipticOpBC&             a_elliptic_bc,
   
    const int& dir( m_bdry_layout->dir() );
    const Side::LoHiSide& side( m_bdry_layout->side() );
-   const int iSIDE(side);
    
    CH_assert(a_face_val.nComp() == 1);
    const DisjointBoxLayout& bdry_grids( m_bdry_layout->disjointBoxLayout() );

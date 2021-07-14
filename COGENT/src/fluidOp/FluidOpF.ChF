@@ -1,3 +1,4 @@
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
 c    COMPUTE FLUX-FREEZING SPEED
 
@@ -73,13 +74,6 @@ c        print*, "shape N_cent       = ", shape(N)
  
             Cspeed1  = C0*sqrt( dq1dx1**2 + dq1dx2**2 )
             Cspeed2  = C0*sqrt( dq2dx1**2 + dq2dx2**2 )
-c            print*, "shape(P)   = ", shape(P)
-c            print*, "Cspeed1    = ", Cspeed1
-c            print*, "CHF_AUTOIX[i]    = ", CHF_AUTOIX[i]
-c            print*, "dq1dx1    = ", dq1dx1
-c            print*, "dq1dx2    = ", dq1dx2
-c            print*, "dq2dx1    = ", dq2dx1
-c            print*, "dq2dx2    = ", dq2dx2
 
             Cspeed(CHF_AUTOIX[i],0) = abs(Vmap1) + Cspeed1
             Cspeed(CHF_AUTOIX[i],1) = abs(Vmap2) + Cspeed2
@@ -88,62 +82,6 @@ c            Cspeed(CHF_AUTOIX[i],1) = abs(V(CHF_AUTOIX[i],1)) + C0
       
          endif
  
-      CHF_ENDDO
-
-      return
-      end
-
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
-c    COMPUTE MAPPED LIGHT SPEED
-
-      subroutine eval_mapped_light_speed(
-     &     CHF_BOX[gridbox],
-     &     CHF_CONST_FRA[N],
-     &     CHF_CONST_FRA1[J],
-     &     CHF_CONST_REAL[delta],
-     &     CHF_FRA[Clight]
-     &     )
-
-c     local variables
-      integer CHF_AUTODECL[i]
-      double precision C0
-      double precision dq1dx1, dq1dx2, dq1dx3
-      double precision dq2dx1, dq2dx2, dq2dx3
-      double precision dq3dx1, dq3dx2, dq3dx3
-
-      C0  = one/sqrt( delta )
-
-      CHF_AUTOMULTIDO[gridbox;i]
-
-         if (CH_SPACEDIM==3) then
-
-            dq1dx1 = N(CHF_AUTOIX[i],0)/J(CHF_AUTOIX[i])
-            dq1dx2 = N(CHF_AUTOIX[i],3)/J(CHF_AUTOIX[i])
-            dq1dx3 = N(CHF_AUTOIX[i],6)/J(CHF_AUTOIX[i])
-            dq2dx1 = N(CHF_AUTOIX[i],1)/J(CHF_AUTOIX[i])
-            dq2dx2 = N(CHF_AUTOIX[i],4)/J(CHF_AUTOIX[i])
-            dq2dx3 = N(CHF_AUTOIX[i],7)/J(CHF_AUTOIX[i])
-            dq3dx1 = N(CHF_AUTOIX[i],2)/J(CHF_AUTOIX[i])
-            dq3dx2 = N(CHF_AUTOIX[i],5)/J(CHF_AUTOIX[i])
-            dq3dx3 = N(CHF_AUTOIX[i],8)/J(CHF_AUTOIX[i])
-
-            Clight(CHF_AUTOIX[i],0) = C0*sqrt( dq1dx1**2 + dq1dx2**2 + dq1dx3**2 )
-            Clight(CHF_AUTOIX[i],1) = C0*sqrt( dq2dx1**2 + dq2dx2**2 + dq2dx3**2 )
-            Clight(CHF_AUTOIX[i],2) = C0*sqrt( dq3dx1**2 + dq3dx2**2 + dq3dx3**2 )
-
-         else
-
-            dq1dx1 = N(CHF_AUTOIX[i],0)/J(CHF_AUTOIX[i])
-            dq1dx2 = N(CHF_AUTOIX[i],2)/J(CHF_AUTOIX[i])
-            dq2dx1 = N(CHF_AUTOIX[i],1)/J(CHF_AUTOIX[i])
-            dq2dx2 = N(CHF_AUTOIX[i],3)/J(CHF_AUTOIX[i])
-
-            Clight(CHF_AUTOIX[i],0) = C0*sqrt( dq1dx1**2 + dq1dx2**2 )
-            Clight(CHF_AUTOIX[i],1) = C0*sqrt( dq2dx1**2 + dq2dx2**2 )
-
-         endif
-
       CHF_ENDDO
 
       return

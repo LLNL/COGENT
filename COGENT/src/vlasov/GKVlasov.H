@@ -2,21 +2,23 @@
 #define _GKVLASOV_H_
 
 #include "KineticFunction.H"
+#include "TiDefinitions.H"
 #include "GlobalDOF.H"
+#include "AppCtxt.H"
 #include "MultiPhysicsPreconditioner.H"
 #include "GKVlasovAMG.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
+#include "GridFunction.H"
+#include "GridFunctionLibrary.H"
 #include "EField.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
 #include "NamespaceHeader.H"
 
-class GKVector;
-class GKOps;
-typedef enum {_explicit_, _implicit_} tiType;
+class ODEVector;
 
 /**
  * Gyrokinetic Vlasov operator class.
@@ -124,34 +126,39 @@ public:
                                      const Real                             time );
    
    
-   void computeIntegratedParticleFluxNormals(CFG::LevelData<CFG::FluxBox>&          flux_normal,
-                                             const KineticSpecies&                  soln_species,
-                                             const CFG::LevelData<CFG::FArrayBox>&  phi,
-                                             const CFG::EField&                     E_field,
-                                             const int                              velocity_option,
-                                             const Real                             time);
+   void computeIntegratedMomentFluxNormals(CFG::LevelData<CFG::FluxBox>&          flux_normal,
+                                           const KineticSpecies&                  soln_species,
+                                           const CFG::LevelData<CFG::FArrayBox>&  phi,
+                                           const CFG::EField&                     E_field,
+                                           const int                              velocity_option,
+                                           const string&                          moment_type,
+                                           const Real                             time);
    
-   void defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>&,
+   void defineMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                              std::vector<DOFList>&,
                              const KineticSpeciesPtrVect&,
                              const GlobalDOFKineticSpeciesPtrVect&,
-                             const GKVector&,
-                             GKOps&,
+                             const ODEVector&,
+                             void*,    
                              const std::string&,
                              const std::string&,
                              bool);
 
-   void updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>&,
+   void updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                              const KineticSpeciesPtrVect&,
-                             const CFG::LevelData<CFG::FArrayBox>&  phi,
-                             const CFG::EField&                     E_field,
+                             const CFG::LevelData<CFG::FArrayBox>&,
+                             const CFG::EField&,
                              const GlobalDOFKineticSpeciesPtrVect&,
-                             const Real, const Real, const bool);
+                             const Real, 
+                             const int,
+                             const int,
+                             const Real, 
+                             const bool);
 
-   void defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+   void defineBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                        std::vector<DOFList>&,
-                       const GKVector&,
-                       GKOps&,
+                       const ODEVector&,
+                       void*,    
                        const std::string&,
                        const std::string&,
                        bool,
@@ -159,12 +166,14 @@ public:
                        const GlobalDOFKineticSpecies&,
                        int );
 
-   void updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+   void updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                        const KineticSpecies&,
                        const CFG::LevelData<CFG::FArrayBox>&  phi,
                        const CFG::EField&                     E_field,
                        const GlobalDOFKineticSpecies&,
                        const Real,
+                       const int,
+                       const int,
                        const Real,
                        const bool,
                        const int );
@@ -174,9 +183,9 @@ public:
    inline void implicitSpecies(std::vector<std::string>& a_names) const
    {
      a_names.clear();
-     std::map<std::string, tiType>::const_iterator it;
-     for (it = m_ti_type.begin(); it != m_ti_type.end(); ++it) {
-       if (it->second == _implicit_) {
+     std::map<std::string, tiOpType>::const_iterator it;
+     for (it = m_ti_op_type.begin(); it != m_ti_op_type.end(); ++it) {
+       if (it->second == _implicit_op_) {
          a_names.push_back(it->first);
        }
      }
@@ -187,10 +196,11 @@ public:
                 const LevelData<FluxBox>&  velocity,
                 const Real                 shift );
 
-   void solvePCImEx( KineticSpeciesPtrVect&           kinetic_species_solution,
-                     const KineticSpeciesPtrVect&     kinetic_species_rhs,
-                     const CFG::FluidSpeciesPtrVect&  fluid_species_rhs,
-                     int                              idx ) const;
+   void solvePCImEx(Preconditioner<ODEVector,AppCtxt>* const,
+                    KineticSpeciesPtrVect&,
+                    const KineticSpeciesPtrVect&,
+                    const CFG::FluidSpeciesPtrVect&,
+                    int ) const;
    
    void constructStencils( const LevelData<FluxBox>&               face_vel,
                            const PhaseGeom&                        geometry,
@@ -240,6 +250,12 @@ public:
    void testZeroDivergence(const LevelData<FluxBox>&  velocity,
                            const PhaseGeom&           geometry) const;
 
+   void testEnergyConservation(const LevelData<FArrayBox>&            rhs,
+                               const KineticSpecies&                  soln_species,
+                               const CFG::LevelData<CFG::FArrayBox>&  phi,
+                               const CFG::EField&                     E_field);
+  
+
    /// Initializes the kinetic species data.
    /**
     * Working through the vector, initializes each KineticSpecies with
@@ -254,6 +270,12 @@ public:
    inline void computeFaceAverages( LevelData<FluxBox>&         face_data,
                                     const LevelData<FArrayBox>& cell_data,
                                     const bool                  second_order = false ) const;
+
+   
+   void getEFieldwFLR(  LevelData<FluxBox>&,
+                        const KineticSpecies&,
+                        const CFG::LevelData<CFG::FArrayBox>&,
+                        const CFG::EField& );
 
    Real m_larmor_number;
 
@@ -288,17 +310,20 @@ public:
    LevelData<FluxBox> m_face_dist;
    RefCountedPtr<KineticFunction> m_ref_func;
 
-   std::map<std::string, tiType> m_ti_type;
+   std::map<std::string, tiOpType> m_ti_op_type;
    std::map<std::string, int> m_my_pc_idx;
-   std::map<std::string, int> m_vlasov_pc_idx;
 
-   Vector<GKVlasovAMG*> m_pc_vec;
    bool m_precond_build_test;
    string m_precond_face_avg_type;
 
    bool m_include_FLR_effects;
-   int m_it_counter;
+   RefCountedPtr<CFG::GridFunction> m_FLR_switch_func;
+   LevelData<FluxBox> m_FLR_bc_factor;
+   int m_FLR_bc_buffer;
+   bool m_plot_FLR_switch;
+
    int m_update_pc_freq;
+   bool m_update_pc_skip_stage;
 };
 
 #include "NamespaceFooter.H"

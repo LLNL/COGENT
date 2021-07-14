@@ -27,12 +27,17 @@ class MultiPhysicsPreconditioner : public Preconditioner<T,Ops>
     ~MultiPhysicsPreconditioner<T,Ops>();
 
     virtual void define(const T&,
-                        Ops&,
+                        void*,
                         const std::string&,
                         const std::string&,
                         bool );
 
-    virtual void update(const T&, const Real, const Real a_a = 0.0);
+    virtual void update(  const T&, 
+                          const Real, 
+                          const int, 
+                          const int, 
+                          const Real a_a = 0.0);
+
     virtual void apply(T&, const T&);
     virtual bool isDefined() const { return m_is_defined; }
 
@@ -103,7 +108,7 @@ MultiPhysicsPreconditioner<T,Ops>::~MultiPhysicsPreconditioner()
 
 template <class T, class Ops>
 void MultiPhysicsPreconditioner<T,Ops>::define( const T&            a_x,
-                                                Ops&                a_ops,
+                                                void*               a_ops,
                                                 const std::string&  a_out_string,
                                                 const std::string&  a_opt_string,
                                                 bool                a_im )
@@ -113,7 +118,7 @@ void MultiPhysicsPreconditioner<T,Ops>::define( const T&            a_x,
   m_out_string = a_out_string + "." + _MULTIPHYSICS_PC_;
   m_opt_string = a_opt_string + "_" + _MULTIPHYSICS_PC_;
 
-  m_ops = &a_ops;
+  m_ops = (Ops*) a_ops;
   m_im = a_im;
 
   m_ops->defineMultiPhysicsPC(m_block_pc, m_dof_list, a_x, m_out_string, m_opt_string, a_im);
@@ -147,6 +152,8 @@ void MultiPhysicsPreconditioner<T,Ops>::define( const T&            a_x,
 template <class T, class Ops>
 void MultiPhysicsPreconditioner<T,Ops>::update( const T&    a_x,
                                                 const Real  a_t,
+                                                const int   a_step,
+                                                const int   a_stage,
                                                 const Real  a_a )
 {
   CH_assert(isDefined());
@@ -155,7 +162,13 @@ void MultiPhysicsPreconditioner<T,Ops>::update( const T&    a_x,
   m_time = a_t;
   m_shift = a_a;
 
-  m_ops->updateMultiPhysicsPC(m_block_pc, a_x, a_t, a_a, m_im);
+  m_ops->updateMultiPhysicsPC(  m_block_pc, 
+                                a_x, 
+                                a_t, 
+                                a_step,
+                                a_stage,
+                                a_a, 
+                                m_im);
 
   return;
 }

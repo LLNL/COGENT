@@ -44,7 +44,7 @@ public:
 
    virtual IntVect getDecomposition(int block) const {return m_decomposition;}
 
-   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return m_divergence_cleaning_bc;}
+   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return *m_divergence_cleaning_bc;}
 
    bool isPeriodic( const int dir ) const;
   
@@ -88,8 +88,8 @@ private:
    bool m_spread_radially;
    IntVect m_decomposition;
    string m_mag_geom_type;
-   LogRectEllipticOpBC m_divergence_cleaning_bc;
-
+   LogRectEllipticOpBC* m_divergence_cleaning_bc;
+   
    void operator = (const LogRectCoordSys&){;}
    int m_mb_dir;
    int m_num_blocks;

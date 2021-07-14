@@ -3,11 +3,7 @@
 
 #include "EllipticOp.H"
 #include "MultiBlockLevelExchangeAverage.H"
-#ifdef with_petsc
-#include "MBPETScSolver.H"
-#else
 #include "MBHypreSolver.H"
-#endif
 
 #include "MagFluxAlignedMBLEXCenter.H"
 
@@ -90,13 +86,8 @@ protected:
 
    bool m_coefficients_defined;
 
-#ifdef with_petsc
-   MBPETScSolver* m_preconditioner;
-   MBPETScSolver* m_imex_preconditioner;
-#else
    MBHypreSolver* m_preconditioner;
    MBHypreSolver* m_imex_preconditioner;
-#endif
 
    LevelData<FluxBox> m_mapped_coefficients; //face-averaged
    LevelData<FluxBox> m_unmapped_coefficients; //face-centered

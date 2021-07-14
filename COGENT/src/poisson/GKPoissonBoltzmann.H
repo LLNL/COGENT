@@ -321,11 +321,7 @@ protected:
    double*  m_phi_inner_plate;
 
    MBTridiagonalSolver* m_precond_Psolver;
-#ifdef with_petsc
-   MBPETScSolver* m_precond_Qsolver;
-#else
    MBHypreSolver* m_precond_Qsolver;
-#endif
 
    MultiBlockLevelExchangeCenter* m_mblex_ptr;
 

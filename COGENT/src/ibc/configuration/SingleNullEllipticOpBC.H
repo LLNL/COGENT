@@ -14,10 +14,11 @@ class SingleNullEllipticOpBC
 {
 public:
 
-   SingleNullEllipticOpBC();
+   SingleNullEllipticOpBC(const int& nblocks);
 
    SingleNullEllipticOpBC( const std::string&  name,
                            ParmParse&          pp,
+                           const int&          nblocks,
                            const int&          poloidal_blocks_per_sector,
                            const int&          verbosity );
 
@@ -31,6 +32,10 @@ public:
    virtual int getBCType( const int block_number,
                           const int dir,
                           const int side ) const;
+   
+   virtual std::string getBCSubType(const int block_number,
+                                    const int dir,
+                                    const int side ) const;
 
    virtual void setBCValue( const int block_number,
                             const int dir,
@@ -56,6 +61,8 @@ public:
                        const int                  a_dir,
                        const int                  a_side,
                        FArrayBox&                 a_phi ) const;
+
+   virtual RefCountedPtr<EllipticOpBC> clone( const bool extrapolated = false ) const;
 
    virtual void printParameters() const;
 

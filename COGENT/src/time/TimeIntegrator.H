@@ -6,6 +6,7 @@
 #include "REAL.H"
 #include "ParmParse.H"
 #include "parstream.H"
+#include "TiDefinitions.H"
 
 #include "NamespaceHeader.H"
 
@@ -17,10 +18,12 @@ public:
 
    virtual ~TimeIntegrator<Vec,Ops>() {}
    
-   virtual void define( ParmParse& a_pp,
-                        std::string a_name,
-                        Vec& a_state,
-                        Real a_dt ) = 0;
+   virtual void define( ParmParse&,
+                        const std::string&,
+                        const Vec&,
+                        Ops* const ) = 0;
+
+   virtual void initialize( const Real, const Vec& ) = 0;
 
    virtual void advance( const Real& a_time, Vec& Y ) = 0;
    
@@ -37,11 +40,9 @@ public:
    virtual void setCurrentTime( const Real& a_time ) = 0;
 
    virtual void getCurrentTime( Real& a_time ) const = 0;
+
+   virtual TimeIntegratorType type() const = 0;
    
-   virtual bool isExplicit() const = 0;
-
-   virtual bool isImEx() const = 0;
-
    virtual void printCounts() const = 0;
 
 };

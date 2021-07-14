@@ -127,6 +127,21 @@ BC.potential.radial_upper.type = "neumann"
 BC.potential.radial_lower.type = "neumann"
 
 #####################################################
+# Transport Model Definitions
+#####################################################
+TPM.hydrogenA.D_kinet = 0.004 0 0 0
+TPM.hydrogenA.model_only = true
+TPM.hydrogenA.verbosity = 1
+TPM.hydrogenA.arbitrary_grid = false
+
+#####################################################
+# Collision Model Definitions
+#####################################################
+CLS.hydrogenA.cls_freq = "cls_freq"
+#CLS.hydrogenA.cls_only = true
+CLS.hydrogenA.verbosity = 1
+
+#####################################################
 # Kinetic Function Definitions
 #####################################################
 kinetic_function_library.number = 2
@@ -143,9 +158,9 @@ kinetic_function_library.maxwellian.density.function = "N0"
 #####################################################
 # Grid Function Definitions
 #####################################################
-grid_function_library.number = 3
+grid_function_library.number = 4
 grid_function_library.verbosity = 1
-grid_function_library.list = "zero" "T0" "N0"
+grid_function_library.list = "zero" "T0" "N0" "cls_freq"
 
 grid_function_library.zero.type = "zero" 
 
@@ -161,20 +176,5 @@ grid_function_library.N0.outer_radial_value = 0.2
 grid_function_library.N0.radial_midpoint = 0.5
 grid_function_library.N0.radial_width = 0.2
 
-#####################################################
-# Transport Model Definitions
-#####################################################
-TPM.hydrogenA.D_kinet = 0.004 0 0 0
-TPM.hydrogenA.model_only = true
-TPM.hydrogenA.verbosity = 1
-TPM.hydrogenA.arbitrary_grid = false
-
-#####################################################
-# Collision Model Definitions
-#####################################################
-CLS.hydrogenA.cls_freq = 0.05
-#CLS.hydrogenA.cls_only = true
-CLS.hydrogenA.ref_function = "maxwellian"
-CLS.hydrogenA.ref_temperature = "T0"
-CLS.hydrogenA.verbosity = 1
-
+grid_function_library.cls_freq.type = "arbitrary"
+grid_function_library.cls_freq.function = "0.05"

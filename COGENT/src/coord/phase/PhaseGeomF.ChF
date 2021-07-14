@@ -14,19 +14,34 @@ c  NOTE in this file CH_SPACEDIM is total phase space dimension
      &     CHF_CONST_INT[include_mag_drifts],
      &     CHF_CONST_INT[mag_drifts_only],
      &     CHF_CONST_INT[use_field_alignment],
+     &     CHF_CONST_INT[use_locnormalized_vels],
      &     CHF_CONST_FRA[E],
      &     CHF_CONST_FRA[Bvec],
      &     CHF_CONST_FRA[gradB],
      &     CHF_CONST_FRA[curlb],
+     &     CHF_CONST_FRA[vnorm],
+     &     CHF_CONST_FRA[gradlogvparn],
+     &     CHF_CONST_FRA[gradlogmun],
      &     CHF_FRA[velocity],
      &     CHF_CONST_INT[is_gyrokinetic]
      &     )
 
+c    For spatial normalization of vpar, mu, use_normalized_coords = 1 (true),
+c    and then vnorm, gradlogvparn and gradlogmun are the (vector) normalization velocity
+c    (vparnorm, munorm) and the logarithmic gradients of the vparallel and mu
+c    normalization functions.  
+
 c     local variables
       double precision vpar, mu, Bmag, Bstar_par, G(0:2), b(0:2), Bstar(0:2),
      &     bxG(0:2), mag_drift_fac(0:2), Bstar_dot_G, fac, this_Bvec(0:2),
-     &     this_curlb(0:2), this_gradB(0:2), this_E(0:2)
-      integer CHF_AUTODECL[i], n, phys_comp(0:2)
+     &     this_curlb(0:2), this_gradB(0:2), this_E(0:2), this_vparnorm, this_munorm,
+     &     this_gradlogvparn(0:2),this_gradlogmun(0:2),gradvn_dot_rdot,gradmun_dot_rdot,
+     &	   vparcomp,mucomp
+      integer CHF_AUTODECL[i], n, phys_comp(0:2), dimless2, dimless1, dimless3
+
+      dimless2 = CH_SPACEDIM-2
+      dimless1 = CH_SPACEDIM-1
+      dimless3 = CH_SPACEDIM-3
 
       if (include_drifts .ne. 0) then
          fac = larmor / Z
@@ -40,14 +55,48 @@ c     local variables
 
       CHF_AUTOMULTIDO[gridbox;i]
 
+c     vpar, mu are the physical (real) velocity components
+c     vparcomp, mucomp are the computational (mapped) components  
+
 #if CH_SPACEDIM==4
-         vpar  = ( i2 + half*(1-CHF_ID(CH_SPACEDIM-2,dir)) ) * h(CH_SPACEDIM-2)
-         mu    = ( i3 + half*(1-CHF_ID(CH_SPACEDIM-1,dir)) ) * h(CH_SPACEDIM-1)
+            vparcomp  = ( i2 + half*(1-CHF_ID(dimless2,dir)) ) * h(dimless2)
+            mucomp    = ( i3 + half*(1-CHF_ID(dimless1,dir)) ) * h(dimless1)
+            if (use_locnormalized_vels .EQ. 1) then
+               this_vparnorm = vnorm(i0,i1,CHF_LBOUND[vnorm;2] ,CHF_LBOUND[vnorm;3],0)
+               this_munorm = vnorm(i0,i1,CHF_LBOUND[vnorm;2] ,CHF_LBOUND[vnorm;3],1)
+               if (dir .GE. dimless2) then	       
+	         do n=0,1
+	             this_gradlogvparn(n)=gradlogvparn(i0,i1,CHF_LBOUND[gradlogvparn;2],
+     &                     CHF_LBOUND[gradlogvparn;3],n)
+                     this_gradlogmun(n)=gradlogmun(i0,i1,CHF_LBOUND[gradlogmun;2],
+     &                     CHF_LBOUND[gradlogmun;3],n)
+	         enddo
+               endif
+            endif      
 #endif
 #if CH_SPACEDIM==5
-         vpar  = ( i3 + half*(1-CHF_ID(CH_SPACEDIM-2,dir)) ) * h(CH_SPACEDIM-2)
-         mu    = ( i4 + half*(1-CHF_ID(CH_SPACEDIM-1,dir)) ) * h(CH_SPACEDIM-1)
+            vparcomp  = ( i3 + half*(1-CHF_ID(dimless2,dir)) ) * h(dimless2)
+            mucomp    = ( i4 + half*(1-CHF_ID(dimless1,dir)) ) * h(dimless1)
+            if (use_locnormalized_vels .EQ. 1) then
+	      this_vparnorm = vnorm(i0,i1,i2,CHF_LBOUND[vnorm;3] ,CHF_LBOUND[vnorm;4],0)
+              this_munorm = vnorm(i0,i1,i2,CHF_LBOUND[vnorm;3] ,CHF_LBOUND[vnorm;4],1)
+              if (dir .GE. dimless2) then
+	        do n=0,2
+                     this_gradlogvparn(n)=gradlogvparn(i0,i1,i2,CHF_LBOUND[gradlogvparn;3],
+     &                   CHF_LBOUND[gradlogvparn;4],n)
+                     this_gradlogmun(n)=gradlogmun(i0,i1,i2,CHF_LBOUND[gradlogmun;3],
+     &                   CHF_LBOUND[gradlogmun;4],n)
+	        enddo
+              endif
+            endif
 #endif
+         if (use_locnormalized_vels .EQ. 1) then
+      	    vpar = vparcomp*this_vparnorm
+            mu = mucomp*this_munorm
+         else
+             vpar = vparcomp
+             mu = mucomp
+         endif
 
          Bmag = zero
          do n = 0, 2
@@ -103,7 +152,7 @@ c        R_dot
          bxG(1) = b(2)*G(0) - b(0)*G(2)
          bxG(2) = b(0)*G(1) - b(1)*G(0)
 
-         do n = 0, CH_SPACEDIM-3
+         do n = 0, dimless3
             velocity(CHF_AUTOIX[i],n)  = fac*bxG(phys_comp(n))
 
             if (include_mag_drifts .ne. 0) then
@@ -130,13 +179,30 @@ c        vpar_dot
             if (include_gradB_par_force .eq. 0) then
               Bstar_dot_G = Bstar_dot_G - this_Bvec(n) * half * mu * this_gradB(n)   
             endif
-
          enddo
 
-         velocity(CHF_AUTOIX[i],CH_SPACEDIM-2) = - Bstar_dot_G / (mass * Bstar_par)
+         velocity(CHF_AUTOIX[i],dimless2) = - Bstar_dot_G / (mass * Bstar_par)
+
+         if (use_locnormalized_vels .EQ. 1) then
+           gradvn_dot_rdot = zero
+           do n = 0, dimless3
+              gradvn_dot_rdot = gradvn_dot_rdot + this_gradlogvparn(n)*velocity(CHF_AUTOIX[i],n)
+           enddo
+           velocity(CHF_AUTOIX[i],dimless2) =(velocity(CHF_AUTOIX[i],dimless2)/this_vparnorm)
+     &         - vparcomp*gradvn_dot_rdot
+         endif
 
 c        mu_dot
-         velocity(CHF_AUTOIX[i],CH_SPACEDIM-1) = zero
+
+         velocity(CHF_AUTOIX[i],dimless1) = zero
+
+         if (use_locnormalized_vels .EQ. 1) then
+           gradmun_dot_rdot = zero
+           do n = 0, dimless3
+              gradmun_dot_rdot = gradmun_dot_rdot + this_gradlogmun(n)*velocity(CHF_AUTOIX[i],n)
+           enddo
+           velocity(CHF_AUTOIX[i],dimless1) =velocity(CHF_AUTOIX[i],dimless1) - mucomp*gradmun_dot_rdot
+         endif
 
       CHF_ENDDO
 
@@ -392,24 +458,32 @@ c     local variables
      &     CHF_CONST_FRA[curlb],
      &     CHF_CONST_FRA1[bdotcurlb],
      &     CHF_FRA[BStar],
-     &     CHF_FRA1[BStarPar]
+     &     CHF_FRA1[BStarPar],
+     &     CHF_CONST_INT[use_locnormalized_vels],
+     &     CHF_CONST_FRA[vnorm],
      &     )
 
 c     local variables
-      integer CHF_AUTODECL[i], m, kk, indvpar
+      integer CHF_AUTODECL[i], m, kk, indvpar, kkv
       double precision v_par_avg, dv_parallel
 
       kk = CHF_LBOUND[B;2]
+      if (use_locnormalized_vels .eq. 1) then
+         kkv = CHF_LBOUND[vnorm;2]
+      endif
       dv_parallel = h(CH_SPACEDIM-2)
 
       CHF_AUTOMULTIDO[gridbox;i]
          indvpar = i2
 #if CH_SPACEDIM==5
          kk = i2
+         kkv = i2
          indvpar = i3
 #endif
          v_par_avg = (indvpar + half)*dv_parallel
-
+         if (use_locnormalized_vels .EQ. 1) then
+            v_par_avg = v_par_avg*vnorm(CHF_IX[i0;i1;kkv;CHF_LBOUND[vnorm;3];CHF_LBOUND[vnorm;4]],0)
+         endif
          do m = 0, 2
             BStar(CHF_AUTOIX[i],m) = B(CHF_IX[i0;i1;kk;CHF_LBOUND[B;3];CHF_LBOUND[B;4]],m)
      &           + prefactor * v_par_avg * curlb(CHF_IX[i0;i1;kk;CHF_LBOUND[curlb;3];CHF_LBOUND[curlb;4]],m)

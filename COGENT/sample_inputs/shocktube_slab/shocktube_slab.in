@@ -9,16 +9,11 @@ gksystem.hdf_fluids = true
 #####################################################
 # Time Stepping Definitions
 #####################################################
-#simulation.max_step            = 2
 simulation.max_step            = 80000
 simulation.max_time            = 0.02 # 0.2
-#simulation.max_dt_grow         = .1
-#simulation.initial_dt_fraction = 1.0
 simulation.cfl_number          = 0.75
-#simulation.fixed_dt            = 0.0005
 simulation.checkpoint_interval = 10000
 simulation.checkpoint_prefix   = "chk"
-#simulation.restart_file = "chk3200.4d.hdf5"
 simulation.plot_interval       = 80
 simulation.plot_time_interval  = 0.02
 simulation.plot_prefix         = "plt"
@@ -127,28 +122,16 @@ BC.mom1_visc.radial_upper.type = "neumann"
 BC.mom1_visc.poloidal_lower.type = "dirichlet"
 BC.mom1_visc.poloidal_upper.type = "dirichlet"
 
-BC.neutrals.density.radial_lower.function = "neutrals_IC"
-BC.neutrals.density.radial_upper.function = "neutrals_IC"
-BC.neutrals.density.poloidal_lower.function = "neutrals_IC"
-BC.neutrals.density.poloidal_upper.function = "neutrals_IC"
 BC.neutrals.density.radial_lower.type = "neumann"
 BC.neutrals.density.radial_upper.type = "neumann"
 BC.neutrals.density.poloidal_lower.type = "neumann"
 BC.neutrals.density.poloidal_upper.type = "neumann"
 
-BC.neutrals.momentumDensity.radial_lower.function = "zero_grid_func"
-BC.neutrals.momentumDensity.radial_upper.function = "zero_grid_func"
-BC.neutrals.momentumDensity.poloidal_lower.function = "zero_grid_func"
-BC.neutrals.momentumDensity.poloidal_upper.function = "zero_grid_func"
 BC.neutrals.momentumDensity.radial_lower.type = "symmetry"
 BC.neutrals.momentumDensity.radial_upper.type = "symmetry"
 BC.neutrals.momentumDensity.poloidal_lower.type = "symmetry"
 BC.neutrals.momentumDensity.poloidal_upper.type = "symmetry"
 
-BC.neutrals.energyDensity.radial_lower.function = "energyDensity_IC"
-BC.neutrals.energyDensity.radial_upper.function = "energyDensity_IC"
-BC.neutrals.energyDensity.poloidal_lower.function = "energyDensity_IC"
-BC.neutrals.energyDensity.poloidal_upper.function = "energyDensity_IC"
 BC.neutrals.energyDensity.radial_lower.type = "neumann"
 BC.neutrals.energyDensity.radial_upper.type = "neumann"
 BC.neutrals.energyDensity.poloidal_lower.type = "neumann"

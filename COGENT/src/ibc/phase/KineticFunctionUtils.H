@@ -17,11 +17,11 @@ void convertToCellAverage( const PhaseGeom&       a_geometry,
    if ( !(a_dfn.ghostVect() >= IntVect::Unit) ) {
       MayDay::Error("convertToCellAverage(): Insufficient number of ghost cells");
    }
-   FourthOrderUtil mySGutils;
-   mySGutils.setSG(useSG);
+   FourthOrderUtil FourthOrderOperators;
+   FourthOrderOperators.setSG(useSG);
 
-   //fourthOrderAverage(a_dfn);
-   mySGutils.fourthOrderAverageGen(a_dfn);
+   //fourthOrderAverage(a_dfn); // old Chombo-only version
+   FourthOrderOperators.fourthOrderAverageGen(a_dfn);
 }
 
 }

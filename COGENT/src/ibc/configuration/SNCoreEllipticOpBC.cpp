@@ -1,8 +1,7 @@
 #include "SNCoreEllipticOpBC.H"
 #include "SNCoreBlockCoordSys.H"
-#include "SingleNullBlockCoordSys.H"
-#include "GridFunctionLibrary.H"
 #include "MagGeom.H"
+#include "GridFunctionLibrary.H"
 #include "Directions.H"
 #include "DataArray.H"
 
@@ -10,8 +9,8 @@
 
 
 
-SNCoreEllipticOpBC::SNCoreEllipticOpBC()
-   : EllipticOpBC(NUM_BOUNDARIES)
+SNCoreEllipticOpBC::SNCoreEllipticOpBC(const int&  a_nblocks)
+   : EllipticOpBC(NUM_BOUNDARIES, a_nblocks)
 {
    setNames();
 }
@@ -20,20 +19,28 @@ SNCoreEllipticOpBC::SNCoreEllipticOpBC()
 
 SNCoreEllipticOpBC::SNCoreEllipticOpBC( const std::string&  a_name,
                                         ParmParse&          a_pp,
+                                        const int&          a_nblocks,
                                         const int&          a_verbosity )
-   : EllipticOpBC(NUM_BOUNDARIES),
+   : EllipticOpBC(NUM_BOUNDARIES, a_nblocks),
      m_name(a_name),
      m_verbosity(a_verbosity)
 {
    setNames();
    parseParameters( a_pp );
+   
+   if (hasCoupledBoundary()) {
+      for (int i=0; i<m_bc_block_data.size(); ++i) {
+         int verbosity = 0;
+         m_bc_block_data[i] = RefCountedPtr<GridFunction>( new DataArray( verbosity ) );
+      }
+   }
 }
 
 
-
 SNCoreEllipticOpBC::SNCoreEllipticOpBC( const SingleNullEllipticOpBC&  a_bc,
-                                        const int                      a_outer_radial_bc_type )
-   : EllipticOpBC(NUM_BOUNDARIES)
+                                        const int                      a_outer_radial_bc_type,
+                                        const int                      a_num_blocks )
+  : EllipticOpBC(NUM_BOUNDARIES, a_num_blocks)
 {
    CH_assert(a_outer_radial_bc_type == DIRICHLET || a_outer_radial_bc_type == NEUMANN);
    setNames();
@@ -127,7 +134,40 @@ SNCoreEllipticOpBC::getBCType( const int  a_block_number,
    return bc_type;
 }
 
+std::string
+SNCoreEllipticOpBC::getBCSubType(const int  a_block_number,
+                                 const int  a_dir,
+                                 const int  a_side ) const
+{
+   CH_assert(a_side == 0 || a_side == 1);
+   std::string bc_subtype;
 
+   switch( a_block_number )
+      {
+      case SNCoreBlockCoordSys::MCORE:
+      case SNCoreBlockCoordSys::LCORE:
+      case SNCoreBlockCoordSys::RCORE:
+         if ( a_dir == RADIAL_DIR ) {
+            if ( a_side == 0 ) {
+               bc_subtype = m_bc_subtype[RADIAL_INNER];
+            }
+            else if ( a_side == 1 ) {
+               bc_subtype = m_bc_subtype[RADIAL_OUTER];
+            }
+            else {
+               MayDay::Error("SNCoreEllipticOpBC::getBCSubType(): Invalid side argument");
+            }
+         }
+         else {
+            MayDay::Error("SNCoreEllipticOpBC::getBCSubType(): Invalid direction argument");
+         }
+         break;
+      default:
+         MayDay::Error("SNCoreEllipticOpBC::getBCSubType(): Unrecognized block number");
+      }
+
+   return bc_subtype;
+}
 
 void
 SNCoreEllipticOpBC::setBCValue( const int     a_block_number,
@@ -244,30 +284,34 @@ SNCoreEllipticOpBC::getBCFunction( const int  a_block_number,
    CH_assert(a_side == 0 || a_side == 1);
    RefCountedPtr<GridFunction> function;
 
-   switch( a_block_number )
+   if (getBCSubType(a_block_number, a_dir, a_side) == "coupled" ) {
+      function = getBlockBCData(a_block_number, a_dir, a_side);
+   }
+   else {
+      switch( a_block_number )
       {
-      case SNCoreBlockCoordSys::MCORE:
-      case SNCoreBlockCoordSys::LCORE:
-      case SNCoreBlockCoordSys::RCORE:
-         if ( a_dir == RADIAL_DIR ) {
-            if ( a_side == 0 ) {
-               function = m_bc_function[RADIAL_INNER];
-            }
-            else if ( a_side == 1 ) {
-               function = m_bc_function[RADIAL_OUTER];
+         case SNCoreBlockCoordSys::MCORE:
+         case SNCoreBlockCoordSys::LCORE:
+         case SNCoreBlockCoordSys::RCORE:
+            if ( a_dir == RADIAL_DIR ) {
+               if ( a_side == 0 ) {
+                  function = m_bc_function[RADIAL_INNER];
+               }
+               else if ( a_side == 1 ) {
+                  function = m_bc_function[RADIAL_OUTER];
+               }
+               else {
+                  MayDay::Error("SNCoreEllipticOpBC::getBCFunction(): Invalid side argument");
+               }
             }
             else {
-               MayDay::Error("SNCoreEllipticOpBC::getBCFunction(): Invalid side argument");
+               MayDay::Error("SNCoreEllipticOpBC::getBCFunction(): Invalid direction argument");
             }
-         }
-         else {
-            MayDay::Error("SNCoreEllipticOpBC::getBCFunction(): Invalid direction argument");
-         }
-         break;
-      default:
-         MayDay::Error("SNCoreEllipticOpBC::getBCFunction(): Unrecognized block number");
+            break;
+         default:
+            MayDay::Error("SNCoreEllipticOpBC::getBCFunction(): Unrecognized block number");
       }
-
+   }
    return function;
 }
 
@@ -368,6 +412,8 @@ void SNCoreEllipticOpBC::parseParameters( ParmParse& a_pp )
          MayDay::Error("SNCoreEllipticOpBC::parseParameter(): Unrecognized potential bc type");
       }
 
+      fpp.query( "subtype", m_bc_subtype[i] );
+      
       bool value_specified = fpp.contains("value");
 
       if (value_specified) {
@@ -392,6 +438,36 @@ void SNCoreEllipticOpBC::parseParameters( ParmParse& a_pp )
    }
 }
 
+
+RefCountedPtr<EllipticOpBC>
+SNCoreEllipticOpBC::clone( const bool a_extrapolated ) const
+{
+   RefCountedPtr<SNCoreEllipticOpBC> result
+      = RefCountedPtr<SNCoreEllipticOpBC>(new SNCoreEllipticOpBC(m_num_blocks));
+
+   // Copy the data members set by the full constructor (i.e., the one with the ParmParse
+   // argument).  
+   
+   result->m_name = m_name;
+   result->m_verbosity = m_verbosity;
+
+   // Copy the data set by calls to setBCType(), etc.
+
+   for (int i=0; i<m_bc_type.size(); ++i) {
+      (result->m_bc_type)[i] = a_extrapolated? EXTRAPOLATED: m_bc_type[i];
+   }
+   for (int i=0; i<m_bc_value.size(); ++i) {
+      (result->m_bc_value)[i] = m_bc_value[i];
+   }
+   for (int i=0; i<m_bc_subtype.size(); ++i) {
+      (result->m_bc_subtype)[i] = m_bc_subtype[i];
+   }
+   for (int i=0; i<m_bc_block_data.size(); ++i) {
+      (result->m_bc_block_data)[i] = m_bc_block_data[i];
+   }
+
+   return result;
+}
 
 
 #include "NamespaceFooter.H"

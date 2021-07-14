@@ -83,11 +83,14 @@ void ArbitraryKineticFunction::assign( KineticSpecies& a_species,
    geometry.multBStarParallel( dfn_tmp, a_bdry_layout );
 
    if ( !(geometry.secondOrder()) )  {
+      FourthOrderUtil FourthOrderOperators; //Object that holds various fourth-order operatiosns 
+      FourthOrderOperators.setSG(m_useSG); //Whether to use the SG versions of fourth order stencils
       for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
          Box domain_box( dfn_tmp[dit].box() );
          domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
          ProblemDomain domain( domain_box );
-         fourthOrderAverageCell( dfn_tmp[dit], domain, grids[dit] );
+         //fourthOrderAverageCell( dfn_tmp[dit], domain, grids[dit] ); // old Chombo-only version
+         FourthOrderOperators.fourthOrderAverageCellGen(dfn_tmp[dit], domain, grids[dit] );
       }
    }
  
@@ -102,6 +105,10 @@ void ArbitraryKineticFunction::parseParameters( ParmParse& a_pp )
    a_pp.get( "function", m_function );
    a_pp.query( "coordinate_type", m_coord_type );
 
+   ParmParse ppsg("sparsegrid");
+
+   m_useSG = false;  //Don't use sparse grids by default
+   ppsg.query( "useSGstencils", m_useSG );
 
    if (m_verbosity) {
       printParameters();

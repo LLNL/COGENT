@@ -82,6 +82,15 @@ public:
                           LevelData<FArrayBox>&       dst ) const;
 
 
+   /// Integrate and spread the src array over flux surfaces (includes single-null topology)
+   /** Integrate and spread the src array over flux surfaces (includes single-null topology)
+    *
+    * @param[in]  src  Data to be spread over flux surfaces
+    * @param[out] dst  Spread data
+    */
+   void integrateAndSpread(const LevelData<FArrayBox>& src,
+                           LevelData<FArrayBox>&       dst ) const;
+  
    /// Add flux surface data
    /** Add flux surface data
     *

@@ -14,12 +14,21 @@ class BandedMatrixSolver
     BandedMatrixSolver<Vec>() {} 
     virtual ~BandedMatrixSolver<Vec>() {}
 
-    virtual void  solve(Vec& a_x, const BandedMatrix& a_A, const Vec& a_b, int a_its = -1) = 0;
-    virtual void  define(const std::string&, const std::string&, const Vec&) = 0;
+    virtual void  solve(  Vec& a_x, 
+                          const BandedMatrix& a_A, 
+                          const Vec& a_b, 
+                          int a_its = -1) = 0;
+
+    virtual void  define( const std::string&, 
+                          const std::string&, 
+                          const Vec&) = 0;
 
   protected:
 
-    void exchangeData(const BandedMatrix&, const Vec&, std::unordered_map<int,Real>&);
+    void exchangeData(  const BandedMatrix&, 
+                        const Vec&, 
+                        std::unordered_map<int,Real>&);
+
     void applyOp(Vec&, const Vec&, const BandedMatrix&);
 
   private:
@@ -27,7 +36,9 @@ class BandedMatrixSolver
 };
 
 template <class Vec>
-void BandedMatrixSolver<Vec>::exchangeData(const BandedMatrix& a_A, const Vec& a_x, std::unordered_map<int,Real>& a_nonlocal_data)
+void BandedMatrixSolver<Vec>::exchangeData( const BandedMatrix& a_A, 
+                                            const Vec& a_x, 
+                                            std::unordered_map<int,Real>& a_nonlocal_data)
 {
   CH_assert(a_A.isAssembled());
 
@@ -48,8 +59,13 @@ void BandedMatrixSolver<Vec>::exchangeData(const BandedMatrix& a_A, const Vec& a
   for (int n(0); n < nproc; n++) {
     if ( (n != rank) && (bmat_exchange_info.dataToRecv(n) > 0) ) {
       recvbuf[n].resize(bmat_exchange_info.dataToRecv(n));
-      MPI_Irecv( recvbuf[n].data(), bmat_exchange_info.dataToRecv(n), MPI_DOUBLE,
-                  n, 1708, MPI_COMM_WORLD,&recv_req[count] );
+      MPI_Irecv(  recvbuf[n].data(), 
+                  bmat_exchange_info.dataToRecv(n), 
+                  MPI_DOUBLE,
+                  n, 
+                  1708, 
+                  MPI_COMM_WORLD,
+                  &recv_req[count] );
       count++;
     }
   }
@@ -65,8 +81,13 @@ void BandedMatrixSolver<Vec>::exchangeData(const BandedMatrix& a_A, const Vec& a
         sendbuf[n][i] = a_x[a_A.globalToLocal(bmat_exchange_info.indexToSend(n,i))];
       }
 
-      MPI_Isend( sendbuf[n].data(), bmat_exchange_info.dataToSend(n), MPI_DOUBLE,
-                 n, 1708, MPI_COMM_WORLD, &send_req[count] );
+      MPI_Isend(  sendbuf[n].data(), 
+                  bmat_exchange_info.dataToSend(n), 
+                  MPI_DOUBLE,
+                  n, 
+                  1708, 
+                  MPI_COMM_WORLD, 
+                  &send_req[count] );
       count++;
     }
   }

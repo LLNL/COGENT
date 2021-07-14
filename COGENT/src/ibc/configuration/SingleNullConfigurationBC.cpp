@@ -10,8 +10,8 @@ SingleNullConfigurationBC::SingleNullConfigurationBC( const std::string& a_speci
                 a_variable_name,
                 a_verbosity,
                 NUM_BOUNDARIES),
-     m_poloidal_blocks_per_sector(a_poloidal_blocks_per_sector),
-     m_verbosity(a_verbosity)
+     m_verbosity(a_verbosity),
+     m_poloidal_blocks_per_sector(a_poloidal_blocks_per_sector)
 {
 
    setNames();

@@ -75,6 +75,8 @@ class GKFluidOp
                          const double          a_dt,
                          const double          a_time );
 
+      void enforcePositivity( FluidSpeciesPtrVect&  a_species_comp );
+
       void postStageEval( FluidSpeciesPtrVect&  a_species_comp,
                           FluidSpeciesPtrVect&  a_species_phys,
                           const int             a_stage,
@@ -96,20 +98,22 @@ class GKFluidOp
                                    const PS::ScalarPtrVect&           a_scalars,
                                    const Real                         a_time );
 
-      void defineMultiPhysicsPC(std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+      void defineMultiPhysicsPC(std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 std::vector<PS::DOFList>&,
                                 const FluidSpeciesPtrVect&,
                                 const PS::GlobalDOFFluidSpeciesPtrVect&,
-                                const PS::GKVector&,
-                                PS::GKOps&,
+                                const PS::ODEVector&,
+                                void*,
                                 const std::string&,
                                 const std::string&,
                                 bool);
 
-      void updateMultiPhysicsPC(std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+      void updateMultiPhysicsPC(std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 const PS::KineticSpeciesPtrVect&,
                                 const FluidSpeciesPtrVect&,
                                 const Real,
+                                const int,
+                                const int,
                                 const Real,
                                 const bool );
 
@@ -121,6 +125,8 @@ class GKFluidOp
       void updatePC( const PS::KineticSpeciesPtrVect&  kinetic_species,
                      const FluidSpeciesPtrVect&        fluid_species,
                      const double                      time,
+                     const int                         step,
+                     const int                         stage,
                      const double                      shift,
                      int                               a_idx = -1 );
 
@@ -166,6 +172,9 @@ class GKFluidOp
        * @param[in] name String name of the species.
        */
       std::string fluidModelName( const std::string& name );
+
+      void setStepConstKinCoeff(  const bool,
+                                  const FluidSpeciesPtrVect& );
 
    private:
 

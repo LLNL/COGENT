@@ -13,8 +13,7 @@
 #include "FokkerPlanckF_F.H"
 #include "FPLimitersF_F.H"
 
-#include "GKVector.H"
-#include "GKOps.H"
+#include "ODEVector.H"
 
 #include "NamespaceHeader.H" 
 
@@ -67,16 +66,16 @@ static inline int sign(Real x)
   return(x < 0 ? -1 : 1);
 }
 
-void FokkerPlanck::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
-                                  std::vector<DOFList>&                         a_dof_list,
-                                  const GKVector&                               a_X,
-                                  GKOps&                                        a_ops,
-                                  const std::string&                            a_out_string,
-                                  const std::string&                            a_opt_string,
-                                  bool                                          a_im,
-                                  const KineticSpecies&                         a_species,
-                                  const GlobalDOFKineticSpecies&                a_global_dofs,
-                                  const int                                     a_species_index )
+void FokkerPlanck::defineBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&  a_pc,
+                                  std::vector<DOFList>&                             a_dof_list,
+                                  const ODEVector&                                  a_X,
+                                  void*                                             a_ops,
+                                  const std::string&                                a_out_string,
+                                  const std::string&                                a_opt_string,
+                                  bool                                              a_im,
+                                  const KineticSpecies&                             a_species,
+                                  const GlobalDOFKineticSpecies&                    a_global_dofs,
+                                  const int                                         a_species_index )
 {
   if (a_im && m_time_implicit) {
   
@@ -89,8 +88,8 @@ void FokkerPlanck::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& 
                 << " (index = " << a_pc.size() << ").\n";
     }
 
-    Preconditioner<GKVector, GKOps> *pc;
-    pc = new BasicGKPreconditioner<GKVector,GKOps>;
+    Preconditioner<ODEVector,AppCtxt> *pc;
+    pc = new BasicGKPreconditioner<ODEVector,AppCtxt>;
     DOFList dof_list(0);
 
     const LevelData<FArrayBox>& soln_dfn    (a_species.distributionFunction());
@@ -111,8 +110,30 @@ void FokkerPlanck::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& 
 
     m_my_pc_idx = a_pc.size();
 
-    dynamic_cast<BasicGKPreconditioner<GKVector,GKOps>*>
-      (pc)->define(a_X, a_ops, m_opt_string, m_opt_string, a_im, dof_list);
+    {
+      BasicGKPreconditioner<ODEVector,AppCtxt>* this_pc 
+        = dynamic_cast< BasicGKPreconditioner<ODEVector,AppCtxt>* > (pc);
+      this_pc->define(a_X, a_ops, m_opt_string, m_opt_string, a_im, dof_list);
+      
+      const GlobalDOF* global_dof = a_X.getGlobalDOF();
+      int n_local = a_X.getVectorSize();
+      int n_total = n_local;
+#ifdef CH_MPI
+      MPI_Allreduce(  &n_local,
+                      &n_total,
+                      1,
+                      MPI_INT,
+                      MPI_SUM,
+                      MPI_COMM_WORLD );
+#endif
+      if (!procID()) {
+        std::cout << "    Setting up banded matrix with " << n_total << " rows ";
+        std::cout << "and " << m_nbands << " bands for the preconditioner.\n";
+      }
+      BandedMatrix& pc_mat(this_pc->getBandedMatrix());
+      pc_mat.define(n_local, m_nbands, global_dof->mpiOffset());
+    }
+
     a_pc.push_back(pc);
     a_dof_list.push_back(dof_list);
 
@@ -121,13 +142,15 @@ void FokkerPlanck::defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& 
   return;
 }
 
-void FokkerPlanck::updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
-                                  const KineticSpecies&                         a_species,
-                                  const GlobalDOFKineticSpecies&                a_global_dofs,
-                                  const Real                                    a_time,
-                                  const Real                                    a_shift,
-                                  const bool                                    a_im,
-                                  const int                                     a_species_index )
+void FokkerPlanck::updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&  a_pc,
+                                  const KineticSpecies&                             a_species,
+                                  const GlobalDOFKineticSpecies&                    a_global_dofs,
+                                  const Real                                        a_time,
+                                  const int                                         a_step,
+                                  const int                                         a_stage,
+                                  const Real                                        a_shift,
+                                  const bool                                        a_im,
+                                  const int                                         a_species_index )
 {
   if (a_im && m_time_implicit) {
     CH_assert(m_my_pc_idx >= 0);
@@ -138,21 +161,29 @@ void FokkerPlanck::updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>& 
                 << " for FP collision term of kinetic species " << a_species_index << ".\n";
     }
 
-    BasicGKPreconditioner<GKVector,GKOps> *pc = dynamic_cast<BasicGKPreconditioner<GKVector,GKOps>*>
-                                                  (a_pc[m_my_pc_idx]);
+    BasicGKPreconditioner<ODEVector,AppCtxt> *pc 
+      = dynamic_cast<BasicGKPreconditioner<ODEVector,AppCtxt>*>
+        (a_pc[m_my_pc_idx]);
     CH_assert(pc != NULL);
 
-    BandedMatrix *pc_mat((BandedMatrix*)pc->getBandedMatrix());
-    pc_mat->setToIdentityMatrix();
-    assemblePrecondMatrix((void*)pc_mat, a_species, a_global_dofs, a_shift);
-    pc_mat->finalAssembly();
+    BandedMatrix& pc_mat(pc->getBandedMatrix());
+    pc_mat.setToIdentityMatrix();
+    assemblePrecondMatrix(  pc_mat, 
+                            a_species, 
+                            a_global_dofs, 
+                            a_step, 
+                            a_stage, 
+                            a_shift);
+    pc_mat.finalAssembly();
   }
   return;
 }
 
-void FokkerPlanck::assemblePrecondMatrix( void                            *a_P,
+void FokkerPlanck::assemblePrecondMatrix( BandedMatrix&                   a_P,
                                           const KineticSpecies&           a_species,
                                           const GlobalDOFKineticSpecies&  a_global_dofs,
+                                          const int                       a_step,
+                                          const int                       a_stage,
                                           const Real                      a_shift )
 {
   /*
@@ -172,8 +203,6 @@ void FokkerPlanck::assemblePrecondMatrix( void                            *a_P,
 
   if (m_time_implicit) {
 
-    BandedMatrix *Pmat = (BandedMatrix*) a_P;
-  
     const LevelData<FArrayBox>& soln_dfn    (a_species.distributionFunction());
     const DisjointBoxLayout&    grids       (soln_dfn.disjointBoxLayout());
     const PhaseGeom&            phase_geom  (a_species.phaseSpaceGeometry());
@@ -498,8 +527,8 @@ void FokkerPlanck::assemblePrecondMatrix( void                            *a_P,
           }
   
           CH_assert(ix <= m_nbands);
-          CH_assert(ix <= Pmat->getNBands());
-          Pmat->setRowValues(pc,ix,icols,data);
+          CH_assert(ix <= a_P.getNBands());
+          a_P.setRowValues(pc,ix,icols,data);
           free(data);
           free(icols);
         }
@@ -1578,7 +1607,7 @@ void FokkerPlanck::computeEnergyConservationFactor( const KineticSpecies&       
                                 CHF_CONST_REALVECT(vel_dx) );
     }
     
-    a_species.energyMoment(m_fp_kinetic_energy, untamed_rhs);
+    a_species.kineticEnergyMoment(m_fp_kinetic_energy, untamed_rhs);
     
     for (CFG::DataIterator dit(m_energy_cons.dataIterator()); dit.ok(); ++dit) {
       m_fp_kinetic_energy[dit].abs();

@@ -65,6 +65,7 @@ MagGeom::MagGeom(ParmParse&                         a_pp,
      m_correct_field(false),
      m_pp_prefix(a_pp.prefix())
 {
+   
    if (a_pp.contains("correct_field")) {
      a_pp.get("correct_field", m_correct_field);
    }
@@ -83,6 +84,10 @@ MagGeom::MagGeom(ParmParse&                         a_pp,
 
    m_second_order = false;
    a_pp.query( "second_order", m_second_order);
+   
+   ParmParse ppsg("sparsegrid"); // sparse grid parm parse object
+   m_useSG = false;  //Don't use sparse grids by default
+   ppsg.query( "useSGstencils", m_useSG );
 
 #if CFG_DIM ==3
    m_mb_dir = TOROIDAL_DIR;
@@ -242,6 +247,8 @@ MagGeom::setMetricTerms( const DisjointBoxLayout&  a_grids,
                          const IntVect&            a_ghostVect ) const
 {
 
+   CH_TIME("MagGeom::setMetricTerms");
+  
    if ( !m_metrics.isDefined() || (m_metrics.ghostVect() < a_ghostVect) ) {
       
       m_metrics.define(a_grids, SpaceDim*SpaceDim, a_ghostVect);
@@ -526,10 +533,29 @@ MagGeom::setdXdxiOnCells( const DisjointBoxLayout&  a_grids,
    if ( !m_dXdxi.isDefined() || (m_dXdxi.ghostVect() < a_ghostVect) ) {
 
       m_dXdxi.define(a_grids, SpaceDim*SpaceDim, a_ghostVect);
+      LevelData<FArrayBox> dXdxiT;
+      dXdxiT.define(a_grids, SpaceDim*SpaceDim, a_ghostVect);
 
       for (DataIterator dit(a_grids); dit.ok(); ++dit) {
          const MagBlockCoordSys& coord_sys = getBlockCoordSys(a_grids[dit]);
-         coord_sys.getCellCentereddXdxi(m_dXdxi[dit]);
+         //coord_sys.getCellCentereddXdxi(m_dXdxi[dit]); // stored as transpose
+
+         coord_sys.getCellCentereddXdxi(dXdxiT[dit]); // stored as transpose
+         m_dXdxi[dit].copy(dXdxiT[dit],0,0,1);
+         m_dXdxi[dit].copy(dXdxiT[dit],m_dXdxi.nComp()-1,m_dXdxi.nComp()-1,1);
+         if(SpaceDim==2) {
+            m_dXdxi[dit].copy(dXdxiT[dit],1,2,1);
+            m_dXdxi[dit].copy(dXdxiT[dit],2,1,1);
+         }
+         else {
+            m_dXdxi[dit].copy(dXdxiT[dit],4,4,1);
+            m_dXdxi[dit].copy(dXdxiT[dit],1,3,1);
+            m_dXdxi[dit].copy(dXdxiT[dit],3,1,1);
+            m_dXdxi[dit].copy(dXdxiT[dit],2,6,1);
+            m_dXdxi[dit].copy(dXdxiT[dit],6,2,1);
+            m_dXdxi[dit].copy(dXdxiT[dit],5,7,1);
+            m_dXdxi[dit].copy(dXdxiT[dit],7,5,1);
+         }
       }
 
       m_coord_sys->postProcessMetricData(m_dXdxi);
@@ -562,14 +588,35 @@ MagGeom::setdXdxiOnFaces( const DisjointBoxLayout&  a_grids,
    if ( !m_dXdxi_onFaces.isDefined() || (m_dXdxi_onFaces.ghostVect() < a_ghostVect) ) {
 
       m_dXdxi_onFaces.define(a_grids, SpaceDim*SpaceDim, a_ghostVect);
+      LevelData<FluxBox> dXdxiT;
+      dXdxiT.define(a_grids, SpaceDim*SpaceDim, a_ghostVect);
 
       for (DataIterator dit(a_grids); dit.ok(); ++dit) {
          const MagBlockCoordSys& coord_sys = getBlockCoordSys(a_grids[dit]);
-         coord_sys.getFaceCentereddXdxi(m_dXdxi_onFaces[dit]);
+         //coord_sys.getFaceCentereddXdxi(m_dXdxi_onFaces[dit]);
+
+         coord_sys.getFaceCentereddXdxi(dXdxiT[dit]);
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            m_dXdxi_onFaces[dit][dir].copy(dXdxiT[dit][dir],0,0,1);
+            m_dXdxi_onFaces[dit][dir].copy(dXdxiT[dit][dir],m_dXdxi_onFaces.nComp()-1,m_dXdxi_onFaces.nComp()-1,1);
+            if(SpaceDim==2) {
+               m_dXdxi_onFaces[dit][dir].copy(dXdxiT[dit][dir],1,2,1);
+               m_dXdxi_onFaces[dit][dir].copy(dXdxiT[dit][dir],2,1,1);
+            }
+            else {
+               m_dXdxi_onFaces[dit][dir].copy(dXdxiT[dit][dir],4,4,1);
+               m_dXdxi_onFaces[dit][dir].copy(dXdxiT[dit][dir],1,3,1);
+               m_dXdxi_onFaces[dit][dir].copy(dXdxiT[dit][dir],3,1,1);
+               m_dXdxi_onFaces[dit][dir].copy(dXdxiT[dit][dir],2,6,1);
+               m_dXdxi_onFaces[dit][dir].copy(dXdxiT[dit][dir],6,2,1);
+               m_dXdxi_onFaces[dit][dir].copy(dXdxiT[dit][dir],5,7,1);
+               m_dXdxi_onFaces[dit][dir].copy(dXdxiT[dit][dir],7,5,1);
+            }
+         }
+
       }
 
       m_dXdxi_onFaces.exchange();
-      
       //if (m_extrablock_exchange) fillInternalGhosts(m_dXdxi_onFaces);
    }
 
@@ -596,14 +643,35 @@ MagGeom::setdXdxiOnEdges( const DisjointBoxLayout&  a_grids,
    if ( !m_dXdxi_onEdges.isDefined() || (m_dXdxi_onEdges.ghostVect() < a_ghostVect) ) {
 
       m_dXdxi_onEdges.define(a_grids, SpaceDim*SpaceDim, a_ghostVect);
+      LevelData<EdgeDataBox> dXdxiT;
+      dXdxiT.define(a_grids, SpaceDim*SpaceDim, a_ghostVect);
 
       for (DataIterator dit(a_grids); dit.ok(); ++dit) {
          const MagBlockCoordSys& coord_sys = getBlockCoordSys(a_grids[dit]);
-         coord_sys.getEdgeCentereddXdxi(m_dXdxi_onEdges[dit]);
+         //coord_sys.getEdgeCentereddXdxi(m_dXdxi_onEdges[dit]);
+
+         coord_sys.getEdgeCentereddXdxi(dXdxiT[dit]);
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            m_dXdxi_onEdges[dit][dir].copy(dXdxiT[dit][dir],0,0,1);
+            m_dXdxi_onEdges[dit][dir].copy(dXdxiT[dit][dir],m_dXdxi_onEdges.nComp()-1,m_dXdxi_onEdges.nComp()-1,1);
+            if(SpaceDim==2) {
+               m_dXdxi_onEdges[dit][dir].copy(dXdxiT[dit][dir],1,2,1);
+               m_dXdxi_onEdges[dit][dir].copy(dXdxiT[dit][dir],2,1,1);
+            }
+            else {
+               m_dXdxi_onEdges[dit][dir].copy(dXdxiT[dit][dir],4,4,1);
+               m_dXdxi_onEdges[dit][dir].copy(dXdxiT[dit][dir],1,3,1);
+               m_dXdxi_onEdges[dit][dir].copy(dXdxiT[dit][dir],3,1,1);
+               m_dXdxi_onEdges[dit][dir].copy(dXdxiT[dit][dir],2,6,1);
+               m_dXdxi_onEdges[dit][dir].copy(dXdxiT[dit][dir],6,2,1);
+               m_dXdxi_onEdges[dit][dir].copy(dXdxiT[dit][dir],5,7,1);
+               m_dXdxi_onEdges[dit][dir].copy(dXdxiT[dit][dir],7,5,1);
+            }
+         }
+
       }
 
       m_dXdxi_onEdges.exchange();
-      
       //if (m_extrablock_exchange) fillInternalGhosts(m_dXdxi_onEdges);
    }
 
@@ -709,6 +777,40 @@ MagGeom::getPointwiseN( LevelData<FluxBox>& a_N ) const
 
    for (dit.begin(); dit.ok(); ++dit) {
       a_N[dit].copy(m_N_face_centered[dit]);
+   }
+}
+
+void
+MagGeom::setPointwiseNJInverseOnEdges( const DisjointBoxLayout&  a_grids,
+                                       const IntVect&            a_ghostVect ) const
+{
+
+   if ( !m_NJinverse_edge_centered.isDefined() || 
+        (m_NJinverse_edge_centered.ghostVect() < a_ghostVect) ) {
+
+      m_NJinverse_edge_centered.define(a_grids, SpaceDim*SpaceDim, a_ghostVect);
+
+      for (DataIterator dit(a_grids); dit.ok(); ++dit) {
+         const MagBlockCoordSys& coord_sys = getBlockCoordSys(a_grids[dit]);
+         coord_sys.getPointwiseNJInverse(m_NJinverse_edge_centered[dit]);
+      }
+
+      m_coord_sys->postProcessMetricData(m_NJinverse_edge_centered);
+
+   }
+
+}
+
+void
+MagGeom::getPointwiseNJInverse( LevelData<EdgeDataBox>& a_NJinverse ) const
+{
+   const DisjointBoxLayout& grids = a_NJinverse.disjointBoxLayout();
+   const IntVect& ghosts = a_NJinverse.ghostVect();
+   setPointwiseNJInverseOnEdges(grids, ghosts);
+
+   DataIterator dit = a_NJinverse.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      a_NJinverse[dit].copy(m_NJinverse_edge_centered[dit]);
    }
 }
 
@@ -923,9 +1025,11 @@ MagGeom::multJonFaces( LevelData<FluxBox>& a_data ) const
    setJonFaces(grids, ghosts);
    
    for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
-      const Box& box = a_data[dit].box();
-      for (int n=0; n<a_data.nComp(); ++n) {
-         a_data[dit].mult(m_JonFaces[dit],box,0,n,1);
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         Box face_box = a_data[dit][dir].box();
+         for (int n=0; n<a_data.nComp(); ++n) {
+            a_data[dit][dir].mult(m_JonFaces[dit][dir],face_box,0,n,1);
+         }
       }
    }
 
@@ -959,12 +1063,14 @@ MagGeom::divideJonFaces( LevelData<FluxBox>& a_data ) const
    setJonFaces(grids, ghosts);
    
    for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
-      const Box& box = a_data[dit].box();
-      for (int n=0; n<a_data.nComp(); ++n) {
-         a_data[dit].divide(m_JonFaces[dit],box,0,n,1); // r=0?
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         Box face_box = a_data[dit][dir].box();
+         for (int n=0; n<a_data.nComp(); ++n) {
+            a_data[dit][dir].divide(m_JonFaces[dit][dir],face_box,0,n,1);
+         }
       }
    }
-
+   
 }
 
 void
@@ -985,36 +1091,6 @@ MagGeom::divideJonEdges( LevelData<EdgeDataBox>& a_data ) const
    }
 
 }
-
-void
-MagGeom::applyOnAxisCurlCorrection( LevelData<EdgeDataBox>& a_Curl,
-                              const LevelData<FArrayBox>&   a_val) const
-{
-   // set values at r=0 to be a_Curl(r=0)[dir=1] = 2*a_val(r=dr/2)/(dr/2);
-   const DisjointBoxLayout& grids = a_val.disjointBoxLayout();
-
-   RealVect dX_mapped;
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const MagBlockCoordSys& coord_sys = getBlockCoordSys(grids[dit]);
-      dX_mapped = coord_sys.getMappedCellSize();
-      if ( coord_sys.isAxisymmetric() ) {
-         const int dir0 = 0;
-         const int dir1 = 1;
-         const FArrayBox& X_phys = m_edge_centered_real_coords[dit][dir1];
-         const FArrayBox& a_val_on_patch = a_val[dit];
-         FArrayBox& a_Curl1_on_patch = a_Curl[dit][dir1];
-         const Box& thisedgebox = a_Curl1_on_patch.box();
-         
-         FORT_ON_AXIS_CURL_CORRECTION( CHF_BOX(thisedgebox),
-                                       CHF_CONST_REAL(dX_mapped[dir0]),
-                                       CHF_CONST_FRA1(X_phys,0),
-                                       CHF_CONST_FRA1(a_val_on_patch,0),
-                                       CHF_FRA1(a_Curl1_on_patch,0) );   
-         
-      } 
-   }
-}
-
 
 void MagGeom::multPointwiseJ( LevelData<FArrayBox>& a_u,
                               const BoundaryBoxLayout& a_bdry_layout ) const
@@ -1039,7 +1115,6 @@ void MagGeom::multNTransposePointwise(LevelData<FluxBox>& a_data) const
    CH_assert(a_data.nComp() == SpaceDim);
 
    const IntVect ghosts = a_data.ghostVect();
-   //setPointwiseN(grids,ghosts); // need to create this function
 
    for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
       
@@ -1219,23 +1294,6 @@ MagGeom::mappedGridDivergenceFromFluxNorms( const LevelData<FluxBox>&   a_F,
 }
 
 void
-MagGeom::mappedGridDivergenceFromFluxNorms( const FluxBox&    a_F,
-                                                  FArrayBox&  a_divergence) const
-{
-   CH_TIME("MagGeom::mappedGridDivergenceFromFluxNorms()");
-   CH_assert(a_F.nComp() == a_divergence.nComp());
-   const Box& this_box = a_divergence.box();
-
-   // Average the normal component of a_F consistent across block interfaces
-   FluxBox NTF_normal(this_box, a_F.nComp());
-   NTF_normal.copy(a_F);
-   //averageAtBlockBoundaries(NTF_normal);
-
-   RealVect fakeDx = RealVect::Unit;
-   simpleDivergence(a_divergence, NTF_normal, this_box, fakeDx);
-}
-
-void
 MagGeom::physicalDivergenceFromEdgeTans( LevelData<NodeFArrayBox>&  a_divF,
                                    const LevelData<EdgeDataBox>&    a_covar_F ) const
 {
@@ -1391,6 +1449,10 @@ MagGeom::mappedGridCurlFromEdgeTans( const LevelData<EdgeDataBox>&   a_E,
 
    // Assumes a_E is line-average of covarient component of vector E
    // at cell edges
+   const IntVect cellgv = a_face_curl.ghostVect();
+   const IntVect edgegv = a_E.ghostVect();
+   IntVect growVect = IntVect::Zero;
+   if(edgegv>=cellgv) growVect = cellgv;
 
    CH_assert(a_E.nComp() == a_face_curl.nComp());
    const DisjointBoxLayout& grids = a_face_curl.disjointBoxLayout();
@@ -1401,9 +1463,6 @@ MagGeom::mappedGridCurlFromEdgeTans( const LevelData<EdgeDataBox>&   a_E,
    dirk = a_face_dir + 2; // a_face_dir + 2
    dirk = dirk % SpaceDim;
 
-   //cout << "dirj = " << dirj << endl;
-   //cout << "dirk = " << dirk << endl;
-
    RealVect dX_mapped;
    for (DataIterator dit(grids); dit.ok(); ++dit) {
    
@@ -1413,7 +1472,7 @@ MagGeom::mappedGridCurlFromEdgeTans( const LevelData<EdgeDataBox>&   a_E,
       const FArrayBox& E_dirj_on_patch = a_E[dit][dirj]; // Ez (on x-edges) 
       const FArrayBox& E_dirk_on_patch = a_E[dit][dirk]; // Ex (on z-edges)
       FArrayBox& face_curl_on_patch = a_face_curl[dit]; 
-      const Box& cellbox = grids[dit]; // no ghosts
+      const Box& cellbox = grow(grids[dit],growVect);
 
       FORT_SIMPLE_CURL( CHF_BOX(cellbox),
                         CHF_CONST_INT(dirj), // 1
@@ -1423,6 +1482,47 @@ MagGeom::mappedGridCurlFromEdgeTans( const LevelData<EdgeDataBox>&   a_E,
                         CHF_CONST_FRA(E_dirj_on_patch),  // Ez
                         CHF_CONST_FRA(E_dirk_on_patch),  // Ex
                         CHF_FRA(face_curl_on_patch) );   
+   
+   }
+
+}
+
+void
+MagGeom::mappedCovarCurlofVirtComp( LevelData<EdgeDataBox>&  a_JaCurlF_covar,
+                              const LevelData<FluxBox>&      a_dFcovar_covar) const
+{
+   CH_TIME("MagGeom::mappedCovarCurlofVirtComp()");
+   CH_assert(SpaceDim==2);
+   CH_assert(a_dFcovar_covar.nComp() == SpaceDim);
+   CH_assert(a_JaCurlF_covar.nComp() == 1);
+   CH_assert(a_dFcovar_covar.ghostVect()==a_JaCurlF_covar.ghostVect());
+   
+   const DisjointBoxLayout& grids = a_dFcovar_covar.disjointBoxLayout();
+   const IntVect& ghosts = a_dFcovar_covar.ghostVect();
+   setdXdxiOnEdges(grids, ghosts);
+   
+   // a_dFcovar_covar is covariant gradient vector of covariant F on each face
+   //
+   // a_JaCurlF_covar = Ja*curl(a_F)_covar at cell edges 
+   // ( Ja*\curl(a_F)\cdot g_l )
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+   
+      int dXdir = 1;
+      for (int dir(0); dir<SpaceDim; dir++) {
+         if(dir==1) dXdir = 0;
+        
+         const FArrayBox& dXdxi_on_dir   = m_dXdxi_onEdges[dit][dir];
+         const FArrayBox& dF_on_dir      = a_dFcovar_covar[dit][dXdir];
+               FArrayBox& JaCurlF_on_dir = a_JaCurlF_covar[dit][dir];
+  
+         Box edgebox = JaCurlF_on_dir.box();
+         FORT_COVAR_CURL_FROM_GRAD( CHF_BOX(edgebox),
+                                    CHF_CONST_INT( dir ),
+                                    CHF_CONST_FRA(dXdxi_on_dir),
+                                    CHF_CONST_FRA(dF_on_dir),
+                                    CHF_FRA1(JaCurlF_on_dir,0) );   
+      }
    
    }
 
@@ -1447,7 +1547,7 @@ MagGeom::mappedGridCurlofVirtComp( LevelData<EdgeDataBox>&  a_edge_curl,
    
    const IntVect cellGV = a_F.ghostVect();
    const IntVect edgeGV = a_edge_curl.ghostVect();
-   CH_assert(cellGV >= IntVect::Unit);
+   CH_assert(cellGV >= 2*IntVect::Unit);
    const DisjointBoxLayout& grids = a_edge_curl.disjointBoxLayout();
 
    RealVect dX_mapped;
@@ -1467,6 +1567,7 @@ MagGeom::mappedGridCurlofVirtComp( LevelData<EdgeDataBox>&  a_edge_curl,
          Box edgebox = grids[dit];     // no ghosts
          edgebox.surroundingNodes( );  // grow hi end by one in all dirs
          edgebox.enclosedCells( dir ); // shrink hi end by 1 in dir
+         edgebox.grow(1);
 
          FORT_SIMPLE_CURL_VIRT( CHF_BOX(edgebox),
                                 CHF_CONST_INT( dir ),
@@ -1782,12 +1883,14 @@ MagGeom::convertContravarToCovar( LevelData<EdgeDataBox>&  a_F,
       for (int dir=0; dir<SpaceDim; ++dir) {
       
          const FArrayBox& dXdxi_on_dir( m_dXdxi_onEdges[dit][dir] );
+         //const FArrayBox& dxidX_on_dir( m_NJinverse_edge_centered[dit][dir] );
       
          FArrayBox& F_on_dir = a_F[dit][dir]; 
          const Box& thisbox = F_on_dir.box();
 
          FORT_CONTRA_TO_COVAR( CHF_BOX(thisbox),
                                CHF_CONST_FRA(dXdxi_on_dir),
+                               //CHF_CONST_FRA(dxidX_on_dir),
                                CHF_CONST_INT(dir),
                                CHF_CONST_INT(a_inverse),
                                CHF_FRA1(F_on_dir,0) );   
@@ -1832,40 +1935,13 @@ MagGeom::convertContravarToCovar( LevelData<FluxBox>&  a_F,
 
 }
 
-void
-MagGeom::convertContravarToCovar( FluxBox&    a_F,
-                            const DataIndex&  a_dit,
-                            const int         a_inverse ) const
-{
-   CH_TIME("MagGeom::convertContravarToCovar() on FluxBox");
-   // convert a_dir comp of contravariant vector a_F
-   // to covariant or vice versa if a_inverse not zero
-   
-   CH_assert(a_F.nComp() == 1);
-   CH_assert(m_dXdxi_onFaces.isDefined());
-
-   for (int dir=0; dir<SpaceDim; ++dir) {
-
-      const FArrayBox& dXdxi_on_dir( m_dXdxi_onFaces[a_dit][dir] );
-
-      FArrayBox& this_F_on_dir = a_F[dir];
-      const Box& thisbox = a_F.box();
-
-      FORT_CONTRA_TO_COVAR( CHF_BOX(thisbox),
-                            CHF_CONST_FRA(dXdxi_on_dir),
-                            CHF_CONST_INT(dir),
-                            CHF_CONST_INT(a_inverse),
-                            CHF_FRA1(this_F_on_dir,0) );
-
-   }
-
-}
-
 void MagGeom::computeJaStrainTensorPhys( LevelData<FluxBox>&    a_JaW_phys, 
                                    const LevelData<FArrayBox>&  a_velocity_phys ) const
 {
    CH_TIME("MagGeom::computeJaStrainTensorPhys()");
    CH_assert(a_JaW_phys.nComp() == SpaceDim*SpaceDim);
+   
+   const DisjointBoxLayout& grids = a_JaW_phys.disjointBoxLayout();
 
    // calculate physical rate of strain tensor components on each cell face
    // (multiplied by Jacobian)
@@ -1873,25 +1949,33 @@ void MagGeom::computeJaStrainTensorPhys( LevelData<FluxBox>&    a_JaW_phys,
    // W = \nabla(V) + (\nabla(V))^T - 2/3*I\nabla\cdot V
    //
 
-   const DisjointBoxLayout& grids( a_velocity_phys.getBoxes() );
-
-   LevelData<FluxBox> gradV0_cf(grids, SpaceDim, 2*IntVect::Unit);
-   LevelData<FluxBox> gradV1_cf(grids, SpaceDim, 2*IntVect::Unit);
-   LevelData<FluxBox> gradV2_cf(grids, SpaceDim, 2*IntVect::Unit);
+   // Defining all these LevelDatas inline can be expensive.
+   // Is there a better way to do this?
+   //
+   // Only need ghost cells for FluxBoxs if doing 4th order 
+   //   
+   LevelData<FluxBox> gradV0_cf(grids, SpaceDim, 1*IntVect::Unit);
+   LevelData<FluxBox> gradV1_cf(grids, SpaceDim, 1*IntVect::Unit);
+   LevelData<FluxBox> gradV2_cf(grids, SpaceDim, 1*IntVect::Unit);
+   LevelData<FluxBox> JadivV_cf(grids, 1, 1*IntVect::Unit);
    LevelData<FArrayBox> dummyFArray0(grids, 1, 2*IntVect::Unit);
    LevelData<FArrayBox> dummyFArray(grids, SpaceDim, 2*IntVect::Unit);
 
    // compute divV on faces in a similar way as gradient in order to use
-   // tighter stencil. Opposed to compuing divV at cc and interpolaring to faces
+   // tighter stencil. Opposed to computing divV at cc and interpolating to faces,
+   // which can lead to red-black instability because one is effectively 
+   // computing d^2f/dx^2 by applying d/dx operator twice, which has a null space
    //
 
-   // convert velocity to contravariant
+   // convert phys velocity to contravariant
    // and calc gradients on cell faces
    //
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       dummyFArray[dit].copy(a_velocity_phys[dit]);
    }
    convertPhysToContravar(dummyFArray,0);
+   IntVect data_ghosts = 2*IntVect::Unit;
+   setJ(grids, data_ghosts); // using m_J below, so make sure it is set properly
    for (int n=0; n<SpaceDim; ++n) {
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          dummyFArray0[dit].copy(dummyFArray[dit],n,0,1);
@@ -1902,39 +1986,38 @@ void MagGeom::computeJaStrainTensorPhys( LevelData<FluxBox>&    a_JaW_phys,
       if(n==2) computeMappedGradient( dummyFArray0, gradV2_cf, 2 );
    }
    
-   // compute Ja*divU on cell faces
+   // compute Ja*divV on cell faces
    //
-   LevelData<FluxBox> JadivU_cf(grids, 1, IntVect::Unit);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       if(SpaceDim==3) {
-         JadivU_cf[dit].copy(gradV0_cf[dit],0,0,0,1);
-         JadivU_cf[dit].copy(gradV1_cf[dit],1,1,0,1);
-         JadivU_cf[dit].copy(gradV2_cf[dit],2,2,0,1);
+         JadivV_cf[dit].copy(gradV0_cf[dit],0,0,0,1);
+         JadivV_cf[dit].copy(gradV1_cf[dit],1,1,0,1);
+         JadivV_cf[dit].copy(gradV2_cf[dit],2,2,0,1);
          const FArrayBox& gradV0_on_ydir = gradV0_cf[dit][1];
          const FArrayBox& gradV0_on_zdir = gradV0_cf[dit][2];
          const FArrayBox& gradV1_on_xdir = gradV1_cf[dit][0];
          const FArrayBox& gradV1_on_zdir = gradV1_cf[dit][2];
          const FArrayBox& gradV2_on_xdir = gradV2_cf[dit][0];
          const FArrayBox& gradV2_on_ydir = gradV2_cf[dit][1];
-               FArrayBox& divU_on_xdir = JadivU_cf[dit][0];
-               FArrayBox& divU_on_ydir = JadivU_cf[dit][1];
-               FArrayBox& divU_on_zdir = JadivU_cf[dit][2];
-         divU_on_ydir.plus(gradV0_on_ydir,0,0,1);
-         divU_on_ydir.plus(gradV2_on_ydir,2,0,1);
-         divU_on_xdir.plus(gradV1_on_xdir,1,0,1);
-         divU_on_xdir.plus(gradV2_on_xdir,2,0,1);
-         divU_on_zdir.plus(gradV0_on_zdir,0,0,1);
-         divU_on_zdir.plus(gradV1_on_zdir,1,0,1);
+               FArrayBox& divV_on_xdir = JadivV_cf[dit][0];
+               FArrayBox& divV_on_ydir = JadivV_cf[dit][1];
+               FArrayBox& divV_on_zdir = JadivV_cf[dit][2];
+         divV_on_ydir.plus(gradV0_on_ydir,0,0,1);
+         divV_on_ydir.plus(gradV2_on_ydir,2,0,1);
+         divV_on_xdir.plus(gradV1_on_xdir,1,0,1);
+         divV_on_xdir.plus(gradV2_on_xdir,2,0,1);
+         divV_on_zdir.plus(gradV0_on_zdir,0,0,1);
+         divV_on_zdir.plus(gradV1_on_zdir,1,0,1);
       }
       else {
-         JadivU_cf[dit].copy(gradV0_cf[dit],0,0,0,1);
-         JadivU_cf[dit].copy(gradV1_cf[dit],1,1,0,1);
+         JadivV_cf[dit].copy(gradV0_cf[dit],0,0,0,1);
+         JadivV_cf[dit].copy(gradV1_cf[dit],1,1,0,1);
          const FArrayBox& gradV0_on_ydir = gradV0_cf[dit][1];
          const FArrayBox& gradV1_on_xdir = gradV1_cf[dit][0];
-               FArrayBox& divU_on_ydir = JadivU_cf[dit][1];
-               FArrayBox& divU_on_xdir = JadivU_cf[dit][0];
-         divU_on_ydir.plus(gradV0_on_ydir,0,0,1);
-         divU_on_xdir.plus(gradV1_on_xdir,1,0,1);
+               FArrayBox& divV_on_ydir = JadivV_cf[dit][1];
+               FArrayBox& divV_on_xdir = JadivV_cf[dit][0];
+         divV_on_ydir.plus(gradV0_on_ydir,0,0,1);
+         divV_on_xdir.plus(gradV1_on_xdir,1,0,1);
       }
    }
 
@@ -1972,24 +2055,24 @@ void MagGeom::computeJaStrainTensorPhys( LevelData<FluxBox>&    a_JaW_phys,
 
       for (int dir=0; dir<SpaceDim; ++dir) {
 
-         const FArrayBox& divU_on_dir   = JadivU_cf[dit][dir];
+         const FArrayBox& divV_on_dir   = JadivV_cf[dit][dir];
          const FArrayBox& gradV0_on_dir = gradV0_cf[dit][dir];
          const FArrayBox& gradV1_on_dir = gradV1_cf[dit][dir];
          FArrayBox& JaW_on_dir = a_JaW_phys[dit][dir];
 
-         const Box& thisbox = JaW_on_dir.box();
+         Box face_box = surroundingNodes(grids[dit],dir);
          if(SpaceDim==3) {
             const FArrayBox& gradV2_on_dir = gradV2_cf[dit][dir];
-            FORT_EVAL_STRAIN_TENSOR_COMPS_THREED( CHF_BOX(thisbox),
-                                                  CHF_CONST_FRA1(divU_on_dir,0),
+            FORT_EVAL_STRAIN_TENSOR_COMPS_THREED( CHF_BOX(face_box),
+                                                  CHF_CONST_FRA1(divV_on_dir,0),
                                                   CHF_CONST_FRA(gradV0_on_dir),
                                                   CHF_CONST_FRA(gradV1_on_dir),
                                                   CHF_CONST_FRA(gradV2_on_dir),
                                                   CHF_FRA(JaW_on_dir) );
          }
          else {
-            FORT_EVAL_STRAIN_TENSOR_COMPS_TWOD( CHF_BOX(thisbox),
-                                                CHF_CONST_FRA1(divU_on_dir,0),
+            FORT_EVAL_STRAIN_TENSOR_COMPS_TWOD( CHF_BOX(face_box),
+                                                CHF_CONST_FRA1(divV_on_dir,0),
                                                 CHF_CONST_FRA(gradV0_on_dir),
                                                 CHF_CONST_FRA(gradV1_on_dir),
                                                 CHF_FRA(JaW_on_dir) );
@@ -1999,64 +2082,6 @@ void MagGeom::computeJaStrainTensorPhys( LevelData<FluxBox>&    a_JaW_phys,
 
    }
    
-}
-
-void
-MagGeom::projectOntoFluxSurfaceDir( FArrayBox&  a_data,
-                              const DataIndex&  a_dit,
-                              const int         a_dir,
-                              const int         a_inverse ) const
-{
-   CH_TIME("MagGeom::projectOntoFluxSurfaceDir()");
-   CH_assert(a_data.nComp() == SpaceDim);
-   CH_assert(m_NJinverse_cell_centered.isDefined());
-   CH_assert(m_dXdxi.isDefined());
-
-   const FArrayBox& dxidX_on_patch( m_NJinverse_cell_centered[a_dit] );
-   const FArrayBox& dXdxi_on_patch = m_dXdxi[a_dit];
-
-   const Box& box = a_data.box();
-   FORT_PROJECT_PHYS_TO_MAPPED_DIR( CHF_BOX(box),
-                                    CHF_CONST_FRA(dxidX_on_patch),
-                                    CHF_CONST_FRA(dXdxi_on_patch),
-                                    CHF_CONST_INT(a_dir),
-                                    CHF_CONST_INT(a_inverse),
-                                    CHF_FRA(a_data) );
-
-}
-
-void
-MagGeom::multJ( FArrayBox&  a_data,
-          const DataIndex&  a_dit ) const
-{
-   CH_TIME("MagGeom::multJ()");
-   CH_assert(m_J.isDefined());
-
-   const Box& box = a_data.box();
-   const FArrayBox& this_J(m_J[a_dit]);
-   CH_assert(box.type()==this_J.box().type());
-
-   for (int n=0; n<a_data.nComp(); n++) {
-      a_data.mult(this_J,box,0,n,1);
-   }
-
-}
-
-void
-MagGeom::divideJ( FArrayBox&  a_data,
-            const DataIndex&  a_dit ) const
-{
-   CH_TIME("MagGeom::divideJ()");
-   CH_assert(m_J.isDefined());
-
-   const Box& box = a_data.box();
-   const FArrayBox& this_J(m_J[a_dit]);
-   CH_assert(box.type()==this_J.box().type());
-
-   for (int n=0; n<a_data.nComp(); n++) {
-      a_data.divide(this_J,box,0,n,1);
-   }
-
 }
 
 void
@@ -2209,6 +2234,8 @@ void MagGeom::computeFieldData( LevelData<FArrayBox>& a_BField,
                                 LevelData<FArrayBox>& a_curlBFieldDir,
                                 LevelData<FArrayBox>& a_BFieldDirdotcurlBFieldDir ) const
 {
+   CH_TIME("MagGeom::computeFieldData");
+   
    const DisjointBoxLayout& grids = a_BField.disjointBoxLayout();
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -2233,6 +2260,8 @@ void MagGeom::computeFieldData( LevelData<FluxBox>& a_BField,
                                 LevelData<FluxBox>& a_curlBFieldDir,
                                 LevelData<FluxBox>& a_BFieldDirdotcurlBFieldDir ) const
 {
+   CH_TIME("MagGeom::computeFieldData");
+
    const DisjointBoxLayout& grids = a_BField.disjointBoxLayout();
 
    // Compute the field cell averages
@@ -2644,11 +2673,18 @@ MagGeom::writeGeometryData( const DisjointBoxLayout& a_grids,
                             const double&            a_time ) const
 {
   IntVect geom_data_ghosts = 4*IntVect::Unit;
+
+  setPointwiseNJInverseOnCells(a_grids, geom_data_ghosts);
+  setdXdxiOnCells(a_grids, geom_data_ghosts);
+
 #if CFG_DIM==2
-  LevelData<FArrayBox> geom_data(a_grids, 6, geom_data_ghosts);
+  LevelData<FArrayBox> geom_data(a_grids, 10, geom_data_ghosts);
 
   for (DataIterator dit(a_grids); dit.ok(); ++dit) {
     const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(a_grids[dit]);
+
+    const FArrayBox& dXdxi_on_patch( m_dXdxi[dit] );
+    const FArrayBox& dxidX_on_patch( m_NJinverse_cell_centered[dit] );
 
     RealVect dx = block_coord_sys.dx();
     RealVect offset = 0.5*RealVect::Unit;
@@ -2662,11 +2698,22 @@ MagGeom::writeGeometryData( const DisjointBoxLayout& a_grids,
       RealVect X = block_coord_sys.realCoord(xi);
       this_geom_data(iv,0) = X[RADIAL_DIR];
       this_geom_data(iv,1) = X[POLOIDAL_DIR];
+      // dXdXi(xi,col,row)
+      //this_geom_data(iv,2) = block_coord_sys.dXdXi(xi,0,0);
+      //this_geom_data(iv,3) = block_coord_sys.dXdXi(xi,0,1);
+      //this_geom_data(iv,4) = block_coord_sys.dXdXi(xi,1,0);
+      //this_geom_data(iv,5) = block_coord_sys.dXdXi(xi,1,1);
 
-      this_geom_data(iv,2) = block_coord_sys.dXdXi(xi,0,0);
-      this_geom_data(iv,3) = block_coord_sys.dXdXi(xi,0,1);
-      this_geom_data(iv,4) = block_coord_sys.dXdXi(xi,1,0);
-      this_geom_data(iv,5) = block_coord_sys.dXdXi(xi,1,1);
+      this_geom_data(iv,2) = dXdxi_on_patch.get(iv,0);
+      this_geom_data(iv,3) = dXdxi_on_patch.get(iv,1);
+      this_geom_data(iv,4) = dXdxi_on_patch.get(iv,2);
+      this_geom_data(iv,5) = dXdxi_on_patch.get(iv,3);
+
+      this_geom_data(iv,6) = dxidX_on_patch.get(iv,0);
+      this_geom_data(iv,7) = dxidX_on_patch.get(iv,1);
+      this_geom_data(iv,8) = dxidX_on_patch.get(iv,2);
+      this_geom_data(iv,9) = dxidX_on_patch.get(iv,3);
+
     }
   }
 
@@ -2958,47 +3005,64 @@ MagGeom::plotMagneticFieldData(const double& a_time) const
    plotCellData( string("curlBFieldDir"), m_curlBFieldDir_cc, a_time );
    plotCellData( string("BFieldDirdotcurlBFieldDir"), m_BFieldDirdotcurlBFieldDir_cc, a_time );
 
-   // Plot local magnetic safety factor q = r/R * Btor/Bpol for SN geometry
-   if ( (typeid(*m_coord_sys) == typeid(SingleNullCoordSys))) {
-
-      LevelData<FArrayBox> BField_cyl;
-      BField_cyl.define(m_BField_cc);
+   // Get cyclindrical components of a magnetic field
+   LevelData<FArrayBox> BField_cyl;
+   BField_cyl.define(m_BField_cc);
       
-#if CFG_DIM == 3
-      // convert to cylindrical from cartesian frame
-      convertCartesianToCylindrical(BField_cyl, m_BFieldDir_cc);
-      plotCellData( string("BField_cyl"), BField_cyl, a_time );
-#endif
-
-      const DisjointBoxLayout& grids = gridsFull();
-      
-      LevelData<FArrayBox> safety_factor(grids, 1, IntVect::Zero);
-
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         const MagBlockCoordSys& coord_sys = getBlockCoordSys(grids[dit]);
-         FArrayBox toroidal_coords(grids[dit], SpaceDim);
-         
-         ((const SingleNullBlockCoordSys&)coord_sys).getToroidalCoords(toroidal_coords);
-         
-         RealVect mag_axis = ((const SingleNullBlockCoordSys&)coord_sys).getMagAxis();
-         
-         BoxIterator bit(grids[dit]);
-         for (bit.begin();bit.ok();++bit) {
-            IntVect iv = bit();
-         
-            Real Bpol = sqrt(pow(BField_cyl[dit](iv,0),2)+pow(BField_cyl[dit](iv,2),2));
-            Real Btor = fabs(BField_cyl[dit](iv,1));
-            
-            Real r = toroidal_coords(iv,RADIAL_DIR);
-            Real theta = toroidal_coords(iv,POLOIDAL_DIR);
-            Real R = mag_axis[RADIAL_DIR] + r*cos(theta);
-            
-            safety_factor[dit](iv,0) = r/R * Btor/Bpol;
-         }
-      }
-      plotCellData( string("LocalSafetyFactor"), safety_factor, a_time );
+   if (SpaceDim == 3) {
+     // convert to cylindrical from cartesian frame
+     convertCartesianToCylindrical(BField_cyl, m_BFieldDir_cc);
+     plotCellData( string("BField_cyl"), BField_cyl, a_time );
    }
 
+   // Plot local magnetic safety factor q = r/R * Btor/Bpol
+   const DisjointBoxLayout& grids = gridsFull();
+      
+   LevelData<FArrayBox> safety_factor(grids, 1, IntVect::Zero);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+     const MagBlockCoordSys& coord_sys = getBlockCoordSys(grids[dit]);
+     FArrayBox toroidal_coords(grids[dit], SpaceDim);
+
+     bool use_flux_coordinate(false);
+     coord_sys.getToroidalCoords(toroidal_coords, use_flux_coordinate);
+         
+     RealVect mag_axis = coord_sys.getMagAxis();
+         
+     BoxIterator bit(grids[dit]);
+     for (bit.begin();bit.ok();++bit) {
+       IntVect iv = bit();
+         
+       Real Bpol = sqrt(pow(BField_cyl[dit](iv,0),2)+pow(BField_cyl[dit](iv,2),2));
+       Real Btor = fabs(BField_cyl[dit](iv,1));
+            
+       Real r = toroidal_coords(iv,RADIAL_DIR);
+       Real theta = toroidal_coords(iv,POLOIDAL_DIR);
+       Real R = mag_axis[RADIAL_DIR] + r*cos(theta);
+       
+       safety_factor[dit](iv,0) = r/R * Btor/Bpol;
+     }
+   }
+   plotCellData( string("LocalSafetyFactor"), safety_factor, a_time );
+   
+   
+   // Plot magnetic flux
+   LevelData<FArrayBox> magnetic_flux_cc(m_gridsFull, 1, IntVect::Zero);
+   LevelData<FArrayBox> normalized_magnetic_flux_cc(m_gridsFull, 1, IntVect::Zero);
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+      if (block_coord_sys.providesFlux()) {
+         block_coord_sys.getMagneticFlux(m_cell_centered_real_coords[dit], magnetic_flux_cc[dit]);
+         block_coord_sys.getNormMagneticFlux(m_cell_centered_real_coords[dit], normalized_magnetic_flux_cc[dit]);
+      }
+      else {
+         magnetic_flux_cc[dit].setVal(0.);
+         normalized_magnetic_flux_cc[dit].setVal(0.);
+      }
+   }
+   plotCellData( string("MagneticFlux"), magnetic_flux_cc, a_time );
+   plotCellData( string("NormalizedMagneticFlux"), normalized_magnetic_flux_cc, a_time );
 }
 
 void
@@ -3167,6 +3231,10 @@ MagGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
       }
 #if CFG_DIM ==3 
       else if ( m_sheared_mb_geom ) {
+
+         // Fill internal ghosts
+         a_data.exchange();
+
          if ( nghosts[TOROIDAL_DIR] > 0 ) {
             // Fill the codim 1 extrablock ghost cells at the toroidal block boundaries
             interpolateFromShearedGhosts(a_data);
@@ -3182,10 +3250,9 @@ MagGeom::fillInternalGhosts( LevelData<FArrayBox>& a_data ) const
                exchangeExtraBlockGhosts(a_data, codim, toroidal_dir_only, no_toroidal_exchange);
             }
          }
-         a_data.exchange();
 
-         //perform data exchange in corner ghost cells
-         //might be needed for high-order calculations 
+         // Perform data exchange in corner ghost cells that might be needed
+         // for high-order calculations 
          fillCorners(a_data, nghosts, SpaceDim);
       }
 #endif
@@ -3551,6 +3618,7 @@ MagGeom::fillCorners( LevelData<FArrayBox>&  a_data,
                       const IntVect&         a_nghosts,
                       const int              a_max_codim ) const
 {
+   CH_TIME("MagGeom::fillCorners()");
    const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
 
    CoDimCopyManager<FArrayBox>* ebe_copy_manager = NULL;
@@ -4105,6 +4173,9 @@ MagGeom::computeNormalExBDrift( const LevelData<FArrayBox>&  a_Efield_cell,
 void
 MagGeom::setRealCoords()
 {
+
+   CH_TIME("MagGeom::setRealCoords()");
+   
    m_cell_centered_real_coords.define(m_gridsFull, SpaceDim, (m_ghosts+1)*IntVect::Unit);
    m_face_centered_real_coords.define(m_gridsFull, SpaceDim, (m_ghosts+1)*IntVect::Unit);
    m_edge_centered_real_coords.define(m_gridsFull, SpaceDim, (m_ghosts+1)*IntVect::Unit);
@@ -4123,26 +4194,71 @@ MagGeom::setRealCoords()
 void
 MagGeom::setNormalizedMagneticFlux()
 {
+   CH_TIME("MagGeom::setNormalizedMagneticFlux");
+   
    m_normalized_magnetic_flux_cell.define(m_gridsFull, 1, (m_ghosts+1)*IntVect::Unit);
    m_normalized_magnetic_flux_face.define(m_gridsFull, 1, (m_ghosts+1)*IntVect::Unit);
 
-   if ( m_coord_sys->providesFlux() ) {
-      for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
-         const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(m_gridsFull[dit]);
+   for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(m_gridsFull[dit]);
+      if (block_coord_sys.providesFlux()) {
          block_coord_sys.getNormMagneticFlux(m_cell_centered_real_coords[dit], m_normalized_magnetic_flux_cell[dit]);
          for (int dir=0; dir<SpaceDim; ++dir) {
             block_coord_sys.getNormMagneticFlux(m_face_centered_real_coords[dit][dir], m_normalized_magnetic_flux_face[dit][dir]);
          }
       }
-   }
-   else {
-      for (DataIterator dit(m_gridsFull); dit.ok(); ++dit) {
+      else {
          m_normalized_magnetic_flux_cell[dit].setVal(0.);
          for (int dir=0; dir<SpaceDim; ++dir) {
             m_normalized_magnetic_flux_face[dit].setVal(0.);
          }
       }
    }
+}
+
+double
+MagGeom::volumeIntegrate( const LevelData<FArrayBox>& a_data ) const
+{
+   const DisjointBoxLayout& grids = a_data.getBoxes();
+
+   double local_sum = 0.;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      FArrayBox tmp(grids[dit],1);
+      tmp.copy(m_cell_volume[dit]);
+      tmp.mult(a_data[dit]);
+      local_sum += tmp.sum(grids[dit],0);
+   }
+
+   double global_sum;
+#ifdef CH_MPI
+   MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+#else
+   global_sum = local_sum;
+#endif
+
+   return global_sum;
+}
+
+
+
+double
+MagGeom::volumeAverage( const LevelData<FArrayBox>& a_data ) const
+{
+   const DisjointBoxLayout& grids = a_data.getBoxes();
+
+   double local_volume = 0.;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      local_volume += m_cell_volume[dit].sum(grids[dit],0);
+   }
+
+   double volume;
+#ifdef CH_MPI
+   MPI_Allreduce(&local_volume, &volume, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+#else
+   volume = local_volume;
+#endif
+
+   return volumeIntegrate(a_data) / volume;
 }
 
 
@@ -5345,9 +5461,9 @@ MagGeom::computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& a_
             }
          }
       }
-      a_field.exchange();
    
    }
+   a_field.exchange();
    
 }
 
@@ -5376,7 +5492,8 @@ MagGeom::computeMappedGradient( const LevelData<FArrayBox>&  a_phi,
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       for (int dir=0; dir<SpaceDim; dir++) {
          IntVect grow_vect = 2*IntVect::Unit;
-         grow_vect[dir] = 0;
+         //grow_vect[dir] = 0;
+         grow_vect[dir] = 1;
          Box facebox = grow(grids[dit],grow_vect);
          facebox.surroundingNodes( dir );
 
@@ -5387,7 +5504,8 @@ MagGeom::computeMappedGradient( const LevelData<FArrayBox>&  a_phi,
                                       phi_face[dit][dir] );
       }
    }
-   //phi_face.exchange(m_exchangeCopier2nd);
+   //SpaceUtils::exchangeFluxBox(phi_face); // exchange doesnt do corners...
+   //phi_face.exchange();
    
    // Compute the field to second-order including one layer of transverse faces
    
@@ -5423,6 +5541,9 @@ MagGeom::computeMappedGradient( const LevelData<FArrayBox>&  a_phi,
          }
       }
    }
+   // Second-order extrapolate the field to the transverse physical boundary ghosts
+   //fillTransversePhysicalGhosts(a_field); 
+   //a_field.exchange();
 
 }
 
@@ -5870,6 +5991,8 @@ MagGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
 void
 MagGeom::initializeShearedMBGeom(const DisjointBoxLayout& a_grids)
 {
+   CH_TIME("MagGeom::initializeShearedMBGeom");
+  
    //Here, set number of ghost layers, which is later used by phaseGeom
    //to be consistent with advection scheme (uw5 needs 3 layers, uw3 needs 2)
    m_sheared_ghosts = 3;
@@ -6119,6 +6242,41 @@ MagGeom::multiplyMatrix(LevelData<FluxBox>&       a_data,
          }
       }
    }
+}
+  
+void MagGeom::convertCellToFace(LevelData<FluxBox>&         a_face_data,
+                                const LevelData<FArrayBox>& a_cell_data) const
+{
+  const DisjointBoxLayout& grids = a_cell_data.getBoxes();
+
+  int order = (secondOrder()) ? 2 : 4;
+
+  if (order == 4) {
+    CH_assert(a_cell_data.ghostVect() >= 2*IntVect::Unit );
+  }
+     
+  for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
+
+    for (int dir=0; dir<SpaceDim; dir++) {
+         
+      Box box(grids[dit]);
+            
+      if (order == 4 && (a_face_data.ghostVect() >= IntVect::Unit)) {
+        for (int tdir(0); tdir<SpaceDim; tdir++) {
+          if (tdir!=dir) {
+            const int TRANSVERSE_GROW(1);
+            box.grow( tdir, TRANSVERSE_GROW );
+          }
+        }
+      }
+         
+      SpaceUtils::faceInterpolate(dir,
+                                  surroundingNodes(box,dir),
+                                  order,
+                                  a_cell_data[dit],
+                                  a_face_data[dit][dir] );
+    }
+  }
 }
    
 #include "NamespaceFooter.H"

@@ -254,6 +254,8 @@ int GKCollisions::precondMatrixBands()
 void GKCollisions::assemblePrecondMatrix( void *a_P,
                                           const KineticSpeciesPtrVect& a_soln,
                                           const GlobalDOFKineticSpeciesPtrVect& a_gdofs,
+                                          const int                                     a_step,
+                                          const int                                     a_stage,
                                           const Real a_shift)
 {
   for (int species(0); species<a_soln.size(); species++) {
@@ -266,20 +268,25 @@ void GKCollisions::assemblePrecondMatrix( void *a_P,
 
       CLSInterface&             CLS(collisionModel(species_name,species_name_bkgr));
 
-      CLS.assemblePrecondMatrix(a_P,soln_species,gdofs_species,a_shift);
+      CLS.assemblePrecondMatrix(  a_P,
+                                  soln_species,
+                                  gdofs_species,
+                                  a_step,
+                                  a_stage,
+                                  a_shift );
     }
   }
 }
 
-void GKCollisions::defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
-                                        std::vector<DOFList>&                         a_dof_list,
-                                        const KineticSpeciesPtrVect&                  a_soln,
-                                        const GlobalDOFKineticSpeciesPtrVect&         a_gdofs,
-                                        const GKVector&                               a_x,
-                                        GKOps&                                        a_ops,
-                                        const std::string&                            a_out_string,
-                                        const std::string&                            a_opt_string,
-                                        bool                                          a_im )
+void GKCollisions::defineMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
+                                        std::vector<DOFList>&                             a_dof_list,
+                                        const KineticSpeciesPtrVect&                      a_soln,
+                                        const GlobalDOFKineticSpeciesPtrVect&             a_gdofs,
+                                        const ODEVector&                                  a_x,
+                                        void*                                             a_ops,
+                                        const std::string&                                a_out_string,
+                                        const std::string&                                a_opt_string,
+                                        bool                                              a_im )
 {
   for (int species(0); species<a_soln.size(); species++) {
     const KineticSpecies&           soln_species(*(a_soln[species]));
@@ -296,12 +303,15 @@ void GKCollisions::defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOp
      }
    }
 }
-void GKCollisions::updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>& a_pc,
-                                        const KineticSpeciesPtrVect&                  a_soln,
-                                        const GlobalDOFKineticSpeciesPtrVect&         a_gdofs,
-                                        const Real                                    a_time,
-                                        const Real                                    a_shift,
-                                        const bool                                    a_im )
+
+void GKCollisions::updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
+                                        const KineticSpeciesPtrVect&                      a_soln,
+                                        const GlobalDOFKineticSpeciesPtrVect&             a_gdofs,
+                                        const Real                                        a_time,
+                                        const int                                         a_step,
+                                        const int                                         a_stage,
+                                        const Real                                        a_shift,
+                                        const bool                                        a_im )
 {
   for (int species(0); species<a_soln.size(); species++) {
     const KineticSpecies&           soln_species(*(a_soln[species]));
@@ -313,7 +323,15 @@ void GKCollisions::updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOp
 
       CLSInterface&             CLS(collisionModel(species_name,species_name_bkgr));
 
-      CLS.updateBlockPC(a_pc, soln_species, gdofs_species, a_time, a_shift, a_im, species);
+      CLS.updateBlockPC(  a_pc, 
+                          soln_species, 
+                          gdofs_species, 
+                          a_time, 
+                          a_step,
+                          a_stage,
+                          a_shift, 
+                          a_im, 
+                          species);
      }
    }
 }

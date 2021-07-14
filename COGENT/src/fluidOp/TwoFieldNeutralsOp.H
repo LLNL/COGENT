@@ -5,6 +5,7 @@
 #include "FluidVarBC.H"
 #include "Diffusion.H"
 #include "OneFieldNeutralsOp.H"
+#include "TwoFieldNeutralsPC.H"
 #include "SpaceUtils.H"
 
 #include "NamespaceHeader.H"
@@ -65,10 +66,10 @@ public:
                                       const int                          component,
                                       const Real                         time);
    
-   virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+   virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                std::vector<PS::DOFList>&,
-                               const PS::GKVector&,
-                               PS::GKOps&,
+                               const PS::ODEVector&,
+                               void*,
                                const std::string&,
                                const std::string&,
                                bool,
@@ -76,10 +77,12 @@ public:
                                const PS::GlobalDOFFluidSpecies&,
                                int );
 
-   virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+   virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 const PS::KineticSpeciesPtrVect&,
                                 const FluidSpeciesPtrVect&,
                                 const Real,
+                                const int,
+                                const int,
                                 const Real,
                                 const bool,
                                 const int );
@@ -87,6 +90,8 @@ public:
    virtual void updatePCImEx( const FluidSpeciesPtrVect&        fluid_species,
                               const PS::KineticSpeciesPtrVect&  kinetic_species,
                               const double                      time,
+                              const int                         step,
+                              const int                         stage,
                               const double                      shift,
                               const int                         component);
 
@@ -229,6 +234,7 @@ private:
    bool m_fixed_recycling;
    bool m_first_call;
    bool m_extrapolate_density;
+   bool m_analytic_pc; // Setting for enabling the analytic preconditioner
    
    std::string m_advScheme;
    std::string m_opt_string;
@@ -238,6 +244,8 @@ private:
 
    Diffusion*        m_viscosity_op;
    mutable EllipticOpBC*     m_viscosity_bc;
+
+   TwoFieldNeutralsPC* m_twofieldneutrals_pc; // The analytic preconditioner
 
    std::vector<FluidVarBC*>  m_fluid_bc;
    

@@ -43,25 +43,28 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
       return (m_is_defined && (m_ops != NULL)); 
     }
 
-    void define(const T&, Ops&, const std::string&, const std::string&, bool)
+    void define(  const T&, 
+                  void*, 
+                  const std::string&, 
+                  const std::string&, 
+                  bool  )
     {
       MayDay::Error("Error in FluidOpPreconditioner::define() - Using disabled interface.\n");
       return;
     }
 
-    void define(const T&, Ops&, CFG::FluidOpInterface&, const std::string&, const std::string&, bool);
-
-    inline void update(const T& a_X, const Real a_time, const Real a_shift = 0.0)
-    {
-      CH_assert(isDefined());
-      if (m_im) m_ops->assemblePCImEx(false, NULL, a_X, a_time, a_shift);
-      else      m_ops->assembleSolPC(false, NULL, a_X, a_time);
-      return;
-    }
+    void define(  const T&, 
+                  void*, 
+                  CFG::FluidOpInterface&, 
+                  const std::string&, 
+                  const std::string&, 
+                  bool  );
 
     inline void update( const KineticSpeciesPtrVect&    a_kin_species_phys,
                         const CFG::FluidSpeciesPtrVect& a_fluid_species,
                         const Real                      a_time,
+                        const int                       a_step,
+                        const int                       a_stage,
                         const Real                      a_shift,
                         const bool                      a_im,
                         const int                       a_idx )
@@ -70,7 +73,13 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
       CH_assert(a_im == m_im);
 
       if (m_im) {
-        m_fluid_ops->updatePCImEx(a_fluid_species, a_kin_species_phys, a_time, a_shift, a_idx);
+        m_fluid_ops->updatePCImEx(  a_fluid_species, 
+                                    a_kin_species_phys, 
+                                    a_time, 
+                                    a_step,
+                                    a_stage,
+                                    a_shift, 
+                                    a_idx);
       }
       return;
     }
@@ -102,7 +111,7 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
 
 template <class T, class Ops>
 void FluidOpPreconditioner<T,Ops>::define(const T&                a_x,
-                                          Ops&                    a_ops,
+                                          void*                   a_ops,
                                           CFG::FluidOpInterface&  a_fluid_ops,
                                           const std::string&      a_out_string,
                                           const std::string&      a_opt_string,
@@ -110,7 +119,7 @@ void FluidOpPreconditioner<T,Ops>::define(const T&                a_x,
 {
   CH_assert(!isDefined());
 
-  m_ops = &a_ops;
+  m_ops = (Ops*) a_ops;
   m_fluid_ops = &a_fluid_ops;
   m_im = a_im;
 

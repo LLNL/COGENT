@@ -129,6 +129,106 @@ c
 c
       return
       end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine insulator_conductor_bc(
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_INTVECT[ng],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside],
+     &     CHF_CONST_REAL[ft],
+     &     CHF_CONST_FRA1[ICbinary],
+     &     CHF_FRA1[Bv],
+     &     )
+c
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[is;js;ks;ls;ms]
+      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3;ibeg4]
+      integer isign
+      double precision ICbinary0
+c
+      isign = 2*iside-1
+
+      CHF_DTERM[
+      ibeg0 = ibdryboxlo0+CHF_ID(idir,0)*((1-iside)*(ng(0)+1)-1);
+      ibeg1 = ibdryboxlo1+CHF_ID(idir,1)*((1-iside)*(ng(1)+1)-1);
+      ibeg2 = ibdryboxlo2+CHF_ID(idir,2)*((1-iside)*(ng(2)+1)-1);
+      ibeg3 = ibdryboxlo3+CHF_ID(idir,3)*((1-iside)*(ng(3)+1)-1);
+      ibeg4 = ibdryboxlo4+CHF_ID(idir,4)*((1-iside)*(ng(4)+1)-1)]
+c
+      CHF_MULTIDO[bdrybox;i;j;k;l;m]
+c
+        CHF_DTERM[
+        is = i + CHF_ID(idir,0)*(2*(ibeg0-i)+isign);
+        js = j + CHF_ID(idir,1)*(2*(ibeg1-j)+isign);
+        ks = k + CHF_ID(idir,2)*(2*(ibeg2-k)+isign);
+        ls = l + CHF_ID(idir,3)*(2*(ibeg3-l)+isign);
+        ms = m + CHF_ID(idir,4)*(2*(ibeg4-m)+isign)]
+c
+        ICbinary0 = ICbinary(CHF_IX[i;j;k;l;m])
+        if(ICbinary0.eq.zero) then
+          Bv(CHF_IX[i;j;k;l;m]) = Bv(CHF_IX[is;js;ks;ls;ms])
+        else
+          Bv(CHF_IX[i;j;k;l;m]) = ft
+        endif
+c
+      CHF_ENDDO
+c
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine insulator_current_density_bc(
+     &     CHF_BOX[bdrybox],
+     &     CHF_CONST_INT[idir],
+     &     CHF_CONST_INT[iside],
+     &     CHF_CONST_FRA1[ICbinary],
+     &     CHF_FRA1[Jcovar],
+     &     )
+c
+      integer CHF_AUTODECL[i]
+      integer CHF_AUTODECL[is]
+      integer CHF_AUTODECL[ibeg]
+      integer CHF_AUTODECL[ng]
+      double precision ICbinary0
+      integer ng(0:CH_SPACEDIM-1)
+c
+      CHF_DTERM[
+      ng0 = CHF_UBOUND[bdrybox;0]-CHF_LBOUND[bdrybox;0]+1;
+      ng1 = CHF_UBOUND[bdrybox;1]-CHF_LBOUND[bdrybox;1]+1;
+      ng2 = CHF_UBOUND[bdrybox;2]-CHF_LBOUND[bdrybox;2]+1;
+      ng3 = CHF_UBOUND[bdrybox;3]-CHF_LBOUND[bdrybox;3]+1;
+      ng4 = CHF_UBOUND[bdrybox;4]-CHF_LBOUND[bdrybox;4]+1]
+c
+      CHF_DTERM[
+      ibeg0 = ibdryboxlo0+CHF_ID(idir,0)*(1-iside)*ng0;
+      ibeg1 = ibdryboxlo1+CHF_ID(idir,1)*(1-iside)*ng1;
+      ibeg2 = ibdryboxlo2+CHF_ID(idir,2)*(1-iside)*ng2;
+      ibeg3 = ibdryboxlo3+CHF_ID(idir,3)*(1-iside)*ng3;
+      ibeg4 = ibdryboxlo4+CHF_ID(idir,4)*(1-iside)*ng4]
+c
+      CHF_AUTOMULTIDO[bdrybox;i]
+c
+        CHF_DTERM[
+        is0 = i0 + CHF_ID(idir,0)*(2*(ibeg0-i0)-1);
+        is1 = i1 + CHF_ID(idir,1)*(2*(ibeg1-i1)-1);
+        is2 = i2 + CHF_ID(idir,2)*(2*(ibeg2-i2)-1);
+        is3 = i3 + CHF_ID(idir,3)*(2*(ibeg3-i3)-1);
+        is4 = i4 + CHF_ID(idir,4)*(2*(ibeg4-i4)-1)]
+c
+        ICbinary0 = ICbinary(CHF_AUTOIX[i])
+        if(ICbinary0.eq.zero) then
+c          Jcovar(CHF_IX[i]) = extrapolate elsewhere
+        else
+          Jcovar(CHF_AUTOIX[i]) = -Jcovar(CHF_AUTOIX[is])
+        endif
+c
+      CHF_ENDDO
+c
+      return
+      end
       
 cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
@@ -155,9 +255,6 @@ c
       mm = CHF_ID(idir, 4)]
 c
       do n=0,nfcomp-1
-        print*, "ibdryboxlo0  = ", ibdryboxlo0
-c        print*, "ibdryboxhi0  = ", ibdryboxhi0
-        print*, "iside        = ", iside
       CHF_MULTIDO[bdrybox;i;j;k;l;m]
 c
         CHF_DTERM[
@@ -178,9 +275,6 @@ c       JRA HARD-CODED FOR idir=0 ONLY
            f(CHF_IX[i;j;k;l;m],n) = ( four*f(CHF_IX[i-ii;j-jj;k-jj;l-ll;m-mm],n) 
      &                            -        f(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm],n) )/three
         endif
-
-c        print*, "is        = ", is
-c        print*, "CHF_IX[i;j]  = ", CHF_IX[i;j;k;l;m]
 
       CHF_ENDDO
       enddo
@@ -227,8 +321,6 @@ c
       ibeg4 = ibdryboxlo4+CHF_ID(idir,4)*(1-iside)*ng4]
 c
       do n=0,nfcomp-1
-c        print*, "ibdryboxlo0  = ", ibdryboxlo0
-c        print*, "idir         = ", idir
       CHF_AUTOMULTIDO[bdrybox;i]
         
         CHF_DTERM[
@@ -304,8 +396,6 @@ c
          is2 = i2 + CHF_ID(idir,2)*(2*(ibeg2-i2)-1);
          is3 = i3 + CHF_ID(idir,3)*(2*(ibeg3-i3)-1);
          is4 = i4 + CHF_ID(idir,4)*(2*(ibeg4-i4)-1)]
-c        print*, "i0           = ", i0
-c        print*, "is0          = ", is0
 
          f(CHF_AUTOIX[i],n) = evenodd*f(CHF_AUTOIX[is],n)
 
@@ -349,14 +439,7 @@ c
       ibeg4 = ibdryboxlo4+CHF_ID(idir,4)*(1-iside)*ng4]
 c
       do n=0,nfcomp-1
-c        print*, "ibdryboxlo0  = ", ibdryboxlo0
-c        print*, "ibdryboxhi0  = ", ibdryboxhi0
-c        print*, "idir         = ", idir
-c        print*, "iside        = ", iside
-c        print*, "ng0          = ", ng0
-c        print*, "ibeg0        = ", ibeg0
       CHF_AUTOMULTIDO[bdrybox;i]
-c        print*, CHF_AUTODECL[i]
       
          CHF_DTERM[
          is0 = i0 + CHF_ID(idir,0)*(2*(ibeg0-i0)-1-isign);
@@ -364,8 +447,6 @@ c        print*, CHF_AUTODECL[i]
          is2 = i2 + CHF_ID(idir,2)*(2*(ibeg2-i2)-1-isign);
          is3 = i3 + CHF_ID(idir,3)*(2*(ibeg3-i3)-1-isign);
          is4 = i4 + CHF_ID(idir,4)*(2*(ibeg4-i4)-1-isign)]
-c        print*, "i0           = ", i0
-c        print*, "is0          = ", is0
 
          f(CHF_AUTOIX[i],n) = evenodd*f(CHF_AUTOIX[is],n)
 
@@ -376,6 +457,11 @@ c        print*, "is0          = ", is0
       end
 
 cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+c
+c  this routine is used for fluid momentum density vector on a wall
+c  where one sets the normal component (stored as idir comp of f) 
+c  to be odd about the boundary and all other components to even
+c
 
       subroutine fourth_order_symmetry_bc(
      &     CHF_FRA[f],
@@ -423,49 +509,6 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       end
       
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
-      subroutine fourth_order_axis_bc(
-     &     CHF_FRA[f],
-     &     CHF_BOX[bdrybox],
-     &     CHF_CONST_INTVECT[ng],
-     &     CHF_CONST_INT[idir],
-     &     CHF_CONST_INT[iside]
-     &     )
-c
-      integer CHF_DDECL[i;j;k;l;m]
-      integer CHF_DDECL[is;js;ks;ls;ms]
-      integer CHF_DDECL[ibeg0;ibeg1;ibeg2;ibeg3;ibeg4]
-      integer n
-      integer isign
-c
-      isign = 2*iside-1
-
-      CHF_DTERM[
-      ibeg0 = ibdryboxlo0+CHF_ID(idir,0)*((1-iside)*(ng(0)+1)-1);
-      ibeg1 = ibdryboxlo1+CHF_ID(idir,1)*((1-iside)*(ng(1)+1)-1);
-      ibeg2 = ibdryboxlo2+CHF_ID(idir,2)*((1-iside)*(ng(2)+1)-1);
-      ibeg3 = ibdryboxlo3+CHF_ID(idir,3)*((1-iside)*(ng(3)+1)-1);
-      ibeg4 = ibdryboxlo4+CHF_ID(idir,4)*((1-iside)*(ng(4)+1)-1)]
-c
-      do n=0,nfcomp-1
-      CHF_MULTIDO[bdrybox;i;j;k;l;m]
-c
-        CHF_DTERM[
-        is = i + CHF_ID(idir,0)*(2*(ibeg0-i)+isign);
-        js = j + CHF_ID(idir,1)*(2*(ibeg1-j)+isign);
-        ks = k + CHF_ID(idir,2)*(2*(ibeg2-k)+isign);
-        ls = l + CHF_ID(idir,3)*(2*(ibeg3-l)+isign);
-        ms = m + CHF_ID(idir,4)*(2*(ibeg4-m)+isign)]
-c
-        f(CHF_IX[i;j;k;l;m],n) = -3.0*f(CHF_IX[is;js;ks;ls;ms],n)
-c
-      CHF_ENDDO
-      enddo
-c
-      return
-      end
-
-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       subroutine fourth_order_dirichlet_bc(
      &     CHF_FRA[f],
@@ -703,17 +746,6 @@ c
         gn(2) = iside*(ii2-ibeg2+1) + (iside-1)*(ii2-ibeg2);
         gn(3) = iside*(ii3-ibeg3+1) + (iside-1)*(ii3-ibeg3);
         gn(4) = iside*(ii4-ibeg4+1) + (iside-1)*(ii4-ibeg4)]
-c
-c        print*, "ibdryboxlo0  = ", ibdryboxlo0
-c        print*, "ibdryboxhi0  = ", ibdryboxhi0
-c        print*, "idir         = ", idir
-c        print*, "iside        = ", iside
-c        print*, "ng0          = ", ng0
-c        print*, "ibeg0        = ", ibeg0
-c        print*, "i0           = ", i0
-c        print*, "ii0          = ", ii0
-c        print*, "gn(idir)     = ", gn(idir)
-c        print*, "break ccccccccccccccccc"
 c
         if (gn(idir).eq.1) then
 c

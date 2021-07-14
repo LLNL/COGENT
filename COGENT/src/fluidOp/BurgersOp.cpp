@@ -5,7 +5,6 @@
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
-#include "GKOps.H"
 #include "FluidOpPreconditioner.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -262,13 +261,13 @@ void BurgersOp::accumulateExplicitRHS(  FluidSpeciesPtrVect&               a_rhs
 }
 
 
-void BurgersOp::accumulateImplicitRHS(  FluidSpeciesPtrVect&               a_rhs,
-                                         const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
-                                         const FluidSpeciesPtrVect&         a_fluid_species,
-                                         const PS::ScalarPtrVect&           a_scalars,
-                                         const EField&                      a_E_field,
-                                         const int                          a_fluidVecComp,
-                                         const Real                         a_time)
+void BurgersOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rhs,
+                                       const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
+                                       const FluidSpeciesPtrVect&         a_fluid_species,
+                                       const PS::ScalarPtrVect&           a_scalars,
+                                       const EField&                      a_E_field,
+                                       const int                          a_fluidVecComp,
+                                       const Real                         a_time)
 {
   if (m_is_time_implicit) {
     accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
@@ -276,16 +275,16 @@ void BurgersOp::accumulateImplicitRHS(  FluidSpeciesPtrVect&               a_rhs
 }
 
 
-void BurgersOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
-                                 std::vector<PS::DOFList>&                                 a_dof_list,
-                                 const PS::GKVector&                                       a_soln_vec,
-                                 PS::GKOps&                                                a_gkops,
-                                 const std::string&                                        a_out_string,
-                                 const std::string&                                        a_opt_string,
-                                 bool                                                      a_im,
-                                 const FluidSpecies&                                       a_fluid_species,
-                                 const PS::GlobalDOFFluidSpecies&                          a_global_dofs,
-                                 int                                                       a_species_idx )
+void BurgersOp::defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>& a_pc,
+                               std::vector<PS::DOFList>&                                    a_dof_list,
+                               const PS::ODEVector&                                         a_soln_vec,
+                               void*                                                        a_gkops,
+                               const std::string&                                           a_out_string,
+                               const std::string&                                           a_opt_string,
+                               bool                                                         a_im,
+                               const FluidSpecies&                                          a_fluid_species,
+                               const PS::GlobalDOFFluidSpecies&                             a_global_dofs,
+                               int                                                          a_species_idx )
 {
   if (a_im && m_is_time_implicit) {
     CH_assert(a_pc.size() == a_dof_list.size());
@@ -297,11 +296,11 @@ void BurgersOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::
                 << " (index = " << a_pc.size() << ").\n";
     }
   
-    PS::Preconditioner<PS::GKVector, PS::GKOps> *pc;
-    pc = new PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>;
-    dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+    PS::Preconditioner<PS::ODEVector,PS::AppCtxt> *pc;
+    pc = new PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>;
+    dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
-    dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+    dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->speciesIndex(a_species_idx);
   
     PS::DOFList dof_list(0);
@@ -335,13 +334,15 @@ void BurgersOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::
 }
 
 
-void BurgersOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
-                                const PS::KineticSpeciesPtrVect&                          a_kin_species_phys,
-                                const FluidSpeciesPtrVect&                                a_fluid_species,
-                                const Real                                                a_time,
-                                const Real                                                a_shift,
-                                const bool                                                a_im,
-                                const int                                                 a_species_idx )
+void BurgersOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&  a_pc,
+                                const PS::KineticSpeciesPtrVect&                              a_kin_species_phys,
+                                const FluidSpeciesPtrVect&                                    a_fluid_species,
+                                const Real                                                    a_time,
+                                const int                                                     a_step,
+                                const int                                                     a_stage,
+                                const Real                                                    a_shift,
+                                const bool                                                    a_im,
+                                const int                                                     a_species_idx )
 {
   if (a_im && m_is_time_implicit) {
     CH_assert(m_my_pc_idx >= 0);
@@ -352,10 +353,17 @@ void BurgersOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::
                 << " for BurgersOp of fluid species " << a_species_idx << ".\n";
     }
   
-    PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps> *pc 
-      = dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>(a_pc[m_my_pc_idx]);
+    PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt> *pc 
+      = dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>(a_pc[m_my_pc_idx]);
     CH_assert(pc != NULL);
-    pc->update(a_kin_species_phys, a_fluid_species, a_time, a_shift, a_im, a_species_idx);
+    pc->update( a_kin_species_phys, 
+                a_fluid_species, 
+                a_time, 
+                a_step, 
+                a_stage, 
+                a_shift, 
+                a_im, 
+                a_species_idx );
   }
   return;
 }
@@ -364,6 +372,8 @@ void BurgersOp::updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::
 void BurgersOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
                              const PS::KineticSpeciesPtrVect& a_kinetic_species,
                              const double                     a_time,
+                             const int                        a_step,
+                             const int                        a_stage,
                              const double                     a_shift,
                              const int                        a_component)
 {
@@ -379,7 +389,7 @@ void BurgersOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
 }
 
 
-void BurgersOp::solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species_solution,
+void BurgersOp::solvePCImEx(  FluidSpeciesPtrVect&              a_fluid_species_solution,
                               const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                               const FluidSpeciesPtrVect&        a_fluid_species_rhs,
                               const int                         a_component )

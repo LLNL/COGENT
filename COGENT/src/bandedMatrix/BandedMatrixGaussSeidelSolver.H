@@ -56,7 +56,10 @@ void BandedMatrixGaussSeidelSolver<Vec>::parseParameters( ParmParse& a_pp )
 }
 
 template <class Vec>
-void BandedMatrixGaussSeidelSolver<Vec>::solve(Vec& a_x, const BandedMatrix& a_A, const Vec& a_b, int a_its)
+void BandedMatrixGaussSeidelSolver<Vec>::solve( Vec&                a_x, 
+                                                const BandedMatrix& a_A, 
+                                                const Vec&          a_b, 
+                                                int                 a_its)
 {
   CH_assert(m_is_defined);
   CH_assert(a_A.isAssembled());

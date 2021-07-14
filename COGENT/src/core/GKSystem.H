@@ -1,7 +1,7 @@
 #ifndef  _GKSYSTEM_H_
 #define  _GKSYSTEM_H_
 
-#include "TimeIntegratorLibrary.H"
+#include "AppCtxt.H"
 #include "GKOps.H"
 #include "evalOpMatrix.H"
 #include "PositivityPostProcessor.H"
@@ -52,7 +52,7 @@ typedef RefCountedPtr<LevelData<FArrayBox> > VelocityPtr;
  *
  */
 
-class GKSystem 
+class GKSystem : public AppCtxt
 {
    public:
 
@@ -65,7 +65,7 @@ class GKSystem
        *  @param[in] a_useExternalTI   Flag to indicate if using native (false, default) 
        *                                    or external (true) time integrators. 
        */
-      GKSystem( ParmParse& pp, bool a_useExternalTI = false);
+      GKSystem( ParmParse& pp );
 
       /// Destructor.
       /**
@@ -78,22 +78,8 @@ class GKSystem
       /**
        * Computes and returns a stable time step estimate.
        */
-      Real stableDt( const int step_number );
-
-      /// Advances the solution.
-      /**
-       * Advance the solution by a single time step.  Returns the current
-       * simulation time.
-       */
-      void advance( Real& cur_time, Real& dt, int& step_number );
-
-      /// Callback to allow for additional operations after stage advance.
-      /**
-       * Callback to allow for additional operations after stage advance.
-       *
-       * @param[in,out] soln data holder.
-       */
-      virtual void postStageAdvance( KineticSpeciesPtrVect& soln );
+      Real stableDt( const int step_number, 
+                     const TimeIntegratorType );
 
       /// Write plot file.
       /**
@@ -101,10 +87,6 @@ class GKSystem
        *
        */
       void writePlotFile( const char *prefix, const int cur_step, const double& cur_time );
-
-      // Read history parameters from input file (see writeFieldHistory)
-
-      void setupFieldHistories();
 
       /// Augment a history file with a value at a spatial index
       /**
@@ -131,81 +113,332 @@ class GKSystem
       void readCheckpointFile( HDF5Handle& handle, int& cur_step,
                                double& cur_time, double& cur_dt );
 
-      void computeEField(const int step_number, KineticSpeciesPtrVect& soln,
-                         CFG::LevelData<CFG::FluxBox>& E_field,
-                         CFG::LevelData<CFG::FArrayBox>& E_field_cell);
-
-      void getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids );
-
-      void getVelocitySpaceDisjointBoxLayout( const VEL::ProblemDomain& domain,
-                                              VEL::DisjointBoxLayout& grids );
-
       void printDiagnostics();
 
-      void preTimeStep  (int,Real);
+      void preTimeStep  ( const ODEVector&, int, Real );
    
-      void postTimeStep (int,Real,Real);
+      void postTimeStep ( ODEVector&, int, Real, Real );
 
-      inline
-      void postTimeStage( const int a_step, const Real a_time, const Real a_dt, const int a_stage )
-        {
-           m_gk_ops->postTimeStage( a_step, a_time, a_dt, m_state_comp, a_stage );
-        }
+      inline void postTimeStage( const int     a_step,
+                                 const Real    a_time,
+                                 const Real    a_dt,
+                                 ODEVector&    a_vec,
+                                 const int     a_stage )
+      {
+         copyStateFromArray( a_vec );
+         postTimeStage(a_step, a_dt, a_time, a_stage);
+         copyStateToArray( a_vec );
+      }
+
+      void postTimeStage( const int, 
+                          const Real, 
+                          const Real, 
+                          const int );
 
       int  getVectorSize()  { return m_state_comp.getVectorSize(); }
 
-      inline void assemblePCImEx(void* a_Pmat, double mshift)
+      inline void copyStateToArray (ODEVector& a_Y) const
       { 
-        MayDay::Error("PETSc interface is no longer supported.\n");
-        //m_gk_ops->assemblePCImEx( a_Pmat, m_state_comp, mshift ); 
+        m_state_comp.copyTo(a_Y.data());   
       }
 
-      inline void setupPCImEx(void *a_Pmat)
+      inline void copyStateFromArray (const ODEVector& a_Y) 
       { 
-        MayDay::Error("PETSc interface is no longer supported.\n");
-        //m_gk_ops->setupPCImEx( a_Pmat, m_state_comp ); 
+        m_state_comp.copyFrom(a_Y.data()); 
       }
 
-      inline void copyStateToArray   (Real *Y) { m_state_comp.copyTo(Y);   }
-      inline void copyStateFromArray (Real *Y) { m_state_comp.copyFrom(Y); }
-      inline void copyRHSToArray     (Real *Y) { m_rhs.copyTo(Y);   }
-      inline void copyRHSFromArray   (Real *Y) { m_rhs.copyFrom(Y); }
-      inline void addStateFromArray  (Real *Y, Real a_scale = 1.0) { m_state_comp.addFrom(Y,a_scale); }
+      inline void copyRHSToArray (ODEVector& a_Y) const
+      { 
+        m_rhs.copyTo(a_Y.data());   
+      }
+      
+      inline void copyRHSFromArray (const ODEVector& a_Y) 
+      { 
+        m_rhs.copyFrom(a_Y.data()); 
+      }
 
-      inline void computeRHSFunctionExp (Real t) 
-      { 
-        MayDay::Error("PETSc interface is no longer supported.\n");
-        //m_gk_ops->explicitOp     (m_rhs,t,m_state_comp); 
+      inline void preOpEval(const ODEVector&   a_Y,
+                            const Real         a_time,
+                            const Checkpoint&  a_chkpt )
+      {
+        copyStateFromArray( a_Y );
+        m_gk_ops->preOpEval(m_state_comp, a_time, a_chkpt);
       }
-      inline void computeRHSFunctionImEx(Real t) 
-      { 
-        MayDay::Error("PETSc interface is no longer supported.\n");
-        //m_gk_ops->explicitOpImEx (m_rhs,t,m_state_comp); 
+
+      inline void preSolutionOpEval(const ODEVector&   a_Y,
+                                    const Real         a_time,
+                                    const Checkpoint&  a_chkpt )
+      {
+         copyStateFromArray( a_Y );
+         m_gk_ops->preSolutionOpEval(m_state_comp, a_time, a_chkpt);
       }
-      inline void computeIFunctionImEx  (Real t) 
-      { 
-        MayDay::Error("PETSc interface is no longer supported.\n");
-        //m_gk_ops->implicitOpImEx (m_rhs,t,m_state_comp); 
+
+      inline void explicitOp(ODEVector&        a_F, 
+                             const Real        a_time, 
+                             const ODEVector&  a_Y)
+      {
+         copyStateFromArray( a_Y );
+         m_gk_ops->explicitOp( m_rhs, a_time, m_state_comp );
+         copyRHSToArray( a_F );
+      }
+
+      inline void explicitOpImEx(ODEVector&         a_F,
+                                 const Real         a_time,
+                                 const ODEVector&   a_Y )
+      {
+         copyStateFromArray( a_Y );
+         m_gk_ops->explicitOpImEx( m_rhs, a_time, m_state_comp );
+         copyRHSToArray( a_F );
+      }
+
+      inline void implicitOpImEx(ODEVector&         a_F,
+                                 const Real         a_time,
+                                 const ODEVector&   a_Y )
+      {
+         copyStateFromArray( a_Y );
+         m_gk_ops->implicitOpImEx( m_rhs, a_time, m_state_comp );
+         copyRHSToArray( a_F );
+      }
+
+      inline void solutionOp(ODEVector&        a_F,
+                             const Real        a_time,
+                             const ODEVector&  a_Y )
+      {
+         copyStateFromArray( a_Y );
+         m_gk_ops->solutionOp( m_rhs, a_time, m_state_comp );
+         copyRHSToArray( a_F );
+      }
+
+      inline void explicitPC(ODEVector&        a_F,
+                             const Real        a_time,
+                             const ODEVector&  a_Y )
+      {
+         copyStateFromArray( a_Y );
+         m_gk_ops->explicitPC( m_rhs, a_time, m_state_comp );
+         copyRHSToArray( a_F );
+      }
+
+      inline void implicitPCImEx(ODEVector&         a_F,
+                                 const Real         a_time,
+                                 const ODEVector&   a_Y )
+      {
+         copyStateFromArray( a_Y );
+         m_gk_ops->implicitPCImEx( m_rhs, a_time, m_state_comp );
+         copyRHSToArray( a_F );
+      }
+
+      inline void solutionPC(ODEVector&        a_F,
+                             const Real        a_time,
+                             const ODEVector&  a_Y )
+      {
+         copyStateFromArray( a_Y );
+         m_gk_ops->solutionPC( m_rhs, a_time, m_state_comp );
+         copyRHSToArray( a_F );
+      }
+
+      inline
+      void defineMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&  a_pc,
+                                std::vector<DOFList>&                             a_dof_list,
+                                const ODEVector&                                  a_Y,
+                                const std::string&                                a_out_string,
+                                const std::string&                                a_opt_string,
+                                bool                                              a_im)
+      {
+         copyStateFromArray( a_Y );
+         m_gk_ops->defineMultiPhysicsPC(  a_pc,
+                                          a_dof_list,
+                                          a_Y,
+                                          m_state_comp,
+                                          (void*) this,
+                                          a_out_string,
+                                          a_opt_string,
+                                          a_im );
+      }
+
+      void updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&  a_pc,
+                                const ODEVector&                                  a_Y,
+                                const Real                                        a_time,
+                                const int                                         a_step, 
+                                const int                                         a_stage,
+                                const Real                                        a_shift,
+                                const bool                                        a_im)
+      {
+        copyStateFromArray( a_Y );
+        m_gk_ops->updateMultiPhysicsPC( a_pc,
+                                        m_state_comp,
+                                        a_time,
+                                        a_step,
+                                        a_stage,
+                                        a_shift,
+                                        a_im );
+      }
+
+      void solveSolutionPC( ODEVector&        a_Z, 
+                            const ODEVector&  a_R, 
+                            int               a_i=-1)
+      {
+        copyStateFromArray( a_R );
+        copyRHSFromArray( a_Z );
+        m_gk_ops->solveSolutionPC(  m_rhs,
+                                    m_state_comp,
+                                    a_i );
+        copyRHSToArray( a_Z );
+      }
+   
+      void solveFluidOpPCImEx(  ODEVector&        a_Z, 
+                                const ODEVector&  a_R, 
+                                int               a_i=-1)
+      {
+        copyStateFromArray( a_R );
+        copyRHSFromArray( a_Z );
+        m_gk_ops->solveFluidOpPCImEx( m_rhs,
+                                      m_state_comp,
+                                      a_i );
+        copyRHSToArray( a_Z );
+      }
+   
+      void solveVlasovOpPCImEx(Preconditioner<ODEVector,AppCtxt>* const a_pc,
+                               ODEVector&                             a_Z, 
+                               const ODEVector&                       a_R, 
+                               int                                    a_i=-1 )
+      {
+        copyStateFromArray( a_R );
+        copyRHSFromArray( a_Z );
+        m_gk_ops->solveVlasovOpPCImEx(  a_pc,
+                                        m_rhs,
+                                        m_state_comp,
+                                        a_i );
+        copyRHSToArray( a_Z );
       }
 
       inline bool isLinear()  { return m_gk_ops->isLinear(); }
       inline void printFunctionCounts() { m_gk_ops->printFunctionCounts(); }
-      inline void printTimeIntegratorCounts() 
-      { 
-        if (m_use_native_time_integrator) {
-          m_integrator->printCounts();
-        }
-        return;
-      }
-      inline void printStepNorm()
+
+      inline
+      void defineODEVector( ODEVector& a_vec) const
       {
-        if (!procID()) {
-          printf("  Step norm: %1.4e (rel), %1.4e (abs)\n", m_step_norm_rel, m_step_norm_abs);
-          printf("\n");
+        a_vec.define(m_state_comp);
+      }
+
+      inline
+      const std::string& tiClass() const { return m_ti_class; }
+
+      inline
+      const std::string& tiMethod() const { return m_ti_method; }
+
+      inline
+      void useScales( const bool a_use_scales = true )
+      {
+        m_use_scales = a_use_scales;
+      }
+   
+      inline
+      void setScaleTolerance(const Real a_tol)
+      {
+        m_scale_tol = a_tol;
+      }
+   
+      inline
+      void computeUScale( const ODEVector&  a_vec )
+      {
+        static bool first_call = true;
+        if (m_use_scales) {
+          m_state_comp.copyFrom(a_vec.data());
+          m_state_comp.setVarScaling(m_scale_u.data(), m_scale_tol);
+        } else {
+          if (first_call) m_scale_u.ones();
         }
+        first_call = false;
+      }
+   
+      inline
+      void computeRHSOpScale( const ODEVector&  a_vec )
+      {
+        static bool first_call = true;
+        if (m_use_scales) {
+          m_rhs.copyFrom(a_vec.data());
+          m_rhs.setVarScaling(m_scale_rhsop.data(), m_scale_tol);
+        } else {
+          if (first_call) m_scale_rhsop.ones();
+        }
+        first_call = false;
+      }
+   
+      inline
+      void computeLHSOpScale( const ODEVector&  a_vec )
+      {
+        static bool first_call = true;
+        if (m_use_scales) {
+          m_rhs.copyFrom(a_vec.data());
+          m_rhs.setVarScaling(m_scale_lhsop.data(), m_scale_tol);
+        } else {
+          if (first_call) m_scale_lhsop.ones();
+        }
+        first_call = false;
+      }
+   
+      inline void scaleU(ODEVector& a_vec) 
+      { 
+        a_vec.elementwiseMultiply(m_scale_u); 
+      }
+      
+      inline void scaleRHSOp(ODEVector& a_vec) 
+      { 
+        a_vec.elementwiseMultiply(m_scale_rhsop); 
+      }
+      
+      inline void scaleLHSOp(ODEVector& a_vec) 
+      { 
+        a_vec.elementwiseMultiply(m_scale_lhsop); 
+      }
+   
+      inline void deScaleU(ODEVector& a_vec) 
+      { 
+        a_vec.elementwiseDivide(m_scale_u); 
+      }
+   
+      inline void deScaleRHSOp(ODEVector& a_vec) 
+      { 
+        a_vec.elementwiseDivide(m_scale_rhsop); 
+      }
+      
+      inline void deScaleLHSOp(ODEVector& a_vec) 
+      { 
+        a_vec.elementwiseDivide(m_scale_lhsop); 
+      }
+   
+      inline const ODEVector& uScale() { return m_scale_u; }
+      inline const ODEVector& rhsOpScale() { return m_scale_rhsop; }
+      inline const ODEVector& lhsOpScale() { return m_scale_lhsop; }
+   
+      inline Real scaledVecNormU( const ODEVector& a_vec) 
+      { 
+        return a_vec.computeNorm(m_scale_u); 
+      }
+      
+      inline Real scaledVecNormRHSOp( const ODEVector& a_vec) 
+      { 
+        return a_vec.computeNorm(m_scale_rhsop); 
+      }
+      
+      inline Real scaledVecNormLHSOp( const ODEVector& a_vec) 
+      { 
+        return a_vec.computeNorm(m_scale_lhsop); 
+      }
+
+      inline bool trivialSolutionOp() const 
+      { 
+        return m_gk_ops->trivialSolutionOp(); 
       }
 
    private:
+
+      void setupFieldHistories();
+
+      void getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& );
+
+      void getVelocitySpaceDisjointBoxLayout( const VEL::ProblemDomain&,
+                                              VEL::DisjointBoxLayout& );
 
       void createState();
    
@@ -278,10 +511,8 @@ class GKSystem
    
       std::string m_mag_geom_type;
 
-      std::string m_ti_class;
-      std::string m_ti_method;
+      GKUnits* m_units;
 
-      GKUnits*                 m_units;
       RefCountedPtr<CFG::MagGeom>     m_mag_geom;
       RefCountedPtr<CFG::MagCoordSys> m_mag_geom_coords;
       RefCountedPtr<VEL::VelCoordSys> m_velocity_coords;
@@ -296,13 +527,9 @@ class GKSystem
 
       GKOps* m_gk_ops;
 
-      TimeIntegrator<GKVector, GKOps> *m_integrator;
       GKState m_state_comp;
       GKState m_state_phys;
-      GKRHSData m_rhs;   // needed for the PETSc option
-      GKVector m_U, m_U_old;
-
-      Real m_step_norm_rel, m_step_norm_abs;
+      GKRHSData m_rhs;
 
       GlobalDOF m_global_dof;
 
@@ -321,6 +548,7 @@ class GKSystem
       bool m_hdf_ParallelVelocity;
 
       bool m_hdf_energyDensity;
+      bool m_hdf_kineticEnergyDensity;
       bool m_hdf_perpEnergyDensity;
       bool m_hdf_parallelEnergyDensity;
       bool m_hdf_pressure;
@@ -347,6 +575,7 @@ class GKSystem
       bool m_hdf_fluids;
    
       bool m_hdf_vpartheta;
+      bool m_hdf_bfvpartheta;
       bool m_hdf_rtheta;
       bool m_hdf_vparmu;
 
@@ -358,11 +587,14 @@ class GKSystem
       bool m_old_vorticity_model;
 
       int m_verbosity;
-      bool m_use_native_time_integrator;
-      bool m_compute_op_matrices;
-      Real m_op_matrices_tolerance;
+      
+      std::string m_ti_class;
+      std::string m_ti_method;
 
-      EvalOpMatrix<GKVector,GKOps> m_op_matrices;
+      /* Scales */
+      bool m_use_scales;
+      Real m_scale_tol;
+      ODEVector m_scale_u, m_scale_rhsop, m_scale_lhsop;
 };
 
 #include "NamespaceFooter.H"

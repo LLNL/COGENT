@@ -28,6 +28,9 @@ SingleNullBlockCoordSys::SingleNullBlockCoordSys( ParmParse&            a_parm_p
       m_poloidally_truncated(false),
       m_include_extrablock_mapping(true),
       m_phys_coord_type(CARTESIAN),
+#if CFG_DIM==3
+      m_interp(NULL),
+#endif
       m_toroidal_ghosts(4),
       m_toroidal_mapping_refinement(2),
       m_field_trace_step_num(10)
@@ -63,6 +66,8 @@ SingleNullBlockCoordSys::SingleNullBlockCoordSys( ParmParse&            a_parm_p
 #if CFG_DIM==3
     m_toroidal_mapped_offset = a_toroidal_sector * a_toroidal_block_separation * a_dx[TOROIDAL_DIR];
 #endif
+    
+    m_provides_flux = m_spectral_field;
  }
 
 
@@ -74,6 +79,10 @@ SingleNullBlockCoordSys::~SingleNullBlockCoordSys()
    }
 #endif
    if (m_poloidal_util) delete m_poloidal_util;
+
+#if CFG_DIM==3
+   if ( m_interp ) delete m_interp;
+#endif
 }
 
 
@@ -2076,73 +2085,6 @@ SingleNullBlockCoordSys::convertCylindricalToCartesian( const FArrayBox&  a_cart
    }
 #endif
 }
-
-void SingleNullBlockCoordSys::getToroidalCoords(FArrayBox& a_coords) const
-{
-  Box box = a_coords.box();
-
-  FArrayBox X(box,SpaceDim);
-  getCellCenteredRealCoords(X);
-
-  RealVect coord;
-  for (BoxIterator bit(box); bit.ok(); ++bit) {
-    IntVect iv = bit();
-
-    for (int dir=0; dir<SpaceDim; ++dir) {       
-      coord[dir] = X(iv,dir);
-    }
-
-    convertCartesianToToroidal(coord);
-
-     for (int dir=0; dir<SpaceDim; ++dir) {
-      a_coords(iv,dir) = coord[dir];
-    }
-  }
-}
-
-void SingleNullBlockCoordSys::convertCartesianToToroidal(RealVect& a_coord) const
-{
-
-  //get Cartesian coordinates
-#if CFG_DIM == 3
-  Real x = a_coord[0];
-  Real y = a_coord[1];
-  Real z = a_coord[2];
-#else
-  Real x = a_coord[0];
-  Real y = 0.0;
-  Real z = a_coord[1];
-#endif
-   
-   
-  //compute toroidal coordinates
-
-  Real flux_norm = getNormMagneticFlux(a_coord);
-   
-  POL::RealVect axis = m_poloidal_util->getMagAxis();
-   
-  Real R0 = axis[0];
-  Real Z0 = axis[1];
-   
-  Real phi = atan2(y,x);
-  if (phi < 0.) phi += 2.*Pi;
-   
-  Real r = sqrt(pow(sqrt(x*x+y*y)-R0,2)+pow(z-Z0,2));
-  Real r_xy = sqrt(x*x + y*y);
-  Real theta = asin((z-Z0)/r);
-  if (r_xy < R0) theta = Pi - theta;
-  if (theta < 0) theta += 2. * Pi;
-
-#if CFG_DIM == 3
-  a_coord[RADIAL_DIR] = flux_norm;
-  a_coord[TOROIDAL_DIR] = phi;
-  a_coord[POLOIDAL_DIR] = theta;
-#else
-  a_coord[RADIAL_DIR] = flux_norm;
-  a_coord[POLOIDAL_DIR] = theta;
-#endif
-}
-
 
 POL::IntVect
 SingleNullBlockCoordSys::restrictToPoloidal( const IntVect& a_v ) const

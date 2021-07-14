@@ -10,6 +10,7 @@
 #include "KineticSpecies.H"
 #include "Scalar.H"
 #include "GlobalDOF.H"
+#include "AppCtxt.H"
 #include "MultiPhysicsPreconditioner.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -17,8 +18,7 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 #include "NamespaceHeader.H"
-class GKVector;
-class GKOps;
+class ODEVector;
 #include "NamespaceFooter.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -92,15 +92,17 @@ class FluidOpInterface
                                   const Real     a_time,
                                   const int      a_stage ) {;}
 
+      virtual void enforcePositivity( FluidSpecies&  a_species_comp ) {;}
+
       virtual void getMemberVar( LevelData<FArrayBox>&  a_Var,
                            const FluidSpecies&          a_fluid_species,
                            const string&                a_name ) const 
       { cout << "getMemberVar: default getMemberVar() " << endl;}
       
-      virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+      virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                   std::vector<PS::DOFList>&,
-                                  const PS::GKVector&,
-                                  PS::GKOps&,
+                                  const PS::ODEVector&,
+                                  void*,
                                   const std::string&,
                                   const std::string&,
                                   bool,
@@ -108,10 +110,12 @@ class FluidOpInterface
                                   const PS::GlobalDOFFluidSpecies&,
                                   int ) { }
 
-      virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+      virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                    const PS::KineticSpeciesPtrVect&,
                                    const FluidSpeciesPtrVect&,
                                    const Real,
+                                   const int,
+                                   const int,
                                    const Real,
                                    const bool,
                                    const int ) { }
@@ -132,6 +136,8 @@ class FluidOpInterface
       virtual void updatePCImEx( const FluidSpeciesPtrVect&       fluid_species,
                                  const PS::KineticSpeciesPtrVect& kinetic_species,
                                  const double                     time,
+                                 const int                        step,
+                                 const int                        stage,
                                  const double                     shift,
                                  const int                        component) {}
 
@@ -144,8 +150,10 @@ class FluidOpInterface
          fluid_species_solution[component]->copy(*(fluid_species_rhs[component]));
       }
 
-      virtual void updatePC( const PS::KineticSpeciesPtrVect&  kinetic_species,
-                             const EllipticOpBC&               bc ) {};
+      virtual void updatePC(  const int                         step,
+                              const int                         stage,
+                              const PS::KineticSpeciesPtrVect&  kinetic_species,
+                              const EllipticOpBC&               bc ) {};
 
       virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                                 const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
@@ -220,6 +228,8 @@ class FluidOpInterface
       {
          return DBL_MAX;
       }
+
+      virtual void setStepConstKinCoeff( const bool ) { }
 
       virtual bool trivialSolutionOp() const = 0;
 

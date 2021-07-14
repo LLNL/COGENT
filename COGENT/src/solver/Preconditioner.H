@@ -13,12 +13,20 @@ class Preconditioner
     virtual ~Preconditioner() {;}
 
     virtual void define(const T&, 
-                        Ops&, 
+                        void*, 
                         const std::string&, 
                         const std::string&,
                         bool ) = 0;
 
-    virtual void update(const T&, const Real, const Real a_a = 0.0) = 0;
+    virtual void update(  const T&, 
+                          const Real, 
+                          const int, 
+                          const int, 
+                          const Real a_a = 0.0)
+    {
+      MayDay::Error("Preconditioner::update() - not implemented!");
+    }
+
     virtual void apply(T&, const T&) = 0;
     virtual bool isDefined() const = 0;
 

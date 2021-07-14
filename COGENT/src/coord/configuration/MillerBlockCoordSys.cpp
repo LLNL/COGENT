@@ -102,10 +102,12 @@ MillerBlockCoordSys::MillerBlockCoordSys( ParmParse&               a_parm_parse,
    double m_phimin = 0.0;
    double dphi = (m_phimax - m_phimin)/(double)dimensions[2];
    RealVect cellSpacing(dr,dtheta,dphi);
+   m_mag_axis = RealVect(m_origin[0], 0 ,m_origin[1]);
 #endif
 
 #if CFG_DIM==2
    RealVect cellSpacing(dr,dtheta);
+   m_mag_axis = RealVect(m_origin[0], m_origin[1]);
 #endif
 
    // Finish defining the object now that we also have the mesh spacing
@@ -114,6 +116,8 @@ MillerBlockCoordSys::MillerBlockCoordSys( ParmParse&               a_parm_parse,
    if (m_verbose && procID()==0) {
       cout << "Done constructing Miller equilibrium geometry" << endl;
    }
+   
+   m_provides_flux = true;
 }
 
 
@@ -534,7 +538,10 @@ void
 MillerBlockCoordSys::getMagneticFlux( const FArrayBox& a_physical_coordinates,
                                       FArrayBox&       a_magnetic_flux ) const
 {
-   for (BoxIterator bit(a_physical_coordinates.box()); bit.ok(); ++bit) {
+   const Box& box(a_magnetic_flux.box());
+   CH_assert(a_physical_coordinates.box().contains(box));
+   
+   for (BoxIterator bit(box); bit.ok(); ++bit) {
       IntVect iv = bit();
       
       RealVect coord;
@@ -565,6 +572,42 @@ MillerBlockCoordSys::getMagneticFlux( const RealVect& a_physical_coordinate ) co
    }
 
    return psi;
+}
+
+void
+MillerBlockCoordSys::getNormMagneticFlux( const FArrayBox& a_physical_coordinates,
+                                          FArrayBox&       a_magnetic_flux ) const
+
+{
+   // Get X,Y,Z coordinates of magnetic axis and separatrix at Y=0
+   const RealVect& X_mag_axis = getMagAxis();
+   RealVect X_mag_sep(X_mag_axis);
+   X_mag_sep[RADIAL_DIR] += m_outer_radial_boundary;
+   
+   double physFluxOnAxis = getMagneticFlux(X_mag_axis);
+   double physFluxOnSep = getMagneticFlux(X_mag_sep);
+   
+   getMagneticFlux(a_physical_coordinates, a_magnetic_flux);
+   a_magnetic_flux.plus(-physFluxOnAxis);
+   a_magnetic_flux.divide(physFluxOnSep - physFluxOnAxis);
+   
+}
+
+
+double
+MillerBlockCoordSys::getNormMagneticFlux( const RealVect& a_physical_coordinate ) const
+{
+   // Get X,Y,Z coordinates of magnetic axis and separatrix at Y=0
+   const RealVect& X_mag_axis = getMagAxis();
+   RealVect X_mag_sep(X_mag_axis);
+   X_mag_sep[RADIAL_DIR] += m_outer_radial_boundary;
+   
+   double physFluxOnAxis = getMagneticFlux(X_mag_axis);
+   double physFluxOnSep = getMagneticFlux(X_mag_sep);
+   
+   double physFlux = getMagneticFlux(a_physical_coordinate);
+   
+   return (physFlux - physFluxOnAxis)/(physFluxOnSep - physFluxOnAxis);
 }
 
 

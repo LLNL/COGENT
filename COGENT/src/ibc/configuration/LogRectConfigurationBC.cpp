@@ -135,12 +135,17 @@ LogRectConfigurationBC::getBCFunction(const int  a_block_number,
    else {
       MayDay::Error("LogRectConfigurationBC::getBCFunction(): Invalid direction argument");
    }
-
+   
    return function;
 }
 
 void LogRectConfigurationBC::parseParameters(ParmParse& a_pp )
 {
+   
+   a_pp.query( "insulator_conductor_variable", m_insulator_conductor_bc );
+   if( m_insulator_conductor_bc ) { // define insulator/conductor object
+      m_InsulatorConductorBC = RefCountedPtr<InsulatorConductorBC> (new InsulatorConductorBC(m_species_name,m_variable_name,m_bdry_name));
+   }
 
    GridFunctionLibrary* library = GridFunctionLibrary::getInstance();
    for (int i(0); i<m_bc_function.size(); i++) {

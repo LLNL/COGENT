@@ -45,7 +45,7 @@ public:
 
    virtual IntVect getDecomposition(int block) const;
 
-   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return m_divergence_cleaning_bc;}
+   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return *m_divergence_cleaning_bc;}
 
    virtual void defineEllipticOpBC( EllipticOpBC& bc ) const;
 
@@ -237,7 +237,7 @@ protected:
    POL::RealVect m_ray[SingleNullBlockCoordSys::NUM_POLOIDAL_BLOCKS];
    int m_sector_block[SingleNullBlockCoordSys::NUM_POLOIDAL_BLOCKS];
 
-   SingleNullEllipticOpBC m_divergence_cleaning_bc;
+   SingleNullEllipticOpBC* m_divergence_cleaning_bc;
    
    LayoutData< RefCountedPtr< IVSFAB<MBStencil> > > m_stencil_ue;
    LayoutData< IntVectSet > m_ghostCells_ue;

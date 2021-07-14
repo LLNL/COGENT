@@ -115,9 +115,10 @@ class LocalizedKineticFunction : public KineticFunction
       /// Set pointwise values at cell centers.
       /**
        */
-      inline void setPointValues( FArrayBox&                a_dfn,
-                                  const PhaseBlockCoordSys& a_coord_sys,
-                                  const Real& a_time ) const;
+      inline void setPointValues( FArrayBox&                dfn,
+				  const Box&                box,
+                                  const FArrayBox&          real_coords,
+                                  const Real&               time ) const;
 
       /// Parse the input database for parameters.
       /**
@@ -136,7 +137,7 @@ class LocalizedKineticFunction : public KineticFunction
       RealVect m_width;
       Real m_floor;
 
-	  bool m_useSG;
+      bool m_useSG; //whether to use sparse grid-friendly stencils
 };
 
 #include "NamespaceFooter.H"

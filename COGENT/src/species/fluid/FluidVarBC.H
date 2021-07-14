@@ -6,6 +6,8 @@
 #include "GridFunction.H"
 #include "GridFunctionLibrary.H"
 #include "Directions.H"
+#include "InsulatorConductorBC.H"
+
 #include "NamespaceHeader.H"
 
 class FluidVarBC
@@ -32,10 +34,6 @@ class FluidVarBC
       virtual void apply( FluidSpecies&  species_phys,
                           const Real&    time );
        
-      virtual void applyBC( const FluidSpecies&    species_phys,
-                            LevelData<FArrayBox>&  dst,
-                      const Real                   time );
-      
       virtual void applyFluxBC( const FluidSpecies&  species_phys,
                                 LevelData<FluxBox>&  dst,
                           const Real                 time );
@@ -49,10 +47,19 @@ class FluidVarBC
                         const LevelData<FluxBox>&  src,
                         const Real                 time );
       
-      virtual void setEdgeBC( const FluidSpecies&     species_comp,
+      virtual void setEdgeBC( const FluidSpecies&     species_phys,
                               LevelData<EdgeDataBox>& dst,
                         const LevelData<EdgeDataBox>& src,
                         const Real                    time );
+      
+      virtual void setOnAxisCurlBC( LevelData<EdgeDataBox>&  a_curl_covar,
+                              const LevelData<FArrayBox>&    a_By_phys,
+                              const FluidSpecies&            a_species_comp );
+      
+      virtual void setInsulatorBC( const FluidSpecies&    a_species_comp,
+                                   LevelData<FArrayBox>&  a_dst,
+                             const LevelData<FArrayBox>&  a_src,
+                             const Real                   a_time );
    
       virtual void applyRecyclingBC(LevelData<FluxBox>&         outflux,
                                     const LevelData<FluxBox>&   influx,
@@ -65,6 +72,8 @@ class FluidVarBC
       virtual void applyRecyclingBC(LevelData<FArrayBox>&       dst,
                                     const LevelData<FArrayBox>& src,
                                     const Real                  time );
+      
+      virtual void defineBoundaryLDT( const FluidSpecies&  a_species_phys );
    
       virtual void fillInflowData(const MagGeom&  geometry,
                                   const Real      time );
@@ -73,6 +82,8 @@ class FluidVarBC
                                 const BoundaryBoxLayoutPtrVect&   bdry_layouts );
       
       bool isRecyclingBC() const {return m_recycling_bc;}
+      
+      bool isInsulatorConductorBC() const {return m_insulator_conductor_bc;}
 
       /// Check association with variable
       /**
@@ -109,16 +120,15 @@ class FluidVarBC
       Vector<std::string> m_block_bc_type;
    
       BoundaryBoxLayoutPtrVect m_block_bdry_layouts;
-      BoundaryBoxLayoutPtrVect m_block_bdry_layouts_flux;
-      BoundaryBoxLayoutPtrVect m_block_bdry_layouts_edge;
    
       Vector< RefCountedPtr<LevelData<FArrayBox>> > m_block_bdry_data;
       
       bool m_block_bdry_defined;
-      bool m_block_bdry_layouts_flux_defined;
-      bool m_block_bdry_layouts_edge_defined;
+      bool m_inflow_data_defined;
       bool m_recycling_bc;
       
+      RefCountedPtr<InsulatorConductorBC> m_InsulatorConductorBC;
+      bool m_insulator_conductor_bc;
    
       Real m_recycling_coefficient;
    

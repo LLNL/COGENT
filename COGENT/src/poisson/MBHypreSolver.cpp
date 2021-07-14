@@ -5,6 +5,7 @@
 #include "MBSolverF_F.H"
 
 #include "_hypre_sstruct_mv.h"
+//#include "_hypre_parcsr_ls.h"
 
 
 #include "NamespaceHeader.H"
@@ -25,6 +26,7 @@ MBHypreSolver::MBHypreSolver( const MultiBlockLevelGeom&      a_geom,
      m_AMG_solver_allocated(false),
      m_ILU_solver_allocated(false),
      m_MGR_solver_allocated(false),
+     m_MGR_aff_solver_allocated(false),
      m_matrix_initialized(false),
      m_matrix_finalized(false)
 {
@@ -139,6 +141,13 @@ MBHypreSolver::setMethodParams( const ParmParse&  a_pp )
       if ( a_pp.query("print_level", m_MGR_print_level) == 0 ) m_MGR_print_level = 0;
       if ( a_pp.query("amg_print_level", m_MGR_amg_print_level) == 0 ) m_MGR_amg_print_level = 0;
       if ( a_pp.query("amg_max_iter", m_MGR_amg_max_iter) == 0 ) m_MGR_amg_max_iter = 1;
+      if ( a_pp.query("frelax_amg_threshold", m_MGR_frelax_amg_threshold) == 0 ) m_MGR_frelax_amg_threshold = 0.6;
+      if ( a_pp.query("frelax_method", m_MGR_frelax_method) == 0 ) m_MGR_frelax_method = 2;
+      if ( a_pp.query("interp_type", m_MGR_interp_type) == 0 ) m_MGR_interp_type = 3;
+      if ( a_pp.query("restrict_type", m_MGR_restrict_type) == 0 ) m_MGR_restrict_type = 0;
+      if ( a_pp.query("relax_type", m_MGR_relax_type) == 0 ) m_MGR_relax_type = 0;
+      if ( a_pp.query("aff_amg_max_iter", m_MGR_aff_amg_max_iter) == 0 ) m_MGR_aff_amg_max_iter = 2;
+      if ( a_pp.query("aff_amg_tol", m_MGR_aff_amg_tol) == 0 ) m_MGR_aff_amg_tol = 0.;
    }
    else if ( m_method == "ILU" ) {
       if ( a_pp.query("type", m_ILU_type) == 0 ) m_ILU_type = 1;
@@ -543,6 +552,11 @@ MBHypreSolver::destroyHypreData()
          if (m_mgr_amg_solver) HYPRE_BoomerAMGDestroy(m_mgr_amg_solver);
          HYPRE_MGRDestroy(m_par_MGR_solver);
          m_MGR_solver_allocated = false;
+
+         if (m_MGR_aff_solver_allocated) {
+            HYPRE_BoomerAMGDestroy(m_MGR_aff_solver);
+            m_MGR_aff_solver_allocated = false;
+         }
       }
 
       if (m_A) {
@@ -1360,17 +1374,11 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
    m_mgr_cindexes = NULL;
    HYPRE_Int mgr_bsize = 2;
    HYPRE_Int mgr_non_c_to_f = 1;
-   HYPRE_Int mgr_frelax_method = 1;
-   HYPRE_Int mgr_relax_type = 0;
-   HYPRE_Int mgr_num_relax_sweeps = 2;
-   HYPRE_Int mgr_interp_type = 3;
+   HYPRE_Int mgr_num_relax_sweeps = 3;
    HYPRE_Int mgr_num_interp_sweeps = 2;
    HYPRE_Int mgr_gsmooth_type = 0;
    HYPRE_Int mgr_num_gsmooth_sweeps = 0;
-   HYPRE_Int mgr_restrict_type = 0;
    HYPRE_Int mgr_num_restrict_sweeps = 0;  
-
-   HYPRE_MGRCreate(&m_par_MGR_solver);
 
    m_mgr_num_cindexes = hypre_CTAlloc(HYPRE_Int,  m_mgr_nlevels, HYPRE_MEMORY_HOST);
    for (int i=0; i<m_mgr_nlevels; i++) {
@@ -1388,6 +1396,10 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
 
    HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
+   HYPRE_ParVector par_b;  // apparently not used, but needs to be passed to HYPRE_*Setup
+   HYPRE_ParVector par_x;  // apparently not used, but needs to be passed to HYPRE_*Setup
+
+   HYPRE_MGRCreate(&m_par_MGR_solver);
 
    /* set MGR data by block */
    HYPRE_BigInt rowstart = hypre_ParCSRMatrixFirstRowIndex(par_A);
@@ -1402,26 +1414,25 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
    /* set intermediate coarse grid strategy */
    HYPRE_MGRSetNonCpointsToFpoints(m_par_MGR_solver, mgr_non_c_to_f);
    /* set F relaxation strategy */
-   HYPRE_MGRSetFRelaxMethod(m_par_MGR_solver, mgr_frelax_method);
+   HYPRE_MGRSetFRelaxMethod(m_par_MGR_solver, m_MGR_frelax_method);
    /* set relax type for single level F-relaxation and post-relaxation */
-   HYPRE_MGRSetRelaxType(m_par_MGR_solver, mgr_relax_type);
+   HYPRE_MGRSetRelaxType(m_par_MGR_solver, m_MGR_relax_type);
    HYPRE_MGRSetNumRelaxSweeps(m_par_MGR_solver, mgr_num_relax_sweeps);
    /* set interpolation type */
-   HYPRE_MGRSetRestrictType(m_par_MGR_solver, mgr_restrict_type);
+   HYPRE_MGRSetRestrictType(m_par_MGR_solver, m_MGR_restrict_type);
    HYPRE_MGRSetNumRestrictSweeps(m_par_MGR_solver, mgr_num_restrict_sweeps);
-   HYPRE_MGRSetInterpType(m_par_MGR_solver, mgr_interp_type);
+   HYPRE_MGRSetInterpType(m_par_MGR_solver, m_MGR_interp_type);
    HYPRE_MGRSetNumInterpSweeps(m_par_MGR_solver, mgr_num_interp_sweeps);
    /* set print level */
    HYPRE_MGRSetPrintLevel(m_par_MGR_solver, m_MGR_print_level);
-   /* set max iterations */
-   //   HYPRE_MGRSetMaxIter(m_par_MGR_solver, max_iter);
-   //   HYPRE_MGRSetTol(m_par_MGR_solver, tol);
 
    HYPRE_MGRSetGlobalsmoothType(m_par_MGR_solver, mgr_gsmooth_type);
    HYPRE_MGRSetMaxGlobalsmoothIters( m_par_MGR_solver, mgr_num_gsmooth_sweeps );
-   //HYPRE_Int num_functions = 1;
-   //HYPRE_MGRSetLevelFRelaxNumFunctions(m_par_MGR_solver, &num_functions);
-   /* create AMG coarse grid solver */
+   HYPRE_Int num_functions = 1;
+   HYPRE_MGRSetLevelFRelaxNumFunctions(m_par_MGR_solver, &num_functions);
+
+   //========== Create AMG coarse grid solver ====================
+
    HYPRE_BoomerAMGCreate(&m_mgr_amg_solver);
    HYPRE_BoomerAMGSetCGCIts(m_mgr_amg_solver, 1);
    HYPRE_BoomerAMGSetInterpType(m_mgr_amg_solver, 0);
@@ -1451,33 +1462,48 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
    /* set the MGR coarse solver. Comment out to use default Coarse Grid solver in MGR */
    HYPRE_MGRSetCoarseSolver( m_par_MGR_solver, HYPRE_BoomerAMGSolve,
                              HYPRE_BoomerAMGSetup, m_mgr_amg_solver);
-   // AFF solver
-   /*
-     HYPRE_Solver aff_solver;
-     HYPRE_BoomerAMGCreate(&aff_solver);
-     HYPRE_BoomerAMGSetCGCIts(aff_solver, 1);
-     HYPRE_BoomerAMGSetInterpType(aff_solver, 0);
-     HYPRE_BoomerAMGSetPostInterpType(aff_solver, 0);
-     HYPRE_BoomerAMGSetCoarsenType(aff_solver, 6);
-     HYPRE_BoomerAMGSetPMaxElmts(aff_solver, 0);
-     HYPRE_BoomerAMGSetCycleType(aff_solver, 1);
-     HYPRE_BoomerAMGSetFCycle(aff_solver, 0);
-     HYPRE_BoomerAMGSetNumSweeps(aff_solver, 1);
-     HYPRE_BoomerAMGSetRelaxType(aff_solver, 3);
 
-     HYPRE_BoomerAMGSetRelaxOrder(aff_solver, 1);
-     HYPRE_BoomerAMGSetMaxLevels(aff_solver, 25);
-     HYPRE_BoomerAMGSetSmoothType(aff_solver, 6);
-     HYPRE_BoomerAMGSetSmoothNumSweeps(aff_solver, 1);
-     HYPRE_BoomerAMGSetMaxIter(aff_solver, 1);
-     HYPRE_BoomerAMGSetTol(aff_solver, 0.0);
-     HYPRE_BoomerAMGSetPrintLevel(aff_solver, 1);
-     // set the MGR aff solver. Comment out to use internal solvers in MGR 
-     HYPRE_MGRSetFSolver(m_par_MGR_solver, HYPRE_BoomerAMGSolve, HYPRE_BoomerAMGSetup, aff_solver);
-   */
+   //========== Create AFF fine grid solver ====================
 
-   HYPRE_ParVector par_b;  // apparently not used, but needs to be passed to HYPRE_MGRSetup
-   HYPRE_ParVector par_x;  // apparently not used, but needs to be passed to HYPRE_MGRSetup
+   //   if ( m_MGR_frelax_method == 1 ) {
+   //      hypre_MGRSetFrelaxPrintLevel(m_par_MGR_solver, 2);
+   //   }
+
+   if ( m_MGR_frelax_method == 2 ) {
+
+      if ( !m_MGR_aff_solver_allocated ) {
+         HYPRE_BoomerAMGCreate(&m_MGR_aff_solver);
+         m_MGR_aff_solver_allocated = true;
+      }
+
+      HYPRE_BoomerAMGSetMaxIter(m_MGR_aff_solver, m_MGR_aff_amg_max_iter);
+      HYPRE_BoomerAMGSetTol(m_MGR_aff_solver, m_MGR_aff_amg_tol);
+      HYPRE_BoomerAMGSetRelaxOrder(m_MGR_aff_solver, 1);
+
+      HYPRE_BoomerAMGSetStrongThreshold(m_MGR_aff_solver, m_MGR_frelax_amg_threshold);
+      HYPRE_BoomerAMGSetCoarsenType(m_MGR_aff_solver, 6);
+
+      // uses L1-GS forward solve for down cycle. Could also use 3 instead of 13
+      HYPRE_BoomerAMGSetCycleRelaxType(m_MGR_aff_solver, 13, 1);
+      // uses L1-GS backward solve for up cycle. Could also use option 4 instead of 14 
+      HYPRE_BoomerAMGSetCycleRelaxType(m_MGR_aff_solver, 14, 2);
+      // uses Gaussian Elimination on the Coarsest grid.
+      HYPRE_BoomerAMGSetCycleRelaxType(m_MGR_aff_solver, 9, 3);
+
+      HYPRE_BoomerAMGSetSmoothType(m_MGR_aff_solver, 5); // 6 = Schwarz, 9 = Euclid, 5 = ILU
+      HYPRE_BoomerAMGSetSmoothNumLevels(m_MGR_aff_solver, 1); // > 1 for coarser levels
+
+      HYPRE_BoomerAMGSetNumSweeps(m_MGR_aff_solver, 1);
+      HYPRE_BoomerAMGSetPrintLevel(m_MGR_aff_solver, m_MGR_amg_print_level);
+      HYPRE_BoomerAMGSetNumFunctions(m_MGR_aff_solver, 1);
+
+      HYPRE_BoomerAMGSetup(m_MGR_aff_solver, par_A, par_b, par_x);
+
+      // set the MGR aff solver. Comment out to use internal solvers in MGR 
+      HYPRE_MGRSetFSolver(m_par_MGR_solver, HYPRE_BoomerAMGSolve, HYPRE_BoomerAMGSetup, m_MGR_aff_solver);
+   }
+
+   //========== MGR setup ====================
 
    HYPRE_MGRSetup(m_par_MGR_solver, par_A, par_b, par_x);
 

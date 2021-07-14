@@ -680,25 +680,32 @@ void GyroaverageOperator::applyOp(FArrayBox&               a_var_bar,
   return;
 }
 
+/* Here, if a_var_bar is not already defined, it will be defined as a
+ * LevelData<FArrayBox> in phase space with the v_parallel dimension flat */
 void GyroaverageOperator::applyOp(LevelData<FArrayBox>&                 a_var_bar,
                                   const CFG::LevelData<CFG::FArrayBox>& a_var ) const
 {
   CH_assert(isDefined());
   CH_assert(a_var.isDefined());
 
-  /* if the gyroaveraged var is already defined, clear it */
-  if (a_var_bar.isDefined()) a_var_bar.clear();
-  /* and now define it */
-  a_var_bar.define(m_grids, a_var.nComp());
+  /* if a_var_bar is not defined, define it */
+  if (!a_var_bar.isDefined()) {
+    a_var_bar.define(m_grids, a_var.nComp());
+  }
 
   /* inject var into phase space */
   LevelData<FArrayBox> injected_var;
   m_phase_geom->injectConfigurationToPhase(a_var, injected_var);
 
   /* create a version with ghost points in the configuration dimensions */
-  IntVect ghost_vec(IntVect::Zero); for (int d=0; d<CFG_DIM; d++) ghost_vec[d] = m_gpt;
+  IntVect ghost_vec(IntVect::Zero); 
+  for (int d=0; d<CFG_DIM; d++) {
+    ghost_vec[d] = m_gpt;
+  }
   LevelData<FArrayBox> var_wghosts;
-  var_wghosts.define(injected_var.disjointBoxLayout(), a_var.nComp(), ghost_vec);
+  var_wghosts.define( injected_var.disjointBoxLayout(), 
+                      a_var.nComp(), 
+                      ghost_vec );
   SpaceUtils::copyAndFillGhostCellsSimple(var_wghosts, injected_var);
 
   /* now apply the gyroaveraging */
@@ -748,19 +755,24 @@ void GyroaverageOperator::applyOp(LevelData<FArrayBox>&                 a_var_ba
   return;
 }
 
+/* Here, if a_var_bar is not already defined, it will be defined as a
+ * LevelData<FArrayBox> in phase space with same layout as a_var */
 void GyroaverageOperator::applyOp(LevelData<FArrayBox>&       a_var_bar,
                                   const LevelData<FArrayBox>& a_var ) const
 {
   CH_assert(isDefined());
   CH_assert(a_var.isDefined());
 
-  /* if the gyroaveraged var is already defined, clear it */
-  if (a_var_bar.isDefined()) a_var_bar.clear();
-  /* and now define it */
-  a_var_bar.define(a_var.disjointBoxLayout(), a_var.nComp());
+  /* if a_var_bar is not defined, define it */
+  if (!a_var_bar.isDefined()) {
+    a_var_bar.define(a_var.disjointBoxLayout(), a_var.nComp());
+  }
 
   /* create a version with ghost points in the configuration dimensions */
-  IntVect ghost_vec(IntVect::Zero); for (int d=0; d<CFG_DIM; d++) ghost_vec[d] = m_gpt;
+  IntVect ghost_vec(IntVect::Zero); 
+  for (int d=0; d<CFG_DIM; d++) {
+    ghost_vec[d] = m_gpt;
+  }
   LevelData<FArrayBox> var_wghosts;
   var_wghosts.define(a_var.disjointBoxLayout(), a_var.nComp(), ghost_vec);
   SpaceUtils::copyAndFillGhostCellsSimple(var_wghosts, a_var);
@@ -824,14 +836,20 @@ void GyroaverageOperator::applyOp(LevelData<FArrayBox>&       a_var_bar,
   return;
 }
 
+/* Here, if a_var_tilde is not already defined, it will be defined as a
+ * LevelData<FArrayBox> in phase space with the v_parallel dimension flat */
 void GyroaverageOperator::applyOpTwice( LevelData<FArrayBox>&       a_var_tilde,
                                         const LevelData<FArrayBox>& a_var ) const
 {
   CH_assert(isDefined());
   CH_assert(a_var.isDefined());
 
-  LevelData<FArrayBox> var_bar;
+  LevelData<FArrayBox> var_bar(m_grids, a_var.nComp());
   applyOp(var_bar, a_var);
+
+  if (!a_var_tilde.isDefined()) {
+    a_var_tilde.define(m_grids, a_var.nComp());
+  }
   applyOp(a_var_tilde, var_bar);
 
   if (m_debug_mode) {
@@ -938,7 +956,7 @@ void GyroaverageOperator::gyroaveragedEField( LevelData<FluxBox>&               
 
   /* even for CFG_DIM=2, efield has 3 components.
    * The second component (toroidal) is 0 */
-  int n_efield_comp = SpaceDim;
+  int n_efield_comp = 3;
  
   LevelData<FArrayBox> phi_phase;
   m_phase_geom->injectAndExpandConfigurationToPhase(a_phi, phi_phase);
@@ -948,28 +966,33 @@ void GyroaverageOperator::gyroaveragedEField( LevelData<FluxBox>&               
   applyOp(phi_bar, phi_phase);
   CH_assert(phi_bar.nComp() == 1);
 
-  /* define the Efield */
-  if (a_E_field.isDefined()) a_E_field.clear();
+  /* define a temporary Efield */
   IntVect gvec = IntVect::Unit;
-  a_E_field.define(phi_bar.disjointBoxLayout(), n_efield_comp, gvec);
+  LevelData<FluxBox> E_field_wghosts;
+  E_field_wghosts.define(phi_bar.disjointBoxLayout(), SpaceDim, gvec);
 
   /* compute the gradient in configuration space */
-  m_phase_geom->computeGradient(phi_bar, a_E_field, a_order);
+  m_phase_geom->computeGradient(phi_bar, E_field_wghosts, a_order);
 
+  /* define the Efield */
+  if (a_E_field.isDefined()) a_E_field.clear();
+  a_E_field.define(phi_bar.disjointBoxLayout(), n_efield_comp, IntVect::Zero);
   for (DataIterator dit(a_E_field.dataIterator()); dit.ok(); ++dit) {
     for (int dir=0; dir<SpaceDim; dir++) {
 
+      a_E_field[dit][dir].setVal(0.0);
+#if CFG_DIM==2
+      a_E_field[dit][dir].copy(E_field_wghosts[dit][dir], RADIAL_DIR, 0);
+      a_E_field[dit][dir].copy(E_field_wghosts[dit][dir], POLOIDAL_DIR, 2);
+#else
+      a_E_field[dit][dir].copy( E_field_wghosts[dit][dir], 
+                                RADIAL_DIR, 
+                                RADIAL_DIR, 
+                                CFG_DIM );
+#endif
+
       /* negate it since E-field is -grad */
       a_E_field[dit][dir].negate();
-
-#if CFG_DIM==2
-      /* if CFG_DIM = 2, then PhaseGeom::computeGradientCfgSpace() would have
-       * populated the first two components with the radial and poloidal gradients.
-       * So, push the 2nd component to 3rd (since the 3rd component is the 
-       * poloidal one, and set 2nd component to zero */
-      a_E_field[dit][dir].copy(a_E_field[dit][dir], CFG_DIM-1, CFG_DIM);
-      a_E_field[dit][dir].setVal(0.0, CFG_DIM-1);
-#endif
     }
   }
 

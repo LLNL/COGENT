@@ -61,11 +61,7 @@ GKPoissonBoltzmann::GKPoissonBoltzmann( ParmParse&                  a_pp,
          m_mblex_ptr = NULL;
       }
 
-#ifdef with_petsc
-      m_precond_Qsolver = new MBPETScSolver(a_geom, 1, precond_order, m_mblex_ptr);
-#else
       m_precond_Qsolver = new MBHypreSolver(a_geom, 1, precond_order, m_mblex_ptr);
-#endif
 
       m_precond_Qsolver->setMethodParams(a_pp);
       m_precond_Qsolver->setConvergenceParams(a_pp);

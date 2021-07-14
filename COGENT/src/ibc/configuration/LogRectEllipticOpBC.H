@@ -13,10 +13,11 @@ class LogRectEllipticOpBC
 {
 public:
 
-   LogRectEllipticOpBC();
+   LogRectEllipticOpBC(const int& nblocks);
 
    LogRectEllipticOpBC( const std::string& name,
                         ParmParse& pp,
+                        const int& nblocks,
                         const int& verbosity );
 
    virtual ~LogRectEllipticOpBC() {};
@@ -29,6 +30,10 @@ public:
    virtual int getBCType( const int block_number,
                           const int dir,
                           const int side ) const;
+   
+   virtual std::string getBCSubType(const int block_number,
+                                    const int dir,
+                                    const int side ) const;
 
    virtual void setBCValue( const int block_number,
                             const int dir,
@@ -54,6 +59,8 @@ public:
                        const int                  a_dir,
                        const int                  a_side,
                        FArrayBox&                 a_phi ) const;
+
+   virtual RefCountedPtr<EllipticOpBC> clone( const bool extrapolated = 0 ) const;
 
    virtual void printParameters() const;
 

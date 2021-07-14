@@ -10,7 +10,6 @@
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
-#include "GKOps.H"
 #include "FluidOpPreconditioner.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -165,7 +164,7 @@ void FullFluidOp::accumulateExplicitRHS(FluidSpeciesPtrVect&               a_rhs
    
    setFaceCenteredFluxes( soln_fluid );
 
-   enforceFluxBCs( rhs_fluid, soln_fluid, a_time );
+   enforceFluxBCs( soln_fluid, a_time );
 
    const Real mass = soln_fluid.mass();
    const Real charge = soln_fluid.charge();
@@ -187,16 +186,16 @@ void FullFluidOp::accumulateImplicitRHS(FluidSpeciesPtrVect&              a_rhs,
 }
 
 
-void FullFluidOp::defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
-                                 std::vector<PS::DOFList>&                                 a_dof_list,
-                                 const PS::GKVector&                                       a_soln_vec,
-                                 PS::GKOps&                                                a_gkops,
-                                 const std::string&                                        a_out_string,
-                                 const std::string&                                        a_opt_string,
-                                 bool                                                      a_im,
-                                 const FluidSpecies&                                       a_fluid_species,
-                                 const PS::GlobalDOFFluidSpecies&                          a_global_dofs,
-                                 int                                                       a_species_idx )
+void FullFluidOp::defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>& a_pc,
+                                 std::vector<PS::DOFList>&                                    a_dof_list,
+                                 const PS::ODEVector&                                         a_soln_vec,
+                                 void*                                                        a_gkops,
+                                 const std::string&                                           a_out_string,
+                                 const std::string&                                           a_opt_string,
+                                 bool                                                         a_im,
+                                 const FluidSpecies&                                          a_fluid_species,
+                                 const PS::GlobalDOFFluidSpecies&                             a_global_dofs,
+                                 int                                                          a_species_idx )
 {
   if (a_im && m_is_time_implicit) {
     CH_assert(a_pc.size() == a_dof_list.size());
@@ -208,11 +207,11 @@ void FullFluidOp::defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS:
                 << " (index = " << a_pc.size() << ").\n";
     }
   
-    PS::Preconditioner<PS::GKVector, PS::GKOps> *pc;
-    pc = new PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>;
-    dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+    PS::Preconditioner<PS::ODEVector,PS::AppCtxt> *pc;
+    pc = new PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>;
+    dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
-    dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>
+    dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->speciesIndex(a_species_idx);
   
     PS::DOFList dof_list(0);
@@ -246,13 +245,15 @@ void FullFluidOp::defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS:
 }
 
 
-void FullFluidOp::updateBlockPC(std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>& a_pc,
-                                const PS::KineticSpeciesPtrVect&                          a_kin_species_phys,
-                                const FluidSpeciesPtrVect&                                a_fluid_species,
-                                const Real                                                a_time,
-                                const Real                                                a_shift,
-                                const bool                                                a_im,
-                                const int                                                 a_species_idx )
+void FullFluidOp::updateBlockPC(std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&  a_pc,
+                                const PS::KineticSpeciesPtrVect&                              a_kin_species_phys,
+                                const FluidSpeciesPtrVect&                                    a_fluid_species,
+                                const Real                                                    a_time,
+                                const int                                                     a_step,
+                                const int                                                     a_stage,
+                                const Real                                                    a_shift,
+                                const bool                                                    a_im,
+                                const int                                                     a_species_idx )
 {
   if (a_im && m_is_time_implicit) {
     CH_assert(m_my_pc_idx >= 0);
@@ -263,10 +264,17 @@ void FullFluidOp::updateBlockPC(std::vector<PS::Preconditioner<PS::GKVector,PS::
                 << " for IdealMhFullFluidf fluid species " << a_species_idx << ".\n";
     }
   
-    PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps> *pc 
-      = dynamic_cast<PS::FluidOpPreconditioner<PS::GKVector,PS::GKOps>*>(a_pc[m_my_pc_idx]);
+    PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt> *pc 
+      = dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>(a_pc[m_my_pc_idx]);
     CH_assert(pc != NULL);
-    pc->update(a_kin_species_phys, a_fluid_species, a_time, a_shift, a_im, a_species_idx);
+    pc->update( a_kin_species_phys, 
+                a_fluid_species, 
+                a_time, 
+                a_step,
+                a_stage,
+                a_shift, 
+                a_im, 
+                a_species_idx);
   }
   return;
 }
@@ -275,6 +283,8 @@ void FullFluidOp::updateBlockPC(std::vector<PS::Preconditioner<PS::GKVector,PS::
 void FullFluidOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
                                const PS::KineticSpeciesPtrVect& a_kinetic_species,
                                const double                     a_time,
+                               const int                        a_step,
+                               const int                        a_stage,
                                const double                     a_shift,
                                const int                        a_component)
 {
@@ -643,6 +653,9 @@ void FullFluidOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
    m_mzFlux_cc.define(a_grids, SpaceDim, a_ghostVect);
    m_enFlux_cc.define(a_grids, SpaceDim, a_ghostVect);
    m_mvFlux_cc.define(a_grids, SpaceDim, a_ghostVect);
+   
+   m_dummyDiv.define(a_grids, 1, IntVect::Zero);
+   m_dummyDiv_mom.define(a_grids, SpaceDim, IntVect::Zero);
 
    m_Cspeed_cc.define(a_grids, SpaceDim, a_ghostVect);
    m_CspeedL_norm.define(a_grids, 1, a_ghostVect);
@@ -680,12 +693,12 @@ void FullFluidOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
       // by face area
    } 
       
-   m_rhoFlux_ce.define(a_grids, SpaceDim, 1*IntVect::Unit);
-   m_mxFlux_ce.define(a_grids, SpaceDim, 1*IntVect::Unit);
-   m_myFlux_ce.define(a_grids, SpaceDim, 1*IntVect::Unit);
-   m_mzFlux_ce.define(a_grids, SpaceDim, 1*IntVect::Unit);
-   m_enFlux_ce.define(a_grids, SpaceDim, 1*IntVect::Unit);
-   m_mvFlux_ce.define(a_grids, SpaceDim, 1*IntVect::Unit);
+   m_rhoFlux_ce.define(a_grids, SpaceDim, a_ghostVect);
+   m_mxFlux_ce.define(a_grids, SpaceDim, a_ghostVect);
+   m_myFlux_ce.define(a_grids, SpaceDim, a_ghostVect);
+   m_mzFlux_ce.define(a_grids, SpaceDim, a_ghostVect);
+   m_enFlux_ce.define(a_grids, SpaceDim, a_ghostVect);
+   m_mvFlux_ce.define(a_grids, SpaceDim, a_ghostVect);
 
    m_rhoFluxBC_norm.define(a_grids, 1, 1*IntVect::Unit);
    m_mxFluxBC_norm.define(a_grids, 1, 1*IntVect::Unit);
@@ -858,9 +871,8 @@ void FullFluidOp::setFaceCenteredFluxes( const FluidSpecies&  a_soln_fluid )
    
 }
 
-void FullFluidOp::enforceFluxBCs(FluidSpecies&  a_rhs_fluid,
-                                 const FluidSpecies&  a_soln_fluid,
-                                 const Real           a_time )
+void FullFluidOp::enforceFluxBCs( const FluidSpecies&  a_soln_fluid,
+                                  const Real           a_time )
 {
    CH_TIME("FullFluidOp::enforceFluxBCs()");
    
@@ -868,7 +880,7 @@ void FullFluidOp::enforceFluxBCs(FluidSpecies&  a_rhs_fluid,
    SpaceUtils::upWindToFaces( m_rhoFlux_ce, m_rhoFlux_cc, m_rhoFlux_ce, "c2" );
    m_geometry.applyAxisymmetricCorrection( m_rhoFlux_ce );
    m_geometry.computeMetricTermProductAverage( m_rhoFluxBC_norm, m_rhoFlux_ce, 0 );
-   m_fluid_bc.at(0)->setFluxBC( a_rhs_fluid, m_rhoFlux_norm, m_rhoFluxBC_norm, a_time );
+   m_fluid_bc.at(0)->setFluxBC( a_soln_fluid, m_rhoFlux_norm, m_rhoFluxBC_norm, a_time );
    
    // Enforce flux BC for momentum density flux
    int this_cvc;
@@ -892,7 +904,7 @@ void FullFluidOp::enforceFluxBCs(FluidSpecies&  a_rhs_fluid,
       }
    }
    this_cvc = a_soln_fluid.cell_var_component("momentumDensity");
-   m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_momFlux_norm, m_momFluxBC_norm, a_time );
+   m_fluid_bc.at(this_cvc)->setFluxBC( a_soln_fluid, m_momFlux_norm, m_momFluxBC_norm, a_time );
   
    // Enforce flux BC for energy density flux
    if(a_soln_fluid.m_evolve_energyDensity) {
@@ -900,7 +912,7 @@ void FullFluidOp::enforceFluxBCs(FluidSpecies&  a_rhs_fluid,
      m_geometry.applyAxisymmetricCorrection( m_enFlux_ce );
      m_geometry.computeMetricTermProductAverage( m_enFluxBC_norm, m_enFlux_ce, 0 );
      this_cvc = a_soln_fluid.cell_var_component("energyDensity");
-     m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_enFlux_norm, m_enFluxBC_norm, a_time );
+     m_fluid_bc.at(this_cvc)->setFluxBC( a_soln_fluid, m_enFlux_norm, m_enFluxBC_norm, a_time );
    }
 
    // Enforce flux BC for virtual momentum density flux
@@ -909,7 +921,7 @@ void FullFluidOp::enforceFluxBCs(FluidSpecies&  a_rhs_fluid,
       m_geometry.applyAxisymmetricCorrection( m_mvFlux_ce );
       m_geometry.computeMetricTermProductAverage( m_mvFluxBC_norm, m_mvFlux_ce, 0 );
       this_cvc = a_soln_fluid.cell_var_component("momentumDensity_virtual");
-      m_fluid_bc.at(this_cvc)->setFluxBC( a_rhs_fluid, m_mvFlux_norm, m_mvFluxBC_norm, a_time );
+      m_fluid_bc.at(this_cvc)->setFluxBC( a_soln_fluid, m_mvFlux_norm, m_mvFluxBC_norm, a_time );
    }
 }
 
@@ -928,9 +940,9 @@ void FullFluidOp::updateRHSs(FluidSpecies&                a_rhs_fluid,
 
    // Update RHS for mass density
    LevelData<FArrayBox>& rhs_data( a_rhs_fluid.cell_var(0) );
+   m_geometry.mappedGridDivergenceFromFluxNorms(m_rhoFlux_norm, m_dummyDiv);
    for (DataIterator dit(rhs_data.dataIterator()); dit.ok(); ++dit) {
-      FArrayBox div_rhoFlux(grids[dit], 1);
-      m_geometry.mappedGridDivergenceFromFluxNorms(m_rhoFlux_norm[dit], div_rhoFlux);
+      FArrayBox& div_rhoFlux(m_dummyDiv[dit]);
       div_rhoFlux /= m_cellVol[dit];
       div_rhoFlux.mult(m_Jacobian[dit]);
       rhs_data[dit].minus(div_rhoFlux);
@@ -938,9 +950,9 @@ void FullFluidOp::updateRHSs(FluidSpecies&                a_rhs_fluid,
   
    // Update RHS for momentum density
    LevelData<FArrayBox>& rhs_data2( a_rhs_fluid.cell_var("momentumDensity") );
+   m_geometry.mappedGridDivergenceFromFluxNorms(m_momFlux_norm, m_dummyDiv_mom);
    for (DataIterator dit(rhs_data2.dataIterator()); dit.ok(); ++dit) {
-      FArrayBox div_momFlux(grids[dit], SpaceDim);
-      m_geometry.mappedGridDivergenceFromFluxNorms(m_momFlux_norm[dit], div_momFlux);
+      FArrayBox& div_momFlux(m_dummyDiv_mom[dit]);
       for (int n=0; n<div_momFlux.nComp(); ++n) {
          if(n==0 && m_twoDaxisymm) {
             FArrayBox pdivIdent_R(grids[dit],1);
@@ -975,9 +987,9 @@ void FullFluidOp::updateRHSs(FluidSpecies&                a_rhs_fluid,
    // Update RHS for energy density
    if(a_soln_fluid.m_evolve_energyDensity){
      LevelData<FArrayBox>& rhs_data3( a_rhs_fluid.cell_var("energyDensity") );
+     m_geometry.mappedGridDivergenceFromFluxNorms(m_enFlux_norm, m_dummyDiv);
      for (DataIterator dit(rhs_data3.dataIterator()); dit.ok(); ++dit) {
-       FArrayBox div_enFlux(grids[dit], 1);
-       m_geometry.mappedGridDivergenceFromFluxNorms(m_enFlux_norm[dit], div_enFlux);
+       FArrayBox& div_enFlux(m_dummyDiv[dit]);
        div_enFlux /= m_cellVol[dit];
        div_enFlux.mult(m_Jacobian[dit]);
        rhs_data3[dit].minus( div_enFlux );
@@ -991,9 +1003,9 @@ void FullFluidOp::updateRHSs(FluidSpecies&                a_rhs_fluid,
    // Update RHS for momentum density in virtual direction
    if(a_soln_fluid.m_evolve_momentumDensity_virtual){
       LevelData<FArrayBox>& rhs_data4( a_rhs_fluid.cell_var("momentumDensity_virtual") );
+      m_geometry.mappedGridDivergenceFromFluxNorms(m_mvFlux_norm, m_dummyDiv);
       for (DataIterator dit(rhs_data4.dataIterator()); dit.ok(); ++dit) {
-         FArrayBox div_mvFlux(grids[dit], 1);
-         m_geometry.mappedGridDivergenceFromFluxNorms(m_mvFlux_norm[dit], div_mvFlux);
+         FArrayBox& div_mvFlux(m_dummyDiv[dit]);
          div_mvFlux /= m_cellVol[dit];
          div_mvFlux.mult(m_Jacobian[dit]);
          rhs_data4[dit].minus( div_mvFlux );

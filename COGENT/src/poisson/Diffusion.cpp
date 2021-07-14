@@ -36,13 +36,8 @@ Diffusion::Diffusion( const ParmParse&  a_pp,
       m_mblx_ptr = NULL;
    }
 
-#ifdef with_petsc
-   m_preconditioner      = new MBPETScSolver(a_geom, 1, preconditioner_order, m_mblx_ptr);
-   m_imex_preconditioner = new MBPETScSolver(a_geom, 1, preconditioner_order, m_mblx_ptr);
-#else
    m_preconditioner      = new MBHypreSolver(a_geom, 1, preconditioner_order, m_mblx_ptr);
    m_imex_preconditioner = new MBHypreSolver(a_geom, 1, preconditioner_order, m_mblx_ptr);
-#endif
 
    ParmParse pp_precond( ((string)a_pp.prefix() + ".linear_solver.precond").c_str());
    m_preconditioner->setMethodParams(pp_precond);

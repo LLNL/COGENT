@@ -5,14 +5,14 @@
 
 #include "REAL.H"
 #include "ParmParse.H"
+#include "AppCtxt.H"
 #include "KineticSpecies.H"
 #include "GlobalDOF.H"
 #include "MultiPhysicsPreconditioner.H"
 
 #include "NamespaceHeader.H"
 
-class GKVector;
-class GKOps;
+class ODEVector;
 
 /**
  * Collision interface class.
@@ -74,12 +74,14 @@ class CLSInterface
       virtual void assemblePrecondMatrix( void*,
                                           const KineticSpecies&,
                                           const GlobalDOFKineticSpecies&,
+                                          const int,
+                                          const int,
                                           const Real ) { }
 
-      virtual void defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+      virtual void defineBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                                   std::vector<DOFList>&,
-                                  const GKVector&,
-                                  GKOps&,
+                                  const ODEVector&,
+                                  void*,
                                   const std::string&,
                                   const std::string&,
                                   bool,
@@ -87,10 +89,12 @@ class CLSInterface
                                   const GlobalDOFKineticSpecies&,
                                   int ) { }
 
-      virtual void updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+      virtual void updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                                   const KineticSpecies&,
                                   const GlobalDOFKineticSpecies&,
                                   const Real,
+                                  const int,
+                                  const int,
                                   const Real,
                                   const bool,
                                   const int ) { }

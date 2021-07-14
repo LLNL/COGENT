@@ -158,6 +158,8 @@ class CanonicalMaxwellianKineticFunction : public KineticFunction
       Vector<Real> m_perturbation_parm;
    
       mutable Real m_r_mid;
+
+      bool m_useSG; //whether to use the sparse grid-friendly stencils
 };
 
 #include "NamespaceFooter.H"

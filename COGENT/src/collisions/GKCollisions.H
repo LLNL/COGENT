@@ -6,6 +6,7 @@
 #include "KineticSpecies.H"
 #include "ParmParse.H"
 #include "GlobalDOF.H"
+#include "AppCtxt.H"
 
 #include "Krook.H"
 #include "Lorentz.H"
@@ -28,8 +29,7 @@
 #define _CLS_CONSDRAGDIFF_       "ConsDragDiff"
 #define _CLS_NONE_               "None"
 
-class GKVector;
-class GKOps;
+class ODEVector;
 
 /**
  * Gyrokinetic collisions operator class.
@@ -75,25 +75,31 @@ class GKCollisions
 
       int precondMatrixBands();
 
-      void defineMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>&,
+      void defineMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                                 std::vector<DOFList>&,
                                 const KineticSpeciesPtrVect&,
                                 const GlobalDOFKineticSpeciesPtrVect&,
-                                const GKVector&,
-                                GKOps&,
+                                const ODEVector&,
+                                void*,
                                 const std::string&,
                                 const std::string&,
                                 bool);
 
-      void updateMultiPhysicsPC(std::vector<Preconditioner<GKVector,GKOps>*>&,
+      void updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                                 const KineticSpeciesPtrVect&,
                                 const GlobalDOFKineticSpeciesPtrVect&,
-                                const Real, const Real, const bool);
+                                const Real, 
+                                const int,
+                                const int,
+                                const Real, 
+                                const bool);
 
 
       void assemblePrecondMatrix( void*,
                                   const KineticSpeciesPtrVect&,
                                   const GlobalDOFKineticSpeciesPtrVect&,
+                                  const int,
+                                  const int,
                                   const Real );
 
       /// returns the collision model associated with the input name

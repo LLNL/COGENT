@@ -5,9 +5,9 @@
 #include <iostream>
 #include <cmath>
 #include <stdexcept>
+#include "SPMD.H" 
 #include "RadialUtils.H"
 #include "Directions.H"
-#include "Simulation.H"
 
 #include "NamespaceHeader.H"
 
@@ -75,7 +75,7 @@ bool readDataBRadial(std::list< std::pair<double, double> >& a_lst,  std::string
   
   std::fstream file_read(a_str.c_str());
   if (!file_read.is_open() ) {
-    string tmp_str = "ERROR: readDataBRadial() failed! File \"";
+    std::string tmp_str = "ERROR: readDataBRadial() failed! File \"";
     tmp_str += a_str;
     tmp_str += "\" cannot be opened.";
     MayDay::Error(tmp_str.c_str());

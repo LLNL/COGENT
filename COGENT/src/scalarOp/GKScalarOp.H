@@ -2,6 +2,7 @@
 #define _GKSCALAROP_H_
 
 #include "ScalarOpInterface.H"
+#include "GKUnit.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -23,7 +24,9 @@ class GKScalarOp
       /**
        *  @param[in] pp the input database.
        */
-     GKScalarOp( const int verbose );
+     GKScalarOp(const PhaseGeom&  geometry,
+                const GKUnits&    units,
+                const int         verbose );
 
       /// Destructor.
       /**

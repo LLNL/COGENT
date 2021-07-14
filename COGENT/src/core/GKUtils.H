@@ -58,7 +58,7 @@ namespace GKUtils {
    }
    
    inline
-   int copyToLevelData( LevelData<FArrayBox>& a_dst, const Real* a_src )
+   int copyToLevelData( LevelData<FArrayBox>& a_dst, const Real* const a_src )
    {
       int offset(0);
       const DisjointBoxLayout& dbl( a_dst.disjointBoxLayout() );
@@ -71,7 +71,7 @@ namespace GKUtils {
    }
    
    inline
-   int copyToLevelData( LevelData<FluxBox>& a_dst, const Real* a_src )
+   int copyToLevelData( LevelData<FluxBox>& a_dst, const Real* const a_src )
    {
       int offset(0);
       const DisjointBoxLayout& dbl( a_dst.disjointBoxLayout() );
@@ -87,7 +87,7 @@ namespace GKUtils {
    }
    
    inline
-   int copyToLevelData( LevelData<EdgeDataBox>& a_dst, const Real* a_src )
+   int copyToLevelData( LevelData<EdgeDataBox>& a_dst, const Real* const a_src )
    {
       int offset(0);
       const DisjointBoxLayout& dbl( a_dst.disjointBoxLayout() );
@@ -107,13 +107,13 @@ namespace GKUtils {
    
    inline
    int addToLevelData( LevelData<FArrayBox>& a_dst,
-                       Real* a_src,
+                       const Real* const a_src,
                        const Real& a_factor )
    {
       int offset(0);
       const DisjointBoxLayout& dbl( a_dst.disjointBoxLayout() );
       for (DataIterator dit( a_dst.dataIterator() ); dit.ok(); ++dit) {
-         FArrayBox tmp( dbl[dit], a_dst.nComp(), ( a_src + offset ) );
+         FArrayBox tmp( dbl[dit], a_dst.nComp(), const_cast<Real*>( a_src + offset ) );
          a_dst[dit].plus( tmp, a_factor );
          offset += dbl[dit].numPts() * a_dst.nComp();
       }
@@ -122,7 +122,7 @@ namespace GKUtils {
    
    inline
    int addToLevelData( LevelData<FluxBox>& a_dst,
-                       Real* a_src,
+                       const Real* const a_src,
                        const Real& a_factor )
    {
       int offset(0);
@@ -130,7 +130,7 @@ namespace GKUtils {
       for (DataIterator dit( a_dst.dataIterator() ); dit.ok(); ++dit) {
          for (int dir=0; dir<SpaceDim; ++dir) {
             Box box = surroundingNodes(dbl[dit],dir);
-            FArrayBox tmp( box, a_dst.nComp(), ( a_src + offset ) );
+            FArrayBox tmp( box, a_dst.nComp(), const_cast<Real*>( a_src + offset ) );
             a_dst[dit][dir].plus( tmp, a_factor );
             offset += box.numPts() * a_dst.nComp();
          }
@@ -140,7 +140,7 @@ namespace GKUtils {
    
    inline
    int addToLevelData( LevelData<EdgeDataBox>& a_dst,
-                       Real* a_src,
+                       const Real* const a_src,
                        const Real& a_factor )
    {
       int offset(0);
@@ -151,7 +151,7 @@ namespace GKUtils {
             for (int adir=0; adir<SpaceDim; ++adir) {
                if(adir!=dir) box = surroundingNodes(box,adir);
             }
-            FArrayBox tmp( box, a_dst.nComp(), ( a_src + offset ) );
+            FArrayBox tmp( box, a_dst.nComp(), const_cast<Real*>( a_src + offset ) );
             a_dst[dit][dir].plus( tmp, a_factor );
             offset += box.numPts() * a_dst.nComp();
          }

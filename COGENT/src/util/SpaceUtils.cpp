@@ -83,28 +83,28 @@ SpaceUtils::upWindToFaces( FluxBox&      this_face_phi,
                       CHF_CONST_FRA( this_cell_phi ),
                       CHF_BOX( face_box ),
                       CHF_CONST_INT( dir ) );
-      } else
+      }
       if(a_method=="uw1") {
          FORT_UW1FACE( CHF_FRA( this_face_phi_dir ),
                        CHF_CONST_FRA( this_cell_phi ),
                        CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
                        CHF_BOX( face_box ),
                        CHF_CONST_INT( dir ) );
-      } else
+      }
       if(a_method=="uw3") {
          FORT_UW3FACE( CHF_FRA( this_face_phi_dir ),
                        CHF_CONST_FRA( this_cell_phi ),
                        CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
                        CHF_BOX( face_box ),
                        CHF_CONST_INT( dir ) );
-      } else
+      }
       if(a_method=="uw5") {
          FORT_UW5FACE( CHF_FRA( this_face_phi_dir ),
                        CHF_CONST_FRA( this_cell_phi ),
                        CHF_CONST_FRA1( this_norm_vel_dir, normVelcomp ),
                        CHF_BOX( face_box ),
                        CHF_CONST_INT( dir ) );
-      } else
+      }
       if(a_method=="quick") {
          FORT_QUICKFACE( CHF_FRA( this_face_phi_dir ),
                          CHF_CONST_FRA( this_cell_phi ),
@@ -369,16 +369,7 @@ SpaceUtils::interpToFacesWENO( FluxBox&      this_face_phi,
       if(a_norm_vel.nComp()==SpaceDim) normVelcomp = dir; 
 
       Box face_box( a_dbl_box ); 
-      /*   
-      for (int tdir(0); tdir<SpaceDim; tdir++) {
-         if (tdir!=dir) {
-            const int TRANSVERSE_GROW(1);
-            face_box.grow( tdir, TRANSVERSE_GROW );
-         }
-      }
-      */
       face_box.surroundingNodes( dir );
-      face_box.grow( dir, 1 ); // JRA, ?
 
       // Interp fluxes from cell centers to cell faces
       //
@@ -493,6 +484,9 @@ SpaceUtils::interpCellToEdges( LevelData<EdgeDataBox>&   a_edge_phi,
    //CH_assert( a_cell_phi.ghostVect() >= a_edge_phi.ghostVect() );
    //CH_assert( a_cell_phi.ghostVect()>=IntVect::Unit );  
    CH_assert( a_method=="c2" ); 
+           
+   IntVect grow_vect = IntVect::Zero; 
+   if(edgegv == cellgv) grow_vect = edgegv-IntVect::Unit;
   
    // Note that EdgeDataBox has extra value in each of the non-dir directions,
    // opposed to FluxBox which has extra value in dir direction. 
@@ -505,13 +499,14 @@ SpaceUtils::interpCellToEdges( LevelData<EdgeDataBox>&   a_edge_phi,
       
       for (int dir(0); dir<SpaceDim; dir++) {
          Box edge_box;
-         if(cellgv >= edgegv )
+         if(cellgv > edgegv )
             edge_box = this_edge_phi[dir].box();    // has ghost 
          else {
-            edge_box = grids[dit];    // no ghost 
+            edge_box = grow(grids[dit],grow_vect);  // grown cell box 
             edge_box.surroundingNodes( );  // grow hi end by one in all dirs
             edge_box.enclosedCells( dir ); // shrink hi end by 1 in dir
          }
+         
          
          FArrayBox& this_edge_phi_dir( this_edge_phi[dir] );
          if(SpaceDim==2) {
@@ -544,9 +539,10 @@ SpaceUtils::interpEdgesToCell( LevelData<FArrayBox>&    a_cell_phi,
    CH_TIME("SpaceUtils::interpEdgesToCell()");
    const int cell_ncomp = a_cell_phi.nComp();
    const int edge_ncomp = a_edge_phi.nComp();
+   const IntVect cellgv = a_cell_phi.ghostVect();
+   const IntVect edgegv = a_edge_phi.ghostVect();
    CH_assert( (cell_ncomp==SpaceDim && edge_ncomp==1 )
             || cell_ncomp==edge_ncomp );
-   CH_assert( a_edge_phi.ghostVect()>=a_cell_phi.ghostVect() );
    CH_assert( a_method=="c2" );
 
    const DisjointBoxLayout& grids( a_edge_phi.getBoxes() );
@@ -555,6 +551,7 @@ SpaceUtils::interpEdgesToCell( LevelData<FArrayBox>&    a_cell_phi,
 
       FArrayBox& this_cell_phi( a_cell_phi[dit] );
       Box cell_box( this_cell_phi.box() ); // has ghosts
+      if(cellgv > edgegv ) cell_box = grids[dit];    // no ghost 
 
       if(cell_ncomp==SpaceDim && edge_ncomp==1) { // edge_phi is vector
          for (int dir(0); dir<SpaceDim; dir++) {
@@ -1364,6 +1361,7 @@ SpaceUtils::inspectFArrayBox(const LevelData<FArrayBox>&  a_F0,
       const FArrayBox& F0_on_patch = a_F0[dit];   
       Box cellbox( grids[dit] ); // no ghosts
       if(a_ghosts) cellbox.grow( a_ghosts );
+      //cellbox.setSmall(0,cellbox.bigEnd(0)-3);
 
       FORT_INSPECT_FARRAYBOX( CHF_BOX(cellbox), 
                               CHF_CONST_FRA1(F0_on_patch,a_comp) );
@@ -1383,6 +1381,7 @@ SpaceUtils::inspectFluxBox(const LevelData<FluxBox>&  a_Flux,
 
       Box facebox( grids[dit] );
       facebox.surroundingNodes( a_dir );
+      //facebox.setSmall(0,facebox.bigEnd(0)-3);
 
       const FArrayBox& Flux_on_dir = Flux_on_patch[a_dir]; 
       if(a_ghosts) facebox = Flux_on_dir.box();
@@ -1394,8 +1393,9 @@ SpaceUtils::inspectFluxBox(const LevelData<FluxBox>&  a_Flux,
 }
 
 void 
-SpaceUtils::inspectEdgeDataBox(const LevelData<EdgeDataBox>&  a_Edge,
-                               const int                      a_dir)
+SpaceUtils::inspectEdgeDataBox( const LevelData<EdgeDataBox>&  a_Edge,
+                                const int                      a_dir,
+                                const int                      a_ghosts )
 {
    const DisjointBoxLayout& grids( a_Edge.getBoxes() );
    
@@ -1407,6 +1407,8 @@ SpaceUtils::inspectEdgeDataBox(const LevelData<EdgeDataBox>&  a_Edge,
       Box edgebox( grids[dit] );
       edgebox.surroundingNodes( );  // grow hi end by one in all dirs
       edgebox.enclosedCells( a_dir ); // shrink hi end by 1 in dir
+      if(a_ghosts) edgebox.grow( a_ghosts );
+      //edgebox.setBig(1,0);
 
       //const Box& edgebox = Edge_on_dir.box();
       FORT_INSPECT_FLUXBOX( CHF_BOX(edgebox), 
@@ -1511,7 +1513,7 @@ SpaceUtils::exchangeFluxBox( LevelData<FluxBox>& a_Face )
    a_Face.exchange();
 
    // now use the original data stored in temp to modify
-   // the exchanged Face data. In this example, I'm copying data on
+   // the exchanged Face data. In this example, I'm copying data
    // on the low-side grid edge from temp->Face, which has the
    // effect of declaring the high-side value on the shared edge
    // to be the "correct" value
@@ -1560,7 +1562,7 @@ SpaceUtils::exchangeEdgeDataBox( LevelData<EdgeDataBox>& a_Edge )
    a_Edge.exchange();
 
    // now use the original data stored in temp to modify
-   // the exchanged Edge data. In this example, I'm copying data on
+   // the exchanged Edge data. In this example, I'm copying data
    // on the low-side grid edge from temp->Edge, which has the
    // effect of declaring the high-side value on the shared edge
    // to be the "correct" value

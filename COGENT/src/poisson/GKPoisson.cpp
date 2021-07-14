@@ -206,18 +206,6 @@ GKPoisson::setFLRObjects( const PS::KineticSpeciesPtrVect& a_species)
 }
 
    
-#ifdef with_petsc
-MBPETScSolver*
-GKPoisson::allocatePreconditioner( const MagGeom&                  a_geom,
-                                   const int                       a_discretization_order,
-                                   MultiBlockLevelExchangeCenter*  a_mblx_ptr )
-{
-   MBPETScSolver* solver(NULL);
-   solver = new MBPETScSolver(a_geom, 1, a_discretization_order, a_mblx_ptr);
-   CH_assert(solver != NULL);
-   return solver;
-}
-#else
 MBHypreSolver*
 GKPoisson::allocatePreconditioner( const MagGeom&                  a_geom,
                                    const int                       a_discretization_order,
@@ -228,7 +216,6 @@ GKPoisson::allocatePreconditioner( const MagGeom&                  a_geom,
    CH_assert(solver != NULL);
    return solver;
 }
-#endif
                                   
 
 void
@@ -1094,7 +1081,7 @@ GKPoisson::applyOp( LevelData<FArrayBox>&       a_out,
 
     /* inject phi to phase space */
     PS::LevelData<PS::FArrayBox> phi;
-    m_phase_geom->injectAndExpandConfigurationToPhase(a_in, phi);
+    m_phase_geom->injectConfigurationToPhase(a_in, phi);
 
     const LevelData<FArrayBox>& BFieldMag = m_geometry.getCCBFieldMag();
 
@@ -1117,11 +1104,28 @@ GKPoisson::applyOp( LevelData<FArrayBox>&       a_out,
         const PS::FArrayBox& factor_fab = factor[dit];
         const PS::Box& box = (*m_phase_grids)[dit];
 
+        const PS::Box& phi_bx(phi_fab.box());
+        const PS::Box& phi_tilde_bx(phi_tilde_fab.box());
+
+        const PS::IntVect smallend_phi = phi_bx.smallEnd();
+        const PS::IntVect smallend_phi_tilde = phi_tilde_bx.smallEnd();
+
         for (PS::BoxIterator bit(box); bit.ok(); ++bit) {
+          PS::IntVect iv_phase(bit());
+
+          PS::IntVect iv_phi(bit());
+          iv_phi[VPARALLEL_DIR] = smallend_phi[VPARALLEL_DIR];
+          iv_phi[MU_DIR] = smallend_phi[MU_DIR];
+
+          PS::IntVect iv_phi_tilde(bit());
+          iv_phi_tilde[VPARALLEL_DIR] = smallend_phi_tilde[VPARALLEL_DIR];
+
           /* multiplying by the mass because the moment op will
            * divide by the mass (see MomentOp::compute() */
-          integrand_fab(bit(),0) = this_species.mass() * factor_fab(bit(),0)
-                                   * (phi_fab(bit(),0)-phi_tilde_fab(bit(),0));
+          integrand_fab(iv_phase,0) =   this_species.mass() 
+                                      * factor_fab(iv_phase,0)
+                                      * (   phi_fab(iv_phi,0)
+                                          - phi_tilde_fab(iv_phi_tilde,0) );
         }
 
       }

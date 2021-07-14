@@ -2,11 +2,7 @@
 #define _POISSON_H_
 
 #include "EllipticOp.H"
-#ifdef with_petsc
-#include "MBPETScSolver.H"
-#else
 #include "MBHypreSolver.H"
-#endif
 
 #include "MagFluxAlignedMBLEXCenter.H"
 
@@ -62,11 +58,7 @@ public:
 
 protected:
 
-#ifdef with_petsc
-   MBPETScSolver* m_preconditioner;
-#else
    MBHypreSolver* m_preconditioner;
-#endif
 
    LevelData<FluxBox> m_mapped_coefficients;
 

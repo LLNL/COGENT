@@ -544,6 +544,13 @@ class EnergyKernel : public Kernel<T>
 {
    public:
 
+      /// Constructor with initialization.
+      /**
+        *  Initialized with potentail, which is used to get phase-velocity
+      */
+      EnergyKernel( const CFG::LevelData<CFG::FArrayBox>& phi )
+        : m_phi(phi) {;}
+  
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
       virtual ~EnergyKernel() {;}
 
@@ -563,6 +570,62 @@ class EnergyKernel : public Kernel<T>
        * contain the second component of the distribution function, etc.
        *
        * @param[out] result Cell-averaged integrand. 
+       * @param[in] kinetic_species Kinetic species object.
+       */
+      virtual void eval( LevelData<T>& result,
+                         const KineticSpecies& kinetic_species ) const;
+
+      /// Returns the kernel scale.
+      /**
+       * Returns the kernel scale, which is 1..
+       *
+       * @param[in] kinetic_species Kinetic species object.
+       * @return real-valued scale to be applied in configuration space.
+       */
+      virtual Real scale( const KineticSpecies& kinetic_species ) const
+      { return 1.; }
+
+      /// Returns the number of kernel components
+      /**
+       * Returns the number of kernel components.
+       *
+       * @param[in] kinetic_species Kinetic species object.
+       */
+       virtual int nComponents() const { return 1; }
+  
+  private:
+
+      const CFG::LevelData<CFG::FArrayBox>& m_phi;
+
+};
+
+/// Kinetic energy kernel.
+/**
+ */
+template <class T>
+class KineticEnergyKernel : public Kernel<T>
+{
+   public:
+
+      /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
+      virtual ~KineticEnergyKernel() {;}
+
+      /// Computes the integrand for a energy moment calculation.
+      /**
+       * Computes the integrand by multiplying the input distribution function
+       * by the scalar velocity squared.
+       *
+       * The number of kernel components is one.  If the distribution function
+       * has more than one component, the first component of the result
+       * will contain the moment of the first distribution function component,
+       * the next component will contain the moment of the second
+       * distribution function component, etc.  Upon entry, it is assumed
+       * that result has already been initialized with the distribution function
+       * correspondingly, ie., the first component contains the first
+       * component of the distribution function, the next component
+       * contain the second component of the distribution function, etc.
+       *
+       * @param[out] result Cell-averaged integrand.
        * @param[in] kinetic_species Kinetic species object.
        */
       virtual void eval( LevelData<T>& result,
@@ -786,7 +849,7 @@ class ParticleFluxKernel : public Kernel<T>
        *
        * @param[in] kinetic_species Kinetic species object.
        */
-       virtual int nComponents() const { return 1; }
+       virtual int nComponents() const { return 2; }
 
     private:
 
@@ -849,7 +912,7 @@ class HeatFluxKernel : public Kernel<T>
        *
        * @param[in] kinetic_species Kinetic species object.
        */
-       virtual int nComponents() const { return 1; }
+       virtual int nComponents() const { return 2; }
 
     private:
 

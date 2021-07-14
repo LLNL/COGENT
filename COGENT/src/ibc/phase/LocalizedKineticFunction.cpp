@@ -39,9 +39,13 @@ void LocalizedKineticFunction::assign( KineticSpecies& a_species,
 
    LevelData<FArrayBox>& dfn( a_species.distributionFunction() );
    const DisjointBoxLayout& grids( dfn.disjointBoxLayout() );
+ 
+   const LevelData<FArrayBox>& real_coords( geometry.getCellCenteredRealCoords() );
+ 
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
       setPointValues( dfn[dit],
-                      geometry.getBlockCoordSys( grids[dit] ),
+		      dfn[dit].box(),
+                      real_coords[dit],
                       a_time  );
    }
    geometry.multBStarParallel( dfn );
@@ -60,8 +64,8 @@ void LocalizedKineticFunction::assign( KineticSpecies& a_species,
    const PhaseGeom& geometry( a_species.phaseSpaceGeometry() );
    checkGeometryValidity( geometry );
    
-   FourthOrderUtil mySGutils; 
-   mySGutils.setSG(m_useSG);
+   FourthOrderUtil FourthOrderOperators; //Object that holds various fourth-order operatiosns 
+   FourthOrderOperators.setSG(m_useSG); //Whether to use the SG versions of fourth order stencils
 
    LevelData<FArrayBox>& dfn( a_species.distributionFunction() );
    const DisjointBoxLayout& grids( dfn.disjointBoxLayout() );
@@ -70,10 +74,12 @@ void LocalizedKineticFunction::assign( KineticSpecies& a_species,
    // will be used at that face to construct the cell average.  We do want the
    // extra cell in all other directions.
    LevelData<FArrayBox> dfn_tmp( grids, dfn.nComp(), IntVect::Unit );
+   const LevelData<FArrayBox>& real_coords( geometry.getCellCenteredRealCoords() );
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
-      const Box box( a_bdry_layout.interiorBox( dit ) );
-      const PhaseBlockCoordSys& coord_sys( geometry.getBlockCoordSys( box ) );
-      setPointValues( dfn_tmp[dit], coord_sys, a_time );
+      const DataIndex& internal_dit( a_bdry_layout.dataIndex( dit ) );
+      Box fill_box( dfn_tmp[dit].box() );
+      fill_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
+      setPointValues( dfn_tmp[dit], fill_box, real_coords[internal_dit], a_time );
    }
    geometry.multBStarParallel( dfn_tmp, a_bdry_layout );
    if ( !(geometry.secondOrder()) )  {
@@ -81,8 +87,7 @@ void LocalizedKineticFunction::assign( KineticSpecies& a_species,
        Box domain_box( dfn_tmp[dit].box() );
        domain_box.growDir( a_bdry_layout.dir(), a_bdry_layout.side(), -1 );
        ProblemDomain domain( domain_box );
-       //fourthOrderAverageCell( dfn_tmp[dit], domain, grids[dit] );
-       mySGutils.fourthOrderAverageCellSG( dfn_tmp[dit], domain, grids[dit] ); //Lee changed this!
+       FourthOrderOperators.fourthOrderAverageCellGen( dfn_tmp[dit], domain, grids[dit] ); 
      }
    }
    dfn_tmp.copyTo( dfn );
@@ -109,7 +114,7 @@ void LocalizedKineticFunction::parseParameters( ParmParse& a_pp )
    
    ParmParse ppsg("sparsegrid");
 
-   m_useSG = false;
+   m_useSG = false; //Don't use sparse grids by default
    ppsg.query( "useSGstencils", m_useSG );
 
    if (m_verbosity) {
@@ -133,16 +138,15 @@ void LocalizedKineticFunction::checkGeometryValidity( const PhaseGeom& a_geometr
 }
 
 inline
-void LocalizedKineticFunction::setPointValues( FArrayBox&                a_dfn,
-                                         const PhaseBlockCoordSys& a_coord_sys,
-                                         const Real&               a_time) const
+void LocalizedKineticFunction::setPointValues( FArrayBox&         a_dfn,
+					       const Box&         a_box,             
+					       const FArrayBox&   a_real_coords,
+					       const Real&        a_time) const
 {
-   const Box& box( a_dfn.box() );
-   FArrayBox cell_center_coords( box, PDIM );
-   a_coord_sys.getCellCenteredRealCoords( cell_center_coords );
+
    FORT_SET_LOCALIZED( CHF_FRA(a_dfn),
-                       CHF_BOX(box),
-                       CHF_CONST_FRA(cell_center_coords),
+                       CHF_BOX(a_box),
+                       CHF_CONST_FRA(a_real_coords),
                        CHF_CONST_REAL(m_amplitude),
                        CHF_CONST_REALVECT(m_location),
                        CHF_CONST_REALVECT(m_width),

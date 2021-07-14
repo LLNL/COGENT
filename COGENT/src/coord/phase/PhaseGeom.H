@@ -22,6 +22,7 @@
 #define CH_SPACEDIM PDIM
 
 #include "GyroaverageOperator.H"
+#include "VelocityNormalization.H"
 
 #include "NamespaceHeader.H"
 namespace CFG = CFG_NAMESPACE;
@@ -44,12 +45,13 @@ public:
               double                                  larmor_number );
 
    // Species-specific constructor
-   PhaseGeom( const PhaseGeom&                        phase_geom,
-              const RefCountedPtr<PhaseCoordSys>&     coord_sys,
-              const RefCountedPtr<VEL::VelCoordSys>&  vel_coords,
-              double                                  mass,
-              double                                  charge,
-              bool                                    is_gyrokinetic = false );
+   PhaseGeom( const PhaseGeom&                            phase_geom,
+              const RefCountedPtr<PhaseCoordSys>&         coord_sys,
+              const RefCountedPtr<VEL::VelCoordSys>&      vel_coords,
+              const RefCountedPtr<VelocityNormalization>& vel_normalization,
+              double                                      mass,
+              double                                      charge,
+              bool                                        is_gyrokinetic = false );
    /**
       Destructor.
     */
@@ -373,6 +375,8 @@ public:
 
    void getCellVolumes( LevelData<FArrayBox>& volume ) const;
 
+   void getFaceCenteredRealCoords(LevelData<FluxBox>& face_centered_real_coords) const;
+   
    void fillInternalGhosts( LevelData<FArrayBox>& a_data, const bool a_opt = false ) const;
    
    void exchangeExtraBlockGhosts( LevelData<FArrayBox>& a_data ) const;
@@ -390,12 +394,17 @@ public:
    const LevelData<FArrayBox>& getBField() const {return *m_BCell;}
 
    const LevelData<FluxBox>& getBFieldMagnitudeFace() const {return *m_BMagFace;}
+   const LevelData<FluxBox>& getBFieldFace() const {return *m_BFace;} 
 
    const LevelData<FArrayBox>& getCellCenteredRealCoords() const {return *m_cell_centered_real_coords;}
+
+   const LevelData<FArrayBox>& getVelocityRealCoords() const {return m_velocity_real_coords;}
 
    const LevelData<FArrayBox>& getNormalizedMagneticFluxCell() const {return *m_normalized_magnetic_flux_cell;}
 
    const LevelData<FluxBox>& getNormalizedMagneticFluxFace() const {return *m_normalized_magnetic_flux_face;}
+  
+   const LevelData<FArrayBox>& getVelNorm() const {return *m_vel_norm;}
 
    const CFG::MagGeom& magGeom() const {return *m_mag_geom;}
 
@@ -415,10 +424,16 @@ public:
    const CFG::MagBlockCoordSys& getMagBlockCoordSys(const Box& box) const;
 
    const MultiBlockLevelExchangeAverage* mblexPtr() const {return m_mblexPtr;}
+   
+   const RefCountedPtr<VelocityNormalization>& velocityNormalizationPtr() const {return m_vel_normalization;}
+
+   const VelocityNormalization& velocityNormalization() const {return *m_vel_normalization;}
 
    bool secondOrder() const {return m_second_order;}
 
    bool divFreeVelocity() const {return m_divfree_velocity;}
+  
+   int spatialVelNorm() const {return  m_use_spatial_vel_norm;}
 
    // Multiply by physical face areas (the components in the velocity directions
    // also contain a 2piR factor for axisymmetric problems)
@@ -562,6 +577,17 @@ public:
                          LevelData<FArrayBox>& dst_phase ) const;
 
    IntVect ghostVect() const {return m_ghostVect;}
+
+
+   /// Multiplies BMag and BdotCurlB by the product of munorm times velnorm, for use
+   /// in Bstarparallel calculation for localized velocity renormalization
+
+   void multFieldQuantitiesByNorms(FArrayBox& BMagProduct,
+                                   FArrayBox& bdotcurlbProduct,
+                                   const FArrayBox& BMag,
+                                   const FArrayBox& bdotcurlb,
+                                   const FArrayBox& velnorm) const;
+
 
    /*
     *  Plotting routines
@@ -736,6 +762,7 @@ protected:
 
    const RefCountedPtr<CFG::MagGeom>     m_mag_geom;
    const RefCountedPtr<VEL::VelCoordSys> m_vel_coords;
+   const RefCountedPtr<VelocityNormalization> m_vel_normalization;
 
 private:
 
@@ -748,7 +775,7 @@ private:
    ProblemDomain m_domain;
 
    DisjointBoxLayout m_vpmu_flattened_dbl;
-   
+
    LevelData<FluxBox> *   m_configuration_metrics;
    LevelData<FluxBox> *   m_configuration_metrics_pointwise;
    LevelData<FArrayBox> * m_configuration_poloidal_J;
@@ -765,6 +792,7 @@ private:
    LevelData<FluxBox> *   m_velocity_face_areas;
 
    LevelData<FArrayBox> * m_cell_centered_real_coords;
+   LevelData<FArrayBox>   m_velocity_real_coords;
 
    LevelData<FArrayBox> * m_normalized_magnetic_flux_cell;
    LevelData<FluxBox> * m_normalized_magnetic_flux_face;
@@ -799,6 +827,12 @@ private:
    bool m_no_parallel_streaming;
    bool m_speciesDefined;
    RealVect m_freestream_components;
+   int m_use_spatial_vel_norm;
+
+   LevelData<FArrayBox>*  m_vel_norm;
+   LevelData<FluxBox>*  m_vel_norm_face;
+   LevelData<FArrayBox>*  m_grad_log_vpar_norm;
+   LevelData<FArrayBox>*  m_grad_log_mu_norm;
 
    bool m_second_order;   // experimental
 
@@ -834,7 +868,7 @@ private:
    Copier m_exchangeCopier;
    bool m_optimized_copier;
    int m_exchange_ghosts;
-  
+
    mutable GyroaverageOperator const *m_gyroavg_op;
    bool m_is_gyrokinetic;
 
@@ -887,6 +921,8 @@ private:
 
    void fillTransversePhysicalGhosts( LevelData<FArrayBox>&, int ) const;
    void fillTransversePhysicalGhosts( LevelData<FluxBox>&, int ) const;
+
+   void computeVelNormGradients(const int);
 };
 
 typedef Vector<RefCountedPtr<PhaseGeom> > PhaseGeomPtrVect;

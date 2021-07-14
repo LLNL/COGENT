@@ -4,6 +4,7 @@
 #include "SlabBlockCoordSys.H"
 #include "ToroidalBlockCoordSys.H"
 #include "CylindricalBlockCoordSys.H"
+#include "OneBlockCoordSys.H"
 #include "FourthOrderUtil.H"
 #include "BlockBoundary.H"
 #include "SpreadingCopier.H"
@@ -21,6 +22,7 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
                                  const std::vector<bool>& a_is_periodic,
                                  const std::vector<int>&  a_decomposition)
   : m_decomposition(a_decomposition),
+    m_divergence_cleaning_bc(NULL),
     m_num_blocks(1)
 {
   m_spread_radially = false;
@@ -85,6 +87,10 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
         CylindricalBlockCoordSys* block_coords = new CylindricalBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic));
         m_coord_vec.push_back(block_coords);
      }
+     else if (m_mag_geom_type == "oneblock") {
+        OneBlockCoordSys* block_coords = new OneBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic));
+        m_coord_vec.push_back(block_coords);
+     }
   }
 
   defineCoordSystemsAndBoundaries(m_coord_vec);
@@ -92,6 +98,9 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
 #if 1
   // Define the boundary conditions for divergence cleaning (whether or not they're used)
   // Does not check for periodicity. FIX IF NEEDED.
+   
+  m_divergence_cleaning_bc = new LogRectEllipticOpBC(m_num_blocks);
+   
   for (int block = 0; block < m_num_blocks; block++) {
     const MagBlockCoordSys& coord_sys( *(MagBlockCoordSys*)getCoordSys(block) );
     const ProblemDomain& domain( coord_sys.domain() );
@@ -101,8 +110,8 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
          if ( containsPhysicalBoundary(block, dir, (side==0? Side::LoHiSide::Lo: Side::LoHiSide::Hi) ) && !domain.isPeriodic(dir)) {
           double bc_value = 0.;
           int bc_type = EllipticOpBC::DIRICHLET;     // Homogeneous Dirichlet
-          m_divergence_cleaning_bc.setBCType(block, dir, side, bc_type);
-          m_divergence_cleaning_bc.setBCValue(block, dir, side, bc_value);
+          m_divergence_cleaning_bc->setBCType(block, dir, side, bc_type);
+          m_divergence_cleaning_bc->setBCValue(block, dir, side, bc_value);
         }
       }
     }
@@ -117,9 +126,10 @@ LogRectCoordSys::~LogRectCoordSys()
    for (int i=0; i<m_coord_vec.size(); ++i) {
       delete m_coord_vec[i];
    }
+   if (m_divergence_cleaning_bc) delete m_divergence_cleaning_bc;
 }
 
-
+ 
 
 void
 LogRectCoordSys::defineBoundaries()

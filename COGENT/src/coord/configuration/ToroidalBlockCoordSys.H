@@ -116,13 +116,16 @@ class ToroidalBlockCoordSys
                                     FArrayBox&       magnetic_flux ) const;
 
       virtual double getMagneticFlux( const RealVect& a_physical_coordinate ) const;
+
+   
+      virtual void getNormMagneticFlux(const FArrayBox& physical_coordinates,
+                                       FArrayBox&       magnetic_flux ) const;
+
+      virtual double getNormMagneticFlux( const RealVect& a_physical_coordinate ) const;
    
       Real getMagneticFlux( const Real r ) const;
    
       virtual void getNodalFieldData(FArrayBox& points, FArrayBox& A, FArrayBox& b, FArrayBox& Bmag) const;
-
-      ///Return toroidal coordinates
-      void getToroidalCoords(FArrayBox& coords) const;
 
       /// Return geometry parameters
       /**
@@ -130,12 +133,10 @@ class ToroidalBlockCoordSys
        */
       virtual double getRBtoroidal() const {return m_Btor_scale;}
    
+      /// Returns X, Y, Z coordinates of the magnetic axis at Y=0
+      virtual RealVect getMagAxis( ) const { return RealVect(m_R0, 0, 0); }
+   
       /// Returns major radius at center of toroidal cross section (a.k.a. R0)
-      /**
-       * Returns the major radius at the middle of the toroidal cross section (R0)
-       *
-       * @param[in] xi mapped grid coordinate.
-       */
       Real centralMajorRadius( ) const { return m_R0; }
    
       /// Returns average minor radius
@@ -172,10 +173,7 @@ class ToroidalBlockCoordSys
       void convertCartesianToToroidal(RealVect& vect,
 				      const RealVect& coord) const;
 
-      //convert Cartesian (x,y,z) coordinates to toroidal (r, phi, theta) 
-      void convertCartesianToToroidal(RealVect& coord) const;
-			
-      //convert cylindrical components (R, Phi, Z) of a vector 
+      //convert cylindrical components (R, Phi, Z) of a vector
       //(vect) to the Cartesian (physical) components (x, y, z)
       void convertCylindricalToCartesian(RealVect& vect,
 					 const RealVect& coord) const;

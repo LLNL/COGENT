@@ -111,10 +111,10 @@ public:
     else                  return(0);
   }
 
-  void defineBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+  void defineBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                       std::vector<DOFList>&,
-                      const GKVector&,
-                      GKOps&,
+                      const ODEVector&,
+                      void*, 
                       const std::string&,
                       const std::string&,
                       bool,
@@ -122,17 +122,21 @@ public:
                       const GlobalDOFKineticSpecies&,
                       int );
 
-  virtual void updateBlockPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+  virtual void updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                               const KineticSpecies&,
                               const GlobalDOFKineticSpecies&,
                               const Real,
+                              const int,
+                              const int,
                               const Real,
                               const bool,
                               const int );
 
-  void assemblePrecondMatrix( void*,
+  void assemblePrecondMatrix( BandedMatrix&,
                               const KineticSpecies&,
                               const GlobalDOFKineticSpecies&,
+                              const int,
+                              const int,
                               const Real );
 
   inline void preTimeStep  ( const KineticSpeciesPtrVect& a_soln_mapped, 

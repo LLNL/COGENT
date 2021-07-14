@@ -144,6 +144,18 @@ class CFGVars
 
       //  Number of cell_centered variables
       const int num_cell_vars() const {return m_cell_data.size();}
+      
+      const bool is_cell_var(const string& name) const
+        {
+           bool is_a_cell_var  = false;
+           for (int n=0; n<num_cell_vars(); ++n) {
+              if (name == m_cell_data_var_name[n]) {
+                 is_a_cell_var = true;
+                 break;
+              }
+           }
+           return is_a_cell_var;
+        }
 
       inline int cell_var_component(const string& name) const
         {

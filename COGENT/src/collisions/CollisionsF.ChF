@@ -630,14 +630,16 @@ ccccc FORTRAN ROUTINES FOR ConsDragDiff COLLISION MODEL
      &     CHF_FRA[fluxes],
      &     CHF_CONST_FRA1[fBJ],
      &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_FRA[vnorm],
      &     CHF_CONST_REAL[mass],
      &     CHF_CONST_REALVECT[dx],
      &     CHF_CONST_INT[dir],
      &     CHF_CONST_INT[Nvp],
-     &     CHF_CONST_INT[Nmu] )
+     &     CHF_CONST_INT[Nmu],
+     &     CHF_CONST_INT[use_locnormalized_vels] )
 
 c     local variables
-      integer CHF_DDECL[i;j;k;l;m], B2, B3, B4
+      integer CHF_DDECL[i;j;k;l;m], B2, B3, B4, dimless1, dimless2
       double precision fBJ_face, dfBJdvp, dfBJdmu
 
 c      print*, "shape(fBJ) =", shape(fBJ)
@@ -645,6 +647,10 @@ c    NOTE THAT THE FLUXES ARE SET TO ZERO AT VELOCITY SPACE
 c    BOUNDARIES SO THAT DENSITY IS CONSERVED. SIMILARLY,
 c    VALUES ARE SET AT FIRST FACE INSIDE VPAR BOUNDARIES
 c    SO THAT FIRST MOMENT OF DIFFUSIVE FLUX IS EXACTLY ZERO
+
+
+      dimless1 = CH_SPACEDIM-1
+      dimless2 = CH_SPACEDIM-2
 
       B2 = CHF_LBOUND[B;2]
       B3 = CHF_LBOUND[B;3]
@@ -655,58 +661,70 @@ c    SO THAT FIRST MOMENT OF DIFFUSIVE FLUX IS EXACTLY ZERO
       CHF_MULTIDO[box;i;j;k;l;m]
 
 #if CH_SPACEDIM==5
-       if (dir==2) then
+       if (dir==dimless2) then
 
          if ((l==Nvp/2) .or. (l==-Nvp/2)) then
            fBJ_face = zero
            dfBJdvp  = zero
          else
-c           fBJ_face = (fBJ(i,j,k,l)+fBJ(i,j,k-1,l))/two
-c           dfBJdvp  = (fBJ(i,j,k,l)-fBJ(i,j,k-1,l))/dx(2)
+c           fBJ_face = (fBJ(i,j,k,l,m)+fBJ(i,j,k,l-1,m))/two
+c           dfBJdvp  = (fBJ(i,j,k,l,m)-fBJ(i,j,k,l-1,m))/dx(dimless2)
          if (l==Nvp/2-1) then
            fBJ_face = ( three*fBJ(i,j,k,l,m)+13.0d0*fBJ(i,j,k,l-1,m)-five*fBJ(i,j,k,l-2,m)+fBJ(i,j,k,l-3,m) )/12.0d0
-           dfBJdvp  = ( ten*fBJ(i,j,k,l,m)-five*fBJ(i,j,k,l-1,m)-nine*fBJ(i,j,k,l-2,m)+five*fBJ(i,j,k,l-3,m)-fBJ(i,j,k,l-4,m) )/12.0d0/dx(2)
+           dfBJdvp  = ( ten*fBJ(i,j,k,l,m)-five*fBJ(i,j,k,l-1,m)-nine*fBJ(i,j,k,l-2,m)+five*fBJ(i,j,k,l-3,m)-fBJ(i,j,k,l-4,m) )/12.0d0/dx(dimless2)
          else
          if (l==-Nvp/2+1) then
            fBJ_face = ( three*fBJ(i,j,k,l-1,m)+13.0d0*fBJ(i,j,k,l,m)-five*fBJ(i,j,k,l+1,m)+fBJ(i,j,k,l+2,m) )/12.0d0
-           dfBJdvp  = (-ten*fBJ(i,j,k,l-1,m)+five*fBJ(i,j,k,l,m)+nine*fBJ(i,j,k,l+1,m)-five*fBJ(i,j,k,l+2,m)+fBJ(i,j,k,l+3,m) )/12.0d0/dx(2)
+           dfBJdvp  = (-ten*fBJ(i,j,k,l-1,m)+five*fBJ(i,j,k,l,m)+nine*fBJ(i,j,k,l+1,m)-five*fBJ(i,j,k,l+2,m)+fBJ(i,j,k,l+3,m) )/12.0d0/dx(dimless2)
          else
            fBJ_face = ( seven*(fBJ(i,j,k,l,m)+fBJ(i,j,k,l-1,m))-(fBJ(i,j,k,l+1,m)+fBJ(i,j,k,l-2,m)) )/12.0d0
-           dfBJdvp  = (15.0d0*(fBJ(i,j,k,l,m)-fBJ(i,j,k,l-1,m))-(fBJ(i,j,k,l+1,m)-fBJ(i,j,k,l-2,m)) )/12.0d0/dx(2)
+           dfBJdvp  = (15.0d0*(fBJ(i,j,k,l,m)-fBJ(i,j,k,l-1,m))-(fBJ(i,j,k,l+1,m)-fBJ(i,j,k,l-2,m)) )/12.0d0/dx(dimless2)
          endif
          endif
          endif
 
-         fluxes(CHF_IX[i;j;k;l;m],0) = k*dx(2)*fBJ_face
+
+         fluxes(CHF_IX[i;j;k;l;m],0) = l*dx(dimless2)*fBJ_face
          fluxes(CHF_IX[i;j;k;l;m],1) = fBJ_face
-         fluxes(CHF_IX[i;j;k;l;m],2) = dfBJdvp/mass
+
+         if (use_locnormalized_vels .EQ. 1) then
+           fluxes(CHF_IX[i;j;k;l;m],2) = dfBJdvp/mass/(vnorm(i,j,k,CHF_LBOUND[vnorm;3],CHF_LBOUND[vnorm;4],0)**2)
+         else
+           fluxes(CHF_IX[i;j;k;l;m],2) = dfBJdvp/mass
+         endif  
+
 
        else
-       if (dir==3) then
+       if (dir==dimless1) then
 
          if ((m==0) .or. (m==Nmu)) then
            fBJ_face = zero
            dfBJdmu  = zero
          else
-c           fBJ_face = (fBJ(i,j,k,l)+fBJ(i,j,k,l-1))/two
-c           dfBJdmu  = (fBJ(i,j,k,l)-fBJ(i,j,k,l-1))/dx(3)
+c           fBJ_face = (fBJ(i,j,k,l,m)+fBJ(i,j,k,l,m-1))/two
+c           dfBJdmu  = (fBJ(i,j,k,l,m)-fBJ(i,j,k,l,m-1))/dx(dimless1)
          if (m==Nmu-1) then
            fBJ_face = ( three*fBJ(i,j,k,l,m)+13.0d0*fBJ(i,j,k,l,m-1)-five*fBJ(i,j,k,l,m-2)+fBJ(i,j,k,l,m-3) )/12.0d0
-           dfBJdmu  = ( ten*fBJ(i,j,k,l,m)-five*fBJ(i,j,k,l,m-1)-nine*fBJ(i,j,k,l,m-2)+five*fBJ(i,j,k,l,m-3)-fBJ(i,j,k,l,m-4) )/12.0d0/dx(3)
+           dfBJdmu  = ( ten*fBJ(i,j,k,l,m)-five*fBJ(i,j,k,l,m-1)-nine*fBJ(i,j,k,l,m-2)+five*fBJ(i,j,k,l,m-3)-fBJ(i,j,k,l,m-4) )/12.0d0/dx(dimless1)
          else
          if (m==1) then
            fBJ_face = ( three*fBJ(i,j,k,l,m-1)+13.0d0*fBJ(i,j,k,l,m)-five*fBJ(i,j,k,l,m+1)+fBJ(i,j,k,l,m+2) )/12.0d0
-           dfBJdmu  = (-ten*fBJ(i,j,k,l,m-1)+five*fBJ(i,j,k,l,m)+nine*fBJ(i,j,k,l,m+1)-five*fBJ(i,j,k,l,m+2)+fBJ(i,j,k,l,m+3) )/12.0d0/dx(3)
+           dfBJdmu  = (-ten*fBJ(i,j,k,l,m-1)+five*fBJ(i,j,k,l,m)+nine*fBJ(i,j,k,l,m+1)-five*fBJ(i,j,k,l,m+2)+fBJ(i,j,k,l,m+3) )/12.0d0/dx(dimless1)
          else
            fBJ_face = ( seven*(fBJ(i,j,k,l,m)+fBJ(i,j,k,l,m-1))-(fBJ(i,j,k,l,m+1)+fBJ(i,j,k,l,m-2)) )/12.0d0
-           dfBJdmu  = (15.0d0*(fBJ(i,j,k,l,m)-fBJ(i,j,k,l,m-1))-(fBJ(i,j,k,l,m+1)-fBJ(i,j,k,l,m-2)) )/12.0d0/dx(3)
+           dfBJdmu  = (15.0d0*(fBJ(i,j,k,l,m)-fBJ(i,j,k,l,m-1))-(fBJ(i,j,k,l,m+1)-fBJ(i,j,k,l,m-2)) )/12.0d0/dx(dimless1)
          endif
          endif
          endif
 
-         fluxes(CHF_IX[i;j;k;l;m],0) = two*m*dx(3)*fBJ_face
+         fluxes(CHF_IX[i;j;k;l;m],0) = two*m*dx(dimless1)*fBJ_face
          fluxes(CHF_IX[i;j;k;l;m],1) = zero
-         fluxes(CHF_IX[i;j;k;l;m],2) = four*m*dx(3)/B(i,j,k,B3,B4)*dfBJdmu
+
+         if (use_locnormalized_vels .EQ. 1) then
+           fluxes(CHF_IX[i;j;k;l;m],2) = four*m*dx(dimless1)/B(i,j,k,B3,B4)*dfBJdmu/vnorm(i,j,k,CHF_LBOUND[vnorm;3],CHF_LBOUND[vnorm;4],1)
+         else
+           fluxes(CHF_IX[i;j;k;l;m],2) = four*m*dx(dimless1)/B(i,j,k,B3,B4)*dfBJdmu
+         endif  
  
        else
 
@@ -718,59 +736,71 @@ c           dfBJdmu  = (fBJ(i,j,k,l)-fBJ(i,j,k,l-1))/dx(3)
        endif
 
 #else
-       if (dir==2) then
+       if (dir==dimless2) then
 
          if ((k==Nvp/2) .or. (k==-Nvp/2)) then
            fBJ_face = zero
            dfBJdvp  = zero
          else
 c           fBJ_face = (fBJ(i,j,k,l)+fBJ(i,j,k-1,l))/two
-c           dfBJdvp  = (fBJ(i,j,k,l)-fBJ(i,j,k-1,l))/dx(2)
+c           dfBJdvp  = (fBJ(i,j,k,l)-fBJ(i,j,k-1,l))/dx(dimless2)
          if (k==Nvp/2-1) then
            fBJ_face = ( three*fBJ(i,j,k,l)+13.0d0*fBJ(i,j,k-1,l)-five*fBJ(i,j,k-2,l)+fBJ(i,j,k-3,l) )/12.0d0
-           dfBJdvp  = ( ten*fBJ(i,j,k,l)-five*fBJ(i,j,k-1,l)-nine*fBJ(i,j,k-2,l)+five*fBJ(i,j,k-3,l)-fBJ(i,j,k-4,l) )/12.0d0/dx(2)
+           dfBJdvp  = ( ten*fBJ(i,j,k,l)-five*fBJ(i,j,k-1,l)-nine*fBJ(i,j,k-2,l)+five*fBJ(i,j,k-3,l)-fBJ(i,j,k-4,l) )/12.0d0/dx(dimless2)
          else
          if (k==-Nvp/2+1) then
            fBJ_face = ( three*fBJ(i,j,k-1,l)+13.0d0*fBJ(i,j,k,l)-five*fBJ(i,j,k+1,l)+fBJ(i,j,k+2,l) )/12.0d0
-           dfBJdvp  = (-ten*fBJ(i,j,k-1,l)+five*fBJ(i,j,k,l)+nine*fBJ(i,j,k+1,l)-five*fBJ(i,j,k+2,l)+fBJ(i,j,k+3,l) )/12.0d0/dx(2)
+           dfBJdvp  = (-ten*fBJ(i,j,k-1,l)+five*fBJ(i,j,k,l)+nine*fBJ(i,j,k+1,l)-five*fBJ(i,j,k+2,l)+fBJ(i,j,k+3,l) )/12.0d0/dx(dimless2)
          else
            fBJ_face = ( seven*(fBJ(i,j,k,l)+fBJ(i,j,k-1,l))-(fBJ(i,j,k+1,l)+fBJ(i,j,k-2,l)) )/12.0d0
-           dfBJdvp  = (15.0d0*(fBJ(i,j,k,l)-fBJ(i,j,k-1,l))-(fBJ(i,j,k+1,l)-fBJ(i,j,k-2,l)) )/12.0d0/dx(2)
+           dfBJdvp  = (15.0d0*(fBJ(i,j,k,l)-fBJ(i,j,k-1,l))-(fBJ(i,j,k+1,l)-fBJ(i,j,k-2,l)) )/12.0d0/dx(dimless2)
          endif
          endif
          endif
 
-         fluxes(CHF_IX[i;j;k;l],0) = k*dx(2)*fBJ_face
+         fluxes(CHF_IX[i;j;k;l],0) = k*dx(dimless2)*fBJ_face
          fluxes(CHF_IX[i;j;k;l],1) = fBJ_face
-         fluxes(CHF_IX[i;j;k;l],2) = dfBJdvp/mass
+
+         if (use_locnormalized_vels .EQ. 1) then
+           fluxes(CHF_IX[i;j;k;l],2) = dfBJdvp/mass/(vnorm(i,j,CHF_LBOUND[vnorm;2],CHF_LBOUND[vnorm;3],0)**2)
+         else
+           fluxes(CHF_IX[i;j;k;l],2) = dfBJdvp/mass
+         endif  
 
        else
-       if (dir==3) then
+       if (dir==dimless1) then
 
          if ((l==0) .or. (l==Nmu)) then
            fBJ_face = zero
            dfBJdmu  = zero
          else
 c           fBJ_face = (fBJ(i,j,k,l)+fBJ(i,j,k,l-1))/two
-c           dfBJdmu  = (fBJ(i,j,k,l)-fBJ(i,j,k,l-1))/dx(3)
+c           dfBJdmu  = (fBJ(i,j,k,l)-fBJ(i,j,k,l-1))/dx(dimless1)
          if (l==Nmu-1) then
            fBJ_face = ( three*fBJ(i,j,k,l)+13.0d0*fBJ(i,j,k,l-1)-five*fBJ(i,j,k,l-2)+fBJ(i,j,k,l-3) )/12.0d0
-           dfBJdmu  = ( ten*fBJ(i,j,k,l)-five*fBJ(i,j,k,l-1)-nine*fBJ(i,j,k,l-2)+five*fBJ(i,j,k,l-3)-fBJ(i,j,k,l-4) )/12.0d0/dx(3)
+           dfBJdmu  = ( ten*fBJ(i,j,k,l)-five*fBJ(i,j,k,l-1)-nine*fBJ(i,j,k,l-2)+five*fBJ(i,j,k,l-3)-fBJ(i,j,k,l-4) )/12.0d0/dx(dimless1)
          else
          if (l==1) then
            fBJ_face = ( three*fBJ(i,j,k,l-1)+13.0d0*fBJ(i,j,k,l)-five*fBJ(i,j,k,l+1)+fBJ(i,j,k,l+2) )/12.0d0
-           dfBJdmu  = (-ten*fBJ(i,j,k,l-1)+five*fBJ(i,j,k,l)+nine*fBJ(i,j,k,l+1)-five*fBJ(i,j,k,l+2)+fBJ(i,j,k,l+3) )/12.0d0/dx(3)
+           dfBJdmu  = (-ten*fBJ(i,j,k,l-1)+five*fBJ(i,j,k,l)+nine*fBJ(i,j,k,l+1)-five*fBJ(i,j,k,l+2)+fBJ(i,j,k,l+3) )/12.0d0/dx(dimless1)
          else
            fBJ_face = ( seven*(fBJ(i,j,k,l)+fBJ(i,j,k,l-1))-(fBJ(i,j,k,l+1)+fBJ(i,j,k,l-2)) )/12.0d0
-           dfBJdmu  = (15.0d0*(fBJ(i,j,k,l)-fBJ(i,j,k,l-1))-(fBJ(i,j,k,l+1)-fBJ(i,j,k,l-2)) )/12.0d0/dx(3)
+           dfBJdmu  = (15.0d0*(fBJ(i,j,k,l)-fBJ(i,j,k,l-1))-(fBJ(i,j,k,l+1)-fBJ(i,j,k,l-2)) )/12.0d0/dx(dimless1)
          endif
          endif
          endif
 
-         fluxes(CHF_IX[i;j;k;l],0) = two*l*dx(3)*fBJ_face
+         fluxes(CHF_IX[i;j;k;l],0) = two*l*dx(dimless1)*fBJ_face
          fluxes(CHF_IX[i;j;k;l],1) = zero
-         fluxes(CHF_IX[i;j;k;l],2) = four*l*dx(3)/B(i,j,B2,B3)*dfBJdmu
 
+         if (use_locnormalized_vels .EQ. 1) then
+           fluxes(CHF_IX[i;j;k;l],2) = four*l*dx(dimless1)/B(i,j,B2,B3)*dfBJdmu/vnorm(i,j,CHF_LBOUND[vnorm;2],CHF_LBOUND[vnorm;3],1)
+         else
+           fluxes(CHF_IX[i;j;k;l],2) = four*l*dx(dimless1)/B(i,j,B2,B3)*dfBJdmu
+         endif  
+
+
+ 
        else
 
          fluxes(CHF_IX[i;j;k;l],0) = zero
@@ -824,8 +854,7 @@ c     local variables
 
       subroutine eval_consdragdiff_rhs( CHF_BOX[box],
      &                                  CHF_FRA1[rhs_cls],
-
-     &                                  CHF_CONST_REAL[nu],
+     &                                  CHF_CONST_FRA1[nu],
      &                                  CHF_CONST_FRA1[Upar],
      &                                  CHF_CONST_FRA1[Temp],
      &                                  CHF_CONST_FRA[Jpsi] )
@@ -842,11 +871,11 @@ c     local variables
       CHF_MULTIDO[box;i;j;k;l;m]
 
 #if CH_SPACEDIM==5
-       rhs_cls(CHF_IX[i;j;k;l;m]) = nu*(Jpsi(CHF_IX[i;j;k;l;m],0)
+       rhs_cls(CHF_IX[i;j;k;l;m]) = nu(i,j,k,l,m)*(Jpsi(CHF_IX[i;j;k;l;m],0)
      &          - Upar(i,j,k,L3,L4)*Jpsi(CHF_IX[i;j;k;l;m],1)
-     &          + Temp(i,j,k,L2,L3)*Jpsi(CHF_IX[i;j;k;l;m],2))
+     &          + Temp(i,j,k,L3,L4)*Jpsi(CHF_IX[i;j;k;l;m],2))
 #else
-       rhs_cls(CHF_IX[i;j;k;l]) = nu*(Jpsi(CHF_IX[i;j;k;l],0)
+       rhs_cls(CHF_IX[i;j;k;l]) = nu(i,j,k,l)*(Jpsi(CHF_IX[i;j;k;l],0)
      &          -     Upar(i,j,L2,L3)*Jpsi(CHF_IX[i;j;k;l],1)
      &          +     Temp(i,j,L2,L3)*Jpsi(CHF_IX[i;j;k;l],2))
 #endif

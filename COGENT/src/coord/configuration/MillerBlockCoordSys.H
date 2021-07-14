@@ -99,6 +99,11 @@ class MillerBlockCoordSys
       virtual void getMagneticFlux( const FArrayBox& physical_coordinates,
                                     FArrayBox&       magnetic_flux ) const;
 
+      virtual void getNormMagneticFlux(const FArrayBox& physical_coordinates,
+                                       FArrayBox&       magnetic_flux ) const;
+
+      virtual double getNormMagneticFlux( const RealVect& a_physical_coordinate ) const;
+   
       virtual double getMagneticFlux( const RealVect& a_physical_coordinate ) const;
 
       virtual void getNodalFieldData(FArrayBox& points,
@@ -138,6 +143,10 @@ class MillerBlockCoordSys
       void getRBpoloidal( const int dir, FArrayBox& RBpol, FArrayBox& dRBpoldt ) const;
 
       virtual double getRBtoroidal() const {return m_Btor_scale;}
+   
+   
+      /// Returns 2D R,Z coordinates of the magnetic axis
+      virtual RealVect getMagAxis( ) const { return m_mag_axis; }
 
       /// Returns major radius at center of toroidal cross section (a.k.a. R0)
       /**
@@ -180,6 +189,7 @@ class MillerBlockCoordSys
       double m_average_radius;
       int m_const_minorrad;
       Vector<double> m_origin;
+      RealVect m_mag_axis;
 };
 
 #include "NamespaceFooter.H"

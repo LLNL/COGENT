@@ -10,7 +10,6 @@ class IMEXStagePCFunction : public LinearFunction<T,Ops>
 {
   public:
 
-    virtual void update(const T&, const Real, const Real a_a = 0.0) = 0;
     virtual void setBaseSolution(const T&) = 0;
 
     virtual void setBaseRHS(const T&, const T&)
@@ -27,6 +26,8 @@ class IMEXStagePCFunction : public LinearFunction<T,Ops>
 
     virtual const BandedMatrix& getBandedMatrixForm() const = 0;
     virtual BandedMatrix& getBandedMatrixForm() = 0;
+
+    virtual bool isDefined() const = 0;
 
   protected:
 

@@ -4,7 +4,9 @@
 
 #include "NamespaceHeader.H"
 
-GKScalarOp::GKScalarOp( const int a_verbose )
+GKScalarOp::GKScalarOp(const PhaseGeom& a_geometry,
+                       const GKUnits&   a_units,
+                       const int        a_verbose )
    : m_verbose(a_verbose)
 {
    bool more_scalars(true);
@@ -25,12 +27,14 @@ GKScalarOp::GKScalarOp( const int a_verbose )
          
          if (ppscalar.contains( "operator_type" )) {
             ppscalar.get( "operator_type", op_type );
+            const std::string prefix( "scalar_model." + scalar_name );
             
             if (op_type == "NullScalarOp") {
                op = new NullScalarOp();
             }
             else if (op_type == "SelfConsistentBCOp") {
-               op = new SelfConsistentBCOp();
+               const double larmor( a_units.larmorNumber() );
+               op = new SelfConsistentBCOp(prefix, a_geometry, larmor, m_verbose);
             }
             else {
                MayDay::Error("GKScalarOp::GKScalarOp(): Unrecognized scalar operator");
@@ -89,7 +93,7 @@ std::string GKScalarOp::scalarOpName( const std::string& a_name )
 }
 
 
-void GKScalarOp::accumulateRHS( GKRHSData&                        a_rhs,
+void GKScalarOp::accumulateRHS( GKRHSData&                         a_rhs,
                                 const KineticSpeciesPtrVect&       a_kinetic_species,
                                 const CFG::FluidSpeciesPtrVect&    a_fluid_species,
                                 const ScalarPtrVect&               a_scalars,

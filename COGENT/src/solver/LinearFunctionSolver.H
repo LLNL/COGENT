@@ -13,7 +13,10 @@ class LinearFunctionSolver
 
     virtual ~LinearFunctionSolver() {}
 
-    virtual void define(LinearFunction<T,Ops>* const, const std::string&, const std::string& ,const T&) = 0;
+    virtual void define(  LinearFunction<T,Ops>* const, 
+                          const std::string&, 
+                          const std::string&,
+                          const T&) = 0;
     virtual void solve(T& a_x, const T& a_r, int a_its = -1) = 0;
     virtual void setTolerances(Real, Real) = 0;
     virtual int getCount() const {return 0;}

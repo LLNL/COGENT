@@ -5,11 +5,7 @@
 #include "GKPoisson.H"
 #include "FluxSurface.H"
 #include "MultiBlockLevelExchangeAverage.H"
-#ifdef with_petsc
-#include "MBPETScSolver.H"
-#else
 #include "MBHypreSolver.H"
-#endif
 
 #include "MagFluxAlignedMBLEXCenter.H"
 
@@ -73,16 +69,9 @@ public:
     */
    virtual ~GKVorticity();
 
-#ifdef with_petsc
-   virtual MBPETScSolver* allocatePreconditioner( const MagGeom&                  geom,
-                                                  const int                       discretization_order,
-                                                  MultiBlockLevelExchangeCenter*  mblx_ptr );
-   }
-#else
    virtual MBHypreSolver* allocatePreconditioner( const MagGeom&                  geom,
                                                   const int                       discretization_order,
                                                   MultiBlockLevelExchangeCenter*  mblx_ptr );
-#endif
 
    void setVorticityOperatorCoefficients( const LevelData<FArrayBox>&  ion_mass_density,
                                           const LevelData<FArrayBox>&  ion_charge_density,
@@ -106,7 +95,7 @@ public:
    virtual void updatePreconditioner( MBSolver*              preconditioner,
                                       LevelData<FArrayBox>&  volume_reciprocal,
                                       LevelData<FluxBox>&    mapped_coefficients,
-                                      const EllipticOpBC&    bc );
+                                      const EllipticOpBC&    potential_bc );
 
    void verifyMatrix( const MBSolver* matrix );
 
@@ -190,6 +179,7 @@ protected:
    LevelData<FluxBox> m_charge_exchange_coeff_face;
 
    bool m_include_pol_den_correction;
+   bool m_symmetrized_preconditioner;
 
 private:
    void init( const ParmParse&  pp,
@@ -204,6 +194,7 @@ private:
    std::string m_model;
 
    Real m_dt_implicit;
+   Real m_parallel_conductivity_limit;
    bool m_subtract_fs_par_div;
    FluxSurface m_flux_surface;
 };

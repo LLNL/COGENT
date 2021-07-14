@@ -13,10 +13,10 @@
 #include "GKSystemIC.H"
 #include "GKSystemBC.H"
 #include "CH_HDF5.H"
-#include "GKVector.H"
+#include "ODEVector.H"
 #include "GKScalarOp.H"
 #include "GyroaverageOperatorFactory.H"
-#include "Checkpoints.H"
+#include "TiDefinitions.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -75,36 +75,57 @@ public:
     *
     *  @param[in] pp the input database.
     */
+   GKOps() :
+      m_vlasov(NULL),
+      m_collisions(NULL),
+      m_neutrals(NULL),
+      m_transport(NULL),
+      m_fluidOp(NULL),
+      m_scalarOp(NULL),
+      m_boltzmann_electron(NULL),
+      m_units(NULL),
+      m_initial_conditions(NULL),
+      m_boundary_conditions(NULL),
+      m_is_defined(false),
+      m_kinetic_ghosts(4),
+      m_fluid_ghosts(4),
+      m_fixed_efield(false),
+      m_zero_efield(false),
+      m_transport_model_on(false),     
+      m_enforce_quasineutrality(false),
+      m_step_const_kin_coeff_fluidop(false),
+      m_history(false),
+      m_hist_freq(1),
+      m_last_hist(0),
+      m_hist_count(0),
+      m_expand_incr(100),
+      m_hist_fieldname("field"),
+      m_dt_vlasov_expl(DBL_MAX),
+      m_dt_collisions_expl(DBL_MAX),
+      m_dt_transport_expl(DBL_MAX),
+      m_dt_fluids_expl(DBL_MAX),
+      m_dt_scalars_expl(DBL_MAX),
+      m_dt_neutrals_expl(DBL_MAX),
+      m_dt_vlasov_imex(DBL_MAX),
+      m_dt_collisions_imex(DBL_MAX),
+      m_dt_transport_imex(DBL_MAX),
+      m_dt_fluids_imex(DBL_MAX),
+      m_dt_scalars_imex(DBL_MAX),
+      m_dt_neutrals_imex(DBL_MAX),
+      m_time_scale_vlasov(-1),
+      m_time_scale_collisions(-1),
+      m_time_scale_transport(-1),
+      m_time_scale_fluids(-1),
+      m_time_scale_scalars(-1),
+      m_time_scale_neutrals(-1),
+      m_count_vlasov(0),
+      m_count_collision(0),
+      m_count_transport(0),
+      m_count_fluids(0),
+      m_count_scalars(0),
+      m_count_neutrals(0),
+      m_verbosity(0) {;}   
 
-   void initializeElectricField( const GKState& state, const int cur_step, const double cur_time );
- 
-   void initializeKineticSpeciesPhysical( KineticSpeciesPtrVect&  a_species_comp,
-                                          const double a_time );
-
-   void initializeFluidSpeciesPhysical( CFG::FluidSpeciesPtrVect&  a_species_comp,
-                                        const double a_time );
-
-   inline
-   void initializeState( GKState& a_state, const int a_cur_step, const Real a_time )
-   {
-      CH_TIME("GKOps::initializeState()");
-      if ( a_cur_step > 0 ) {
-         // If restarting the old vorticity model, then the potential has already been set
-         m_initial_conditions->initializeSystem( a_state, a_time );
-      }
-      else {
-         m_initial_conditions->initializeSystem( a_state, m_phi, a_time );
-      }
-      m_fluidOp->initialize( a_state.dataFluid(), a_time );
-      enforceQuasiNeutrality( a_state.dataKinetic(), m_phi );
-   }
-
-  inline
-   void initializePotential( const Real a_time )
-   {
-      m_initial_conditions->initializePotentialField( m_phi, a_time );
-   }
-   
    /// Destructor.
    /**
     */
@@ -187,88 +208,53 @@ public:
     * @param[in] stage  stage number
     */
    
-   GKOps() :
-      m_vlasov(NULL),
-      m_collisions(NULL),
-      m_neutrals(NULL),
-      m_transport(NULL),
-      m_fluidOp(NULL),
-      m_scalarOp(NULL),
-      m_boltzmann_electron(NULL),
-      m_units(NULL),
-      m_initial_conditions(NULL),
-      m_boundary_conditions(NULL),
-      m_dt(0.0),
-      m_dt_scale(1.0),
-      m_is_defined(false),
-      m_kinetic_ghosts(4),
-      m_fluid_ghosts(4),
-      m_fixed_efield(false),
-      m_zero_efield(false),
-      m_transport_model_on(false),     
-      m_enforce_quasineutrality(false),
-      m_step_const_coef(false),
-      m_history(false),
-      m_hist_freq(1),
-      m_last_hist(0),
-      m_hist_count(0),
-      m_expand_incr(100),
-      m_hist_fieldname("field"),
-      m_dt_vlasov_expl(DBL_MAX),
-      m_dt_collisions_expl(DBL_MAX),
-      m_dt_transport_expl(DBL_MAX),
-      m_dt_fluids_expl(DBL_MAX),
-      m_dt_scalars_expl(DBL_MAX),
-      m_dt_neutrals_expl(DBL_MAX),
-      m_dt_vlasov_imex(DBL_MAX),
-      m_dt_collisions_imex(DBL_MAX),
-      m_dt_transport_imex(DBL_MAX),
-      m_dt_fluids_imex(DBL_MAX),
-      m_dt_scalars_imex(DBL_MAX),
-      m_dt_neutrals_imex(DBL_MAX),
-      m_time_scale_vlasov(-1),
-      m_time_scale_collisions(-1),
-      m_time_scale_transport(-1),
-      m_time_scale_fluids(-1),
-      m_time_scale_scalars(-1),
-      m_time_scale_neutrals(-1),
-      m_count_vlasov(0),
-      m_count_collision(0),
-      m_count_transport(0),
-      m_count_fluids(0),
-      m_count_scalars(0),
-      m_count_neutrals(0),
-      m_verbosity(0),
-      m_use_scales(false),
-      m_scale_tol(1e-12) {;}   
-   
-   void define( const GKState& a_state, 
-                const Real a_dt, 
-                const bool a_use_scales = false );
-   
+   void define( const GKState& a_state );
+
    bool isDefined() const { return m_is_defined; }
    
-   void resetDt( const Real a_dt )
+   void initializeElectricField(  const GKState& state, 
+                                  const int cur_step, 
+                                  const double cur_time );
+ 
+   void initializeKineticSpeciesPhysical( KineticSpeciesPtrVect&,
+                                          const double );
+
+   void initializeFluidSpeciesPhysical( CFG::FluidSpeciesPtrVect&,
+                                        const double );
+
+   inline
+   void initializeState(  GKState& a_state, 
+                          const int a_cur_step, 
+                          const Real a_time )
    {
-      CH_assert( a_dt>0.0 );
-      CH_assert( isDefined() );
-      m_dt = a_dt;
+      CH_TIME("GKOps::initializeState()");
+      if ( a_cur_step > 0 ) {
+         // If restarting the old vorticity model, 
+         // then the potential has already been set
+         m_initial_conditions->initializeSystem( a_state, a_time );
+      }
+      else {
+         m_initial_conditions->initializeSystem( a_state, m_phi, a_time );
+      }
+      m_fluidOp->initialize( a_state.dataFluid(), a_time );
+      enforceQuasiNeutrality( a_state.dataKinetic(), m_phi );
    }
+
+   inline
+   void initializePotential( const Real a_time )
+   {
+      m_initial_conditions->initializePotentialField( m_phi, a_time );
+   }
+   
+   void initializeTI (  const int,
+                        const Real,
+                        GKRHSData&, 
+                        const GKState&,
+                        const GKState&  );
 
    void preTimeStep  (const int,const Real,const GKState&,const GKState&);
    void postTimeStep (const int,const Real, const Real, GKState&);
-
    void postTimeStage(const int, const Real, const Real, GKState&, const int);
-   inline void postTimeStage( const int   a_step,
-                              const Real  a_time,
-                              const Real  a_dt,
-                              GKVector&   a_vec,
-                              const int   a_stage )
-   {
-      m_Y.copyFrom(a_vec.data());
-      postTimeStage(a_step,a_time,a_dt,m_Y,a_stage);
-      m_Y.copyTo(a_vec.data());
-   }
    
    void setElectricField( const GKState&                   state_comp,
                           const int                        step,
@@ -276,190 +262,45 @@ public:
                           CFG::EField&                     E_field,
                           const bool                       inject_field = true) const;
 
-   inline
-   void setScaleTolerance(const Real a_tol)
-   {
-     m_scale_tol = a_tol;
-   }
-
-   inline
-   void computeUScale( const GKVector&  a_vec )
-   {
-     static bool first_call = true;
-     if (m_use_scales) {
-       m_Y.copyFrom(a_vec.data());
-       m_Y.setVarScaling(m_scale_u.data(), m_scale_tol);
-     } else {
-       if (first_call) m_scale_u.ones();
-     }
-     first_call = false;
-   }
-
-   inline
-   void computeRHSOpScale( const GKVector&  a_vec )
-   {
-     static bool first_call = true;
-     if (m_use_scales) {
-       m_rhs.copyFrom(a_vec.data());
-       m_rhs.setVarScaling(m_scale_rhsop.data(), m_scale_tol);
-     } else {
-       if (first_call) m_scale_rhsop.ones();
-     }
-     first_call = false;
-   }
-
-   inline
-   void computeLHSOpScale( const GKVector&  a_vec )
-   {
-     static bool first_call = true;
-     if (m_use_scales) {
-       m_rhs.copyFrom(a_vec.data());
-       m_rhs.setVarScaling(m_scale_lhsop.data(), m_scale_tol);
-     } else {
-       if (first_call) m_scale_lhsop.ones();
-     }
-     first_call = false;
-   }
-
-   inline void scaleU(GKVector& a_vec) { a_vec.elementwiseMultiply(m_scale_u); }
-   inline void scaleRHSOp(GKVector& a_vec) { a_vec.elementwiseMultiply(m_scale_rhsop); }
-   inline void scaleLHSOp(GKVector& a_vec) { a_vec.elementwiseMultiply(m_scale_lhsop); }
-
-   inline void deScaleU(GKVector& a_vec) { a_vec.elementwiseDivide(m_scale_u); }
-   inline void deScaleRHSOp(GKVector& a_vec) { a_vec.elementwiseDivide(m_scale_rhsop); }
-   inline void deScaleLHSOp(GKVector& a_vec) { a_vec.elementwiseDivide(m_scale_lhsop); }
-
-   inline const GKVector& uScale() { return m_scale_u; }
-   inline const GKVector& rhsOpScale() { return m_scale_rhsop; }
-   inline const GKVector& lhsOpScale() { return m_scale_lhsop; }
-
-   inline Real scaledVecNormU( const GKVector& a_vec) 
-   { 
-     return a_vec.computeNorm(m_scale_u); 
-   }
-   inline Real scaledVecNormRHSOp( const GKVector& a_vec) 
-   { 
-     return a_vec.computeNorm(m_scale_rhsop); 
-   }
-   inline Real scaledVecNormLHSOp( const GKVector& a_vec) 
-   { 
-     return a_vec.computeNorm(m_scale_lhsop); 
-   }
-
    inline bool trivialSolutionOp() const { return m_trivial_solution_op; }
 
    void preOpEval( const GKState&, const Real, const Checkpoint&);
-   inline void preOpEval(const GKVector&    a_state,
-                         const Real         a_time,
-                         const Checkpoint&  a_chkpt )
-   {
-      m_Y.copyFrom(a_state.data());
-      preOpEval(m_Y, a_time, a_chkpt);
-   }
-
    void preSolutionOpEval( const GKState&, const Real, const Checkpoint&);
-   inline void preSolutionOpEval(const GKVector&    a_state,
-                                 const Real         a_time,
-                                 const Checkpoint&  a_chkpt )
-   {
-      m_Y.copyFrom(a_state.data());
-      preSolutionOpEval(m_Y, a_time, a_chkpt);
-   }
 
    void explicitOp( GKRHSData&, const Real, const GKState&);
-   inline void explicitOp(GKVector&       a_rhs, 
-                          const Real      a_time, 
-                          const GKVector& a_state_comp)
-   {
-      m_Y.copyFrom(a_state_comp.data());
-      explicitOp(m_rhs,a_time,m_Y);
-      m_rhs.copyTo(a_rhs.data());
-   }
-
    void explicitOpImEx( GKRHSData&, const Real, const GKState&);
-   inline void explicitOpImEx(GKVector&        a_rhs,
-                              const Real       a_time,
-                              const GKVector&  a_state_comp )
-   {
-      m_Y.copyFrom(a_state_comp.data());
-      explicitOpImEx(m_rhs,a_time,m_Y);
-      m_rhs.copyTo(a_rhs.data());
-   }
-
    void implicitOpImEx( GKRHSData&, const Real, const GKState&);
-   inline void implicitOpImEx(GKVector&        a_rhs,
-                              const Real       a_time,
-                              const GKVector&  a_state_comp )
-   {
-      m_Y.copyFrom(a_state_comp.data());
-      implicitOpImEx(m_rhs, a_time, m_Y);
-      m_rhs.copyTo(a_rhs.data());
-   }
+   void solutionOp( GKRHSData&, const Real, const GKState&);
 
    void explicitPC( GKRHSData&, const Real, const GKState&);
-   inline void explicitPC(GKVector&       a_rhs,
-                          const Real      a_time,
-                          const GKVector& a_state )
-   {
-      m_Y.copyFrom(a_state.data());
-      explicitPC(m_rhs,a_time,m_Y);
-      m_rhs.copyTo(a_rhs.data());
-   }
-
    void implicitPCImEx( GKRHSData&, const Real, const GKState&);
-   inline void implicitPCImEx(GKVector&        a_rhs,
-                              const Real       a_time,
-                              const GKVector&  a_state_comp )
-   {
-      m_Y.copyFrom(a_state_comp.data());
-      implicitPCImEx(m_rhs,a_time,m_Y);
-      m_rhs.copyTo(a_rhs.data());
-   }
-
-   void solutionOp( GKRHSData&, const Real, const GKState&);
-   inline void solutionOp(GKVector&       a_rhs,
-                          const Real      a_time,
-                          const GKVector& a_state )
-   {
-      m_Y.copyFrom(a_state.data());
-      solutionOp(m_rhs,a_time,m_Y);
-      m_rhs.copyTo(a_rhs.data());
-   }
-
-
    void solutionPC( GKRHSData&, const Real, const GKState&);
-   inline void solutionPC(GKVector&       a_rhs,
-                          const Real      a_time,
-                          const GKVector& a_state )
-   {
-      m_Y.copyFrom(a_state.data());
-      solutionPC(m_rhs,a_time,m_Y);
-      m_rhs.copyTo(a_rhs.data());
-   }
 
-   void defineMultiPhysicsPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
+   void defineMultiPhysicsPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                               std::vector<DOFList>&,
-                              const GKVector&,
+                              const ODEVector&,
+                              const GKState&,
+                              void*,
                               const std::string&,
                               const std::string&,
                               bool);
 
-   void updateMultiPhysicsPC( std::vector<Preconditioner<GKVector,GKOps>*>&,
-                              const GKVector&,
+   void updateMultiPhysicsPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
+                              const GKState&,
                               const Real,
+                              const int, 
+                              const int,
                               const Real,
                               const bool );
 
-   bool preallocatePCMatrixImEx (void*,const GKVector&);
-   void assemblePCImEx( const bool, void*, const GKVector&, const Real, const Real );
-   void assembleVlasovOpPCImEx(void *_P, const GKVector& state, const Real time, const Real shift);
+   void solveSolutionPC( GKRHSData&, const GKState&, int a_idx=-1);
 
-   bool preallocateSolPCMatrix (void*,const GKVector&);
-   void assembleSolPC( const bool, void*, const GKVector&, const Real );
-   
-   void solveSolutionPC( GKVector&, const GKVector&, int a_idx=-1);
-   void solveFluidOpPCImEx( GKVector&, const GKVector&, int a_idx=-1);
-   void solveVlasovOpPCImEx( GKVector&, const GKVector&, int a_idx=-1);
+   void solveFluidOpPCImEx( GKRHSData&, const GKState&, int a_idx=-1);
+
+   void solveVlasovOpPCImEx(  Preconditioner<ODEVector,AppCtxt>* const,
+                              GKRHSData&, 
+                              const GKState&, 
+                              int a_idx=-1 );
 
    void divideJ( const KineticSpeciesPtrVect& soln_mapped,
                  KineticSpeciesPtrVect&       soln_physical ) const;
@@ -562,6 +403,13 @@ public:
                             const int             mu_index,
                             const double&         time ) const;
 
+   void plotbfVParallelTheta( const std::string&    filename,
+			      const KineticSpecies& soln_species,
+			      const int             radial_index,
+			      const int             toroidal_index,
+			      const int             mu_index,
+			      const double&         time ) const;
+
    void plotRTheta( const std::string&    filename,
                     const KineticSpecies& soln_species,
                     const int             vpar_index,
@@ -599,9 +447,13 @@ public:
                               const KineticSpecies& kinetic_species,
                               const double&         time ) const;
 
-   void plotEnergyDensity( const std::string&    filename,
-                         const KineticSpecies& soln_species,
-                         const double&         time ) const;
+   void plotEnergyDensity(const std::string&    filename,
+                          const KineticSpecies& soln_species,
+                          const double&         time ) const;
+
+   void plotKineticEnergyDensity(const std::string&    filename,
+                                 const KineticSpecies& soln_species,
+                                 const double&         time ) const;
 
    void plotPerpEnergyDensity( const std::string&    filename,
                          const KineticSpecies& soln_species,
@@ -734,8 +586,6 @@ public:
      return m_gyroavg_ops;
    }
 
-   inline bool stepConstCoef() const { return m_step_const_coef; }
-   
 private:
    
    /// Parse parameters.
@@ -862,14 +712,13 @@ private:
    const GKSystemBC*              m_boundary_conditions;
    RefCountedPtr<PhaseGeom>       m_phase_geometry;
 
-   Real m_dt;
-   Real m_dt_scale;
    bool m_is_defined;
    
    int                            m_kinetic_ghosts;
    int                            m_fluid_ghosts;
       
    bool                           m_consistent_potential_bcs;
+   bool                           m_use_vlasov_ampere_bcs;
    bool                           m_ampere_post_step_update;
    bool                           m_ampere_law;
    bool                           m_ampere_cold_electrons;
@@ -887,12 +736,12 @@ private:
    bool                           m_transport_imex_implicit;
    bool                           m_neutrals_imex_implicit;
 
-   GKState                        m_Y;
-   GKRHSData                      m_rhs;
+   /* needs to be removed */
+   GKState m_Y;
 
    bool m_state_includes_potential;
    bool m_trivial_solution_op;
-   bool m_step_const_coef;
+   bool m_step_const_kin_coeff_fluidop;
 
    bool m_history;   // whether to write out histories
    int m_hist_freq;  // how often to write out field history
@@ -948,11 +797,6 @@ private:
    int m_count_neutrals;
 
    int m_verbosity;
-
-   /* Scales */
-   bool m_use_scales;
-   Real m_scale_tol;
-   GKVector m_scale_u, m_scale_rhsop, m_scale_lhsop;
 
    /* gyroaverage operators */
    std::map<std::string,GyroaverageOperator*> m_gyroavg_ops;

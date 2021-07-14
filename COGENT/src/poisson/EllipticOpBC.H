@@ -10,7 +10,8 @@ class EllipticOpBC
 {
 public:
 
-   EllipticOpBC(const int num_boundaries);
+   EllipticOpBC(const int num_boundaries,
+                const int num_blocks);
 
    virtual ~EllipticOpBC();
 
@@ -22,6 +23,10 @@ public:
    virtual int getBCType( const int block_number,
                           const int dir,
                           const int side ) const = 0;
+ 
+   virtual std::string getBCSubType(const int block_number,
+                                    const int dir,
+                                    const int side ) const = 0;
    
    virtual void setBCValue( const int block_number,
                             const int dir,
@@ -41,25 +46,39 @@ public:
                                                       const int dir,
                                                       const int side ) const = 0;
 
-   virtual void apply( const MultiBlockLevelGeom& a_geom,
-                       const Box&                 a_coord_sys_box,
-                       const double&              a_time,
-                       const int                  a_dir,
-                       const int                  a_side,
-                       FArrayBox&                 a_phi ) const = 0;
+   virtual void apply( const MultiBlockLevelGeom&  geom,
+                       const Box&                  coord_sys_box,
+                       const double&               time,
+                       const int                   dir,
+                       const int                   side,
+                       FArrayBox&                  phi ) const = 0;
+
+   virtual RefCountedPtr<EllipticOpBC> clone( const bool extrapolated = false ) const = 0;
 
    bool hasNeumannCondition() const;
+   
+   bool hasCoupledBoundary() const;
 
-   static const int DIRICHLET = 0;
-   static const int NEUMANN = 1;
-   static const int UNDEFINED = -1;
+   enum EllipticBCType {UNDEFINED = -1, DIRICHLET, NEUMANN, EXTRAPOLATED};
 
 protected:
+   
+   RefCountedPtr<GridFunction> getBlockBCData( const int  block_number,
+                                               const int  dir,
+                                               const int  side ) const
+   {
+      return m_bc_block_data[block_number*2*SpaceDim + dir + side*SpaceDim];
+   }
 
    Vector<RefCountedPtr<GridFunction> > m_bc_function;
+   Vector<RefCountedPtr<GridFunction> > m_bc_block_data;
    Vector<std::string> m_bdry_name;
    Vector<int> m_bc_type;
+   Vector<std::string> m_bc_subtype;
    Vector<double> m_bc_value;
+
+   int m_num_boundaries;
+   int m_num_blocks;
 };
 
 #include "NamespaceFooter.H"

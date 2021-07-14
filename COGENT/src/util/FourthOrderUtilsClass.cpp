@@ -164,6 +164,21 @@ void FourthOrderUtil::fourthOrderCellProdSG( LevelData<FArrayBox>& a_uTimesV,
 //********************************************************************************//
 //********************************************************************************//
 
+
+void FourthOrderUtil::fourthOrderAverageCellGen( FArrayBox& a_phi, 
+								   				 const ProblemDomain& a_domain, 
+								   				 const Box& 			a_bx, 
+                                          		 int a_sgn)
+{
+   
+   if (!useSG) { fourthOrderAverageCell(a_phi, a_domain, a_bx, a_sgn); }
+   else
+   {
+      FourthOrderUtil::fourthOrderAverageCellSG(a_phi, a_domain, a_bx, a_sgn);
+   }
+}
+
+
 void FourthOrderUtil::fourthOrderAverageCellSG( FArrayBox& a_phi,
                                             int a_sgn )
 {

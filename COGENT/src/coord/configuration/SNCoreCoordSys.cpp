@@ -9,7 +9,8 @@ const std::string SNCoreCoordSys::pp_name = "sncore";
 
 SNCoreCoordSys::SNCoreCoordSys( ParmParse& a_pp_grid,
                                 ParmParse& a_pp_geom )
-   : m_num_toroidal_sectors(1)
+  : m_num_toroidal_sectors(1),
+    m_divergence_cleaning_bc(NULL)
 {
    readGridParams( a_pp_grid );
 
@@ -30,7 +31,8 @@ SNCoreCoordSys::SNCoreCoordSys( ParmParse&                a_pp_geom,
                                 const SingleNullCoordSys& a_single_null_coord_sys,
                                 const DisjointBoxLayout&  a_single_null_dbl,
                                 DisjointBoxLayout&        a_dbl )
-   : m_num_toroidal_sectors(1)
+  : m_num_toroidal_sectors(1),
+    m_divergence_cleaning_bc(NULL)
 {
    m_numcells_core_radial    = a_single_null_coord_sys.numCellsCoreRadial();
    m_numcells_mcore_poloidal = a_single_null_coord_sys.numCellsMcorePoloidal();
@@ -108,6 +110,7 @@ SNCoreCoordSys::~SNCoreCoordSys()
    for (int i=0; i<m_coord_vec.size(); ++i) {
       delete m_coord_vec[i];
    }
+   if (m_divergence_cleaning_bc) delete m_divergence_cleaning_bc;
 }
 
 
@@ -188,16 +191,14 @@ SNCoreCoordSys::define( ParmParse& a_pp_geom )
    }
 
    if ( correct_field ) {
-
+      m_divergence_cleaning_bc = new SNCoreEllipticOpBC(num_blocks);
       int bc_type = 0;     // Homogeneous Dirichlet
       int bc_value = 0.;
       for (int side=0; side<2; ++side) {
-         m_divergence_cleaning_bc.setBCType(0, RADIAL_DIR, side, bc_type);
-         m_divergence_cleaning_bc.setBCValue(0, RADIAL_DIR, side, bc_value);
+         m_divergence_cleaning_bc->setBCType(0, RADIAL_DIR, side, bc_type);
+         m_divergence_cleaning_bc->setBCValue(0, RADIAL_DIR, side, bc_value);
       }
    }
-
-   m_provides_flux = a_pp_geom.contains("field_coefficients_file");
 }
 
 

@@ -64,6 +64,8 @@ ToroidalBlockCoordSys::ToroidalBlockCoordSys( ParmParse&               a_parm_pa
    if (m_verbose) {
       printParameters();
    }
+   
+   m_provides_flux = true;
 }
 
 
@@ -350,7 +352,10 @@ void
 ToroidalBlockCoordSys::getMagneticFlux(const FArrayBox& a_physical_coordinates,
                                        FArrayBox&       a_magnetic_flux ) const
 {
-  for (BoxIterator bit(a_physical_coordinates.box()); bit.ok(); ++bit) {
+  const Box& box(a_magnetic_flux.box());
+  CH_assert(a_physical_coordinates.box().contains(box));
+   
+  for (BoxIterator bit(box); bit.ok(); ++bit) {
     IntVect iv = bit();
     
     RealVect coord;
@@ -362,7 +367,41 @@ ToroidalBlockCoordSys::getMagneticFlux(const FArrayBox& a_physical_coordinates,
   }
 }
 
+void
+ToroidalBlockCoordSys::getNormMagneticFlux( const FArrayBox& a_physical_coordinates,
+                                            FArrayBox&       a_magnetic_flux ) const
 
+{
+   // Get X,Y,Z coordinates of magnetic axis and separatrix at Y=0
+   const RealVect& X_mag_axis = getMagAxis();
+   RealVect X_mag_sep(X_mag_axis);
+   X_mag_sep[RADIAL_DIR] += m_a;
+   
+   double physFluxOnAxis = getMagneticFlux(X_mag_axis);
+   double physFluxOnSep = getMagneticFlux(X_mag_sep);
+   
+   getMagneticFlux(a_physical_coordinates, a_magnetic_flux);
+   a_magnetic_flux.plus(-physFluxOnAxis);
+   a_magnetic_flux.divide(physFluxOnSep - physFluxOnAxis);
+   
+}
+
+
+double
+ToroidalBlockCoordSys::getNormMagneticFlux( const RealVect& a_physical_coordinate ) const
+{
+   // Get X,Y,Z coordinates of magnetic axis and separatrix at Y=0
+   const RealVect& X_mag_axis = getMagAxis();
+   RealVect X_mag_sep(X_mag_axis);
+   X_mag_sep[RADIAL_DIR] += m_a;
+   
+   double physFluxOnAxis = getMagneticFlux(X_mag_axis);
+   double physFluxOnSep = getMagneticFlux(X_mag_sep);
+   
+   double physFlux = getMagneticFlux(a_physical_coordinate);
+   
+   return (physFlux - physFluxOnAxis)/(physFluxOnSep - physFluxOnAxis);
+}
 
 double
 ToroidalBlockCoordSys::getMagneticFlux( const RealVect& a_physical_coordinate ) const
@@ -386,8 +425,11 @@ ToroidalBlockCoordSys::getMagneticFlux( const Real a_r) const
 {
    
    //Set the region where magnetic flux will be defined
+   //Becasue we need a flux value at the separatrix for
+   //normalized flux calculations, should have flux function
+   //defined at least till separatrix
    Real r_in = m_rmin - 4.0 * m_dx[RADIAL_DIR];
-   Real r_out = m_rmax + 4.0 * m_dx[RADIAL_DIR];
+   Real r_out = Max(m_a,m_rmax) + 4.0 * m_dx[RADIAL_DIR];
 
    if (!m_is_flux_defined) {
       initializeMagneticFluxFunction(r_in, r_out);
@@ -702,29 +744,6 @@ void ToroidalBlockCoordSys::convertCartesianToToroidal(RealVect& a_vect,
   a_vect[POLOIDAL_DIR] = F_theta;
 }
 
-void ToroidalBlockCoordSys::convertCartesianToToroidal(RealVect& a_coord) const
-{
-  //get Cartisian coordinates
-  Real x = a_coord[0];
-  Real y = a_coord[1];
-  Real z = a_coord[2];
-
-  //compute toroidal coordinates
-  Real phi = atan2(y,x);
-  if (phi < 0.) phi += 2.*Pi;
-
-  Real r = sqrt(pow(sqrt(x*x+y*y)-m_R0,2)+z*z);
-  Real r_xy = sqrt(x*x + y*y);
-  Real theta = asin(z/r);
-  if (r_xy < m_R0) theta = Pi - theta;
-  if (theta < 0) theta += 2. * Pi;
-
-  a_coord[RADIAL_DIR] = r;
-  a_coord[TOROIDAL_DIR] = phi;
-  a_coord[POLOIDAL_DIR] = theta;
-
-}
-
 void ToroidalBlockCoordSys::convertCylindricalToCartesian(RealVect& a_vect,
                                                           const RealVect& a_coord) const
 {
@@ -765,29 +784,6 @@ void ToroidalBlockCoordSys::convertCylindricalToCartesian(FArrayBox& a_vect,
 
     for (int dir=0; dir<SpaceDim; ++dir) {
       a_vect(iv,dir) = vect[dir];
-    }
-  }
-}
-
-void ToroidalBlockCoordSys::getToroidalCoords(FArrayBox& a_coords) const
-{
-  Box box = a_coords.box();
-
-  FArrayBox X(box,SpaceDim);
-  getCellCenteredRealCoords(X);
-
-  RealVect coord;
-  for (BoxIterator bit(box); bit.ok(); ++bit) {
-    IntVect iv = bit();
-
-    for (int dir=0; dir<SpaceDim; ++dir) {       
-      coord[dir] = X(iv,dir);
-    }
-
-    convertCartesianToToroidal(coord);
-
-    for (int dir=0; dir<SpaceDim; ++dir) {
-      a_coords(iv,dir) = coord[dir];
     }
   }
 }

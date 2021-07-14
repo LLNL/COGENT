@@ -85,10 +85,10 @@ public:
                            const EField&                      E_field,
                            const double                       time );
 
-   virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+   virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                std::vector<PS::DOFList>&,
-                               const PS::GKVector&,
-                               PS::GKOps&,
+                               const PS::ODEVector&,
+                               void*,
                                const std::string&,
                                const std::string&,
                                bool,
@@ -96,10 +96,12 @@ public:
                                const PS::GlobalDOFFluidSpecies&,
                                int );
 
-   virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::GKVector,PS::GKOps>*>&,
+   virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 const PS::KineticSpeciesPtrVect&,
                                 const FluidSpeciesPtrVect&,
                                 const Real,
+                                const int,
+                                const int,
                                 const Real,
                                 const bool,
                                 const int );
@@ -121,6 +123,8 @@ public:
    virtual void updatePCImEx( const FluidSpeciesPtrVect&       fluid_species,
                               const PS::KineticSpeciesPtrVect& kinetic_species,
                               const double                     time,
+                              const int                        step,
+                              const int                        stage,
                               const double                     shift,
                               const int                        component);
 
@@ -130,6 +134,19 @@ public:
                              const int                         component );
 
    virtual bool trivialSolutionOp() const {return false;}
+
+   virtual void setStepConstKinCoeff(const bool a_step_const_kin_coeff)
+   {
+     if (a_step_const_kin_coeff) {
+       if (!procID()) {
+         std::cout << "VorticityOp: skipping preconditioner updates ";
+         std::cout << "at time integration stages because kinetic coeffs ";
+         std::cout << "are assumed constant in a step.\n";
+       }
+       m_update_pc_skip_stage_i = true;
+       m_update_pc_skip_stage_e = true;
+     }
+   }
 
    virtual CFGVars* createStateVariable( const string&       a_pp_prefix,
                                          const std::string&  a_name,
@@ -240,10 +257,13 @@ private:
    bool m_remove_axisymmetric_phi;
    bool m_consistent_lower_bc_only;
    bool m_consistent_upper_bc_only;
-   int m_update_pc_freq;
+   int m_update_pc_freq_oldmodel;
    int m_it_counter;
 
    RefCountedPtr<GridFunction> m_electron_temperature_func;
+
+   int m_update_pc_freq_e, m_update_pc_freq_i;
+   bool m_update_pc_skip_stage_e, m_update_pc_skip_stage_i;
 };
 
 

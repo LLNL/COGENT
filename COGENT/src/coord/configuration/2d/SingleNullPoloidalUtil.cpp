@@ -110,6 +110,13 @@ SingleNullPoloidalUtil::SingleNullPoloidalUtil( const ParmParse&  a_pp,
 }
 
 
+SingleNullPoloidalUtil::~SingleNullPoloidalUtil()
+{
+   if ( m_RZ_interp ) delete m_RZ_interp;
+   if ( m_field_interp ) delete m_field_interp;
+}
+
+
 void
 SingleNullPoloidalUtil::setRZInterp( const ParmParse&  a_pp,
                                      const string&     a_interp_method,

@@ -1,8 +1,6 @@
 #ifndef _CODIM1STENCIL_
 #define _CODIM1STENCIL_
 
-enum CoDim1StencilValueType {VALUE,DERIVATIVE};
-
 #include "FArrayBox.H"
 #include "RealVect.H"
 

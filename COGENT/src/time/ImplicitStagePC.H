@@ -39,7 +39,10 @@ class ImplicitStagePC: public IMEXStagePCFunction<T,Ops>
       return(a_Y.computeNorm()); 
     }
 
-    inline bool isDefined() const { return m_is_Defined;  }
+    inline bool isDefined() const 
+    { 
+      return (m_is_Defined && m_Pmat.isDefined());  
+    }
 
     inline void setJFNKEps(Real a_eps) { m_epsJFNK = a_eps; }
 
@@ -57,13 +60,6 @@ class ImplicitStagePC: public IMEXStagePCFunction<T,Ops>
 
     void define(const T&, Ops&, const std::string&, const std::string&);
     inline void setIsLinear(bool a_isLinear) { m_isLinear = a_isLinear; }
-
-    inline void update(const T& a_X, const Real a_time, const Real a_shift) 
-    {
-       m_shift = a_shift;
-       m_stage_time = a_time;
-       m_ops->assemblePCImEx(true, (void*)&m_Pmat, a_X, a_time, a_shift);
-    }
 
     inline void getDiagonal(std::vector<Real>& a_D) const
     {
@@ -106,7 +102,6 @@ void ImplicitStagePC<T,Ops>::define(  const T&            a_state,
   ParmParse pp_IPreCond( a_optPrefix.c_str() );
   parseParameters( pp_IPreCond );
 
-  m_ops->preallocatePCMatrixImEx((void*)&m_Pmat, a_state);
   m_is_Defined = true;
   return;
 }

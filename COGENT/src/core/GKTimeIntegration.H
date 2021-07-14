@@ -331,7 +331,7 @@ public:
 
    void copyFrom( const Real* a_Y );
 
-   void addFrom( Real *a_Y, const Real& a_a=1.0 );
+   void addFrom( const Real* const a_Y, const Real& a_a=1.0 );
 
    const Real& operator[] (int idx) const;
    
