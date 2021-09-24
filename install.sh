@@ -22,8 +22,11 @@ if [[ $HOSTNAME == "quartz"* ]]; then
   export MACHINE="quartz"
 else
   if [[ $HOSTNAME == "cori"* || $HOSTNAME == "edison"* ]]; then
+    echo "Purging modules for Cori (NERSC)"
+    module purge
     echo "Loading GNU compilers for Cori/Edison (NERSC)"
-    module swap PrgEnv-intel PrgEnv-gnu
+    module load PrgEnv-gnu
+
     export CC=$(which cc)
     export CXX=$(which CC)
     export CPP=$(which cpp)
@@ -34,6 +37,16 @@ else
     export MPIF77=$(which ftn)
     export MPIF90=$(which ftn)
     export MACHINE="nersc"
+
+    export HDF5_DIR=$HDF5_ROOT
+
+    export CRAY_CPU_TARGET=haswell
+
+    # Note: These flags are needed because dependencies
+    # are specified out of order in the linker command line.
+    # Without them a linker error occurs: "DSO missing from command line"
+    # Suggested here: https://stackoverflow.com/a/55086637
+    export LDFLAGS="-Wl,--copy-dt-needed-entries"
   fi
 fi
 echo "CC is $CC"
@@ -66,7 +79,8 @@ if [[ $HOSTNAME == "quartz"* ]]; then
 else
   if [[ $HOSTNAME == "cori"* || $HOSTNAME == "edison"* ]]; then
     echo "Loading HDF5 for Cori/Edison (NERSC)"
-    export HDF5_DIR="/opt/cray/pe/hdf5-parallel/1.10.0.3/GNU/5.1"
+    module load cray-hdf5-parallel/1.10.5.2
+    export HDF5_DIR=$CRAY_HDF5_DIR
     echo "HDF5: $HDF5_DIR"
   fi
 fi
@@ -97,5 +111,5 @@ cd $ROOT_DIR
 
 # build COGENT
 cd $COGENT_DIR/$COGENT_EXEC_DIR
-make -j all OPT=TRUE DEBUG=FALSE
+make -j all OPT=TRUE DEBUG=FALSE LDFLAGS=$LDFLAGS
 cd $ROOT_DIR
