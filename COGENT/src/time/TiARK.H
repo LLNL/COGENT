@@ -55,12 +55,16 @@ class TiARK : public TimeIntegrator<Vector,Ops>
      * @param[in] a_name string containing the method name
     */
     virtual void define(  ParmParse&, 
-                          const std::string&, 
+                          const std::string& a_name,
                           const Vector&, 
                           Ops* const );
 
     /// Initialize
-    virtual void initialize( const Real, const Vector& );
+    /**
+     * @param[in] a_time   Simulation time
+     * @param[in] a_Y      Vector passed to ImplicitStageJacobian::updatePreCondMat
+     */
+    virtual void initialize( const Real a_time, const Vector& a_Y);
 
     /// Advance one time step
     /**

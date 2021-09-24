@@ -15,7 +15,8 @@ class AppCtxt
 
     AppCtxt() {}
     virtual ~AppCtxt() {}
-    
+
+    /// Start the state at given time step number and time
     virtual void initialize( const int, const double ) = 0;
     virtual Real stableDt( const int, const TimeIntegratorType ) = 0;
     

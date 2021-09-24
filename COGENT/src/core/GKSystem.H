@@ -31,7 +31,7 @@ typedef RefCountedPtr<LevelData<FArrayBox> > VelocityPtr;
  * "num_cells", the number of cells in the radial, poloidal, vparallel, and mu directions,
  * "is_periodic", an integer array of zeros and ones for periodicity in the coordinate
  * directions (same order). some parameters to control specification of what hdf5
- * files to write for plotting (see below), and "magneic_geometry_mapping", the name of the
+ * files to write for plotting (see below), and "magnetic_geometry_mapping", the name of the
  * magnetic geometry.   Specific parameters of the geometry are parsed in the geometry
  * implementation.  The plotting parameters are hdf_density (default true),
  * df_vpartheta (default false), and hdf_frtheta (default false), to control creation
@@ -58,12 +58,10 @@ class GKSystem : public AppCtxt
 
       /// Constructor with initialization.
       /**
-       *  Pure virtual function that will be resposible for setting
-       *  initial conditions on the soln data.
+       *  Pure virtual function that will be responsible for setting
+       *  initial conditions on the solution data.
        *
        *  @param[in] pp                     the input database.
-       *  @param[in] a_useExternalTI   Flag to indicate if using native (false, default) 
-       *                                    or external (true) time integrators. 
        */
       GKSystem( ParmParse& pp );
 
@@ -72,6 +70,11 @@ class GKSystem : public AppCtxt
        */
       virtual ~GKSystem();
 
+      /// Initialize the simulation
+      /**
+       * @param[in] cur_step    Simulation step number
+       * @param[in] cur_time    Simulation time
+       */
       virtual void initialize( const int cur_step, const double cur_time );
    
       /// Compute a stable time step.
@@ -90,9 +93,11 @@ class GKSystem : public AppCtxt
 
       /// Augment a history file with a value at a spatial index
       /**
-       *Augment a history file with a value at a spatial index
+       *
+       * @param[in] cur_step       Current simulation step number
+       * @param[in] cur_time       Current simulation time
+       * @param[in] startup_flag   true once at start of simulation, false otherwise
        */
-
       void writeFieldHistory(int cur_step, double cur_time, bool startup_flag);
 
       /// Write checkpoint file.
@@ -137,11 +142,19 @@ class GKSystem : public AppCtxt
 
       int  getVectorSize()  { return m_state_comp.getVectorSize(); }
 
+      /// Copy internal state into given ODEVector
+      /**
+       * @param[out] a_Y  ODEVector to copy data into
+       */
       inline void copyStateToArray (ODEVector& a_Y) const
       { 
         m_state_comp.copyTo(a_Y.data());   
       }
 
+      /// Load data from input into internal state
+      /**
+       * @param[in] a_Y   Copy data from this state vector
+       */
       inline void copyStateFromArray (const ODEVector& a_Y) 
       { 
         m_state_comp.copyFrom(a_Y.data()); 

@@ -130,6 +130,7 @@ class COGENTTimeIntegration : public Simulation<Vector,System>
        */
       void advance();
 
+      /// Runs the simulation by advancing until done
       inline  void solve()
       {
         while ( notDone() ) advance();
@@ -491,7 +492,7 @@ COGENTTimeIntegration<Vector,System>::~COGENTTimeIntegration<Vector,System>()
 template <class Vector, class System>
 bool COGENTTimeIntegration<Vector,System>::notDone()
 {
-   return ( (m_cur_step<m_max_step) && (m_cur_time<m_max_time) );
+   return ( (m_cur_step < m_max_step) && (m_cur_time < m_max_time) );
 }
 
 
