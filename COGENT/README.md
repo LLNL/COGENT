@@ -1,5 +1,11 @@
+# Cogent
+
 COGENT is a tokamak edge plasma gyro-kinetic simulation code.   
 
 COGENT was developed at LLNL using NERSC CHOMBO, and stored in the NERSC 
 Subversion repo: https://anag-repo.lbl.gov/svn/COGENT.
+
+
+- [Code structure](README-CodeStructure.md)
+- [Time integration](README-TimeIntegration.md)
 

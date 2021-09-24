@@ -1,11 +1,11 @@
+# Cogent time integration
+
 COGENT can be used with the following external time integration libraries:
 - SUNDIALS
 - PETSc
 By default, it will use native time integrators.
 
------------------------
-Compiling with SUNDIALS
------------------------
+## Compiling with SUNDIALS
 
 See SUNDIALS (https://github.com/LLNL/sundials) documentation and repo 
 for instructions on how to dowload and compile it. A quick set of 
@@ -18,8 +18,7 @@ or "lib64" are located).
 - Compile COGENT as usual - it will use the SUNDIALS_DIR variable
 to find SUNDIALS and compile with the SUNDIALS interface.
 
-Running with SUNDIALS Time Integration
---------------------------------------
+### Running with SUNDIALS Time Integration
 
 In the input file, add the following line:
 
@@ -38,9 +37,7 @@ For other available options (setting tolerances,
 verbosity, etc.), see 
 SundialsTimeIntegration::parseParametersSUNDIALS()
 
---------------------
-Compiling with PETSc
---------------------
+## Compiling with PETSc
 
 See PETSc (https://gitlab.com/petsc/petsc) documentation
 and repo for instructions on how to download and compile
@@ -54,8 +51,7 @@ set to meaningful values.
 and PETSC_ARCH variables to find PETSc and compile with
 the PETSc interface.
 
-Running with PETSc Time Integration
---------------------------------------
+### Running with PETSc Time Integration
 
 In the input file, add the following line:
 
