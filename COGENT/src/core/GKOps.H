@@ -71,9 +71,7 @@ public:
    /// Constructor with initialization.
    /**
     *  Pure virtual function that will be resposible for setting
-    *  initial conditions on the soln data.
-    *
-    *  @param[in] pp the input database.
+    *  initial conditions on the solution data.
     */
    GKOps() :
       m_vlasov(NULL),
@@ -134,6 +132,9 @@ public:
    /// Returns the Vlasov time scale.
    /**
     * Returns the Vlasov time scale.
+    *
+    * @param[in] state         Current simulation state
+    * @param[in] step_number   Simulation time step number
     */
    Real dtScaleVlasov( const GKState& state, const int step_number )
    {
@@ -207,7 +208,7 @@ public:
     * @param[in] time current time.
     * @param[in] stage  stage number
     */
-   
+
    void define( const GKState& a_state );
 
    bool isDefined() const { return m_is_defined; }
@@ -240,6 +241,12 @@ public:
       enforceQuasiNeutrality( a_state.dataKinetic(), m_phi );
    }
 
+   /// Set electrostatic potential from initial conditions
+   /**
+    * Evaluate the initial conditions at given \p a_time
+    *
+    * Modifies the m_phi member
+    */
    inline
    void initializePotential( const Real a_time )
    {

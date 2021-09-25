@@ -23,4 +23,12 @@ The [COGENTTimeIntegration](src/driver/COGENTTimeIntegration.H) class
 is a wrapper around an integrator [TiRK](src/time/TiRK.H) or
 [TiARK](src/time/TiARK.H). 
 
+## Gyrokinetic system
+
+The [GKSystem](src/core/GKSystem.H) object coordinates other objects:
+[GKOps](src/core/GKOps.H).
+
+GKOps in turn makes use of [GKUnits](src/core/GKUnit.H),
+[GKSystemBC](src/core/GKSystemBC.H) and
+[GKSystemIC](src/core/GKSystemIC.H).
 

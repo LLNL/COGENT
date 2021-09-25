@@ -15,6 +15,11 @@
 
 #include "NamespaceHeader.H"
 
+/// Gyrokinetic system boundary conditions
+/**
+ *
+ *
+ */
 class GKSystemBC
 {
    public:
@@ -23,7 +28,11 @@ class GKSystemBC
 
       ~GKSystemBC();
 
-      // fills ghost cells on the physical domain
+      /// fills ghost cells on the physical domain
+      /**
+       *
+       * @param[in,out] state
+       */
       void fillGhostCells( GKState&                               state,
                            const CFG::LevelData<CFG::FArrayBox>&  phi,
                            const LevelData<FluxBox>&              E_field,
@@ -78,10 +87,24 @@ class GKSystemBC
       void parsePotential( ParmParse& a_pp,
                            const std::string& a_coord_sys_type );
 
+      /// Create KineticSpeciesBC objects for each species
+      /**
+       * For each species in \p a_species, uses
+       * KineticSpeciesBCFactory to push boundary conditions into the
+       * m_kinetic_bcs member variable.
+       *
+       * Settings taken from ParmParse("BC." + species_name)
+       *
+       * @param[in] a_pp    Not used
+       * @param[in] a_coord_sys_type   Coordinate system name
+       *                               passed to KineticSpeciesBCFactory::create
+       * @param[in] a_species    A vector of pointers to species
+       */
       void parseKineticSpecies( ParmParse& a_pp,
                                 const std::string& a_coord_sys_type,
                                 const KineticSpeciesPtrVect& a_species  );
 
+      /// Create fluid boundary conditions. Currently disabled
       void parseFluidSpecies( ParmParse& a_pp,
                               const std::string& a_coord_sys_type,
                               const CFG::FluidSpeciesPtrVect& a_species );
