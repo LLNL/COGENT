@@ -11,7 +11,6 @@
 #include "LevelData.H"
 #include "FluxBox.H"
 #include "BoxIterator.H"
-
 #include "PetscSolver.H"
 
 // for now, include both ViscousTensorOp versions
@@ -20,6 +19,7 @@
 
 #include "NamespaceHeader.H"
 
+#ifdef CH_USE_PETSC
 // *******************************************************
 // PetscSolverPoisson Implementation
 // *******************************************************
@@ -30,7 +30,9 @@ PetscSolverPoisson<LevelData<FArrayBox> >::PetscSolverPoisson()
    m_beta(1.0)
 {
 }
+#endif
 
+#ifdef CH_USE_PETSC
 // *******************************************************
 template< >
 void PetscSolverPoisson<LevelData<FArrayBox> >::define( Real a_dx,
@@ -38,6 +40,7 @@ void PetscSolverPoisson<LevelData<FArrayBox> >::define( Real a_dx,
 {
   PetscSolver<LevelData<FArrayBox> >::define(a_dx,a_homogeneous);
 }
+#endif
 
 #ifdef CH_USE_PETSC
 // *******************************************************
@@ -103,6 +106,8 @@ int PetscSolverPoisson<LevelData<FArrayBox> >::formMatrix( Mat a_mat, const Leve
   return 0;
 }
 #endif
+
+#ifdef CH_USE_PETSC
 // *******************************************************
 // PetscSolverViscousTensor Implementation
 // *******************************************************
@@ -153,6 +158,7 @@ void PetscSolverViscousTensor<LevelData<FArrayBox> >::define( LinearOp<LevelData
 
     }
 }
+#endif
 
 #ifdef CH_USE_PETSC
 // *******************************************************

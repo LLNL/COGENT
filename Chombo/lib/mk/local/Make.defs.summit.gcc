@@ -22,5 +22,5 @@ HDFLIBFLAGS=-L$(OLCF_HDF5_ROOT)/lib -lhdf5 -lz
 HDFMPIINCFLAGS=-I$(OLCF_HDF5_ROOT)/include
 HDFMPILIBFLAGS=-L$(OLCF_HDF5_ROOT)/lib -lhdf5 -lz
 
-PETSC_DIR=/gpfs/alpine/world-shared/geo127/petsc/opt-gcc-int64-cuda
+PETSC_DIR=/gpfs/alpine/world-shared/geo127/petsc_install/arch-opt-gnu-cuda
 PETSC_ARCH=""

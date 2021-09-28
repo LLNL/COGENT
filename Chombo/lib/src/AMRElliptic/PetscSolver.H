@@ -70,12 +70,24 @@ public:
 #endif
   //
   virtual void define( Real a_dx, bool a_homogeneous = true );     // convenience define
+
+
   virtual void define( LinearOp<T> *, bool a_homogeneous = true ); // pure virtual in base class
+
+
+
   ///
+
+#ifdef CH_USE_PETSC
+  
   /**
      Solve
   */
   virtual void solve( T& a_phi, const T& a_rhs );
+#endif
+
+
+
   int solve_private(T& a_phi, const T& a_rhs);
   ///
   /**
@@ -83,10 +95,13 @@ public:
      The preconditioner (for which a matrix is formed) need not be 
      the same as the actual operator.
   */
+
+#ifdef CH_USE_PETSC
   
   virtual void solve_mfree( T& a_phi, 
                             const T& a_rhs, 
                             LinearOp<T> *a_op );
+#endif
 
   int solve_mfree_private(T& a_phi, 
                           const T& a_rhs, 
@@ -106,10 +121,17 @@ public:
      viewResidual
   */
   Real computeResidual( );
+
+#ifdef CH_USE_PETSC
+  
   /**
      apply
   */
   virtual int applyOp(T & a_phi, const T & a_rhs );
+#endif
+  
+
+
   /**
      set initial guess non-zero
  */
@@ -302,6 +324,7 @@ public:
   Real m_beta;
 };
 
+#ifdef CH_USE_PETSC
 ////////////////////////////////////////////////////////////////////////
 // an instantiation of PetscSolver with viscous tensor Poisson
 //     solve: alpha a(x) + beta div( eta(x)grad(u) + I * lambda(x) div(u) ) = f
@@ -339,6 +362,7 @@ public:
     m_lamb = lam;
   }
 };
+#endif
 
 #include "NamespaceFooter.H"
 
