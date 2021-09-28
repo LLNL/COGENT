@@ -14,8 +14,8 @@ VelocityNormalization::VelocityNormalization(const RefCountedPtr<CFG::MagGeom>& 
                                              const ParmParse&                       a_ppspecies)
   : m_mag_geom( a_mag_geom ),
     m_vel_coords( a_vel_coords),
-    m_include_Bfield_factor(false),
-    m_norm_func(NULL)
+    m_norm_func(NULL),
+    m_include_Bfield_factor(false)
 {
   m_normalization_type = "None";
   parseParameters(a_ppspecies);

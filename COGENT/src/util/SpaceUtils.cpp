@@ -1,4 +1,4 @@
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 #include "SpaceUtilsF_F.H"
 //#include "altFaceAveragesF_F.H"
 //#include "upwindSchemesF_F.H"
@@ -1347,6 +1347,90 @@ SpaceUtils::copyAndFillGhostCellsSimple(  LevelData<FArrayBox>&       a_var_wg,
   return;
 }
 
+void
+SpaceUtils::copyAndFillGhostCellsSimple(  LevelData<FluxBox>&       a_var_wg,
+                                          const LevelData<FluxBox>& a_var )
+{
+  const DisjointBoxLayout& var_dbl = a_var.disjointBoxLayout();
+
+  /* interior */
+  for (DataIterator dit(a_var.dataIterator()); dit.ok(); ++dit) {
+    a_var_wg[dit].setVal(0.0);
+    a_var_wg[dit].copy(a_var[dit], var_dbl[dit]);
+  }
+  a_var_wg.exchange();
+
+  /* codim-1 boundaries */
+  for (DataIterator dit(a_var.dataIterator()); dit.ok(); ++dit) {
+    for (int dir=0; dir<SpaceDim; dir++) {
+      for (int dim = 0; dim < SpaceDim; dim++) {
+        fillGhostCellsSimple(a_var_wg[dit][dim], var_dbl[dit], dir);
+      }
+    }
+  }
+  a_var_wg.exchange();
+
+  /* higher codim boundaries */
+  for (DataIterator dit(a_var.dataIterator()); dit.ok(); ++dit) {
+    Box bx_int(var_dbl[dit]);
+    const Box& bx_var(a_var_wg[dit].box());
+    for (int dir=0; dir<SpaceDim-1; dir++) {
+      bx_int.growLo(dir, (bx_int.smallEnd(dir)-bx_var.smallEnd(dir)) );
+      bx_int.growHi(dir, (bx_var.bigEnd(dir)-bx_int.bigEnd(dir)) );
+      for (int dim = 0; dim < SpaceDim; dim++) {
+        fillGhostCellsSimple(a_var_wg[dit][dim], bx_int, dir+1);
+      }
+    }
+  }
+  a_var_wg.exchange();
+
+  /* done - hopefully! */
+  return;
+}
+
+void
+SpaceUtils::copyAndFillGhostCellsSimple(  LevelData<EdgeDataBox>&       a_var_wg,
+                                          const LevelData<EdgeDataBox>& a_var )
+{
+  const DisjointBoxLayout& var_dbl = a_var.disjointBoxLayout();
+
+  /* interior */
+  for (DataIterator dit(a_var.dataIterator()); dit.ok(); ++dit) {
+    for (int dim = 0; dim < SpaceDim; dim++) {
+      a_var_wg[dit][dim].setVal(0.0);
+      a_var_wg[dit][dim].copy(a_var[dit][dim], var_dbl[dit]);
+    }
+  }
+  a_var_wg.exchange();
+
+  /* codim-1 boundaries */
+  for (DataIterator dit(a_var.dataIterator()); dit.ok(); ++dit) {
+    for (int dir=0; dir<SpaceDim; dir++) {
+      for (int dim = 0; dim < SpaceDim; dim++) {
+        fillGhostCellsSimple(a_var_wg[dit][dim], var_dbl[dit], dir);
+      }
+    }
+  }
+  a_var_wg.exchange();
+
+  /* higher codim boundaries */
+  for (DataIterator dit(a_var.dataIterator()); dit.ok(); ++dit) {
+    Box bx_int(var_dbl[dit]);
+    const Box& bx_var(a_var_wg[dit].box());
+    for (int dir=0; dir<SpaceDim-1; dir++) {
+      bx_int.growLo(dir, (bx_int.smallEnd(dir)-bx_var.smallEnd(dir)) );
+      bx_int.growHi(dir, (bx_var.bigEnd(dir)-bx_int.bigEnd(dir)) );
+      for (int dim = 0; dim < SpaceDim; dim++) {
+        fillGhostCellsSimple(a_var_wg[dit][dim], bx_int, dir+1);
+      }
+    }
+  }
+  a_var_wg.exchange();
+
+  /* done - hopefully! */
+  return;
+}
+
 void 
 SpaceUtils::inspectFArrayBox(const LevelData<FArrayBox>&  a_F0,
                              const int                    a_comp, 
@@ -1592,6 +1676,40 @@ SpaceUtils::exchangeEdgeDataBox( LevelData<EdgeDataBox>& a_Edge )
 
    } // end loop over grids on this level
 
+}
+
+void
+SpaceUtils::incrementLevelData( LevelData<FArrayBox>&       a_dst,
+                                const LevelData<FArrayBox>& a_src,
+                                const Real                  a_a )
+{
+  for (auto dit(a_dst.dataIterator()); dit.ok(); ++dit) {
+    a_dst[dit].plus(a_src[dit], a_a);
+  }
+}
+
+void
+SpaceUtils::incrementLevelData( LevelData<FluxBox>&       a_dst,
+                                const LevelData<FluxBox>& a_src,
+                                const Real                a_a )
+{
+  for (auto dit(a_dst.dataIterator()); dit.ok(); ++dit) {
+    for (int dim(0); dim<SpaceDim; dim++) {
+      a_dst[dit][dim].plus(a_src[dit][dim], a_a);
+    }
+  }
+}
+
+void
+SpaceUtils::incrementLevelData( LevelData<EdgeDataBox>&       a_dst,
+                                const LevelData<EdgeDataBox>& a_src,
+                                const Real                    a_a )
+{
+  for (auto dit(a_dst.dataIterator()); dit.ok(); ++dit) {
+    for (int dim(0); dim<SpaceDim; dim++) {
+      a_dst[dit][dim].plus(a_src[dit][dim], a_a);
+    }
+  }
 }
 
 #include "NamespaceFooter.H"

@@ -1,5 +1,5 @@
 
-#include "FourthOrderUtilsClass.H"
+#include "FourthOrderUtilsClass.H.multidim"
 #include "FourthOrderUtil.H"
 #include "BoxIterator.H"
 
@@ -50,6 +50,16 @@ void FourthOrderUtil::fourthOrderAverageGen( LevelData<FluxBox>& a_phi,
    }
 
 }
+//********************************************************************************//
+
+void FourthOrderUtil::fourthOrderAverageGen( LevelData<EdgeDataBox>& a_phi, 
+                                          int a_sgn)
+{
+   // I'm not aware of a native Chombo version of this operator, so I'm just 
+	// using the SG-friendly version all the time
+   FourthOrderUtil::fourthOrderAverageSG(a_phi, a_sgn);
+}
+
 //********************************************************************************//
 // This routine is already sparse friendly (the operation only happens in one 
 // direction, so just call the old routine regardless of whether SG is turned on)
@@ -125,8 +135,23 @@ void FourthOrderUtil::fourthOrderAverageSG( LevelData<FluxBox>& a_phi,
 
       fourthOrderAverageFaceSG(thisPhi, a_sgn);
    }
+
 }
 
+//********************************************************************************//
+void FourthOrderUtil::fourthOrderAverageSG( LevelData<EdgeDataBox>& a_phi, 
+                                            int a_sgn)
+{
+   CH_TIME("fourthOrderAverageSG_Edge");
+
+   DataIterator dit = a_phi.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit)
+   {
+      EdgeDataBox& thisPhi = a_phi[dit];
+
+      fourthOrderAverageEdgeSG(thisPhi, a_sgn);
+   }
+}
 //********************************************************************************//
 void FourthOrderUtil::fourthOrderMultSG( LevelData<FluxBox>& a_uTimesV, 
                                          const LevelData<FluxBox>& a_u, 
@@ -182,16 +207,14 @@ void FourthOrderUtil::fourthOrderAverageCellGen( FArrayBox& a_phi,
 void FourthOrderUtil::fourthOrderAverageCellSG( FArrayBox& a_phi,
                                             int a_sgn )
 {
-   //derivBox shrunk by 1
+   FArrayBox tempLap(a_phi.box(), a_phi.nComp());
    Box derivBox(a_phi.box());
-   derivBox.grow(-1);
-
-   FArrayBox tempLap(derivBox, a_phi.nComp());
 
    Real factor = a_sgn * (1.0/24.0);
    for (int dir=0; dir < SpaceDim; dir++) 
    {
       tempLap.setVal(0.0);
+      derivBox.grow(dir, -1);
       FORT_INCREMENTLAPLACIAN(CHF_FRA(tempLap), 
                               CHF_CONST_FRA(a_phi), 
                               CHF_BOX(derivBox), 
@@ -239,7 +262,7 @@ void FourthOrderUtil::fourthOrderAverageCellSG( FArrayBox& a_phi,
 	  if (!a_domain.isPeriodic(dir) &&
 		  (a_domain.domainBox().bigEnd(dir) == a_bx.bigEnd(dir)))
 	  {
-	     // one-sided derivative, low end
+	     // one-sided derivative, high end
 	     Box hiBox(a_bx);
 		 hiBox.setRange(dir, a_bx.bigEnd(dir));
 		 FORT_INCREMENTHISIDELAPLACIAN(CHF_FRA(tempLap),
@@ -250,7 +273,7 @@ void FourthOrderUtil::fourthOrderAverageCellSG( FArrayBox& a_phi,
 		 derivDirBox.growHi(dir,-1);
 	  }
 
-	  FORT_INCREMENTHISIDELAPLACIAN(CHF_FRA(tempLap),
+	  FORT_INCREMENTLAPLACIAN(CHF_FRA(tempLap),
 									CHF_FRA(a_phi),
 									CHF_BOX(derivDirBox),
 									CHF_INT(dir),
@@ -278,7 +301,38 @@ void FourthOrderUtil::fourthOrderAverageFaceSG( FluxBox& a_phi,
 
       for (int tanDir=0; tanDir < SpaceDim; tanDir++)
       {
+         tempLap.setVal(0.0);
          if (tanDir != dir)
+         {
+            FORT_INCREMENTLAPLACIAN(CHF_FRA(tempLap), 
+                                    CHF_CONST_FRA(thisPhiDir),
+                                    CHF_BOX(derivBox),
+                                    CHF_CONST_INT(tanDir), 
+                                    CHF_CONST_REAL(factor));
+            thisPhiDir.plus(tempLap, derivBox, 0, 0, tempLap.nComp());
+         }
+      }
+   }
+}
+
+//********************************************************************************//
+void FourthOrderUtil::fourthOrderAverageEdgeSG( EdgeDataBox& a_phi, 
+                                                int a_sgn )
+{
+   Real factor = a_sgn * (1.0/24.0);
+   for (int dir=0; dir<SpaceDim; dir++)
+   {
+      FArrayBox& thisPhiDir = a_phi[dir];
+      // derivBox shrunk by 1 in tangential directions
+      Box derivBox(thisPhiDir.box());
+      derivBox.grow(-1);
+      derivBox.grow(dir,1);
+      
+      FArrayBox tempLap(derivBox, thisPhiDir.nComp());
+
+      for (int tanDir=0; tanDir < SpaceDim; tanDir++)
+      {
+         if (tanDir == dir)
          {
             tempLap.setVal(0.0);
             FORT_INCREMENTLAPLACIAN(CHF_FRA(tempLap), 

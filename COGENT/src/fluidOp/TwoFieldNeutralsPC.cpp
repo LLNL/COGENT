@@ -15,9 +15,9 @@
 TwoFieldNeutralsPC::TwoFieldNeutralsPC(const ParmParse&   a_pp,
 				       const MagGeom&     a_geom )
    : EllipticOp(a_pp, a_geom),
-     m_imex_preconditioner(NULL),
      m_diffusion_coeffs_defined(false),
-     m_viscosity_coeffs_defined(false)
+     m_viscosity_coeffs_defined(false),
+     m_imex_preconditioner(NULL)
 {
 
 
@@ -56,12 +56,7 @@ TwoFieldNeutralsPC::TwoFieldNeutralsPC(const ParmParse&   a_pp,
    }
 
    if ( m_imex_preconditioner == NULL ) {
-#ifdef with_petsc
-      m_imex_preconditioner = new MBPETScSolver(m_geometry, 2, preconditioner_order, m_mblx_ptr);
-#else
       m_imex_preconditioner = new MBHypreSolver(m_geometry, 2, preconditioner_order, m_mblx_ptr);
-#endif
-   
       ParmParse pp_precond( ((string)a_pp.prefix() + ".linear_solver.precond").c_str());
       m_imex_preconditioner->setMethodParams(pp_precond);
       m_imex_preconditioner->setConvergenceParams(pp_precond);
@@ -74,6 +69,7 @@ TwoFieldNeutralsPC::TwoFieldNeutralsPC(const ParmParse&   a_pp,
 
 TwoFieldNeutralsPC::~TwoFieldNeutralsPC()
 {
+   if ( m_imex_preconditioner ) delete m_imex_preconditioner;
 }
 
 void

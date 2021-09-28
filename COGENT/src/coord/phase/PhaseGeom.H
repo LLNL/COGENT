@@ -9,7 +9,7 @@
 #include "PhaseBlockCoordSys.H"
 #include "PhaseGrid.H"
 #include "BlockRegister.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 #include "EdgeDataBox.H"
 #include "CoDimCopyManager.H"
 
@@ -36,8 +36,7 @@ public:
    /**
       Constructors, destructor and defines
    */
-   PhaseGeom( ParmParse&                              parm_parse,
-              const RefCountedPtr<PhaseCoordSys>&     coord_sys,
+   PhaseGeom( const RefCountedPtr<PhaseCoordSys>&     coord_sys,
               const RefCountedPtr<PhaseGrid>&         grids,
               const RefCountedPtr<CFG::MagGeom>&      mag_geom,
               const RefCountedPtr<VEL::VelCoordSys>&  vel_coords,
@@ -678,7 +677,7 @@ public:
                                    const LevelData<FluxBox>& vector) const;
 
    enum velocity_option {FULL_VELOCITY, PARALLEL_STREAMING_VELOCITY, DRIFT_VELOCITY, EXB_DRIFT_VELOCITY,
-                         MAGNETIC_DRIFT_VELOCITY, NO_ZERO_ORDER_TERMS};
+                         MAGNETIC_DRIFT_VELOCITY, NO_ZERO_ORDER_TERMS, DIAGNOSTICS};
    
    double getLarmorNumber() const {return m_larmor_number;}
 

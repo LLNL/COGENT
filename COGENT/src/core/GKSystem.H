@@ -6,6 +6,9 @@
 #include "evalOpMatrix.H"
 #include "PositivityPostProcessor.H"
 
+#include "GKSystemParameters.H"
+#include "GKDiagnostics.H"
+
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "MagGeom.H"
@@ -65,7 +68,11 @@ class GKSystem : public AppCtxt
        *  @param[in] a_useExternalTI   Flag to indicate if using native (false, default) 
        *                                    or external (true) time integrators. 
        */
-      GKSystem( ParmParse& pp );
+      GKSystem( int sys_id = -1 );
+
+      GKSystem( ParmParse&, int sys_id = -1 );
+
+      GKSystem( const GKSystemParameters&, int sys_id = -1 );
 
       /// Destructor.
       /**
@@ -81,19 +88,26 @@ class GKSystem : public AppCtxt
       Real stableDt( const int step_number, 
                      const TimeIntegratorType );
 
+      inline int sysID() const { return m_sys_id; }
+      inline void sysID( const int a_id ) { m_sys_id = a_id; }
+
       /// Write plot file.
       /**
        * Write plotting data to HDF5 files with a common prefix.
        *
        */
-      void writePlotFile( const char *prefix, const int cur_step, const double& cur_time );
+      void writePlotFile( const char *prefix, 
+                          const int cur_step, 
+                          const double& cur_time );
 
       /// Augment a history file with a value at a spatial index
       /**
        *Augment a history file with a value at a spatial index
        */
 
-      void writeFieldHistory(int cur_step, double cur_time, bool startup_flag);
+      void writeFieldHistory( int cur_step, 
+                              double cur_time, 
+                              bool startup_flag);
 
       /// Write checkpoint file.
       /**
@@ -101,8 +115,10 @@ class GKSystem : public AppCtxt
        *
        * @param[in] handle a reference to an HDF5 plot file.
        */
-      void writeCheckpointFile( HDF5Handle& handle, const int cur_step,
-                                const double cur_time, const double cur_dt );
+      void writeCheckpointFile( const std::string&, 
+                                const int cur_step,
+                                const double cur_time, 
+                                const double cur_dt );
 
       /// Read checkpoint file.
       /**
@@ -110,9 +126,12 @@ class GKSystem : public AppCtxt
        *
        * @param[in] handle a reference to an HDF5 plot file.
        */
-      void readCheckpointFile( HDF5Handle& handle, int& cur_step,
-                               double& cur_time, double& cur_dt );
+      void readCheckpointFile( const std::string&, 
+                               int& cur_step,
+                               double& cur_time, 
+                               double& cur_dt );
 
+      void getDiagnostics(std::vector<Real>&, std::vector<Real>& );
       void printDiagnostics();
 
       void preTimeStep  ( const ODEVector&, int, Real );
@@ -237,12 +256,15 @@ class GKSystem : public AppCtxt
       }
 
       inline
-      void defineMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&  a_pc,
-                                std::vector<DOFList>&                             a_dof_list,
-                                const ODEVector&                                  a_Y,
-                                const std::string&                                a_out_string,
-                                const std::string&                                a_opt_string,
-                                bool                                              a_im)
+      void defineMultiPhysicsPC(std::vector<
+                                  Preconditioner< ODEVector,
+                                                  AppCtxt >* >&  a_pc,
+                                std::vector<DOFList>& a_dof_list,
+                                const ODEVector&      a_Y,
+                                const std::string&    a_out_string,
+                                const std::string&    a_opt_string,
+                                bool                  a_im,
+                                const int             a_sys_id = -1)
       {
          copyStateFromArray( a_Y );
          m_gk_ops->defineMultiPhysicsPC(  a_pc,
@@ -252,16 +274,43 @@ class GKSystem : public AppCtxt
                                           (void*) this,
                                           a_out_string,
                                           a_opt_string,
-                                          a_im );
+                                          a_im,
+                                          a_sys_id );
       }
 
-      void updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&  a_pc,
-                                const ODEVector&                                  a_Y,
-                                const Real                                        a_time,
-                                const int                                         a_step, 
-                                const int                                         a_stage,
-                                const Real                                        a_shift,
-                                const bool                                        a_im)
+      inline
+      void defineMultiPhysicsPC(std::vector<
+                                  Preconditioner< ODEVector,
+                                                  AppCtxt >* >&  a_pc,
+                                std::vector<DOFList>& a_dof_list,
+                                const ODEVector&      a_Y,
+                                void*                 a_ops,
+                                const std::string&    a_out_string,
+                                const std::string&    a_opt_string,
+                                bool                  a_im,
+                                const int             a_sys_id = -1)
+      {
+         copyStateFromArray( a_Y );
+         m_gk_ops->defineMultiPhysicsPC(  a_pc,
+                                          a_dof_list,
+                                          a_Y,
+                                          m_state_comp,
+                                          a_ops,
+                                          a_out_string,
+                                          a_opt_string,
+                                          a_im,
+                                          a_sys_id );
+      }
+
+      void updateMultiPhysicsPC(std::vector<
+                                  Preconditioner< ODEVector,
+                                                  AppCtxt >* >&  a_pc,
+                                const ODEVector&  a_Y,
+                                const Real        a_time,
+                                const int         a_step, 
+                                const int         a_stage,
+                                const Real        a_shift,
+                                const bool        a_im)
       {
         copyStateFromArray( a_Y );
         m_gk_ops->updateMultiPhysicsPC( a_pc,
@@ -275,8 +324,10 @@ class GKSystem : public AppCtxt
 
       void solveSolutionPC( ODEVector&        a_Z, 
                             const ODEVector&  a_R, 
+                            const int         a_sys_id,
                             int               a_i=-1)
       {
+        CH_assert(a_sys_id == m_sys_id);
         copyStateFromArray( a_R );
         copyRHSFromArray( a_Z );
         m_gk_ops->solveSolutionPC(  m_rhs,
@@ -287,8 +338,10 @@ class GKSystem : public AppCtxt
    
       void solveFluidOpPCImEx(  ODEVector&        a_Z, 
                                 const ODEVector&  a_R, 
+                                const int         a_sys_id,
                                 int               a_i=-1)
       {
+        CH_assert(a_sys_id == m_sys_id);
         copyStateFromArray( a_R );
         copyRHSFromArray( a_Z );
         m_gk_ops->solveFluidOpPCImEx( m_rhs,
@@ -300,8 +353,10 @@ class GKSystem : public AppCtxt
       void solveVlasovOpPCImEx(Preconditioner<ODEVector,AppCtxt>* const a_pc,
                                ODEVector&                             a_Z, 
                                const ODEVector&                       a_R, 
+                               const int                              a_sid,
                                int                                    a_i=-1 )
       {
+        CH_assert(a_sid == m_sys_id);
         copyStateFromArray( a_R );
         copyRHSFromArray( a_Z );
         m_gk_ops->solveVlasovOpPCImEx(  a_pc,
@@ -312,10 +367,17 @@ class GKSystem : public AppCtxt
       }
 
       inline bool isLinear()  { return m_gk_ops->isLinear(); }
-      inline void printFunctionCounts() { m_gk_ops->printFunctionCounts(); }
+
+      inline void printFunctionCounts() 
+      { 
+        if (!procID() && m_sys_id >= 0) {
+          printf("  System %d", m_sys_id);
+        }
+        m_gk_ops->printFunctionCounts(); 
+      }
 
       inline
-      void defineODEVector( ODEVector& a_vec) const
+      void defineODEVector( ODEVector& a_vec)
       {
         a_vec.define(m_state_comp);
       }
@@ -341,40 +403,34 @@ class GKSystem : public AppCtxt
       inline
       void computeUScale( const ODEVector&  a_vec )
       {
-        static bool first_call = true;
         if (m_use_scales) {
           m_state_comp.copyFrom(a_vec.data());
           m_state_comp.setVarScaling(m_scale_u.data(), m_scale_tol);
         } else {
-          if (first_call) m_scale_u.ones();
+          m_scale_u.ones();
         }
-        first_call = false;
       }
    
       inline
       void computeRHSOpScale( const ODEVector&  a_vec )
       {
-        static bool first_call = true;
         if (m_use_scales) {
           m_rhs.copyFrom(a_vec.data());
           m_rhs.setVarScaling(m_scale_rhsop.data(), m_scale_tol);
         } else {
-          if (first_call) m_scale_rhsop.ones();
+          m_scale_rhsop.ones();
         }
-        first_call = false;
       }
    
       inline
       void computeLHSOpScale( const ODEVector&  a_vec )
       {
-        static bool first_call = true;
         if (m_use_scales) {
           m_rhs.copyFrom(a_vec.data());
           m_rhs.setVarScaling(m_scale_lhsop.data(), m_scale_tol);
         } else {
-          if (first_call) m_scale_lhsop.ones();
+          m_scale_lhsop.ones();
         }
-        first_call = false;
       }
    
       inline void scaleU(ODEVector& a_vec) 
@@ -431,7 +487,57 @@ class GKSystem : public AppCtxt
         return m_gk_ops->trivialSolutionOp(); 
       }
 
+      inline const GKState& stateComp() const { return m_state_comp; }
+      inline GKState& stateComp() { return m_state_comp; }
+      inline const GKState& statePhys() const { return m_state_phys; }
+      inline GKState& statePhys() { return m_state_phys; }
+
+      inline void copyDOFs( ODEVector&        a_Y,
+                            const ODEVector&  a_X,
+                            const DOFList&    a_dof_list,
+                            const int         a_sys_id ) const
+      {
+        CH_assert(a_sys_id == m_sys_id);
+        a_Y.copy(a_X, a_dof_list);
+      }
+
+      inline void getVec( const ODEVector&  a_X,
+                          const int,
+                          ODEVector&        a_Y ) const
+      {
+        CH_assert(!a_Y.isDefined());
+        a_Y.define( a_X.getVectorSize(),
+                    a_X.data(),
+                    a_X.getState() );
+      }
+
+      virtual void defineShell( const GKSystemParameters& );
+      virtual void initializeShell( const int, const double );
+
+      inline 
+      void getTimeScales( std::vector<std::pair<std::string,Real> >& a_T) const
+      {
+        a_T.clear();
+        a_T.push_back( std::pair<std::string,Real>( "Vlasov", 
+                                                    m_dt_vlasov) );
+        a_T.push_back( std::pair<std::string,Real>( "Collisions", 
+                                                    m_dt_collisions) );
+        a_T.push_back( std::pair<std::string,Real>( "Transport", 
+                                                    m_dt_transport) );
+        a_T.push_back( std::pair<std::string,Real>( "Neutrals", 
+                                                    m_dt_neutrals) );
+      }
+
+      inline
+      const GKOps* getOps() const { return m_gk_ops; }
+
+      inline
+      const GKDiagnostics* getDiagnostics() const { return m_diagnostics; }
+
    private:
+
+      void define( const GKSystemParameters& );
+
 
       void setupFieldHistories();
 
@@ -440,13 +546,19 @@ class GKSystem : public AppCtxt
       void getVelocitySpaceDisjointBoxLayout( const VEL::ProblemDomain&,
                                               VEL::DisjointBoxLayout& );
 
-      void createState();
+      void createState( GKState&,
+                        const GKSystemParameters&,
+                        const int,
+                        const int );
    
-      void createFluidSpecies( CFG::FluidSpeciesPtrVect& fluid_species );
+      void createFluidSpecies( CFG::FluidSpeciesPtrVect& fluid_species,
+                               const GKSystemParameters& );
 
-      void createScalars( ScalarPtrVect& scalars );
+      void createScalars( ScalarPtrVect& scalars,
+                          const GKSystemParameters& );
 
-      void createKineticSpecies( KineticSpeciesPtrVect& kinetic_species );
+      void createKineticSpecies(  KineticSpeciesPtrVect& kinetic_species,
+                                  const GKSystemParameters& );
 
       inline
       void createGlobalDOF()
@@ -459,11 +571,11 @@ class GKSystem : public AppCtxt
 
       VEL::ProblemDomain getVelocityDomain() const;
    
-      void createConfigurationSpace();
+      void createConfigurationSpace( const GKSystemParameters& );
 
       void createVelocitySpace();
 
-      void createPhaseSpace( ParmParse& ppgksys );
+      void createPhaseSpace( const GKSystemParameters& );
 
       void enforcePositivity( KineticSpeciesPtrVect& a_soln );
 
@@ -480,16 +592,26 @@ class GKSystem : public AppCtxt
        */
       void printParameters() const;
 
-      /// Parse parameters.
-      /**
-       * Private method to obtain control parameters from "gksystem" section
-       * of ParmParse database.
-       *
-       * \param[in] ppgksys gksystem input database.
-       */
-      void parseParameters( ParmParse& ppgksys );
+      void setParameters( const GKSystemParameters& );
 
       void giveSpeciesTheirGyroaverageOps();
+
+      inline void prependSysID(std::string& a_str)
+      {
+        if (m_sys_id >= 0) {
+          a_str = m_sys_id_str + "." + a_str;
+        }
+      }
+
+      inline void appendSysID(std::string& a_str)
+      {
+        if (m_sys_id >= 0) {
+          a_str = a_str + "." + m_sys_id_str;
+        }
+      }
+
+      int m_sys_id;
+      std::string m_sys_id_str;
 
       bool m_using_electrons; // true for either boltzmann or kinetic
       bool m_enforce_stage_positivity;
@@ -526,6 +648,7 @@ class GKSystem : public AppCtxt
       VelocityPtrVect          m_velocity;
 
       GKOps* m_gk_ops;
+      GKDiagnostics* m_diagnostics;
 
       GKState m_state_comp;
       GKState m_state_phys;
@@ -533,51 +656,11 @@ class GKSystem : public AppCtxt
 
       GlobalDOF m_global_dof;
 
-     // Parameters to control plotting
-     /**
-      * Private variables to control what hdf5 files to generate
-      */
-      bool m_hdf_potential;
-      bool m_hdf_potential_non_zonal;
-      bool m_hdf_efield;
-      bool m_hdf_ExBdata;
-      bool m_hdf_density;
-      bool m_hdf_momentum;
-      bool m_hdf_ParallelMomentum;
-      bool m_hdf_PoloidalMomentum;
-      bool m_hdf_ParallelVelocity;
-
-      bool m_hdf_energyDensity;
-      bool m_hdf_kineticEnergyDensity;
-      bool m_hdf_perpEnergyDensity;
-      bool m_hdf_parallelEnergyDensity;
-      bool m_hdf_pressure;
-      bool m_hdf_perpPressure;
-      bool m_hdf_parallelPressure;
-      bool m_hdf_gradPoverN;
-      bool m_hdf_temperature;
-      bool m_hdf_perpTemperature;
-      bool m_hdf_parallelTemperature;
-
-      bool m_hdf_parallelHeatFlux;
-      bool m_hdf_totalParallelHeatFlux;
-      bool m_hdf_fourthMoment;
-      bool m_hdf_ParticleFlux;
-      bool m_hdf_HeatFlux;
-      
-      bool m_hdf_vlasov_divergence;
-      bool m_hdf_AmpereErIncrement;
-      bool m_hdf_total_density;
-   
-      bool m_hdf_dfn;
-      bool m_hdf_deltaF;
-      bool m_hdf_dfn_at_mu;
-      bool m_hdf_fluids;
-   
-      bool m_hdf_vpartheta;
-      bool m_hdf_bfvpartheta;
-      bool m_hdf_rtheta;
-      bool m_hdf_vparmu;
+      std::vector<std::string> m_diagnostics_dfn_plots;
+      std::vector<std::string> m_diagnostics_cfg_field_vars;
+      std::vector<std::string> m_diagnostics_cfg_vars_kin_spec;
+      std::vector<std::string> m_diagnostics_cfg_vars_total_kin_spec;
+      bool m_diagnostics_fluids;
 
       std::vector<int> m_fixed_plotindices;
 
@@ -595,6 +678,9 @@ class GKSystem : public AppCtxt
       bool m_use_scales;
       Real m_scale_tol;
       ODEVector m_scale_u, m_scale_rhsop, m_scale_lhsop;
+
+      /* Time scales */
+      Real m_dt_vlasov, m_dt_collisions, m_dt_transport, m_dt_neutrals;
 };
 
 #include "NamespaceFooter.H"

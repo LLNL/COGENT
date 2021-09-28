@@ -142,7 +142,8 @@ public:
                              void*,    
                              const std::string&,
                              const std::string&,
-                             bool);
+                             bool,
+                             const int);
 
    void updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                              const KineticSpeciesPtrVect&,
@@ -164,7 +165,8 @@ public:
                        bool,
                        const KineticSpecies&,
                        const GlobalDOFKineticSpecies&,
-                       int );
+                       const int,
+                       const int);
 
    void updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                        const KineticSpecies&,
@@ -324,6 +326,8 @@ public:
 
    int m_update_pc_freq;
    bool m_update_pc_skip_stage;
+
+	bool m_useSG; // Whether to use sparse grid-friendly stencils when computing fluxes, etc.
 };
 
 #include "NamespaceFooter.H"

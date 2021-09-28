@@ -149,7 +149,13 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   //need actual Upar for pressure moment
   if (!m_dens.isDefined()) m_dens.define(mag_geom.grids(), 1, CFG::IntVect::Zero);
   if (!m_ushift.isDefined()) m_ushift.define(mag_geom.grids(), 1, CFG::IntVect::Zero);
-  
+
+  // optimize performace by cashing m_ushift variable and only updating it
+  // every so often. In the results we degrade energy conservation a bit,
+  // becasue the mean velocity used in the calculation of the distribution temeprature
+  // will be slightly out of sink with the m_ushift variable that is used to evaluate
+  // the "conservative" value of the temeprature (see Justin's thesis for details).
+  // This should not affect momentum conservation.
   if ((m_it_counter % m_update_freq == 0 && m_first_stage) || m_first_call) {
     soln_species.numberDensity(m_dens);
     soln_species.ParallelMomentum(m_ushift);
@@ -167,7 +173,7 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   phase_geom.injectConfigurationToPhase(vpar_moms, inj_vpar_moms);
   phase_geom.injectConfigurationToPhase(pres_moms, inj_pres_moms);
 
-  // create conseravetive mean parallel velocity and Temperature
+  // create conservative mean parallel velocity and Temperature
   LevelData<FArrayBox> Upar(inj_vpar_moms.getBoxes(), 1, IntVect::Zero);
   LevelData<FArrayBox> Temp(inj_vpar_moms.getBoxes(), 1, IntVect::Zero);
   DataIterator mdit = Upar.dataIterator();
@@ -456,10 +462,10 @@ inline void ConsDragDiff::printParameters( const KineticSpeciesPtrVect&  soln )
    const Real Peclet_vp = dvp/sqrt(2.0*min_Temp/mass);
    const Real Peclet_mu = dmu/2.0/min_TonB;
    if ( procID() == 0 && !(Peclet_vp < 1) ){
-     MayDay::Warning( "vpar grid spacing too large for physically meaninful results" );
+     MayDay::Warning( "vpar grid spacing too large for physically meaningful results" );
    }
    if ( procID() == 0 && !(Peclet_mu < 1) ){
-     MayDay::Warning( "mu grid spacing too large for physically meaninful results" );
+     MayDay::Warning( "mu grid spacing too large for physically meaningful results" );
    }
 
    std::string cls_only_str("false");

@@ -5,11 +5,7 @@
 #include "GKPoisson.H"
 #include "FluxSurface.H"
 #include "MultiBlockLevelExchangeAverage.H"
-#ifdef with_petsc
-#include "MBPETScSolver.H"
-#else
 #include "MBHypreSolver.H"
-#endif
 
 #include "MagFluxAlignedMBLEXCenter.H"
 
@@ -146,11 +142,7 @@ private:
    bool m_diffusion_coeffs_defined;
    bool m_viscosity_coeffs_defined;
 
-#ifdef with_petsc
-   MBPETScSolver* m_imex_preconditioner;
-#else
    MBHypreSolver* m_imex_preconditioner;
-#endif
 
    LevelData<FArrayBox> m_volume_reciprocal;
 

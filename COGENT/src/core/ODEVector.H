@@ -1,6 +1,7 @@
 #ifndef _ODEVector_H_
 #define _ODEVector_H_
 
+#include "SPMD.H"
 #include "GKTimeIntegration.H"
 
 #include "NamespaceHeader.H"
@@ -12,67 +13,132 @@ class ODEVector
     ODEVector() 
     { 
       m_is_defined = false;
+      m_owner = false;
       m_size = 0;
       m_data = NULL;
       m_epsilon = 1e-12;
+      m_states.clear();
     }
 
     ODEVector(const ODEVector& a_vec)
     {
       m_is_defined = false;
+      m_owner = false;
       m_size = 0;
       m_data = NULL;
       m_epsilon = 1e-12;
+      m_states.clear();
       define(a_vec);
     }
 
     ODEVector(const GKState& a_state)
     {
       m_is_defined = false;
+      m_owner = false;
       m_size = 0;
       m_data = NULL;
       m_epsilon = 1e-12;
+      m_states.clear();
       define(a_state);
     }
 
     ODEVector(int a_size)
     {
       m_is_defined = false;
+      m_owner = false;
       m_size = 0;
       m_data = NULL;
       m_epsilon = 1e-12;
+      m_states.clear();
       define(a_size);
+    }
+
+    ODEVector(  const int             a_size, 
+                const Real* const     a_data,
+                const GKState* const  a_state = NULL)
+    {
+      define(a_size, a_data, a_state);
+    }
+
+    ODEVector(  const int             a_size, 
+                Real* const           a_data,
+                const GKState* const  a_state = NULL)
+    {
+      m_owner = false;
+      m_size = a_size;
+      m_data = a_data;
+      m_epsilon = 1e-12;
+      if (a_state) {
+        m_states = std::vector<const GKState*>(1, a_state);
+      } else {
+        m_states.clear();
+      }
+      m_is_defined = true;
     }
 
     ~ODEVector()
     {
-      if (m_data) delete[] m_data;
+      if (m_data && m_owner) delete[] m_data;
+      m_states.clear();
     }
 
     inline
     bool isDefined() const { return m_is_defined; }
 
     inline
-    int getVectorSize() const { return(m_size); }
+    int getVectorSize() const { return m_size; }
 
     inline
-    Real* data() { return(m_data); }
+    Real* data() { return m_data; }
 
     inline
-    const Real* data() const { return(m_data); }
+    const Real* data() const { return m_data; }
 
     inline
-    GlobalDOF* getGlobalDOF() const { return(m_state->getGlobalDOF()); }
+    Real* dataAt(const int a) { return (m_data+a); }
 
     inline
-    const GKState* getState() const { return(m_state); }
+    const Real* dataAt(const int a) const { return (m_data+a); }
+
+    inline
+    GlobalDOF* getGlobalDOF() const 
+    { 
+      CH_assert(m_states.size() == 1);
+      return m_states[0]->getGlobalDOF(); 
+    }
+
+    inline
+    const GKState* getState() const 
+    { 
+      if (m_states.size() == 1) {
+        return m_states[0]; 
+      } else {
+        return NULL;
+      }
+    }
+
+    inline
+    const GKState* getState(const int a_i) const 
+    { 
+      if (m_states.size() > 0) {
+        return m_states[a_i]; 
+      } else {
+        return NULL;
+      }
+    }
+
+    inline
+    const std::vector<const GKState*> getStates() const 
+    { 
+      return m_states; 
+    }
 
     inline
     void define(const ODEVector& a_vec)
     {
       CH_assert(a_vec.isDefined());
       define(a_vec.getVectorSize());
-      m_state = a_vec.getState();
+      m_states = a_vec.getStates();
       return;
     }
 
@@ -80,7 +146,19 @@ class ODEVector
     void define(const GKState& a_state)
     {
       define(a_state.getVectorSize());
-      m_state = &a_state;
+      m_states = std::vector<const GKState*>(1,&a_state);
+      return;
+    }
+
+    inline
+    void define(const std::vector<const GKState*>& a_states)
+    {
+      int total_size(0);
+      for (int i = 0; i < a_states.size(); i++) {
+        total_size += a_states[i]->getVectorSize();
+      }
+      define(total_size);
+      m_states = a_states;
       return;
     }
 
@@ -90,6 +168,25 @@ class ODEVector
       CH_assert(m_is_defined == false);
       m_size = a_size;
       m_data = new Real[m_size];
+      m_owner = true;
+      m_is_defined = true;
+    }
+
+    inline
+    void define(const int             a_size, 
+                const Real* const     a_data,
+                const GKState* const  a_state = NULL)
+    {
+      CH_assert(m_is_defined == false);
+      m_owner = false;
+      m_size = a_size;
+      m_data = const_cast<Real*>(a_data);
+      m_epsilon = 1e-12;
+      if (a_state) {
+        m_states = std::vector<const GKState*>(1, a_state);
+      } else {
+        m_states.clear();
+      }
       m_is_defined = true;
     }
 
@@ -243,11 +340,16 @@ class ODEVector
 
       Real global_dot_product = 0.0;
 #ifdef CH_MPI
-      MPI_Allreduce(&local_product, &global_dot_product, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(  &local_product, 
+                      &global_dot_product, 
+                      1, 
+                      MPI_DOUBLE, 
+                      MPI_SUM, 
+                      MPI_COMM_WORLD  );
 #else
       global_dot_product = local_dot_product;
 #endif
-      return(global_dot_product);
+      return global_dot_product;
     }
 
     Real dotProduct(const ODEVector& a_vec, const ODEVector& a_scale) const
@@ -267,11 +369,16 @@ class ODEVector
 
       Real global_dot_product = 0.0;
 #ifdef CH_MPI
-      MPI_Allreduce(&local_product, &global_dot_product, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(  &local_product, 
+                      &global_dot_product, 
+                      1, 
+                      MPI_DOUBLE, 
+                      MPI_SUM, 
+                      MPI_COMM_WORLD  );
 #else
       global_dot_product = local_dot_product;
 #endif
-      return(global_dot_product);
+      return global_dot_product;
     }
 
     Real dotProduct(const ODEVector& a_vec, const ODEVector& a_scale_1, const ODEVector& a_scale_2) const
@@ -294,11 +401,16 @@ class ODEVector
 
       Real global_dot_product = 0.0;
 #ifdef CH_MPI
-      MPI_Allreduce(&local_product, &global_dot_product, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(  &local_product, 
+                      &global_dot_product, 
+                      1, 
+                      MPI_DOUBLE, 
+                      MPI_SUM, 
+                      MPI_COMM_WORLD  );
 #else
       global_dot_product = local_dot_product;
 #endif
-      return(global_dot_product);
+      return global_dot_product;
     }
 
     inline
@@ -315,13 +427,45 @@ class ODEVector
       return sqrt(dotProduct(*this, a_scale));
     }
 
+    inline
+    void printLoadBalanceInfo() const
+    {
+      int my_rank = (int) procID();
+      int num_procs = (int) numProc();
+
+      std::vector<int> local_sizes(num_procs, -1);
+      local_sizes[my_rank] = m_size;
+      std::vector<int> global_sizes(num_procs, -1);
+#ifdef CH_MPI
+      MPI_Allreduce(  local_sizes.data(),
+                      global_sizes.data(),
+                      num_procs,
+                      MPI_INT,
+                      MPI_MAX, 
+                      MPI_COMM_WORLD );
+#else
+      CH_assert(num_procs == 1);
+#endif
+      if (!my_rank) {
+        int total_size = 0;
+        printf("ODEVector local size on each MPI rank:\n");
+        for (int i = 0; i < num_procs; i++) {
+          printf("  Rank %4d, local size = %9d\n", i, global_sizes[i] );
+          total_size += global_sizes[i];
+        }
+        printf("  Total size: %12d\n\n", total_size);
+      }
+    }
+
   private:
 
-    bool            m_is_defined;
-    int             m_size;
-    Real            m_epsilon;
-    Real            *m_data;
-    const GKState   *m_state;
+    bool  m_is_defined;
+    bool  m_owner;
+    int   m_size;
+    Real  m_epsilon;
+    Real* m_data;
+    
+    std::vector<const GKState*> m_states;
 };
 
 #include "NamespaceFooter.H"

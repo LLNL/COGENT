@@ -85,7 +85,7 @@ class GKFluidOp
       
       void getMemberVarForPlotting( LevelData<FArrayBox>&  a_Var,
                               const FluidSpecies&          a_fluid_species,
-                              const string                 a_var_name );
+                              const string                 a_var_name ) const;
 
       virtual void convertToPhysical( FluidSpeciesPtrVect&  a_fluid_species_phys,
                                 const FluidSpeciesPtrVect&  a_fluid_species_comp ) const;
@@ -106,7 +106,8 @@ class GKFluidOp
                                 void*,
                                 const std::string&,
                                 const std::string&,
-                                bool);
+                                bool,
+                                const int );
 
       void updateMultiPhysicsPC(std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 const PS::KineticSpeciesPtrVect&,
@@ -165,7 +166,7 @@ class GKFluidOp
       /**
        * @param[in] name String name of the species.
        */
-      FluidOpInterface& fluidModel( const std::string& name );
+      FluidOpInterface& fluidModel( const std::string& name ) const;
 
       /// returns the fluid model name associated with the input name
       /**
@@ -189,7 +190,7 @@ class GKFluidOp
       }
    
       bool m_verbose;
-      std::map<std::string,int> m_species_map;
+      mutable std::map<std::string,int> m_species_map;
       std::vector<FluidOpInterface*> m_fluid_model;
       std::map<std::string,int> m_fluid_model_name;
 };

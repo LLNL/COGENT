@@ -278,13 +278,10 @@ COGENTTimeIntegration<Vector,System>::loadRestartFile( ParmParse& a_ppsim )
 {
    std::string restartFile;
    a_ppsim.query( "restart_file", restartFile );
-#ifdef CH_USE_HDF5
-   HDF5Handle handle( restartFile, HDF5Handle::OPEN_RDONLY );
-   m_system->readCheckpointFile( handle, m_cur_step, m_cur_time, m_cur_dt );
-   handle.close();
-#else
-   MayDay::Error("restart only defined with hdf5");
-#endif
+   m_system->readCheckpointFile(  restartFile, 
+                                  m_cur_step, 
+                                  m_cur_time, 
+                                  m_cur_dt );
 }
 
 static int plottedonce = 0;
@@ -309,14 +306,7 @@ COGENTTimeIntegration<Vector,System>::writePlotFile()
       sprintf( iter_str, "%s", m_plot_prefix.c_str());
    }
 
-   //if (m_verbosity >= 2) {
-   //   pout() << "plot file name = " << iter_str << endl;
-   //}
-
-   // HDF5Handle handle( iter_str, HDF5Handle::CREATE );
-   // Instead of dummy file with prefix, use prefix for all plot files.
    m_system->writePlotFile( iter_str, m_cur_step, m_cur_time);
-   // handle.close();
 #else
    MayDay::Error( "plotting only defined with hdf5" );
 #endif
@@ -335,26 +325,10 @@ COGENTTimeIntegration<Vector,System>::writeHistFile(bool startup_flag)
 template <class Vector, class System> inline void
 COGENTTimeIntegration<Vector,System>::writeCheckpointFile()
 {
-   if (m_verbosity>=3) {
-      pout() << "COGENTTimeIntegration<Vector,System>::writeCheckpointFile" << endl;
-   }
-
-#ifdef CH_USE_HDF5
-   char iter_str[100];
-
-   sprintf( iter_str, "%s%04d.%dd.hdf5",
-            m_checkpoint_prefix.c_str(), m_cur_step, SpaceDim );
-
-   if (m_verbosity>=2) {
-      pout() << "checkpoint file name = " << iter_str << endl;
-   }
-
-   HDF5Handle handle( iter_str, HDF5Handle::CREATE );
-   m_system->writeCheckpointFile( handle, m_cur_step, m_cur_time, m_cur_dt );
-   handle.close();
-#else
-   MayDay::Error( "restart only defined with hdf5" );
-#endif
+   m_system->writeCheckpointFile( m_checkpoint_prefix, 
+                                  m_cur_step, 
+                                  m_cur_time, 
+                                  m_cur_dt );
 }
 
 template <class Vector, class System> inline void
@@ -433,6 +407,8 @@ void COGENTTimeIntegration<Vector,System>::initialize(  ParmParse&    a_pp,
    m_system->printDiagnostics();
 
    m_system->defineODEVector(m_U);
+   m_U.printLoadBalanceInfo();
+
    m_system->copyStateToArray( m_U );
    m_system->defineODEVector(m_U_old);
 

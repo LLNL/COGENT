@@ -24,15 +24,6 @@
 /** Assumes all physical boundary conditions have been set.
     -- also returns face-averaged face advection velocity in faceVel
  */
-void
-computeMappedFourthOrderFlux(LevelData<FluxBox>& a_compCoordFlux,
-                             LevelData<FluxBox>& a_faceVel,
-                             const LevelData<FArrayBox>& a_phi,
-                             const LevelData<FArrayBox>* a_advVelPtr,
-                             const FourthOrderCoordSys* a_FOCS,
-                             const RealVect& a_dx,
-                             bool a_limitFaceValues
-                             );
 
 
 void
@@ -42,11 +33,31 @@ cellUJToCellU(
               const FourthOrderCoordSys* a_FOCS);
 
 
+// original, SG-unfriendly version - implements the 
+// "average of product is product of averages plus gradient correction"
+// Is equivalent to the SG-friendly version if a_useFourthOrder = false
 void
 computeCompFaceFluxes( LevelData<FluxBox>& a_uTimesV,
                        const LevelData<FluxBox>& a_u,
                        const LevelData<FluxBox>& a_v,
                        bool a_useFourthOrder);
+
+// New, SG-friendly version - implements the 
+// "de-average to face centers, multiply, then re-average" method
+// Is equivalent to the SG-unfriendly version if a_useFourthOrder = false
+void
+computeCompFaceFluxesSG( LevelData<FluxBox>& a_uTimesV,
+                       const LevelData<FluxBox>& a_u,
+                       const LevelData<FluxBox>& a_v,
+                       bool a_useFourthOrder);
+
+void
+computeCompFaceFluxesGen( LevelData<FluxBox>& a_uTimesV,
+                       const LevelData<FluxBox>& a_u,
+                       const LevelData<FluxBox>& a_v,
+                       bool a_useFourthOrder,
+							  bool a_useSG);
+
 
 void
 computeCompFaceFluxesNormal( LevelData<FluxBox>& a_uTimesV,

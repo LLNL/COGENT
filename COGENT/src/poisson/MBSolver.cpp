@@ -34,7 +34,6 @@ L2Norm( const LevelData<FArrayBox>&  a_data )
 }
 
 
-
 MBSolver::MBSolver( const MultiBlockLevelGeom&      a_geom,
                     const int                       a_discretization_order,
                     MultiBlockLevelExchangeCenter*  a_mblex_ptr )

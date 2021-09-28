@@ -11,7 +11,7 @@
 #include "IntVect.H"
 #include "BoxIterator.H"
 #include "EdgeDataBox.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 #include "CONSTANTS.H"
 #include "LevelData.H"
 

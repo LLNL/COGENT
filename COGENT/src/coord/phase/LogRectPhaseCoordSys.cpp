@@ -6,7 +6,7 @@
 
 
 
-LogRectPhaseCoordSys::LogRectPhaseCoordSys(ParmParse&                                  a_pp,
+LogRectPhaseCoordSys::LogRectPhaseCoordSys(const GKSystemParameters&                   a_params,
                                            const RefCountedPtr<CFG::LogRectCoordSys>&  a_mag_coords,
                                            const RefCountedPtr<VEL::VelCoordSys>&      a_vel_coords,
                                            const Vector<ProblemDomain>&                a_domains )
@@ -26,7 +26,7 @@ LogRectPhaseCoordSys::LogRectPhaseCoordSys(ParmParse&                           
 
   initializeBlockTransformations();
 
-  getDecompositionParams( a_pp );
+  getDecompositionParams( a_params );
 }
 
 
@@ -152,22 +152,15 @@ LogRectPhaseCoordSys::blockRemapping(RealVect&       a_xi_valid,
 
 
 void
-LogRectPhaseCoordSys::getDecompositionParams( ParmParse& a_pp )
+LogRectPhaseCoordSys::getDecompositionParams( const GKSystemParameters& a_params )
 {
-  if (a_pp.contains("phase_decomp")) {
-    std::vector<int> decomp( SpaceDim );
-    a_pp.queryarr( "phase_decomp", decomp, 0, SpaceDim );
-
+  const std::vector<int>& decomp = a_params.phaseDecomp();
+  if (decomp.size() > 0) {
     for (int dir=0; dir<SpaceDim; ++dir) {
       m_decomposition[dir] = decomp[dir];
     }
-     
-     //Assume that the velocity space is a single block
-     //that is numBlocks() = configuration num blocks
-
-     m_decomposition[m_mb_dir] /= numBlocks();
-  }
-  else {
+    m_decomposition[m_mb_dir] /= numBlocks();
+  } else {
     m_decomposition = IntVect::Unit;
   }
 }

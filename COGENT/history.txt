@@ -1,4 +1,84 @@
 ------------------------------------------------------------------------
+r1784 | debo | 2021-09-27 18:33:11 -0700 (Mon, 27 Sep 2021) | 1 line
+
+Small bugfix in SG-friendly version of averaging for cells; added the option of plotting individual sparse grids solutions interpolated onto the full grid
+------------------------------------------------------------------------
+r1783 | ricketson1 | 2021-09-23 12:39:24 -0700 (Thu, 23 Sep 2021) | 1 line
+
+Bug fix in the sparse grid version of computeCompFaceFluxes and its call from GKVlasov
+------------------------------------------------------------------------
+r1782 | mdorr | 2021-09-22 11:34:38 -0700 (Wed, 22 Sep 2021) | 3 lines
+
+Doing another commit message test.
+
+
+------------------------------------------------------------------------
+r1781 | mdorr | 2021-09-22 10:33:37 -0700 (Wed, 22 Sep 2021) | 3 lines
+
+Fixing an output message (and testing new commit message workaround for LLNL).
+
+
+------------------------------------------------------------------------
+r1780 | mdorf | 2021-09-19 14:02:18 -0700 (Sun, 19 Sep 2021) | 1 line
+
+Fixed cylindrical Bcomponent diagnostcs
+------------------------------------------------------------------------
+r1779 | debo | 2021-09-15 15:18:55 -0700 (Wed, 15 Sep 2021) | 1 line
+
+removed an unused var
+------------------------------------------------------------------------
+r1778 | debo | 2021-09-15 11:11:24 -0700 (Wed, 15 Sep 2021) | 1 line
+
+1) Overhauled the process of selecting and plotting various diagnostics; 2) For sparse grids, use combination technique on each diagnostic rather than entire phase space solution; 3) Making SpaceUtils, SGInterp, and Lee's FourthOrderUtils multidim; and other small changes
+------------------------------------------------------------------------
+r1777 | ricketson1 | 2021-09-13 14:07:47 -0700 (Mon, 13 Sep 2021) | 1 line
+
+(De)averaging between cell averages and cell centers implemented for sparse grid interpolation
+------------------------------------------------------------------------
+r1776 | debo | 2021-09-01 15:58:00 -0700 (Wed, 01 Sep 2021) | 1 line
+
+added missing file; squashed warnings; removed commented code
+------------------------------------------------------------------------
+r1775 | debo | 2021-09-01 14:41:00 -0700 (Wed, 01 Sep 2021) | 1 line
+
+Implemented multidomain and sparse grids simulation capabilities
+------------------------------------------------------------------------
+r1774 | mdorf | 2021-08-27 16:41:21 -0700 (Fri, 27 Aug 2021) | 1 line
+
+Extended Reyonlds-stress term to work with the 4D code; fixed calculation of the normalized flux for the 5D toroidal geometry
+------------------------------------------------------------------------
+r1773 | angus1 | 2021-08-26 13:41:37 -0700 (Thu, 26 Aug 2021) | 1 line
+
+removing some unused members from OneBlockCoordSys class
+------------------------------------------------------------------------
+r1772 | mdorf | 2021-08-17 16:00:23 -0700 (Tue, 17 Aug 2021) | 1 line
+
+Added new diagnostics capabilities (mainly to plot ExB fluxes); set default calculation of RS-term to use UW3 scheme
+------------------------------------------------------------------------
+r1771 | mdorr | 2021-08-10 14:48:34 -0700 (Tue, 10 Aug 2021) | 3 lines
+
+Changing the MGR solver to use an index array to specify the C and F points
+
+
+------------------------------------------------------------------------
+r1770 | ricketson1 | 2021-08-04 13:29:06 -0700 (Wed, 04 Aug 2021) | 1 line
+
+Adding sparse grid stencils to advectUtils and their calls in GKVlasov.  Also getting rid of a wrapper function in advectUtil/mappedAdvectionFlux that's never used (GKVlasov implements its own version of the wrapper)
+------------------------------------------------------------------------
+r1769 | debo | 2021-07-20 20:31:32 -0700 (Tue, 20 Jul 2021) | 1 line
+
+Bugfix in ARK Butcher tables that cause a memory leak; removed MBPETScSolver option from TwoFieldNeutralPC
+------------------------------------------------------------------------
+r1768 | mdorr | 2021-07-19 19:51:58 -0700 (Mon, 19 Jul 2021) | 3 lines
+
+Fixing memory leaks
+
+
+------------------------------------------------------------------------
+r1767 | ricketson1 | 2021-07-16 12:03:14 -0700 (Fri, 16 Jul 2021) | 1 line
+
+Fixed fortran indes overflow bug in sparse grid cell averaging stencil
+------------------------------------------------------------------------
 r1766 | debo | 2021-07-14 11:45:48 -0700 (Wed, 14 Jul 2021) | 1 line
 
 Small corrections to the external time integrator interfaces

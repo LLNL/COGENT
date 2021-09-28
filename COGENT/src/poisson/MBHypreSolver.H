@@ -135,6 +135,8 @@ public:
 
    void MGRSetup( const HYPRE_SStructMatrix& matrix );
 
+   void setMGRCFIndexes( HYPRE_Int** CF_indexes );
+
    void AMG( const HYPRE_SStructMatrix&  matrix,
              const HYPRE_SStructVector&  b,
              const double                tol,
@@ -228,6 +230,7 @@ public:
 
    HYPRE_Int* m_mgr_num_cindexes;
    HYPRE_Int** m_mgr_cindexes;
+   HYPRE_Int* m_mgr_CF_indexes;
    HYPRE_Int m_mgr_nlevels;
    HYPRE_Solver m_mgr_amg_solver;
    

@@ -1,4 +1,5 @@
 #include <array>
+#include <sys/stat.h>
 #include "MagGeom.H"
 #include "MagGeomF_F.H"
 #include "Poisson.H"
@@ -85,7 +86,7 @@ MagGeom::MagGeom(ParmParse&                         a_pp,
    m_second_order = false;
    a_pp.query( "second_order", m_second_order);
    
-   ParmParse ppsg("sparsegrid"); // sparse grid parm parse object
+   ParmParse ppsg("sparse_grids"); // sparse grid parm parse object
    m_useSG = false;  //Don't use sparse grids by default
    ppsg.query( "useSGstencils", m_useSG );
 
@@ -2998,12 +2999,13 @@ MagGeom::plotInitializationData(const ParmParse&  a_pp,
 void
 MagGeom::plotMagneticFieldData(const double& a_time) const
 {
-   plotCellData( string("BField"), m_BField_cc, a_time );
-   plotCellData( string("BFieldMag"), m_BFieldMag_cc, a_time );
-   plotCellData( string("BFieldDir"), m_BFieldDir_cc, a_time );
-   plotCellData( string("gradB"), m_gradBFieldMag_cc, a_time );
-   plotCellData( string("curlBFieldDir"), m_curlBFieldDir_cc, a_time );
-   plotCellData( string("BFieldDirdotcurlBFieldDir"), m_BFieldDirdotcurlBFieldDir_cc, a_time );
+   mkdir( "plt_magnetic_field_data", 0777 );
+   plotCellData( string("plt_magnetic_field_data/BField"), m_BField_cc, a_time );
+   plotCellData( string("plt_magnetic_field_data/BFieldMag"), m_BFieldMag_cc, a_time );
+   plotCellData( string("plt_magnetic_field_data/BFieldDir"), m_BFieldDir_cc, a_time );
+   plotCellData( string("plt_magnetic_field_data/gradB"), m_gradBFieldMag_cc, a_time );
+   plotCellData( string("plt_magnetic_field_data/curlBFieldDir"), m_curlBFieldDir_cc, a_time );
+   plotCellData( string("plt_magnetic_field_data/BFieldDirdotcurlBFieldDir"), m_BFieldDirdotcurlBFieldDir_cc, a_time );
 
    // Get cyclindrical components of a magnetic field
    LevelData<FArrayBox> BField_cyl;
@@ -3011,8 +3013,8 @@ MagGeom::plotMagneticFieldData(const double& a_time) const
       
    if (SpaceDim == 3) {
      // convert to cylindrical from cartesian frame
-     convertCartesianToCylindrical(BField_cyl, m_BFieldDir_cc);
-     plotCellData( string("BField_cyl"), BField_cyl, a_time );
+     convertCartesianToCylindrical(BField_cyl, m_BField_cc);
+     plotCellData( string("plt_magnetic_field_data/BField_cyl"), BField_cyl, a_time );
    }
 
    // Plot local magnetic safety factor q = r/R * Btor/Bpol
@@ -3043,7 +3045,7 @@ MagGeom::plotMagneticFieldData(const double& a_time) const
        safety_factor[dit](iv,0) = r/R * Btor/Bpol;
      }
    }
-   plotCellData( string("LocalSafetyFactor"), safety_factor, a_time );
+   plotCellData( string("plt_magnetic_field_data/LocalSafetyFactor"), safety_factor, a_time );
    
    
    // Plot magnetic flux
@@ -3061,8 +3063,8 @@ MagGeom::plotMagneticFieldData(const double& a_time) const
          normalized_magnetic_flux_cc[dit].setVal(0.);
       }
    }
-   plotCellData( string("MagneticFlux"), magnetic_flux_cc, a_time );
-   plotCellData( string("NormalizedMagneticFlux"), normalized_magnetic_flux_cc, a_time );
+   plotCellData( string("plt_magnetic_field_data/MagneticFlux"), magnetic_flux_cc, a_time );
+   plotCellData( string("plt_magnetic_field_data/NormalizedMagneticFlux"), normalized_magnetic_flux_cc, a_time );
 }
 
 void

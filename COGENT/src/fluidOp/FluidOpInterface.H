@@ -108,7 +108,8 @@ class FluidOpInterface
                                   bool,
                                   const FluidSpecies&,
                                   const PS::GlobalDOFFluidSpecies&,
-                                  int ) { }
+                                  const int,
+                                  const int ) { }
 
       virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                    const PS::KineticSpeciesPtrVect&,

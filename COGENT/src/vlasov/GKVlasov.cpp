@@ -171,6 +171,12 @@ GKVlasov::GKVlasov( ParmParse&                      a_pp,
    else {
       m_precond_face_avg_type = "uw1";
    }
+
+	// parameter parsing for sparse grids
+   ParmParse ppsg("sparse_grids");
+   m_useSG = false;  //Don't use sparse grids by default
+   ppsg.query( "useSGstencils", m_useSG );
+
 }
 
 
@@ -595,15 +601,18 @@ GKVlasov::computeAdvectionFluxPhys( const LevelData<FArrayBox>& a_dist_fn,
    if ( a_phase_geom.secondOrder() ) {
 
       // Compute computational-space fluxes; in mappedAdvectionFlux.cpp
-      computeCompFaceFluxes( a_flux, m_face_dist, a_velocity, false );
+      computeCompFaceFluxes( a_flux, m_face_dist, a_velocity, false ); // if second-order, don't need to worry about SG stencils
    }
    else {
 
       const DisjointBoxLayout& grids = a_flux.disjointBoxLayout();
-      LevelData<FluxBox> fourth_order_flux(grids, SpaceDim, IntVect::Zero);
+		int num_gpts_in_flux=0;
+		if (m_useSG) { num_gpts_in_flux=1; } // if you're using sparse grids, your flux needs a ghost cell
+		IntVect gvec = num_gpts_in_flux*IntVect::Unit;
+		LevelData<FluxBox> fourth_order_flux(grids, SpaceDim, gvec); 
       
       // Compute computational-space fluxes; in mappedAdvectionFlux.cpp
-      computeCompFaceFluxes( fourth_order_flux, m_face_dist, a_velocity, true );
+      computeCompFaceFluxesGen( fourth_order_flux, m_face_dist, a_velocity, true, m_useSG ); // if fourth order, you do
 
       // Compute the second-order flux in valid plus ghost cell faces,
       // then overwrite with the fourth-order flux on the valid faces.
@@ -1814,7 +1823,8 @@ GKVlasov::defineMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>& 
                                void*                                            a_ops,
                                const std::string&                               a_out_string,
                                const std::string&                               a_opt_string,
-                               bool                                             a_im )
+                               bool                                             a_im,
+                               const int                                        a_id )
 {
   for (int species(0); species<a_soln.size(); species++) {
     const KineticSpecies&           soln_species(*(a_soln[species]));
@@ -1830,7 +1840,8 @@ GKVlasov::defineMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>& 
                     a_im, 
                     soln_species, 
                     gdofs_species, 
-                    species );
+                    species,
+                    a_id );
   }
 }
 
@@ -1845,7 +1856,8 @@ GKVlasov::defineBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
                          bool                                             a_im,
                          const KineticSpecies&                            a_species,
                          const GlobalDOFKineticSpecies&                   a_global_dofs,
-                         const int                                        a_species_index )
+                         const int                                        a_species_index,
+                         const int                                        a_id )
 {
   const std::string& name = a_species.name();
 
@@ -1870,6 +1882,7 @@ GKVlasov::defineBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
 
     Preconditioner<ODEVector,AppCtxt> *pc;
     pc = new GKVlasovPreconditioner<ODEVector,AppCtxt>;
+    pc->setSysID(a_id);
 
     m_my_pc_idx[name] = a_pc.size();
 

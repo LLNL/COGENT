@@ -3,6 +3,7 @@
 
 #include "MagGeom.H"
 #include "EdgeDataBox.H"
+#include "SGInterp.H.multidim"
 
 #include "NamespaceHeader.H"
 
@@ -258,6 +259,23 @@ class CFGVars
       int size( bool a_count_ghosts = false );
 
       string pp_prefix() const {return m_pp_prefix;}
+
+      inline void interpolateFrom(  const CFGVars&  a_src )
+      {
+        for (int i = 0; i < m_cell_data.size(); i++) {
+          SGInterp::interpolate<FArrayBox>( *m_cell_data[i],
+                                            *a_src.m_cell_data[i] );
+        }
+        for (int i = 0; i < m_face_data.size(); i++) {
+          SGInterp::interpolate<FluxBox>( *m_face_data[i],
+                                          *a_src.m_face_data[i] );
+        }
+        for (int i = 0; i < m_edge_data.size(); i++) {
+          SGInterp::interpolate<EdgeDataBox>( *m_edge_data[i],
+                                              *a_src.m_edge_data[i] );
+        }
+        return;
+      }
 
    private:
 

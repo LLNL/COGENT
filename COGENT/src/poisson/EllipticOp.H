@@ -6,7 +6,7 @@
 #include "LinearSolver.H"
 #include "CoDim1Stencil.H"
 #include "CoDim2Stencil.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 
 
 #include "NamespaceHeader.H"

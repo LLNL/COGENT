@@ -79,7 +79,7 @@ class GKUnits
        *
        *  @param[in] parm_parse the ParmParse database.
        */
-      GKUnits( ParmParse& parm_parse );
+      GKUnits();
 
       /// Destructor.
       /**

@@ -806,8 +806,10 @@ class ParticleFluxKernel : public Kernel<T>
        /**
         *  Initialized with potentail, which is used to get phase-velocity
         */
-       ParticleFluxKernel( const LevelData<FluxBox>& field )
-          : m_field(field) {;}
+       ParticleFluxKernel(const LevelData<FluxBox>& field,
+                          const int velocity_option)
+          : m_field(field),
+            m_velocity_option(velocity_option) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
       virtual ~ParticleFluxKernel() {;}
@@ -854,6 +856,7 @@ class ParticleFluxKernel : public Kernel<T>
     private:
 
         const LevelData<FluxBox>& m_field;
+        const int m_velocity_option;
 };
 
 /// Heat flux kernel.
@@ -867,10 +870,12 @@ class HeatFluxKernel : public Kernel<T>
        /**
         *  Initialized with potentail, which is used to get phase-velocity
         */
-       HeatFluxKernel( const LevelData<FluxBox>& field,
-                       const LevelData<FArrayBox>& phi)
+       HeatFluxKernel(const LevelData<FluxBox>& field,
+                      const LevelData<FArrayBox>& phi,
+                      const int velocity_option )
           : m_field(field),
-            m_phi(phi) {;}
+            m_phi(phi),
+            m_velocity_option(velocity_option) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
       virtual ~HeatFluxKernel() {;}
@@ -918,70 +923,9 @@ class HeatFluxKernel : public Kernel<T>
 
         const LevelData<FluxBox>& m_field;
         const LevelData<FArrayBox>& m_phi;
+        const int m_velocity_option;
 
 };
-
-/// Perpendicular current density kernel.
-/**
- */
-template <class T>
-class PerpCurrentDensityKernel : public Kernel<T>
-{
-public:
-   /// Constructor with initialization.
-   /**
-    *  Initialized with potentail, which is used to get phase-velocity
-    */
-   PerpCurrentDensityKernel( const LevelData<FluxBox>& field )
-      : m_field(field) {;}
-   
-   /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
-   virtual ~PerpCurrentDensityKernel() {;}
-   
-   /// Computes the integrand for a PerpCurrent moment calculation.
-   /**
-    * Computes the integrand by multiplying the input distribution function
-    * by the perpendicular component of the drift velocity.
-    *
-    * The number of kernel components is CFG_DIM.  If the distribution function
-    * has more than one component, the first component of the result
-    * will contain the moment of the first distribution function component,
-    * the next component will contain the moment of the second
-    * distribution function component, etc.  Upon entry, it is assumed
-    * that result has already been initialized with the distribution function
-    * correspondingly, ie., the first component contains the first
-    * component of the distribution function, the next component
-    * contain the second component of the distribution function, etc.
-    *
-    * @param[out] result Cell-averaged integrand.
-    * @param[in] kinetic_species Kinetic species object.
-    */
-   virtual void eval( LevelData<T>& result,
-                     const KineticSpecies& kinetic_species ) const;
-   
-   /// Returns the kernel scale.
-   /**
-    * Returns the kernel scale, which is 1..
-    *
-    * @param[in] kinetic_species Kinetic species object.
-    * @return real-valued scale to be applied in configuration space.
-    */
-   virtual Real scale( const KineticSpecies& kinetic_species ) const
-   { return kinetic_species.charge(); }
-   
-   /// Returns the number of kernel components
-   /**
-    * Returns the number of kernel components.
-    *
-    * @param[in] kinetic_species Kinetic species object.
-    */
-   virtual int nComponents() const { return CFG_DIM; }
-   
-private:
-   
-   const LevelData<FluxBox>& m_field;
-};
-
 
 /// Guding Center Poloidal Momentum moment.
 /**

@@ -1,5 +1,5 @@
 #include "FluidSpecies.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 
 #include "NamespaceHeader.H"
 

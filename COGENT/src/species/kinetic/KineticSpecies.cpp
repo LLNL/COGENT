@@ -78,9 +78,9 @@ void KineticSpecies::gyroaveragedChargeDensity( CFG::LevelData<CFG::FArrayBox>& 
 }
 
 
-void KineticSpecies::momentumDensity( CFG::LevelData<CFG::FArrayBox>& a_momentum,
-				      const LevelData<FluxBox>& a_field,
-				      const double larmor  ) const
+void KineticSpecies::momentumDensity(CFG::LevelData<CFG::FArrayBox>& a_momentum,
+                                     const LevelData<FluxBox>& a_field,
+                                     const double larmor  ) const
 {
    const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
@@ -162,15 +162,13 @@ void KineticSpecies::ParallelMomentum( CFG::LevelData<CFG::FArrayBox>& a_Paralle
 
 void KineticSpecies::ParallelVelocity( CFG::LevelData<CFG::FArrayBox>& a_ParallelVel ) const
 {
-   //const CFG::MagGeom& mag_geom = m_geometry->magGeom();
-   
    CFG::LevelData<CFG::FArrayBox> density;
    density.define(a_ParallelVel);
    m_moment_op.compute( density, *this, DensityKernel<FArrayBox>() );
 
    m_moment_op.compute( a_ParallelVel, *this, ParallelMomKernel<FArrayBox>() );
 
-// Note that ParallelMomKernel is actually the Number Density Flux (not the Mass Density)
+   //NB: ParallelMomKernel returns number density flux (not mass density flux )
    for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
       a_ParallelVel[dit].divide(density[dit]);
    }
@@ -197,7 +195,7 @@ void KineticSpecies::PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& a_Poloida
    CFG::LevelData<CFG::FArrayBox> magnetization_grown(a_PoloidalMom.disjointBoxLayout(),1,
                                                       a_PoloidalMom.ghostVect()+2*CFG::IntVect::Unit);
    
-   //Extrapolating magnetization moment into the two layers of ghost cells
+   //Extrapolating magnetization moment into two layers of ghost cells
    for (CFG::DataIterator dit(magnetization.dataIterator()); dit.ok(); ++dit) {
       int block_number( coords.whichBlock( mag_geom.gridsFull()[dit] ) );
       const CFG::MagBlockCoordSys& block_coord_sys = (const CFG::MagBlockCoordSys&)(*(coords.getCoordSys(block_number)));
@@ -246,11 +244,12 @@ void KineticSpecies::PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& a_Poloida
 
 }
 
-void KineticSpecies::ParticleFlux( CFG::LevelData<CFG::FArrayBox>& a_ParticleFlux,
-                                   const LevelData<FluxBox>& field  ) const
+void KineticSpecies::ParticleFlux(CFG::LevelData<CFG::FArrayBox>& a_ParticleFlux,
+                                  const LevelData<FluxBox>&       a_field,
+                                  const int                       a_velocity_option) const
 
 {
-   m_moment_op.compute( a_ParticleFlux, *this, ParticleFluxKernel<FArrayBox>(field) );
+   m_moment_op.compute( a_ParticleFlux, *this, ParticleFluxKernel<FArrayBox>(a_field, a_velocity_option) );
 
    const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    CFG::FluxSurface flux_surface(mag_geom, false);
@@ -279,11 +278,12 @@ void KineticSpecies::ParticleFlux( CFG::LevelData<CFG::FArrayBox>& a_ParticleFlu
 }
 
 void KineticSpecies::HeatFlux(CFG::LevelData<CFG::FArrayBox>& a_HeatFlux,
-                              const LevelData<FluxBox>& a_field,
-                              const LevelData<FArrayBox>& a_phi  ) const
+                              const LevelData<FluxBox>&       a_field,
+                              const LevelData<FArrayBox>&     a_phi,
+                              const int                       a_velocity_option) const
 
 {
-   m_moment_op.compute( a_HeatFlux, *this, HeatFluxKernel<FArrayBox>(a_field, a_phi) );
+   m_moment_op.compute( a_HeatFlux, *this, HeatFluxKernel<FArrayBox>(a_field, a_phi, a_velocity_option) );
 
    const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    CFG::FluxSurface flux_surface(mag_geom, false);
@@ -315,13 +315,6 @@ void KineticSpecies::parallelHeatFluxMoment( CFG::LevelData<CFG::FArrayBox>& a_p
                                              CFG::LevelData<CFG::FArrayBox>& a_vparshift ) const
 {
    m_moment_op.compute( a_parallelHeatFlux, *this, ParallelHeatFluxKernel<FArrayBox>(a_vparshift) );
-}
-
-void KineticSpecies::perpCurrentDensity( CFG::LevelData<CFG::FArrayBox>& a_PerpCurrentDensity,
-                                         const LevelData<FluxBox>& a_field  ) const
-{
-   m_moment_op.compute( a_PerpCurrentDensity, *this, PerpCurrentDensityKernel<FArrayBox>(a_field) );
-   
 }
 
 void KineticSpecies::pressureMoment( CFG::LevelData<CFG::FArrayBox>& a_pressure,

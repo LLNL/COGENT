@@ -87,6 +87,7 @@ private:
    LevelData<FArrayBox> m_neutral_density;
    LevelData<FArrayBox> m_neutral_dfn;
 
+   bool m_first_call_tscale;
    
    /// Computes the ionization contribution to RHS.
    /*

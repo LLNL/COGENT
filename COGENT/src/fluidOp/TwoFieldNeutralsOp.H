@@ -6,7 +6,7 @@
 #include "Diffusion.H"
 #include "OneFieldNeutralsOp.H"
 #include "TwoFieldNeutralsPC.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 
 #include "NamespaceHeader.H"
 
@@ -75,7 +75,8 @@ public:
                                bool,
                                const FluidSpecies&,
                                const PS::GlobalDOFFluidSpecies&,
-                               int );
+                               const int,
+                               const int );
 
    virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 const PS::KineticSpeciesPtrVect&,
@@ -234,18 +235,19 @@ private:
    bool m_fixed_recycling;
    bool m_first_call;
    bool m_extrapolate_density;
-   bool m_analytic_pc; // Setting for enabling the analytic preconditioner
-   
+
    std::string m_advScheme;
    std::string m_opt_string;
    
+   bool m_analytic_pc; // Setting for enabling the analytic preconditioner
+   
+   TwoFieldNeutralsPC* m_twofieldneutrals_pc; // The analytic preconditioner
+
    Diffusion*        m_diffusion_op;
    EllipticOpBC*     m_diffusion_bc;
 
    Diffusion*        m_viscosity_op;
    mutable EllipticOpBC*     m_viscosity_bc;
-
-   TwoFieldNeutralsPC* m_twofieldneutrals_pc; // The analytic preconditioner
 
    std::vector<FluidVarBC*>  m_fluid_bc;
    

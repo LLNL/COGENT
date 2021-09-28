@@ -121,7 +121,12 @@ void MultiPhysicsPreconditioner<T,Ops>::define( const T&            a_x,
   m_ops = (Ops*) a_ops;
   m_im = a_im;
 
-  m_ops->defineMultiPhysicsPC(m_block_pc, m_dof_list, a_x, m_out_string, m_opt_string, a_im);
+  m_ops->defineMultiPhysicsPC(  m_block_pc, 
+                                m_dof_list, 
+                                a_x, 
+                                m_out_string, 
+                                m_opt_string, 
+                                a_im);
   CH_assert(m_block_pc.size() == m_dof_list.size());
 
   m_is_defined = true;
@@ -232,8 +237,7 @@ void MultiPhysicsPreconditioner<T,Ops>::apply(T&        a_x,
         
         z = a_b;
         pc->apply(z, a_b);
-        
-        a_x.copy(z, dof_list);
+        m_ops->copyDOFs(a_x, z, dof_list, pc->getSysID());
       }
   
     }
@@ -257,7 +261,7 @@ void MultiPhysicsPreconditioner<T,Ops>::apply(T&        a_x,
       
       z = a_b;
       pc->apply(z, a_b);
-      a_x.copy(z, dof_list);
+      m_ops->copyDOFs(a_x, z, dof_list, pc->getSysID());
   
     }
   }

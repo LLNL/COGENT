@@ -105,7 +105,7 @@ void ArbitraryKineticFunction::parseParameters( ParmParse& a_pp )
    a_pp.get( "function", m_function );
    a_pp.query( "coordinate_type", m_coord_type );
 
-   ParmParse ppsg("sparsegrid");
+   ParmParse ppsg("sparse_grids");
 
    m_useSG = false;  //Don't use sparse grids by default
    ppsg.query( "useSGstencils", m_useSG );

@@ -54,8 +54,7 @@
 using namespace CH_MultiDim;
 
 
-PhaseGeom::PhaseGeom( ParmParse&                              a_parm_parse,
-                      const RefCountedPtr<PhaseCoordSys>&     a_coord_sys,
+PhaseGeom::PhaseGeom( const RefCountedPtr<PhaseCoordSys>&     a_coord_sys,
                       const RefCountedPtr<PhaseGrid>&         a_grids,
                       const RefCountedPtr<CFG::MagGeom>&      a_mag_geom,
                       const RefCountedPtr<VEL::VelCoordSys>&  a_vel_coords,
@@ -669,9 +668,10 @@ PhaseGeom::computeGKVelocities( const LevelData<FluxBox>& a_Efield,
       const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
       RealVect dx = block_coord_sys.dx();
 
-      //use field alignment presently turns off parallel streaming and EXB drift on radial faces (assumes no Epol!!!)
+      //use field alignment presently turns off parallel streaming on radial faces
       const CFG::MagBlockCoordSys& mag_block_coord_sys = getMagBlockCoordSys(grids[dit]);
-      int use_field_alignment = mag_block_coord_sys.isFieldAligned()? 1: 0;
+      int use_field_alignment = (mag_block_coord_sys.isFieldAligned()
+                              && a_option != DIAGNOSTICS) ? 1: 0;
       
       const FluxBox& this_Efield = a_Efield[dit];
       const FluxBox& this_B = (*m_BFace)[dit];

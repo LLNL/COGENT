@@ -110,7 +110,7 @@ GKFluidOp::~GKFluidOp()
 }
 
 
-FluidOpInterface& GKFluidOp::fluidModel( const std::string& a_name )
+FluidOpInterface& GKFluidOp::fluidModel( const std::string& a_name ) const
 {
    typedef std::map<std::string,int>::iterator mapIterator;
    const mapIterator it( m_species_map.find( a_name ) );
@@ -227,7 +227,7 @@ void GKFluidOp::enforcePositivity( FluidSpeciesPtrVect&  a_species_comp )
 
 void GKFluidOp::getMemberVarForPlotting( LevelData<FArrayBox>&  a_Var,
                                          const FluidSpecies&    a_fluid_species,
-                                         const string           a_var_name )
+                                         const string           a_var_name ) const
 {
    const std::string species_name( a_fluid_species.name() );
    FluidOpInterface& fluidOp( fluidModel( species_name ) );
@@ -358,7 +358,8 @@ void GKFluidOp::defineMultiPhysicsPC( std::vector<PS::Preconditioner<PS::ODEVect
                                       void*                                                         a_gkops,
                                       const std::string&                                            a_out_string,
                                       const std::string&                                            a_opt_string,
-                                      bool                                                          a_im )
+                                      bool                                                          a_im,
+                                      const int                                                     a_id )
 {
    for (int species(0); species<a_fluid_species.size(); species++) {
       FluidSpecies& fluid_species( static_cast<FluidSpecies&>(*(a_fluid_species[species])) );
@@ -366,8 +367,17 @@ void GKFluidOp::defineMultiPhysicsPC( std::vector<PS::Preconditioner<PS::ODEVect
       const std::string species_name( fluid_species.name() );
       FluidOpInterface& fluidOp( fluidModel( species_name ) );
 
-      fluidOp.defineBlockPC(a_pc, a_dof_list, a_soln_vec, a_gkops, a_out_string, a_opt_string, a_im,
-                            fluid_species, gdofs_species, species );
+      fluidOp.defineBlockPC(  a_pc, 
+                              a_dof_list, 
+                              a_soln_vec, 
+                              a_gkops, 
+                              a_out_string, 
+                              a_opt_string, 
+                              a_im,
+                              fluid_species, 
+                              gdofs_species, 
+                              species,
+                              a_id );
    }
    return;
 }

@@ -19,7 +19,8 @@
 #include "NamespaceHeader.H"
 
 
-void GKOps::define( const GKState& a_state )
+void GKOps::define( const GKState&            a_state, 
+                    const GKSystemParameters& a_gkparams )
 {
    CH_assert( isDefined()==false );
    m_phase_geometry = a_state.geometry();
@@ -32,10 +33,9 @@ void GKOps::define( const GKState& a_state )
    m_transport_imex_implicit  = false;
    m_neutrals_imex_implicit   = false;
 
-   ParmParse ppgksys( "gksystem" );
-   parseParameters( ppgksys );
+   setParameters( a_gkparams );
 
-   m_units = new GKUnits( ppgksys );
+   m_units = new GKUnits();
 
    ParmParse pp;
    m_boundary_conditions = new GKSystemBC( pp, a_state );
@@ -101,6 +101,26 @@ void GKOps::define( const GKState& a_state )
 
    m_fluidOp->setStepConstKinCoeff( m_step_const_kin_coeff_fluidop, 
                                     fluid_species );
+
+   m_is_defined = true;
+}
+
+
+void GKOps::defineShell(  const GKState&            a_state, 
+                          const GKSystemParameters& a_gkparams )
+{
+   CH_assert( isDefined()==false );
+   m_phase_geometry = a_state.geometry();
+   CH_assert( m_phase_geometry != NULL );
+
+   setParameters( a_gkparams );
+   m_units = new GKUnits();
+   m_fluidOp = new CFG::GKFluidOp(  m_phase_geometry->magGeom(), 
+                                    *m_units, 
+                                    m_verbosity );
+ 
+   CFG::IntVect phi_ghost_vect = m_fluid_ghosts*CFG::IntVect::Unit;
+   m_phi.define( m_phase_geometry->magGeom().gridsFull(), 1, phi_ghost_vect );
 
    m_is_defined = true;
 }
@@ -237,6 +257,47 @@ void GKOps::initializeElectricField( const GKState& a_state_phys,
    
 }
 
+void GKOps::initializeElectricFieldShell( const GKState& a_state_phys,
+                                          const int      a_cur_step,
+                                          const double   a_cur_time )
+{
+   string field_type;
+   CFG::IntVect ghostVect = (m_phase_geometry->secondOrder()) ? CFG::IntVect::Zero : CFG::IntVect::Unit;
+   if ( m_ampere_law ) {
+      field_type = "EFieldAmpere";
+      m_E_field = new CFG::EFieldAmpere("", 
+                                        "EField", 
+                                        m_phase_geometry->magGeom(), 
+                                        ghostVect);
+   }
+   else if ( m_consistent_potential_bcs ) {
+      field_type = "EFieldSelfConsistentBC";
+      m_E_field = new CFG::EFieldSelfConsistentBC("", 
+                                                  "EField", 
+                                                  m_phase_geometry->magGeom(),
+                                                  ghostVect);
+   }
+   else {
+      field_type = "EField";
+      m_E_field = new CFG::EField("", 
+                                  "EField", 
+                                  m_phase_geometry->magGeom(), 
+                                  ghostVect);
+   }
+
+   m_E_field->define( m_units->larmorNumber(),
+                      m_units->debyeNumber(),
+                      a_state_phys.dataKinetic(),
+                      m_boltzmann_electron,
+                      m_fixed_efield,
+                      m_phase_geometry->divFreeVelocity(),
+                      a_cur_step );
+
+   CH_assert( m_phase_geometry != NULL );
+
+   return;
+}
+
 void GKOps::initializeKineticSpeciesPhysical( KineticSpeciesPtrVect& a_species_comp,
                                               const double a_time )
 {
@@ -274,9 +335,9 @@ GKOps::~GKOps()
    if (m_E_field) delete m_E_field;
    if (m_boltzmann_electron) delete m_boltzmann_electron;
    if (m_VorticityOp) delete m_VorticityOp;
-   delete m_collisions;
-   delete m_fluidOp;
-   delete m_scalarOp;
+   if (m_collisions) delete m_collisions;
+   if (m_fluidOp) delete m_fluidOp;
+   if (m_scalarOp) delete m_scalarOp;
    if (m_transport) delete m_transport;
    if (m_neutrals)  delete m_neutrals;
    if (m_vlasov) delete m_vlasov;
@@ -286,8 +347,8 @@ GKOps::~GKOps()
      delete save_hist->timevals;
      delete save_hist->timestep;
    }
-   delete m_initial_conditions;
-   delete m_boundary_conditions;
+   if (m_initial_conditions) delete m_initial_conditions;
+   if (m_boundary_conditions) delete m_boundary_conditions;
    delete m_units;
 
    m_kinetic_species_phys.clear();
@@ -909,9 +970,9 @@ void GKOps::defineMultiPhysicsPC( std::vector<Preconditioner<ODEVector,AppCtxt>*
                                   void*                                             a_sys,
                                   const std::string&                                a_out_string,
                                   const std::string&                                a_opt_string,
-                                  bool                                              a_im )
+                                  bool                                              a_im,
+                                  const int                                         a_id )
 {
-  a_pc.clear();
   const GlobalDOF* global_dof(a_state.getGlobalDOF());
 
   if (m_vlasov) {
@@ -923,7 +984,8 @@ void GKOps::defineMultiPhysicsPC( std::vector<Preconditioner<ODEVector,AppCtxt>*
                                     a_sys,
                                     a_out_string,
                                     a_opt_string,
-                                    a_im );
+                                    a_im,
+                                    a_id );
   }
 
   m_collisions->defineMultiPhysicsPC( a_pc, 
@@ -934,7 +996,8 @@ void GKOps::defineMultiPhysicsPC( std::vector<Preconditioner<ODEVector,AppCtxt>*
                                       a_sys, 
                                       a_out_string, 
                                       a_opt_string, 
-                                      a_im );
+                                      a_im,
+                                      a_id );
 
   m_fluidOp->defineMultiPhysicsPC(  a_pc,
                                     a_dof_list,
@@ -944,7 +1007,8 @@ void GKOps::defineMultiPhysicsPC( std::vector<Preconditioner<ODEVector,AppCtxt>*
                                     a_sys,
                                     a_out_string,
                                     a_opt_string,
-                                    a_im );
+                                    a_im,
+                                    a_id );
 
   return;
 }
@@ -1441,248 +1505,157 @@ void GKOps::convertToPhysical( const GKState& a_soln_mapped, GKState& a_soln_phy
 }
 
 
-void GKOps::parseParameters( ParmParse& a_ppgksys )
+void GKOps::setParameters( const GKSystemParameters& a_gkparams )
 {
-   if (a_ppgksys.contains("fixed_efield")) {
-      a_ppgksys.query( "fixed_efield", m_fixed_efield );
-   }
-   else {
-      m_fixed_efield = false;
-   }
-   
-   if (a_ppgksys.contains("zero_efield")) {
-      a_ppgksys.query( "zero_efield", m_zero_efield );
-   }
+  m_fixed_efield = a_gkparams.fixedEField();
+  m_zero_efield = a_gkparams.zeroEField();
 
-   a_ppgksys.query( "imex_transport_implicit", m_transport_imex_implicit );
-   a_ppgksys.query( "imex_neutrals_implicit", m_neutrals_imex_implicit );
+  m_transport_imex_implicit = a_gkparams.imexTransportImplicit();
+  m_neutrals_imex_implicit = a_gkparams.imexNeutralsImplicit();
 
-   if (a_ppgksys.contains("old_vorticity_model")) {
-      a_ppgksys.get("old_vorticity_model", m_old_vorticity_model);
-   }
-   else {
-      m_old_vorticity_model = false;
-   }
+  m_old_vorticity_model = a_gkparams.oldVorticityModel();
+  m_skip_efield_stage_update = a_gkparams.skipEFieldStageUpdate();
 
-   if (a_ppgksys.contains("skip_efield_stage_update")) {
-      a_ppgksys.get("skip_efield_stage_update", m_skip_efield_stage_update);
-   }
-   else {
-      m_skip_efield_stage_update = false;
-   }
+  m_consistent_potential_bcs = a_gkparams.consistentPotentialBCs();
+  m_use_vlasov_ampere_bcs = a_gkparams.useVlasovAmpereBCs();
+  m_Esol_extrapolation = a_gkparams.ESolExtrapolation();
 
-   if (a_ppgksys.contains("consistent_potential_bcs")) {
-      a_ppgksys.query( "consistent_potential_bcs", m_consistent_potential_bcs );
-   }
-   else {
-      m_consistent_potential_bcs = false;
-   }
+  m_dealignment_corrections = a_gkparams.dealignmentCorrections();
 
-  if (a_ppgksys.contains("use_vlasov_ampere_bcs")) {
-      a_ppgksys.query( "use_vlasov_ampere_bcs", m_use_vlasov_ampere_bcs );
-   }
-   else {
-      m_use_vlasov_ampere_bcs = true;
-   }
-   
-   if (a_ppgksys.contains("extrapolated_sol_efield")) {
-     a_ppgksys.query( "extrapolated_sol_efield", m_Esol_extrapolation );
-   }
-   else {
-     m_Esol_extrapolation = true;
-   }
+  m_ampere_law = a_gkparams.ampereLaw();
+  if (m_ampere_law) {
+    m_consistent_potential_bcs = true;
+    m_ampere_cold_electrons = a_gkparams.ampereColdElectrons();
+  } else {
+    m_ampere_cold_electrons = false;
+  }
+  m_ampere_post_step_update = a_gkparams.amperePostStepUpdate();
 
-   if (a_ppgksys.contains("efield_dealignment_corrections")) {
-     a_ppgksys.query( "efield_dealignment_corrections", m_dealignment_corrections );
-   }
-   else {
-     m_dealignment_corrections = false;
-   }
+  if ( m_fixed_efield && m_ampere_law ) {
+     MayDay::Error("GKOps::setParameters(): Specify either fixed field or ampere law, but not both"); 
+  }
 
-   if (a_ppgksys.contains("ampere_law")) {
-      a_ppgksys.query( "ampere_law", m_ampere_law );
+  m_transport_model_on = a_gkparams.transportModelOn();
+  m_neutrals_model_on = a_gkparams.neutralsModelOn();
 
-      if (m_ampere_law) {
-         m_consistent_potential_bcs = true;
+  m_enforce_quasineutrality = a_gkparams.enforceQuasineutrality();
+  m_step_const_kin_coeff_fluidop = a_gkparams.stepConstKineticCoeffFluidOp();
 
-         if (a_ppgksys.contains("ampere_cold_electrons")) {
-            a_ppgksys.query( "ampere_cold_electrons", m_ampere_cold_electrons );
-         }
-         else {
-            m_ampere_cold_electrons = false;
-         }
-      }
-      else {
-         m_ampere_cold_electrons = false;
-      }
-   }
-   else {
-      m_ampere_law = false;
-      m_ampere_cold_electrons = false;
-   }
+  m_kinetic_ghosts = a_gkparams.kineticGhosts();
+  m_fluid_ghosts = a_gkparams.fluidGhosts();
 
-   if (a_ppgksys.contains("ampere_post_step_update")) {
-      a_ppgksys.query( "ampere_post_step_update", m_ampere_post_step_update );
-   }
-   else {
-      m_ampere_post_step_update = false;
-   }
-
-   if ( m_fixed_efield && m_ampere_law ) {
-      MayDay::Error("GKOps::parseParameters(): Specify either fixed field or ampere law, but not both"); 
-   }
-
-   if (a_ppgksys.contains("transport_model_on")) {
-      a_ppgksys.get("transport_model_on", m_transport_model_on);
-   }
-   else {
-      m_transport_model_on = false;
-   }
-
-   if (a_ppgksys.contains("neutrals_model_on")) {
-      a_ppgksys.get("neutrals_model_on", m_neutrals_model_on);
-   }
-   else {
-      m_neutrals_model_on = false;
-   }
-
-   bool using_boltzmann_electrons(true);
-   m_boltzmann_electron = NULL;
-   ParmParse pp_be( "boltzmann_electron" );
-   
-   string name;
-   if (using_boltzmann_electrons && pp_be.contains("name")) {
-      pp_be.get( "name", name );
-      using_boltzmann_electrons = (name=="electron");
-   }
-   else using_boltzmann_electrons = false;
-   
-   double mass;
-   if (using_boltzmann_electrons && pp_be.contains("mass")) {
-      pp_be.get( "mass", mass );
-   }
-   else using_boltzmann_electrons = false;
-   
-   double charge;
-   if (using_boltzmann_electrons && pp_be.contains("charge")) {
-      pp_be.get( "charge", charge );
-   }
-   else using_boltzmann_electrons = false;
-   
-   double temperature;
-   if (using_boltzmann_electrons && pp_be.contains("temperature")) {
-      pp_be.get( "temperature", temperature );
-   }
-   else using_boltzmann_electrons = false;
-   
-   if (using_boltzmann_electrons) {
-      CH_assert( m_phase_geometry != NULL );
-      const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-      CFG::LevelData<CFG::FArrayBox> temp( mag_geom.gridsFull(),
-                                           1,
-                                           CFG::IntVect::Unit );
-      for (CFG::DataIterator dit( temp.dataIterator() ); dit.ok(); ++dit) {
-         temp[dit].setVal( temperature );
-      }
-      
-      m_boltzmann_electron = new CFG::BoltzmannElectron( mass,
-                                                         charge,
-                                                         mag_geom,
-                                                         temp );
-   }
-
-   a_ppgksys.query( "gksystem.enforce_quasineutrality", m_enforce_quasineutrality );
-
-   a_ppgksys.query("step_const_coef", m_step_const_kin_coeff_fluidop);
-   
-   
-   // Get kinetic ghost layer width
-   a_ppgksys.query( "kinetic_ghost_width", m_kinetic_ghosts );
-
-   // Get fluid ghost layer width
-   a_ppgksys.query( "fluid_ghost_width", m_fluid_ghosts );
+  bool using_boltzmann_electrons(true);
+  m_boltzmann_electron = NULL;
+  ParmParse pp_be( "boltzmann_electron" );
+  
+  string name;
+  if (using_boltzmann_electrons && pp_be.contains("name")) {
+     pp_be.get( "name", name );
+     using_boltzmann_electrons = (name=="electron");
+  }
+  else using_boltzmann_electrons = false;
+  
+  double mass;
+  if (using_boltzmann_electrons && pp_be.contains("mass")) {
+     pp_be.get( "mass", mass );
+  }
+  else using_boltzmann_electrons = false;
+  
+  double charge;
+  if (using_boltzmann_electrons && pp_be.contains("charge")) {
+     pp_be.get( "charge", charge );
+  }
+  else using_boltzmann_electrons = false;
+  
+  double temperature;
+  if (using_boltzmann_electrons && pp_be.contains("temperature")) {
+     pp_be.get( "temperature", temperature );
+  }
+  else using_boltzmann_electrons = false;
+  
+  if (using_boltzmann_electrons) {
+     CH_assert( m_phase_geometry != NULL );
+     const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
+     CFG::LevelData<CFG::FArrayBox> temp( mag_geom.gridsFull(),
+                                          1,
+                                          CFG::IntVect::Unit );
+     for (CFG::DataIterator dit( temp.dataIterator() ); dit.ok(); ++dit) {
+        temp[dit].setVal( temperature );
+     }
+     
+     m_boltzmann_electron = new CFG::BoltzmannElectron( mass,
+                                                        charge,
+                                                        mag_geom,
+                                                        temp );
+  }
 }
 
 
-
-void GKOps::plotPotential( const std::string& a_filename,
-                           const bool&        a_non_zonal_comp,
-                           const double&      a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   if (!a_non_zonal_comp){
-      m_phase_geometry->plotConfigurationData( a_filename.c_str(), m_phi, a_time );
-   }
-   else {
-      const PhaseGeom& phase_geometry( *m_phase_geometry );
-      const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-      CFG::LevelData<CFG::FArrayBox> phi( mag_geom.gridsFull(), 2, CFG::IntVect::Zero);
-      
-      CFG::LevelData<CFG::FArrayBox> phi_axisym;
-      phi_axisym.define(m_phi);
-      
-      CFG::FluxSurface flux_surface(mag_geom);
-      flux_surface.averageAndSpread(m_phi, phi_axisym);
-      for (CFG::DataIterator dit(m_phi.dataIterator()); dit.ok(); ++dit) {
-         phi[dit].copy(m_phi[dit],0,0,1);
-         phi[dit].copy(m_phi[dit],0,1,1);
-         phi[dit].minus(phi_axisym[dit],0,1,1);
-      }
-      m_phase_geometry->plotConfigurationData( a_filename.c_str(), phi, a_time );
-   }
-}
-
-void GKOps::plotEField( const std::string& a_filename,
-                        const double&      a_time ) const
+void GKOps::computeEField(  CFG::LevelData<CFG::FluxBox>& a_Efield ) const
 {
    CH_assert( m_phase_geometry != NULL );
    const PhaseGeom& phase_geometry( *m_phase_geometry );
 
-   // Plot the psi and theta projections of the physical field
-
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
    const CFG::DisjointBoxLayout& grids = mag_geom.gridsFull();
-   CFG::LevelData<CFG::FluxBox> Efield( grids, CFG_DIM, CFG::IntVect::Unit);
+   a_Efield.define( grids, CFG_DIM, CFG::IntVect::Unit);
 
-#if 1
 #if CFG_DIM==2
-   m_E_field->computePoloidalField( m_phi, Efield );
+   m_E_field->computePoloidalField( m_phi, a_Efield );
    for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
-      CFG::FluxBox& this_Efield = Efield[dit];
+      CFG::FluxBox& this_Efield = a_Efield[dit];
       mag_geom.getBlockCoordSys(grids[dit]).computePsiThetaProjections(this_Efield);
    }
 #endif
 #if CFG_DIM==3
-   m_E_field->computeField( m_phi, Efield );
-#endif
-#else
-   m_E_field->getFaceCenteredFieldOnCore( m_phi, Efield );
+   m_E_field->computeField( m_phi, a_Efield );
 #endif
       
-   if ( m_ampere_law ) {
-      CFG::LevelData<CFG::FArrayBox>& E_field = m_E_field->getCellCenteredField();
-      CFG::LevelData<CFG::FArrayBox> E_field_no_ghosts(grids, CFG_DIM, CFG::IntVect::Zero);
-      for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
-         E_field_no_ghosts[dit].copy(E_field[dit], grids[dit]);
-      }
-      phase_geometry.plotConfigurationData( a_filename.c_str(), E_field_no_ghosts, a_time );
-   }
-   else {
-      CFG::LevelData<CFG::FluxBox> E_field_no_ghosts(grids, CFG_DIM, CFG::IntVect::Zero);
-      for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
-         E_field_no_ghosts[dit].copy(Efield[dit], grids[dit]);
-      }
-      phase_geometry.plotConfigurationData( a_filename.c_str(), E_field_no_ghosts, a_time );
-   }
+   return;
 }
 
-void GKOps::plotExBData(const std::string& a_filename,
-                        const double&      a_time ) const
+void GKOps::getEField(  CFG::LevelData<CFG::FArrayBox>& a_E ) const
+{
+   CH_assert(m_ampere_law);
+
+   CFG::LevelData<CFG::FArrayBox>& E_field(m_E_field->getCellCenteredField());
+   a_E.define(E_field.disjointBoxLayout(), CFG_DIM, CFG::IntVect::Zero);
+   for (auto dit(a_E.dataIterator()); dit.ok(); ++dit) {
+      a_E[dit].copy(E_field[dit]);
+   }
+
+   return;
+}
+
+void GKOps::getEField(  CFG::LevelData<CFG::FluxBox>& a_E ) const
+{
+   CH_assert(!m_ampere_law);
+
+   CFG::LevelData<CFG::FluxBox> Efield;
+   computeEField( Efield );
+
+   a_E.define(Efield.disjointBoxLayout(), CFG_DIM, CFG::IntVect::Zero);
+   for (auto dit(a_E.dataIterator()); dit.ok(); ++dit) {
+      a_E[dit].copy(Efield[dit]);
+   }
+
+   return;
+}
+
+void GKOps::getEField( LevelData<FluxBox>& a_E) const
 {
    CH_assert( m_phase_geometry != NULL );
    const PhaseGeom& phase_geometry( *m_phase_geometry );
+   phase_geometry.injectConfigurationToPhase( m_E_field->getFaceCenteredField(),
+                                              m_E_field->getCellCenteredField(),
+                                              a_E );
+   return;
+}
 
-   // Plot the psi and theta projections of the physical field
+void GKOps::getExBData( CFG::LevelData<CFG::FArrayBox>& a_ExB_data ) const
+{
+   CH_assert( m_phase_geometry != NULL );
+   const PhaseGeom& phase_geometry( *m_phase_geometry );
 
    const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
    const CFG::DisjointBoxLayout& grids = mag_geom.gridsFull();
@@ -1698,13 +1671,13 @@ void GKOps::plotExBData(const std::string& a_filename,
       ExB_drift[dit].mult(larmor_number);
    }
    
-   CFG::LevelData<CFG::FArrayBox> ExB_data( grids, 4, CFG::IntVect::Zero);
+   a_ExB_data.define( grids, 4, CFG::IntVect::Zero);
    CFG::LevelData<CFG::FArrayBox> tmp( grids, 1, CFG::IntVect::Zero);
    
    // Compute radial component of ExB velocity
    mag_geom.computeRadialProjection(tmp, ExB_drift);
    for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
-      ExB_data[dit].copy(tmp[dit],0,0,1);
+      a_ExB_data[dit].copy(tmp[dit],0,0,1);
    }
 
    // Compute FS averaged poloidal component of ExB velocity
@@ -1715,7 +1688,7 @@ void GKOps::plotExBData(const std::string& a_filename,
    flux_surface.averageAndSpread(tmp, tmp_axisym);
    
    for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
-      ExB_data[dit].copy(tmp_axisym[dit],0,1,1);
+      a_ExB_data[dit].copy(tmp_axisym[dit],0,1,1);
    }
 
    // Compute radial component of the <ExB velocity> shear
@@ -1724,10 +1697,10 @@ void GKOps::plotExBData(const std::string& a_filename,
    
    mag_geom.computeRadialProjection(tmp, ExB_shear);
    for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
-      ExB_data[dit].copy(tmp[dit],0,2,1);
+      a_ExB_data[dit].copy(tmp[dit],0,2,1);
       //Multiply by -1 to compensate for the minus sign
       // in computeField calculation that returns -grad(phi)
-      ExB_data[dit].mult(-1.0,2,1);
+      a_ExB_data[dit].mult(-1.0,2,1);
    }
 
    // Compute flux surface average of the <ExB> shear
@@ -1735,804 +1708,12 @@ void GKOps::plotExBData(const std::string& a_filename,
    CFG::LevelData<CFG::FArrayBox> negative_ExB_shear_axisym( grids, 1, CFG::IntVect::Zero);
    flux_surface.averageAndSpread(tmp, negative_ExB_shear_axisym);
    for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
-      ExB_data[dit].copy(negative_ExB_shear_axisym[dit],0,3,1);
-      ExB_data[dit].mult(-1.0,3,1);
-   }
-   
-   phase_geometry.plotConfigurationData( a_filename.c_str(), ExB_data, a_time );
-}
-
-void GKOps::plotDistributionFunction( const std::string&    a_filename,
-                                      const KineticSpecies& a_soln_species,
-                                      const double&         a_time ) const
-{
-   const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
-
-   const LevelData<FArrayBox>& soln_dfn = a_soln_species.distributionFunction();
-   LevelData<FArrayBox> dfn( species_geometry.gridsFull(), 1, IntVect::Zero );
-   for (DataIterator dit(dfn.dataIterator()); dit.ok(); ++dit) {
-      dfn[dit].copy(soln_dfn[dit]);
+      a_ExB_data[dit].copy(negative_ExB_shear_axisym[dit],0,3,1);
+      a_ExB_data[dit].mult(-1.0,3,1);
    }
 
-   species_geometry.divideBStarParallel( dfn );
-   species_geometry.plotData( a_filename.c_str(), dfn, a_time );
+   return;   
 }
-
-void GKOps::plotFluid( const std::string&       a_filename,
-                       const CFG::FluidSpecies& a_fluid_species,
-                       const string&            a_var_name,
-                       const double&            a_time ) const
-{
-   CH_TIME("GKOps::plotFluid()");
-   m_phase_geometry->plotConfigurationData( a_filename.c_str(), a_fluid_species.cell_var(a_var_name), a_time );
-}
-
-void GKOps::plotFluidAtCellFromFaceNorms( const std::string&        a_filename,
-                                          const CFG::FluidSpecies&  a_fluid_species,
-                                          const string&             a_var_name,
-                                          const double&             a_time ) const
-{
-   CH_TIME("GKOps::plotFluidAtCellFromFaceNorms()");
-
-   // convert contravarient vars on faces to physical vars at cells
-   //
-   const CFG::IntVect& ghostVect = a_fluid_species.face_var(a_var_name).ghostVect();
-   CFG::LevelData<CFG::FArrayBox> this_cell_data(a_fluid_species.face_var(a_var_name).getBoxes(), CFG_DIM, ghostVect);
-   a_fluid_species.interpFaceVarToCell(this_cell_data, a_var_name);
-   
-   //const PhaseGeom& phase_geometry( *m_phase_geometry );
-   //const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-   mag_geom.convertPhysToContravar(this_cell_data,1); // 1 is for inverse
-   
-   // plot data
-   //
-   m_phase_geometry->plotConfigurationData( a_filename.c_str(), this_cell_data, a_time );
-   
-}
-
-void GKOps::plotFluidAtCellFromEdgeTans( const std::string&        a_filename,
-                                         const CFG::FluidSpecies&  a_fluid_species,
-                                         const string&             a_var_name,
-                                         const double&             a_time ) const
-{
-   CH_TIME("GKOps::plotFluidAtCellFromEdgeTans()");
-   
-   // convert covariant vars on edges to physical vars at cells
-   //
-   const CFG::IntVect& ghostVect = a_fluid_species.edge_var(a_var_name).ghostVect();
-   CFG::LevelData<CFG::FArrayBox> this_cell_data(a_fluid_species.edge_var(a_var_name).getBoxes(), CFG_DIM, ghostVect);
-   a_fluid_species.interpEdgeVarToCell(this_cell_data, a_var_name);
-   
-   //const PhaseGeom& phase_geometry( *m_phase_geometry );
-   //const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-   mag_geom.convertPhysToCovar(this_cell_data,1); // 1 is for inverse
-
-   m_phase_geometry->plotConfigurationData( a_filename.c_str(), this_cell_data, a_time );
-
-}
-
-void GKOps::plotFluidOpMember( const std::string&        a_filename,
-                               const CFG::FluidSpecies&  a_fluid_species,
-                               const std::string&        a_member_var_name,
-                               const double              a_time ) const
-
-{
-   CH_TIME("GKOps::plotFluidOpMember()");
-   //const CFG::IntVect& ghostVect = 1*CFG::IntVect::Unit;
-   //const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-   CFG::LevelData<CFG::FArrayBox> this_cell_data;
-   m_fluidOp->getMemberVarForPlotting(this_cell_data, a_fluid_species, a_member_var_name);
-   m_phase_geometry->plotConfigurationData( a_filename.c_str(), this_cell_data, a_time );
-  
-}
-
-void GKOps::plotBStarParallel( const std::string&    a_filename,
-                               const KineticSpecies& a_soln_species,
-                               const double&         a_time ) const
-{
-   const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
-
-   LevelData<FArrayBox> BStarParallel( species_geometry.gridsFull(), 1, IntVect::Zero );
-   species_geometry.getBStarParallel(BStarParallel);
-
-   species_geometry.plotData( a_filename.c_str(), BStarParallel, a_time );
-}
-
-void GKOps::plotDeltaF( const std::string&    a_filename,
-                        const KineticSpecies& a_soln_species,
-                        const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.numberDensity( density );
-
-   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.ParallelMomentum( ParallelMom );
-
-   for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
-      ParallelMom[dit].divide(density[dit]);
-   }
-   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.pressureMoment(pressure, ParallelMom);
-
-   for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
-      pressure[dit].divide(density[dit]);
-   }
-
-   const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
-   LevelData<FArrayBox> deltaF( species_geometry.gridsFull(), 1, IntVect::Zero );
-   DeltaFKernel<FArrayBox> DeltaF_Kernel(density, pressure, ParallelMom);
-   DeltaF_Kernel.eval(deltaF, a_soln_species);
-
-   species_geometry.plotData( a_filename.c_str(), deltaF, a_time );
-
-}
-
-
-void GKOps::plotDistributionFunctionAtMu( const std::string&    a_filename,
-                                          const KineticSpecies& a_soln_species,
-                                          const int             a_mu,
-                                          const double&         a_time ) const
-{
-   const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
-
-   const LevelData<FArrayBox>& soln_dfn = a_soln_species.distributionFunction();
-   LevelData<FArrayBox> dfn( species_geometry.gridsFull(), 1, IntVect::Zero );
-   for (DataIterator dit(dfn.dataIterator()); dit.ok(); ++dit) {
-      dfn[dit].copy(soln_dfn[dit]);
-   }
-
-   species_geometry.divideBStarParallel( dfn );
-   species_geometry.plotAtMuIndex( a_filename.c_str(), a_mu, soln_dfn, a_time );
-}
-
-
-void GKOps::plotVParallelTheta( const std::string&    a_filename,
-                                const KineticSpecies& a_soln_species,
-                                const int             a_radial_index,
-                                const int             a_toroidal_index,
-                                const int             a_mu_index,
-                                const double&         a_time ) const
-{
-   const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
-
-   const LevelData<FArrayBox>& soln_dfn = a_soln_species.distributionFunction();
-   LevelData<FArrayBox> dfn( species_geometry.gridsFull(), 1, IntVect::Zero );
-   for (DataIterator dit(dfn.dataIterator()); dit.ok(); ++dit) {
-      dfn[dit].copy(soln_dfn[dit]);
-   }
-
-   species_geometry.divideBStarParallel( dfn );
-   species_geometry.plotVParPoloidalData( a_filename.c_str(), a_radial_index,
-                                          a_toroidal_index, a_mu_index, dfn, a_time );
-}
-
-void GKOps::plotbfVParallelTheta( const std::string&    a_filename,
-                                const KineticSpecies& a_soln_species,
-                                const int             a_radial_index,
-                                const int             a_toroidal_index,
-                                const int             a_mu_index,
-                                const double&         a_time ) const
-{
-   const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
-
-   const LevelData<FArrayBox>& soln_dfn = a_soln_species.distributionFunction();
-   LevelData<FArrayBox> dfn( species_geometry.gridsFull(), 1, IntVect::Zero );
-   for (DataIterator dit(dfn.dataIterator()); dit.ok(); ++dit) {
-      dfn[dit].copy(soln_dfn[dit]);
-   }
-
-   // Same as plotVParallelTheta but not dividing by BStarParallel this time
-   species_geometry.plotVParPoloidalData( a_filename.c_str(), a_radial_index,
-                                          a_toroidal_index, a_mu_index, dfn, a_time );
-}
-
-
-void GKOps::plotRTheta( const std::string&    a_filename,
-                        const KineticSpecies& a_soln_species,
-                        const int             a_vpar_index,
-                        const int             a_mu_index,
-                        const double&         a_time ) const
-{
-   const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
-
-   const LevelData<FArrayBox>& soln_dfn = a_soln_species.distributionFunction();
-   LevelData<FArrayBox> dfn( species_geometry.gridsFull(), 1, IntVect::Zero );
-   for (DataIterator dit(dfn.dataIterator()); dit.ok(); ++dit) {
-      dfn[dit].copy(soln_dfn[dit]);
-   }
-
-   VEL::IntVect vspace_index(a_vpar_index, a_mu_index);
-
-   species_geometry.divideBStarParallel( dfn );
-   species_geometry.plotAtVelocityIndex( a_filename.c_str(), vspace_index, dfn, a_time );
-}
-
-
-
-void GKOps::plotVParallelMu( const std::string&    a_filename,
-                             const KineticSpecies& a_soln_species,
-                             const int             a_radial_index,
-                             const int             a_poloidal_index,
-                             const int             a_toroidal_index,
-                             const double&         a_time ) const
-{
-   const PhaseGeom& species_geometry = a_soln_species.phaseSpaceGeometry();
-
-   const LevelData<FArrayBox>& soln_dfn = a_soln_species.distributionFunction();
-   LevelData<FArrayBox> dfn( species_geometry.gridsFull(), 1, IntVect::Zero );
-   for (DataIterator dit(dfn.dataIterator()); dit.ok(); ++dit) {
-      dfn[dit].copy(soln_dfn[dit]);
-   }
-
-#if CFG_DIM==3
-   CFG::IntVect cspace_index(a_radial_index, a_poloidal_index, a_toroidal_index);
-#else
-   CFG::IntVect cspace_index(a_radial_index, a_poloidal_index);
-#endif
-   species_geometry.divideBStarParallel( dfn );
-   species_geometry.plotAtConfigurationIndex( a_filename.c_str(),
-                                              cspace_index, dfn, a_time );
-}
-
-
-void GKOps::plotChargeDensity( const std::string&    a_filename,
-                              const KineticSpecies& a_soln_species,
-                              const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   CFG::LevelData<CFG::FArrayBox> charge_density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.chargeDensity( charge_density );
-   
-   phase_geometry.plotConfigurationData( a_filename.c_str(), charge_density, a_time );
-}
-
-
-void GKOps::plotChargeDensity( const std::string&     a_filename,
-                               const KineticSpeciesPtrVect& a_species,
-                               const double&          a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   CFG::LevelData<CFG::FArrayBox> charge_density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   CFG::LevelData<CFG::FArrayBox> species_charge_density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-
-   for (CFG::DataIterator dit(charge_density.dataIterator()); dit.ok(); ++dit) {
-      charge_density[dit].setVal(0.);
-   }
-
-   for (int species(0); species<a_species.size(); species++) {
-      KineticSpecies& soln_species( *(a_species[species]) );
-      soln_species.chargeDensity(species_charge_density);
-
-      for (CFG::DataIterator dit(charge_density.dataIterator()); dit.ok(); ++dit) {
-         charge_density[dit] += species_charge_density[dit];
-      }
-   }
-
-   if (m_boltzmann_electron) {
-      const CFG::LevelData<CFG::FArrayBox>& ne = m_boltzmann_electron->numberDensity();
-
-      for (CFG::DataIterator dit(charge_density.dataIterator()); dit.ok(); ++dit) {
-         charge_density[dit] -= ne[dit];
-      }
-   }
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), charge_density, a_time );
-}
-
-
-void GKOps::plotMomentum( const std::string&    a_filename,
-                          const KineticSpecies& a_soln_species,
-                          const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const double larmor_number( m_units->larmorNumber() );
-   LevelData<FluxBox> E_field_tmp;
-
-   phase_geometry.injectConfigurationToPhase( m_E_field->getFaceCenteredField(),
-   					      m_E_field->getCellCenteredField(),
-					      E_field_tmp );
-
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> momentum( mag_geom.gridsFull(), CFG_DIM, CFG::IntVect::Zero );
-   a_soln_species.momentumDensity( momentum, E_field_tmp, larmor_number );
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), momentum, a_time );
-}
-
-
-void GKOps::plotParallelMomentum( const std::string&    a_filename,
-                                  const KineticSpecies& a_soln_species,
-                                  const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   CFG::LevelData<CFG::FArrayBox> parallel_mom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.ParallelMomentum(parallel_mom);
-   phase_geometry.plotConfigurationData( a_filename.c_str(), parallel_mom, a_time );
-}
-
-
-void GKOps::plotPoloidalMomentum( const std::string&    a_filename,
-                                  const KineticSpecies& a_soln_species,
-                                  const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const double larmor_number( m_units->larmorNumber() );
-   LevelData<FluxBox> E_field_tmp;
-
-   phase_geometry.injectConfigurationToPhase( m_E_field->getFaceCenteredField(),
-                                              m_E_field->getCellCenteredField(),
-                                              E_field_tmp );
-
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> poloidal_mom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.PoloidalMomentum( poloidal_mom, E_field_tmp, larmor_number );
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), poloidal_mom, a_time );
-}
-
-void GKOps::plotParallelVelocity( const std::string&    a_filename,
-                                  const KineticSpecies& a_soln_species,
-                                  const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> parallel_velocity( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.ParallelVelocity( parallel_velocity );
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), parallel_velocity, a_time );
-}
-
-
-void GKOps::plotEnergyDensity(const std::string&    a_filename,
-                              const KineticSpecies& a_soln_species,
-                              const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> energy_density( mag_geom.gridsFull(), 3, CFG::IntVect::Zero );
-   
-   CFG::LevelData<CFG::FArrayBox> energy_density_loc( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.energyMoment( energy_density_loc, m_phi );
-
-   for (CFG::DataIterator dit(energy_density.dataIterator()); dit.ok(); ++dit) {
-      energy_density[dit].copy(energy_density_loc[dit], 0, 0, 1);
-   }
-
-   // Get flux-surface shell-averaged and shell-integrated components
-   CFG::FluxSurface flux_surface(mag_geom);
-   CFG::LevelData<CFG::FArrayBox> energy_density_tmp( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   
-   flux_surface.averageAndSpread(energy_density_loc, energy_density_tmp);
-   for (CFG::DataIterator dit(energy_density.dataIterator()); dit.ok(); ++dit) {
-      energy_density[dit].copy(energy_density_tmp[dit], 0, 1, 1);
-   }
-   
-   flux_surface.integrateAndSpread(energy_density_loc, energy_density_tmp);
-   for (CFG::DataIterator dit(energy_density.dataIterator()); dit.ok(); ++dit) {
-      energy_density[dit].copy(energy_density_tmp[dit], 0, 2, 1);
-   }
-   
-   phase_geometry.plotConfigurationData( a_filename.c_str(), energy_density, a_time );
-}
-
-void GKOps::plotKineticEnergyDensity(const std::string&    a_filename,
-                                     const KineticSpecies& a_soln_species,
-                                     const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> energy_density( mag_geom.gridsFull(), 3, CFG::IntVect::Zero );
-   
-   CFG::LevelData<CFG::FArrayBox> energy_density_loc( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.kineticEnergyMoment( energy_density_loc );
-
-   for (CFG::DataIterator dit(energy_density.dataIterator()); dit.ok(); ++dit) {
-      energy_density[dit].copy(energy_density_loc[dit], 0, 0, 1);
-   }
-
-   // Get flux-surface shell-averaged and shell-integrated components
-   CFG::FluxSurface flux_surface(mag_geom);
-   CFG::LevelData<CFG::FArrayBox> energy_density_tmp( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   
-   flux_surface.averageAndSpread(energy_density_loc, energy_density_tmp);
-   for (CFG::DataIterator dit(energy_density.dataIterator()); dit.ok(); ++dit) {
-      energy_density[dit].copy(energy_density_tmp[dit], 0, 1, 1);
-   }
-   
-   flux_surface.integrateAndSpread(energy_density_loc, energy_density_tmp);
-   for (CFG::DataIterator dit(energy_density.dataIterator()); dit.ok(); ++dit) {
-      energy_density[dit].copy(energy_density_tmp[dit], 0, 2, 1);
-   }
-   
-   phase_geometry.plotConfigurationData( a_filename.c_str(), energy_density, a_time );
-}
-
-void GKOps::plotParallelEnergyDensity(const std::string&    a_filename,
-                                      const KineticSpecies& a_soln_species,
-                                      const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> energy_density( mag_geom.gridsFull(), 3, CFG::IntVect::Zero );
-   
-   CFG::LevelData<CFG::FArrayBox> energy_density_loc( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.parallelEnergyDensity( energy_density_loc );
-
-   for (CFG::DataIterator dit(energy_density.dataIterator()); dit.ok(); ++dit) {
-      energy_density[dit].copy(energy_density_loc[dit], 0, 0, 1);
-   }
-
-   // Get flux-surface shell-averaged and shell-integrated components
-   CFG::FluxSurface flux_surface(mag_geom);
-   CFG::LevelData<CFG::FArrayBox> energy_density_tmp( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   
-   flux_surface.averageAndSpread(energy_density_loc, energy_density_tmp);
-   for (CFG::DataIterator dit(energy_density.dataIterator()); dit.ok(); ++dit) {
-      energy_density[dit].copy(energy_density_tmp[dit], 0, 1, 1);
-   }
-   
-   flux_surface.integrateAndSpread(energy_density_loc, energy_density_tmp);
-   for (CFG::DataIterator dit(energy_density.dataIterator()); dit.ok(); ++dit) {
-      energy_density[dit].copy(energy_density_tmp[dit], 0, 2, 1);
-   }
-   
-   phase_geometry.plotConfigurationData( a_filename.c_str(), energy_density, a_time );
-}
-
-
-void GKOps::plotPerpEnergyDensity(const std::string&    a_filename,
-                                  const KineticSpecies& a_soln_species,
-                                  const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> energy_density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.perpEnergyDensity( energy_density );
-   
-   phase_geometry.plotConfigurationData( a_filename.c_str(), energy_density, a_time );
-}
-
-
-void GKOps::plotPressure( const std::string&    a_filename,
-                          const KineticSpecies& a_soln_species,
-                          const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.pressureMoment( pressure );
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), pressure, a_time );
-}
-
-
-void GKOps::plotParallelPressure(const std::string&    a_filename,
-                                 const KineticSpecies& a_soln_species,
-                                 const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.parallelPressure( pressure );
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), pressure, a_time );
-}
-
-
-void GKOps::plotPerpPressure(const std::string&    a_filename,
-                             const KineticSpecies& a_soln_species,
-                             const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.perpPressure( pressure );
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), pressure, a_time );
-}
-
-void GKOps::plotGradPoverN(const std::string&    a_filename,
-                           const KineticSpecies& a_soln_species,
-                           const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.numberDensity( density );
-   a_soln_species.ParallelMomentum( ParallelMom );
-
-   for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
-      ParallelMom[dit].divide(density[dit]);
-   }
-   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.pressureMoment(pressure, ParallelMom);
-
-   const CFG::DisjointBoxLayout& cfg_grids = mag_geom.gridsFull();
-   CFG::LevelData<CFG::FArrayBox> pressure_grown( cfg_grids, 1, 2*CFG::IntVect::Unit );
-   for (CFG::DataIterator dit(pressure.dataIterator()); dit.ok(); ++dit) {
-      pressure_grown[dit].copy(pressure[dit]);
-      const CFG::MagBlockCoordSys& coord_sys = mag_geom.getBlockCoordSys(cfg_grids[dit]);
-      const CFG::ProblemDomain& domain = coord_sys.domain();
-      secondOrderCellExtrapAtDomainBdry(pressure_grown[dit], cfg_grids[dit], domain);
-   }
-   mag_geom.fillInternalGhosts(pressure_grown);
-
-#if CFG_DIM==2
-
-   CFG::LevelData<CFG::FArrayBox> pressure_gradient_mapped( cfg_grids, CFG_DIM, CFG::IntVect::Unit );
-   mag_geom.computeMappedPoloidalGradientWithGhosts(pressure_grown, pressure_gradient_mapped, 2);
-   
-   CFG::LevelData<CFG::FArrayBox> pressure_gradient(cfg_grids, CFG_DIM, CFG::IntVect::Unit);
-   mag_geom.unmapPoloidalGradient(pressure_gradient_mapped, pressure_gradient);
-
-   CFG::LevelData<CFG::FArrayBox> gradPoverN( cfg_grids, CFG_DIM, CFG::IntVect::Zero );
-   for (CFG::DataIterator dit(cfg_grids); dit.ok(); ++dit) {
-      mag_geom.getBlockCoordSys(cfg_grids[dit]).computePsiThetaProjections(pressure_gradient[dit]);
-      gradPoverN[dit].copy(pressure_gradient[dit]);
-      for (int n=0; n<gradPoverN.nComp(); ++n) {
-         gradPoverN[dit].divide(density[dit], 0, n);
-      }
-   }
-   
-   phase_geometry.plotConfigurationData( a_filename.c_str(), gradPoverN, a_time );
-
-#else
-   MayDay::Error("GKOps::gradPover this diagnostcs is not implemented in 3D");
-#endif
-}
-
-void GKOps::plotTemperature( const std::string&    a_filename,
-                             const KineticSpecies& a_soln_species,
-                             const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> temperature( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.temperature( temperature );
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), temperature, a_time );
-}
-
-
-
-void GKOps::plotParallelTemperature(const std::string&    a_filename,
-                                    const KineticSpecies& a_soln_species,
-                                    const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> temperature( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.parallelTemperature( temperature );
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), temperature, a_time );
-}
-
-
-void GKOps::plotPerpTemperature( const std::string&    a_filename,
-                                 const KineticSpecies& a_soln_species,
-                                 const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> temperature( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.perpTemperature( temperature );
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), temperature, a_time );
-}
-
-
-void GKOps::plotParallelHeatFlux( const std::string&    a_filename,
-                                  const KineticSpecies& a_soln_species,
-                                  const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   
-   CFG::LevelData<CFG::FArrayBox> density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.numberDensity( density );
-   a_soln_species.ParallelMomentum( ParallelMom );
-   
-   for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
-      ParallelMom[dit].divide(density[dit]);
-   }
-   CFG::LevelData<CFG::FArrayBox> parallelHeatFlux( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.parallelHeatFluxMoment( parallelHeatFlux, ParallelMom );
-   
-   phase_geometry.plotConfigurationData( a_filename.c_str(), parallelHeatFlux, a_time );
-}
-
-
-
-void GKOps::plotTotalParallelHeatFlux(const std::string&    a_filename,
-                                      const KineticSpecies& a_soln_species,
-                                      const double&         a_time ) const
-{
-   CH_assert( isDefined() );
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   
-   CFG::LevelData<CFG::FArrayBox> zero_velocity( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   for (CFG::DataIterator dit(zero_velocity.dataIterator()); dit.ok(); ++dit) {
-      zero_velocity[dit].setVal(0.0);
-   }
-
-   CFG::LevelData<CFG::FArrayBox> parallelHeatFlux( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.parallelHeatFluxMoment( parallelHeatFlux, zero_velocity );
-   
-   phase_geometry.plotConfigurationData( a_filename.c_str(), parallelHeatFlux, a_time );
-}
-
-void GKOps::plotFourthMoment( const std::string&    a_filename,
-                              const KineticSpecies& a_soln_species,
-                              const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   CFG::LevelData<CFG::FArrayBox> density( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.numberDensity( density );
-
-   CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.ParallelMomentum( ParallelMom );
-   for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
-      ParallelMom[dit].divide(density[dit]);
-   }
-
-   CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-   a_soln_species.pressureMoment(pressure, ParallelMom);
-
-   CFG::LevelData<CFG::FArrayBox> fourthMoment( mag_geom.gridsFull(), 1, CFG::IntVect::Zero);
-   a_soln_species.fourthMoment( fourthMoment );
-
-   CFG::LevelData<CFG::FArrayBox> temp;
-   temp.define(pressure);
-
-   for (CFG::DataIterator dit(fourthMoment.dataIterator()); dit.ok(); ++dit) {
-      fourthMoment[dit].divide(temp[dit]);       // fourthMom/Pressure
-      temp[dit].divide(density[dit]);            // Pressure/Density
-      fourthMoment[dit].divide(temp[dit]);       // fourthMom/(N*T^2)
-      fourthMoment[dit].mult(4.0/15.0);          // should be unity for Maxwellian!!!
-   }
-
-   phase_geometry.plotConfigurationData(a_filename.c_str(), fourthMoment, a_time);
-}
-
-
-void GKOps::plotParticleFlux( const std::string&    a_filename,
-                              const KineticSpecies& a_soln_species,
-                              const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   LevelData<FluxBox> E_field_tmp;
-
-   phase_geometry.injectConfigurationToPhase( m_E_field->getFaceCenteredField(),
-                                              m_E_field->getCellCenteredField(),
-                                              E_field_tmp );
-
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   
-   CFG::LevelData<CFG::FArrayBox> particle_flux( mag_geom.gridsFull(), 2, CFG::IntVect::Zero );
-   a_soln_species.ParticleFlux( particle_flux, E_field_tmp );
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), particle_flux, a_time );
-}
-
-
-void GKOps::plotHeatFlux( const std::string&    a_filename,
-                          const KineticSpecies& a_soln_species,
-                          const double&         a_time ) const
-{
-   CH_assert( m_phase_geometry != NULL );
-   const PhaseGeom& phase_geometry( *m_phase_geometry );
-   LevelData<FluxBox> E_field_tmp;
-   LevelData<FArrayBox> phi_injected_tmp;
-
-   phase_geometry.injectConfigurationToPhase( m_E_field->getFaceCenteredField(),
-                                              m_E_field->getCellCenteredField(),
-                                              E_field_tmp );
-
-   phase_geometry.injectConfigurationToPhase( m_phi, phi_injected_tmp );
-   const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-
-   CFG::LevelData<CFG::FArrayBox> heat_flux( mag_geom.gridsFull(), 2, CFG::IntVect::Zero );
-   a_soln_species.HeatFlux( heat_flux, E_field_tmp, phi_injected_tmp );
-
-   phase_geometry.plotConfigurationData( a_filename.c_str(), heat_flux, a_time );
-}
-
-
-void GKOps::plotAmpereErIncrement( const std::string&                a_filename,
-				   const CFG::FluidSpeciesPtrVect&   a_soln_fluid,
-				   const ScalarPtrVect&              a_soln_scalar,
-				   const double&                     a_time ) const
-{
-  CH_assert( m_phase_geometry != NULL );
-  const PhaseGeom& phase_geometry( *m_phase_geometry );
-  const CFG::MagGeom& mag_geom( phase_geometry.magGeom() );
-   
-  CFG::LevelData<CFG::FArrayBox> AmpereErIncr( mag_geom.gridsFull(), 1, CFG::IntVect::Zero );
-
-  int scalar_component = m_Y.getScalarComponent("Er_boundary");
-  const Vector<Real>& Er_boundary = a_soln_scalar[scalar_component]->data();
-
-  int fluid_component = m_Y.getFluidComponent("Er_flux_surfaces");
-  const CFG::LevelData<CFG::FArrayBox>& Er = a_soln_fluid[fluid_component]->cell_var("Er_flux_surfaces");
-
-  const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
-  const CFG::MagBlockCoordSys& block0_coord_sys = (const CFG::MagBlockCoordSys&)(*(coords.getCoordSys(0)));
-  int hi_radial_index = block0_coord_sys.domain().domainBox().bigEnd(RADIAL_DIR);
-
-  for (CFG::DataIterator dit(AmpereErIncr.dataIterator()); dit.ok(); ++dit) {
-    int block_number( coords.whichBlock( mag_geom.gridsFull()[dit] ) );
-    CFG::FArrayBox& this_AmpereErIncr = AmpereErIncr[dit];
-        
-    if ( block_number < 2 ) {
-            
-      const CFG::FArrayBox& this_Er = Er[dit];
-      for (CFG::BoxIterator bit(this_AmpereErIncr.box()); bit.ok(); ++bit) {
-         CFG::IntVect iv = bit();
-         CFG::IntVect iv_shift = bit();
-         iv_shift[0] = iv[0]+1;
-         this_AmpereErIncr(iv,0) = this_Er(iv_shift,0);
-         if (iv[0]==hi_radial_index) {
-            this_AmpereErIncr(iv,0) = Er_boundary[1];
-         }
-      }
-    }
-    else {
-      this_AmpereErIncr.setVal(0.);
-    }
-  }
-
-  phase_geometry.plotConfigurationData( a_filename.c_str(), AmpereErIncr, a_time );
-}
-
 
 void GKOps::setupFieldHistories( ParmParse& a_ppsim )
 {
@@ -2613,7 +1794,8 @@ void GKOps::setupFieldHistories( ParmParse& a_ppsim )
 
 void GKOps::writeFieldHistory( const int a_cur_step,
                                const Real a_cur_time,
-                               const bool a_startup_flag )
+                               const bool a_startup_flag,
+                               const std::string& a_prefix )
 {
    if (a_cur_step % m_hist_freq != 0 && !a_startup_flag) {
       return;
@@ -2631,24 +1813,24 @@ void GKOps::writeFieldHistory( const int a_cur_step,
 
       if (hist_field_name == "potential") {
          field = &m_phi;
-         fname = "potential_hist";
+         fname = a_prefix + "potential_hist_";
          stringstream fname_temp;
-         fname_temp << "potential_hist_" << ihist + 1 << ".curve" << ends;
+         fname_temp << fname << ihist + 1 << ".curve" << ends;
          fname_suf = fname_temp.str();
          stringstream fname_step_temp;
-         fname_step_temp << "potential_hist_" << ihist + 1 << ".txt" << ends;
+         fname_step_temp << fname << ihist + 1 << ".txt" << ends;
          fname_step = fname_step_temp.str();
       }
       else if (hist_field_name == "Efield") {
 
          CFG::LevelData<CFG::FArrayBox>& E_field_cell = m_E_field->getCellCenteredField();
          field = &E_field_cell;
-         fname = "Efield_hist";
+         fname = a_prefix + "Efield_hist_";
          stringstream fname_temp;
-         fname_temp << "Efield_hist_" << ihist + 1 << ".curve" << ends;
+         fname_temp << fname << ihist + 1 << ".curve" << ends;
          fname_suf = fname_temp.str();
          stringstream fname_step_temp;
-         fname_step_temp << "Efield_hist_" << ihist + 1 << ".txt" << ends;
+         fname_step_temp << fname << ihist + 1 << ".txt" << ends;
          fname_step = fname_step_temp.str();
       }
       else{

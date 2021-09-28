@@ -88,6 +88,7 @@ private:
    LevelData<FArrayBox> m_neutral_maxw;
    LevelData<FArrayBox> m_ni_inj;
 
+   bool m_first_call_tscale;
    
    /// Computes the ionization contribution to RHS.
    /*

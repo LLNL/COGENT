@@ -3,7 +3,7 @@
 #include "FluidVarBCFactory.H"
 #include "FourthOrderUtil.H"
 #include "SimpleDivergence.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 #include "Directions.H"
 #include "mappedAdvectionFlux.H"
 #include "FourthOrderUtil.H"
@@ -159,6 +159,8 @@ TwoFieldNeutralsOp::~TwoFieldNeutralsOp()
       delete (*it);
    }
    m_fluid_bc.clear();
+
+   if ( m_twofieldneutrals_pc ) delete m_twofieldneutrals_pc;
    
    delete m_diffusion_op;
    delete m_diffusion_bc;
@@ -1003,7 +1005,8 @@ void TwoFieldNeutralsOp::defineBlockPC(std::vector<PS::Preconditioner<PS::ODEVec
                                        bool                                                         a_im,
                                        const FluidSpecies&                                          a_fluid_species,
                                        const PS::GlobalDOFFluidSpecies&                             a_global_dofs,
-                                       int                                                          a_species_idx )
+                                       const int                                                    a_species_idx,
+                                       const int                                                    a_id )
 {
   if (a_im && m_is_time_implicit) {
     CH_assert(a_pc.size() == a_dof_list.size());
@@ -1017,6 +1020,7 @@ void TwoFieldNeutralsOp::defineBlockPC(std::vector<PS::Preconditioner<PS::ODEVec
   
     PS::Preconditioner<PS::ODEVector,PS::AppCtxt> *pc;
     pc = new PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>;
+    pc->setSysID(a_id);
     dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
     dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>

@@ -218,6 +218,7 @@ void TiARK<Vector,Ops>::define( ParmParse&          a_pp,
                                         &m_c,
                                         &m_bi_emb,
                                         &m_be_emb,
+                                        m_pinterp,
                                         &m_binterpi,
                                         &m_binterpe );
 
@@ -358,10 +359,8 @@ TiARK<Vector, Ops>::~TiARK()
   if (m_bi) delete[] m_bi;
   if (m_bi_emb) delete[] m_bi_emb;
   if (m_be_emb) delete[] m_be_emb;
-  if (m_pinterp != 0) {
-    delete[] m_binterpe;
-    delete[] m_binterpi;
-  }
+  if (m_binterpe) delete[] m_binterpe;
+  if (m_binterpi) delete[] m_binterpi;
   delete[] m_rhsStage_exp;
   delete[] m_rhsStage_imp;
   if (m_stagePredictor) {

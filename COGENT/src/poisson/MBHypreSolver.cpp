@@ -27,6 +27,7 @@ MBHypreSolver::MBHypreSolver( const MultiBlockLevelGeom&      a_geom,
      m_ILU_solver_allocated(false),
      m_MGR_solver_allocated(false),
      m_MGR_aff_solver_allocated(false),
+     m_mgr_CF_indexes(NULL),
      m_matrix_initialized(false),
      m_matrix_finalized(false)
 {
@@ -548,6 +549,10 @@ MBHypreSolver::destroyHypreData()
             hypre_TFree(m_mgr_cindexes, HYPRE_MEMORY_HOST);
             m_mgr_cindexes = NULL;
          }
+
+         if(m_mgr_CF_indexes)
+            hypre_TFree(m_mgr_CF_indexes, HYPRE_MEMORY_HOST);
+         m_mgr_CF_indexes = NULL;
 
          if (m_mgr_amg_solver) HYPRE_BoomerAMGDestroy(m_mgr_amg_solver);
          HYPRE_MGRDestroy(m_par_MGR_solver);
@@ -1364,6 +1369,10 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
          m_mgr_cindexes = NULL;
       }
 
+      if(m_mgr_CF_indexes)
+         hypre_TFree(m_mgr_CF_indexes, HYPRE_MEMORY_HOST);
+      m_mgr_CF_indexes = NULL;
+
       if (m_mgr_amg_solver) HYPRE_BoomerAMGDestroy(m_mgr_amg_solver);
       HYPRE_MGRDestroy(m_par_MGR_solver);
    }
@@ -1394,6 +1403,7 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
       m_mgr_cindexes[i][0] = m_MGR_cpoint;
    }
 
+
    HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
    HYPRE_ParVector par_b;  // apparently not used, but needs to be passed to HYPRE_*Setup
@@ -1401,29 +1411,24 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
 
    HYPRE_MGRCreate(&m_par_MGR_solver);
 
-   /* set MGR data by block */
-   HYPRE_BigInt rowstart = hypre_ParCSRMatrixFirstRowIndex(par_A);
-   HYPRE_BigInt rowend = hypre_ParCSRMatrixLastRowIndex(par_A);
-   HYPRE_Int fsize = (rowend - rowstart + 1)/2 ;
-   HYPRE_BigInt next_block = rowstart + fsize;
+   // Create and set the marker array defining the C and F points
+   setMGRCFIndexes(&m_mgr_CF_indexes);
+   HYPRE_MGRSetCpointsByPointMarkerArray(m_par_MGR_solver, mgr_bsize, m_mgr_nlevels,
+                                         m_mgr_num_cindexes, m_mgr_cindexes, m_mgr_CF_indexes);
 
-   HYPRE_BigInt idx_array[2] = {rowstart,next_block};
-   HYPRE_MGRSetCpointsByContiguousBlock( m_par_MGR_solver, mgr_bsize, m_mgr_nlevels,
-                                         idx_array, m_mgr_num_cindexes, m_mgr_cindexes);
-
-   /* set intermediate coarse grid strategy */
+   // Set intermediate coarse grid strategy
    HYPRE_MGRSetNonCpointsToFpoints(m_par_MGR_solver, mgr_non_c_to_f);
-   /* set F relaxation strategy */
+   // Set F relaxation strategy
    HYPRE_MGRSetFRelaxMethod(m_par_MGR_solver, m_MGR_frelax_method);
-   /* set relax type for single level F-relaxation and post-relaxation */
+   // Set relax type for single level F-relaxation and post-relaxation */
    HYPRE_MGRSetRelaxType(m_par_MGR_solver, m_MGR_relax_type);
    HYPRE_MGRSetNumRelaxSweeps(m_par_MGR_solver, mgr_num_relax_sweeps);
-   /* set interpolation type */
+   // Set interpolation type
    HYPRE_MGRSetRestrictType(m_par_MGR_solver, m_MGR_restrict_type);
    HYPRE_MGRSetNumRestrictSweeps(m_par_MGR_solver, mgr_num_restrict_sweeps);
    HYPRE_MGRSetInterpType(m_par_MGR_solver, m_MGR_interp_type);
    HYPRE_MGRSetNumInterpSweeps(m_par_MGR_solver, mgr_num_interp_sweeps);
-   /* set print level */
+   // Set print level
    HYPRE_MGRSetPrintLevel(m_par_MGR_solver, m_MGR_print_level);
 
    HYPRE_MGRSetGlobalsmoothType(m_par_MGR_solver, mgr_gsmooth_type);
@@ -1471,6 +1476,8 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
 
    if ( m_MGR_frelax_method == 2 ) {
 
+      MayDay::Error("MBHypreSolver::MGRSetup(): MGR_frelax_method == 2 option is currently unavailable");
+
       if ( !m_MGR_aff_solver_allocated ) {
          HYPRE_BoomerAMGCreate(&m_MGR_aff_solver);
          m_MGR_aff_solver_allocated = true;
@@ -1509,6 +1516,38 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
 
    m_MGR_solver_allocated = true;
 }
+
+
+void
+MBHypreSolver::setMGRCFIndexes( HYPRE_Int** a_CF_indexes )
+{
+   const DisjointBoxLayout& grids = m_geometry.grids();
+
+   int num_local_dof = 0;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      num_local_dof += grids[dit].numPts();
+   }
+   num_local_dof *= m_nvar;
+
+   *a_CF_indexes = hypre_CTAlloc(HYPRE_Int, num_local_dof, HYPRE_MEMORY_HOST);
+
+   // The index ordering is determined by the Hypre convention
+   HYPRE_Int* ptr = *a_CF_indexes;
+   for (int part=0; part<m_coord_sys_ptr->numBlocks(); ++part) {
+      for (int var=0; var<m_nvar; ++var) {
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            const Box& box = grids[dit];
+            int block_number = m_coord_sys_ptr->whichBlock(box);
+
+            if ( block_number == part ) {
+               for (BoxIterator bit(box); bit.ok(); ++bit) {
+                  *ptr++ = var;
+               }
+            }
+         }
+      }
+   }
+} 
 
 
 void
@@ -1752,7 +1791,6 @@ MBHypreSolver::copyFromHypreVector( const HYPRE_SStructVector&  a_in,
       }
    }
 } 
-
 
 
 #include "NamespaceFooter.H"

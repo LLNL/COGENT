@@ -38,8 +38,9 @@
 using namespace CH_MultiDim;
 
 
-GKSystem::GKSystem( ParmParse& a_pp )
-   : m_using_electrons(false),
+GKSystem::GKSystem( int a_sys_id )
+   : m_sys_id(a_sys_id),
+     m_using_electrons(false),
      m_enforce_stage_positivity(false),
      m_enforce_step_positivity(false),
      m_enforce_step_floor(false),
@@ -47,69 +48,77 @@ GKSystem::GKSystem( ParmParse& a_pp )
      m_kinetic_ghosts(4),
      m_fluid_ghosts(4),
      m_gk_ops(NULL),
-     m_hdf_potential(false),
-     m_hdf_potential_non_zonal(false),
-     m_hdf_efield(false),
-     m_hdf_ExBdata(false),
-     m_hdf_density(false),
-     m_hdf_momentum(false),
-     m_hdf_ParallelMomentum(false),
-     m_hdf_PoloidalMomentum(false),
-     m_hdf_ParallelVelocity(false),
-     m_hdf_energyDensity(false),
-     m_hdf_kineticEnergyDensity(false),
-     m_hdf_perpEnergyDensity(false),
-     m_hdf_parallelEnergyDensity(false),
-     m_hdf_pressure(false),
-     m_hdf_perpPressure(false),
-     m_hdf_parallelPressure(false),
-     m_hdf_gradPoverN(false),
-     m_hdf_temperature(false),
-     m_hdf_perpTemperature(false),
-     m_hdf_parallelTemperature(false),
-     m_hdf_parallelHeatFlux(false),
-     m_hdf_totalParallelHeatFlux(false),
-     m_hdf_fourthMoment(false),
-     m_hdf_ParticleFlux(false),
-     m_hdf_HeatFlux(false),
-     m_hdf_AmpereErIncrement(false),
-     m_hdf_total_density(false),
-     m_hdf_dfn(false),
-     m_hdf_deltaF(false),
-     m_hdf_dfn_at_mu(false),
-     m_hdf_fluids(false),
-     m_hdf_vpartheta(false),
-     m_hdf_bfvpartheta(false),
-     m_hdf_rtheta(false),
-     m_hdf_vparmu(false),
+     m_diagnostics(NULL),
      m_verbosity(0),
      m_ti_class("rk"),
      m_ti_method("4"),
      m_use_scales(false),
-     m_scale_tol(1e-12)
-{
-   ParmParse ppgksys("gksystem");
+     m_scale_tol(1e-12),
+     m_dt_vlasov(-1),
+     m_dt_collisions(-1),
+     m_dt_transport(-1),
+     m_dt_neutrals(-1)
+{ 
+   m_diagnostics_dfn_plots.clear();
+   m_diagnostics_cfg_field_vars.clear();
+   m_diagnostics_cfg_vars_kin_spec.clear();
+   m_diagnostics_cfg_vars_total_kin_spec.clear();
+   m_diagnostics_fluids = false;
 
-   m_units = new GKUnits( ppgksys );
+   char sys_id_str[10];
+   sprintf(sys_id_str, "%d", m_sys_id);
+   m_sys_id_str = std::string(sys_id_str);
+}
+
+GKSystem::GKSystem( ParmParse&, int a_sys_id )
+   : GKSystem(a_sys_id)
+{
+   std::string parse_key = "gksystem";
+   GKSystemParameters gkparams;
+   /* first read all inputs with "gksystem" */
+   gkparams.readParams( parse_key );
+   appendSysID(parse_key);
+   /* now reread any available input with "gksystem.n" */
+   gkparams.readParams( parse_key );
+
+   define( gkparams );
+   return;
+}
+
+GKSystem::GKSystem( const GKSystemParameters& a_gkparams,
+                    int                       a_sys_id )
+   : GKSystem(a_sys_id)
+{
+   define( a_gkparams );
+}
+
+void GKSystem::define(const GKSystemParameters& a_params )
+{
+   setParameters( a_params );
+   
+   m_units = new GKUnits();
    if (procID()==0) {
       m_units->print(cout);
    }
-   
-   parseParameters( ppgksys );
 
-   createConfigurationSpace();
-
+   createConfigurationSpace( a_params );
    createVelocitySpace();
+   createPhaseSpace( a_params );
 
-   createPhaseSpace( ppgksys );
-
-   createState();
+   createState( m_state_comp,
+                a_params,
+                m_kinetic_ghosts,
+                m_fluid_ghosts );
+   m_state_phys.define( m_state_comp, IntVect::Zero );
 
    createGlobalDOF();
    m_state_comp.setGlobalDOF(&m_global_dof);
 
    m_gk_ops = new GKOps;
-   m_gk_ops->define( m_state_comp );
+   m_gk_ops->define( m_state_comp, a_params );
+
+   m_diagnostics = new GKDiagnostics(m_gk_ops);
+
    m_rhs.define( m_state_comp );
 
    giveSpeciesTheirGyroaverageOps();
@@ -131,7 +140,28 @@ GKSystem::GKSystem( ParmParse& a_pp )
    setupFieldHistories();
 }
 
+void GKSystem::defineShell(const GKSystemParameters& a_params )
+{
+   setParameters( a_params );
+   
+   m_units = new GKUnits();
+   if (procID()==0) {
+      m_units->print(cout);
+   }
 
+   createConfigurationSpace( a_params );
+   createVelocitySpace();
+   createPhaseSpace( a_params );
+
+   createState( m_state_phys, a_params, 0, 0 );
+
+   m_gk_ops = new GKOps;
+   m_gk_ops->defineShell( m_state_phys, a_params );
+
+   m_diagnostics = new GKDiagnostics(m_gk_ops);
+
+   setupFieldHistories();
+}
 
 void
 GKSystem::initialize( const int     a_cur_step,
@@ -184,12 +214,25 @@ GKSystem::initialize( const int     a_cur_step,
    return;
 }
 
+void
+GKSystem::initializeShell(  const int     a_cur_step,
+                            const double  a_cur_time )
+{
+   CH_TIME("GKSystem::initialize");
+   m_gk_ops->initializeElectricFieldShell(  m_state_phys, 
+                                            a_cur_step, 
+                                            a_cur_time );
+
+   return;
+}
+
 
 
 GKSystem::~GKSystem()
 {
    delete m_units;
    delete m_gk_ops;
+   delete m_diagnostics;
 }
 
 
@@ -237,14 +280,17 @@ VEL::ProblemDomain GKSystem::getVelocityDomain() const
 
 
 
-void GKSystem::createConfigurationSpace()
+void GKSystem::createConfigurationSpace( const GKSystemParameters& a_params )
 {
   CH_TIME("GKSystem::createConfigurationSpace");
-  string mag_geom_prefix = string("gksystem.magnetic_geometry_mapping");
+
+  string mag_geom_prefix = a_params.parseKey() + ".magnetic_geometry_mapping";
 
   if ( m_mag_geom_type == "SingleNull" ) {
 
-    ParmParse pp_grid("singlenull");
+    string parsekey = "singlenull";
+    appendSysID(parsekey);
+    ParmParse pp_grid(parsekey.c_str());
 
     string prefix = mag_geom_prefix + string(".")
        + string(CFG::SingleNullCoordSys::pp_name);
@@ -254,7 +300,9 @@ void GKSystem::createConfigurationSpace()
   }
   else if ( m_mag_geom_type == "SNCore"  ) {
 
-    ParmParse pp_grid("sncore");
+    string parsekey = "sncore";
+    appendSysID(parsekey);
+    ParmParse pp_grid(parsekey.c_str());
 
     string prefix = mag_geom_prefix + string(".")
        + string(CFG::SNCoreCoordSys::pp_name);
@@ -269,14 +317,14 @@ void GKSystem::createConfigurationSpace()
            || m_mag_geom_type == "oneblock" )   {
      
     string prefix = mag_geom_prefix + string(".") + m_mag_geom_type;
-     
     ParmParse pp( prefix.c_str() );
 
-    m_mag_geom_coords = RefCountedPtr<CFG::MagCoordSys>(new CFG::LogRectCoordSys(pp,
-                                                                                 m_mag_geom_type,
-                                                                                 m_num_cells,
-                                                                                 m_is_periodic,
-                                                                                 m_configuration_decomposition));
+    m_mag_geom_coords = RefCountedPtr<CFG::MagCoordSys>(
+                          new CFG::LogRectCoordSys( pp,
+                                                    m_mag_geom_type,
+                                                    m_num_cells,
+                                                    m_is_periodic,
+                                                    m_configuration_decomposition));
   }
  
   // Construct the phase space DisjointBoxLayout
@@ -287,14 +335,22 @@ void GKSystem::createConfigurationSpace()
 
   // Construct the magnetic geometry
 
-  if (procID()==0) cout << "Constructing magnetic geometry" << endl;
+  if (procID()==0) {
+    cout << "Constructing magnetic geometry" << endl;
+  }
 
   ParmParse pp_mag_geom( mag_geom_prefix.c_str() );
 
-  int ghosts = (m_kinetic_ghosts > m_fluid_ghosts) ? m_kinetic_ghosts : m_fluid_ghosts;
-  m_mag_geom = RefCountedPtr<CFG::MagGeom>(new CFG::MagGeom(pp_mag_geom, m_mag_geom_coords, grids, ghosts));
+  int ghosts = (m_kinetic_ghosts > m_fluid_ghosts)  ? m_kinetic_ghosts 
+                                                    : m_fluid_ghosts;
+  m_mag_geom = RefCountedPtr<CFG::MagGeom>(new CFG::MagGeom(pp_mag_geom, 
+                                                            m_mag_geom_coords,
+                                                            grids, 
+                                                            ghosts));
 
-  if (procID()==0) cout << "Done constructing magnetic geometry" << endl;
+  if (procID()==0) {
+    cout << "Done constructing magnetic geometry" << endl;
+  }
 
 #if 0
   // For testing of metric data
@@ -302,7 +358,6 @@ void GKSystem::createConfigurationSpace()
   exit(1);
 #endif
 }
-
 
 
 void
@@ -406,7 +461,10 @@ GKSystem::getConfigurationSpaceDisjointBoxLayout( CFG::DisjointBoxLayout& grids 
     if (m_verbosity>0) {
       for (int n=0; n<boxes.size(); n++) {
         const CFG::Box& local_box = boxes[n];
-        cout << "   Configuration space box " << local_box << " is assigned to process " << procMap[n] << endl;
+        cout << "   ";
+        cout  << "Configuration space box " 
+              << local_box << " is assigned to process " 
+              << procMap[n] << endl;
       }
     }
 #ifdef CH_MPI
@@ -425,7 +483,8 @@ GKSystem::createVelocitySpace()
    VEL::DisjointBoxLayout grids;
    getVelocitySpaceDisjointBoxLayout( domain, grids );
 
-   ParmParse pppsm( "phase_space_mapping" );
+   string parsekey( "phase_space_mapping" );
+   ParmParse pppsm( parsekey.c_str() );
 
    Real v_parallel_max;
    pppsm.get("v_parallel_max", v_parallel_max);
@@ -440,11 +499,12 @@ GKSystem::createVelocitySpace()
    m_dv[1] = dmu;
    
    const VEL::RealVect dv(dv_parallel,dmu);
-
-   string prefix = string("gksystem.") + string(VEL::VelCoordSys::pp_name);
-   ParmParse pp_vel(prefix.c_str());
-   
-   m_velocity_coords = RefCountedPtr<VEL::VelCoordSys>(new VEL::VelCoordSys(pp_vel, grids, domain, dv));
+   ParmParse pp_vel(VEL::VelCoordSys::pp_name.c_str());
+   m_velocity_coords = RefCountedPtr<VEL::VelCoordSys>(
+                          new VEL::VelCoordSys( pp_vel, 
+                                                grids, 
+                                                domain, 
+                                                dv  ));
 }
 
 
@@ -506,7 +566,9 @@ GKSystem::getVelocitySpaceDisjointBoxLayout( const VEL::ProblemDomain& domain,
      if (m_verbosity>0) {
        for (int n=0; n<boxes.size(); n++) {
          const VEL::Box& local_box = boxes[n];
-         cout << "   Velocity space box " << local_box << " is assigned to process " << procMap[n] << endl;
+         cout << "   ";
+         cout << "Velocity space box " << local_box 
+              << " is assigned to process " << procMap[n] << endl;
        }
      }
 #ifdef CH_MPI
@@ -517,7 +579,7 @@ GKSystem::getVelocitySpaceDisjointBoxLayout( const VEL::ProblemDomain& domain,
 
 
 void
-GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
+GKSystem::createPhaseSpace( const GKSystemParameters& a_gkparams )
 {
   // Build a vector of ProblemDomains, one per configuration space block
 
@@ -560,24 +622,37 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
       || m_mag_geom_type == "cylindrical" || m_mag_geom_type == "toroidal"
       || m_mag_geom_type == "oneblock" ) {
      
-     m_phase_coords = RefCountedPtr<PhaseCoordSys>(new LogRectPhaseCoordSys(a_ppgksys,
-                                                                            m_mag_geom_coords,
-                                                                            m_velocity_coords,
-                                                                            m_domains ));
+     m_phase_coords = RefCountedPtr<PhaseCoordSys>(
+                        new LogRectPhaseCoordSys( a_gkparams,
+                                                  m_mag_geom_coords,
+                                                  m_velocity_coords,
+                                                  m_domains ));
   }
   else if ( m_mag_geom_type == "SingleNull" ) {
-    ParmParse pp("singlenull.decomp");
-    m_phase_coords = RefCountedPtr<PhaseCoordSys>(new SingleNullPhaseCoordSys( pp,
-                                                                               m_mag_geom_coords,
-                                                                               m_velocity_coords,
-                                                                               m_domains ));
+
+    string parsekey = "singlenull";
+    appendSysID(parsekey);
+    parsekey += ".decomp";
+    ParmParse pp(parsekey.c_str());
+
+    m_phase_coords = RefCountedPtr<PhaseCoordSys>(
+                        new SingleNullPhaseCoordSys(  pp,
+                                                      m_mag_geom_coords,
+                                                      m_velocity_coords,
+                                                      m_domains ));
   }
   else if ( m_mag_geom_type == "SNCore" ) {
-    ParmParse pp("sncore.decomp");
-    m_phase_coords = RefCountedPtr<PhaseCoordSys>(new SNCorePhaseCoordSys( pp,
-                                                                           m_mag_geom_coords,
-                                                                           m_velocity_coords,
-                                                                           m_domains ));
+
+    string parsekey = "sncore";
+    appendSysID(parsekey);
+    parsekey += ".decomp";
+    ParmParse pp(parsekey.c_str());
+
+    m_phase_coords = RefCountedPtr<PhaseCoordSys>(
+                        new SNCorePhaseCoordSys(  pp,
+                                                  m_mag_geom_coords,
+                                                  m_velocity_coords,
+                                                  m_domains ));
   }
   else {
     MayDay::Error("Invalid magnetic geometry type");
@@ -590,7 +665,8 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
 
   // Construct the phase space grid
 
-  m_phase_grid = RefCountedPtr<PhaseGrid>(new PhaseGrid(m_domains, decomps, m_mag_geom_type));
+  m_phase_grid = RefCountedPtr<PhaseGrid>(
+                    new PhaseGrid(m_domains, decomps, m_mag_geom_type ));
 
   // Construct the phase space geometry
 
@@ -599,8 +675,7 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
   }
    
   m_phase_geom =
-     RefCountedPtr<PhaseGeom>( new PhaseGeom( a_ppgksys,
-                                              m_phase_coords,
+     RefCountedPtr<PhaseGeom>( new PhaseGeom( m_phase_coords,
                                               m_phase_grid,
                                               m_mag_geom,
                                               m_velocity_coords,
@@ -609,36 +684,32 @@ GKSystem::createPhaseSpace( ParmParse& a_ppgksys )
 }
 
 inline
-void GKSystem::createState()
+void GKSystem::createState( GKState&                  a_state,
+                            const GKSystemParameters& a_params,
+                            const int                 a_gpt_kin,
+                            const int                 a_gpt_fluid )
 {
    CH_TIME("GKSystem::createState");
    KineticSpeciesPtrVect kinetic_species;
-   createKineticSpecies( kinetic_species );
+   createKineticSpecies( kinetic_species, a_params );
 
    CFG::FluidSpeciesPtrVect fluid_species;
-   createFluidSpecies( fluid_species );
+   createFluidSpecies( fluid_species, a_params );
 
    ScalarPtrVect scalars;
-   createScalars( scalars );
+   createScalars( scalars, a_params );
 
-   // Define the computational state object by cloning from the argument vectors.  
-   // Ghost cells are added for the kinetic and fluid species.
-   //
-   m_state_comp.define( kinetic_species,
-                        fluid_species,
-                        scalars,
-                        m_phase_geom,
-                        m_kinetic_ghosts * IntVect::Unit,
-                        m_fluid_ghosts * CFG::IntVect::Unit );
-
-   // Define the physical state object by cloning from the argument vectors.  
-   // No ghost cells are included, since this state object is generally used for output.
-   //
-   m_state_phys.define( m_state_comp, IntVect::Zero );
-}
+   a_state.define( kinetic_species,
+                   fluid_species,
+                   scalars,
+                   m_phase_geom,
+                   a_gpt_kin * IntVect::Unit,
+                   a_gpt_fluid * CFG::IntVect::Unit );
+  }
 
 void
-GKSystem::createScalars( ScalarPtrVect& a_scalars )
+GKSystem::createScalars( ScalarPtrVect& a_scalars,
+                         const GKSystemParameters& a_gkparams )
 {
    /*
      Create the vector of time-evolving Real scalars.
@@ -700,20 +771,8 @@ GKSystem::createScalars( ScalarPtrVect& a_scalars )
       }
    }
 
-   // Check that the required scalar state variables have been defined to support the self-consistent
-   // potential boundary condition or Ampere options.
-
-   ParmParse ppgksys("gksystem");
-
-   bool consistent_potential_bcs = false;
-   if (ppgksys.contains("consistent_potential_bcs")) {
-      ppgksys.query( "consistent_potential_bcs", consistent_potential_bcs );
-   }
-
-   bool ampere_law = false;
-   if (ppgksys.contains("ampere_law")) {
-      ppgksys.query( "ampere_law", ampere_law );
-   }
+   bool consistent_potential_bcs = a_gkparams.consistentPotentialBCs();
+   bool ampere_law = a_gkparams.ampereLaw();
 
    if ( consistent_potential_bcs || ampere_law ) {
 
@@ -736,7 +795,8 @@ GKSystem::createScalars( ScalarPtrVect& a_scalars )
 
 
 void
-GKSystem::createFluidSpecies( CFG::FluidSpeciesPtrVect& a_fluid_species )
+GKSystem::createFluidSpecies( CFG::FluidSpeciesPtrVect& a_fluid_species,
+                              const GKSystemParameters& a_gkparams )
 {
    /*
      Create the vector of configuration space variable (pointers)
@@ -781,12 +841,7 @@ GKSystem::createFluidSpecies( CFG::FluidSpeciesPtrVect& a_fluid_species )
       }
    }
 
-   ParmParse ppgksys("gksystem");
-   bool ampere_law = false;
-   if (ppgksys.contains("ampere_law")) {
-      ppgksys.query( "ampere_law", ampere_law );
-   }
-
+   bool ampere_law = a_gkparams.ampereLaw();
    if ( ampere_law ) {
 
       bool er_flux_surfaces_defined = false;
@@ -808,7 +863,8 @@ GKSystem::createFluidSpecies( CFG::FluidSpeciesPtrVect& a_fluid_species )
 
 
 void
-GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
+GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species,
+                                const GKSystemParameters& a_params )
 {
    /*
      Create the vector of species model (pointers), and when a kinetic
@@ -817,7 +873,8 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
    */
 
    if ( m_verbosity && procID() == 0 ) {
-      cout << "Adding species and constructing gyrocenter coordinates..." << endl;
+      cout << "Adding species and constructing gyrocenter coordinates..." 
+           << endl;
    }
 
    bool more_kinetic_species = true;
@@ -884,9 +941,11 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
       bool include_velocity_renormalization(false);
       string velocity_normalization_type("None");
       if ( ppspecies.contains("velocity_renormalization") ) {
-         ppspecies.get("velocity_renormalization", include_velocity_renormalization);
+         ppspecies.get( "velocity_renormalization", 
+                        include_velocity_renormalization  );
       }
-      // NOTE Retaining boolian include_velocity_renormalization for backward compatibility of input files.
+      // NOTE Retaining boolian include_velocity_renormalization 
+      // for backward compatibility of input files.
       if ( ppspecies.contains("velocity_normalization") ) {
          ppspecies.get("velocity_normalization", velocity_normalization_type);
       }
@@ -896,15 +955,17 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
 
       if ( species_is_complete ) {
          if ( procID() == 0 && m_verbosity ) {
-            cout << "   " << (is_gyrokinetic ? "Gyrokinetic" : "Drift-kinetic") << " species "
-                 << name << ": mass = " << mass << ", charge = "
-                 << charge << ", velocity renormalization = " << include_velocity_renormalization
-                 << ", velocity normalization = " << velocity_normalization_type <<endl;
+            cout  << "   " << (is_gyrokinetic?"Gyrokinetic":"Drift-kinetic") 
+                  << " species "
+                  << name << ": mass = " << mass << ", charge = "
+                  << charge << ", velocity renormalization = " 
+                  << include_velocity_renormalization
+                  << ", velocity normalization = " 
+                  << velocity_normalization_type <<endl;
          }
 
          //Construct species-depended velocity space
-         string prefix = string("gksystem.") + string(VEL::VelCoordSys::pp_name);
-         ParmParse pp_vel(prefix.c_str());
+         ParmParse pp_vel(VEL::VelCoordSys::pp_name.c_str());
 
          const VEL::ProblemDomain& domain = getVelocityDomain();
         
@@ -912,58 +973,84 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species )
          getVelocitySpaceDisjointBoxLayout( domain, grids );
 
          VEL::RealVect dv(m_dv);
-         if (include_velocity_renormalization || (velocity_normalization_type == "global")) {
+         if (    include_velocity_renormalization 
+              || (velocity_normalization_type == "global")) {
             dv[0] = m_dv[0] / sqrt(mass);
          }
-         RefCountedPtr<VEL::VelCoordSys> velocity_coords = RefCountedPtr<VEL::VelCoordSys>(new VEL::VelCoordSys(pp_vel,
-                                                                                                                grids,
-                                                                                                                domain,
-                                                                                                                dv));
+         RefCountedPtr<VEL::VelCoordSys> velocity_coords 
+            = RefCountedPtr<VEL::VelCoordSys>(
+                new VEL::VelCoordSys( pp_vel,
+                                      grids,
+                                      domain,
+                                      dv  ));
          
 
          // Construct the species-dependent velocity normalization 
          RefCountedPtr<VelocityNormalization> velocity_normalization;
-         velocity_normalization = RefCountedPtr<VelocityNormalization>(new VelocityNormalization(m_mag_geom,
-                                                                                                 velocity_coords,
-                                                                                                 ppspecies));
+         velocity_normalization = RefCountedPtr<VelocityNormalization>(
+                                    new VelocityNormalization(m_mag_geom,
+                                                              velocity_coords,
+                                                              ppspecies));
 
-         // Construct the multiblock species-dependent phase space coordinate system
+         // Construct the multiblock species-dependent 
+         // phase space coordinate system
          RefCountedPtr<PhaseCoordSys> phase_coords;
-         if (   m_mag_geom_type == "miller" || m_mag_geom_type == "slab"
-             || m_mag_geom_type == "cylindrical" || m_mag_geom_type == "toroidal"
-             || m_mag_geom_type == "oneblock" ) {
-            ParmParse pp("gksystem");
-            phase_coords = RefCountedPtr<PhaseCoordSys>(new LogRectPhaseCoordSys(pp,
-                                                                                 m_mag_geom_coords,
-                                                                                 velocity_coords,
-                                                                                 m_domains ));
-         }
-         else if ( m_mag_geom_type == "SingleNull" ) {
-            ParmParse pp("singlenull.decomp");
-            phase_coords = RefCountedPtr<PhaseCoordSys>(new SingleNullPhaseCoordSys(pp,
-                                                                                    m_mag_geom_coords,
-                                                                                    velocity_coords,
-                                                                                    m_domains ));
+         if (     m_mag_geom_type == "miller" 
+              ||  m_mag_geom_type == "slab"
+              ||  m_mag_geom_type == "cylindrical" 
+              ||  m_mag_geom_type == "toroidal"
+              ||  m_mag_geom_type == "oneblock" ) {
+
+            phase_coords = RefCountedPtr<PhaseCoordSys>(
+                              new LogRectPhaseCoordSys( a_params,
+                                                        m_mag_geom_coords,
+                                                        velocity_coords,
+                                                        m_domains ));
+         } else if ( m_mag_geom_type == "SingleNull" ) {
+
+            string parsekey("singlenull");
+            appendSysID(parsekey);
+            parsekey += (".decomp");
+            ParmParse pp(parsekey.c_str());
+
+            phase_coords = RefCountedPtr<PhaseCoordSys>(
+                              new SingleNullPhaseCoordSys(  pp,
+                                                            m_mag_geom_coords,
+                                                            velocity_coords,
+                                                            m_domains ));
          }
          else if ( m_mag_geom_type == "SNCore" ) {
-            ParmParse pp("sncore.decomp");
-            phase_coords = RefCountedPtr<PhaseCoordSys>(new SNCorePhaseCoordSys(pp,
-                                                                                m_mag_geom_coords,
-                                                                                velocity_coords,
-                                                                                m_domains ));
+
+            string parsekey("sncore");
+            appendSysID(parsekey);
+            parsekey += (".decomp");
+            ParmParse pp(parsekey.c_str());
+
+            phase_coords = RefCountedPtr<PhaseCoordSys>(
+                              new SNCorePhaseCoordSys(pp,
+                                                      m_mag_geom_coords,
+                                                      velocity_coords,
+                                                      m_domains ));
          }
          
          // Get the species geometry
-         RefCountedPtr<PhaseGeom> species_geom = RefCountedPtr<PhaseGeom>(new PhaseGeom(*m_phase_geom,
-                                                                                        phase_coords,
-                                                                                        velocity_coords,
-                                                                                        velocity_normalization,
-                                                                                        mass,
-                                                                                        charge,
-                                                                                        is_gyrokinetic));
+         RefCountedPtr<PhaseGeom> species_geom 
+            = RefCountedPtr<PhaseGeom>(
+                new PhaseGeom(  *m_phase_geom,
+                                phase_coords,
+                                velocity_coords,
+                                velocity_normalization,
+                                mass,
+                                charge,
+                                is_gyrokinetic  ));
 
          // Create the species object
-         KineticSpecies* kin_spec = new KineticSpecies( name, mass, charge, species_geom, is_gyrokinetic );
+         KineticSpecies* kin_spec = new KineticSpecies( name, 
+                                                        mass, 
+                                                        charge, 
+                                                        species_geom, 
+                                                        is_gyrokinetic );
+
          kin_spec->distributionFunction().define(m_phase_grid->disjointBoxLayout(), 1, IntVect::Zero);
 
          // Add the new species to the solution vector
@@ -1011,19 +1098,35 @@ void GKSystem::enforcePositivity( KineticSpeciesPtrVect& a_soln )
 {
    for (int n(0); n<a_soln.size(); n++) {
       KineticSpecies* kinetic_species( a_soln[n].operator->() );
-      m_positivity_post_processor.enforce( kinetic_species->distributionFunction(),
-                                           kinetic_species->maxValue() );
+      m_positivity_post_processor.enforce( 
+              kinetic_species->distributionFunction(),
+              kinetic_species->maxValue() );
    }
 }
 
 
-inline
+static inline
 std::string dirPrefix( const std::string& a_prefix,
-                       const std::string& a_diag_name )
+                       const std::string& a_diag_name,
+                       const int a_sys_id,
+                       const std::string& a_sys_id_str )
 {
    std::string dir_prefix( a_prefix );
 #if 1  // warning, OS dependencies, will not work on all platforms
-   std::string iter_str( a_prefix + "_" + a_diag_name + "_plots" );
+   std::string iter_str;
+   if (a_sys_id < 0) {
+     iter_str = ( a_prefix 
+                  + "_" 
+                  + a_diag_name 
+                  + "_plots" );
+   } else {
+     iter_str = ( a_prefix 
+                  + "_" 
+                  + a_sys_id_str
+                  + "_" 
+                  + a_diag_name 
+                  + "_plots" );
+   }
 #ifdef CH_MPI
    if (procID() == 0) {
 #endif
@@ -1039,12 +1142,17 @@ std::string dirPrefix( const std::string& a_prefix,
 
 
 
-inline
+static inline
 std::string plotFileName( const std::string& a_prefix,
                           const std::string& a_diag_name,
-                          const int a_cur_step )
+                          const int a_cur_step,
+                          const int a_sys_id,
+                          const std::string& a_sys_id_str )
 {
-   std::string dir_prefix( dirPrefix( a_prefix, a_diag_name ) );
+   std::string dir_prefix( dirPrefix( a_prefix, 
+                                      a_diag_name, 
+                                      a_sys_id, 
+                                      a_sys_id_str ) );
    char buffer[100];
    sprintf( buffer, "%04d.", a_cur_step );
    std::string filename( dir_prefix + a_prefix + "." + a_diag_name + buffer );
@@ -1052,19 +1160,31 @@ std::string plotFileName( const std::string& a_prefix,
 }
 
 
-inline
+static inline
 std::string plotFileName( const std::string& a_prefix,
                           const std::string& a_diag_name,
                           const std::string& a_species_name,
                           const int a_cur_step,
-                          const int a_species_index )
+                          const int a_species_index,
+                          const int a_sys_id,
+                          const std::string& a_sys_id_str )
 {
-   std::string dir_prefix( dirPrefix( a_prefix, a_diag_name ) );
+   std::string dir_prefix( dirPrefix( a_prefix, 
+                                      a_diag_name, 
+                                      a_sys_id, 
+                                      a_sys_id_str ) );
    char buffer0[10];
    char buffer[20];
    sprintf( buffer0, ".%d.", a_species_index);
    sprintf( buffer, "%04d", a_cur_step );
-   std::string filename( dir_prefix + a_prefix + buffer0 + a_species_name + "." + a_diag_name + buffer + "." );
+   std::string filename(    dir_prefix 
+                          + a_prefix 
+                          + buffer0 
+                          + a_species_name 
+                          + "." 
+                          + a_diag_name 
+                          + buffer 
+                          + "." );
 
    return filename;
 }
@@ -1075,29 +1195,39 @@ void GKSystem::writePlotFile(const char    *prefix,
                              const double& cur_time )
 {
    CH_TIME("GKSystem::writePlotFile()");
-   // If the efield and potential are fixed, only consider plotting them at step 0
+   // If the efield and potential are fixed, 
+   // only consider plotting them at step 0
    if ( !m_gk_ops->fixedEField() || cur_step == 0 ) {
-   
-      if (m_hdf_potential) {
-         std::string filename( plotFileName( prefix,
-                                             "potential",
-                                             cur_step ) );
-         m_gk_ops->plotPotential( filename, m_hdf_potential_non_zonal, cur_time );
-      }
+     for (int i = 0; i < m_diagnostics_cfg_field_vars.size(); i++) {
 
-      if (m_hdf_efield) {
-         std::string filename = plotFileName( prefix,
-                                              "efield",
-                                              cur_step );
-         m_gk_ops->plotEField( filename, cur_time );
-      }
-      
-      if (m_hdf_ExBdata) {
-         std::string filename = plotFileName( prefix,
-                                              "ExBdata",
-                                              cur_step );
-         m_gk_ops->plotExBData( filename, cur_time );
-      }
+       std::string varname = m_diagnostics_cfg_field_vars[i];
+       if (varname == "potential_non_zonal") continue;
+
+       bool non_zonal = false;
+       if (varname == "potential") {
+        for (int j = 0; j < m_diagnostics_cfg_field_vars.size(); j++) {
+          if (m_diagnostics_cfg_field_vars[j] == "potential_non_zonal") {
+            non_zonal = true;
+          }
+        }
+       }
+
+       std::string filename( plotFileName( prefix,
+                                           varname,
+                                           cur_step,
+                                           m_sys_id,
+                                           m_sys_id_str ) );
+
+       if ((varname == "efield") && (!m_gk_ops->usingAmpereLaw())) {
+         CFG::LevelData<CFG::FluxBox> var;
+         m_diagnostics->getCfgVar(var, varname);
+         m_diagnostics->plotCfgVar(var, filename, cur_time);
+       } else {
+         CFG::LevelData<CFG::FArrayBox> var;
+         m_diagnostics->getCfgVar(var, varname, non_zonal);
+         m_diagnostics->plotCfgVar(var, filename, cur_time);
+       }
+     }
    }
 
    // Get indices for plots at various specified points
@@ -1114,425 +1244,151 @@ void GKSystem::writePlotFile(const char    *prefix,
 
    const KineticSpeciesPtrVect& kinetic_species( m_state_phys.dataKinetic() );
    for (int species(0); species<kinetic_species.size(); species++) {
+      
       const KineticSpecies& soln_species( *(kinetic_species[species]) );
 
-      // Distribution function
-
-      if (m_hdf_dfn) {
-         std::string filename( plotFileName( prefix,
-                                             "dfn",
+      if (m_diagnostics_dfn_plots.size() > 0) {
+        if (cur_step == 0) {
+          for (int i = 0; i<m_diagnostics_dfn_plots.size(); i++) {
+            std::string plotname = m_diagnostics_dfn_plots[i];
+            if (plotname == "dfn") {
+              m_diagnostics_dfn_plots.push_back("bstar_par");
+              break;
+            }
+          }
+        }
+        std::vector<std::string> filenames(0);
+        for (int i = 0; i<m_diagnostics_dfn_plots.size(); i++) {
+          std::string plotname = m_diagnostics_dfn_plots[i];
+          filenames.push_back( plotFileName( prefix,
+                                             plotname,
                                              soln_species.name(),
                                              cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotDistributionFunction( filename, soln_species, cur_time );
-
-         // Write out BStarParallel at first step
-         if (cur_step==0) {
-            std::string filename( plotFileName( prefix,
-                                                "bstar_par",
-                                                soln_species.name(),
-                                                cur_step,
-                                                species + 1) );
-
-            m_gk_ops->plotBStarParallel( filename, soln_species, cur_time );
-         }
+                                             species + 1,
+                                             m_sys_id,
+                                             m_sys_id_str ) ) ;
+        }
+        m_diagnostics->writeDfnPlots( m_diagnostics_dfn_plots,
+                                      filenames,
+                                      soln_species,
+                                      cur_time,
+                                      radial_index,
+                                      poloidal_index,
+                                      toroidal_index,
+                                      vpar_index,
+                                      mu_index );
       }
 
-      // Distribution function with subtracted Maxwellian 
+      for (int i(0); i < m_diagnostics_cfg_vars_kin_spec.size(); i++) {
+        std::string varname = m_diagnostics_cfg_vars_kin_spec[i];
 
-      if (m_hdf_deltaF) {
-         std::string filename( plotFileName( prefix,
-                                             "deltaF",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotDeltaF( filename, soln_species, cur_time );
-      }
-
-      // Distribution function at a specified mu index
-
-      if (m_hdf_dfn_at_mu) {
-         std::string filename( plotFileName( prefix,
-                                             "dfn_at_mu",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotDistributionFunctionAtMu( filename, soln_species, mu_index, cur_time );
-      }
-
-      // Distribution function vparallel versus theta at specified configuration space point
-
-      if (m_hdf_vpartheta) {
-         std::string filename( plotFileName( prefix,
-                                             "vpar_poloidal",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-         m_gk_ops->plotVParallelTheta( filename, soln_species, radial_index, toroidal_index, mu_index, cur_time );
-      }
-
-      if (m_hdf_bfvpartheta) {
-         std::string filename( plotFileName( prefix,
-                                             "bfvpar_poloidal",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-         m_gk_ops->plotbfVParallelTheta( filename, soln_species, radial_index, toroidal_index, mu_index, cur_time );
-      }
-
-      // Distribution function r versus theta at specified velocity space point
-
-      if (m_hdf_rtheta) {
-         std::string filename( plotFileName( prefix,
-                                             "f_rtheta",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-         m_gk_ops->plotRTheta( filename, soln_species, vpar_index, mu_index, cur_time );
-      }
-
-
-      // Distribution function vparallel versus mu at fixed configuration coordinate
-
-      if (m_hdf_vparmu) {
-         std::string filename( plotFileName( prefix,
-                                             "vpar_mu",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotVParallelMu( filename, soln_species, radial_index, poloidal_index, toroidal_index, cur_time );
-      }
-
-      // Charge density
-
-      if (m_hdf_density) {
-         std::string filename( plotFileName( prefix,
-                                             "density",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotChargeDensity( filename, soln_species, cur_time );
-      }
-
-      // Momentum density                                                                                                                                                                                        
-
-      if (m_hdf_momentum) {
-         std::string filename( plotFileName( prefix,
-                                            "momentum",
+        std::string filename( plotFileName( prefix,
+                                            varname,
                                             soln_species.name(),
                                             cur_step,
-                                            species + 1) );
+                                            species + 1,
+                                            m_sys_id,
+                                            m_sys_id_str ) );
 
-         m_gk_ops->plotMomentum( filename, soln_species, cur_time );
+        CFG::LevelData<CFG::FArrayBox> var;
+        m_diagnostics->getCfgVar(var, varname, soln_species);
+        m_diagnostics->plotCfgVar( var, filename, cur_time );
+
       }
 
-      // Parallel momentum moment
-
-      if (m_hdf_ParallelMomentum) {
-         std::string filename( plotFileName( prefix,
-                                             "ParallelMomentum",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-         m_gk_ops->plotParallelMomentum( filename, soln_species, cur_time );
-      }
-
-      // Poloidal momentum moment
-
-      if (m_hdf_PoloidalMomentum) {
-         std::string filename( plotFileName( prefix,
-                                             "PoloidalMomentum",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-         m_gk_ops->plotPoloidalMomentum( filename, soln_species, cur_time );
-      }
-
-      // Parallel velocity moment
-
-      if (m_hdf_ParallelVelocity) {
-         std::string filename( plotFileName( prefix,
-                                             "ParallelVelocity",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-         m_gk_ops->plotParallelVelocity( filename, soln_species, cur_time );
-      }
-
-      // Energy density
-
-      if (m_hdf_energyDensity) {
-         std::string filename( plotFileName( prefix,
-                                             "energyDensity",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotEnergyDensity( filename, soln_species, cur_time );
-      }
-
-      // Kinetic energy density
-
-       if (m_hdf_energyDensity) {
-          std::string filename( plotFileName( prefix,
-                                              "kieticEnergyDensity",
-                                              soln_species.name(),
-                                              cur_step,
-                                              species + 1) );
-
-          m_gk_ops->plotKineticEnergyDensity( filename, soln_species, cur_time );
-       }
-      
-      // Parallel energy density
-
-      if (m_hdf_parallelEnergyDensity) {
-         std::string filename( plotFileName( prefix,
-                                             "parallelEnergyDensity",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotParallelEnergyDensity( filename, soln_species, cur_time );
-      }
-
-      // Perpendicular energy density
-
-      if (m_hdf_perpEnergyDensity) {
-         std::string filename( plotFileName( prefix,
-                                             "perpEnergyDensity",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotPerpEnergyDensity( filename, soln_species, cur_time );
-      }
-      
-      // Pressure
-
-      if (m_hdf_pressure) {
-         std::string filename( plotFileName( prefix,
-                                             "pressure",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotPressure( filename, soln_species, cur_time );
-      }
-
-      // Parallel Pressure
-
-       if (m_hdf_parallelPressure) {
-          std::string filename( plotFileName( prefix,
-                                              "parallelPressure",
-                                              soln_species.name(),
-                                              cur_step,
-                                              species + 1) );
-
-          m_gk_ops->plotParallelPressure( filename, soln_species, cur_time );
-       }
-
-       // Perpendicular Pressure
-
-       if (m_hdf_perpPressure) {
-          std::string filename( plotFileName( prefix,
-                                              "perpPressure",
-                                              soln_species.name(),
-                                              cur_step,
-                                              species + 1) );
-
-          m_gk_ops->plotPerpPressure( filename, soln_species, cur_time );
-       }
-
-      // Grad P over N
-
-      if (m_hdf_gradPoverN) {
-         std::string filename( plotFileName( prefix,
-                                             "gradPoverN",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotGradPoverN( filename, soln_species, cur_time );
-      }
-
-      // Parallel heat flux
-      
-      if (m_hdf_parallelHeatFlux) {
-         std::string filename( plotFileName( prefix,
-                                            "ParallelHeatFlux",
-                                            soln_species.name(),
-                                            cur_step,
-                                            species + 1) );
-         
-         m_gk_ops->plotParallelHeatFlux( filename, soln_species, cur_time );
-      }
-
-      
-      // Temperature
-
-      if (m_hdf_temperature) {
-         std::string filename( plotFileName( prefix,
-                                             "temperature",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotTemperature( filename, soln_species, cur_time );
-      }
-
-      // Parallel temperature
-
-      if (m_hdf_parallelTemperature) {
-         std::string filename( plotFileName( prefix,
-                                             "parallelTemperature",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotParallelTemperature( filename, soln_species, cur_time );
-      }
-
-      // Perpendicular temperature
-
-      if (m_hdf_perpTemperature) {
-         std::string filename( plotFileName( prefix,
-                                             "perpTemperature",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotPerpTemperature( filename, soln_species, cur_time );
-      }
-
-      // Parallel heat flux
-      
-      if (m_hdf_parallelHeatFlux) {
-         std::string filename( plotFileName( prefix,
-                                            "ParallelHeatFlux",
-                                            soln_species.name(),
-                                            cur_step,
-                                            species + 1) );
-         
-         m_gk_ops->plotParallelHeatFlux( filename, soln_species, cur_time );
-      }
-
-      // Total parallel heat flux
-      
-      if (m_hdf_totalParallelHeatFlux) {
-         std::string filename( plotFileName( prefix,
-                                            "totalParallelHeatFlux",
-                                            soln_species.name(),
-                                            cur_step,
-                                            species + 1) );
-         
-         m_gk_ops->plotTotalParallelHeatFlux( filename, soln_species, cur_time );
-      }
-
-      // Fourth momemnt
-
-      if (m_hdf_fourthMoment) {
-         std::string filename( plotFileName( prefix,
-                                             "fourthMoment",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-
-         m_gk_ops->plotFourthMoment( filename, soln_species, cur_time );
-      }
-
-      // Increment of Er in the Ampere model                                                                                                                           
-      if (m_hdf_AmpereErIncrement) {
-         std::string filename( plotFileName( prefix,
-					    "AmpereErIncrement",
-					    soln_species.name(),
-					    cur_step,
-					    species + 1) );
-         m_gk_ops->plotAmpereErIncrement( filename, m_state_phys.dataFluid(), m_state_phys.dataScalar(), cur_time );
-      }
-
-
-      // Particle flux moment
-
-      if (m_hdf_ParticleFlux) {
-         std::string filename( plotFileName( prefix,
-                                             "ParticleFlux",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-         m_gk_ops->plotParticleFlux( filename, soln_species, cur_time );
-      }
-
-      // Heat flux moment
-
-      if (m_hdf_HeatFlux) {
-         std::string filename( plotFileName( prefix,
-                                             "HeatFlux",
-                                             soln_species.name(),
-                                             cur_step,
-                                             species + 1) );
-         m_gk_ops->plotHeatFlux( filename, soln_species, cur_time );
-      }
    }
 
-   // Total charge density
+   for (int i(0); i < m_diagnostics_cfg_vars_total_kin_spec.size(); i++) {
+     std::string varname = m_diagnostics_cfg_vars_total_kin_spec[i];
 
-   if (m_hdf_total_density) {
-      std::string filename( plotFileName( prefix,
-                                          "charge_density",
-                                          cur_step ) );
+     std::string filename( plotFileName( prefix,
+                                         varname,
+                                         cur_step,
+                                         m_sys_id,
+                                         m_sys_id_str ) );
 
-      m_gk_ops->plotChargeDensity( filename, kinetic_species, cur_time );
+     CFG::LevelData<CFG::FArrayBox> var;
+     m_diagnostics->getCfgVar(var, varname, kinetic_species);
+     m_diagnostics->plotCfgVar( var, filename, cur_time );
    }
 
    // Fluid species variables
-
-   if (m_hdf_fluids) {
+   if (m_diagnostics_fluids) {
 
       const CFG::FluidSpeciesPtrVect& fluids( m_state_phys.dataFluid() );
+
       for (int species(0); species<fluids.size(); species++) {
-         const CFG::FluidSpecies& fluid_species( static_cast<const CFG::FluidSpecies&>(*(fluids[species])) );
+
+         const CFG::FluidSpecies& fluid_species( 
+            static_cast<const CFG::FluidSpecies&>(*(fluids[species])) );
       
-         if ( fluid_species.num_cell_vars() == 1 &&
-              fluid_species.name() == fluid_species.cell_var_name(0) ) {
-            // Don't repeat the variable name if there's only one and it's the same as the species name
-            std::string filename (plotFileName( prefix,
-                                                fluid_species.name(),
-                                                cur_step ));
-            m_gk_ops->plotFluid( filename, fluid_species, fluid_species.cell_var_name(0), cur_time );
+         for (int n=0; n<fluid_species.num_cell_vars(); ++n) {
+
+           CFG::LevelData<CFG::FArrayBox> var;
+           m_diagnostics->getFluidCellVar( var, 
+                                      fluid_species, 
+                                      fluid_species.cell_var_name(n) );
+
+           std::string filename;
+           if (  fluid_species.num_cell_vars() == 1 &&
+                 fluid_species.name() == fluid_species.cell_var_name(0) ) {
+             filename = plotFileName( prefix,
+                                      fluid_species.name(),
+                                      cur_step,
+                                      m_sys_id,
+                                      m_sys_id_str );
+           } else {
+             filename = plotFileName( prefix,
+                                      fluid_species.cell_var_name(n),
+                                      fluid_species.name(),
+                                      cur_step,
+                                      species + 1,
+                                      m_sys_id,
+                                      m_sys_id_str );
+           }
+
+           m_diagnostics->plotCfgVar( var, filename, cur_time );
+
          }
-         else {
-            for (int n=0; n<fluid_species.num_cell_vars(); ++n) {
-               std::string filename (plotFileName( prefix,
-                                                   fluid_species.cell_var_name(n),
-                                                   fluid_species.name(),
-                                                   cur_step,
-                                                   species + 1));
-               m_gk_ops->plotFluid( filename, fluid_species, fluid_species.cell_var_name(n), cur_time );
-            }
-            for (int n=0; n<fluid_species.num_face_vars(); ++n) {
-               std::string filename (plotFileName( prefix,
-                                                   fluid_species.face_var_name(n),
-                                                   fluid_species.name(),
-                                                   cur_step,
-                                                   species + 1));
-               m_gk_ops->plotFluidAtCellFromFaceNorms( filename, fluid_species, 
-                                                       fluid_species.face_var_name(n), cur_time );
-            }
-            for (int n=0; n<fluid_species.num_edge_vars(); ++n) {
-               std::string filename (plotFileName( prefix,
-                                                   fluid_species.edge_var_name(n),
-                                                   fluid_species.name(),
-                                                   cur_step,
-                                                   species + 1));
-               m_gk_ops->plotFluidAtCellFromEdgeTans( filename, fluid_species, 
-                                                      fluid_species.edge_var_name(n), cur_time );
-            }
+         
+         for (int n=0; n<fluid_species.num_face_vars(); ++n) {
+
+           CFG::LevelData<CFG::FArrayBox> var;
+           m_diagnostics->getFluidFaceVarAtCell( var, 
+                                            fluid_species, 
+                                            fluid_species.face_var_name(n) );
+
+           std::string filename (plotFileName( prefix,
+                                               fluid_species.face_var_name(n),
+                                               fluid_species.name(),
+                                               cur_step,
+                                               species + 1,
+                                               m_sys_id,
+                                               m_sys_id_str ));
+
+           m_diagnostics->plotCfgVar( var, filename, cur_time );
+
          }
+         
+         for (int n=0; n<fluid_species.num_edge_vars(); ++n) {
+
+           CFG::LevelData<CFG::FArrayBox> var;
+           m_diagnostics->getFluidEdgeVarAtCell( var, 
+                                            fluid_species, 
+                                            fluid_species.edge_var_name(n) );
+
+           std::string filename (plotFileName( prefix,
+                                               fluid_species.edge_var_name(n),
+                                               fluid_species.name(),
+                                               cur_step,
+                                               species + 1,
+                                               m_sys_id,
+                                               m_sys_id_str ));
+
+           m_diagnostics->plotCfgVar( var, filename, cur_time );
+
+         }
+         
          if ( fluid_species.m_plotMemberVars == 1 ) {
             std::vector<string> varname = fluid_species.m_plotMemberVarNames;
             for (int i(0); i<varname.size(); i++) {
@@ -1540,29 +1396,55 @@ void GKSystem::writePlotFile(const char    *prefix,
                                                    varname[i],
                                                    fluid_species.name(),
                                                    cur_step,
-                                                   species + 1 ));
-               m_gk_ops->plotFluidOpMember( filename, fluid_species, varname[i], cur_time );
+                                                   species + 1,
+                                                   m_sys_id,
+                                                   m_sys_id_str ));
+               CFG::LevelData<CFG::FArrayBox> var;
+               m_diagnostics->getFluidOpMember(  var, fluid_species, varname[i] );
+               m_diagnostics->plotCfgVar( var, filename, cur_time );
             }
          }
       }
    }
+
+   return;
 }
 
       
 
-void GKSystem::writeCheckpointFile( HDF5Handle&  a_handle,
-                                    const int    a_cur_step,
-                                    const double a_cur_time,
-                                    const double a_cur_dt )
+void GKSystem::writeCheckpointFile( const std::string& a_chkpt_prefix,
+                                    const int          a_cur_step,
+                                    const double       a_cur_time,
+                                    const double       a_cur_dt )
 {
-  CH_TIME("GKSystem::writeCheckpointFile");
+   CH_TIME("GKSystem::writeCheckpointFile");
 
-   pout() << "writing checkpoint file" << endl;
-
+#ifdef CH_USE_HDF5
    MPI_Barrier(MPI_COMM_WORLD);
-   if (procID()==0) {
-      cout << "Writing checkpoint file" << endl;
+
+   char iter_str[100];
+   if (m_sys_id < 0) {
+     sprintf( iter_str, "%s%04d.%dd.hdf5",
+              a_chkpt_prefix.c_str(), 
+              a_cur_step, 
+              SpaceDim );
+   } else {
+     sprintf( iter_str, "%d_%s%04d.%dd.hdf5",
+              m_sys_id,
+              a_chkpt_prefix.c_str(), 
+              a_cur_step, 
+              SpaceDim );
    }
+
+   if (procID()==0) {
+      if (m_sys_id >= 0) cout << "System " << m_sys_id << ": ";
+      cout  << "Writing checkpoint file " 
+            << iter_str
+            << endl;
+   }
+
+
+   HDF5Handle handle( iter_str, HDF5Handle::CREATE );
 
    HDF5HeaderData header;
    const int RESTART_VERSION(2); // to distinguish from future versions
@@ -1572,41 +1454,41 @@ void GKSystem::writeCheckpointFile( HDF5Handle&  a_handle,
    header.m_real["Er_lo"]           = m_gk_ops->getLoRadialField(m_state_comp);
    header.m_real["Er_hi"]           = m_gk_ops->getHiRadialField(m_state_comp);
    header.m_int ["restart_version"] = RESTART_VERSION;
-   header.writeToFile( a_handle );
+   header.writeToFile( handle );
 
    if ( m_gk_ops->usingAmpereLaw() ) {
       // save the averaged radial E-field in 4D injected form
       LevelData<FArrayBox> Er_cell_injected;
       m_phase_geom->injectConfigurationToPhase( m_gk_ops->getErAverageCell(), Er_cell_injected);
-      a_handle.setGroup( "Er_cell" );
-      write(a_handle,Er_cell_injected.boxLayout());
-      write(a_handle,Er_cell_injected,"data",Er_cell_injected.ghostVect());
+      handle.setGroup( "Er_cell" );
+      write(handle,Er_cell_injected.boxLayout());
+      write(handle,Er_cell_injected,"data",Er_cell_injected.ghostVect());
  
       LevelData<FluxBox> Er_face_injected;
       m_phase_geom->injectConfigurationToPhase( m_gk_ops->getErAverageFace(), Er_face_injected);
-      a_handle.setGroup( "Er_face" );
-      write(a_handle,Er_face_injected.boxLayout());
-      write(a_handle,Er_face_injected,"data",Er_face_injected.ghostVect());
+      handle.setGroup( "Er_face" );
+      write(handle,Er_face_injected.boxLayout());
+      write(handle,Er_face_injected,"data",Er_face_injected.ghostVect());
 
       LevelData<FArrayBox> E_tilde_cell_injected;
       m_phase_geom->injectConfigurationToPhase( m_gk_ops->getETildeCell(), E_tilde_cell_injected);
-      a_handle.setGroup( "E_tilde_cell" );
-      write(a_handle,E_tilde_cell_injected.boxLayout());
-      write(a_handle,E_tilde_cell_injected,"data",E_tilde_cell_injected.ghostVect());
+      handle.setGroup( "E_tilde_cell" );
+      write(handle,E_tilde_cell_injected.boxLayout());
+      write(handle,E_tilde_cell_injected,"data",E_tilde_cell_injected.ghostVect());
  
       LevelData<FluxBox> E_tilde_face_injected;
       m_phase_geom->injectConfigurationToPhase( m_gk_ops->getETildeFace(), E_tilde_face_injected);
-      a_handle.setGroup( "E_tilde_face" );
-      write(a_handle,E_tilde_face_injected.boxLayout());
-      write(a_handle,E_tilde_face_injected,"data",E_tilde_face_injected.ghostVect());
+      handle.setGroup( "E_tilde_face" );
+      write(handle,E_tilde_face_injected.boxLayout());
+      write(handle,E_tilde_face_injected,"data",E_tilde_face_injected.ghostVect());
    }
    
    if ( m_old_vorticity_model ) {
       LevelData<FArrayBox> phi_injected;
       m_phase_geom->injectConfigurationToPhase( m_gk_ops->getPhi(), phi_injected);
-      a_handle.setGroup( "potential" );
-      write(a_handle,phi_injected.boxLayout());
-      write(a_handle,phi_injected,"data",phi_injected.ghostVect());
+      handle.setGroup( "potential" );
+      write(handle,phi_injected.boxLayout());
+      write(handle,phi_injected,"data",phi_injected.ghostVect());
    }
    
    const KineticSpeciesPtrVect& kinetic_species( m_state_comp.dataKinetic() );
@@ -1617,9 +1499,9 @@ void GKSystem::writeCheckpointFile( HDF5Handle&  a_handle,
       LevelData<FArrayBox> & soln_dfn = soln_species.distributionFunction();
       char buff[100];
       sprintf( buff, "dfn_%d", species + 1 );
-      a_handle.setGroup( buff );
-      write( a_handle, soln_dfn.boxLayout() );
-      write( a_handle, soln_dfn, "data" );
+      handle.setGroup( buff );
+      write( handle, soln_dfn.boxLayout() );
+      write( handle, soln_dfn, "data" );
    }
 
    const CFG::FluidSpeciesPtrVect& fluid_species( m_state_comp.dataFluid() );
@@ -1633,13 +1515,13 @@ void GKSystem::writeCheckpointFile( HDF5Handle&  a_handle,
          CFG::LevelData<CFG::FArrayBox> & fluid_data = this_fluid_species.cell_var(n);
          const string& var_name = this_fluid_species.cell_var_name(n);
          sprintf( buff, "fluid_%d_%s", species + 1, var_name.c_str() );
-         a_handle.setGroup( buff );
+         handle.setGroup( buff );
 
          LevelData<FArrayBox> injected_fluid_data;
          m_phase_geom->injectConfigurationToPhase( fluid_data, injected_fluid_data);
 
-         write( a_handle, injected_fluid_data.boxLayout() );
-         write( a_handle, injected_fluid_data, "data", injected_fluid_data.ghostVect() );
+         write( handle, injected_fluid_data.boxLayout() );
+         write( handle, injected_fluid_data, "data", injected_fluid_data.ghostVect() );
       }
 
       // NEED TO ADD FACE DATA
@@ -1647,21 +1529,36 @@ void GKSystem::writeCheckpointFile( HDF5Handle&  a_handle,
 
    MPI_Barrier(MPI_COMM_WORLD);
    if (procID()==0) {
+      if (m_sys_id >= 0) cout << "System " << m_sys_id << ": ";
       cout << "Writing history file" << endl;
    }
 
-   m_gk_ops->writeCheckpointFile( a_handle );
+   m_gk_ops->writeCheckpointFile( handle );
+
+   handle.close();
+#else
+   MayDay::Error( "restart only defined with hdf5" );
+#endif
 }
 
 
-void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
-                                   int&        a_cur_step,
-                                   double&     a_cur_time,
-                                   double&     a_cur_dt )
+void GKSystem::readCheckpointFile( const std::string& a_chkpt_fname,
+                                   int&               a_cur_step,
+                                   double&            a_cur_time,
+                                   double&            a_cur_dt )
 {
-   //pout() << "reading checkpoint file" << endl;
+   string fname;
+   if (m_sys_id >= 0) {
+     fname = m_sys_id_str + "_"  + a_chkpt_fname;
+   } else {
+     fname = a_chkpt_fname;
+   }
+
+#ifdef CH_USE_HDF5
+   HDF5Handle handle( fname, HDF5Handle::OPEN_RDONLY );
+
    HDF5HeaderData header;
-   header.readFromFile( a_handle );
+   header.readFromFile( handle );
 
    a_cur_step = header.m_int ["cur_step"];
    a_cur_time = header.m_real["cur_time"];
@@ -1671,41 +1568,41 @@ void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
    //   const int restart_version = header.m_int ["restart_version"];
 
    if ( m_gk_ops->usingAmpereLaw() ) {
-      a_handle.setGroup("Er_cell");
+      handle.setGroup("Er_cell");
       CFG::LevelData<CFG::FArrayBox> Er_cell_config(m_mag_geom->grids(), 3, CFG::IntVect::Unit);
       LevelData<FArrayBox> Er_cell_injected;
       m_phase_geom->injectConfigurationToPhase(Er_cell_config, Er_cell_injected);
-      read( a_handle, Er_cell_injected, "data", Er_cell_injected.disjointBoxLayout() );
+      read( handle, Er_cell_injected, "data", Er_cell_injected.disjointBoxLayout() );
       m_gk_ops->setErAverage( Er_cell_injected );
     
-      a_handle.setGroup("Er_face");
+      handle.setGroup("Er_face");
       CFG::LevelData<CFG::FluxBox> Er_face_config(m_mag_geom->grids(), 3, CFG::IntVect::Unit);
       LevelData<FluxBox> Er_face_injected;
       m_phase_geom->injectConfigurationToPhase(Er_face_config, Er_face_injected);
-      read( a_handle, Er_face_injected, "data", Er_face_injected.disjointBoxLayout() );
+      read( handle, Er_face_injected, "data", Er_face_injected.disjointBoxLayout() );
       m_gk_ops->setErAverage( Er_face_injected );
 
-      a_handle.setGroup("E_tilde_cell");
+      handle.setGroup("E_tilde_cell");
       CFG::LevelData<CFG::FArrayBox> E_tilde_cell_config(m_mag_geom->grids(), 3, CFG::IntVect::Unit);
       LevelData<FArrayBox> E_tilde_cell_injected;
       m_phase_geom->injectConfigurationToPhase(E_tilde_cell_config, E_tilde_cell_injected);
-      read( a_handle, E_tilde_cell_injected, "data", E_tilde_cell_injected.disjointBoxLayout() );
+      read( handle, E_tilde_cell_injected, "data", E_tilde_cell_injected.disjointBoxLayout() );
       m_gk_ops->setETilde( E_tilde_cell_injected );
     
-      a_handle.setGroup("E_tilde_face");
+      handle.setGroup("E_tilde_face");
       CFG::LevelData<CFG::FluxBox> E_tilde_face_config(m_mag_geom->grids(), 3, CFG::IntVect::Unit);
       LevelData<FluxBox> E_tilde_face_injected;
       m_phase_geom->injectConfigurationToPhase(E_tilde_face_config, E_tilde_face_injected);
-      read( a_handle, E_tilde_face_injected, "data", E_tilde_face_injected.disjointBoxLayout() );
+      read( handle, E_tilde_face_injected, "data", E_tilde_face_injected.disjointBoxLayout() );
       m_gk_ops->setETilde( E_tilde_face_injected );
    }
    
    if ( m_old_vorticity_model ) {
-      a_handle.setGroup("potential");
+      handle.setGroup("potential");
       CFG::LevelData<CFG::FArrayBox> phi(m_mag_geom->grids(), 1, CFG::IntVect::Zero);
       LevelData<FArrayBox> phi_injected;
       m_phase_geom->injectConfigurationToPhase(phi, phi_injected);
-      read( a_handle, phi_injected, "data", phi_injected.disjointBoxLayout() );
+      read( handle, phi_injected, "data", phi_injected.disjointBoxLayout() );
       m_gk_ops->setPhi( phi_injected );
    }
 
@@ -1717,8 +1614,8 @@ void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
       LevelData<FArrayBox>& soln_dfn = soln_species.distributionFunction();
       char buff[100];
       sprintf( buff, "dfn_%d", species + 1 );
-      a_handle.setGroup( buff );
-      read( a_handle, soln_dfn, "data", soln_dfn.disjointBoxLayout(), Interval(0,soln_dfn.nComp()-1), false );
+      handle.setGroup( buff );
+      read( handle, soln_dfn, "data", soln_dfn.disjointBoxLayout(), Interval(0,soln_dfn.nComp()-1), false );
    }
 
    CFG::FluidSpeciesPtrVect& fluid_species( m_state_comp.dataFluid() );
@@ -1736,8 +1633,8 @@ void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
 
          const string& var_name = this_fluid_species.cell_var_name(n);
          sprintf( buff, "fluid_%d_%s", species + 1, var_name.c_str() );
-         a_handle.setGroup( buff );
-         read( a_handle, injected_fluid_data, "data", injected_fluid_data.disjointBoxLayout() );
+         handle.setGroup( buff );
+         read( handle, injected_fluid_data, "data", injected_fluid_data.disjointBoxLayout() );
          m_phase_geom->projectPhaseToConfiguration( injected_fluid_data, 
                                                     fluid_data);
       }
@@ -1745,7 +1642,12 @@ void GKSystem::readCheckpointFile( HDF5Handle& a_handle,
       // NEED TO ADD FACE DATA
    }
 
-   m_gk_ops->readCheckpointFile( a_handle, a_cur_step );
+   m_gk_ops->readCheckpointFile( handle, a_cur_step );
+   handle.close();
+
+#else
+   MayDay::Error("restart only defined with hdf5");
+#endif
 }
 
 
@@ -1761,36 +1663,45 @@ void GKSystem::writeFieldHistory( int     cur_step,
                                   double  cur_time, 
                                   bool    startup_flag)
 {
-  m_gk_ops->writeFieldHistory( cur_step, cur_time, startup_flag );
+  if (m_sys_id < 0) {
+    m_gk_ops->writeFieldHistory( cur_step, cur_time, startup_flag );
+  } else {
+    string prefix = m_sys_id_str + "_";
+    m_gk_ops->writeFieldHistory( cur_step, cur_time, startup_flag, prefix );
+  }
 }
 
 
-void GKSystem::printDiagnostics()
+void GKSystem::getDiagnostics(  std::vector<Real>& a_minvals,
+                                std::vector<Real>& a_maxvals )
 {
-   CH_TIME("GKSystem::printDiagnostics()");
-   pout() << "  Distribution Function Extrema:" << std::endl;
-   if (procID()==0) {
-      cout << "  Distribution Function Extrema:" << std::endl;
-   }
    const KineticSpeciesPtrVect& kinetic_species( m_state_comp.dataKinetic() );
    for (int n(0); n<kinetic_species.size(); n++) {
       const KineticSpecies& species( *(kinetic_species[n]) );
-      Real maximum( species.maxValue() );
-      Real minimum( species.minValue() );
-      pout() << "    Species " << n << ":\t"
-             << maximum << " [max]\t" << minimum << " [min]" << std::endl;
+      a_maxvals.push_back( species.maxValue() );
+      a_minvals.push_back( species.minValue() );
+   }
+   return;
+}
+
+void GKSystem::printDiagnostics()
+{
+   std::vector<Real> a_minvals(0), a_maxvals(0);
+   getDiagnostics(a_minvals, a_maxvals);
+   CH_TIME("GKSystem::printDiagnostics()");
+   if (procID()==0) {
+      cout << "  ";
+      if (m_sys_id >= 0) cout << "System " << m_sys_id << ": ";
+      cout << "Distribution Function Extrema:" << std::endl;
+   }
+   const KineticSpeciesPtrVect& kinetic_species( m_state_comp.dataKinetic() );
+   for (int n(0); n<kinetic_species.size(); n++) {
       if (procID()==0) {
-         cout << "    Species " 
-              << n << ":\t" 
-              << maximum << " [max]\t" 
-              << minimum << " [min]" 
-              << std::endl;
+         printf("    Species %d:  %5.3e [max], %5.3e [min]\n",
+                n, a_maxvals[n], a_minvals[n] );
       }
    }
-   pout() << std::endl;
-   if (procID()==0) {
-      cout << std::endl;
-   }
+   if (procID()==0) printf("\n");
 }
 
 void printTimeStep( const Real& a_dt,
@@ -1836,26 +1747,17 @@ void GKSystem::postTimeStep(ODEVector&  a_vec,
   m_gk_ops->postTimeStep( a_cur_step, a_dt, a_cur_time, m_state_comp );
   m_gk_ops->convertToPhysical( m_state_comp, m_state_phys, a_cur_time );
 
-  if (procID() == 0) {
+  m_dt_vlasov = m_gk_ops->dtScaleVlasov( m_state_comp, a_cur_step );
+  m_dt_collisions = m_gk_ops->dtScaleCollisions( m_state_comp, a_cur_step);
+  m_dt_transport = m_gk_ops->dtScaleTransport( m_state_comp, a_cur_step );
+  m_dt_neutrals = m_gk_ops->dtScaleNeutrals( m_state_comp, a_cur_step );
 
-    cout << "  ----\n";
-    cout << "  dt: " << a_dt << std::endl;
-
-    Real dt_vlasov = m_gk_ops->dtScaleVlasov( m_state_comp, a_cur_step );
-    printTimeStep( dt_vlasov, "    Vlasov    : ", a_dt ); 
-    Real dt_collisions = m_gk_ops->dtScaleCollisions( m_state_comp, 
-                                                      a_cur_step);
-
-    printTimeStep( dt_collisions, "    Collisions: ", a_dt ); 
-    Real dt_transport = m_gk_ops->dtScaleTransport( m_state_comp, 
-                                                    a_cur_step );
-
-    printTimeStep( dt_transport, "    Transport : ", a_dt ); 
-    Real dt_neutrals = m_gk_ops->dtScaleNeutrals( m_state_comp, 
-                                                  a_cur_step );
-
-    printTimeStep( dt_neutrals, "    Neutrals  : ", a_dt ); 
-    cout << "  ----\n";
+  if ((procID() == 0) && (m_sys_id < 0)) {
+    cout << "  dt = " << a_dt << std::endl;
+    printTimeStep( m_dt_vlasov,     "    Vlasov    : ", a_dt ); 
+    printTimeStep( m_dt_collisions, "    Collisions: ", a_dt ); 
+    printTimeStep( m_dt_transport,  "    Transport : ", a_dt ); 
+    printTimeStep( m_dt_neutrals,   "    Neutrals  : ", a_dt ); 
   }
 
   copyStateToArray( a_vec );
@@ -1877,6 +1779,9 @@ inline void GKSystem::printParameters() const
 {
    if (procID() == 0 && m_verbosity) {
 
+      if (m_sys_id >= 0) {
+        printf("System %d:", m_sys_id);
+      }
       if ( m_mag_geom_type != "SingleNull" && m_mag_geom_type != "SNCore" ) {
          cout << "num_cells = ";
          for (int i=0; i<SpaceDim; i++) cout << m_num_cells[i] << " ";
@@ -1915,286 +1820,95 @@ inline void GKSystem::printParameters() const
 #endif
       }
 
-      cout << "enforce_positivity = " << (m_enforce_step_positivity||m_enforce_stage_positivity) << endl;
+      cout  << "enforce_positivity = " 
+            << (m_enforce_step_positivity||m_enforce_stage_positivity) 
+            << endl;
       std::string ptype("stage");
       if (m_enforce_step_positivity)
          ptype = "step";
       cout << "enforce_positivity_type = " << ptype << endl;
+      if (m_sys_id >= 0) {
+        printf("--");
+      }
 
    }
 }
 
 
-void GKSystem::parseParameters( ParmParse& a_ppgksys )
-{
-   
-   // Get kinetic ghost layer width
-   a_ppgksys.query( "kinetic_ghost_width", m_kinetic_ghosts );
+void GKSystem::setParameters( const GKSystemParameters& a_params )
+{   
+   m_kinetic_ghosts = a_params.kineticGhosts();
+   m_fluid_ghosts = a_params.fluidGhosts();
 
-   // Get fluid ghost layer width
-   a_ppgksys.query( "fluid_ghost_width", m_fluid_ghosts );
-   
-   // Get magnetic geometry type
-   a_ppgksys.get( "magnetic_geometry_mapping", m_mag_geom_type );
-
-   // This determines the amount of diagnositic output generated
-   a_ppgksys.query( "verbosity", m_verbosity );
-   CH_assert( m_verbosity >= 0 );
+   m_verbosity = a_params.verbosity();
+   m_mag_geom_type = a_params.magGeomType();
 
    if ( m_mag_geom_type != "SingleNull" && m_mag_geom_type != "SNCore") {
-      // Set the grid size
-      m_num_cells.resize( PDIM );
-      for (int i=0; i<PDIM; ++i) m_num_cells[i] = 0;
-      a_ppgksys.getarr( "num_cells", m_num_cells, 0, PDIM );
-      for (int i=0; i<PDIM; ++i) CH_assert( m_num_cells[i]>0 );
+      m_num_cells = a_params.numCells();
+      m_is_periodic = a_params.isPeriodic();
 
-      // Determine which spatial directions are periodic
-      m_is_periodic.resize(PDIM);
-      vector<int> isPeriodic( PDIM ); // why should I have to do this?
-      a_ppgksys.getarr( "is_periodic", isPeriodic, 0, PDIM );
-      for (int dim=0; dim<SpaceDim; dim++)  {
-         m_is_periodic[dim] = (isPeriodic[dim] == 1);
-      }
-
-      // Get the domain decomposition parameters
-      if (a_ppgksys.contains("configuration_decomp")) {
-         m_configuration_decomposition.resize( CFG_DIM );
-         for (int i=0; i<CFG_DIM; ++i) m_configuration_decomposition[i] = 0;
-         a_ppgksys.getarr( "configuration_decomp", m_configuration_decomposition, 0, CFG_DIM );
-         for (int i=0; i<CFG_DIM; ++i) CH_assert( m_configuration_decomposition[i]>0 );
-      }
-      if (a_ppgksys.contains("phase_decomp")) {
-         m_phase_decomposition.resize( PDIM );
-         for (int i=0; i<PDIM; ++i) m_phase_decomposition[i] = 0;
-         a_ppgksys.getarr( "phase_decomp", m_phase_decomposition, 0, PDIM );
-         for (int i=0; i<PDIM; ++i) CH_assert( m_phase_decomposition[i]>0 );
-      }
-   }
-   else {
-      // Set the velocity space grid size
-      m_num_velocity_cells.resize( VEL_DIM );
-      for (int i=0; i<VEL_DIM; ++i) m_num_velocity_cells[i] = 0;
-      a_ppgksys.getarr( "num_velocity_cells", m_num_velocity_cells, 0, VEL_DIM );
-      for (int i=0; i<VEL_DIM; ++i) CH_assert( m_num_velocity_cells[i]>0 );
+      m_configuration_decomposition = a_params.cfgDecomp();
+      m_phase_decomposition = a_params.phaseDecomp();
+   } else {
+      m_num_velocity_cells = a_params.numVelocityCells();
    }
 
-   if (a_ppgksys.contains("velocity_decomp")) {
-      m_velocity_decomposition.resize( VEL_DIM );
-      for (int i=0; i<VEL_DIM; ++i) m_velocity_decomposition[i] = 0;
-      a_ppgksys.getarr( "velocity_decomp", m_velocity_decomposition, 0, VEL_DIM );
-      for (int i=0; i<VEL_DIM; ++i) CH_assert( m_velocity_decomposition[i]>0 );
-   }
+   m_velocity_decomposition = a_params.velDecomp();
 
-   // time integration method to use 
-   a_ppgksys.query("ti_class",m_ti_class);
-   a_ppgksys.query("ti_method",m_ti_method);
+   m_ti_class = a_params.tiClass();
+   m_ti_method = a_params.tiMethod();
 
-   // Should we make an hdf file for the potential?
-   a_ppgksys.query("hdf_potential",m_hdf_potential);
+   m_diagnostics_dfn_plots = a_params.diagnosticsDfnPlots();
+   m_diagnostics_cfg_field_vars = a_params.diagnosticsCfgFieldVars();
+   m_diagnostics_cfg_vars_kin_spec = a_params.diagnosticsCfgVarsKinSpec();
+   m_diagnostics_cfg_vars_total_kin_spec = a_params.diagnosticsCfgVarsTotalKinSpec();
+   m_diagnostics_fluids = a_params.diagnosticsFluids();
 
-   // Should we make an hdf file for the non-zonal potential components?
-   a_ppgksys.query("hdf_potential_non_zonal",m_hdf_potential_non_zonal);
-   
-   // Should we make an hdf file for the electric field?
-   a_ppgksys.query("hdf_efield",m_hdf_efield);
+   m_fixed_plotindices = a_params.fixedPlotIndices();
 
-   // Should we make an hdf file for the ExB data?
-   a_ppgksys.query("hdf_ExBdata",m_hdf_ExBdata);
-   
-   // Should we make an hdf file for the distribution function?
-   a_ppgksys.query("hdf_dfn",m_hdf_dfn);
-
-   // Should we make an hdf file for fluids?
-   a_ppgksys.query("hdf_fluids",m_hdf_fluids);
-
-   // Should we make an hdf file for the function minus Maxwellian?
-   a_ppgksys.query("hdf_deltaF",m_hdf_deltaF);
-
-   // Should we make an hdf file for the distribution function at a specified mu?
-   a_ppgksys.query("hdf_dfn_at_mu",m_hdf_dfn_at_mu);
-
-   // Should we make hdf files for f versus vparallel and poloidal angle?
-   a_ppgksys.query("hdf_vpartheta",m_hdf_vpartheta);
-
-   // Should we make hdf files for bstarparalel*f versus vparallel and poloidal angle?
-   a_ppgksys.query("hdf_bfvpartheta",m_hdf_bfvpartheta);
-
-   // Should we make hdf files for f versus radius and poloidal angle at a specified vpar, mu?
-   a_ppgksys.query("hdf_rtheta",m_hdf_rtheta);
-
-   // Should we make hdf files for vparallel-mu at a specified configuration space point?
-   a_ppgksys.query("hdf_vparmu",m_hdf_vparmu);
-
-   // Should we make hdf files for charge density?
-   a_ppgksys.query("hdf_density",m_hdf_density);
-
-   // Should we make hdf files for momentum?
-   a_ppgksys.query("hdf_momentum",m_hdf_momentum);
-
-   // Should we make an hdf file for the total charge density?
-   a_ppgksys.query("hdf_total_density",m_hdf_total_density);
-
-   // Should we make hdf files for ParallelMomentum?
-   a_ppgksys.query("hdf_ParallelMomentum",m_hdf_ParallelMomentum);
-
-   // Should we make hdf files for PoloidalMomentum?
-   a_ppgksys.query("hdf_PoloidalMomentum",m_hdf_PoloidalMomentum);
-
-   // Should we make hdf files for ParallelMomentum?
-    a_ppgksys.query("hdf_ParallelVelocity",m_hdf_ParallelVelocity);
-
-   // Should we make hdf files for energy density?
-   a_ppgksys.query("hdf_energyDensity",m_hdf_energyDensity);
-
-   // Should we make hdf files for kinetic energy density?
-   a_ppgksys.query("hdf_kineticEnergyDensity",m_hdf_kineticEnergyDensity);
-    
-   // Should we make hdf files for parallel energy density?
-   a_ppgksys.query("hdf_parallelEnergyDensity",m_hdf_parallelEnergyDensity);
-
-   // Should we make hdf files for perpendicular energy density?
-   a_ppgksys.query("hdf_perpEnergyDensity",m_hdf_perpEnergyDensity);
-    
-   // Should we make hdf files for pressure?
-   a_ppgksys.query("hdf_pressure",m_hdf_pressure);
-
-   // Should we make hdf files for parallel pressure?
-   a_ppgksys.query("hdf_parallelPressure",m_hdf_parallelPressure);
-
-   // Should we make hdf files for perpendicular pressure?
-   a_ppgksys.query("hdf_perpPressure",m_hdf_perpPressure);
-
-   // Should we make hdf files for gradPoverN?
-   a_ppgksys.query("hdf_gradPoverN",m_hdf_gradPoverN);
-    
-   // Should we make hdf files for parallel heat flux?
-   a_ppgksys.query("hdf_parallelHeatFlux",m_hdf_parallelHeatFlux);
-
-   // Should we make hdf files for temperature?
-   a_ppgksys.query("hdf_temperature",m_hdf_temperature);
-
-   // Should we make hdf files for parallel temperature?
-   a_ppgksys.query("hdf_parallelTemperature",m_hdf_parallelTemperature);
-
-   // Should we make hdf files for perpendicular temperature?
-   a_ppgksys.query("hdf_perpTemperature",m_hdf_perpTemperature);
-   
-   // Should we make hdf files for parallel heat flux?
-   a_ppgksys.query("hdf_parallelHeatFlux",m_hdf_parallelHeatFlux);
-
-   // Should we make hdf files for parallel heat flux?
-   a_ppgksys.query("hdf_totalParallelHeatFlux",m_hdf_totalParallelHeatFlux);
-
-   // Should we make hdf files for fourthMoment?
-   a_ppgksys.query("hdf_fourthMoment",m_hdf_fourthMoment);
-
-   // Should we make hdf files for particle flux?
-   a_ppgksys.query("hdf_ParticleFlux",m_hdf_ParticleFlux);
-
-   // Should we make hdf files for heat flux?
-   a_ppgksys.query("hdf_HeatFlux",m_hdf_HeatFlux);
-
-   // Should we make hdf files for Ampere Er increment?
-   a_ppgksys.query("hdf_AmpereErIncrement",m_hdf_AmpereErIncrement);
-
-   // At what fixed phase space indices should I plot?  (Indices plotted against in a given plot
-   //   are ignored.  Specify in 5D; toroidal index ignored in 4D and set to zero in arguments
-   //   of hdf write methods.
-   m_fixed_plotindices.resize( 5 );
-   for (int i=0; i<5; ++i) m_fixed_plotindices[i]=0;
-   a_ppgksys.queryarr("fixed_plot_indices",m_fixed_plotindices,0,5);
-   if ( m_mag_geom_type != "SingleNull" && m_mag_geom_type != "SNCore" ) {       // FIX THIS TO WORK WITH MULTIBLOCK
-      // check to make sure these are not out of bounds.
-      for (int i=0;i<2; ++i)
-         {
-            CH_assert( m_fixed_plotindices[i] >= 0 );
-            CH_assert( m_fixed_plotindices[i] < m_num_cells[i] );
-         }
+   if ( m_mag_geom_type != "SingleNull" && m_mag_geom_type != "SNCore" ) {
+     // check to make sure these are not out of bounds.
+     for (int i=0;i<2; ++i)
+     {
+       CH_assert( m_fixed_plotindices[i] >= 0 );
+       CH_assert( m_fixed_plotindices[i] < m_num_cells[i] );
+     }
 #if CFG_DIM == 3
-      CH_assert( m_fixed_plotindices[2] >= 0 );
-      CH_assert( m_fixed_plotindices[2] < m_num_cells[2] );
+     CH_assert( m_fixed_plotindices[2] >= 0 );
+     CH_assert( m_fixed_plotindices[2] < m_num_cells[2] );
 #endif
-      CH_assert( m_fixed_plotindices[3] >= -m_num_cells[VPARALLEL_DIR]/2 );
-      CH_assert( m_fixed_plotindices[3] < m_num_cells[VPARALLEL_DIR]/2 );
-      CH_assert( m_fixed_plotindices[4] >= 0 );
-      CH_assert( m_fixed_plotindices[4] < m_num_cells[MU_DIR] );
-   }
-   else {
-#if 0
-      for (int block=0; block<a_config_blocks.size(); ++block) {
-         for (int dir=0; dir<CFG_DIM; ++dir) {
-            CH_assert( a_config_blocks[block].loMappedIndex()[dir] <= m_fixed_plotindices[dir] );
-            CH_assert( a_config_blocks[block].hiMappedIndex()[dir] >  m_fixed_plotindices[dir] );
-         }
-      }
-      CH_assert( m_fixed_plotindices[3] >= -m_num_velocity_cells[0]/2 );
-      CH_assert( m_fixed_plotindices[3] < m_num_velocity_cells[0]/2 );
-      CH_assert( m_fixed_plotindices[4] >= 0 );
-      CH_assert( m_fixed_plotindices[4] < m_num_velocity_cells[1] );
-#endif
+     CH_assert( m_fixed_plotindices[3] >= -m_num_cells[VPARALLEL_DIR]/2 );
+     CH_assert( m_fixed_plotindices[3] < m_num_cells[VPARALLEL_DIR]/2 );
+     CH_assert( m_fixed_plotindices[4] >= 0 );
+     CH_assert( m_fixed_plotindices[4] < m_num_cells[MU_DIR] );
+   } else {
    }
 
-   bool enforce_positivity(false);
-   if (a_ppgksys.contains("enforce_positivity")) {
-      a_ppgksys.get("enforce_positivity", enforce_positivity);
-   }
+   m_enforce_stage_positivity = a_params.enforceStagePositivity();
+   m_enforce_step_positivity = a_params.enforceStepPositivity();
+   if (m_enforce_stage_positivity || m_enforce_step_positivity) {
 
-   if (enforce_positivity) {
-
-      std::string ptype("stage");
-      m_enforce_stage_positivity = true;
-      if (a_ppgksys.contains("enforce_positivity_type")) {
-         a_ppgksys.get("enforce_positivity_type", ptype);
-         if (ptype=="step") {
-            m_enforce_step_positivity = true;
-            m_enforce_stage_positivity = false;
-         }
-         else if (ptype!="stage") {
-            MayDay::Error("Invalid positivity enforcement type");
-         }
-      }
-
-      int n_iter(5);
-      if (a_ppgksys.contains("max_positivity_iter")) {
-         a_ppgksys.get("max_positivity_iter", n_iter);
-      }
-
-      bool verbose(false);
-      if (a_ppgksys.contains("positivity_verbose_output")) {
-         a_ppgksys.get("positivity_verbose_output", verbose);
-      }
+      int n_iter = a_params.positivityNIter();
+      bool verbose = a_params.positivityVerbose();
 
       int width(2);
       if (m_enforce_step_positivity) width++;
       IntVect halo( width*IntVect::Unit );
-      //IntVect halo(m_kinetic_ghosts*IntVect::Unit);
       m_positivity_post_processor.define( halo, n_iter, verbose );
    }
 
-   bool enforce_floor(false);
-   if (a_ppgksys.contains("enforce_floor")) {
-      a_ppgksys.get("enforce_floor", enforce_floor);
-   }
-   if (enforce_floor) {
-      m_enforce_step_floor = true;
 
-      Real floor_value(0.);
-      a_ppgksys.query( "floor_value", floor_value );
-
-      bool absolute_floor(true);
-      a_ppgksys.query( "absolute_floor", absolute_floor );
-
+   m_enforce_step_floor = a_params.enforceStepFloor();
+   if (m_enforce_step_floor) {
+      Real floor_value = a_params.floorValue();
+      bool absolute_floor = a_params.absoluteFloor();
       m_floor_post_processor.define( floor_value, absolute_floor );
    }
    
-   if (a_ppgksys.contains("old_vorticity_model")) {
-      a_ppgksys.get("old_vorticity_model", m_old_vorticity_model);
-   }
-   else {
-      m_old_vorticity_model = false;
-   }
-}
+   m_old_vorticity_model = a_params.oldVorticityModel();
 
+   return;
+}
 
 
 void GKSystem::giveSpeciesTheirGyroaverageOps()

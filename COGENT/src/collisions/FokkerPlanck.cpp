@@ -36,7 +36,10 @@ FokkerPlanck::FokkerPlanck( const std::string& a_ppcls_str, const int a_verbosit
      m_ref_updated(false),
      m_compute_maxwellian(false),
      m_conserve_energy(false),
-     m_fp_energy_cons_epsilon(1.0e-16)
+     m_fp_energy_cons_epsilon(1.0e-16),
+     m_first_call_preTimeStep(true),
+     m_first_call_computeReferenceSolution(true),
+     m_first_call_computePotentialsAndCoeffs(true)
 {
    m_verbosity = true;
    m_opt_string = a_ppcls_str;
@@ -75,10 +78,11 @@ void FokkerPlanck::defineBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*
                                   bool                                              a_im,
                                   const KineticSpecies&                             a_species,
                                   const GlobalDOFKineticSpecies&                    a_global_dofs,
-                                  const int                                         a_species_index )
+                                  const int                                         a_species_index,
+                                  const int                                         a_id )
 {
   if (a_im && m_time_implicit) {
-  
+ 
     CH_assert(a_pc.size() == a_dof_list.size());
 
     if (!procID()) {
@@ -90,6 +94,7 @@ void FokkerPlanck::defineBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*
 
     Preconditioner<ODEVector,AppCtxt> *pc;
     pc = new BasicGKPreconditioner<ODEVector,AppCtxt>;
+    pc->setSysID(a_id);
     DOFList dof_list(0);
 
     const LevelData<FArrayBox>& soln_dfn    (a_species.distributionFunction());
@@ -543,10 +548,9 @@ void FokkerPlanck::preTimeStep( const KineticSpeciesPtrVect& a_soln_mapped,
                                 const Real a_time,
                                 const KineticSpeciesPtrVect& a_soln_physical )
 { 
-  static bool first_call = true;
   computeReferenceSolution  ( a_soln_physical, a_species, a_time);
 
-  if (first_call) {
+  if (m_first_call_preTimeStep) {
     const KineticSpecies& soln_species(*(a_soln_mapped[a_species]));
     const PhaseGeom&      phase_geom(soln_species.phaseSpaceGeometry());
     const CFG::MagGeom&   mag_geom(phase_geom.magGeom());
@@ -578,7 +582,7 @@ void FokkerPlanck::preTimeStep( const KineticSpeciesPtrVect& a_soln_mapped,
   computePotentialsAndCoeffs( soln_species, dfn, grids, phase_geom_ptr); 
 
   m_it_counter+=1;
-  first_call = false;
+  m_first_call_preTimeStep = false;
   return;
 }
 
@@ -1166,11 +1170,10 @@ void FokkerPlanck::computeReferenceSolution(const KineticSpeciesPtrVect& a_soln,
                                             const int a_species,
                                             const Real a_time)
 {
-  static bool first_call = true;
   const KineticSpecies& soln_species( *(a_soln[a_species]) );
   const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
 
-  if (first_call) {
+  if (m_first_call_computeReferenceSolution) {
     m_F0.define( phase_geom.gridsFull(), 1, IntVect::Zero );
   }
 
@@ -1205,7 +1208,7 @@ void FokkerPlanck::computeReferenceSolution(const KineticSpeciesPtrVect& a_soln,
   } else {
 
     /* use the specified reference distribution function */
-    if (first_call) {
+    if (m_first_call_computeReferenceSolution) {
 
       KineticSpeciesPtr ref_species( soln_species.clone( IntVect::Unit, false ) );
       m_ref_func->assign( *ref_species, a_time );
@@ -1224,7 +1227,7 @@ void FokkerPlanck::computeReferenceSolution(const KineticSpeciesPtrVect& a_soln,
 
   }
 
-  first_call = false;
+  m_first_call_computeReferenceSolution = false;
   return;
 }
 
@@ -1361,13 +1364,11 @@ void FokkerPlanck::computePotentialsAndCoeffs(const KineticSpecies&            a
                                               const DisjointBoxLayout&         a_grids,
                                               const RefCountedPtr<PhaseGeom>&  a_phase_geom )
 {
-  static bool first_call = true;
-
   //Get test-particle (tp) and field-particle (fp) masses
   const double mass_tp = a_species.mass();
   const double mass_fp = a_species.mass();
 
-  if (first_call) {
+  if (m_first_call_computePotentialsAndCoeffs) {
     //Compute normalization
     computeClsNorm(m_cls_norm, a_species.mass(), a_species.charge());
 
@@ -1421,7 +1422,7 @@ void FokkerPlanck::computePotentialsAndCoeffs(const KineticSpecies&            a
 
   }
 
-  if ((m_update_freq < 0) || (m_it_counter % m_update_freq == 0) || first_call) {
+  if ((m_update_freq < 0) || (m_it_counter % m_update_freq == 0) || m_first_call_computePotentialsAndCoeffs) {
 
     if (m_subtract_background) {
 
@@ -1431,7 +1432,7 @@ void FokkerPlanck::computePotentialsAndCoeffs(const KineticSpecies&            a
         delta_f[dit].minus(m_F0[dit]);
       }
 
-      if (m_ref_updated || first_call) {
+      if (m_ref_updated || m_first_call_computePotentialsAndCoeffs) {
         if (!procID() && m_verbosity) {
           std::cout<<"  Note: Reference distribution function updated (by recomputing Maxwellian).\n";
           std::cout<<"  Note: Recomputing Rosenbluth potentials for reference distribution function.\n";
@@ -1453,7 +1454,7 @@ void FokkerPlanck::computePotentialsAndCoeffs(const KineticSpecies&            a
 
   }
 
-  first_call = false;
+  m_first_call_computePotentialsAndCoeffs = false;
   return;
 }
 

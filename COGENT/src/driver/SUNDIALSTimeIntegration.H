@@ -360,18 +360,10 @@ void SundialsTimeIntegrator<AppVec,System>::writeHistFile(bool flag)
 template <class AppVec, class System> 
 void SundialsTimeIntegrator<AppVec,System>::writeCheckpointFile()
 {
-#ifdef CH_USE_HDF5
-   char iter_str[100];
-
-   sprintf( iter_str, "%s%04d.%dd.hdf5",
-            m_checkpoint_prefix.c_str(), ((int)m_cur_step), SpaceDim );
-
-   HDF5Handle handle( iter_str, HDF5Handle::CREATE );
-   m_system->writeCheckpointFile( handle, m_cur_step, m_cur_time, m_dt );
-   handle.close();
-#else
-   MayDay::Error( "restart only defined with hdf5" );
-#endif
+   m_system->writeCheckpointFile( m_checkpoint_prefix, 
+                                  m_cur_step, 
+                                  m_cur_time, 
+                                  m_dt );
 }
 
 template <class AppVec, class System> 
@@ -460,6 +452,8 @@ void SundialsTimeIntegrator<AppVec,System>::initialize( ParmParse&    a_pp,
   m_system->printDiagnostics();
 
   m_system->defineODEVector( m_U );
+  m_U.printLoadBalanceInfo();
+
   m_system->copyStateToArray( m_U );
   m_F.define( m_U );
 
@@ -573,7 +567,7 @@ void SundialsTimeIntegrator<AppVec,System>::initialize( ParmParse&    a_pp,
             *bembe = NULL,
             *binterpi = NULL,
             *binterpe = NULL;
-      int nstages, order, order_emb;
+      int nstages, order, order_emb, pinterp;
       TiButcherTables::getButcherTableARK(  m_system->tiMethod(),
                                             nstages,
                                             order,
@@ -582,6 +576,7 @@ void SundialsTimeIntegrator<AppVec,System>::initialize( ParmParse&    a_pp,
                                             &bi, &be,
                                             &c, 
                                             &bembi, &bembe,
+                                            pinterp,
                                             &binterpi, &binterpe );
       ARKodeButcherTable butcher_tab_i = NULL;
       ARKodeButcherTable butcher_tab_e = NULL;

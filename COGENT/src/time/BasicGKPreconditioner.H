@@ -45,7 +45,8 @@ class BasicGKPreconditioner : public Preconditioner<T,Ops>
               a_ops,
               a_out_str,
               a_opt_str,
-              a_im,tmp  );
+              a_im,
+              tmp  );
     }
 
     void define(  const T&, 
@@ -58,12 +59,16 @@ class BasicGKPreconditioner : public Preconditioner<T,Ops>
     inline void apply(T& a_Y, const T& a_X)
     {
       CH_assert(isDefined());
+      T X, Y;
+      m_ops->getVec( a_X, Preconditioner<T,Ops>::getSysID(), X);
+      m_ops->getVec( a_Y, Preconditioner<T,Ops>::getSysID(), Y);
+
       if (m_dof_list.size() == 0) {
-        m_pc_solver->solve(a_Y, a_X);
+        m_pc_solver->solve(Y, X);
       } else {
-        m_Z = a_Y;
-        m_pc_solver->solve(m_Z,a_X);
-        a_Y.copy(m_Z, m_dof_list);
+        m_Z = Y;
+        m_pc_solver->solve(m_Z, X);
+        Y.copy(m_Z, m_dof_list);
       }
       return;
     }
@@ -73,17 +78,24 @@ class BasicGKPreconditioner : public Preconditioner<T,Ops>
 
     inline void setBaseSolution(const T& a_x) 
     { 
-      m_pc_object->setBaseSolution(a_x); 
+      T x;
+      m_ops->getVec( a_x, Preconditioner<T,Ops>::getSysID(), x );
+      m_pc_object->setBaseSolution(x); 
     }
 
     inline void setBaseRHS(const T& a_F, const T& a_M) 
     { 
-      m_pc_object->setBaseRHS(a_F, a_M); 
+      T F, M;
+      m_ops->getVec( a_F, Preconditioner<T,Ops>::getSysID(), F);
+      m_ops->getVec( a_M, Preconditioner<T,Ops>::getSysID(), M);
+      m_pc_object->setBaseRHS(F, M); 
     }
 
     inline void setBaseRHS(const T& a_M) 
     { 
-      m_pc_object->setBaseRHS(a_M); 
+      T M;
+      m_ops->getVec( a_M, Preconditioner<T,Ops>::getSysID(), M);
+      m_pc_object->setBaseRHS(M); 
     }
 
     inline void setJFNKEps(Real a_eps) { m_pc_object->setJFNKEps(a_eps); }
@@ -105,6 +117,7 @@ class BasicGKPreconditioner : public Preconditioner<T,Ops>
     std::string m_out_string, m_opt_string;
     DOFList m_dof_list;
     T m_Z;
+    Ops* m_ops;
 
     IMEXStagePCFunction<T,Ops>  *m_pc_object;
     LinearFunctionSolver<T,Ops> *m_pc_solver;
@@ -120,11 +133,11 @@ void BasicGKPreconditioner<T,Ops>::define(const T&            a_x,
 {
   CH_assert(!isDefined());
 
-  Ops* ops = (Ops*) a_ops;
+  m_ops = (Ops*) a_ops;
 
   if (a_im) m_pc_object = new ImplicitStagePC<T,Ops>;
   else      m_pc_object = new ExplicitStagePC<T,Ops>;
-  m_pc_object->define(a_x, *ops, m_out_string, m_opt_string);
+  m_pc_object->define(a_x, *m_ops, m_out_string, m_opt_string);
 
   m_Z.define(a_x);
   m_dof_list = a_dof_list;

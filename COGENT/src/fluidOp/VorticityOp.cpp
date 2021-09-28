@@ -6,7 +6,7 @@
 #include "SNCoreCoordSys.H"
 #include "FourthOrderUtil.H"
 #include "SimpleDivergence.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -374,7 +374,8 @@ void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,P
                                   bool                                                          a_im,
                                   const FluidSpecies&                                           a_fluid_species,
                                   const PS::GlobalDOFFluidSpecies&                              a_global_dofs,
-                                  int                                                           a_species_idx )
+                                  const int                                                     a_species_idx,
+                                  const int                                                     a_id )
 {
   
   CH_assert(a_pc.size() == a_dof_list.size());
@@ -395,6 +396,7 @@ void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,P
 
   PS::Preconditioner<PS::ODEVector,PS::AppCtxt> *pc;
   pc = new PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>;
+  pc->setSysID(a_id);
   dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
     (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
   dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
@@ -839,12 +841,18 @@ void VorticityOp::computeReynoldsStressTerm( LevelData<FArrayBox>&             a
    LevelData<FluxBox> faceVorticity(grids, 1, IntVect::Unit);
    fourthOrderCellToFace(faceVorticity, vorticity_grown);
 
- #if 0
+#if 1
    // Experimental option to use uw3 method for ExB vorticity advection
    // Might not be useful, since cfl is likely dominated by stiff k^4 term
-   LevelData<FluxBox> ExB_drift_mapped(grids, 3, IntVect::Unit);
+   LevelData<FluxBox> ExB_drift_mapped(grids, SpaceDim, IntVect::Unit);
    for (DataIterator dit(ExB_drift_mapped.dataIterator()); dit.ok(); ++dit) {
-      ExB_drift_mapped[dit].copy(ExB_drift[dit]);
+      if (SpaceDim == 3) {
+         ExB_drift_mapped[dit].copy(ExB_drift[dit]);
+      }
+      if (SpaceDim == 2) {
+         ExB_drift_mapped[dit].copy(ExB_drift[dit],0,0,1);
+         ExB_drift_mapped[dit].copy(ExB_drift[dit],2,1,1);
+      }
    }
    m_geometry.multNTransposePointwise(ExB_drift_mapped);
    
@@ -852,7 +860,7 @@ void VorticityOp::computeReynoldsStressTerm( LevelData<FArrayBox>&             a
                              vorticity_grown,
                              ExB_drift_mapped,
                              "uw3");
- #endif
+#endif
    
    // Compute ExB times vorticity flux
    LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Unit);

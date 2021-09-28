@@ -131,7 +131,6 @@ class OneBlockCoordSys
 
    double m_rmin, m_rmax;
    double m_thetamin, m_thetamax;
-   double m_Rscale, m_Zscale, m_a, m_b;
 #if CFG_DIM==3
    double m_phimin, m_phimax;
 #endif

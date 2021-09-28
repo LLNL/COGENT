@@ -13,7 +13,7 @@ inline void getPosDefUnit(
    a_val = val;
 }
 
-GKUnits::GKUnits( ParmParse& a_parm_parse )
+GKUnits::GKUnits()
 {
    // Fundamental Characteristic Scales
    ParmParse ppunits( "units" );

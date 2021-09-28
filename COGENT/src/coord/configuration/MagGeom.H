@@ -11,7 +11,7 @@
 #include "CoDimCopyManager.H"
 
 #include "BoundaryBoxLayout.H.multidim"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 
 #include "NamespaceHeader.H"
 

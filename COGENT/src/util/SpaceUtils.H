@@ -1,7 +1,6 @@
-#ifndef _SPACEUTILS_H_
-#define _SPACEUTILS_H_
+//#ifndef _SPACEUTILS_H_
+//#define _SPACEUTILS_H_
 
-#include "Dimensions.H"
 #include "BoundaryBoxLayout.H.multidim"
 
 #include "FourthOrderUtil.H"
@@ -182,6 +181,12 @@ namespace SpaceUtils {
   void copyAndFillGhostCellsSimple( LevelData<FArrayBox>&, 
                                     const LevelData<FArrayBox>& );
   
+  void copyAndFillGhostCellsSimple( LevelData<FluxBox>&, 
+                                    const LevelData<FluxBox>& );
+  
+  void copyAndFillGhostCellsSimple( LevelData<EdgeDataBox>&, 
+                                    const LevelData<EdgeDataBox>& );
+  
   void inspectFArrayBox( const LevelData<FArrayBox>&,
                          const int,
                          const int                   );
@@ -216,8 +221,20 @@ namespace SpaceUtils {
   void localVectorNorm( FArrayBox&,
                   const FArrayBox& );
 
+  void incrementLevelData(  LevelData<FArrayBox>&,
+                            const LevelData<FArrayBox>&,
+                            const Real a_a = 1);
+
+  void incrementLevelData(  LevelData<FluxBox>&,
+                            const LevelData<FluxBox>&,
+                            const Real a_a = 1);
+
+  void incrementLevelData(  LevelData<EdgeDataBox>&,
+                            const LevelData<EdgeDataBox>&,
+                            const Real a_a = 1);
+
 }
 
 #include "NamespaceFooter.H"
-#endif
+//#endif
 

@@ -7,7 +7,7 @@
 //#include "BCInterface.H.multidim"
 #include "Vector.H"
 #include "RefCountedPtr.H"
-
+#include "SGInterp.H.multidim"
 #include "GyroaverageOperator.H"
 
 #include "NamespaceHeader.H"
@@ -109,14 +109,16 @@ class KineticSpecies
       /**
        */
       virtual void ParticleFlux( CFG::LevelData<CFG::FArrayBox>& Particle_Flux,
-                                 const LevelData<FluxBox>& field  ) const;
+                                 const LevelData<FluxBox>& field,
+                                 const int velocity_option) const;
 
       /// Returns species radial heat flux.
       /**
        */
       virtual void HeatFlux( CFG::LevelData<CFG::FArrayBox>& Heat_Flux,
                              const LevelData<FluxBox>& field,
-                             const LevelData<FArrayBox>& phi ) const;
+                             const LevelData<FArrayBox>& phi,
+                             const int velocity_option) const;
 
       /// Returns species parallel heat flux.
       /**
@@ -124,12 +126,6 @@ class KineticSpecies
       virtual void parallelHeatFluxMoment( CFG::LevelData<CFG::FArrayBox>& parallelHeatFlux,
                                            CFG::LevelData<CFG::FArrayBox>& vparshift ) const;
 
-      /// Returns species perpendicular current density.
-      /**
-       */
-      virtual void perpCurrentDensity( CFG::LevelData<CFG::FArrayBox>& Perp_Current_Density,
-                                       const LevelData<FluxBox>& field  ) const;
-   
       /// Returns species pressure.
       /**
        */
@@ -382,6 +378,13 @@ class KineticSpecies
       inline bool isGyrokinetic() const
       {
         return m_is_gyrokinetic;
+      }
+
+      inline void interpolateFrom(  const KineticSpecies& a_src )
+      {
+        SGInterp::interpolate<FArrayBox>( distributionFunction(),
+                                          a_src.distributionFunction() );
+        return;
       }
 
    private:
