@@ -123,17 +123,10 @@ class GKFluidOp
                                     const FluidSpeciesPtrVect&        a_fluid_species_rhs,
                                     int                               a_idx = -1 );
 
-      void updatePC( const PS::KineticSpeciesPtrVect&  kinetic_species,
-                     const FluidSpeciesPtrVect&        fluid_species,
-                     const double                      time,
-                     const int                         step,
-                     const int                         stage,
-                     const double                      shift,
-                     int                               a_idx = -1 );
-
       virtual void solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species_solution,
                                 const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                                 const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                                const std::string&                a_name,
                                 int                               a_idx = -1 );
 
       bool trivialSolutionOp( const FluidSpeciesPtrVect& fluid_species );

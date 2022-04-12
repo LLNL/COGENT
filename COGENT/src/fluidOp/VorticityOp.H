@@ -127,11 +127,13 @@ public:
                               const int                        step,
                               const int                        stage,
                               const double                     shift,
-                              const int                        component);
+                              const int                        component,
+                              const std::string&               op_name );
 
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
                              const FluidSpeciesPtrVect&        fluid_species_rhs,
+                             const std::string&                op_name,
                              const int                         component );
 
    virtual bool trivialSolutionOp() const {return false;}
@@ -216,7 +218,6 @@ private:
    
    /// Print parameters.
    void printParameters();
-
   
    int m_verbosity;
    const MagGeom& m_geometry;
@@ -226,16 +227,22 @@ private:
    GKVorticity*    m_parallel_current_divergence_op;
    GKVorticity*    m_par_cond_op;
    GKVorticity*    m_imex_pc_op;
+   GKVorticity*    m_vorticity_diffusion_op;
    GKPoisson*      m_gyropoisson_op;
 
    PS::GKVlasov*  m_vlasov;
 
    std::string m_opt_string;
-   int m_my_pc_idx_e, m_my_pc_idx_i;
+   int m_my_pc_idx_e;
+  
+   int m_num_pc_rhs;
+   std::vector<int> m_my_pc_idx_i;
+   std::vector<std::string> m_pc_names;
 
    EllipticOpBC* m_parallel_current_divergence_op_bcs;
    EllipticOpBC* m_par_cond_op_bcs;
    EllipticOpBC* m_imex_pc_op_bcs;
+   EllipticOpBC* m_vorticity_diffusion_op_bcs;
    EllipticOpBC* m_gyropoisson_op_bcs;
 
    LevelData<FArrayBox> m_volume;
@@ -251,6 +258,7 @@ private:
    bool	m_reynolds_stress;
    bool m_ExB_current_model;
    bool m_include_pol_den_correction;
+   bool m_include_vorticity_diffusion;
    bool m_include_pol_den_correction_precond;
    bool m_include_pol_den_correction_to_pe;
    bool m_second_order;

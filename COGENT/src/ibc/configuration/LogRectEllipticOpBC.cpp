@@ -15,14 +15,14 @@ LogRectEllipticOpBC::LogRectEllipticOpBC(const int& a_nblocks)
 
 LogRectEllipticOpBC::LogRectEllipticOpBC( const std::string&  a_name,
                                           ParmParse&          a_pp,
-                                          const int&          a_nblocks,
+                                          const bool*         a_is_periodic,
                                           const int&          a_verbosity )
-   : EllipticOpBC(NUM_BOUNDARIES, a_nblocks),
+   : EllipticOpBC(NUM_BOUNDARIES, 1),
      m_name(a_name),
      m_verbosity(a_verbosity)
 {
    setNames();
-   parseParameters( a_pp );
+   parseParameters( a_pp, a_is_periodic );
    
    if (hasCoupledBoundary()) {
       for (int i=0; i<m_bc_block_data.size(); ++i) {
@@ -138,9 +138,6 @@ LogRectEllipticOpBC::getBCType( const int  a_block_number,
       }
    }
 #endif
-   else {
-      MayDay::Error("LogRectEllipticOpBC::getBCType(): Invalid direction argument");
-   }
 
    return bc_type;
 }
@@ -488,7 +485,8 @@ void LogRectEllipticOpBC::printParameters() const
 
 
 inline
-void LogRectEllipticOpBC::parseParameters( ParmParse& a_pp )
+void LogRectEllipticOpBC::parseParameters( ParmParse&   a_pp,
+                                           const bool*  a_is_periodic )
 {
    GridFunctionLibrary* library = GridFunctionLibrary::getInstance();
    
@@ -499,26 +497,101 @@ void LogRectEllipticOpBC::parseParameters( ParmParse& a_pp )
       std::string bc_type;
       fpp.query( "type", bc_type );
 
+      m_bc_type[i] = UNDEFINED;
+
       if (bc_type == "dirichlet") {
          m_bc_type[i] = DIRICHLET;
       }
-
       else if (bc_type == "neumann") {
          m_bc_type[i] = NEUMANN;
       }
-      
-      //Default option
+      else if (bc_type == "mapped_neumann") {
+         m_bc_type[i] = MAPPED_NEUMANN;
+      }
+      else if (bc_type == "natural") {
+         m_bc_type[i] = NATURAL;
+      }
       else if (bc_type.length() == 0) {
-         if ( procID()==0 ) {
-            std::cout << "LogRectEllipticOpBC: No potential BC is specified at the " << m_bdry_name[i]
-            <<" boundary: a zero Dirichlet BC will be used if the direction is not periodic" << std::endl;
-         }
-         m_bc_type[i] = DIRICHLET;
+         switch(i) 
+            {
+            case RADIAL_LOWER:
+               if ( !a_is_periodic[RADIAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): No boundary condition specified on lower radial boundary!");
+               }
+               break;
+            case RADIAL_UPPER:
+               if ( !a_is_periodic[RADIAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): No boundary condition specified on upper radial boundary!");
+               }
+               break;
+            case POLOIDAL_LOWER:
+               if ( !a_is_periodic[POLOIDAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): No boundary condition specified on lower poloidal boundary!");
+               }
+               break;
+            case POLOIDAL_UPPER:
+               if ( !a_is_periodic[POLOIDAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): No boundary condition specified on upper poloidal boundary!");
+               }
+               break;
+#if CFG_DIM==3
+            case TOROIDAL_LOWER:
+               if ( !a_is_periodic[TOROIDAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): No boundary condition specified on lower toroidal boundary!");
+               }
+               break;
+            case TOROIDAL_UPPER:
+               if ( !a_is_periodic[TOROIDAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): No boundary condition specified on upper toroidal boundary!");
+               }
+               break;
+#endif
+            }
+      }
+      else {
+         MayDay::Error("LogRectEllipticOpBC::parseParameter(): Unknown potential bc type");
       }
 
-      else {
-         MayDay::Error("LogRectEllipticOpBC::parseParameter(): Illegal potential bc type");
+      // If a boundary condition was set, then make sure it wasn't at a periodic boundary
+      if ( m_bc_type[i] != UNDEFINED ) {
+
+         switch(i) 
+            {
+            case RADIAL_LOWER:
+               if ( a_is_periodic[RADIAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): Boundary condition specified on periodic lower radial boundary!");
+               }
+               break;
+            case RADIAL_UPPER:
+               if ( a_is_periodic[RADIAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): Boundary condition specified on periodic upper radial boundary!");
+               }
+               break;
+            case POLOIDAL_LOWER:
+               if ( a_is_periodic[POLOIDAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): Boundary condition specified on periodic lower poloidal boundary!");
+               }
+               break;
+            case POLOIDAL_UPPER:
+               if ( a_is_periodic[POLOIDAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): Boundary condition specified on periodic upper poloidal boundary!");
+               }
+               break;
+#if CFG_DIM==3
+            case TOROIDAL_LOWER:
+               if ( a_is_periodic[TOROIDAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): Boundary condition specified on periodic lower toroidal boundary!");
+               }
+               break;
+            case TOROIDAL_UPPER:
+               if ( a_is_periodic[TOROIDAL_DIR] ) {
+                  MayDay::Error("LogRectEllipticOpBC::parseParameters(): Boundary condition specified on periodic upper toroidal boundary!");
+               }
+               break;
+#endif
+            }
       }
+
 
       fpp.query( "subtype", m_bc_subtype[i] );
       
@@ -553,22 +626,20 @@ void LogRectEllipticOpBC::parseParameters( ParmParse& a_pp )
 RefCountedPtr<EllipticOpBC>
 LogRectEllipticOpBC::clone( const bool a_extrapolated ) const
 {
+   // This sets m_bdry_name too
    RefCountedPtr<LogRectEllipticOpBC> result
       = RefCountedPtr<LogRectEllipticOpBC>(new LogRectEllipticOpBC(m_num_blocks));
 
+   // Copy the data members set by the full constructor (i.e., the one with the ParmParse
+   // argument).  
    result->m_name = m_name;
+   result->m_verbosity = m_verbosity;
 
-   for (int i=0; i<m_bc_type.size(); ++i) {
-      result->m_bc_type[i] = a_extrapolated? EXTRAPOLATED: m_bc_type[i];
-   }
-   for (int i=0; i<m_bc_value.size(); ++i) {
-      (result->m_bc_value)[i] = m_bc_value[i];
-   }
-   for (int i=0; i<m_bc_subtype.size(); ++i) {
-      (result->m_bc_subtype)[i] = m_bc_subtype[i];
-   }
-   for (int i=0; i<m_bc_block_data.size(); ++i) {
-      (result->m_bc_block_data)[i] = m_bc_block_data[i];
+   // Copy the rest of the data owned by the EllipticOpBC base class
+   result->copyBaseData(*this);
+
+   if ( a_extrapolated ) {
+      result->setExtrapolatedType();
    }
 
    return result;

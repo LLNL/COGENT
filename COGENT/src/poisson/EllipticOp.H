@@ -165,15 +165,17 @@ public:
    void computeMappedField( const LevelData<FArrayBox>& phi,
                             LevelData<FluxBox>&         field ) const;
 
-   void computeFluxDivergence( const LevelData<FArrayBox>& in,
-                               LevelData<FArrayBox>&       out,
-                               const bool                  homogeneous_bcs,
-                               const bool                  extrap_to_ghosts = false );
+   void computeFluxDivergence( const LevelData<FArrayBox>&  in,
+                               LevelData<FArrayBox>&        out,
+                               const bool                   homogeneous_bcs,
+                               const bool                   extrap_to_ghosts = false );
 
    virtual void computeBcDivergence( LevelData<FArrayBox>& out );
 
-   void setBc( const EllipticOpBC& bc );
-
+   void updateBoundaryData(const LevelData<FluxBox>&  unmapped_coefficients,
+                           EllipticOpBC&              bc,
+                           const bool                 homogeneous_bcs = false);
+   
    void addBcDivergence(LevelData<FArrayBox>& rhs) const;
 
    void subtractBcDivergence(LevelData<FArrayBox>& rhs) const;
@@ -194,6 +196,16 @@ public:
                                 double&                   hi_value,
                                 LevelData<FArrayBox>&     out ) const;
    
+   void modifyForNeumannAndNaturalBCs( const EllipticOpBC&  bc,
+                                       LevelData<FluxBox>&  unmapped_coefs,
+                                       LevelData<FluxBox>&  mapped_coefs ) const;
+
+   void setNeumannNaturalFactor( const LevelData<FluxBox>&  unmapped_coefficients,
+                                 EllipticOpBC&              bc ) const;
+
+   void addNeumannAndNaturalBVContrib( const EllipticOpBC&    bc,
+                                       LevelData<FArrayBox>&  data ) const;
+
    void fillInternalGhosts( LevelData<FArrayBox>& phi ) const;
 
    void extractNormalComponent( const LevelData<FluxBox>& in,
@@ -331,6 +343,7 @@ protected:
 
    Vector< Vector<CoDim1Stencil> > m_codim1_stencils;
    Vector< Vector<CoDim2Stencil> > m_codim2_stencils;
+   RefCountedPtr<EllipticOpBC> m_bc;
 
 private:
 

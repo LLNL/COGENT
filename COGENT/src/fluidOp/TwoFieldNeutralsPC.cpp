@@ -13,10 +13,11 @@
  
 
 TwoFieldNeutralsPC::TwoFieldNeutralsPC(const ParmParse&   a_pp,
-				       const MagGeom&     a_geom )
+                                       const MagGeom&     a_geom )
    : EllipticOp(a_pp, a_geom),
      m_diffusion_coeffs_defined(false),
      m_viscosity_coeffs_defined(false),
+     m_bottomLeft_coeffs_defined(false),
      m_imex_preconditioner(NULL)
 {
 
@@ -70,11 +71,12 @@ TwoFieldNeutralsPC::TwoFieldNeutralsPC(const ParmParse&   a_pp,
 TwoFieldNeutralsPC::~TwoFieldNeutralsPC()
 {
    if ( m_imex_preconditioner ) delete m_imex_preconditioner;
+   if ( m_mblx_ptr ) delete m_mblx_ptr;
 }
 
 void
 TwoFieldNeutralsPC::updatePreconditioner( const EllipticOpBC& a_diffusion_bc,
-					  const EllipticOpBC& a_viscosity_bc )
+                                          const EllipticOpBC& a_viscosity_bc )
 {
    CH_TIME("TwoFieldNeutralsPC::updatePreconditioner");
 
@@ -82,9 +84,12 @@ TwoFieldNeutralsPC::updatePreconditioner( const EllipticOpBC& a_diffusion_bc,
 
    LevelData<FluxBox> zeroTensor(grids, SpaceDim*SpaceDim, IntVect::Unit);
    LevelData<FArrayBox> zeroBeta(grids, 1, IntVect::Zero);
+   LevelData<FArrayBox> negVolRec(grids, 1, IntVect::Zero);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       zeroTensor[dit].setVal(0.);
       zeroBeta[dit].setVal(0.);
+      negVolRec[dit].copy(m_volume_reciprocal[dit]);
+      negVolRec[dit].negate();
    }
 
    m_imex_preconditioner->initializeMatrix();
@@ -93,10 +98,11 @@ TwoFieldNeutralsPC::updatePreconditioner( const EllipticOpBC& a_diffusion_bc,
    m_imex_preconditioner->constructMatrixBlock(0, 0, m_volume_reciprocal, m_topLeft_mapped_tensor, m_topLeft_beta, a_diffusion_bc);
 
    // Upper-right coefficient
-   m_imex_preconditioner->constructMatrixBlock(0, 1, m_volume_reciprocal, zeroTensor, zeroBeta, a_viscosity_bc);
+   m_imex_preconditioner->constructMatrixBlock(0, 1, zeroBeta, zeroTensor, zeroBeta, a_viscosity_bc);
 
    // Lower-left coefficient
-   m_imex_preconditioner->constructMatrixBlock(1, 0, m_volume_reciprocal, zeroTensor, zeroBeta, a_diffusion_bc);
+   m_imex_preconditioner->constructMatrixBlock(1, 0, m_volume_reciprocal, m_bottomLeft_mapped_tensor, m_bottomLeft_beta, a_diffusion_bc);
+   // m_imex_preconditioner->constructMatrixBlock(1, 0, negVolRec, zeroTensor, zeroBeta, a_diffusion_bc);
 
    // Lower-right coefficient
    m_imex_preconditioner->constructMatrixBlock(1, 1, m_volume_reciprocal, m_bottomRight_mapped_tensor, m_bottomRight_beta, a_viscosity_bc);
@@ -106,11 +112,12 @@ TwoFieldNeutralsPC::updatePreconditioner( const EllipticOpBC& a_diffusion_bc,
 
 void TwoFieldNeutralsPC::solvePreconditioner( const LevelData<FArrayBox>& in, LevelData<FArrayBox>& out )
 {
+  // Don't call this function. Call the other solvePreconditioner
 }
 
 void
 TwoFieldNeutralsPC::solvePreconditioner( const LevelData<FArrayBox>& a_rhs_density,
-					 const LevelData<FArrayBox>& a_rhs_par_mom,
+                                         const LevelData<FArrayBox>& a_rhs_par_mom,
                                          LevelData<FArrayBox>&       a_z_density,
                                          LevelData<FArrayBox>&       a_z_par_mom )
 {
@@ -138,8 +145,8 @@ TwoFieldNeutralsPC::solvePreconditioner( const LevelData<FArrayBox>& a_rhs_densi
 
 void
 TwoFieldNeutralsPC::updateSourceTermComponents( const LevelData<FArrayBox>& a_topLeft_beta,
-						const LevelData<FArrayBox>& a_bottomLeft_beta,
-						const LevelData<FArrayBox>& a_bottomRight_beta )
+                                                const LevelData<FArrayBox>& a_bottomLeft_beta,
+                                                const LevelData<FArrayBox>& a_bottomRight_beta )
 {
    CH_TIME("TwoFieldNeutralsPC::updateSourceTermComponents");
 
@@ -150,7 +157,7 @@ TwoFieldNeutralsPC::updateSourceTermComponents( const LevelData<FArrayBox>& a_to
 
 void
 TwoFieldNeutralsPC::updateBottomRightCoefficients( const LevelData<FluxBox>& a_unmapped_coeff,
-						   const LevelData<FluxBox>& a_mapped_coeff)
+                                                   const LevelData<FluxBox>& a_mapped_coeff)
 {
    CH_TIME("TwoFieldNeutralsPC::updateBottomRightCoefficients");
 
@@ -163,10 +170,6 @@ TwoFieldNeutralsPC::updateBottomRightCoefficients( const LevelData<FluxBox>& a_u
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
       m_bottomRight_mapped_tensor[dit].copy(a_mapped_coeff[dit]);
       m_bottomRight_unmapped_tensor[dit].copy(a_unmapped_coeff[dit]);
-
-      // For now, set bottomLeft to zero
-      m_bottomLeft_mapped_tensor[dit].setVal(0.);
-      m_bottomLeft_unmapped_tensor[dit].setVal(0.);
    }
 
    
@@ -180,8 +183,34 @@ TwoFieldNeutralsPC::updateBottomRightCoefficients( const LevelData<FluxBox>& a_u
 }
 
 void
+TwoFieldNeutralsPC::updateBottomLeftCoefficients( const LevelData<FluxBox>& a_unmapped_coeff,
+                                                  const LevelData<FluxBox>& a_mapped_coeff)
+{
+   CH_TIME("TwoFieldNeutralsPC::updateBottomLeftCoefficients");
+
+   const DisjointBoxLayout & grids = m_geometry.grids();
+   
+   const IntVect grown_ghosts = m_bottomLeft_mapped_tensor.ghostVect() + IntVect::Unit;
+   CH_assert(grown_ghosts == 2*IntVect::Unit);
+   CH_assert(a_mapped_coeff.ghostVect() >= 2*IntVect::Unit);
+
+   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      m_bottomLeft_mapped_tensor[dit].copy(a_mapped_coeff[dit]);
+      m_bottomLeft_unmapped_tensor[dit].copy(a_unmapped_coeff[dit]);
+   }
+
+   // The mapped coefficients must now be converted to face averages, which
+   // requires a layer of transverse ghost faces that we don't have at the
+   // physical boundary, so we need to extrapolate them. DO WE NEED THIS?
+   m_geometry.fillTransverseGhosts(m_bottomLeft_mapped_tensor, false);
+   m_geometry.fillTransverseGhosts(m_bottomLeft_unmapped_tensor, false);
+
+   m_bottomLeft_coeffs_defined = true;
+}
+
+void
 TwoFieldNeutralsPC::updateTopLeftCoefficients( const LevelData<FluxBox>& a_unmapped_coeff,
-					       const LevelData<FluxBox>& a_mapped_coeff)
+                                               const LevelData<FluxBox>& a_mapped_coeff)
 {
    CH_TIME("TwoFieldNeutralsPC::updateDiffusionCoefficients");
 
@@ -199,8 +228,8 @@ TwoFieldNeutralsPC::updateTopLeftCoefficients( const LevelData<FluxBox>& a_unmap
    // The mapped coefficients must now be converted to face averages, which
    // requires a layer of transverse ghost faces that we don't have at the
    // physical boundary, so we need to extrapolate them. DO WE NEED THIS?
-   m_geometry.fillTransverseGhosts(m_bottomLeft_mapped_tensor, false);
-   m_geometry.fillTransverseGhosts(m_bottomLeft_unmapped_tensor, false);
+   m_geometry.fillTransverseGhosts(m_topLeft_mapped_tensor, false);
+   m_geometry.fillTransverseGhosts(m_topLeft_unmapped_tensor, false);
 
    m_diffusion_coeffs_defined = true;
 }

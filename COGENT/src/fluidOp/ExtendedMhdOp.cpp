@@ -1284,7 +1284,8 @@ void ExtendedMhdOp::updatePCImEx(const FluidSpeciesPtrVect&     a_fluid_species,
                               const int                         a_step,
                               const int                         a_stage,
                               const double                      a_shift,
-                              const int                         a_component)
+                              const int                         a_component,
+                              const std::string& )
 {
    CH_TIME("ExtendedMhdOp::updatePCImEx()");
      
@@ -1298,6 +1299,7 @@ void ExtendedMhdOp::updatePCImEx(const FluidSpeciesPtrVect&     a_fluid_species,
 void ExtendedMhdOp::solvePCImEx( FluidSpeciesPtrVect&     a_fluid_species_solution,
                         const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                         const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                        const std::string&,
                         const int                         a_component )
 {
    CH_TIME("ExtendedMhdOp::solvePCImEx()");
@@ -4807,8 +4809,8 @@ void ExtendedMhdOp::updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
    //
    m_geometry.applyAxisymmetricCorrection( m_m0JaFluxVisc_cf );
    m_geometry.applyAxisymmetricCorrection( m_m1JaFluxVisc_cf );
-   m_geometry.computedxidXProductAverage(m_m0JaFluxVisc_norm, m_m0JaFluxVisc_cf, 0);
-   m_geometry.computedxidXProductAverage(m_m1JaFluxVisc_norm, m_m1JaFluxVisc_cf, 0);
+   m_geometry.computedxidXProductNorm(m_m0JaFluxVisc_norm, m_m0JaFluxVisc_cf);
+   m_geometry.computedxidXProductNorm(m_m1JaFluxVisc_norm, m_m1JaFluxVisc_cf);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       m_momJaFluxVisc_norm[dit].copy( m_m0JaFluxVisc_norm[dit],0,0,1 ); 
       m_momJaFluxVisc_norm[dit].copy( m_m1JaFluxVisc_norm[dit],0,1,1 );
@@ -4841,7 +4843,7 @@ void ExtendedMhdOp::updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
    // since Flux is already multiplied by Jacobian
    //
    m_geometry.applyAxisymmetricCorrection( m_enJaFluxVisc_cf );
-   m_geometry.computedxidXProductAverage(m_enJaFluxVisc_norm, m_enJaFluxVisc_cf, 0);
+   m_geometry.computedxidXProductNorm(m_enJaFluxVisc_norm, m_enJaFluxVisc_cf);
 
    LevelData<FArrayBox>& rhs_ene_ion( a_rhs_fluid.cell_var("energyDensity") );
    m_geometry.mappedGridDivergenceFromFluxNorms(m_enJaFluxVisc_norm, m_dummyDiv);

@@ -33,13 +33,13 @@ TwoFieldNeutralsOp::TwoFieldNeutralsOp(const string&   a_pp_str,
      m_my_pc_idx(-1),
      m_bckgr_density(1.0e-7),
      m_is_time_implicit(true),
-     m_include_advection_bc(true),
      m_fixed_recycling(false),
-     m_first_call(true),
-     m_extrapolate_density(false),
      m_advScheme("uw3"),
      m_opt_string(a_pp_str),
+     m_include_advection_bc(true),
+     m_extrapolate_density(false),
      m_analytic_pc(false),
+     m_first_call(true),
      m_twofieldneutrals_pc(nullptr)
 {
 
@@ -311,6 +311,12 @@ void TwoFieldNeutralsOp::accumulateDiffusiveTerms(FluidSpecies&        a_fluid_r
    m_viscosity_op->setOperatorCoefficients(ellip_coeff, ellip_coeff_mapped, *m_viscosity_bc);
    if (m_analytic_pc) {
       m_twofieldneutrals_pc->updateBottomRightCoefficients(ellip_coeff, ellip_coeff_mapped);
+
+      // Compute viscosity term
+      LevelData<FArrayBox> temp_parallel_velocity(grids, 1, 2*IntVect::Unit);
+      a_fluid_soln.velocity_virtual(temp_parallel_velocity);
+      computeBottomLeftCoefficients(ellip_coeff, ellip_coeff_mapped, temp_parallel_velocity, species_mass);
+      m_twofieldneutrals_pc->updateBottomLeftCoefficients(ellip_coeff, ellip_coeff_mapped);
    }
    
    m_viscosity_op->computeFluxDivergence( parallel_velocity, flux_div, false, false);
@@ -899,6 +905,67 @@ void TwoFieldNeutralsOp::computeViscosityCoefficients(LevelData<FluxBox>&       
    }
 }
 
+void
+TwoFieldNeutralsOp::computeBottomLeftCoefficients(LevelData<FluxBox>&         a_ellip_coeff,
+                                                  LevelData<FluxBox>&         a_ellip_coeff_mapped,
+                                                  const LevelData<FArrayBox>& a_parallel_velocity,
+                                                  const Real                  a_mass) const
+{
+   /*
+     Computes the bottom-left jacobian coefficients
+     D = V_||g / (m_g v_cx)
+   */
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   
+   //Parallel and perpendicular tensor coefficeints
+   const LevelData<FluxBox>& perp_coeff = m_geometry.getEllipticOpPerpCoeff();
+   const LevelData<FluxBox>& par_coeff = m_geometry.getEllipticOpParCoeff();
+   const LevelData<FluxBox>& perp_coeff_mapped = m_geometry.getEllipticOpPerpCoeffMapped();
+   const LevelData<FluxBox>& par_coeff_mapped  = m_geometry.getEllipticOpParCoeffMapped();
+   
+   // Get scalar factors
+   LevelData<FArrayBox> D_cell(grids, 1, 2*IntVect::Unit);
+   LevelData<FluxBox> D_face(grids, 1, 2*IntVect::Unit);
+
+   // LevelData<FArrayBox> eta_cell(grids, 1, 2*IntVect::Unit);
+   // LevelData<FluxBox> eta_face(grids, 1, 2*IntVect::Unit);
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      D_cell[dit].copy(a_parallel_velocity[dit]);
+      D_cell[dit].divide(m_chx_rate[dit]);
+      D_cell[dit].divide(a_mass);
+      D_cell[dit].negate();
+
+      // eta_cell[dit].copy(a_parallel_velocity[dit]);
+      // eta_cell[dit].divide(m_chx_rate[dit]);
+      // eta_cell[dit].divide(a_mass);
+      // eta_cell[dit].negate();
+   }
+
+   // Get the coefficients on faces
+   if (m_ghostVect == IntVect::Zero || m_extrapolate_density) {
+      bool fourth_order = (m_geometry.secondOrder()) ? false : true;
+      m_geometry.extrapolateToPhysicalGhosts(D_cell, fourth_order);
+   }
+   convertCellToFace(D_face, D_cell);
+      
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      a_ellip_coeff[dit].copy(par_coeff[dit]);
+      a_ellip_coeff_mapped[dit].copy(par_coeff_mapped[dit]);
+      // a_ellip_coeff[dit].copy(perp_coeff[dit]);
+      // a_ellip_coeff[dit] += par_coeff[dit];
+      // a_ellip_coeff_mapped[dit].copy(perp_coeff_mapped[dit]);
+      // a_ellip_coeff_mapped[dit] += par_coeff_mapped[dit];
+      for (int dir = 0; dir < SpaceDim; dir++) {
+        for (int n = 0; n < SpaceDim*SpaceDim; n++) {
+          a_ellip_coeff[dit][dir].mult(D_face[dit][dir],0,n,1);
+          a_ellip_coeff_mapped[dit][dir].mult(D_face[dit][dir],0,n,1);
+        }
+      }
+   }
+}
+
 void TwoFieldNeutralsOp::computeAtomicRates(LevelData<FArrayBox>&   a_ionization_rate,
                                             LevelData<FArrayBox>&   a_recombination_rate,
                                             LevelData<FArrayBox>&   a_chx_rate,
@@ -1098,7 +1165,8 @@ void TwoFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
                                       const int                        a_step,
                                       const int                        a_stage,
                                       const double                     a_shift,
-                                      const int                        a_component)
+                                      const int                        a_component,
+                                      const std::string& )
 {
    CH_TIME("TwoFieldNeutralsOp::updatePCImEx");
 
@@ -1136,10 +1204,8 @@ void TwoFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
       beta_diffusion[dit].divide(m_Tg[dit]);
 
    }
-   if (!m_analytic_pc) {
-      m_diffusion_op->updateImExPreconditioner( beta_diffusion, *m_diffusion_bc );
-   }
-   
+   m_diffusion_op->updateImExPreconditioner( beta_diffusion, *m_diffusion_bc );
+
    // Compute linear coefficients (beta) and update velocity elliptic solver
    LevelData<FArrayBox> beta_viscosity(grids, 1, IntVect::Zero);
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
@@ -1148,11 +1214,8 @@ void TwoFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
       beta_viscosity[dit].plus(m_chx_rate[dit]);
       beta_viscosity[dit].mult(density_phys[dit]);
    }
-   
-   if (!m_analytic_pc) {
-      m_viscosity_op->updateImExPreconditioner( beta_viscosity, *m_viscosity_bc );
-   }
-   
+   m_viscosity_op->updateImExPreconditioner( beta_viscosity, *m_viscosity_bc );
+
    // Save density for the use in solvePCImEx function
    if ( !m_pc_density.isDefined() ) {
       m_pc_density.define(grids, 1, IntVect::Zero);
@@ -1164,14 +1227,36 @@ void TwoFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
    // If using the analytic preconditioner, we update here instead of the
    // two previous calls to m_diffusion_op and m_viscosity_op
    if (m_analytic_pc) {
-      LevelData<FArrayBox> zero_beta(grids, 1, IntVect::Zero);
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-	 zero_beta[dit].setVal(0.);
-      }
-      m_twofieldneutrals_pc->updateSourceTermComponents(beta_diffusion,
-							zero_beta,
-						        beta_viscosity);
-      m_twofieldneutrals_pc->updatePreconditioner(*m_diffusion_bc, *m_viscosity_bc);
+
+     LevelData<FArrayBox> analytic_beta_diffusion(grids, 1, IntVect::Zero);
+     for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+        analytic_beta_diffusion[dit].setVal(a_shift);
+        analytic_beta_diffusion[dit].plus(m_ionization_rate[dit]);
+        analytic_beta_diffusion[dit].minus(m_recombination_rate[dit]);
+        analytic_beta_diffusion[dit].divide(m_Tg[dit]);
+     }
+
+     LevelData<FArrayBox> bottomLeft_beta(grids, 1, IntVect::Zero);
+     for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+        bottomLeft_beta[dit].copy(m_recombination_rate[dit]);
+        bottomLeft_beta[dit].plus(m_chx_rate[dit]);
+        bottomLeft_beta[dit].mult(m_ion_parallel_vel[dit]);
+        bottomLeft_beta[dit].negate();
+        bottomLeft_beta[dit].divide(m_Tg[dit]);
+     }
+
+     LevelData<FArrayBox> analytic_beta_viscosity(grids, 1, IntVect::Zero);
+     for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+        analytic_beta_viscosity[dit].setVal(a_shift);
+        analytic_beta_viscosity[dit].plus(m_ionization_rate[dit]);
+        analytic_beta_viscosity[dit].plus(m_chx_rate[dit]);
+        analytic_beta_viscosity[dit].mult(density_phys[dit]);
+     }
+
+     m_twofieldneutrals_pc->updateSourceTermComponents(analytic_beta_diffusion,
+                                                       bottomLeft_beta,
+                                                       analytic_beta_viscosity);
+     m_twofieldneutrals_pc->updatePreconditioner(*m_diffusion_bc, *m_viscosity_bc);
    }
 }
 
@@ -1179,6 +1264,7 @@ void TwoFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
 void TwoFieldNeutralsOp::solvePCImEx(FluidSpeciesPtrVect&              a_fluid_species_solution,
                                      const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                                      const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                                     const std::string&,
                                      const int                         a_component )
 {
    /*
@@ -1219,12 +1305,13 @@ void TwoFieldNeutralsOp::solvePCImEx(FluidSpeciesPtrVect&              a_fluid_s
    // Get convergence parameters for diffusion MBSolver
    double tol = m_diffusion_op->getPrecondTol();
    double max_iter = m_diffusion_op->getPrecondMaxIter();
-   double precond_tol = 0.;
-   double precond_max_iter = 1;
+   double precond_tol = tol;
+   double precond_max_iter = max_iter;
 
    if (m_analytic_pc) {
       m_twofieldneutrals_pc->setImExPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
       m_twofieldneutrals_pc->solvePreconditioner(rhs_density_phys, rhs_par_mom_phys, z_density, z_par_mom);
+
    }
    else
    {
@@ -1239,11 +1326,9 @@ void TwoFieldNeutralsOp::solvePCImEx(FluidSpeciesPtrVect&              a_fluid_s
       // Solve for z_par_mom = par_mom / rho_g
       m_viscosity_op->setImExPreconditionerConvergenceParams(tol, max_iter, precond_tol, precond_max_iter);
       m_viscosity_op->solveImExPreconditioner(rhs_par_mom_phys, z_par_mom);
-
    }
 
-
-   // Convert the elliptic solutions to the state vector components
+   //  Convert the elliptic solutions to the state vector components
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
       z_density[dit].divide(m_Tg[dit]);
       z_par_mom[dit].mult(m_pc_density[dit]);

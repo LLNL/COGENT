@@ -47,6 +47,11 @@ class NTRInterface
       virtual Real computeDtExplicitTI(const KineticSpeciesPtrVect& soln, const int i) { return DBL_MAX; }
       virtual Real computeDtImExTI(const KineticSpeciesPtrVect& soln, const int i) { return DBL_MAX; }
       virtual Real TimeScale(const KineticSpeciesPtrVect& soln, const int i) { return -1; }
+  
+      virtual void preTimeStep(const KineticSpeciesPtrVect&,
+                               const int, const Real,
+                               const KineticSpeciesPtrVect&) { }
+
 
 
 };

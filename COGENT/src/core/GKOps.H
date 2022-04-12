@@ -94,7 +94,7 @@ public:
       m_kinetic_ghosts(4),
       m_fluid_ghosts(4),
       m_fixed_efield(false),
-      m_zero_efield(false),
+      m_no_efield(false),
       m_transport_model_on(false),     
       m_enforce_quasineutrality(false),
       m_step_const_kin_coeff_fluidop(false),
@@ -304,7 +304,7 @@ public:
 
    void solveSolutionPC( GKRHSData&, const GKState&, int a_idx=-1);
 
-   void solveFluidOpPCImEx( GKRHSData&, const GKState&, int a_idx=-1);
+   void solveFluidOpPCImEx( GKRHSData&, const GKState&, const std::string&, int a_idx=-1);
 
    void solveVlasovOpPCImEx(  Preconditioner<ODEVector,AppCtxt>* const,
                               GKRHSData&, 
@@ -547,7 +547,7 @@ private:
    void computeQuasiNeutralElectronDensity(
       CFG::LevelData<CFG::FArrayBox>&       a_quasineutral_density,
       CFG::LevelData<CFG::FArrayBox>&       a_potential,
-      const CFG::EllipticOpBC&              a_bc, 
+      CFG::EllipticOpBC&                    a_bc, 
       const CFG::LevelData<CFG::FArrayBox>& a_ion_density) const;
    
    inline
@@ -589,7 +589,7 @@ private:
    bool                           m_ampere_law;
    bool                           m_ampere_cold_electrons;
    bool                           m_fixed_efield;
-   bool                           m_zero_efield;
+   bool                           m_no_efield;
    bool                           m_transport_model_on;
    bool                           m_neutrals_model_on;
    bool                           m_enforce_quasineutrality;

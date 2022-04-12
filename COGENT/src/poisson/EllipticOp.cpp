@@ -1,15 +1,11 @@
 #include "EllipticOp.H"
-#include "BlockRegister.H"
-#include "EdgeToCell.H"
 #include "FourthOrderUtil.H"
 #include "Directions.H"
 #include "FluxSurface.H"
 #include "BiCGStabSolver.H"
 #include "GMRESSolver.H"
 #include "SingleNullCoordSys.H"
-#include "MBSolverF_F.H"
 #include "SimpleDivergence.H"
-#include "CoDimCopyManager.H"
 #include "DataArray.H"
 
 #undef CH_SPACEDIM
@@ -98,6 +94,8 @@ EllipticOp::init( const ParmParse& a_pp )
    }
 
    m_bc_divergence.define(grids, 1, IntVect::Zero);
+
+   
 }
       
 
@@ -627,78 +625,70 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
                                    const bool                   a_extrap_to_ghosts )
 {
    CH_TIME("EllipticOp::computeFluxDivergence");
-   const DisjointBoxLayout& grids = a_in.disjointBoxLayout();
 
-   LevelData<FArrayBox> phi(grids, 1, 3*IntVect::Unit);
-
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      phi[dit].copy(a_in[dit]);
-   }
-
+   const DisjointBoxLayout& grids = m_geometry.grids();
    LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Unit);
 
-   if (!m_low_pollution) {
+   if ( !m_low_pollution ) {
 
-     if (SpaceDim == 3) {
-       if (a_extrap_to_ghosts) computeField(phi, flux);
-       else compute3DFieldWithBCs(phi, flux, a_homogeneous_bcs);
+#if CFG_DIM==3
+      if (a_extrap_to_ghosts) computeField(a_in, flux);
+      else compute3DFieldWithBCs(a_in, flux, a_homogeneous_bcs);
+#else
+      if (a_extrap_to_ghosts) computePoloidalField(a_in, flux);
+      else computePoloidalFieldWithBCs(a_in, flux, a_homogeneous_bcs);
+#endif
 
-     }
-     else {
-       if (a_extrap_to_ghosts) computePoloidalField(phi, flux);
-       else computePoloidalFieldWithBCs(phi, flux, a_homogeneous_bcs);
-     }
+      // Multiply the field by the unmapped, face-centered tensor coefficients
+      multiplyCoefficients(flux, false);
 
-     // Multiply the field by the unmapped, face-centered GKP coefficients
-     multiplyCoefficients(flux, false);
+      m_geometry.fillTransversePhysicalGhosts(flux);
+      m_geometry.applyAxisymmetricCorrection(flux);
 
-     m_geometry.fillTransversePhysicalGhosts(flux);
+      // Convert to face-averaged
+      if ( !m_second_order ) fourthOrderAverage(flux);
 
-     m_geometry.applyAxisymmetricCorrection(flux);
-
-     // Convert to face-averaged
-     if (!m_second_order) fourthOrderAverage(flux);
-
-     m_geometry.computeMappedGridDivergence(flux, a_out, !m_second_order);
+      m_geometry.computeMappedGridDivergence(flux, a_out, !m_second_order);
    }
-
    else {
 
-     if (SpaceDim == 3) {
-       if (a_extrap_to_ghosts) computeMapped3DField(phi, flux);
-       else computeMapped3DFieldWithBCs(phi, flux, a_homogeneous_bcs);
-    }
+#if CFG_DIM==3
+      if (a_extrap_to_ghosts) computeMapped3DField(a_in, flux);
+      else computeMapped3DFieldWithBCs(a_in, flux, a_homogeneous_bcs);
+#else
+      if (a_extrap_to_ghosts) computeMappedPoloidalField(a_in, flux);
+      else computeMappedPoloidalFieldWithBCs(a_in, flux, a_homogeneous_bcs);
+#endif
 
-     else  {
-       if (a_extrap_to_ghosts) computeMappedPoloidalField(phi, flux);
-       else computeMappedPoloidalFieldWithBCs(phi, flux, a_homogeneous_bcs);
-     }
+      // Multiply the field by the mapped, face-centered tensor coefficients
+      multiplyCoefficients(flux, true);
 
-     // Multiply the field by the mapped, face-centered GKP coefficients
-     multiplyCoefficients(flux, true);
+      m_geometry.fillTransversePhysicalGhosts(flux);
 
-     m_geometry.fillTransversePhysicalGhosts(flux);
+      // Convert to face-averaged
+      if (!m_second_order) fourthOrderAverage(flux);
 
-     // Convert to face-averaged
-     if (!m_second_order) fourthOrderAverage(flux);
+      m_geometry.averageAtBlockBoundaries(flux);
 
-     m_geometry.averageAtBlockBoundaries(flux);
+      LevelData<FluxBox> NTF_normal(grids, 1, IntVect::Zero);
+      for (DataIterator dit(flux.dataIterator()); dit.ok(); ++dit) {
+         const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
+         RealVect faceArea = block_coord_sys.getMappedFaceArea();
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            NTF_normal[dit][dir].copy(flux[dit][dir],dir,0,1);
+            NTF_normal[dit][dir].mult(faceArea[dir]);
+         }
+      }
 
-     LevelData<FluxBox> NTF_normal(grids, 1, IntVect::Zero);
-     for (DataIterator dit(flux.dataIterator()); dit.ok(); ++dit) {
-       const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
-       RealVect faceArea = block_coord_sys.getMappedFaceArea();
-       for (int dir=0; dir<SpaceDim; ++dir) {
-          NTF_normal[dit][dir].copy(flux[dit][dir],dir,0,1);
-          NTF_normal[dit][dir].mult(faceArea[dir]);
-       }
-     }
+      RealVect fakeDx = RealVect::Unit;
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         simpleDivergence(a_out[dit], NTF_normal[dit], grids[dit], fakeDx);
+      }
+   }
 
-     RealVect fakeDx = RealVect::Unit;
-     for (DataIterator dit(grids); dit.ok(); ++dit) {
-       simpleDivergence(a_out[dit], NTF_normal[dit], grids[dit], fakeDx);
-     }
-
+   if ( !a_homogeneous_bcs && !a_extrap_to_ghosts ) {
+      // Add inhomogeneous contributions from Neumann and natural boundaries
+      addNeumannAndNaturalBVContrib(*m_bc, a_out);
    }
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -710,80 +700,32 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
 void
 EllipticOp::computeBcDivergence( LevelData<FArrayBox>& a_out ) 
 {
-   const DisjointBoxLayout& grids = a_out.disjointBoxLayout();
-   LevelData<FArrayBox> phi(grids, 1, IntVect::Zero);
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      phi[dit].setVal(0.);
-   }
+   LevelData<FArrayBox> phi(m_geometry.grids(), 1, IntVect::Zero);
+   setToZero(phi);
 
-   LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Unit);
-
-   if (!m_low_pollution) {
-
-#if CFG_DIM==3
-      LevelData<FluxBox> mapped_field(grids, CFG_DIM, IntVect::Unit);
-      computeMapped3DFieldWithBCs( phi, mapped_field, false );
-      m_geometry.unmap3DGradient(mapped_field, flux);
-#else
-      computePoloidalFieldWithBCs(phi, flux, false);
-#endif
-      
-      // Multiply the field by the unmapped, face-centered GKP coefficients
-      multiplyCoefficients(flux, false);
-      m_geometry.applyAxisymmetricCorrection(flux);
-   }
-   else {
-#if CFG_DIM==3
-      computeMapped3DFieldWithBCs(phi, flux, false);
-#else
-      computeMappedPoloidalFieldWithBCs(phi, flux, false);
-#endif
-      
-      // Multiply the field by the mapped, face-centered GKP coefficients
-      multiplyCoefficients(flux, true);
-   }
-
-   // Convert to face-averaged if we're fourth-order
-   if (!m_second_order) fourthOrderAverage(flux);
-
-   if (!m_low_pollution) {
-      m_geometry.computeMappedGridDivergence(flux, a_out, !m_second_order);
-   }
-
-   else {
-      LevelData<FluxBox> NTF_normal(grids, 1, IntVect::Zero);
-      for (DataIterator dit(flux.dataIterator()); dit.ok(); ++dit) {
-         const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
-         RealVect dx = block_coord_sys.dx();
-         for (int dir=0; dir<SpaceDim; ++dir) {
-            Real transverse_area_mapped(1.0);
-            for (int tdir = 0; tdir<SpaceDim; tdir++) {
-               if (tdir != dir) {
-                  transverse_area_mapped *= dx[tdir];
-               }
-            }
-            NTF_normal[dit][dir].copy(flux[dit][dir],dir,0,1);
-            NTF_normal[dit][dir].mult(transverse_area_mapped);
-         }
-      }
-      RealVect fakeDx = RealVect::Unit;
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         simpleDivergence(a_out[dit], NTF_normal[dit], grids[dit], fakeDx);
-      }
-   }
-   
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      a_out[dit] /= m_volume[dit];
-   }
+   computeFluxDivergence(phi, a_out, false, false);
 }
 
 
 void
-EllipticOp::setBc( const EllipticOpBC& a_bc )
+EllipticOp::updateBoundaryData(const LevelData<FluxBox>&  a_unmapped_coefficients,
+                               EllipticOpBC&              a_bc,
+                               const bool                 a_homogeneous_bcs)
 {
+   CH_TIME("EllipticOp::updateBoundaryData");
+   
    m_codim1_stencils.clear();
    m_codim2_stencils.clear();
    constructBoundaryStencils(!m_second_order, a_bc, m_codim1_stencils, m_codim2_stencils );
+
+   setNeumannNaturalFactor(a_unmapped_coefficients, a_bc);
+   
+   // Save a copy for use in the flux divergence calculations
+   m_bc = a_bc.clone();
+
+   if (!a_homogeneous_bcs) {
+      computeBcDivergence( m_bc_divergence );
+   }
 }
 
 
@@ -1860,6 +1802,341 @@ EllipticOp::interpToNodes( const LevelData<FArrayBox>&  a_phi,
 
    a_phi_node.exchange();
 #endif
+}
+
+
+void
+EllipticOp::setNeumannNaturalFactor( const LevelData<FluxBox>&  a_unmapped_coefficients,
+                                     EllipticOpBC&              a_bc ) const
+{
+   /*
+     On faces with Neumann boundary conditions, compute the factor
+
+        n_mapped^T N^T D n A,
+
+     where D is the unmapped coefficient matrix, n_mapped and n are the mapped
+     and physical cell face normals, respectively, and A is the mapped is the
+     cell face A.  On faces with natural boundary conditions, compute the same
+     quantity without D (i.e., D = identity), which is the physical face area.
+     This factor is used in the application of inhomogeneous Neumann or natural
+     boundary conditions.
+   */
+
+   if ( a_bc.hasNeumannCondition() || a_bc.hasNaturalCondition() ) {
+
+      const DisjointBoxLayout& grids = m_geometry.grids();
+      const MagCoordSys& coords = *m_geometry.getCoordSys();
+
+      // Initialize to zero
+      for (int block_number=0; block_number<coords.numBlocks(); ++block_number ) {
+         const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
+         const ProblemDomain& domain = block_coord_sys.domain();
+         const Box& domain_box = domain.domainBox();
+
+         for (int dir=0; dir<SpaceDim; dir++) {
+            for (SideIterator sit; sit.ok(); ++sit) {
+               Side::LoHiSide side = sit();
+
+               Box bdry_box = bdryBox(domain_box, dir, side, 1);
+               FArrayBox fab(bdry_box,1);
+               fab.setVal(0.);
+                           
+               DataArray* da = new DataArray(false);
+               da->setData(fab);
+               a_bc.setNeumannNaturalFactor(block_number, dir, side, da);
+            }
+         }
+      }
+
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         int block_number = coords.whichBlock(grids[dit]);
+         const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
+         const RealVect dx = block_coord_sys.dx();
+         
+         for (int dir=0; dir<SpaceDim; dir++) {
+            const FArrayBox& this_unmapped_coefs_dir = a_unmapped_coefficients[dit][dir];
+
+            Real mapped_face_area = 1.;
+            for (int tdir=0; tdir<SpaceDim; ++tdir) {
+               if (tdir != dir) mapped_face_area *= dx[tdir];
+            }
+
+            for (SideIterator sit; sit.ok(); ++sit) {
+               Side::LoHiSide side = sit();
+
+               RefCountedPtr<DataArray> da = a_bc.getNeumannNaturalFactor(block_number, dir, side);
+
+               const Vector<Box> boundary_boxes = m_geometry.getBoundaryBoxes(block_number, dir, side);
+
+               if ( boundary_boxes.size() > 0 ) {  // Contains part of physical boundary?
+                  int bc_type = a_bc.getBCType(block_number, dir, side);
+                  bool neumann_boundary = (bc_type == EllipticOpBC::NEUMANN);
+                  bool natural_boundary = (bc_type == EllipticOpBC::NATURAL);
+
+                  if ( neumann_boundary || natural_boundary ) {
+                     Box grid_bdry_box = bdryBox(grids[dit], dir, side, 1);
+
+                     for (int n=0; n<boundary_boxes.size(); ++n) {
+                        Box overlap = grid_bdry_box & boundary_boxes[n];
+
+                        if ( overlap.ok() ) {
+
+                           FArrayBox factor(overlap, 1);
+
+                           FArrayBox N(overlap, SpaceDim*SpaceDim);
+                           block_coord_sys.getPointwiseN(N);
+                              
+                           FArrayBox normal(overlap, SpaceDim);
+                           block_coord_sys.computeFaceUnitNormal(dir, normal);
+                           if ( side == Side::LoHiSide::Lo ) normal.negate();  // make outward
+
+                           RealVect tmp;
+
+                           for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+                              IntVect iv = bit();
+
+                              if ( neumann_boundary ) {
+                                 for (int i=0; i<SpaceDim; ++i) {
+                                    tmp[i] = 0.;
+                                    for (int j=0; j<SpaceDim; ++j) {
+                                       tmp[i] += this_unmapped_coefs_dir(iv,i*SpaceDim+j) * normal(iv,j);
+                                    }
+                                 }
+                              }
+                              else {  // i.e., natural boudary
+                                 for (int i=0; i<SpaceDim; ++i) {
+                                    tmp[i] = normal(iv,i);
+                                 }
+                              }
+
+                              // Multiply N transpose and extract mapped normal component
+                              factor(iv,0) = 0.;
+                              for (int j=0; j<SpaceDim; ++j) {
+                                 factor(iv,0) += N(iv,j*SpaceDim+dir) * tmp[j];
+                              }
+                              factor(iv,0) *= sign(side) * mapped_face_area;
+                           }
+                           
+                           da->updateData(factor);
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+}
+
+
+void
+EllipticOp::addNeumannAndNaturalBVContrib( const EllipticOpBC&    a_bc,
+                                           LevelData<FArrayBox>&  a_data ) const
+{
+   if ( a_bc.hasNeumannCondition() || a_bc.hasNaturalCondition() ) {
+
+      const DisjointBoxLayout& grids = m_geometry.grids();
+      const MagCoordSys& coords = *m_geometry.getCoordSys();
+
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         int block_number = coords.whichBlock(grids[dit]);
+         const MagBlockCoordSys& block_coord_sys = *(coords.getCoordSys(block_number));
+
+         FArrayBox& this_data = a_data[dit];
+
+         for (int dir=0; dir<SpaceDim; dir++) {
+            for (SideIterator sit; sit.ok(); ++sit) {
+               Side::LoHiSide side = sit();
+
+               const Vector<Box> boundary_boxes = m_geometry.getBoundaryBoxes(block_number, dir, side);
+
+               if ( boundary_boxes.size() > 0 ) {  // Physical boundary?
+               
+                  int bc_type = a_bc.getBCType(block_number, dir, side);
+
+                  if ( bc_type == EllipticOpBC::NEUMANN || bc_type == EllipticOpBC::NATURAL ) {
+
+                     RefCountedPtr<DataArray> bc_factor = a_bc.getNeumannNaturalFactor(block_number, dir, side);
+
+                     for (int n=0; n<boundary_boxes.size(); ++n) {
+                        Box boundary_box = boundary_boxes[n];
+
+                        for (BoxIterator bit(boundary_box); bit.ok(); ++bit) {
+                           IntVect iv_face = bit();
+                           IntVect iv = iv_face;
+                           if ( side == Side::LoHiSide::Hi ) iv[dir]--;
+
+                           if ( grids[dit].contains(iv) ) {
+
+                              double bv = 0.;
+
+                              RefCountedPtr<GridFunction> bc_func = a_bc.getBCFunction(block_number, dir, side );
+                              if ( bc_func ) {
+                                 if ( typeid(*bc_func) == typeid(DataArray) ) {
+                                    IntVect iv_ghost = iv_face;
+                                    if (side == Side::LoHiSide::Lo) iv_ghost[dir]--;
+                                    FArrayBox bv_ghost(Box(iv_ghost,iv_ghost),1);
+                                    FArrayBox dummy;
+                                    bc_func->assign(bv_ghost, m_geometry, dummy, dummy, block_number, 0., false);
+                                    bv = bv_ghost(iv_ghost,0); 
+                                 }
+                                 else {
+                                    Box face_box(iv_face,iv_face);
+                                    FluxBox bv_face(face_box,1);
+                                    FluxBox real_coords(face_box,CFG_DIM);
+                                    FluxBox norm_flux(face_box,1);
+
+                                    block_coord_sys.getFaceCenteredRealCoords(dir, real_coords[dir]);
+                                    block_coord_sys.getNormMagneticFlux(real_coords[dir], norm_flux[dir]);
+
+                                    bc_func->assign(bv_face, m_geometry, real_coords, norm_flux, block_number, 0., false);
+                                    
+                                    bv = bv_face[dir](iv_face,0);
+                                 }
+                              }
+                              else {
+                                 bv = a_bc.getBCValue(block_number, dir, side);
+                              }
+
+                              bv *= bc_factor->getData()(iv_face,0);
+
+                              // Neumann and natural boundary conditions are assumed to be specified as an
+                              // outward normal component, so there is no need to distinguish between high
+                              // and low cell faces when adding their contribution to the divergence.  We
+                              // subtract here because we are actually contributing to a negative divergence,
+                              // per this class's convention of an EllipticOp being of the form:
+                              // - div (tensor grad phi).
+                              this_data(iv,0) -= bv;
+                           }
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+}
+
+
+void
+EllipticOp::modifyForNeumannAndNaturalBCs( const EllipticOpBC&  a_bc,
+                                           LevelData<FluxBox>&  a_unmapped_coefs,
+                                           LevelData<FluxBox>&  a_mapped_coefs ) const
+{
+   if ( a_bc.hasNeumannCondition() || a_bc.hasNaturalCondition() ) {
+      CH_assert(a_unmapped_coefs.ghostVect() >= a_mapped_coefs.ghostVect());
+
+      const DisjointBoxLayout& grids = m_geometry.grids();
+      const MagCoordSys& coords = *m_geometry.getCoordSys();
+
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         int block_number = coords.whichBlock(grids[dit]);
+         const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(block_number);
+         FluxBox& this_unmapped_coefs = a_unmapped_coefs[dit];
+         FluxBox& this_mapped_coefs = a_mapped_coefs[dit];
+
+         for (int dir=0; dir<SpaceDim; dir++) {
+            FArrayBox& this_unmapped_coefs_dir = this_unmapped_coefs[dir];
+            FArrayBox& this_mapped_coefs_dir = this_mapped_coefs[dir];
+
+            for (SideIterator sit; sit.ok(); ++sit) {
+               Side::LoHiSide side = sit();
+
+               const Vector<Box> boundary_boxes = m_geometry.getBoundaryBoxes(block_number, dir, side);
+
+               if ( boundary_boxes.size() > 0 ) {  // Physical boundary?
+                  int bc_type = a_bc.getBCType(block_number, dir, side);
+
+                  if ( bc_type == EllipticOpBC::NEUMANN ) {
+                     double tmp[CH_SPACEDIM*CH_SPACEDIM];
+
+                     for (int n=0; n<boundary_boxes.size(); ++n) {
+
+                        IntVect grow_vect = a_unmapped_coefs.ghostVect();
+                        grow_vect[dir] = 0;
+                        Box bb = boundary_boxes[n];
+                        bb.grow(grow_vect);
+                        Box overlap = bb & this_unmapped_coefs_dir.box();
+                        if ( overlap.ok() ) {
+                              
+                           // Modify the unmapped coefficients: D_mod = D tau tau^T
+
+                           FArrayBox tan_tensor(overlap, SpaceDim*SpaceDim);
+                           block_coord_sys.getFaceTangentTensor(dir, tan_tensor);
+                              
+                           for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+                              IntVect iv = bit();
+                                 
+                              for (int i=0; i<SpaceDim; ++i) {
+                                 for (int j=0; j<SpaceDim; ++j) {
+                                    tmp[i*SpaceDim+j] = 0.;
+                                    for (int k=0; k<SpaceDim; ++k) {
+                                       tmp[i*SpaceDim+j] += this_unmapped_coefs_dir(iv,i*SpaceDim+k) * tan_tensor(iv,k*SpaceDim+j);
+                                    }
+                                 }
+                              }
+
+                              for (int k=0; k<SpaceDim*SpaceDim; ++k) {
+                                 this_unmapped_coefs_dir(iv,k) = tmp[k];
+                              }
+                           }
+                        }
+
+                        overlap &= this_mapped_coefs_dir.box();
+                        if ( overlap.ok() ) {
+
+                           // Update the mapped coefficients to N^T D_mod NJinverse
+
+                           FArrayBox NJi(overlap, SpaceDim*SpaceDim);
+                           block_coord_sys.getPointwiseNJInverse(NJi);
+                              
+                           FArrayBox N(overlap, SpaceDim*SpaceDim);
+                           block_coord_sys.getPointwiseN(N);
+                              
+                           for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+                              IntVect iv = bit();
+
+                              for (int i=0; i<SpaceDim; ++i) {
+                                 for (int j=0; j<SpaceDim; ++j) {
+                                    tmp[i*SpaceDim+j] = 0.;
+                                    for (int k=0; k<SpaceDim; ++k) {
+                                       tmp[i*SpaceDim+j] += this_unmapped_coefs_dir(iv,i*SpaceDim+k) * NJi(iv,k*SpaceDim+j);
+                                    }
+                                 }
+                              }
+
+                              // Multiply N transpose
+                              for (int i=0; i<SpaceDim; ++i) {
+                                 for (int j=0; j<SpaceDim; ++j) {
+                                    double sum = 0.;
+                                    for (int k=0; k<SpaceDim; ++k) {
+                                       sum += N(iv,k*SpaceDim+i) * tmp[k*SpaceDim+j];
+                                    }
+                                    this_mapped_coefs_dir(iv,i*SpaceDim+j) = sum;
+                                 }
+                              }
+                           }
+                        }
+                     }
+                  }
+                  else if ( bc_type == EllipticOpBC::NATURAL ) {
+                     for (int n=0; n<boundary_boxes.size(); ++n) {
+                        Box overlap = boundary_boxes[n] & this_unmapped_coefs_dir.box();
+                        if ( overlap.ok() ) {
+                           this_unmapped_coefs_dir.setVal(0., overlap, 0, this_unmapped_coefs_dir.nComp());
+                        }
+                        overlap = boundary_boxes[n] & this_mapped_coefs_dir.box();
+                        if ( overlap.ok() ) {
+                           this_mapped_coefs_dir.setVal(0., overlap, 0, this_mapped_coefs_dir.nComp());
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
 }
 
 

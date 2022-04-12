@@ -60,7 +60,7 @@ public:
    
    virtual void postProcessMetricData( LevelData<EdgeDataBox>& data ) const {;}
 
-   virtual const EllipticOpBC& getDivergenceCleaningBC() const = 0;
+   virtual EllipticOpBC* getDivergenceCleaningBC() {return NULL;}
 
    virtual void defineEllipticOpBC( EllipticOpBC& bc ) const {};
 

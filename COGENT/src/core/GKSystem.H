@@ -336,16 +336,18 @@ class GKSystem : public AppCtxt
         copyRHSToArray( a_Z );
       }
    
-      void solveFluidOpPCImEx(  ODEVector&        a_Z, 
-                                const ODEVector&  a_R, 
-                                const int         a_sys_id,
-                                int               a_i=-1)
+      void solveFluidOpPCImEx(  ODEVector&          a_Z, 
+                                const ODEVector&    a_R, 
+                                const std::string&  a_name,
+                                const int           a_sys_id,
+                                int                 a_i=-1)
       {
         CH_assert(a_sys_id == m_sys_id);
         copyStateFromArray( a_R );
         copyRHSFromArray( a_Z );
         m_gk_ops->solveFluidOpPCImEx( m_rhs,
                                       m_state_comp,
+                                      a_name,
                                       a_i );
         copyRHSToArray( a_Z );
       }

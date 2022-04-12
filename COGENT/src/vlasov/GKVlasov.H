@@ -281,7 +281,7 @@ public:
 
    Real m_larmor_number;
 
-   typedef enum {INVALID=-1, PPM, UW1, UW3, UW5, WENO5, BWENO, NUM_FLUX } FluxType;
+   typedef enum {INVALID=-1, PPM, C2, UW1, UW3, UW5, WENO5, BWENO, NUM_FLUX } FluxType;
    FluxType m_face_avg_type;
    std::string m_method;
 

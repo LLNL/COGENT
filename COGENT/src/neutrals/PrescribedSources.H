@@ -58,37 +58,60 @@ public:
   Real computeDtExplicitTI(const KineticSpeciesPtrVect& a_soln, const int a_species);
   Real computeDtImExTI(const KineticSpeciesPtrVect& a_soln, const int a_species);
   Real TimeScale(const KineticSpeciesPtrVect& a_soln, const int a_species);
+  
+  inline void preTimeStep  ( const KineticSpeciesPtrVect& a_soln_mapped,
+                             const int a_species,
+                             const Real a_time,
+                             const KineticSpeciesPtrVect& a_soln_physical);
    
 private:
   
-   void computeHeatSrc(LevelData<FArrayBox>&  heat_src,
+   void computeHeatSrc(LevelData<FArrayBox>&  src,
                        const KineticSpecies&  kinetic_species,
                        const Real&            mass,
                        const Real&            time);
   
-  void computeThermalBathSrc(LevelData<FArrayBox>&  heat_src,
-                             const KineticSpecies&  kinetic_species,
-                             const Real&            time);
+   void computeRelaxationSrc(LevelData<FArrayBox>&  src,
+                            const KineticSpecies&  kinetic_species,
+                            const Real&            time);
+
+   void computeThermalizationSrc(LevelData<FArrayBox>&  src,
+                                 const KineticSpecies&  kinetic_species,
+                                 const Real&            time);
   
    void getNormalizationFactors();
   
    int m_verbosity;
+   int m_it_counter;
+   int m_update_freq;
    bool m_first_call;
-   bool m_thermal_bath;
+   bool m_include_relaxation;
+   bool m_include_thermalization;
+   bool m_include_heat_src;
    bool m_diagnostics;
 
    double m_power;
    double m_T_src;
    double m_heat_src_norm;
    
-   RefCountedPtr<KineticFunction> m_ref_func;
-   RefCountedPtr<CFG::GridFunction> m_heat_src_spatial_func;
-   
-   LevelData<FArrayBox> m_heat_src;
-   LevelData<FArrayBox> m_ref_dfn;
-   LevelData<FArrayBox> m_spatial_profile_inj;
-
+   RefCountedPtr<KineticFunction>   m_ref_func;
+   RefCountedPtr<CFG::GridFunction> m_heat_src_profile_func;
+   RefCountedPtr<CFG::GridFunction> m_relaxation_profile_func;
+   RefCountedPtr<CFG::GridFunction> m_thermalization_profile_func;
+   RefCountedPtr<CFG::GridFunction> m_maxw_density_func;
+   RefCountedPtr<CFG::GridFunction> m_maxw_vparallel_func;
   
+   LevelData<FArrayBox> m_heat_src;
+   LevelData<FArrayBox> m_relaxation_src;
+   LevelData<FArrayBox> m_thermalization_src;
+   LevelData<FArrayBox> m_ref_dfn;
+   LevelData<FArrayBox> m_maxw_dfn;
+   LevelData<FArrayBox> m_relaxation_profile_inj;
+   LevelData<FArrayBox> m_thermalization_profile_inj;
+   LevelData<FArrayBox> m_heat_src_profile_inj;
+   CFG::LevelData<CFG::FArrayBox> m_maxw_density;
+   CFG::LevelData<CFG::FArrayBox> m_maxw_vparallel;
+
    /// Parse parameters.
    /**
     * Private method to obtain control parameters from "NTR.species" section

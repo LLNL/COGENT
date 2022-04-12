@@ -68,10 +68,10 @@ CoDim1Stencil::define( const FArrayBox&      a_boundary_values,
       m_box.shiftHalf(m_dir,-1);
       m_box.growLo(m_dir,width-1);
 
-      // Neumann boundary conditions are specified relative to the outward
-      // normal, so we need to flip the sign on low side boundaries to
-      // convert to non-directional derivatives.
-      if (a_value_type == EllipticOpBC::NEUMANN) {
+      // Mapped Neumann boundary conditions are specified relative to the outward
+      // normal, so we need to flip the sign on low side boundaries to convert to
+      // non-directional derivatives.
+      if (a_value_type == EllipticOpBC::MAPPED_NEUMANN) {
          m_boundary_values->negate();
       }
    }
@@ -182,7 +182,7 @@ CoDim1Stencil::getStencil( const IntVect&   a_iv,
             MayDay::Error("CoDim1Stencil::getStencil(): unknown order");
          }
       }
-      else if (m_value_type == EllipticOpBC::NEUMANN) {
+      else if (m_value_type == EllipticOpBC::MAPPED_NEUMANN) {
 
          if ( m_order == 2 ) {
 
@@ -267,11 +267,15 @@ CoDim1Stencil::getStencil( const IntVect&   a_iv,
          }
       }
       else if (m_value_type == EllipticOpBC::EXTRAPOLATED) {
-         
+
+         // For these boundary conditions, the boundary values are not involved in
+         // in the extrapolation to ghost cells
+
          if ( m_order == 2 ) {
+
             int num_points = 2;
-            double weights[] = {2., -1.};
-         
+            double weights[2] = {2., -1.};
+
             IntVect point = a_iv;
             if (m_side == Side::LoHiSide::Lo) {
                for (int i=0; i<num_points; ++i) {
@@ -288,8 +292,106 @@ CoDim1Stencil::getStencil( const IntVect&   a_iv,
                }
             }
          }
-         else if ( m_order == 4 ) {
-            MayDay::Error("CoDim1Stencil::getStencil(): fourth-order extrapolation option not implemented");
+         else if (m_order == 4) {
+
+            int num_points = 5;
+            double weights[2][5] = {{37./8.,  -68./8., 62./8., -28./8., 5./8.},
+                                    {45./4., -100./4., 90./4., -36./4., 5./4.}};
+
+            IntVect point = a_iv;
+            if (m_side == Side::LoHiSide::Lo) {
+               int dist = m_box.bigEnd(m_dir) - a_iv[m_dir];
+               CH_assert(dist >= 0 && dist < 2);
+
+               for (int i=0; i<dist; ++i) {
+                  point[m_dir]++;
+               }
+
+               for (int i=0; i<num_points; ++i) {
+                  point[m_dir]++;
+                  a_points.push_back(point);
+                  a_weights.push_back(weights[dist][i]);
+               }
+            }
+            else {
+               int dist = a_iv[m_dir] - m_box.smallEnd(m_dir);
+               CH_assert(dist >= 0 && dist < 2);
+
+               for (int i=0; i<dist; ++i) {
+                  point[m_dir]--;
+               }
+
+               for (int i=0; i<num_points; ++i) {
+                  point[m_dir]--;
+                  a_points.push_back(point);
+                  a_weights.push_back(weights[dist][i]);
+               }
+            }
+         }
+      }
+      else if (m_value_type == EllipticOpBC::NEUMANN ||
+               m_value_type == EllipticOpBC::NATURAL) {
+
+         // For these boundary conditions, the boundary values are not involved in
+         // in the extrapolation to ghost cells.  This is the same as the MAPPED_NEUMANN
+         // case above but without the boundary value data
+
+         if ( m_order == 2 ) {
+
+            int num_points = 1;
+            double weights[1] = {1.};
+
+            IntVect point = a_iv;
+            if (m_side == Side::LoHiSide::Lo) {
+               for (int i=0; i<num_points; ++i) {
+                  point[m_dir]++;
+                  a_points.push_back(point);
+                  a_weights.push_back(weights[i]);
+               }
+            }
+            else {
+               for (int i=0; i<num_points; ++i) {
+                  point[m_dir]--;
+                  a_points.push_back(point);
+                  a_weights.push_back(weights[i]);
+               }
+            }
+         }
+         else if (m_order == 4) {
+
+            int num_points = 3;
+            double weights[2][3] = {{21./23., 3./23., -1./23.}, {-54./23., 104./23., -27./23.}};
+
+            IntVect point = a_iv;
+            if (m_side == Side::LoHiSide::Lo) {
+               int dist = m_box.bigEnd(m_dir) - a_iv[m_dir];
+               CH_assert(dist >= 0 && dist < 2);
+
+               for (int i=0; i<dist; ++i) {
+                  point[m_dir]++;
+               }
+
+               for (int i=0; i<num_points; ++i) {
+                  point[m_dir]++;
+                  a_points.push_back(point);
+                  a_weights.push_back(weights[dist][i]);
+               }
+            }
+            else {
+               int dist = a_iv[m_dir] - m_box.smallEnd(m_dir);
+               CH_assert(dist >= 0 && dist < 2);
+
+               for (int i=0; i<dist; ++i) {
+                  point[m_dir]--;
+               }
+
+               for (int i=0; i<num_points; ++i) {
+                  point[m_dir]--;
+                  a_points.push_back(point);
+                  a_weights.push_back(weights[dist][i]);
+               }
+            }
+
          }
          else {
             MayDay::Error("CoDim1Stencil::getStencil(): unknown order");

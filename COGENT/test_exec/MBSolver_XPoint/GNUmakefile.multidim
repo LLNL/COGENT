@@ -1,0 +1,74 @@
+# -*- Mode: Makefile;  -*- 
+
+## Define the variables needed by Make.example
+
+# trace the chain of included makefiles
+makefiles += mbsolver_xpt
+
+# knowing this can be useful for things which are specific to 
+# specific machines
+UNAMEN = $(shell uname -n)
+
+
+# the base name(s) of the application(s) in this directory
+mdebase = mbsolver_xpt
+# in an example of true silliness, need to define ebase so that the 
+# realclean target will also remove my *.ex files...
+ebase = bogus
+
+# the location of Chombo lib dir
+CHOMBO_HOME = ../../../Chombo/lib
+
+# names of Chombo libraries needed by this program, in order of search.
+1dLibNames =  BoxTools BaseTools
+2dLibNames = HOMappedGeometry HOAMRTools AMRTimeDependent AMRTools BoxTools
+3dLibNames = HOMappedGeometry HOAMRTools AMRTimeDependent AMRTools BoxTools
+4dLibNames = HOMappedGeometry HOAMRTools AMRTools BoxTools
+
+# relative paths to source code directories
+base_dir = .
+COGENT_SRC = ../../src
+
+2dsrc_dirs = ../../test_src/MBSolver_XPoint
+2dsrc_dirs += $(COGENT_SRC)/coord/configuration $(COGENT_SRC)/coord/velocity $(COGENT_SRC)/coord/configuration/2d
+2dsrc_dirs += $(COGENT_SRC)/coord/configuration/utils
+2dsrc_dirs += $(COGENT_SRC)/ibc/configuration $(COGENT_SRC)/poisson
+2dsrc_dirs += $(COGENT_SRC)/util $(COGENT_SRC)/ibc $(COGENT_SRC)/species/fluid
+2dsrc_dirs += $(COGENT_SRC)/fluidOp
+2dsrc_dirs += $(COGENT_SRC)/advectUtil
+3dsrc_dirs += $(COGENT_SRC)/util $(COGENT_SRC)/ibc $(COGENT_SRC)/coord/configuration/3d
+4dsrc_dirs =  $(COGENT_SRC)/core $(COGENT_SRC)/driver $(COGENT_SRC)/vlasov
+4dsrc_dirs += $(COGENT_SRC)/collisions $(COGENT_SRC)/transport $(COGENT_SRC)/neutrals
+4dsrc_dirs += $(COGENT_SRC)/coord/phase $(COGENT_SRC)/ibc/phase $(COGENT_SRC)/util 
+4dsrc_dirs += $(COGENT_SRC)/advectUtil $(COGENT_SRC)/species/kinetic
+4dsrc_dirs += $(COGENT_SRC)/ibc
+4dsrc_dirs += $(COGENT_SRC)/bandedMatrix
+4dsrc_dirs += $(COGENT_SRC)/gyroavg
+4dsrc_dirs += $(COGENT_SRC)/solver
+4dsrc_dirs += $(COGENT_SRC)/time
+4dsrc_dirs += $(COGENT_SRC)/scalarOp $(COGENT_SRC)/species/scalar
+
+mdsrc_dirs = $(COGENT_SRC)/ibc/multidim
+
+# input file for 'run' target
+INPUT = regression.inputs
+
+
+# shared code for building example programs
+include $(CHOMBO_HOME)/mk/Make.example.multidim
+
+# application-specific variables
+
+CXXFLAGS += -DCFG_DIM=2 -std=c++0x -ftemplate-depth=128 
+
+ifeq ($(MPI),TRUE)
+HYPRE_LOC = ../../hypre/hypre_loc
+else
+HYPRE_LOC = ../hypre/hypre_loc_serial
+endif
+
+XTRACPPFLAGS += -I$(HYPRE_LOC)/include
+XTRALIBFLAGS += -L$(HYPRE_LOC)/lib -lHYPRE $(LAPACKLIBS)
+
+# application-specific targets
+

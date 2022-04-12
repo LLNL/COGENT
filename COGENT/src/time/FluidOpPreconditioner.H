@@ -29,6 +29,7 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
       m_fluid_ops = NULL;
       m_shift = 0.0;
       m_species_idx = -1;
+      m_op_name = "noname";
       m_is_defined = false;
       return;
     }
@@ -79,7 +80,8 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
                                     a_step,
                                     a_stage,
                                     a_shift, 
-                                    a_idx);
+                                    a_idx,
+                                    m_op_name );
       }
       return;
     }
@@ -89,6 +91,7 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
       CH_assert(isDefined() && (m_species_idx >= 0));
       if (m_im) m_ops->solveFluidOpPCImEx(  a_Y, 
                                             a_X, 
+                                            m_op_name,
                                             Preconditioner<T,Ops>::getSysID(),
                                             m_species_idx );
       else      m_ops->solveSolutionPC( a_Y, 
@@ -102,6 +105,10 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
 
     inline void speciesIndex(int a_idx) { m_species_idx = a_idx; }
 
+    inline void opName(const std::string& a_name) { m_op_name = a_name; }
+    inline const std::string& opName() const { return m_op_name; }
+
+
   protected:
 
   private:
@@ -112,6 +119,8 @@ class FluidOpPreconditioner : public Preconditioner<T,Ops>
     CFG::FluidOpInterface*  m_fluid_ops;
     Real                    m_shift;
     bool                    m_im;
+
+    std::string             m_op_name;
 
 };
 

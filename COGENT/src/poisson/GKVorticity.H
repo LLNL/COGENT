@@ -2,6 +2,7 @@
 #define _GKVORTICITY_H_
 
 #include "EllipticOp.H"
+#include "EllipticOpBCFactory.H"
 #include "GKPoisson.H"
 #include "FluxSurface.H"
 #include "MultiBlockLevelExchangeAverage.H"
@@ -49,12 +50,7 @@ public:
     *  @param[in] larmor_number the Larmor number for the operator.
     *  @param[in] debye_number the Debye number for the operator.
     */
-   GKVorticity(const ParmParse&   pp,
-               const ParmParse&   pp_base,
-               const MagGeom&     geom,
-               const Real         larmor_number,
-               const Real         debye_number,
-               const bool         include_pol_den_correction = false );
+   
    GKVorticity(const ParmParse&   pp,
                const ParmParse&   pp_base,
                const MagGeom&     geom,
@@ -62,7 +58,8 @@ public:
                const Real         debye_number,
                const bool         second_order,
                const bool         low_pollution,
-               const bool         include_pol_den_correction = false );
+               const bool         include_pol_den_correction,
+               const std::string& model = "Vorticity" );
       
    /// Destructor.
    /**
@@ -72,33 +69,7 @@ public:
    virtual MBHypreSolver* allocatePreconditioner( const MagGeom&                  geom,
                                                   const int                       discretization_order,
                                                   MultiBlockLevelExchangeCenter*  mblx_ptr );
-
-   void setVorticityOperatorCoefficients( const LevelData<FArrayBox>&  ion_mass_density,
-                                          const LevelData<FArrayBox>&  ion_charge_density,
-                                          const EllipticOpBC&          bc,
-                                          const bool                   update_preconditioner );
-
-   /// Construct the GKP operator coefficients
-   /**
-    * Computes the GKP operator coefficients.  The polarization density
-    * term requires the mass-weighted sum of the ion charge densities,
-    * which is obtained from the species vector
-    *
-    * @param[in] species   Array of kinetic species
-    */
-
    
-   virtual void computeCoefficients(const LevelData<FArrayBox>& ni,
-                                    LevelData<FluxBox>& mapped_coefficients,
-                                    LevelData<FluxBox>& unmapped_coefficients );
-
-   virtual void updatePreconditioner( MBSolver*              preconditioner,
-                                      LevelData<FArrayBox>&  volume_reciprocal,
-                                      LevelData<FluxBox>&    mapped_coefficients,
-                                      const EllipticOpBC&    potential_bc );
-
-   void verifyMatrix( const MBSolver* matrix );
-
    virtual void solvePreconditioner( const LevelData<FArrayBox>& in,
                                      LevelData<FArrayBox>&       out );
 
@@ -106,11 +77,33 @@ public:
                         const LevelData<FArrayBox>& in,
                         bool homogeneous = false);
 
-   void applyPolDenCorrectionOp(LevelData<FArrayBox>&        out,
-                                const LevelData<FArrayBox>&  in,
-                                bool                         homogeneous );
-
    virtual void computeBcDivergence( LevelData<FArrayBox>& out );
+   
+   virtual void updatePreconditioner( MBSolver*              preconditioner,
+                                      LevelData<FArrayBox>&  volume_reciprocal,
+                                      LevelData<FluxBox>&    mapped_coefficients,
+                                      const EllipticOpBC&    potential_bc );
+
+
+   void setVorticityOperatorCoefficients( const LevelData<FArrayBox>&  ion_mass_density,
+                                          const LevelData<FArrayBox>&  ion_charge_density,
+                                          const LevelData<FArrayBox>&  electron_temeprature,
+                                          EllipticOpBC&                bc,
+                                          const bool                   update_preconditioner );
+
+   void computeVorticityCoefficients(const LevelData<FArrayBox>& ion_mass_density,
+                                     const LevelData<FArrayBox>& ion_charge_density,
+                                     const LevelData<FArrayBox>& electron_temeprature,
+                                     const EllipticOpBC&         bc,
+                                     LevelData<FluxBox>&         mapped_coefficients,
+                                     LevelData<FluxBox>&         unmapped_coefficients );
+
+   void verifyMatrix( const MBSolver* matrix );
+
+
+   void applyHighOrderCorrectionOp(LevelData<FArrayBox>&        out,
+                                   const LevelData<FArrayBox>&  in,
+                                   bool                         homogeneous );
 
    void computeFluxDivergence(const LevelData<FArrayBox>& in,
                               LevelData<FArrayBox>&       out,
@@ -124,22 +117,10 @@ public:
                                         const bool                  subtract_fs_par_div,
                                         const bool                  extrap_to_ghosts = false);
    
-   void setPolDenCorrectionCoeff(const LevelData<FArrayBox>& ion_charge_density );
-
    /// Substract flux-averaged parallel divergence; used for 3D MB vorticity
    void subtractFSAverParDiv( LevelData<FArrayBox>&      divergence,
                               const  LevelData<FluxBox>& flux) const;
 
-   inline void setModel(const std::string& model) {m_model = model;};
-   
-   /// Return perpendicular coefficeints (those of the perpendicular Laplacian operator, M)
-   const LevelData<FluxBox>& getPerpCoeffMapped() const {return m_perp_coeff_mapped;}
-   
-   /// Return parallel coefficeints (those of the parallel current operator)
-   const LevelData<FluxBox>& getParCoeffMapped() const {return m_par_coeff_mapped;}
-
-   /// Return face-cenetered electron temperature
-   const LevelData<FluxBox>& getFCElectronTemp() const {return m_electron_temperature_face;}
    
    /// Set implicit dt value
    inline void setImplicitDt(const Real a_value) {m_dt_implicit = a_value;};
@@ -168,35 +149,53 @@ protected:
    
    void computeParallelConductivity(const LevelData<FluxBox>& Te,
                                     LevelData<FluxBox>&       parallel_conductivity ) const;
+   
+   void computeDiffusionCoeff(LevelData<FluxBox>& diffusion_coeff_unmapped,
+                              LevelData<FluxBox>& diffusion_coeff_mapped) const;
+   
+   void convertCellToFace(LevelData<FluxBox>&          face_data,
+                          const LevelData<FArrayBox>&  cell_data ) const;
 
-   RefCountedPtr<GridFunction> m_electron_temperature;
-   RefCountedPtr<GridFunction> m_charge_exchange_coeff;
-   RefCountedPtr<GridFunction> m_parallel_conductivity;
+   RefCountedPtr<GridFunction> m_charge_exchange_func;
+   RefCountedPtr<GridFunction> m_pol_diffusion_func;
+   RefCountedPtr<GridFunction> m_perp_diffusion_func;
+   RefCountedPtr<GridFunction> m_parallel_conductivity_func;
 
-   LevelData<FArrayBox> m_electron_temperature_cell;
-   LevelData<FluxBox> m_electron_temperature_face;
    LevelData<FluxBox> m_parallel_cond_face;
-   LevelData<FluxBox> m_charge_exchange_coeff_face;
+   LevelData<FluxBox> m_charge_exchange_face;
+   LevelData<FluxBox> m_pol_diffusion_face;
+   LevelData<FluxBox> m_perp_diffusion_face;
 
    bool m_include_pol_den_correction;
+   bool m_include_diffusion;
+   bool m_include_high_order_corr;
    bool m_symmetrized_preconditioner;
 
 private:
    void init( const ParmParse&  pp,
               const ParmParse&  pp_base );
    
-   LevelData<FluxBox> m_perp_coeff_mapped;
-   LevelData<FluxBox> m_par_coeff_mapped;
-   LevelData<FluxBox> m_perp_coeff_unmapped;
-   LevelData<FluxBox> m_par_coeff_unmapped;
+   LevelData<FluxBox> m_diffusion_coeff_mapped;
+   LevelData<FluxBox> m_diffusion_coeff_unmapped;
+   LevelData<FluxBox> m_M_mapped;
+   LevelData<FluxBox> m_M_unmapped;
+   LevelData<FluxBox> m_N2_mapped;
+   LevelData<FluxBox> m_N2_unmapped;
    LevelData<FArrayBox> m_ne_over_Te;
+
    int m_verbosity;
    std::string m_model;
 
    Real m_dt_implicit;
    Real m_parallel_conductivity_limit;
+   Real m_precond_scale_fac;
    bool m_subtract_fs_par_div;
+   bool m_use_vorticity_bcs;
+  
    FluxSurface m_flux_surface;
+      
+   EllipticOpBC* m_vorticity_bc;
+   RefCountedPtr<EllipticOpBC> m_potential_bc;
 };
 
 

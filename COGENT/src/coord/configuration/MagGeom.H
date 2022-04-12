@@ -129,6 +129,8 @@ public:
    
    void multJonEdges( LevelData<EdgeDataBox>& dfn ) const;
 
+   void divideCellVolume( LevelData<FArrayBox>& a_data ) const;
+
    void divideJonValid( LevelData<FArrayBox>& dfn ) const;
    
    void divideJonFaces( LevelData<FluxBox>& dfn ) const;
@@ -150,9 +152,8 @@ public:
                                          const LevelData<FluxBox>& data,
                                          const bool                fourthOrder ) const;
    
-   void computedxidXProductAverage( LevelData<FluxBox>&  product,
-                              const LevelData<FluxBox>&  data,
-                              const bool                 fourthOrder ) const;
+   void computedxidXProductNorm( LevelData<FluxBox>&  product,
+                           const LevelData<FluxBox>&  data ) const;
 
    void computeMappedGridDivergence( const LevelData<FluxBox>& F,
                                      LevelData<FArrayBox>&     divergence,
@@ -186,6 +187,9 @@ public:
    
    void mappedGridCurlofVirtComp( LevelData<FArrayBox>&  cell_curl,
                             const LevelData<FArrayBox>&  F ) const;
+   
+   void mappedGridCurl( LevelData<FArrayBox>&  a_JaCurlF_phys,
+                  const LevelData<FArrayBox>&  a_F_covar ) const;
    
    void mappedGridCurl3D( LevelData<EdgeDataBox>&  a_JaCurlB_ce,
                     const LevelData<FluxBox>&      a_B_cf ) const;
@@ -233,7 +237,7 @@ public:
    const LevelData<FArrayBox>& getCellCenteredRealCoords() const {return m_cell_centered_real_coords;}
    
    const LevelData<FArrayBox>& getCellCenteredJacobian() const {return m_J;}
-
+   
    const LevelData<FArrayBox>& getCellCentereddXdxi() const {return m_dXdxi;}
 
    const LevelData<FArrayBox>& getCellCentereddxidX() const {return m_NJinverse_cell_centered;}
@@ -281,10 +285,19 @@ public:
    const LevelData<FluxBox>& getEllipticOpParCoeff() const {return m_par_coeff;}
    
    const LevelData<FluxBox>& getEllipticOpParCoeffMapped() const {return m_par_coeff_mapped;}
+      
+   void getCustomEllipticOpCoeff(LevelData<FluxBox>& coeff,
+                                 const string&       type) const;
    
-   void getEllipticOpRadCoeff(LevelData<FluxBox>& rad_coeff) const;
+   void getCustomEllipticOpCoeffMapped(LevelData<FluxBox>& coeff_mapped,
+                                       const string&       type) const;
    
-   void getEllipticOpRadCoeffMapped(LevelData<FluxBox>& rad_coeff_mapped) const;
+   void getBPoloidalDir(LevelData<FluxBox>& BPoloidalDir_fc) const;
+   
+   void getFluxSurfaceNormDir(LevelData<FluxBox>& fluxSurfaceNormDir) const;
+   
+   void getSafetyFactor(LevelData<FArrayBox>&   a_safety_factor,
+                        const bool              a_midplane_local = false) const;
 
    void plotMagneticFieldData(const double& time) const;
    
@@ -432,12 +445,20 @@ public:
    void computePoloidalProjection( LevelData<FluxBox>& polComp,
                                    const LevelData<FluxBox>& vector) const;
    
-   // Compute cylyndrical components of a Cartesian vector
+   // Compute cylindrical components of a Cartesian vector
    void convertCartesianToCylindrical(LevelData<FArrayBox>& vect_cyl,
                                       const LevelData<FArrayBox>& vect_cart) const;
    
    void convertCartesianToCylindrical(LevelData<FluxBox>& vect_cyl,
                                       const LevelData<FluxBox>& vect_cart) const;
+   
+   // Compute Cartesian components of a cylindrical vector
+   void convertCylindricalToCartesian(LevelData<FArrayBox>& vect_cart,
+                                      const LevelData<FArrayBox>& vect_cyl) const;
+
+   void convertCylindricalToCartesian(LevelData<FluxBox>& vect_cart,
+                                      const LevelData<FluxBox>& vect_cyl) const;
+
    
    void computeMappedPoloidalGradientWithGhosts( const LevelData<FArrayBox>& phi,
                                                  LevelData<FArrayBox>&       field,
@@ -476,6 +497,10 @@ public:
    const LevelData<FArrayBox>& getShearedInterpStencilOffsets() const {return m_sheared_interp_stencil_offsets;}
    void interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const;
    
+   void  plotToroidalSliceData(const string&                file_name,
+                               const LevelData<FArrayBox>&  data,
+                               const int                    toroidal_index,
+			       const Side::LoHiSide&        side) const;
 #endif
 
    Vector<Box> getBoundaryBoxes( const int block_number, const int dir, const Side::LoHiSide& side ) const
@@ -573,6 +598,8 @@ private:
    
    mutable LevelData<FluxBox> m_rad_coeff;
    mutable LevelData<FluxBox> m_rad_coeff_mapped;
+   mutable LevelData<FluxBox> m_custom_elliptic_coeff;
+   mutable LevelData<FluxBox> m_custom_elliptic_coeff_mapped;
     
    mutable LevelData<FArrayBox> m_cell_volume;
    mutable LevelData<FluxBox> m_face_areas;
@@ -622,6 +649,10 @@ private:
    LevelData<FluxBox> m_gradBFieldMag_fc;
    LevelData<FluxBox> m_curlBFieldDir_fc;
    LevelData<FluxBox> m_BFieldDirdotcurlBFieldDir_fc;
+   
+   mutable LevelData<FluxBox> m_fluxSurfaceNormDir;
+   mutable LevelData<FluxBox> m_BPoloidalDir_fc;
+
    
    mutable LevelData<FArrayBox> m_nodal_integrals;
    mutable LevelData<FluxBox> m_face_Binverse_integrals;

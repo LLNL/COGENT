@@ -41,8 +41,33 @@ function smooth_eqdsk(input_file, s)
   end
 
   % Read the flux
-  psi = fscanf(fd_in, '%g', [nw nh])';
+  psi_orig = fscanf(fd_in, '%g', [nw nh])';
 
+  % Read more data including safety factor,
+  % LCFS and Limiter boundary
+  % Seems that newer versions of g-file may have 
+  % different formal, so use with caution
+  read_extra_data = true
+  if read_extra_data == true 
+    % Read the safety factor
+    safety_factor = fscanf(fd_in, '%g', nw);
+
+    % Read the boundary (LCFS) and limiter points
+    n = fscanf(fd_in, '%d', 2);
+    nbdry = n(1);
+    nlim = n(2);
+    if nbdry>0
+        boundary = fscanf(fd_in, '%g', [2 nbdry])';
+        xb=boundary(:,1);
+        yb=boundary(:,2);
+    end
+    if nlim>0
+       limiter = fscanf(fd_in, '%g', [2 nlim])';
+       xlim=limiter(:,1);
+       ylim=limiter(:,2);
+    end
+  end
+  
   % Get the geometry data
   rdim = geom1(1);
   zdim = geom1(2);
@@ -56,28 +81,165 @@ function smooth_eqdsk(input_file, s)
   zmin = zmid - 0.5*zdim;
   zmax = zmid + 0.5*zdim;
 
+  % Create linear space
   r = linspace(rmin, rmax, nw);
   z = linspace(zmin, zmax, nh);
 
-  % Created extrapolated space
+  % Flip single-null geometry. 
+  % In order to turn the upper SN to lower SN
+  % configuration, we reflect psi w/r/t to z. 
+  % We also need to change its sign  
+  % to maintan proper direction of Bp 
+  % e.g., toward the Xpoint.  
+  use_reflected = false;
+  if use_reflected 
+    psi_lower_SN=zeros(nh,nw);
+    for jj = 1:nh
+        for ii = 1:nw
+          psi_lower_SN(jj,ii) = -psi_orig(nh+1-jj,ii);
+        end
+    end
+  else
+    psi_lower_SN = psi_orig;  
+  end  
+
+  % set temporary psi to lower SN flux function  
+  psi = psi_lower_SN;  
+
+  % Add external point sources (e.g., to suppress upper Xpoint)
+  use_external_sources = false;
+  if use_external_sources 
+    psi = psi_with_sources(psi_lower_SN,[rmin, rmax, zmin, zmax],[nw,nh]);
+  end
+
+  % Create flux function least-square fit 
+  % e.g., to have a smoother psi in the divertor leg region
+  use_fit = false;
+  if use_fit 
+    psi_fit = fitted_psi(psi,[rmin, rmax, zmin, zmax],[nw,nh]);
+    psi = psi_fit;
+  end  
+
+  
+  % Apply Garcia's smoothing algorithm 
+  if s >= 0.
+    [psi_smoothed psi_dct] = smoothn_mod(psi, s);
+  else
+    [psi_smoothed psi_dct] = smoothn_mod(psi);
+  end
+
+  % Write the smoothed flux
+  fprintf(fd_out, '%16.9e%16.9e%16.9e%16.9e%16.9e\n', psi_smoothed');
+
+  % Find the X point, given an initial guess (that might need to be adjusted)
+  Xpt = [0.75*rmin+0.25*rmax, 0.75*zmin+0.25*zmax];
+  Xpt = fminsearch(@(x) poloidal_Bmag(x, psi_dct', [rmin, rmax, zmin, zmax]), Xpt);
+  fprintf('The X point is at (R,Z) = (%f,%f)\n', Xpt(1), Xpt(2));
+
+  % Find the O point, given an initial guess (that might need to be adjusted)
+  Opt = [rmaxis, zmaxis];
+  Opt = fminsearch(@(x) poloidal_Bmag(x, psi_dct', [rmin, rmax, zmin, zmax]), Opt);
+  fprintf('The O point is at (R,Z) = (%f,%f)\n', Opt(1), Opt(2));
+
+  % Create normalized poloidal flux function
+  psi_smoothed_Xpt = dct_derivs(Xpt(1), Xpt(2), psi_dct', [rmin, rmax, zmin, zmax],0);
+  psi_smoothed_Opt = dct_derivs(Opt(1), Opt(2), psi_dct', [rmin, rmax, zmin, zmax],0);
+  psi_smoothed_norm = (psi_smoothed - psi_smoothed_Opt)/(psi_smoothed_Xpt - psi_smoothed_Opt);
+
+  % Write the dct coefficients
+  fprintf(fd_dct, '%16.8f%16.8f%16.8f%16.8f%8d%8d\n', rmin, rmax, zmin, zmax, nw, nh);
+  fprintf(fd_dct, '%16.8f%16.8f%16.8f%16.8f\n', rmaxis, zmaxis, Xpt(1), Xpt(2));
+  fprintf(fd_dct, '%20.13e %20.13e %20.13e %20.13e %20.13e\n', psi_dct');
+
+
+  % Make plots
+
+  % Set selected values of the normalized flux function
+  v = [1.15 1.1 1.05 1.0 0.9];
+
+  figure(1);
+  h1 = contour(r,z,psi_orig,80);
+  if read_extra_data == true
+    hold on
+    plot(xlim,ylim, '-k', 'LineWidth',2)
+    hold off
+  end 
+  cmin = min(psi_orig(:));
+  cmax = max(psi_orig(:));
+  caxis([cmin cmax]);
+  colorbar
+  title('Original flux function')
+  axis image;
+
+  figure(2);
+  h2 = contour(r,z,psi_smoothed_norm,80);
+  hold on
+  contour(r,z,psi_smoothed_norm,v,'-k','LineWidth',1);
+  hold off
+  cmin = min(psi_smoothed_norm(:));
+  cmax = max(psi_smoothed_norm(:));
+  caxis([cmin cmax]);
+  colorbar
+  title('Normalized smoothed flux function')
+  axis image;
+ 
+  figure(3);
+  func = (psi_smoothed - psi_lower_SN)/psi_smoothed_Xpt;
+  h3 = pcolor(r,z,func);
+  h3.FaceColor = 'interp';
+  set(h3, 'EdgeColor', 'none');
+  hold on
+  contour(r,z,psi_smoothed_norm,v,'-k','LineWidth',1,'ShowText','on')
+  hold off
+  cmin=-0.1;
+  cmax=0.1;
+  caxis([cmin cmax]);
+  colormap('turbo');
+  colorbar
+  title('Smoothing error estimate (psiSmoothed - psiLowerSN)/psiSmoothedXpt')
+  axis image;
+
+
+  % Read and write the rest of the file
+  tline = fgets(fd_in);
+  while ischar(tline)
+    fwrite(fd_out, tline);
+    tline = fgets(fd_in);
+  end      
+
+  % Close the files
+  fclose(fd_in);
+  fclose(fd_out);
+  fclose(fd_dct);
+
+end
+
+function psi_fit = fitted_psi(psi, limits, Npts)
+
+  % Create RBF interpolation by using point sources;
+  % the idea here is that we can truncate the point source region
+  % (e.g., zSmin) above the divertor legs, and then rely on smooth
+  % (extrapolated) psi in the divertor leg region. We can do this
+  % in case we need longer divertor legs that are supported 
+  % by the original flux function.
   % NB: meaningful comparission between fitted 
   % and the GEQDSK data as well as modified GEQDSK file
   % is only possibe if extrapolated space
   % is identical to the original space 
-  rminExt = rmin;
-  rmaxExt = rmax; 
-  zminExt = zmin;
-  zmaxExt = zmax;
-  nwExt = nw;
-  nhExt = nh;
-  rExt = linspace(rminExt, rmaxExt, nwExt);
-  zExt = linspace(zminExt, zmaxExt, nhExt);
+  rmin = limits(1);
+  rmax = limits(2); 
+  zmin = limits(3);
+  zmax = limits(4);
+  nw = Npts(1);
+  nh = Npts(2);
+  r = linspace(rmin, rmax, nw);
+  z = linspace(zmin, zmax, nh);
 
   % Set locations of point sources
-  zSmin = zmin;
-  zSmax = zmax;
-  rSmin = rmin;
-  rSmax = rmax;
+  rSmin = limits(1);
+  rSmax = limits(2);
+  zSmin = limits(3);
+  zSmax = limits(4);
   r0 = 0.5; %RBF is In/(r+r0)
   nSw = 20; %number of RBF's in r-direction
   nSh = 20; %number of RBF's in z-direction
@@ -123,94 +285,48 @@ function smooth_eqdsk(input_file, s)
   I = linsolve(C,B');
 
   %Define flux function fix on the extrapolated space
-  psi_fit=zeros(nhExt,nwExt);
+  psi_fit=zeros(nh,nw);
   for nn = 1:nS
-   for jj = 1:nhExt
-    for ii = 1:nwExt
-      psi_fit(jj,ii) = psi_fit(jj,ii) + I(nn)/(sqrt((rExt(ii)-rS(nn))^2 + (zExt(jj)-zS(nn))^2) + r0);
+   for jj = 1:nh
+    for ii = 1:nw
+      psi_fit(jj,ii) = psi_fit(jj,ii) + I(nn)/(sqrt((r(ii)-rS(nn))^2 + (z(jj)-zS(nn))^2) + r0);
     end
    end
   end
 
-%{
-  %Add extra point sources if needed
-   nSextr=3;
-   Iextr(1)=-0.0007; zSextr(1)=0.4; rSextr(1)=0.2; r0extr(1)=0.1;
-   Iextr(2)=0.0004; zSextr(2)=-0.6; rSextr(2)=-0.05; r0extr(2)=0.1;
-   Iextr(3)=-0.0008; zSextr(3)=-0.15; rSextr(3)=-0.05; r0extr(3)=0.1;
+end
+
+function psiWithSources = psi_with_sources(psi_lower_SN, limits, Npts)
+
+   %Add extra point sources if needed
+   %Format:
+   % nSextr = n;
+   % Iextr(1)=xxx; zSextr(1)=xxx; rSextr(1)=xxx; r0extr(1)=xxx;
+   % Iextr(2)=xxx; zSextr(2)=xxx; rSextr(2)=xxx; r0extr(2)=xxx;
+   % ...
+   % Iextr(n)=xxx; zSextr(n)=xxx; rSextr(n)=xxx; r0extr(n)=xxx;
+
+   nSextr=1;
+   Iextr(1)=-0.005; zSextr(1)=1.5; rSextr(1)=1.2; r0extr(1)=0.1;
+
+   psiWithSources = psi_lower_SN;
+
+   rmin = limits(1);
+   rmax = limits(2); 
+   zmin = limits(3);
+   zmax = limits(4);
+   nw = Npts(1);
+   nh = Npts(2);
+   r = linspace(rmin, rmax, nw);
+   z = linspace(zmin, zmax, nh);
 
    for nn = 1:nSextr
-    for jj = 1:nhExt
-     for ii = 1:nwExt
-      psi_fit(jj,ii) = psi_fit(jj,ii) + Iextr(nn)/(sqrt((rExt(ii)-rSextr(nn))^2 + (zExt(jj)-zSextr(nn))^2) + r0extr(nn));
+    for jj = 1:nh
+     for ii = 1:nw
+      psiWithSources(jj,ii) = psiWithSources(jj,ii) + Iextr(nn)/(sqrt((r(ii)-rSextr(nn))^2 + (z(jj)-zSextr(nn))^2) + r0extr(nn));
      end
     end
    end
-%} 
-
-  % Smooth the flux
-  if s >= 0.
-    [psi_smoothed psi_dct] = smoothn_mod(psi_fit, s);
-  else
-    [psi_smoothed psi_dct] = smoothn_mod(psi_fit);
-  end
-
-  % Write the smoothed flux
-  fprintf(fd_out, '%16.9e%16.9e%16.9e%16.9e%16.9e\n', psi_smoothed');
-
-  % Find the X point, given an initial guess (that might need to be adjusted)
-  xpt = [0.75*rmin+0.25*rmax, 0.75*zmin+0.25*zmax];
-  xpt = fminsearch(@(x) poloidal_Bmag(x, psi_dct', [rminExt, rmaxExt, zminExt, zmaxExt]), xpt);
-  fprintf('The X point is at (R,Z) = (%f,%f)\n', xpt(1), xpt(2));
-
-  % Write the dct coefficients
-  fprintf(fd_dct, '%16.8f%16.8f%16.8f%16.8f%8d%8d\n', rminExt, rmaxExt, zminExt, zmaxExt, nwExt, nhExt);
-  fprintf(fd_dct, '%16.8f%16.8f%16.8f%16.8f\n', rmaxis, zmaxis, xpt(1), xpt(2));
-  fprintf(fd_dct, '%20.13e %20.13e %20.13e %20.13e %20.13e\n', psi_dct');
-
-
-  % Make plots
-  cmin = min(psi(:));
-  cmax = max(psi(:));
-
-  figure(1);
-  h1 = contour(r,z,psi,80);
-  caxis([cmin cmax]);
-  axis image;
-
-  figure(2);
-  h2 = contour(rExt,zExt,psi_fit,80);
-  caxis([cmin cmax]);
-  axis image;
-
-  cmin = min(psi_smoothed(:));
-  cmax = max(psi_smoothed(:));
-
-  figure(3);
-  h4 = contour(rExt,zExt,psi_smoothed,80);
-  caxis([cmin cmax]);
-  axis image;
-  
-  figure(4);
-  h3 = surf(r,z,(psi_fit - psi)/cmax);
-  set(h3, 'EdgeColor', 'none');
-
-  figure(5);
-  h5 = surf(r,z,(psi_smoothed - psi)/cmax);
-  set(h5, 'EdgeColor', 'none');
-
-
-  % Read and write the rest of the file
-  tline = fgets(fd_in);
-  while ischar(tline)
-    fwrite(fd_out, tline);
-    tline = fgets(fd_in);
-  end      
-
-  % Close the files
-  fclose(fd_in);
-  fclose(fd_out);
-  fclose(fd_dct);
 
 end
 
@@ -271,3 +387,12 @@ function sum = dct_derivs(u, v, f, limits, deriv)
 
 end
 
+%{
+  // Code to compute BZ, if needed for debugging  
+  BZ=zeros(nh,nw);
+  for jj = 2:nh-1
+    for ii = 2:nw-1
+      BZ(jj,ii) = (psi(jj,ii+1)-psi(jj,ii-1))/(r(ii+1)-r(ii-1))/r(ii);
+    end
+  end
+%}

@@ -202,7 +202,7 @@ NewGKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>&  a_i
 
    if ( m_bc_core == NULL ) {
       // Create an SNCoreEllipticOpBC from the passed in SingleNullEllipticOpBC
-      m_bc_core = new SNCoreEllipticOpBC( sn_bc,  EllipticOpBC::NEUMANN, m_core_coord_sys->numBlocks() );
+      m_bc_core = new SNCoreEllipticOpBC( sn_bc,  EllipticOpBC::MAPPED_NEUMANN, m_core_coord_sys->numBlocks() );
       m_core_geometry->defineEllipticOpBC(*m_bc_core);
    }
 
@@ -257,7 +257,7 @@ NewGKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>&  a_i
 
    if ( m_bc_core == NULL ) {
       // Create an SNCoreEllipticOpBC from the passed in SingleNullEllipticOpBC
-      m_bc_core = new SNCoreEllipticOpBC( sn_bc,  EllipticOpBC::NEUMANN, m_core_coord_sys->numBlocks() );
+      m_bc_core = new SNCoreEllipticOpBC( sn_bc,  EllipticOpBC::MAPPED_NEUMANN, m_core_coord_sys->numBlocks() );
       m_core_geometry->defineEllipticOpBC(*m_bc_core);
    }
 

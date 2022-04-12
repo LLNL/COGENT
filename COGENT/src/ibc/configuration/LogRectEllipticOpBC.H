@@ -15,10 +15,10 @@ public:
 
    LogRectEllipticOpBC(const int& nblocks);
 
-   LogRectEllipticOpBC( const std::string& name,
-                        ParmParse& pp,
-                        const int& nblocks,
-                        const int& verbosity );
+   LogRectEllipticOpBC( const std::string&  name,
+                        ParmParse&          pp,
+                        const bool*         is_periodic,
+                        const int&          verbosity );
 
    virtual ~LogRectEllipticOpBC() {};
 
@@ -72,7 +72,8 @@ private:
 
    void setNames();
 
-   inline void parseParameters( ParmParse& a_pp );
+   inline void parseParameters( ParmParse&   pp,
+                                const bool*  is_periodic );
 
    std::string m_name;
    int m_verbosity;

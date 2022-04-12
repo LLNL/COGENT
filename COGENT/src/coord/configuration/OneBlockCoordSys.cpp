@@ -37,7 +37,7 @@ OneBlockCoordSys::OneBlockCoordSys( ParmParse&      a_parm_parse,
    
    a_parm_parse.get("theta_min", m_thetamin);
    a_parm_parse.get("theta_max", m_thetamax);
-   CH_assert(m_thetamin>=0.0 && m_thetamax<=3.141592653589793); 
+   //   CH_assert(m_thetamin>=0.0 && m_thetamax<=3.141592653589793); 
 
 #if CFG_DIM==3
    a_parm_parse.get("phi_min", m_phimin);

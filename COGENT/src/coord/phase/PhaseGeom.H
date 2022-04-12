@@ -12,6 +12,7 @@
 #include "SpaceUtils.H.multidim"
 #include "EdgeDataBox.H"
 #include "CoDimCopyManager.H"
+#include "PhaseCoDim2Stencil.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
@@ -325,6 +326,11 @@ public:
                                                        const LevelData<FluxBox>&   F ) const;
 
    void fillTransverseGhosts( LevelData<FluxBox>& a_data, const bool do_block_exchange ) const;
+
+   void constructCoDim2BoundaryStencils( const bool                             fourth_order,
+                                         Vector< Vector<PhaseCoDim2Stencil> >&  codim2_stencils ) const;
+
+   void fillCoDim2BoundaryGhosts( LevelData<FArrayBox>&  data ) const;
 
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
@@ -827,6 +833,7 @@ private:
    bool m_speciesDefined;
    RealVect m_freestream_components;
    int m_use_spatial_vel_norm;
+   Vector<double> m_miller_vel_parms;
 
    LevelData<FArrayBox>*  m_vel_norm;
    LevelData<FluxBox>*  m_vel_norm_face;
@@ -870,6 +877,8 @@ private:
 
    mutable GyroaverageOperator const *m_gyroavg_op;
    bool m_is_gyrokinetic;
+
+   Vector< Vector<PhaseCoDim2Stencil> > m_codim2_stencils;
 
    void getExtrablockExchangeLayout( const int                 dir,
                                      const int                 codim,

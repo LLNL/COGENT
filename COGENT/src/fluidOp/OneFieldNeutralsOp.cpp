@@ -437,7 +437,8 @@ void OneFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
                                       const int                        a_step,
                                       const int                        a_stage,
                                       const double                     a_shift,
-                                      const int                        a_component)
+                                      const int                        a_component,
+                                      const std::string& )
 {
    CH_TIME("OneFieldNeutralsOp::updatePCImEx");
    
@@ -470,6 +471,7 @@ void OneFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
 void OneFieldNeutralsOp::solvePCImEx(FluidSpeciesPtrVect&              a_fluid_species_solution,
                                      const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                                      const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                                     const std::string&,
                                      const int                         a_component )
 {
    CH_TIME("OneFieldNeutralsOp::solvePCImEx");
@@ -627,8 +629,8 @@ void OneFieldNeutralsOp::computeDiffusionCoefficients(LevelData<FluxBox>& a_D_te
       m_geometry.fillInternalGhosts( D_cell );
       fourthOrderCellToFaceCenters(D_face, D_cell);
       
-      m_geometry.getEllipticOpRadCoeff(D_tmp);
-      m_geometry.getEllipticOpRadCoeffMapped(D_tmp_mapped);
+      m_geometry.getCustomEllipticOpCoeff(D_tmp, "radial");
+      m_geometry.getCustomEllipticOpCoeffMapped(D_tmp_mapped, "radial");
       
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          for (int dir = 0; dir < SpaceDim; dir++) {

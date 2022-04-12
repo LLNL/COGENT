@@ -48,7 +48,7 @@ public:
 
    virtual IntVect getDecomposition(int block) const;
 
-   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return *m_divergence_cleaning_bc;}
+   virtual EllipticOpBC* getDivergenceCleaningBC() {return m_divergence_cleaning_bc;}
 
    virtual void defineEllipticOpBC( EllipticOpBC& a_bc ) const;
 

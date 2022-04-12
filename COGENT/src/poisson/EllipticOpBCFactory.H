@@ -60,7 +60,9 @@ EllipticOpBC* EllipticOpBCFactory::create( const std::string&  a_name,
    int nblocks = a_coord_sys.numBlocks();
    
    if (a_coord_sys.type() == "LogicallyRectangular" ) {
-      result = new LogRectEllipticOpBC( a_name, a_pp, nblocks, a_verbosity );
+      const MagBlockCoordSys& block0_coord_sys = *(a_coord_sys.getCoordSys(0));
+      const bool* is_periodic = block0_coord_sys.domain().isPeriodicVect();
+      result = new LogRectEllipticOpBC( a_name, a_pp, is_periodic, a_verbosity );
    }
    else if (a_coord_sys.type() == "SingleNull" ) {
       int poloidal_blocks_per_sector = ((const SingleNullCoordSys&)a_coord_sys).numPoloidalBlocks();

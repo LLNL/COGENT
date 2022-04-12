@@ -53,13 +53,12 @@ Poisson::~Poisson()
 
 
 void
-Poisson::setOperatorCoefficients( const EllipticOpBC& a_bc )
+Poisson::setOperatorCoefficients( EllipticOpBC&  a_bc )
 {
-   setBc(a_bc);
-
    computeCoefficients(m_mapped_coefficients);
 
-   computeBcDivergence( m_bc_divergence );
+   LevelData<FluxBox> dummy;  // FIX
+   updateBoundaryData(dummy, a_bc);
 
    m_preconditioner->constructMatrix(m_volume_reciprocal, m_mapped_coefficients, a_bc);
 }

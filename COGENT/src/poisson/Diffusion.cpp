@@ -9,8 +9,7 @@ const char* Diffusion::pp_name = {"diffusion"};
 
 Diffusion::Diffusion( const ParmParse&  a_pp,
                       const MagGeom&    a_geom )
-   : EllipticOp(a_pp, a_geom),
-     m_coefficients_defined(false)
+   : EllipticOp(a_pp, a_geom)
 {
    // We give the coefficients one ghost cell layer so that the
    // second-order centered difference formula can be used to compute
@@ -62,21 +61,9 @@ Diffusion::~Diffusion()
 
 
 void
-Diffusion::updateBoundaries( const EllipticOpBC&  a_bc )
-{
-   CH_TIME("Diffusion::updateBoundaries");
-   CH_assert(m_coefficients_defined);
-   
-   setBc(a_bc);
-   
-   computeBcDivergence( m_bc_divergence );
-}
-
-
-void
-Diffusion::setOperatorCoefficients( const LevelData<FluxBox>&           a_unmapped_coefficients,
-                                    const LevelData<FluxBox>&           a_mapped_coefficients,
-                                    const EllipticOpBC&                 a_bc )
+Diffusion::setOperatorCoefficients( const LevelData<FluxBox>&  a_unmapped_coefficients,
+                                    const LevelData<FluxBox>&  a_mapped_coefficients,
+                                    EllipticOpBC&              a_bc )
 {
    CH_TIME("Diffusion::setOperatorCoefficients");
    
@@ -91,6 +78,8 @@ Diffusion::setOperatorCoefficients( const LevelData<FluxBox>&           a_unmapp
       m_mapped_coefficients[dit].copy(a_mapped_coefficients[dit]);
    }
    
+   modifyForNeumannAndNaturalBCs(a_bc, m_unmapped_coefficients, m_mapped_coefficients);
+
    // The mapped coefficients must now be converted to face averages, which
    // requires a layer of transverse ghost faces that we don't have at the
    // physical boundary, so we need to extrapolate them. DO WE NEED THIS?
@@ -99,10 +88,8 @@ Diffusion::setOperatorCoefficients( const LevelData<FluxBox>&           a_unmapp
 
    // Convert the mapped coefficients from face-centered to face-averaged
    if (!m_second_order) fourthOrderAverage(m_mapped_coefficients);
-   
-   m_coefficients_defined = true;
 
-   updateBoundaries(a_bc);
+   updateBoundaryData(m_unmapped_coefficients, a_bc);
 }
 
 
@@ -117,7 +104,6 @@ Diffusion::updateImExPreconditioner( const LevelData<FArrayBox>&  a_mshift,
    }
 
    m_imex_preconditioner->constructMatrix(m_volume_reciprocal, m_mapped_coefficients, beta, a_bc);
-
 }
 
 
@@ -157,7 +143,6 @@ Diffusion::multiplyCoefficients( LevelData<FluxBox>& a_data,
                                  const bool          a_mapped_coeff ) const
 {
    CH_assert(a_data.ghostVect() <= m_unmapped_coefficients.ghostVect());
-   CH_assert(m_coefficients_defined);
 
    for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
       FluxBox& this_data = a_data[dit];

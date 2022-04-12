@@ -99,6 +99,9 @@ void EField::computeEField( const PS::GKState&                a_state,
                computeTotalChargeDensity( total_charge_density, a_kinetic_species, a_fluid_species );
                
                if (!m_fixed_krho2) {
+                  if (m_poisson->isBoussinesq()) {
+                     applyBoussinesqCorrections(total_charge_density,ion_mass_density);
+                  }
                   m_poisson->solveWithBCs( a_phi, total_charge_density );
                }
                else {
@@ -289,7 +292,7 @@ EField::clone( const bool a_copy_data ) const
 
 void EField::computeQuasiNeutralElectronDensity( LevelData<FArrayBox>&        a_quasineutral_density,
                                                  LevelData<FArrayBox>&        a_potential,
-                                                 const EllipticOpBC&          a_bc, 
+                                                 EllipticOpBC&                a_bc, 
                                                  const LevelData<FArrayBox>&  a_ion_density) const
 {
    a_ion_density.copyTo( a_quasineutral_density );
@@ -510,6 +513,23 @@ EField::applyHarmonicFiltering(LevelData<FArrayBox>& a_phi,
          double phase = 2.0 * pi * (iv[a_dir]+0.5)/Npts;
          a_phi[dit](iv,0) = A*cos(phase)+B*sin(phase);
       }
+   }
+}
+
+void
+EField::applyBoussinesqCorrections(LevelData<FArrayBox>& a_total_charge_density,
+                                   const LevelData<FArrayBox>& a_ion_mass_density) const
+{
+   
+   const MagGeom& mag_geom = configurationSpaceGeometry();
+   const LevelData<FArrayBox>& BfieldMag = mag_geom.getCCBFieldMag();
+   
+   const DisjointBoxLayout& grids = a_ion_mass_density.getBoxes();
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      a_total_charge_density[dit].divide(a_ion_mass_density[dit]);
+      a_total_charge_density[dit].mult(BfieldMag[dit]);
+      a_total_charge_density[dit].mult(BfieldMag[dit]);
    }
 }
 

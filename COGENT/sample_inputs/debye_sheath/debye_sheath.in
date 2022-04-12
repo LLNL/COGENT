@@ -150,8 +150,6 @@ BC.electron.vpar_upper.function = "maxwellian_electron_phase_func"
 BC.electron.mu_lower.function = "maxwellian_electron_phase_func"
 BC.electron.mu_upper.function = "maxwellian_electron_phase_func"
 
-BC.potential.radial_lower.type = "dirichlet"  #ignored for the periodic direction 
-BC.potential.radial_upper.type = "dirichlet"  #ignored for the periodic	direction
 BC.potential.poloidal_lower.type = "dirichlet"
 BC.potential.poloidal_upper.type = "dirichlet"
 

@@ -434,7 +434,7 @@ void GKOps::preTimeStep (const int       a_step,
    CH_TIMERS("GKOps::preTimeStep()");
    CH_TIMER("compute_dt",t_compute_dt);
 
-   if(!m_zero_efield) {
+   if(!m_no_efield) {
       updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time);
       updatePhysicalSpeciesVector( a_state_comp.dataKinetic(), a_time, false);
       setElectricField( a_state_comp, a_step, m_phi, *m_E_field );
@@ -479,6 +479,7 @@ void GKOps::preTimeStep (const int       a_step,
       m_time_scale_transport = m_transport->computeTimeScale( soln_comp );
    }
    if (m_neutrals_model_on) {
+      m_neutrals->preTimeStep( soln_comp, a_time, soln_phys );
       m_dt_neutrals_expl = m_neutrals->computeDtExplicitTI( soln_phys );
       m_dt_neutrals_imex = m_neutrals->computeDtImExTI( soln_phys );
       m_time_scale_neutrals = m_neutrals->computeTimeScale( soln_phys );
@@ -546,7 +547,7 @@ void GKOps::postTimeStage( const int   a_step,
    
    updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time ); 
    updatePhysicalSpeciesVector( a_state_comp.dataKinetic(), a_time, false ); 
-   if (a_stage && !m_zero_efield && !m_skip_efield_stage_update ) {
+   if (a_stage && !m_no_efield && !m_skip_efield_stage_update ) {
       setElectricField( a_state_comp, a_step, m_phi, *m_E_field );
    }
    fillPhysicalKineticSpeciesGhostCells(a_time);
@@ -856,7 +857,7 @@ void GKOps::implicitOpImEx( GKRHSData&      a_rhs,
 
    CFG::LevelData<CFG::FArrayBox> phi( m_phase_geometry->magGeom().gridsFull(), 1, 4*CFG::IntVect::Unit );
 
-   if(!m_zero_efield) {
+   if(!m_no_efield) {
       // The last argument is for whether E_field will be injected or not;
       // If m_step_const_kin_coeff_fluidop = true, it means that kinietc distribution is not updated;
       // so we do not need to inject E_field
@@ -1067,14 +1068,16 @@ void GKOps::solveSolutionPC( GKRHSData&     a_rhs,
                                 a_idx );
 }
 
-void GKOps::solveFluidOpPCImEx( GKRHSData&     a_rhs,
-                                const GKState& a_state,
-                                int            a_idx )
+void GKOps::solveFluidOpPCImEx( GKRHSData&          a_rhs,
+                                const GKState&      a_state,
+                                const std::string&  a_name,
+                                int                 a_idx )
 {
    CH_TIME("GKOps::solvePCImEx");
    m_fluidOp->solvePCImEx(  a_rhs.dataFluid(), 
                             a_state.dataKinetic(), 
                             a_state.dataFluid(), 
+                            a_name,
                             a_idx );
 }
 
@@ -1508,7 +1511,7 @@ void GKOps::convertToPhysical( const GKState& a_soln_mapped, GKState& a_soln_phy
 void GKOps::setParameters( const GKSystemParameters& a_gkparams )
 {
   m_fixed_efield = a_gkparams.fixedEField();
-  m_zero_efield = a_gkparams.zeroEField();
+  m_no_efield = a_gkparams.noEField();
 
   m_transport_imex_implicit = a_gkparams.imexTransportImplicit();
   m_neutrals_imex_implicit = a_gkparams.imexNeutralsImplicit();
@@ -2211,7 +2214,7 @@ inline
 void GKOps::computeQuasiNeutralElectronDensity(
    CFG::LevelData<CFG::FArrayBox>&       a_quasineutral_density,
    CFG::LevelData<CFG::FArrayBox>&       a_potential,
-   const CFG::EllipticOpBC&              a_bc, 
+   CFG::EllipticOpBC&                    a_bc, 
    const CFG::LevelData<CFG::FArrayBox>& a_ion_density) const
 {
    m_E_field->computeQuasiNeutralElectronDensity( a_quasineutral_density,

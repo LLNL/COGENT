@@ -102,6 +102,7 @@ protected:
    FluxSurface m_flux_surface;
 
    LevelData<FArrayBox> m_A_radial;
+   LevelData<FArrayBox> m_rhs_from_bc;
 
    FArrayBox m_A_stencil_values;
 

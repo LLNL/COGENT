@@ -28,14 +28,7 @@ MBSolverUtil::computeMappedCoefficients( const LevelData<FluxBox>&  a_unmapped_c
                                          LevelData<FluxBox>&        a_mapped_coefficients ) const
 {
    int ncomp = a_unmapped_coefficients.nComp();
-
-   IntVect ghosts;
-   if (m_discretization_order == 4) {
-      ghosts = IntVect::Unit;
-   }
-   else {
-      ghosts = IntVect::Zero;
-   }
+   IntVect ghosts = a_unmapped_coefficients.ghostVect();
 
    const DisjointBoxLayout& grids = m_geometry.grids();
    LevelData<FluxBox> N(grids, SpaceDim*SpaceDim, ghosts);

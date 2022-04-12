@@ -56,6 +56,8 @@ public:
 
       if (coord_sys_ptr && ((MagGeom*)a_geomPtr)->extrablockExchange() ) {
 
+         m_geomPtr = (MultiBlockLevelGeom*)a_geomPtr;
+
          const LayoutData< IntVectSet >& ghostCells_ue = coord_sys_ptr->getGhostCellsUe();
 
          m_ghostCells.define(ghostCells_ue.boxLayout());

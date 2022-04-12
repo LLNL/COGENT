@@ -44,7 +44,7 @@ public:
 
    virtual IntVect getDecomposition(int block) const {return m_decomposition;}
 
-   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return *m_divergence_cleaning_bc;}
+   virtual EllipticOpBC* getDivergenceCleaningBC() {return m_divergence_cleaning_bc;}
 
    bool isPeriodic( const int dir ) const;
   

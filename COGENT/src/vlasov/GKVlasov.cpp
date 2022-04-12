@@ -31,7 +31,7 @@ using std::max;
 
 const char* GKVlasov::pp_name = {"gkvlasov"};
 
-Real GKVlasov::s_stability_bound[NUM_FLUX] = {2.06,2.7852,1.7453,1.7320,1.7320,1.7453};
+Real GKVlasov::s_stability_bound[NUM_FLUX] = {2.06,2.8,2.7852,1.7453,1.7320,1.7320,1.7453};
 
 Real
 MaxNorm( const LevelData<FArrayBox>& a )
@@ -128,7 +128,10 @@ GKVlasov::GKVlasov( ParmParse&                      a_pp,
    if (a_pp.contains("face_avg_type")) {
       std::string dummy;
       a_pp.get("face_avg_type", dummy);
-      if (dummy.compare("uw1")==0) {
+      if (dummy.compare("c2")==0) {
+         m_face_avg_type = C2;
+      }
+      else if (dummy.compare("uw1")==0) {
          m_face_avg_type = UW1;
       }
       else if (dummy.compare("uw3")==0) {

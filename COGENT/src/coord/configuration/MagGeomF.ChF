@@ -251,6 +251,89 @@ c     local variables
       return
       end
 
+
+      subroutine convert_cylindrical_to_cartesian(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[vect_cyl],
+     &     CHF_CONST_FRA[coords],
+     &     CHF_FRA[vect_cart]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k] 
+      double precision x, y, rxy
+
+      CHF_MULTIDO[box;i;j;k]
+
+        x = coords(CHF_IX[i;j;k],0)
+        y = coords(CHF_IX[i;j;k],1)
+        rxy = sqrt(x*x + y*y)
+        
+        vect_cart(CHF_IX[i;j;k],0) = vect_cyl(CHF_IX[i;j;k],0) * x/rxy
+     &                             - vect_cyl(CHF_IX[i;j;k],1) * y/rxy
+
+        vect_cart(CHF_IX[i;j;k],1) = vect_cyl(CHF_IX[i;j;k],0) * y/rxy
+     &                             + vect_cyl(CHF_IX[i;j;k],1) * x/rxy
+
+        vect_cart(CHF_IX[i;j;k],2) = vect_cyl(CHF_IX[i;j;k],2)
+
+      
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine normalize_vector(
+     &     CHF_BOX[box],
+     &     CHF_FRA[vector]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k], n 
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k]
+
+        fac = zero
+
+        do n = 0, CHF_NCOMP[vector]-1
+         fac = fac + vector(CHF_IX[i;j;k],n)**2 
+        enddo
+
+        do n = 0, CHF_NCOMP[vector]-1
+          vector(CHF_IX[i;j;k],n) = vector(CHF_IX[i;j;k],n) / dsqrt(fac) 
+        enddo
+      
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine rotate_clockwise(
+     &     CHF_BOX[box],
+     &     CHF_FRA[vector]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k] 
+      double precision vect_R, vect_Z 
+     
+      CHF_MULTIDO[box;i;j;k]
+
+        vect_R = vector(CHF_IX[i;j;k],0)
+        vect_Z = vector(CHF_IX[i;j;k],2)
+
+        vector(CHF_IX[i;j;k],0) = vect_Z
+        vector(CHF_IX[i;j;k],2) = -vect_R 
+      
+      CHF_ENDDO
+
+      return
+      end
+
+
       subroutine compute_face_Binverse_integrals(
      &     CHF_BOX[box],
      &     CHF_CONST_INT[dir],
@@ -328,6 +411,43 @@ c     local variables
          CHF_ENDDO
 
       enddo
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine simple_curl_cc(
+     &     CHF_BOX[thisbox],
+     &     CHF_CONST_INT[dir_j],
+     &     CHF_CONST_INT[dir_k],
+     &     CHF_CONST_REAL[dX_j],
+     &     CHF_CONST_REAL[dX_k],
+     &     CHF_CONST_FRA1[F_j],
+     &     CHF_CONST_FRA1[F_k],
+     &     CHF_FRA1[curlF_i])
+
+c     local variables
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii_j;jj_j;kk_j], CHF_DDECL[ii_k;jj_k;kk_k]
+      double precision djFk, dkFj
+
+      CHF_DTERM[
+      ii_j = CHF_ID(0,dir_j);
+      jj_j = CHF_ID(1,dir_j);
+      kk_j = CHF_ID(2,dir_j)]
+
+      CHF_DTERM[
+      ii_k = CHF_ID(0,dir_k);
+      jj_k = CHF_ID(1,dir_k);
+      kk_k = CHF_ID(2,dir_k)]
+
+      CHF_MULTIDO[thisbox;i;j;k]
+
+         djFk = (F_k(CHF_IX[i+ii_j;j+jj_j;k+kk_j]) - F_k(CHF_IX[i-ii_j;j-jj_j;k-kk_j]))/dX_j/two
+         dkFj = (F_j(CHF_IX[i+ii_k;j+jj_k;k+kk_k]) - F_j(CHF_IX[i-ii_k;j-jj_k;k-kk_k]))/dX_k/two
+         curlF_i(CHF_IX[i;j;k]) = djFk - dkFj
+
+      CHF_ENDDO
 
       return
       end
@@ -577,6 +697,66 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
             F(CHF_IX[i;j;k],0) = Fnew0
             F(CHF_IX[i;j;k],1) = Fnew1
+
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine ntflux_norm(
+     &     CHF_BOX[box],
+     &     CHF_INT[dir],
+     &     CHF_CONST_FRA[dxidX],
+     &     CHF_CONST_FRA[F],
+     &     CHF_FRA1[NTF])
+      
+      integer CHF_DDECL[i;j;k] 
+      double precision F0, F1, F2
+      double precision a00, a01, a02, a10, a11, a12, a20, a21, a22
+
+      CHF_MULTIDO[box;i;j;k]
+      
+         if (CH_SPACEDIM==3) then
+            
+            F0 = F(CHF_IX[i;j;k],0)
+            F1 = F(CHF_IX[i;j;k],1)
+            F2 = F(CHF_IX[i;j;k],2)
+  
+            if (dir==0) then
+               a00 = dxidX(CHF_IX[i;j;k],0)
+               a10 = dxidX(CHF_IX[i;j;k],3)
+               a20 = dxidX(CHF_IX[i;j;k],6)
+               NTF(CHF_IX[i;j;k]) = a00*F0 + a10*F1 + a20*F2
+            else if(dir==1) then
+               a01 = dxidX(CHF_IX[i;j;k],1)
+               a11 = dxidX(CHF_IX[i;j;k],4)
+               a21 = dxidX(CHF_IX[i;j;k],7)
+               NTF(CHF_IX[i;j;k]) = a01*F0 + a11*F1 + a21*F2
+            else
+               a02 = dxidX(CHF_IX[i;j;k],2)
+               a12 = dxidX(CHF_IX[i;j;k],5)
+               a22 = dxidX(CHF_IX[i;j;k],8)
+               NTF(CHF_IX[i;j;k]) = a02*F0 + a12*F1 + a22*F2
+            endif
+
+         else
+
+            F0 = F(CHF_IX[i;j;k],0)
+            F1 = F(CHF_IX[i;j;k],1)
+            
+            if (dir==0) then
+               a00 = dxidX(CHF_IX[i;j;k],0)
+               a10 = dxidX(CHF_IX[i;j;k],2)
+               NTF(CHF_IX[i;j;k]) = a00*F0 + a10*F1
+            else
+               a01 = dxidX(CHF_IX[i;j;k],1)
+               a11 = dxidX(CHF_IX[i;j;k],3)
+               NTF(CHF_IX[i;j;k]) = a01*F0 + a11*F1
+            endif
 
          endif
 
@@ -1411,6 +1591,42 @@ c        Premultiply by the NTranspose matrix
 
       return
       end
+
+
+      subroutine compute_custom_elliptic_op_coeff(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[unit_vect],
+     &     CHF_FRA[coef],
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      CHF_MULTIDO[box;i;j;k]
+
+#if CH_SPACEDIM==3
+         coef(CHF_IX[i;j;k],0) = unit_vect(CHF_IX[i;j;k],0) * unit_vect(CHF_IX[i;j;k],0)
+         coef(CHF_IX[i;j;k],1) = unit_vect(CHF_IX[i;j;k],0) * unit_vect(CHF_IX[i;j;k],1)
+         coef(CHF_IX[i;j;k],2) = unit_vect(CHF_IX[i;j;k],0) * unit_vect(CHF_IX[i;j;k],2)
+         coef(CHF_IX[i;j;k],3) = unit_vect(CHF_IX[i;j;k],1) * unit_vect(CHF_IX[i;j;k],0)
+         coef(CHF_IX[i;j;k],4) = unit_vect(CHF_IX[i;j;k],1) * unit_vect(CHF_IX[i;j;k],1)
+         coef(CHF_IX[i;j;k],5) = unit_vect(CHF_IX[i;j;k],1) * unit_vect(CHF_IX[i;j;k],2)
+         coef(CHF_IX[i;j;k],6) = unit_vect(CHF_IX[i;j;k],2) * unit_vect(CHF_IX[i;j;k],0)
+         coef(CHF_IX[i;j;k],7) = unit_vect(CHF_IX[i;j;k],2) * unit_vect(CHF_IX[i;j;k],1)
+         coef(CHF_IX[i;j;k],8) = unit_vect(CHF_IX[i;j;k],2) * unit_vect(CHF_IX[i;j;k],2)
+#else
+         coef(CHF_IX[i;j;k],0) =   unit_vect(CHF_IX[i;j;k],0) * unit_vect(CHF_IX[i;j;k],0)
+         coef(CHF_IX[i;j;k],1) =   unit_vect(CHF_IX[i;j;k],0) * unit_vect(CHF_IX[i;j;k],2)
+         coef(CHF_IX[i;j;k],2) =   unit_vect(CHF_IX[i;j;k],2) * unit_vect(CHF_IX[i;j;k],0)
+         coef(CHF_IX[i;j;k],3) =   unit_vect(CHF_IX[i;j;k],2) * unit_vect(CHF_IX[i;j;k],2)
+#endif
+
+         
+      CHF_ENDDO
+
+      return
+      end
+
 
       subroutine compute_radial_elliptic_op_coeff(
      &     CHF_BOX[box],

@@ -145,9 +145,9 @@ BC.hydrogen.mu_upper.function = "zero"
 
 BC.potential.radial_core.type = "dirichlet"
 BC.potential.radial_core.value = 0.
-BC.potential.radial_sol.type = "neumann"
+BC.potential.radial_sol.type = "mapped_neumann"
 BC.potential.radial_sol.value = 0.
-BC.potential.radial_pf.type = "neumann"
+BC.potential.radial_pf.type = "mapped_neumann"
 BC.potential.radial_pf.value = 0.0
 BC.potential.poloidal_inner_div.type = "dirichlet"
 BC.potential.poloidal_inner_div.function = "inner_divertor_flux"

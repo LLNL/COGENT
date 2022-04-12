@@ -68,10 +68,10 @@ public:
       const bool                       first_step = false);
 
    virtual void setOperatorCoefficients( const LevelData<FArrayBox>&  ni,
-                                         const EllipticOpBC&          bc ); 
+                                         EllipticOpBC&                bc ); 
 
    virtual void setOperatorCoefficients( const LevelData<FArrayBox>&  ion_mass_density,
-                                         const EllipticOpBC&          bc,
+                                         EllipticOpBC&                bc,
                                          double&                      lo_value,
                                          double&                      hi_value,
                                          LevelData<FArrayBox>&        radial_gkp_divergence_average);

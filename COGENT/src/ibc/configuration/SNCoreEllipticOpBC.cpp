@@ -42,7 +42,7 @@ SNCoreEllipticOpBC::SNCoreEllipticOpBC( const SingleNullEllipticOpBC&  a_bc,
                                         const int                      a_num_blocks )
   : EllipticOpBC(NUM_BOUNDARIES, a_num_blocks)
 {
-   CH_assert(a_outer_radial_bc_type == DIRICHLET || a_outer_radial_bc_type == NEUMANN);
+   CH_assert(a_outer_radial_bc_type == DIRICHLET || a_outer_radial_bc_type == MAPPED_NEUMANN);
    setNames();
 
    // Use the same lower radial conditions as the initializing full single null
@@ -122,9 +122,6 @@ SNCoreEllipticOpBC::getBCType( const int  a_block_number,
             else {
                MayDay::Error("SNCoreEllipticOpBC::getBCType(): Invalid side argument");
             }
-         }
-         else {
-            MayDay::Error("SNCoreEllipticOpBC::getBCType(): Invalid direction argument");
          }
          break;
       default:
@@ -408,6 +405,12 @@ void SNCoreEllipticOpBC::parseParameters( ParmParse& a_pp )
       else if (bc_type == "neumann") {
          m_bc_type[i] = NEUMANN;
       }
+      else if (bc_type == "mapped_neumann") {
+         m_bc_type[i] = MAPPED_NEUMANN;
+      }
+      else if (bc_type == "natural") {
+         m_bc_type[i] = NATURAL;
+      }
       else {
          MayDay::Error("SNCoreEllipticOpBC::parseParameter(): Unrecognized potential bc type");
       }
@@ -442,28 +445,20 @@ void SNCoreEllipticOpBC::parseParameters( ParmParse& a_pp )
 RefCountedPtr<EllipticOpBC>
 SNCoreEllipticOpBC::clone( const bool a_extrapolated ) const
 {
+   // Also sets m_bdry_name
    RefCountedPtr<SNCoreEllipticOpBC> result
       = RefCountedPtr<SNCoreEllipticOpBC>(new SNCoreEllipticOpBC(m_num_blocks));
 
    // Copy the data members set by the full constructor (i.e., the one with the ParmParse
    // argument).  
-   
    result->m_name = m_name;
    result->m_verbosity = m_verbosity;
 
-   // Copy the data set by calls to setBCType(), etc.
+   // Copy the rest of the data owned by the EllipticOpBC base class.
+   result->copyBaseData(*this);
 
-   for (int i=0; i<m_bc_type.size(); ++i) {
-      (result->m_bc_type)[i] = a_extrapolated? EXTRAPOLATED: m_bc_type[i];
-   }
-   for (int i=0; i<m_bc_value.size(); ++i) {
-      (result->m_bc_value)[i] = m_bc_value[i];
-   }
-   for (int i=0; i<m_bc_subtype.size(); ++i) {
-      (result->m_bc_subtype)[i] = m_bc_subtype[i];
-   }
-   for (int i=0; i<m_bc_block_data.size(); ++i) {
-      (result->m_bc_block_data)[i] = m_bc_block_data[i];
+   if ( a_extrapolated ) {
+      result->setExtrapolatedType();
    }
 
    return result;

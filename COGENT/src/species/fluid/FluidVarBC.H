@@ -33,6 +33,10 @@ class FluidVarBC
       
       virtual void apply( FluidSpecies&  species_phys,
                           const Real&    time );
+
+      virtual void applyCellBC( const FluidSpecies&  species_phys,
+                                LevelData<FArrayBox>&  dst,
+                                const Real&    time );
        
       virtual void applyFluxBC( const FluidSpecies&  species_phys,
                                 LevelData<FluxBox>&  dst,

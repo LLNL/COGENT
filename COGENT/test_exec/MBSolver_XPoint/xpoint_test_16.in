@@ -1,0 +1,33 @@
+#####################################################
+# Computational Grid Definitions
+#####################################################
+xpsystem.block_size = 16 16
+xpsystem.origin = 1.7 0
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.potential.block_0.type = "dirichlet"
+BC.potential.block_0.value = 0.
+BC.potential.block_1.type = "dirichlet"
+BC.potential.block_1.value = 1.
+BC.potential.block_2.type = "dirichlet"
+BC.potential.block_2.value = 2.
+BC.potential.block_3.type = "dirichlet"
+BC.potential.block_3.value = 3.
+BC.potential.block_4.type = "dirichlet"
+BC.potential.block_4.value = 4.
+BC.potential.block_5.type = "dirichlet"
+BC.potential.block_5.value = 5.
+BC.potential.block_6.type = "dirichlet"
+BC.potential.block_6.value = 6.
+BC.potential.block_7.type = "dirichlet"
+BC.potential.block_7.value = 7.
+
+#####################################################
+# Solver Parameters
+#####################################################
+linear_solver.method = "AMG"
+linear_solver.max_iter = 80
+linear_solver.tol = 1.e-6
+linear_solver.verbose = true

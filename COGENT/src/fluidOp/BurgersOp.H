@@ -93,11 +93,13 @@ public:
                               const int                         step,
                               const int                         stage,
                               const double                      shift,
-                              const int                         component);
+                              const int                         component,
+                              const std::string& );
 
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
                              const FluidSpeciesPtrVect&        fluid_species_rhs,
+                             const std::string&,
                              const int                         component );
 
    virtual bool trivialSolutionOp() const {return true;}

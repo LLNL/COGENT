@@ -108,6 +108,7 @@ class AppCtxt
     
     virtual void solveFluidOpPCImEx(ODEVector&, 
                                     const ODEVector&, 
+                                    const std::string&,
                                     const int a_id = -1,
                                     int a_i = -1 ) = 0;
     

@@ -17,9 +17,8 @@ ConsDragDiff::ConsDragDiff( const string& a_species_name, const string& a_ppcls_
     : m_cls_only(false),
       moment_op( MomentOp::instance() ),
       m_first_call(true),
-      m_first_stage(true),
       m_it_counter(0),
-      m_update_freq(-1),
+      m_update_freq(1),
       m_time_implicit(true),
       m_diagnostics(false),
       m_verbosity(a_verbosity),
@@ -75,9 +74,9 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
     }
     m_fBJ_vel_ghost.define(dbl, 1, velGhost);
   }
-  LevelData<FArrayBox> m_fBJ_vel_ghost(dbl, 1, 2*IntVect::Unit);
+
   for (DataIterator dit(soln_fBJ.dataIterator()); dit.ok(); ++dit) {
-    m_fBJ_vel_ghost[dit].copy(soln_fBJ[dit]);
+    m_fBJ_vel_ghost[dit].copy(soln_fBJ[dit], dbl[dit]);
   }
   //since we only need ghost information in velocity space only
   // use simple exchange, instead of fillInternalGhosts
@@ -156,7 +155,7 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   // will be slightly out of sink with the m_ushift variable that is used to evaluate
   // the "conservative" value of the temeprature (see Justin's thesis for details).
   // This should not affect momentum conservation.
-  if ((m_it_counter % m_update_freq == 0 && m_first_stage) || m_first_call) {
+  if ((m_it_counter % m_update_freq == 0) || m_first_call) {
     soln_species.numberDensity(m_dens);
     soln_species.ParallelMomentum(m_ushift);
     CFG::DataIterator cfg_dit = m_ushift.dataIterator();
@@ -200,7 +199,7 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   }
   
   if (m_cls_freq_func == NULL) {
-    if ((m_it_counter % m_update_freq == 0 && m_first_stage) || m_first_call) {
+    if ((m_it_counter % m_update_freq == 0) || m_first_call) {
       mag_geom.divideJonValid(m_dens);
       LevelData<FArrayBox> dens_inj;
       phase_geom.injectConfigurationToPhase(m_dens, dens_inj);
@@ -255,8 +254,6 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   }
   
   m_first_call = false;
-  m_first_stage = false;
-
 }
 
 
@@ -333,6 +330,12 @@ inline void ConsDragDiff::printParameters( const KineticSpeciesPtrVect&  soln )
    const Box& domain_box = phase_domain.domainBox();
    int num_mu_cells = domain_box.size(MU_DIR);
    int num_vp_cells = domain_box.size(VPARALLEL_DIR);
+
+   // check to ensure that fourth-order one-sided calculations do not
+   // reach into undefined physical ghosts
+   if ( procID() == 0 && (num_vp_cells < 5 || num_mu_cells < 5) ){
+     MayDay::Error( "total number of velocity cells is too few for physically meaningful results" );
+   }
 
    // get magnetic field, density, and pressure, etc..
    const CFG::MagGeom & mag_geom = phase_geom.magGeom();
@@ -491,7 +494,6 @@ void ConsDragDiff::preTimeStep(const KineticSpeciesPtrVect& a_soln_mapped,
                                const KineticSpeciesPtrVect& a_soln_physical )
 {
    m_it_counter+=1;
-   m_first_stage = true;
 }
 
 Real ConsDragDiff::computeTimeScale( const KineticSpeciesPtrVect&  soln, const int a_idx )

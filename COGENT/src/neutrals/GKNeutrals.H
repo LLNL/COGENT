@@ -57,6 +57,8 @@ class GKNeutrals
        * @param[in] name String name of the species.
        */
       NTRInterface& neutralModel( const std::string& name );
+  
+      void preTimeStep(const KineticSpeciesPtrVect&, const Real, const KineticSpeciesPtrVect&);
 
    private:
 

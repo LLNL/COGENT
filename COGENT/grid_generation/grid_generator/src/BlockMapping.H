@@ -6,6 +6,7 @@
 #include "ParmParse.H"
 #include "RealVect.H"
 #include "FArrayBox.H"
+#include "LevelData.H"
 
 #include "NamespaceHeader.H"
 
@@ -24,11 +25,12 @@ class BlockMapping
 
    void init(const double a_trans_rad);
 
-   void getPhysicalCoordinates(FArrayBox&       physical_coordinates,
-                                const Vector<RealVect*> & mapping) const;
+   void getPhysicalCoordinates(FArrayBox&                physical_coordinates,
+                               const Vector<RealVect*>&  mapping) const;
    
-   void getArcLengthMapping(Vector<RealVect*> & mapping,
-                            double& block_length, const int block_id) const;
+   void getArcLengthMapping(Vector<RealVect*>&  mapping,
+                            double&             block_length,
+                            const int           block_id) const;
 
    Vector<Real> getMagFieldData(const RealVect& physical_coordinate ) const;
    
@@ -50,16 +52,26 @@ class BlockMapping
 
   private:
 
+   void assembleDecomposedData(FArrayBox&                    data,
+                               const LevelData<FArrayBox>&   data_decomp,
+                               const Vector<Box>&            grid_boxes,
+                               const int&                    decomp_num ) const;
+
+   void getPoloidalDisjointBoxLayout(DisjointBoxLayout&   grids,
+                                     Vector<Box>&         boxes,
+                                     int&                 decomp_num,
+                                     const Box&           box) const;
+   
    void getMagneticFluxFromDCT(const FArrayBox& a_physical_coordinates,
                                FArrayBox&       a_magnetic_flux ) const;
    
-   void getNormMagneticFlux(const FArrayBox& a_physical_coordinates,
-                            FArrayBox&       a_magnetic_flux ) const;
+   void getNormMagneticFlux(const FArrayBox& physical_coordinates,
+                            FArrayBox&       magnetic_flux ) const;
    
-   double getNormMagneticFlux(const RealVect& a_physical_coordinate ) const;
+   double getNormMagneticFlux(const RealVect& physical_coordinate ) const;
    
    
-   double getLinearMagneticFlux( const RealVect& a_physical_coordinate ) const;
+   double getLinearMagneticFlux( const RealVect& physical_coordinate ) const;
 
    
    void readFieldFromDCTFile(const string& file_name);
@@ -69,9 +81,9 @@ class BlockMapping
    double getPoloidalArcLength(const int       pol_index,
                                const string&   option) const;
    
-   void getRadialGridLine(FArrayBox& radialGridLine,
-                          const Vector<RealVect*> & mapping,
-                          const double length) const;
+   void getRadialGridLine(FArrayBox&               radialGridLine,
+                          const Vector<RealVect*>& mapping,
+                          const double             length) const;
    
    void extrapolateGrid(FArrayBox& physical_coordinates, const Box& box_extrp) const;
 
@@ -84,38 +96,49 @@ class BlockMapping
    
    void pushToFluxSurface(RealVect& X, const double psi_norm, const RealVect& dir) const;
    
-   void getCutDir(const Vector<Real>& a_sep_dir,
-                  RealVect& a_core_cut_dir,
-                  RealVect& a_sol_cut_dir ) const;
+   void initializeBlockCut(FArrayBox&  block_cut_coords,
+                           FArrayBox&  block_cut_dir) const;
+   
+   void getCutDir(const Vector<Real>&  sep_dir,
+                  RealVect&            core_cut_dir,
+                  RealVect&            sol_cut_dir ) const;
 
    
-   RealVect getCutCoords( const double a_psi ) const;
+   RealVect getStraightCutCoords( const double a_psi ) const;
    
    Vector <Real> getSeparatrixDirAnalytic() const;
 
-   void getPsiLinearCoeff(RealVect& a_vec_1,
-                          RealVect& a_vec_2 ) const;
+   void getPsiLinearCoeff(RealVect& vec_1,
+                          RealVect& vec_2 ) const;
    
-   RealVect interpolateFromArcLengthMapping(const Vector<RealVect*> & a_mapping,
-                                            const double a_length) const;
+   RealVect interpolateFromArcLengthMapping(const Vector<RealVect*>& mapping,
+                                            const double             length) const;
    
-   RealVect getRadialDir(const RealVect& a_X, const double a_length, const RealVect& a_cut_dir) const;
+   RealVect getRadialDir(const RealVect&  X,
+                         const double     length,
+                         const RealVect&  cut_dir) const;
    
-   RealVect getPsiNorm(const RealVect& a_X, const bool a_norm_dir) const;
+   RealVect getPsiNorm(const RealVect& X,
+                       const bool      norm_dir) const;
    
-   RealVect getPsiTang(const RealVect& a_X, const int a_block_number) const;
+   RealVect getPsiTang(const RealVect& X,
+                       const int       block_number) const;
    
-   double vectProd(const RealVect& a_1, const RealVect& a_2) const;
+   double vectProd(const RealVect& vect_1,
+                   const RealVect& vect_2) const;
    
-   double vectMag(const RealVect& a_vect) const;
+   double vectMag(const RealVect& vect) const;
    
-   double projection(const RealVect& a_vec, const RealVect& a_targ) const;
+   double projection(const RealVect& vec,
+                     const RealVect& targ) const;
    
-   RealVect rotation(const RealVect& a_vec, const int a_dir) const;
+   RealVect rotation(const RealVect&   vec,
+                     const int         dir) const;
    
    FArrayBox m_psi_coefs;
    
    mutable FArrayBox m_block_cut_dir;
+   mutable FArrayBox m_block_cut_coords;
    
    double m_psi_smallEnd, m_psi_bigEnd;
    double m_physFluxOnAxis, m_physFluxOnSep;

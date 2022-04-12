@@ -288,7 +288,8 @@ void FullFluidOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
                                const int                        a_step,
                                const int                        a_stage,
                                const double                     a_shift,
-                               const int                        a_component)
+                               const int                        a_component,
+                               const std::string& )
 {
    CH_TIME("FullFluidOp::updatePCImEx()");
    
@@ -300,6 +301,7 @@ void FullFluidOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
 void FullFluidOp::solvePCImEx(FluidSpeciesPtrVect&              a_fluid_species_solution,
                               const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                               const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                              const std::string&,
                               const int                         a_component )
 {
    CH_TIME("FullFluidOp::solvePCImEx()");

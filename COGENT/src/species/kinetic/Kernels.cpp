@@ -22,7 +22,8 @@ Kernel<FArrayBox>::computeVelCfgComp(LevelData<FArrayBox>&      a_vel_cfg_comp,
     */
 
    const DisjointBoxLayout & grids = a_vel_cfg_comp.getBoxes();
-   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
+   IntVect ghosts = a_vel_cfg_comp.ghostVect();
+   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, ghosts);
    a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, false, a_option);
 
    for (DataIterator dit(a_vel_cfg_comp.dataIterator()); dit.ok(); ++dit) {
@@ -48,7 +49,9 @@ Kernel<FluxBox>::computeVelCfgComp(LevelData<FluxBox>&        a_vel_cfg_comp,
     */
 
    const DisjointBoxLayout & grids = a_vel_cfg_comp.getBoxes();
-   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
+   IntVect ghosts = a_vel_cfg_comp.ghostVect();
+   
+   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, ghosts);
    a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, false, a_option);
 
    for (DataIterator dit(a_vel_cfg_comp.dataIterator()); dit.ok(); ++dit) {
@@ -73,7 +76,9 @@ Kernel<FArrayBox>::computeVelCfgCompNormals(LevelData<FArrayBox>&      a_vel_cfg
     */
 
    const DisjointBoxLayout & grids = a_vel_cfg_comp.getBoxes();
-   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
+   IntVect ghosts = a_vel_cfg_comp.ghostVect();
+   
+   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, ghosts);
    a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, false, a_option);
    a_phase_geom.multNTransposePointwise( pointwiseFaceVel );
    
@@ -120,7 +125,9 @@ Kernel<FluxBox>::computeVelCfgCompNormals(LevelData<FluxBox>&        a_vel_cfg_c
     */
 
    const DisjointBoxLayout & grids = a_vel_cfg_comp.getBoxes();
-   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, IntVect::Unit);
+   IntVect ghosts = a_vel_cfg_comp.ghostVect();
+   
+   LevelData<FluxBox> pointwiseFaceVel(grids, SpaceDim, ghosts);
    a_phase_geom.computeGKVelocities(a_field, pointwiseFaceVel, false, a_option);
    a_phase_geom.multNTransposePointwise( pointwiseFaceVel );
    

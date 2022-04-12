@@ -68,7 +68,7 @@ class GKSystemParameters
  
     inline bool oldVorticityModel() const { return m_old_vorticity_model; }
     inline bool fixedEField() const { return m_fixed_efield; }
-    inline bool zeroEField() const { return m_zero_efield; }
+    inline bool noEField() const { return m_no_efield; }
 
     inline bool imexTransportImplicit() const { return m_transport_imex_implicit; }
     inline bool imexNeutralsImplicit() const { return m_neutrals_imex_implicit; }
@@ -163,7 +163,7 @@ class GKSystemParameters
 
     bool m_old_vorticity_model;
     bool m_fixed_efield;
-    bool m_zero_efield;
+    bool m_no_efield;
 
     bool m_transport_imex_implicit;
     bool m_neutrals_imex_implicit;

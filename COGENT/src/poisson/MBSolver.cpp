@@ -47,8 +47,6 @@ MBSolver::MBSolver( const MultiBlockLevelGeom&      a_geom,
 {
    CH_assert(m_discretization_order == 2 || m_discretization_order == 4);
 
-   m_rhs_from_bc.define(a_geom.grids(), 1, IntVect::Zero);
-   
    // If there is more than one block and no MultiBlockLevelExchangeCenter object has
    // been provided, construct one
    if ( m_coord_sys_ptr->numBlocks() > 1 && m_mblex_potential_Ptr == NULL) {
@@ -580,17 +578,18 @@ MBSolver::accumStencilMatrixEntries(const IntVect    a_index,
 }
 
 
-
 void
 MBSolver::modifyStencilForBCs( const Vector<CoDim1Stencil>&  a_codim1_stencils,
                                const Vector<CoDim2Stencil>&  a_codim2_stencils,
                                const IntVect&                a_iv,
                                FArrayBox&                    a_stencil_values,
                                FArrayBox&                    a_rhs_from_bc,
+                               const int                     a_rhs_from_bc_comp,
                                const bool                    a_rhs_from_bc_only,
-                               const bool                    a_force_codim2_condense ) const
+                               const bool                    a_force_codim2_condense,
+                               const bool                    a_update_rhs ) const
 {
-   bool updating_rhs = a_rhs_from_bc.box().ok();  // FAB defined?
+   bool updating_rhs = a_rhs_from_bc.box().ok() && a_update_rhs;  // FAB defined?
 
    CH_assert((a_stencil_values.box().size(0)-1)%2 == 0);
    int radius = (a_stencil_values.box().size(0) - 1) / 2;
@@ -675,7 +674,7 @@ MBSolver::modifyStencilForBCs( const Vector<CoDim1Stencil>&  a_codim1_stencils,
             }
 
             if ( updating_rhs ) {
-               a_rhs_from_bc(a_iv,0) -= stencil_value * bv_contrib;
+               a_rhs_from_bc(a_iv,a_rhs_from_bc_comp) -= stencil_value * bv_contrib;
             }
 
             // We can zero the stencil value here since no other codim1 bc_stencil object
@@ -690,7 +689,6 @@ MBSolver::modifyStencilForBCs( const Vector<CoDim1Stencil>&  a_codim1_stencils,
       a_stencil_values.setVal(0.);
    }
 }
-
 
 
 void
@@ -951,6 +949,64 @@ MBSolver::accumPhysicalGhosts( const Vector< Vector<CoDim1Stencil> >&  a_codim1_
 }
 
 
+void
+MBSolver::getNeumannNaturalFactor( const EllipticOpBC&  a_bc,
+                                   LevelData<FluxBox>&  a_bc_factor ) const
+{
+   /*
+     On faces with Neumann boundary conditions, compute the Neumann factor
+
+        n_mapped^T N^T D n A,
+
+     where D is the unmapped coefficient matrix, n_mapped and n are the mapped
+     and physical cell face normals, respectively, and A is the mapped  cell face
+     area.  On faces with natural boundary conditions, compute the same
+     quantity without D (i.e., D = identity), which is the physical face area.
+     This factor is used in the application of inhomogeneous Neumann or natural
+     boundary conditions.
+   */
+
+   if ( a_bc.hasNeumannCondition() || a_bc.hasNaturalCondition()) {
+      const DisjointBoxLayout &grids = m_geometry.gridsFull();
+
+      if ( !a_bc_factor.isDefined() ) {
+         a_bc_factor.define(grids, 1, IntVect::Zero);
+      }
+
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         int block_number = m_coord_sys_ptr->whichBlock(grids[dit]);
+         FluxBox& this_factor = a_bc_factor[dit];
+         this_factor.setVal(0.);
+
+         for (int dir=0; dir<SpaceDim; dir++) {
+            FArrayBox& this_factor_dir = this_factor[dir];
+            for (SideIterator sit; sit.ok(); ++sit) {
+               Side::LoHiSide side = sit();
+
+               const Vector<Box> boundary_boxes = ((MagGeom&)m_geometry).getBoundaryBoxes(block_number, dir, side);
+
+               if ( boundary_boxes.size() > 0 ) {  // Contains part of physical boundary?
+                  int bc_type = a_bc.getBCType(block_number, dir, side);
+                  if ( (bc_type == EllipticOpBC::NEUMANN) || (bc_type == EllipticOpBC::NATURAL) ) {
+
+                     RefCountedPtr<DataArray> factor = a_bc.getNeumannNaturalFactor(block_number, dir, side);
+                     const FArrayBox& factor_data = factor->getData();
+
+                     for (int n=0; n<boundary_boxes.size(); ++n) {
+                        Box overlap = this_factor_dir.box() & boundary_boxes[n];
+                        
+                        if ( overlap.ok() ) {
+                           this_factor_dir.copy(factor_data, overlap);
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+}
+
 
 void
 MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&                        a_in,
@@ -958,6 +1014,7 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
                                         const Vector< Tuple<BlockBoundary, 2*SpaceDim> >&  a_block_boundaries,
                                         const Vector< Vector<CoDim1Stencil> >&             a_codim1_stencils,
                                         const Vector< Vector<CoDim2Stencil> >&             a_codim2_stencils,
+                                        const EllipticOpBC&                                a_bc,
                                         FArrayBox&                                         a_stencil_values,
                                         const bool                                         a_fourthOrder,
                                         const bool                                         a_extrapolate_from_interior,
@@ -979,6 +1036,9 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
 
    const Vector<Box>& mapping_blocks = m_coord_sys_ptr->mappingBlocks();
 
+   LevelData<FluxBox> bc_factor;
+   getNeumannNaturalFactor(a_bc, bc_factor);
+
    for (int dir_outer=0; dir_outer<SpaceDim; ++dir_outer) {
       for (int dir_inner=0; dir_inner<SpaceDim; ++dir_inner) {
 
@@ -989,7 +1049,8 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
 
          // Fill internal ghosts
          if ( m_coord_sys_ptr->numBlocks() > 1 ) {
-            ((MagGeom&)m_geometry).fillInternalGhosts(tmp);
+            //            ((MagGeom&)m_geometry).fillInternalGhosts(tmp);
+            m_mblex_potential_Ptr->interpGhosts(tmp);
          }
          tmp.exchange();
 
@@ -1008,12 +1069,35 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
             bool lo_block_interface = this_block_boundaries[dir_outer].isInterface();
             bool hi_block_interface = this_block_boundaries[dir_outer + SpaceDim].isInterface();
 
+            bool lo_phys_boundary = this_block_boundaries[dir_outer].isDomainBoundary();
+            bool hi_phys_boundary = this_block_boundaries[dir_outer + SpaceDim].isDomainBoundary();
+
             for (BoxIterator bit_face(this_flux.box()); bit_face.ok(); ++bit_face) {
                IntVect iv_face = bit_face();
 
                bool on_lo_block_interface = (lo_block_interface && iv_face[dir_outer] == domain_box.smallEnd(dir_outer));
                bool on_hi_block_interface = (hi_block_interface && iv_face[dir_outer] == domain_box.bigEnd(dir_outer)+1);
 
+               bool on_lo_phys_boundary = (lo_phys_boundary && iv_face[dir_outer] == domain_box.smallEnd(dir_outer));
+               bool on_hi_phys_boundary = (hi_phys_boundary && iv_face[dir_outer] == domain_box.bigEnd(dir_outer)+1);
+
+               bool neumann_boundary;
+               bool natural_boundary;
+               if ( on_lo_phys_boundary ) {
+                  int bc_type = a_bc.getBCType(block_number, dir_outer, Side::LoHiSide::Lo);
+                  neumann_boundary = (bc_type == EllipticOpBC::NEUMANN);
+                  natural_boundary = (bc_type == EllipticOpBC::NATURAL);
+               }
+               else if ( on_hi_phys_boundary ) {
+                  int bc_type = a_bc.getBCType(block_number, dir_outer, Side::LoHiSide::Hi);
+                  neumann_boundary = (bc_type == EllipticOpBC::NEUMANN);
+                  natural_boundary = (bc_type == EllipticOpBC::NATURAL);
+               }
+               else {
+                  neumann_boundary = false;
+                  natural_boundary = false;
+               }
+                  
                for (SideIterator sit; sit.ok(); ++sit) {
                   Side::LoHiSide side = sit();
 
@@ -1026,6 +1110,7 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
                                             dx, a_fourthOrder, a_stencil_values);
 
                   double flux_contrib = 0.;
+                  
                   for (BoxIterator bit_cell(a_stencil_values.box()); bit_cell.ok(); ++bit_cell) {
                      IntVect iv2 = iv + bit_cell() - radius * IntVect::Unit;
                      flux_contrib += a_stencil_values(bit_cell(),0) * tmp[dit](iv2,0);
@@ -1051,12 +1136,62 @@ MBSolver::computeFluxNormalFromStencil( const LevelData<FArrayBox>&             
                      this_flux(iv_face,0) += 0.5 * (1 - 2*side) * flux_contrib;
                   }
                }
+
+               // Add the flux contributions from inhomogenous Neumann or natural boundary conditions
+               if ( a_include_bvs && (neumann_boundary || natural_boundary) && dir_inner == 0 ) {
+                  Side::LoHiSide block_side = on_lo_phys_boundary? Side::LoHiSide::Lo: Side::LoHiSide::Hi;
+                     
+                  double bv = getBV(a_bc, *((MagBlockCoordSys*)block_coord_sys), block_number, 
+                                    dir_outer, block_side, iv_face);
+
+                  this_flux(iv_face,0) -= sign(block_side) * bc_factor[dit][dir_outer](iv_face,0) * bv;
+               }
             }
          }
       }
    }
 }
 
+
+double
+MBSolver::getBV( const EllipticOpBC&      a_bc,
+                 const MagBlockCoordSys&  a_coord_sys,
+                 const int                a_block_number,
+                 const int                a_dir,
+                 const Side::LoHiSide&    a_side,
+                 const IntVect            a_iv_face ) const
+{
+   double bv;
+
+   RefCountedPtr<GridFunction> bc_func = a_bc.getBCFunction(a_block_number, a_dir, a_side );
+   if ( bc_func ) {
+      if ( typeid(*bc_func) == typeid(DataArray) ) {
+         IntVect iv_ghost = a_iv_face; iv_ghost[a_dir] += (a_side - 1);
+         FArrayBox bv_ghost(Box(iv_ghost,iv_ghost),1);
+         FArrayBox dummy;
+         bc_func->assign(bv_ghost, m_geometry, dummy, dummy, a_block_number, 0., false);
+         bv = bv_ghost(iv_ghost,0); 
+      }
+      else {
+         Box face_box(a_iv_face,a_iv_face);
+         FluxBox bv_face(face_box,1);
+         FluxBox real_coords(face_box,CFG_DIM);
+         FluxBox norm_flux(face_box,1);
+                        
+         a_coord_sys.getFaceCenteredRealCoords(a_dir, real_coords[a_dir]);
+         a_coord_sys.getNormMagneticFlux(real_coords[a_dir], norm_flux[a_dir]);
+                              
+         bc_func->assign(bv_face, m_geometry, real_coords, norm_flux, a_block_number, 0., false);
+         
+         bv = bv_face[a_dir](a_iv_face,0);
+      }
+   }
+   else {
+      bv = a_bc.getBCValue(a_block_number, a_dir, a_side);
+   }
+
+   return bv;
+}
 
 
 void
@@ -1066,11 +1201,12 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
                                const Vector< Tuple<BlockBoundary, 2*SpaceDim> >&  a_block_boundaries,
                                const Vector< Vector<CoDim1Stencil> >&             a_codim1_stencils,
                                const Vector< Vector<CoDim2Stencil> >&             a_codim2_stencils,
+                               const EllipticOpBC&                                a_bc,
                                FArrayBox&                                         a_stencil_values,
                                const bool                                         a_fourthOrder,
                                const LevelData<FArrayBox>&                        a_rhs_from_bc ) const
 {
-   const DisjointBoxLayout& grids = a_rhs_from_bc.disjointBoxLayout();
+   const DisjointBoxLayout & grids = m_geometry.gridsFull();
 
    LevelData<FArrayBox> solution(grids, 1, IntVect::Zero);
 
@@ -1092,7 +1228,7 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
    extrapolate_from_interior = true;
    include_bvs = false;
    computeFluxNormalFromStencil( solution, a_tensor_coefficient, a_block_boundaries, a_codim1_stencils,
-                                 a_codim2_stencils, a_stencil_values, a_fourthOrder,
+                                 a_codim2_stencils, a_bc, a_stencil_values, a_fourthOrder,
                                  extrapolate_from_interior, include_bvs, flux_normal_without_bvs );
    averageAtBlockBoundaries(flux_normal_without_bvs);
 
@@ -1106,7 +1242,7 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
    extrapolate_from_interior = false;
    include_bvs = true;
    computeFluxNormalFromStencil( zero, a_tensor_coefficient, a_block_boundaries, a_codim1_stencils,
-                                 a_codim2_stencils, a_stencil_values, a_fourthOrder,
+                                 a_codim2_stencils, a_bc, a_stencil_values, a_fourthOrder,
                                  extrapolate_from_interior, include_bvs, flux_normal_only_bvs );
 
    LevelData<FArrayBox> operator_eval(grids, 1, IntVect::Zero);
@@ -1158,11 +1294,14 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
    multiplyMatrix(solution, matvec);
    plot("matvec", matvec, 0.);
 
+   plot("rhs_bc", a_rhs_from_bc, 0.); 
+
    LevelData<FArrayBox> diff(grids, 1, IntVect::Zero);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       diff[dit].copy(matvec[dit]);
       diff[dit] -= a_rhs_from_bc[dit];
       diff[dit] -= operator_eval[dit];
+      diff[dit].abs();
    }
    plot("diff", diff, 0.);
 
@@ -1197,12 +1336,14 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
       cout << "Max diff at " << max_iv << " = " << global_max_diff << endl;
    }
 
+#if 0
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       for (BoxIterator bit(grids[dit]); bit.ok(); ++bit) {
          IntVect iv = bit();
-         if ( fabs(diff[dit](iv,0)) > 1.e-14)  cout << iv << " " << fabs(diff[dit](iv,0)) << endl;
+         //         if ( fabs(diff[dit](iv,0)) > 1.e-14)  cout << iv << " " << fabs(diff[dit](iv,0)) << endl;
       }
    }
+#endif	
    MPI_Barrier(MPI_COMM_WORLD);
    exit(1);
 #endif

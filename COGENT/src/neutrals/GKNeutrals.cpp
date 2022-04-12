@@ -145,6 +145,18 @@ Real GKNeutrals::computeTimeScale( const KineticSpeciesPtrVect& soln )
 
 }
 
+void GKNeutrals::preTimeStep( const KineticSpeciesPtrVect& a_soln,
+                              const Real a_time,
+                              const KineticSpeciesPtrVect& a_soln_physical )
+
+{
+  for (int species(0); species<a_soln.size(); species++) {
+    KineticSpecies&           soln_species(*(a_soln[species]));
+    const std::string         species_name(soln_species.name());
+    NTRInterface& NTR( neutralModel( species_name ) );
+    NTR.preTimeStep(a_soln, species, a_time, a_soln_physical);
+  }
+}
 
 
 #include "NamespaceFooter.H"

@@ -246,6 +246,58 @@ c     local variables
 
 
 
+      subroutine miller_polvel_test(
+     &     CHF_CONST_INT[dir],
+     &     CHF_BOX[gridbox],
+     &     CHF_CONST_REALVECT[h],
+     &     CHF_CONST_REAL[rmin],
+     &     CHF_CONST_REAL[rbar],
+     &     CHF_CONST_REAL[R0],
+     &     CHF_CONST_REAL[kappa],
+     &     CHF_CONST_REAL[delta],
+     &     CHF_FRA[velocity],
+     &     CHF_INT[l_const_minorrad]
+     &     )
+
+c     local variables
+      double precision r, theta,Rmaj,costheta,radfac
+      double precision x, tr, tt
+      integer CHF_AUTODECL[i], m
+
+      x = dasin(delta)
+
+c      print *, "R0, rbar = ", R0, rbar
+      CHF_AUTOMULTIDO[gridbox;i]
+
+         theta = ( i1 + half*(1-CHF_ID(1,dir)) )*h(1)
+         costheta = dcos(theta)
+         if (l_const_minorrad .eq. 1) then
+             r = rbar
+             Rmaj = R0
+         else
+             r     = ( i0 + half*(1-CHF_ID(0,dir)) )*h(0) + rmin
+            Rmaj = R0 + r*costheta
+         endif
+
+         tr = -r * (one + x*dcos(theta)) * dsin(theta + x*dsin(theta))
+         tt = r * kappa * costheta
+         radfac = r*R0/(rbar*Rmaj*dsqrt(tr*tr + tt*tt))
+
+         velocity(CHF_AUTOIX[i],0) = tr * radfac
+         velocity(CHF_AUTOIX[i],1) = tt * radfac
+         velocity(CHF_AUTOIX[i],2) = zero
+         velocity(CHF_AUTOIX[i],3) = zero
+#if CH_SPACEDIM==5
+         velocity(CHF_AUTOIX[i],4) = zero
+#endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+
       subroutine annulus_polvel_test(
      &     CHF_CONST_INT[dir],
      &     CHF_BOX[gridbox],

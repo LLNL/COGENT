@@ -77,24 +77,6 @@ findMax( const LevelData<FArrayBox>& a,
    for (int i=0; i<SpaceDim; ++i) a_max_iv[i] = iv[i];
 }
 
-
-GKVorticity::GKVorticity(const ParmParse&   a_pp,
-                         const ParmParse&   a_pp_base,
-                         const MagGeom&     a_geom,
-                         const Real         a_larmor_number,
-                         const Real         a_debye_number,
-                         const bool         a_include_pol_den_correction )
-   : GKPoisson(a_pp_base, a_geom, a_larmor_number, a_debye_number, false),
-     m_electron_temperature(NULL),
-     m_charge_exchange_coeff(NULL),
-     m_parallel_conductivity(NULL),
-     m_include_pol_den_correction(a_include_pol_den_correction),
-     m_flux_surface(a_geom)
-{
-   init(a_pp, a_pp_base);
-}
-      
-
 GKVorticity::GKVorticity(const ParmParse&   a_pp,
                          const ParmParse&   a_pp_base,
                          const MagGeom&     a_geom,
@@ -102,28 +84,119 @@ GKVorticity::GKVorticity(const ParmParse&   a_pp,
                          const Real         a_debye_number,
                          const bool         a_second_order,
                          const bool         a_low_pollution,
-                         const bool         a_include_pol_den_correction )
+                         const bool         a_include_pol_den_correction,
+                         const std::string& a_model)
    : GKPoisson(a_pp_base, a_geom, a_larmor_number, a_debye_number, false, a_second_order, a_low_pollution),
-     m_electron_temperature(NULL),
-     m_charge_exchange_coeff(NULL),
-     m_parallel_conductivity(NULL),
+     m_model(a_model),
      m_include_pol_den_correction(a_include_pol_den_correction),
-     m_flux_surface(a_geom)
+     m_include_diffusion(false),
+     m_use_vorticity_bcs(false),
+     m_precond_scale_fac(1.),
+     m_dt_implicit(1.),
+     m_flux_surface(a_geom),
+     m_charge_exchange_func(NULL),
+     m_pol_diffusion_func(NULL),
+     m_perp_diffusion_func(NULL),
+     m_parallel_conductivity_func(NULL)
+
 {
    init(a_pp, a_pp_base);
 }
       
 GKVorticity::~GKVorticity()
 {
+   delete m_vorticity_bc;
 }
-
 
 void
 GKVorticity::init( const ParmParse&  a_pp,
                    const ParmParse&  a_pp_base )
 {
+   
+   m_verbosity = false;
+   
+   parseParameters( a_pp );
+
+   if (m_verbosity>0) {
+      printParameters();
+   }
+
+   // Get distjoint box layout
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   
+   // Assign parallel conductivity profile
+   m_parallel_cond_face.define( grids, 1, IntVect::Zero );
+   if (m_parallel_conductivity_func != NULL) {
+      LevelData<FArrayBox> parallel_cond_cell( grids, 1, 2*IntVect::Unit );
+      m_parallel_conductivity_func->assign( parallel_cond_cell, m_geometry, 0.0);
+      m_geometry.fillInternalGhosts( parallel_cond_cell );
+      fourthOrderCellToFaceCenters(m_parallel_cond_face, parallel_cond_cell);
+   }
+
+   // Assign charge exchange profile
+   m_charge_exchange_face.define( grids, 1, IntVect::Zero );
+   if (m_charge_exchange_func != NULL ) {
+      LevelData<FArrayBox> charge_exchange_cell( grids, 1, 2*IntVect::Unit );
+      m_charge_exchange_func->assign( charge_exchange_cell, m_geometry, 0.0);
+      m_geometry.fillInternalGhosts( charge_exchange_cell );
+      fourthOrderCellToFaceCenters(m_charge_exchange_face, charge_exchange_cell);
+   }
+
+   // Assign perendicular diffusion profiles
+   m_pol_diffusion_face.define( grids, 1, IntVect::Zero );
+   if (m_pol_diffusion_func != NULL) {
+      LevelData<FArrayBox> pol_diffusion_cell( grids, 1, 2*IntVect::Unit );
+      m_pol_diffusion_func->assign( pol_diffusion_cell, m_geometry, 0.0);
+      m_geometry.fillInternalGhosts( pol_diffusion_cell );
+      fourthOrderCellToFaceCenters(m_pol_diffusion_face, pol_diffusion_cell);
+   }
+ 
+   // Assign poloidal diffusion profiles
+   m_perp_diffusion_face.define( grids, 1, IntVect::Zero );
+   if (m_perp_diffusion_func != NULL) {
+      LevelData<FArrayBox> perp_diffusion_cell( grids, 1, 2*IntVect::Unit );
+      m_perp_diffusion_func->assign( perp_diffusion_cell, m_geometry, 0.0);
+      m_geometry.fillInternalGhosts( perp_diffusion_cell );
+      fourthOrderCellToFaceCenters(m_perp_diffusion_face, perp_diffusion_cell);
+   }
+
+   // Compute tensor diffusion coefficents
+   m_diffusion_coeff_unmapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
+   m_diffusion_coeff_mapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
+   if (m_include_diffusion) {
+      computeDiffusionCoeff(m_diffusion_coeff_unmapped, m_diffusion_coeff_mapped);
+   }
+   
+   // Check if we need to include high-order corrections
+   // NB: vorticity diffusion model should only solve
+   // standard (2nd order) elliptic diffusion equaiton for vorticity)
+   m_include_high_order_corr = ((m_include_pol_den_correction || m_include_diffusion)
+                                && m_model == "Vorticity") ? true : false;
+   
+   
+   // Create objects to handle high-order (i.e., polarization density corrections and
+   // vorticity diffusion) terms in the vorticity equation. See notes for notation.
+   m_M_mapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
+   m_M_unmapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
+   m_N2_mapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
+   m_N2_unmapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
+   
+   
+   // Create vorticity BC object
+   if (m_use_vorticity_bcs) {
+      EllipticOpBCFactory elliptic_op_bc_factory;
+      const std::string name("vorticity");
+      const std::string prefix( "BC." + name );
+      ParmParse ppsp( prefix.c_str() );
+      m_vorticity_bc = elliptic_op_bc_factory.create(name, ppsp, *(m_geometry.getCoordSys()), false);
+   }
+   else {
+      m_vorticity_bc = NULL;
+   }
+   
+   // Preconditioner initializations
    m_symmetrized_preconditioner = false;
-   if ( m_include_pol_den_correction ) {
+   if ( m_include_high_order_corr ) {
       ParmParse pp( ((string)a_pp_base.prefix() + ".linear_solver.precond").c_str());
       if ( pp.contains("method") ) {
          string method;
@@ -136,63 +209,21 @@ GKVorticity::init( const ParmParse&  a_pp,
          pp.get( "symmetrized", m_symmetrized_preconditioner );
       }
       else {
-         m_symmetrized_preconditioner = true;
+         m_symmetrized_preconditioner = false;
       }
-   }
 
-   m_verbosity = false;
-   m_model = "Vorticity";
-   m_dt_implicit = 1.0;
-
-   parseParameters( a_pp );
-
-   if (m_verbosity>0) {
-      printParameters();
-   }
-
-   const std::string geomType = m_geometry.getCoordSys()->type();
-#ifdef VERIFY_MATRIX
-   m_subtract_fs_par_div = false;
-#else
-   m_subtract_fs_par_div = m_geometry.shearedMBGeom();
-#endif
-   
-   if (a_pp.contains("charge_exchange_coefficient")) {
-      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-      std::string grid_function_name;
-      a_pp.get("charge_exchange_coefficient", grid_function_name );
-      m_charge_exchange_coeff = grid_library->find( grid_function_name );
-   }
-   
-   if (a_pp.contains("parallel_conductivity")) {
-      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-      std::string grid_function_name;
-      a_pp.get("parallel_conductivity", grid_function_name );
-      m_parallel_conductivity = grid_library->find( grid_function_name );
-   }
-
-   if (a_pp.contains("parallel_conductivity_limit")) {
-     a_pp.get("parallel_conductivity_limit",m_parallel_conductivity_limit );
-   }
-   else {
-     m_parallel_conductivity_limit = DBL_MAX;
-   }
-   
-   if (a_pp.contains("electron_temperature")) {
-      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-      std::string grid_function_name;
-      a_pp.get("electron_temperature", grid_function_name );
-      m_electron_temperature = grid_library->find( grid_function_name );
-   }
-
-   if (m_include_pol_den_correction) {
-      const DisjointBoxLayout& grids( m_geometry.grids() );
-      m_perp_coeff_mapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
-      m_perp_coeff_unmapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
-      m_par_coeff_mapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
-      m_par_coeff_unmapped.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
+      if ( m_symmetrized_preconditioner ) {
+         // This option is highly experimental
+         cout << "GKVorticity::init(): m_symmetrized_preconditioner is true!" << endl;
+         exit(1);
+      }
+      
       if ( m_symmetrized_preconditioner ) {
          m_ne_over_Te.define(grids, 1, IntVect::Zero);
+      }
+
+      if ( pp.contains("precond_scale_fac") ) {
+         pp.get("precond_scale_fac", m_precond_scale_fac);
       }
    }
 
@@ -210,6 +241,13 @@ GKVorticity::init( const ParmParse&  a_pp,
    else {
       MayDay::Error("GKVorticity::init(): m_preconditioner is already allocated");
    }
+
+#ifdef VERIFY_MATRIX
+   m_subtract_fs_par_div = false;
+#else
+   m_subtract_fs_par_div = m_geometry.shearedMBGeom();
+#endif
+
 }
 
 
@@ -217,7 +255,7 @@ MBHypreSolver* GKVorticity::allocatePreconditioner( const MagGeom&              
                                                     const int                       a_discretization_order,
                                                     MultiBlockLevelExchangeCenter*  a_mblx_ptr )
 {
-   int nvar = m_include_pol_den_correction? 2: 1;
+   int nvar = m_include_high_order_corr? 2: 1;
    MBHypreSolver* solver(NULL);
    solver = new MBHypreSolver(a_geom, nvar, a_discretization_order, a_mblx_ptr);
    CH_assert(solver != NULL);
@@ -226,17 +264,32 @@ MBHypreSolver* GKVorticity::allocatePreconditioner( const MagGeom&              
 
 
 void
-GKVorticity::setVorticityOperatorCoefficients( const LevelData<FArrayBox>&  a_ion_mass_density,
-                                               const LevelData<FArrayBox>&  a_ion_charge_density,
-                                               const EllipticOpBC&          a_bc,
-                                               const bool                   a_update_preconditioner )
+GKVorticity::setVorticityOperatorCoefficients(const LevelData<FArrayBox>&  a_ion_mass_density,
+                                              const LevelData<FArrayBox>&  a_ion_charge_density,
+                                              const LevelData<FArrayBox>&  a_electron_temeprature,
+                                              EllipticOpBC&                a_bc,
+                                              const bool                   a_update_preconditioner )
 {
-   setOperatorCoefficients(a_ion_mass_density, a_bc, false);
+   // Compute tensor coefficients
+   computeVorticityCoefficients(a_ion_mass_density,
+                                a_ion_charge_density,
+                                a_electron_temeprature,
+                                a_bc,
+                                m_mapped_coefficients,
+                                m_unmapped_coefficients);
+   
+   // Update BCs of an elliptic op base class, but don't yet
+   // compute inhomogeneous BC contribution to RHS, because
+   // it requires a local copy of m_potential_bc object
+   // (for the case when high_order terms are included)
+   updateBoundaryData(m_unmapped_coefficients, a_bc, true);
+   
+   // Save a local copy of potential BCs
+   m_potential_bc = a_bc.clone();
 
-   if ( m_include_pol_den_correction ) {
-      setPolDenCorrectionCoeff(a_ion_charge_density);
-   }
-
+   // Now compute inhomogeneous contribution
+   computeBcDivergence(m_bc_divergence);
+   
    if ( a_update_preconditioner ) {
       updatePreconditioner(m_preconditioner, m_volume_reciprocal, m_mapped_coefficients, a_bc);
    }
@@ -244,121 +297,49 @@ GKVorticity::setVorticityOperatorCoefficients( const LevelData<FArrayBox>&  a_io
 
 
 void
-GKVorticity::computeCoefficients(const LevelData<FArrayBox>& a_ion_mass_density,
-                                 LevelData<FluxBox>&         a_mapped_coefficients,
-                                 LevelData<FluxBox>&         a_unmapped_coefficients )
+GKVorticity::computeVorticityCoefficients(const LevelData<FArrayBox>& a_ion_mass_density,
+                                          const LevelData<FArrayBox>& a_ion_charge_density,
+                                          const LevelData<FArrayBox>& a_electron_temperature,
+                                          const EllipticOpBC&         a_bc,
+                                          LevelData<FluxBox>&         a_mapped_coefficients,
+                                          LevelData<FluxBox>&         a_unmapped_coefficients )
 {
    CH_TIME("GKVorticity::computeCoefficients");
+   CH_assert(a_mapped_coefficients.ghostVect() >= IntVect::Unit);
+   CH_assert(a_unmapped_coefficients.ghostVect() >= IntVect::Unit);
 
    const DisjointBoxLayout& grids( m_geometry.grids() );
    
-   LevelData<FArrayBox> density_sum_cell( grids, 1, 2*IntVect::Unit );
-      
-   // This fills two codim 1 ghost cell layers at all block boundaries
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
-      const ProblemDomain& domain = block_coord_sys.domain();
-
-      density_sum_cell[dit].copy(a_ion_mass_density[dit]);
-      fourthOrderCellExtrapAtDomainBdry(density_sum_cell[dit], domain, grids[dit]);
+   // This can be speed-up later by cashing density and temeprature objects
+   LevelData<FluxBox> mass_density_face( grids, 1, IntVect::Zero );
+   LevelData<FluxBox> charge_density_face( grids, 1, IntVect::Zero );
+   LevelData<FluxBox> electron_temperature_face( grids, 1, IntVect::Zero );
+   
+   convertCellToFace(mass_density_face, a_ion_mass_density);
+   convertCellToFace(charge_density_face, a_ion_charge_density);
+   convertCellToFace(electron_temperature_face, a_electron_temperature);
+   
+   //Update parallel conductivity
+   if (m_parallel_conductivity_func == NULL) {
+      computeParallelConductivity(electron_temperature_face, m_parallel_cond_face);
    }
    
-   // This fills extrablock ghosts and performs an exchange.  We now have 4 layers
-   // of ghost cells filled, except at the physical boundary were we only have 2.
-   m_geometry.fillInternalGhosts( density_sum_cell );
-   
-   // Convert from cell averages to face centers.  We lose 2 ghost cells in this
-   // process, so we now only have data on 2 ghost cell layers, except at the
-   // physical boundary where we have none.
-   // NB: this operation only involves data from the cells along the same direction
-   // (i.e., does not involve CODIM 2 isses, and therefore it is safe to use even
-   // even for the second-order (since fourthOrderCellExtrapAtDomainBdry() call provided all
-   // nesesary information).
-
-   LevelData<FluxBox> density_sum_face( grids, 1, IntVect::Zero );
-   fourthOrderCellToFaceCenters(density_sum_face, density_sum_cell);
-
-   if (!m_electron_temperature_cell.isDefined() ) {
-      m_electron_temperature_cell.define(grids, 1, 2*IntVect::Unit);
-   }
-
-   //Assign electron temperature
-   if (!m_electron_temperature_face.isDefined() ) {
-      if (m_electron_temperature == NULL) {
-         MayDay::Error("GKVorticity::computeCoefficients() electron temperature should be specified for voriticity model");
-      }
-      m_electron_temperature->assign( m_electron_temperature_cell, m_geometry, 0.0);
-      m_geometry.fillInternalGhosts( m_electron_temperature_cell );
-      m_electron_temperature_face.define( grids, 1, IntVect::Zero );
-      fourthOrderCellToFaceCenters(m_electron_temperature_face, m_electron_temperature_cell);
-   }
-   
-   //Assign parallel conductivity
-   if (!m_parallel_cond_face.isDefined() ) {
-      if (m_parallel_conductivity == NULL) {
-  	 m_parallel_cond_face.define( grids, 1, IntVect::Zero );
-         computeParallelConductivity(m_electron_temperature_face, m_parallel_cond_face);
-      }
-      else {
-         LevelData<FArrayBox> parallel_cond_cell( grids, 1, 2*IntVect::Unit );
-         m_parallel_conductivity->assign( parallel_cond_cell, m_geometry, 0.0);
-         m_geometry.fillInternalGhosts( parallel_cond_cell );
-         m_parallel_cond_face.define( grids, 1, IntVect::Zero );
-         fourthOrderCellToFaceCenters(m_parallel_cond_face, parallel_cond_cell);
-      }
-   }
-
-   //Assign charge exchange coefficient
-   if (m_model == "Vorticity" && m_charge_exchange_coeff != NULL 
-       && !m_charge_exchange_coeff_face.isDefined() ) {
-      LevelData<FArrayBox> charge_exchange_coeff_cell( grids, 1, 2*IntVect::Unit );
-      m_charge_exchange_coeff->assign( charge_exchange_coeff_cell, m_geometry, 0.0);
-      m_geometry.fillInternalGhosts( charge_exchange_coeff_cell );
-      m_charge_exchange_coeff_face.define( grids, 1, IntVect::Zero );
-      fourthOrderCellToFaceCenters(m_charge_exchange_coeff_face, charge_exchange_coeff_cell);
-   }
-   
-   const IntVect grown_ghosts( m_mapped_coefficients.ghostVect() + IntVect::Unit );
-   CH_assert(grown_ghosts == 2*IntVect::Unit);
    const LevelData<FluxBox>& BFieldMag = m_geometry.getFCBFieldMag();
-   CH_assert(BFieldMag.ghostVect()>=grown_ghosts);
-   const LevelData<FluxBox>& BFieldDir = m_geometry.getFCBFieldDir();
-   CH_assert(BFieldDir.ghostVect()>=grown_ghosts);
    
-   LevelData<FluxBox> grown_mapped_coefficients(grids, SpaceDim*SpaceDim, grown_ghosts);
-   LevelData<FluxBox> grown_unmapped_coefficients(grids, SpaceDim*SpaceDim, grown_ghosts);
-
-   const LevelData<FluxBox>& perp_coeff = m_geometry.getEllipticOpPerpCoeff();
-   const LevelData<FluxBox>& par_coeff = m_geometry.getEllipticOpParCoeff();
+   const LevelData<FluxBox>& perp_coeff_unmapped = m_geometry.getEllipticOpPerpCoeff();
+   const LevelData<FluxBox>& par_coeff_unmapped = m_geometry.getEllipticOpParCoeff();
    const LevelData<FluxBox>& perp_coeff_mapped = m_geometry.getEllipticOpPerpCoeffMapped();
    const LevelData<FluxBox>& par_coeff_mapped  = m_geometry.getEllipticOpParCoeffMapped();
-
+      
    for (DataIterator dit(grids); dit.ok(); ++dit) {
 
       const Box& box = grids[dit];
-
-      FluxBox isotropic_coeff(box, SpaceDim * SpaceDim);
-      isotropic_coeff.copy(perp_coeff[dit]);
-      isotropic_coeff += par_coeff[dit];
-      isotropic_coeff *= m_debye_number2;
-
-      FluxBox isotropic_coeff_mapped(box, SpaceDim * SpaceDim);
-      isotropic_coeff_mapped.copy(perp_coeff_mapped[dit]);
-      isotropic_coeff_mapped += par_coeff_mapped[dit];
-      isotropic_coeff_mapped *= m_debye_number2;
       
-      FluxBox polarization_fac(box, 1);
-      polarization_fac.setVal(1.0);
-      polarization_fac *= m_larmor_number2;
-      polarization_fac.mult(density_sum_face[dit],box, 0, 0);
-      polarization_fac.divide(BFieldMag[dit], box, 0, 0);
-      polarization_fac.divide(BFieldMag[dit], box, 0, 0);
-
-      FluxBox tmp_perp(box, SpaceDim * SpaceDim);
-      tmp_perp.copy(perp_coeff[dit]);
+      FluxBox tmp_perp_unmapped(box, SpaceDim * SpaceDim);
+      tmp_perp_unmapped.copy(perp_coeff_unmapped[dit]);
       
-      FluxBox tmp_par(box, SpaceDim * SpaceDim);
-      tmp_par.copy(par_coeff[dit]);
+      FluxBox tmp_par_unmapped(box, SpaceDim * SpaceDim);
+      tmp_par_unmapped.copy(par_coeff_unmapped[dit]);
       
       FluxBox tmp_perp_mapped(box, SpaceDim * SpaceDim);
       tmp_perp_mapped.copy(perp_coeff_mapped[dit]);
@@ -367,65 +348,127 @@ GKVorticity::computeCoefficients(const LevelData<FArrayBox>& a_ion_mass_density,
       tmp_par_mapped.copy(par_coeff_mapped[dit]);
 
       if (m_model == "Vorticity") {
+      
+         FluxBox polarization_fac(box, 1);
+         polarization_fac.setVal(1.0);
+         polarization_fac *= m_larmor_number2;
+         polarization_fac.mult(mass_density_face[dit],box, 0, 0);
+         polarization_fac.divide(BFieldMag[dit], box, 0, 0);
+         polarization_fac.divide(BFieldMag[dit], box, 0, 0);
          
          FluxBox perp_fac(box, 1);
          perp_fac.copy(polarization_fac);
          perp_fac *= m_alpha;
-         if (m_charge_exchange_coeff != NULL) {
+         
+         if (m_charge_exchange_func != NULL) {
             FluxBox perp_fac_chx(box, 1);
-            perp_fac_chx.copy(m_charge_exchange_coeff_face[dit]);
+            perp_fac_chx.copy(m_charge_exchange_face[dit]);
             perp_fac_chx *= m_dt_implicit;
             perp_fac += perp_fac_chx;
          }
          
          for (int n=0; n<SpaceDim*SpaceDim; ++n) {
-            tmp_perp.mult(perp_fac, box, 0, n);
-            tmp_par.mult(m_parallel_cond_face[dit], box, 0, n);
+            tmp_perp_unmapped.mult(perp_fac, box, 0, n);
+            tmp_par_unmapped.mult(m_parallel_cond_face[dit], box, 0, n);
             
             tmp_perp_mapped.mult(perp_fac, box, 0, n);
             tmp_par_mapped.mult(m_parallel_cond_face[dit], box, 0, n);
          }
 
-         tmp_par *= m_dt_implicit;
+         tmp_par_unmapped *= m_dt_implicit;
          tmp_par_mapped *= m_dt_implicit;
 
-         grown_unmapped_coefficients[dit].copy(tmp_perp);
-         grown_unmapped_coefficients[dit] += tmp_par;
+         a_unmapped_coefficients[dit].copy(tmp_perp_unmapped);
+         a_unmapped_coefficients[dit] += tmp_par_unmapped;
 
-         grown_mapped_coefficients[dit].copy(tmp_perp_mapped);
-         grown_mapped_coefficients[dit] += tmp_par_mapped;
+         a_mapped_coefficients[dit].copy(tmp_perp_mapped);
+         a_mapped_coefficients[dit] += tmp_par_mapped;
 
+         // Handle high-order terms
+         m_M_mapped[dit].setVal(0.);
+         m_M_unmapped[dit].setVal(0.);
+         m_N2_mapped[dit].setVal(0.);
+         m_N2_unmapped[dit].setVal(0.);
+         
+         // Include polarization corrections
          if (m_include_pol_den_correction) {
-            m_perp_coeff_mapped[dit].copy(perp_coeff_mapped[dit]);
-            m_perp_coeff_unmapped[dit].copy(perp_coeff[dit]);
-            m_par_coeff_mapped[dit].copy(tmp_par_mapped);
-            m_par_coeff_unmapped[dit].copy(tmp_par);
+            m_M_mapped[dit] += perp_coeff_mapped[dit];
+            m_M_unmapped[dit] += perp_coeff_unmapped[dit];
+            m_N2_mapped[dit] += tmp_par_mapped;
+            m_N2_unmapped[dit] += tmp_par_unmapped;
+           
             for (int n=0; n<SpaceDim*SpaceDim; ++n) {
-               m_perp_coeff_mapped[dit].mult(polarization_fac, box, 0, n);
-               m_perp_coeff_unmapped[dit].mult(polarization_fac, box, 0, n);
-               m_par_coeff_mapped[dit].mult(m_electron_temperature_face[dit],box, 0, n);
-               m_par_coeff_unmapped[dit].mult(m_electron_temperature_face[dit],box, 0, n);
+               m_M_mapped[dit].mult(polarization_fac, box, 0, n);
+               m_M_unmapped[dit].mult(polarization_fac, box, 0, n);
+
+               m_N2_mapped[dit].mult(electron_temperature_face[dit],box, 0, n);
+               m_N2_unmapped[dit].mult(electron_temperature_face[dit],box, 0, n);
+               
+               m_N2_mapped[dit].divide(charge_density_face[dit], box, 0, n);
+               m_N2_unmapped[dit].divide(charge_density_face[dit], box, 0, n);
             }
+         }
+         
+         // Include anomalous viscosity term
+         // NEED TO MULTIPLY DIFFUSION BY DT (AFTER VERIFICATION)
+         if (m_include_diffusion) {
+
+	   FluxBox diff_coeff_unmapped(box, SpaceDim * SpaceDim);
+	   FluxBox diff_coeff_mapped(box, SpaceDim * SpaceDim);
+
+	   diff_coeff_unmapped.copy(m_diffusion_coeff_unmapped[dit]);
+	   diff_coeff_mapped.copy(m_diffusion_coeff_mapped[dit]);
+
+	   diff_coeff_unmapped *= m_dt_implicit;
+           diff_coeff_mapped *= m_dt_implicit;
+	   
+	   m_N2_unmapped[dit] += diff_coeff_unmapped;
+	   m_N2_mapped[dit] += diff_coeff_mapped;
          }
       }
 
       else if (m_model == "ParallelCurrent") {
          
          for (int n=0; n<SpaceDim*SpaceDim; ++n) {
-            tmp_par.mult(m_parallel_cond_face[dit], box, 0, n);
-            tmp_par.divide(density_sum_face[dit],box, 0, n);
-            tmp_par.mult(m_electron_temperature_face[dit],box, 0, n);
+            tmp_par_unmapped.mult(m_parallel_cond_face[dit], box, 0, n);
+            tmp_par_unmapped.divide(charge_density_face[dit],box, 0, n);
+            tmp_par_unmapped.mult(electron_temperature_face[dit],box, 0, n);
             
             tmp_par_mapped.mult(m_parallel_cond_face[dit], box, 0, n);
-            tmp_par_mapped.divide(density_sum_face[dit],box, 0, n);
-            tmp_par_mapped.mult(m_electron_temperature_face[dit],box, 0, n);
+            tmp_par_mapped.divide(charge_density_face[dit],box, 0, n);
+            tmp_par_mapped.mult(electron_temperature_face[dit],box, 0, n);
          }
 
-         tmp_par *= m_dt_implicit;
+         tmp_par_unmapped *= m_dt_implicit;
          tmp_par_mapped *= m_dt_implicit;
          
-         grown_unmapped_coefficients[dit].copy(tmp_par);
-         grown_mapped_coefficients[dit].copy(tmp_par_mapped);
+         a_unmapped_coefficients[dit].copy(tmp_par_unmapped);
+         a_mapped_coefficients[dit].copy(tmp_par_mapped);
+      }
+
+      else if (m_model == "VorticityDiffusion") {
+         
+         a_unmapped_coefficients[dit].setVal(0.);
+         a_mapped_coefficients[dit].setVal(0.);
+         
+         if (m_include_pol_den_correction) {
+            for (int n=0; n<SpaceDim*SpaceDim; ++n) {
+               tmp_par_unmapped.mult(m_parallel_cond_face[dit], box, 0, n);
+               tmp_par_unmapped.divide(charge_density_face[dit],box, 0, n);
+               tmp_par_unmapped.mult(electron_temperature_face[dit],box, 0, n);
+               
+               tmp_par_mapped.mult(m_parallel_cond_face[dit], box, 0, n);
+               tmp_par_mapped.divide(charge_density_face[dit],box, 0, n);
+               tmp_par_mapped.mult(electron_temperature_face[dit],box, 0, n);
+            }
+            a_unmapped_coefficients[dit] += tmp_par_unmapped;
+            a_mapped_coefficients[dit] += tmp_par_mapped;
+         }
+         
+         if (m_include_diffusion) {
+            a_unmapped_coefficients[dit] += m_diffusion_coeff_unmapped[dit];
+            a_mapped_coefficients[dit] += m_diffusion_coeff_mapped[dit];
+         }
       }
       
       else {
@@ -433,30 +476,109 @@ GKVorticity::computeCoefficients(const LevelData<FArrayBox>& a_ion_mass_density,
       }
    }
 
+   modifyForNeumannAndNaturalBCs(a_bc, a_unmapped_coefficients, a_mapped_coefficients);
+   
+   if (m_model == "Vorticity" && m_include_high_order_corr) {
+      modifyForNeumannAndNaturalBCs(a_bc, m_M_unmapped, m_M_mapped);
+      
+      if (m_use_vorticity_bcs) {
+         modifyForNeumannAndNaturalBCs(*m_vorticity_bc, m_N2_unmapped, m_N2_mapped);
+      }
+   }
+
    if (!m_second_order) {
 
-      grown_unmapped_coefficients.exchange();
-      grown_mapped_coefficients.exchange();
-      
-      // The mapped coefficients must now be converted to face averages, which
-      // requires a layer of transverse ghost faces that we don't have at the
-      // physical boundary, so we need to extrapolate them.
-      m_geometry.fillTransverseGhosts(grown_mapped_coefficients, false);
+      // Fill the ghost cell data needed for conversion to face averages
+      //   (a) Make sure the interior ghost cell values are consistent
+      a_unmapped_coefficients.exchange();
+      a_mapped_coefficients.exchange();
+      //   (b) Extrapolate to transverse physical boundaries
+      m_geometry.fillTransverseGhosts(a_unmapped_coefficients, false);
+      m_geometry.fillTransverseGhosts(a_mapped_coefficients, false);
    
-      // Convert the mapped coefficients from face-centered to face-averaged
-      fourthOrderAverage(grown_mapped_coefficients);
-   
-      m_geometry.fillTransverseGhosts(grown_unmapped_coefficients, false);
-      m_geometry.fillTransverseGhosts(grown_mapped_coefficients, false);
+      // Convert from face-centered to face-averaged
+      fourthOrderAverage(a_unmapped_coefficients);
+      fourthOrderAverage(a_mapped_coefficients);
 
+      // Update the ghosts again
+      a_unmapped_coefficients.exchange();
+      a_mapped_coefficients.exchange();
+      m_geometry.fillTransverseGhosts(a_unmapped_coefficients, false);
+      m_geometry.fillTransverseGhosts(a_mapped_coefficients, false);
    }
    
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      a_mapped_coefficients[dit].copy(grown_mapped_coefficients[dit]);
-      a_unmapped_coefficients[dit].copy(grown_unmapped_coefficients[dit]);
+   // We don't seem to use symmetrized version, yet keep the code just in case
+   if ( m_symmetrized_preconditioner ) {
+      const DisjointBoxLayout& grids( m_geometry.grids() );
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_ne_over_Te[dit].copy(a_ion_charge_density[dit]);
+         m_ne_over_Te[dit] /= a_electron_temperature[dit];
+      }
    }
+   
 }
 
+
+void GKVorticity::computeDiffusionCoeff(LevelData<FluxBox>& a_diffusion_coeff_unmapped,
+                                        LevelData<FluxBox>& a_diffusion_coeff_mapped) const
+{
+   
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   
+   LevelData<FluxBox> poloidal_coeff(grids, SpaceDim*SpaceDim, IntVect::Unit);
+   LevelData<FluxBox> poloidal_coeff_mapped(grids, SpaceDim*SpaceDim, IntVect::Unit);
+
+   m_geometry.getCustomEllipticOpCoeff(poloidal_coeff, "poloidal");
+   m_geometry.getCustomEllipticOpCoeffMapped(poloidal_coeff_mapped, "poloidal");
+   
+   const LevelData<FluxBox>& perp_coeff_unmapped = m_geometry.getEllipticOpPerpCoeff();
+   const LevelData<FluxBox>& perp_coeff_mapped = m_geometry.getEllipticOpPerpCoeffMapped();
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+            
+      FluxBox& this_coeff = a_diffusion_coeff_unmapped[dit];
+      FluxBox& this_coeff_mapped = a_diffusion_coeff_mapped[dit];
+      
+      this_coeff.setVal(0.);
+      this_coeff_mapped.setVal(0.);
+      
+      const Box& box = grids[dit];
+      
+      if (m_pol_diffusion_func != NULL) {
+
+         FluxBox diffusion_coeff_pol(box, SpaceDim * SpaceDim);
+         FluxBox diffusion_coeff_pol_mapped(box, SpaceDim * SpaceDim);
+         
+         diffusion_coeff_pol.copy(poloidal_coeff[dit]);
+         diffusion_coeff_pol_mapped.copy(poloidal_coeff_mapped[dit]);
+
+         for (int n=0; n<SpaceDim*SpaceDim; ++n) {
+            diffusion_coeff_pol.mult(m_pol_diffusion_face[dit], box, 0, n);
+            diffusion_coeff_pol_mapped.mult(m_pol_diffusion_face[dit], box, 0, n);
+         }
+         
+         this_coeff += diffusion_coeff_pol;
+         this_coeff_mapped += diffusion_coeff_pol_mapped;
+      }
+
+      if (m_perp_diffusion_func != NULL) {
+
+         FluxBox diffusion_coeff_perp(box, SpaceDim * SpaceDim);
+         FluxBox diffusion_coeff_perp_mapped(box, SpaceDim * SpaceDim);
+         
+         diffusion_coeff_perp.copy(perp_coeff_unmapped[dit]);
+         diffusion_coeff_perp_mapped.copy(perp_coeff_mapped[dit]);
+
+         for (int n=0; n<SpaceDim*SpaceDim; ++n) {
+            diffusion_coeff_perp.mult(m_perp_diffusion_face[dit], box, 0, n);
+            diffusion_coeff_perp_mapped.mult(m_perp_diffusion_face[dit], box, 0, n);
+         }
+
+         this_coeff += diffusion_coeff_perp;
+         this_coeff_mapped += diffusion_coeff_perp_mapped;
+      }
+   }
+}
 
 void
 GKVorticity::updatePreconditioner( MBSolver*              a_preconditioner,
@@ -470,33 +592,39 @@ GKVorticity::updatePreconditioner( MBSolver*              a_preconditioner,
 
    a_preconditioner->initializeMatrix();
 
-   if (m_include_pol_den_correction) {
+   if (m_include_high_order_corr) {
 
-      bool use_extrapolated_bcs = true;
-      RefCountedPtr<EllipticOpBC> vorticity_bc = a_potential_bc.clone(use_extrapolated_bcs);
-
+      LevelData<FluxBox> MplusN1(grids, SpaceDim*SpaceDim, IntVect::Unit);
+      LevelData<FluxBox> negativeN2(grids, SpaceDim*SpaceDim, IntVect::Unit);
+      LevelData<FluxBox> M(grids, SpaceDim*SpaceDim, IntVect::Unit);
       LevelData<FluxBox> zero(grids, SpaceDim*SpaceDim, IntVect::Unit);
-      LevelData<FluxBox> negative_par_cond(grids, SpaceDim*SpaceDim, IntVect::Unit);
 
       for (DataIterator dit(grids); dit.ok(); ++dit) {
+         MplusN1[dit].copy(a_mapped_coefficients[dit]);
+         M[dit].copy(m_M_mapped[dit]);
+         if ( m_precond_scale_fac != 1. ) {
+            MplusN1[dit] *= m_precond_scale_fac;
+            M[dit] *= m_precond_scale_fac;
+         }
+         negativeN2[dit].copy(m_N2_mapped[dit]);
+         negativeN2[dit].negate();
+
          zero[dit].setVal(0.);
-         negative_par_cond[dit].copy(m_par_coeff_mapped[dit]);
-         negative_par_cond[dit].negate();
       }
 
       // Upper-left block
-      a_preconditioner->constructMatrixBlock(0, 0, a_volume_reciprocal, a_mapped_coefficients, a_potential_bc);
+      a_preconditioner->constructMatrixBlock(0, 0, a_volume_reciprocal, MplusN1, a_potential_bc);
 
       if ( m_symmetrized_preconditioner ) {
 
          // Upper-right block
-         a_preconditioner->constructMatrixBlock(0, 1, a_volume_reciprocal, m_perp_coeff_mapped, a_potential_bc);
+         a_preconditioner->constructMatrixBlock(0, 1, a_volume_reciprocal, M, a_potential_bc);
 
          // Lower-left block
-         a_preconditioner->constructMatrixBlock(1, 0, a_volume_reciprocal, m_perp_coeff_mapped, a_potential_bc);
+         a_preconditioner->constructMatrixBlock(1, 0, a_volume_reciprocal, M, a_potential_bc);
 
          // Lower-right block
-         a_preconditioner->constructMatrixBlock(1, 1, a_volume_reciprocal, m_perp_coeff_mapped, m_ne_over_Te, a_potential_bc);
+         a_preconditioner->constructMatrixBlock(1, 1, a_volume_reciprocal, M, m_ne_over_Te, a_potential_bc);
       }
       else {
 
@@ -507,16 +635,40 @@ GKVorticity::updatePreconditioner( MBSolver*              a_preconditioner,
             // Te_reciprocal[dit] /= m_electron_temperature_cell[dit];
          }
 
+         
+         RefCountedPtr<EllipticOpBC> vorticity_bc;
+         
+         if (m_use_vorticity_bcs) {
+            vorticity_bc = m_vorticity_bc->clone();
+	    // we don't need to update Neumann factor, becasue the
+	    // preconditioner solves a homogeneous problem
+	    //setNeumannNaturalFactor(negativeN2, *vorticity_bc);
+         }
+         else {
+            bool use_extrapolated_bcs = true;
+            vorticity_bc = a_potential_bc.clone(use_extrapolated_bcs);
+         }
+         
          // Upper-right block
-         a_preconditioner->constructMatrixBlock(0, 1, a_volume_reciprocal, negative_par_cond, *vorticity_bc);
+         a_preconditioner->constructMatrixBlock(0, 1, a_volume_reciprocal, negativeN2, *vorticity_bc);
 
          // Lower-left block
-         a_preconditioner->constructMatrixBlock(1, 0, a_volume_reciprocal, m_perp_coeff_mapped, a_potential_bc);
+         a_preconditioner->constructMatrixBlock(1, 0, a_volume_reciprocal, M, a_potential_bc);
 
          // Lower-right block
          a_preconditioner->constructMatrixBlock(1, 1, zero, Te_reciprocal, *vorticity_bc);
       }
    }
+   
+   else if (m_model == "VorticityDiffusion") {
+      LevelData<FArrayBox> beta(grids, 1, IntVect::Zero);
+      for (DataIterator dit(beta.dataIterator()); dit.ok(); ++dit ) {
+         beta[dit].setVal(1.0);
+         beta[dit].divide(m_dt_implicit);
+      }
+      a_preconditioner->constructMatrixBlock(0, 0, a_volume_reciprocal, a_mapped_coefficients, beta, a_potential_bc);
+   }
+   
    else {
       a_preconditioner->constructMatrixBlock(0, 0, a_volume_reciprocal, a_mapped_coefficients, a_potential_bc);
    }
@@ -524,7 +676,7 @@ GKVorticity::updatePreconditioner( MBSolver*              a_preconditioner,
    a_preconditioner->finalizeMatrix();
 
 #ifdef VERIFY_MATRIX
-   if (m_include_pol_den_correction) {
+   if (m_include_high_order_corr) {
       verifyMatrix(a_preconditioner);
    }
 #endif
@@ -534,7 +686,7 @@ GKVorticity::updatePreconditioner( MBSolver*              a_preconditioner,
 void
 GKVorticity::verifyMatrix( const MBSolver*  a_matrix )
 {
-   CH_assert(m_include_pol_den_correction);
+   CH_assert(m_include_high_order_corr);
 
    // Check the difference between the input block matrix and the
    // operator for which it's intended to server as a preconditioner.
@@ -556,10 +708,10 @@ GKVorticity::verifyMatrix( const MBSolver*  a_matrix )
    // Compute Mu
    LevelData<FArrayBox> Mu(grids, 1, IntVect::Zero);
    if ( !m_low_pollution ) {
-      computeFluxDivergenceWithCoeff(Mu, u, m_perp_coeff_unmapped, true, false);
+      computeFluxDivergenceWithCoeff(Mu, u, m_M_unmapped, true, false);
    }
    else {
-      computeFluxDivergenceWithCoeff(Mu, u, m_perp_coeff_mapped, true, false);
+      computeFluxDivergenceWithCoeff(Mu, u, m_M_mapped, true, false);
    }
       
    if ( m_symmetrized_preconditioner ) {
@@ -618,7 +770,7 @@ GKVorticity::solvePreconditioner( const LevelData<FArrayBox>& a_r,
 {
    CH_TIME("GKVorticity::solvePreconditioner");
 
-   if ( m_include_pol_den_correction ) {
+   if ( m_include_high_order_corr ) {
       const DisjointBoxLayout& grids = m_geometry.grids();
 
       LevelData<FArrayBox> block_in(grids, 2, IntVect::Zero);
@@ -629,12 +781,20 @@ GKVorticity::solvePreconditioner( const LevelData<FArrayBox>& a_r,
          block_in[dit].setVal(0.,1);
          block_out[dit].copy(a_z[dit],0,0,1);
          block_out[dit].setVal(0.,1);
+
+         if ( m_precond_scale_fac != 1. ) {
+            block_out[dit].mult(1./m_precond_scale_fac,0);
+         }
       }
 
       m_preconditioner->solve(block_in, block_out, true);
 
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          a_z[dit].copy(block_out[dit],0,0,1);
+
+         if ( m_precond_scale_fac != 1. ) {
+            a_z[dit] *= m_precond_scale_fac;
+         }
       }
 
       if ( m_symmetrized_preconditioner ) {
@@ -645,47 +805,6 @@ GKVorticity::solvePreconditioner( const LevelData<FArrayBox>& a_r,
    }
    else {
       m_preconditioner->solve(a_r, a_z, true);
-   }
-}
-
-
-void
-GKVorticity::setPolDenCorrectionCoeff(const LevelData<FArrayBox>& a_ion_charge_density )
-{
-   CH_TIME("GKVorticity::setPolDenCorrectionCoeff");
-
-   const DisjointBoxLayout& grids( m_geometry.grids() );
-
-   LevelData<FArrayBox> density_sum_cell( grids, 1, 2*IntVect::Unit );
-      
-   // This fills two codim 1 ghost cell layers at all block boundaries
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
-      const ProblemDomain& domain = block_coord_sys.domain();
-      
-      density_sum_cell[dit].copy(a_ion_charge_density[dit]);
-      fourthOrderCellExtrapAtDomainBdry(density_sum_cell[dit], domain, grids[dit]);
-   }
-   
-   // This fills extrablock ghosts and performs an exchange.  We now have 4 layers
-   // of ghost cells filled, except at the physical boundary were we only have 2.
-   m_geometry.fillInternalGhosts( density_sum_cell );
-      
-   LevelData<FluxBox> density_sum_face( grids, 1, IntVect::Zero );
-   fourthOrderCellToFaceCenters(density_sum_face, density_sum_cell);
-
-   if ( m_symmetrized_preconditioner ) {
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         m_ne_over_Te[dit].copy(density_sum_cell[dit]);
-         m_ne_over_Te[dit] /= m_electron_temperature_cell[dit];
-      }
-   }
-
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      for (int n=0; n<SpaceDim*SpaceDim; ++n) {
-         m_par_coeff_mapped[dit].divide(density_sum_face[dit], grids[dit], 0, n);
-         m_par_coeff_unmapped[dit].divide(density_sum_face[dit], grids[dit], 0, n);
-      }
    }
 }
 
@@ -943,22 +1062,33 @@ GKVorticity::applyOp(LevelData<FArrayBox>&       a_out,
 
    computeFluxDivergence(a_in, a_out, a_homogeneous);
 
-   // Add polarization density correction into electron pressure
-   if (m_include_pol_den_correction) {
+   // Add high-order corrections (vorticity parallel and perp diffusion)
+   if (m_include_high_order_corr) {
       
       LevelData<FArrayBox> pol_den_correction(grids, 1, IntVect::Zero);
-      applyPolDenCorrectionOp(pol_den_correction, a_in, a_homogeneous);
+      applyHighOrderCorrectionOp(pol_den_correction, a_in, a_homogeneous);
 
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          a_out[dit] += pol_den_correction[dit];
       }
    }
+   
+   // Add linear term from the first-order Backward Euler solve
+   if (m_model == "VorticityDiffusion" ) {
+
+     for (DataIterator dit(grids); dit.ok(); ++dit) {
+         FArrayBox shift(grids[dit],1);
+         shift.copy(a_in[dit]);
+         shift.divide(m_dt_implicit);
+         a_out[dit] += shift;
+      }
+   }
 }
 
 void
-GKVorticity::applyPolDenCorrectionOp(LevelData<FArrayBox>&       a_out,
-                                     const LevelData<FArrayBox>& a_in,
-                                     bool                        a_homogeneous )
+GKVorticity::applyHighOrderCorrectionOp(LevelData<FArrayBox>&       a_out,
+                                        const LevelData<FArrayBox>& a_in,
+                                        bool                        a_homogeneous )
 {
    const DisjointBoxLayout& grids = m_geometry.grids();
 
@@ -967,35 +1097,55 @@ GKVorticity::applyPolDenCorrectionOp(LevelData<FArrayBox>&       a_out,
    if ( !m_low_pollution ) {
       computeFluxDivergenceWithCoeff(negative_vorticity,
                                      a_in,
-                                     m_perp_coeff_unmapped,
+                                     m_M_unmapped,
                                      a_homogeneous,
                                      false);
    }
    else {
       computeFluxDivergenceWithCoeff(negative_vorticity,
                                      a_in,
-                                     m_perp_coeff_mapped,
+                                     m_M_mapped,
                                      a_homogeneous,
                                      false);
    }
 
-   // Compute par_grad * sigma * par_grad of negative_vorticity                                                       
+  
+   
+   // Update boundary data using vorticity bcs; presently only homogeneous
+   // vorticity BCs are supported; overwise the code will stuck
+   // in an infinite recursion (from the updateBoundaryData call)
+   if (m_use_vorticity_bcs) {
+      bool homogeneous_bcs = true;
+      updateBoundaryData(m_N2_unmapped, *m_vorticity_bc, homogeneous_bcs = true);
+   }
+   
+    // Compute -(par_grad * sigma * par_grad + perp_grad D perp_grad) of negative_vorticity
    if ( !m_low_pollution ) {
+
       computeFluxDivergenceWithCoeff(a_out,
                                      negative_vorticity,
-                                     m_par_coeff_unmapped,
+                                     m_N2_unmapped,
                                      a_homogeneous,
                                      m_subtract_fs_par_div,
-                                     true);
+                                     !m_use_vorticity_bcs);
    }
    else {
+
       computeFluxDivergenceWithCoeff(a_out,
                                      negative_vorticity,
-                                     m_par_coeff_mapped,
+                                     m_N2_mapped,
                                      a_homogeneous,
                                      m_subtract_fs_par_div,
-                                     true);
+                                     !m_use_vorticity_bcs);
    }
+
+   // Update boundary data to be consistent with low-order potential bcs.
+   // Do not update m_bc_divergence, since we did that earlier
+   if (m_use_vorticity_bcs) {
+      bool homogeneous_bcs = true;
+      updateBoundaryData(m_unmapped_coefficients, *m_potential_bc, homogeneous_bcs = true);
+    }
+
 }
 
 void
@@ -1067,11 +1217,83 @@ GKVorticity::computeParallelConductivity(const LevelData<FluxBox>& a_Te,
 }
 
 void
-GKVorticity::parseParameters( const ParmParse&   a_ppntr )
+GKVorticity::convertCellToFace(LevelData<FluxBox>&          a_face_data,
+                               const LevelData<FArrayBox>&  a_cell_data ) const
 {
-   if (a_ppntr.contains("model")) {
-      a_ppntr.get( "model", m_model );
+   CH_assert(m_num_potential_ghosts >= 2);
+   
+   const DisjointBoxLayout& grids = a_cell_data.disjointBoxLayout();
+   
+   LevelData<FArrayBox> cell_data_grown( grids, 1, m_num_potential_ghosts*IntVect::Unit );
+      
+   // Extrapolate to two codim 1 ghost cell layers at all block boundaries, including
+   // physical boundaries
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const MagBlockCoordSys& block_coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
+      const ProblemDomain& domain = block_coord_sys.domain();
+      
+      cell_data_grown[dit].copy(a_cell_data[dit]);
+      fourthOrderCellExtrapAtDomainBdry(cell_data_grown[dit], domain, grids[dit]);
    }
+   
+   // Fill extrablock ghosts and perform an exchange.  We then have m_num_potential_ghosts
+   // layers of ghost cells filled, except at the physical boundary were we only have 2
+   // codim 1 cells.
+   m_geometry.fillInternalGhosts( cell_data_grown );
+      
+   // Average from cell averages to face centers.  We use fourth-order averaging, even
+   // if m_second_order is true.  This operation only involves data from the cells along
+   // the same direction (i.e., does not involve codim 2 values, and therefore it is safe
+   // to use even for the second-order (since fourthOrderCellExtrapAtDomainBdry() call
+   // provided all necessary information).
+
+   fourthOrderCellToFaceCenters(a_face_data, cell_data_grown);
+}
+
+void
+GKVorticity::parseParameters( const ParmParse&   a_pp )
+{
+
+   if (a_pp.contains("charge_exchange_coefficient")) {
+      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
+      std::string grid_function_name;
+      a_pp.get("charge_exchange_coefficient", grid_function_name );
+      m_charge_exchange_func = grid_library->find( grid_function_name );
+   }
+
+   if (a_pp.contains("poloidal_diffusion_coefficient")) {
+      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
+      std::string grid_function_name;
+      a_pp.get("poloidal_diffusion_coefficient", grid_function_name );
+      m_pol_diffusion_func = grid_library->find( grid_function_name );
+      m_include_diffusion = true;
+   }
+
+   if (a_pp.contains("perpendicular_diffusion_coefficient")) {
+      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
+      std::string grid_function_name;
+      a_pp.get("perpendicular_diffusion_coefficient", grid_function_name );
+      m_perp_diffusion_func = grid_library->find( grid_function_name );
+      m_include_diffusion = true;
+   }
+   
+   a_pp.query( "use_vorticity_bcs", m_use_vorticity_bcs );
+
+   
+   if (a_pp.contains("parallel_conductivity")) {
+      GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
+      std::string grid_function_name;
+      a_pp.get("parallel_conductivity", grid_function_name );
+      m_parallel_conductivity_func = grid_library->find( grid_function_name );
+   }
+
+   if (a_pp.contains("parallel_conductivity_limit")) {
+     a_pp.get("parallel_conductivity_limit",m_parallel_conductivity_limit );
+   }
+   else {
+     m_parallel_conductivity_limit = DBL_MAX;
+   }
+
 }
 
 

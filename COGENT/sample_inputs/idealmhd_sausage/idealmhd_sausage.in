@@ -64,6 +64,8 @@ gksystem.magnetic_geometry_mapping.cylindrical.z_max = 1.0472
 gksystem.magnetic_geometry_mapping.cylindrical.Btor_scale = 1.0
 gksystem.magnetic_geometry_mapping.second_order = true
 
+gksystem.no_efield = true
+
 #####################################################
 # Phase Space Geometry Definitions
 #####################################################
@@ -71,13 +73,6 @@ phase_space_mapping.v_parallel_max = 1.0
 phase_space_mapping.mu_max = 2.0
 phase_space_mapping.velocity_type = "gyrokinetic"
 phase_space_mapping.second_order = true
-
-#####################################################
-# Poisson Operator Definitions
-#####################################################
-gksystem.fixed_efield = true
-gksystem.zero_efield = true
-gkpoisson.verbose = true
 
 #####################################################
 # Species Definitions
@@ -116,6 +111,9 @@ IC.neutrals.magneticField_virtual.function = "By_IC"
 #####################################################
 # Boundary Condition Definitions
 #####################################################
+BC.neutrals_diffusion.radial_lower.type = "neumann"
+BC.neutrals_diffusion.radial_upper.type = "neumann"
+
 BC.mom0_visc.radial_lower.type = "dirichlet"
 BC.mom0_visc.radial_upper.type = "dirichlet"
 

@@ -73,8 +73,10 @@ void EFieldSelfConsistentBC::computeEField( const PS::GKState&                a_
             }
          }
          else {
-            m_poisson->setOperatorCoefficients( ion_mass_density, a_bc, true, m_radial_gkp_divergence_average_lo,
-                                                m_radial_gkp_divergence_average_hi, m_radial_gkp_divergence_average );
+            m_poisson->setOperatorCoefficients( ion_mass_density, a_bc, a_update_potential,
+                                                m_radial_gkp_divergence_average_lo,
+                                                m_radial_gkp_divergence_average_hi,
+                                                m_radial_gkp_divergence_average );
          }
 
          if ( a_update_potential ) {

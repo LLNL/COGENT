@@ -125,8 +125,8 @@ BC.hydrogen.vpar_upper.function   = "maxwellian_tanh_0"
 BC.hydrogen.mu_lower.function     = "maxwellian_tanh_0"
 BC.hydrogen.mu_upper.function     = "maxwellian_tanh_0"
 
-BC.potential.radial_lower.type = "neumann"
-BC.potential.radial_upper.type = "neumann"
+BC.potential.radial_lower.type = "mapped_neumann"
+BC.potential.radial_upper.type = "mapped_neumann"
 
 #####################################################
 # Collisions Definitions

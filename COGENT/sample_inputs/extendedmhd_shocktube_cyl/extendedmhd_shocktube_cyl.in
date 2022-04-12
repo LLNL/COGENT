@@ -57,6 +57,8 @@ gksystem.magnetic_geometry_mapping.cylindrical.z_max = 1.0
 gksystem.magnetic_geometry_mapping.cylindrical.Btor_scale = 1.0
 gksystem.magnetic_geometry_mapping.second_order = true
 
+gksystem.no_efield = true
+
 #####################################################
 # Phase Space Geometry Definitions
 #####################################################
@@ -64,13 +66,6 @@ phase_space_mapping.v_parallel_max = 1.0
 phase_space_mapping.mu_max = 2.0
 phase_space_mapping.velocity_type = "gyrokinetic"
 phase_space_mapping.second_order = true
-
-#####################################################
-# Poisson Operator Definitions
-#####################################################
-gksystem.fixed_efield = true
-gksystem.zero_efield = true
-gkpoisson.verbose = true
 
 #####################################################
 # Species Definitions
@@ -142,7 +137,6 @@ BC.plasma.energyDensity_ele.radial_lower.type = "neumann"
 BC.plasma.energyDensity_ele.radial_upper.type = "neumann"
 BC.plasma.energyDensity_ele.poloidal_lower.type = "neumann"
 BC.plasma.energyDensity_ele.poloidal_upper.type = "neumann"
-
 
 #####################################################
 # Grid Function Definitions

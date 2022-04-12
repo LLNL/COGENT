@@ -92,6 +92,8 @@ USE_MT=TRUE#         #memory tracking
 USE_COMPLEX=TRUE#    #type for complex numbers
 USE_TIMER=TRUE#      #Chombo::Timer
 
+XTRACXXFLAGS=MASTER_XTRACXXFLAGS
+
 USE_HDF=TRUE#        #HDF5 file i/o
 ifeq ($(USE_HDF),TRUE)
 HDF5_SERIAL_ROOT=MASTER_HDF5_SERIAL_DIR

@@ -126,7 +126,7 @@ public:
    
    void computeQuasiNeutralElectronDensity( LevelData<FArrayBox>&        quasineutral_density,
                                             LevelData<FArrayBox>&        potential,
-                                            const EllipticOpBC&          bc, 
+                                            EllipticOpBC&                bc, 
                                             const LevelData<FArrayBox>&  ion_density) const;
 
    void applyHarmonicFiltering(LevelData<FArrayBox>& phi,
@@ -174,6 +174,10 @@ protected:
    Real m_krho2_value;
    
 private:
+   
+   void applyBoussinesqCorrections(LevelData<FArrayBox>& total_charge_density,
+                                   const LevelData<FArrayBox>& ion_mass_density) const;
+   
    void parseParameters( ParmParse& pp);
    
 };

@@ -128,7 +128,11 @@ void Anomalous::evalTpmRHS( KineticSpecies&               a_rhs_species,
   }
   
   // compute simple diffusion for 3D
-  if (SpaceDim == 5) {
+ if (SpaceDim == 5) {
+   // NB: for some reasons BC classes do not properly fill codim2 ghosts
+   // for the case of 3D SN field-aligned geometry, so use the
+   // alternative functionality here 
+    phase_geom.fillCoDim2BoundaryGhosts(m_fB);
     computeRhs3D(m_rhs_transport, phase_geom);
   }
    

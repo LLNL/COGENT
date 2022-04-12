@@ -85,7 +85,7 @@ GKSystemParameters::GKSystemParameters()
 
   m_old_vorticity_model = false;
   m_fixed_efield = false;
-  m_zero_efield = false;
+  m_no_efield = false;
 
   m_transport_imex_implicit = false;
   m_neutrals_imex_implicit = false;
@@ -278,8 +278,14 @@ void GKSystemParameters::readParams(const std::string&  a_parsekey)
     m_old_vorticity_model = false;
   }
 
-  ppgksys.query( "fixed_efield", m_fixed_efield );
-  ppgksys.query( "zero_efield", m_zero_efield );
+  ppgksys.query( "zero_efield", m_no_efield );  // zero_efield is deprecated
+  ppgksys.query( "no_efield", m_no_efield );
+  if ( m_no_efield ) {
+     m_fixed_efield = true;
+  }
+  else {
+     ppgksys.query( "fixed_efield", m_fixed_efield ); 
+  }
 
   ppgksys.query( "imex_transport_implicit", m_transport_imex_implicit );
   ppgksys.query( "imex_neutrals_implicit", m_neutrals_imex_implicit );

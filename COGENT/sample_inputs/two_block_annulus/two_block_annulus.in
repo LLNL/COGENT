@@ -122,9 +122,9 @@ BC.hydrogen.vpar_upper.function = "zero"
 BC.hydrogen.mu_lower.function = "maxwellian_const"
 BC.hydrogen.mu_upper.function = "zero"
 
-BC.potential.radial_inner.type = "neumann"
+BC.potential.radial_inner.type = "mapped_neumann"
 BC.potential.radial_inner.value = 0.
-BC.potential.radial_outer.type = "neumann"
+BC.potential.radial_outer.type = "mapped_neumann"
 BC.potential.radial_outer.value = 0.
 
 #####################################################

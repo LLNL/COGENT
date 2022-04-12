@@ -38,7 +38,7 @@ public:
    /**
     * Computes the operator coefficients.
     */
-   void setOperatorCoefficients( const EllipticOpBC& bc );
+   void setOperatorCoefficients( EllipticOpBC& bc );
 
    void computeCoefficients( LevelData<FluxBox>& coefficients );
 

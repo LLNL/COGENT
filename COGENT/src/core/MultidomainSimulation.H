@@ -438,10 +438,11 @@ class MultidomainSimulation : public AppCtxt
     }
    
     inline virtual
-    void solveFluidOpPCImEx(ODEVector&        a_Z, 
-                            const ODEVector&  a_R, 
-                            const int         a_sys_id,
-                            int               a_i = -1 )
+    void solveFluidOpPCImEx(ODEVector&          a_Z, 
+                            const ODEVector&    a_R, 
+                            const std::string&  a_name,
+                            const int           a_sys_id,
+                            int                 a_i = -1 )
     {
       CH_assert(isDefined());
       CH_assert((a_sys_id < m_num_systems) && (a_sys_id >= 0));
@@ -450,7 +451,7 @@ class MultidomainSimulation : public AppCtxt
       getVec(a_R, a_sys_id, R);
       getVec(a_Z, a_sys_id, Z);
 
-      m_systems[a_sys_id]->solveFluidOpPCImEx( Z, R, a_sys_id, a_i );
+      m_systems[a_sys_id]->solveFluidOpPCImEx( Z, R, a_name, a_sys_id, a_i );
     }
     
     inline virtual

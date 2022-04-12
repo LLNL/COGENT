@@ -14,6 +14,7 @@
 #include "MagCoordSys.H"
 #include "MagBlockCoordSys.H"
 #include "MillerBlockCoordSys.H"
+#include "OneBlockCoordSys.H"
 #include "newMappedGridIO.H"
 #include "inspect.H"
 #undef CH_SPACEDIM
@@ -102,6 +103,30 @@ PhaseGeom::PhaseGeom( const RefCountedPtr<PhaseCoordSys>&     a_coord_sys,
      }
    }
 
+   if (m_velocity_type == "miller_poloidal_velocity") {
+
+      m_miller_vel_parms.resize(5);
+      string prefix = string(psm.prefix()) + ".miller_poloidal_velocity";
+      ParmParse pp_miller_parms(prefix.c_str());
+      if ( pp_miller_parms.query("kappa", m_miller_vel_parms[0]) == 0) {
+         MayDay::Error("PhaseGeom:: No kappa specified for miller poloidal velocity");
+      }
+      if ( pp_miller_parms.query("delta", m_miller_vel_parms[1]) == 0 ) {
+         MayDay::Error("PhaseGeom:: No delta specified for miller poloidal velocity");
+      }
+      if ( pp_miller_parms.query("R0", m_miller_vel_parms[2]) == 0 ) {
+         MayDay::Error("PhaseGeom:: No R0 specified for miller poloidal velocity");
+      }
+
+      const CFG::MagCoordSys* mag_coord_sys = (const CFG::MagCoordSys*)m_mag_geom->coordSysPtr();
+      const CFG::OneBlockCoordSys* block_coord_sys = dynamic_cast<const CFG::OneBlockCoordSys*>(mag_coord_sys->getCoordSys(0));
+      if ( block_coord_sys == NULL ) {
+         MayDay::Error("PhaseGeom::PhaseGeom(): miller_poloidal_velocity option assumes OneBlockCoordSys geometry");
+      }
+      m_miller_vel_parms[3] = block_coord_sys->rmin();
+      m_miller_vel_parms[4] = block_coord_sys->rmax();
+   }
+
    if (psm.contains("no_drifts")) {
       psm.get("no_drifts", m_no_drifts);
    }
@@ -186,6 +211,7 @@ PhaseGeom::PhaseGeom( const PhaseGeom&                            a_phase_geom,
      m_no_parallel_streaming(a_phase_geom.m_no_parallel_streaming),
      m_speciesDefined(false),
      m_freestream_components(a_phase_geom.m_freestream_components),
+     m_miller_vel_parms(a_phase_geom.m_miller_vel_parms),
      m_second_order(a_phase_geom.m_second_order),
      m_larmor_number(a_phase_geom.m_larmor_number),
      m_sheared_remapped_index(a_phase_geom.m_sheared_remapped_index),
@@ -195,8 +221,8 @@ PhaseGeom::PhaseGeom( const PhaseGeom&                            a_phase_geom,
      m_optimized_copier(a_phase_geom.m_optimized_copier),
      m_exchange_ghosts(a_phase_geom.m_exchange_ghosts),
      m_gyroavg_op(NULL),
-     m_is_gyrokinetic(a_is_gyrokinetic)
-
+     m_is_gyrokinetic(a_is_gyrokinetic),
+     m_codim2_stencils(a_phase_geom.m_codim2_stencils)
 {
    defineSpeciesState(a_mass, a_charge);
 }
@@ -362,6 +388,8 @@ PhaseGeom::define()
       m_exchangeCopier.define(m_gridsFull, m_gridsFull, ghostVect, true);
       m_exchangeCopier.trimEdges(m_gridsFull, ghostVect);
    }
+
+   constructCoDim2BoundaryStencils(!m_second_order, m_codim2_stencils);
 }
 
 
@@ -488,7 +516,6 @@ PhaseGeom::defineSpeciesState( double a_mass,
    if (!m_second_order) fourthOrderAverage(m_BStarParallel_cell_averaged);
 
    m_speciesDefined = true;
-
 }
 
 
@@ -778,6 +805,49 @@ PhaseGeom::computeTestVelocities( LevelData<FluxBox>& a_velocity ) const
          }
          else {
            MayDay::Error("PhaseGeom::computeTestVelocities(): annular_poloidal_velocity is only implemented for Miller geometry");
+         }
+      }
+   }
+   else if (m_velocity_type == "miller_poloidal_velocity") {
+
+      // Computes the velocity in a Miller geometry defined by a mapping file.
+      // The velocity is the flux surface poloidal tangent scaled by the minor
+      // radius.
+      
+      DataIterator dit = grids.dataIterator();
+      for (dit.begin(); dit.ok(); ++dit) {
+         const CFG::OneBlockCoordSys* mag_block_coord_sys
+            = dynamic_cast<const CFG::OneBlockCoordSys*>(&getMagBlockCoordSys(grids[dit]));
+         const PhaseBlockCoordSys& block_coord_sys = getBlockCoordSys(grids[dit]);
+
+         if (mag_block_coord_sys != NULL) {
+
+            double kappa = m_miller_vel_parms[0];
+            double delta = m_miller_vel_parms[1];
+            Real R0      = m_miller_vel_parms[2];
+            double rmin  = m_miller_vel_parms[3];
+            double rmax  = m_miller_vel_parms[4];
+
+            Real rbar = 0.5 * (rmin + rmax);
+            int const_minorrad = 0;
+            RealVect dx = block_coord_sys.dx();
+
+            for (int dir=0; dir<SpaceDim; dir++) {
+               FArrayBox& thisVel = a_velocity[dit][dir];
+               FORT_MILLER_POLVEL_TEST(CHF_CONST_INT(dir),
+                                       CHF_BOX(thisVel.box()),
+                                       CHF_CONST_REALVECT(dx),
+                                       CHF_CONST_REAL(rmin),
+                                       CHF_CONST_REAL(rbar),
+                                       CHF_CONST_REAL(R0),
+                                       CHF_CONST_REAL(kappa),
+                                       CHF_CONST_REAL(delta),
+                                       CHF_FRA(thisVel),
+                                       CHF_INT(const_minorrad));
+            }
+         }
+         else {
+            MayDay::Error("PhaseGeom::computeTestVelocities(): poloidal_velocity is only implemented for OneBlock geometry");
          }
       }
    }
@@ -1748,6 +1818,141 @@ PhaseGeom::fillTransverseGhosts( LevelData<FluxBox>& a_data,
    }
 }
 
+
+void
+PhaseGeom::fillCoDim2BoundaryGhosts( LevelData<FArrayBox>&  a_data ) const
+{
+   // Fills the codim2 ghosts at physical boundaries, which are assumed to depend upon valid data
+   // and/or codim1 data
+
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+   int ncomp = a_data.nComp();
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const int block_number = m_phase_coords->whichBlock(grids[dit]);
+      FArrayBox& this_data = a_data[dit];
+      const Box& this_data_box = this_data.box();
+
+      const Vector<PhaseCoDim2Stencil>& codim2_stencil = m_codim2_stencils[block_number];      
+
+      // Zero the codim2 values
+      for (int i=0; i<codim2_stencil.size(); ++i) {
+         const PhaseCoDim2Stencil& bndry_stencil = codim2_stencil[i];
+         const Box overlap = bndry_stencil.box() & this_data_box;
+
+         if ( overlap.ok() ) {
+            for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+               for (int n=0; n<ncomp; ++n ) {
+                  this_data(bit(),n) = 0.;
+               }
+            }
+         }
+      }
+      
+      for (int i=0; i<codim2_stencil.size(); ++i) {
+         const PhaseCoDim2Stencil& bndry_stencil = codim2_stencil[i];
+         const Box overlap = bndry_stencil.box() & this_data_box;
+
+         if ( overlap.ok() ) {
+            for (BoxIterator bit(overlap); bit.ok(); ++bit) {
+               IntVect iv = bit();
+
+               vector<IntVect> points;
+               vector<double> weights;
+
+               bndry_stencil.getStencil(iv, points, weights);
+
+               for (int j=0; j<points.size(); ++j) {
+                  for (int n=0; n<ncomp; ++n ) {
+                     this_data(iv,n) += weights[j] * this_data(points[j],n);
+                  }
+               }
+            }
+         }
+      }
+   }
+}
+
+
+void
+PhaseGeom::constructCoDim2BoundaryStencils( const bool                             a_fourth_order,
+                                            Vector< Vector<PhaseCoDim2Stencil> >&  a_codim2_stencils ) const
+{
+   CH_assert(a_codim2_stencils.size() == 0);
+
+   int order = a_fourth_order? 4: 2;
+
+   int num_blocks = m_phase_coords->numBlocks();
+   a_codim2_stencils.resize(num_blocks);
+
+   const Vector< Tuple <BlockBoundary, 2*SpaceDim> >& boundaries = m_phase_coords->boundaries();
+   const Vector<Box>& mapping_blocks = m_phase_coords->mappingBlocks();
+   
+   for (int block_number=0; block_number<num_blocks; ++block_number) {
+      const PhaseBlockCoordSys& block_coord_sys = *(m_phase_coords->getCoordSys(block_number));
+      Box domain_box = mapping_blocks[block_number];
+      RealVect dx = block_coord_sys.dx();
+
+      const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = boundaries[block_number];
+
+      Vector<PhaseCoDim2Stencil>& codim2_stencil = a_codim2_stencils[block_number];      
+
+      int num_codim2_neighbors = 0;
+
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         for (SideIterator sit; sit.ok(); ++sit) {
+            Side::LoHiSide side = sit();
+
+            if ( this_block_boundaries[dir + side*SpaceDim].isDomainBoundary() ) {
+
+               Box codim1_box = bdryBox(domain_box, dir, side, 1);
+
+               for (int tdir=0; tdir < SpaceDim; ++tdir) {
+                  if ( tdir != dir ) {
+                     for (SideIterator sit2; sit2.ok(); ++sit2) {
+                        Side::LoHiSide side2 = sit2();
+
+                        // Determine if the current codim2 cell is also codim2 cell
+                        // for a physical boundary in the tdir direction on side2
+                        bool transverse_boundary = this_block_boundaries[tdir + side2*SpaceDim].isDomainBoundary();
+
+                        codim2_stencil.resize(++num_codim2_neighbors);
+
+                        Box codim1_box_cc = codim1_box;
+                        codim1_box_cc.shiftHalf(dir, sign(side));
+
+                        codim2_stencil[num_codim2_neighbors-1].
+                           define(codim1_box_cc, dx, dir, side, tdir, side2, order, transverse_boundary);
+
+                        // Check to see if the new codim2 box overlaps another block
+
+                        Box new_codim2_box = codim2_stencil[num_codim2_neighbors-1].box();
+
+                        for (int block_number2=0; block_number2<num_blocks; ++block_number2) {
+                           if (block_number2 != block_number) {
+                              const Box& domain_box2 = mapping_blocks[block_number2];
+
+                              Box overlap = new_codim2_box & domain_box2;
+                                 if ( overlap == new_codim2_box ) {
+                                    // Codim2 box is contained in a valid block, so delete it
+                                    
+                                    codim2_stencil.resize(--num_codim2_neighbors);
+                                 }
+                                 else if ( overlap.ok() ) {
+                                    // Codim2 box partially overlaps a valid block.  Need to exit and figure out
+                                    // what to do about it.
+                                    MayDay::Error("MBSolver::constructBoundaryStencils(): codim2 box partially overlaps a valid block");
+                                 }
+                           }
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+}
 
 
 void
@@ -5227,5 +5432,6 @@ DisjointBoxLayout PhaseGeom::getGhostDBL(const LevelData<FluxBox>& a_data) const
   
   return ghost_dbl;
 }
+
 
 #include "NamespaceFooter.H"

@@ -71,8 +71,8 @@ public:
     *  @param[in] a_bottomRight_beta The bottom-right coefficient (corresponding to P_22)
     */
    virtual void updateSourceTermComponents( const LevelData<FArrayBox>& a_topLeft_beta,
-					    const LevelData<FArrayBox>& a_bottomLeft_beta,
-					    const LevelData<FArrayBox>& a_bottomRight_beta );
+                                            const LevelData<FArrayBox>& a_bottomLeft_beta,
+                                            const LevelData<FArrayBox>& a_bottomRight_beta );
 
    /// Updates the top-left coefficients of the analytic Jacobian preconditioner, corresponding to P_11
    /**
@@ -80,7 +80,16 @@ public:
     *  @param[in] a_mapped_coeff The mapped version of the coefficient
     */
    virtual void updateTopLeftCoefficients( const LevelData<FluxBox>& a_unmapped_coeff,
-					   const LevelData<FluxBox>& a_mapped_coeff);
+                                           const LevelData<FluxBox>& a_mapped_coeff);
+
+   /// Updates the bottom-left coefficients of the analytic Jacobian preconditioner, corresponding to P_21
+   /**
+    *  @param[in] a_unmapped_coeff The un-mapped version of the coefficient
+    *  @param[in] a_mapped_coeff The mapped version of the coefficient
+    */
+   virtual void updateBottomLeftCoefficients( const LevelData<FluxBox>& a_unmapped_coeff,
+                                              const LevelData<FluxBox>& a_mapped_coeff);
+
 
    /// Updates the bottom-right coefficients of the analytic Jacobian preconditioner, corresponding to P_22
    /**
@@ -88,7 +97,7 @@ public:
     *  @param[in] a_mapped_coeff The mapped version of the coefficient
     */
    virtual void updateBottomRightCoefficients( const LevelData<FluxBox>& a_unmapped_coeff,
-					       const LevelData<FluxBox>& a_mapped_coeff);
+                                               const LevelData<FluxBox>& a_mapped_coeff);
 
    /// Updates the preconditioner matrix once the coefficients have been individually updated
    /**
@@ -96,7 +105,7 @@ public:
     *  @param[in] a_viscosity_bc Boundary conditions for viscosity coefficients
     */
    virtual void updatePreconditioner( const EllipticOpBC& a_diffusion_bc,
-				      const EllipticOpBC& a_viscosity_bc );
+                                      const EllipticOpBC& a_viscosity_bc );
 
    /// Solves the preconditioner. A null-op, use the other solvePreconditioner function
    /**
@@ -139,8 +148,10 @@ public:
                                                         const int     precond_max_iter );
 
 private:
+
    bool m_diffusion_coeffs_defined;
    bool m_viscosity_coeffs_defined;
+   bool m_bottomLeft_coeffs_defined;
 
    MBHypreSolver* m_imex_preconditioner;
 

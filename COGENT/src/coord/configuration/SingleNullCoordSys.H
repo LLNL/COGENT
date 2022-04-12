@@ -45,7 +45,7 @@ public:
 
    virtual IntVect getDecomposition(int block) const;
 
-   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return *m_divergence_cleaning_bc;}
+   virtual EllipticOpBC* getDivergenceCleaningBC() {return m_divergence_cleaning_bc;}
 
    virtual void defineEllipticOpBC( EllipticOpBC& bc ) const;
 
@@ -107,11 +107,32 @@ public:
                                      const RealVect&  dx_dst,
                                      const int        order) const;
 
-   void getInterpolationCoefficients(Vector<Real>&                  a_coeff,
-                                     Vector<int>&                   a_offsets,
-                                     const RealVect&                a_X,
-                                     const IntVect&                 a_iv0_dst,
-                                     const SingleNullBlockCoordSys& a_coords) const;
+   void getInterpolationCoefficients(Vector<Real>&                  coeff,
+                                     Vector<int>&                   offsets,
+                                     const RealVect&                X,
+                                     const IntVect&                 iv0_dst,
+                                     const SingleNullBlockCoordSys& coords,
+                                     const bool                     include_curvature) const;
+   
+   void findClosestValidCellCenter(RealVect&             xi_dst_cent,
+                                   RealVect&             X_dst_cent,
+                                   RealVect&             X_dst_pol_lo,
+                                   RealVect&             X_dst_pol_hi,
+                                   int&                  nDst,
+                                   const int             nSrc,
+                                   const RealVect&       xiSrc,
+                                   const RealVect&       X,
+                                   const Side::LoHiSide& side) const;
+   
+   void  setSawtoothBCCoeff(Vector<int>&                     a_interpStencilOffsets,
+                            Vector<Real>&                    a_interpStecil,
+                            const SingleNullBlockCoordSys&   a_src_coord_sys,
+                            const SingleNullBlockCoordSys&   a_dst_coord_sys,
+                            const IntVect&                   a_ivDst,
+                            const RealVect&                  a_xiDst,
+                            const RealVect&                  a_xiSrc,
+                            const int                        a_nDst,
+                            const Side::LoHiSide&            a_side) const;
    
    Real getInterpMappedPoloidalCoord(const RealVect& X,
                                      const RealVect& X_dst_pol_cent,
@@ -121,11 +142,24 @@ public:
                                      const RealVect& dx) const;
 
    void applyToroidalPeriodicity(RealVect& X,
-				 const Side::LoHiSide&  side) const;
+                                 const Side::LoHiSide&  side) const;
 
    Vector<Box> getToroidalBoundaryBoxes( const int              block_number,
                                          const Side::LoHiSide&  side,
                                          const int              shear_interp_order ) const;
+   
+   void runMappingDiagnostics(const RealVect&                  xiSrc,
+                              const IntVect&                   ivDst,
+			      const int                        nDst,
+                              const SingleNullBlockCoordSys&   coords_dst,
+                              const SingleNullBlockCoordSys&   coords_src,
+                              const Side::LoHiSide&            a_side) const;
+   
+   void testClosestCenterSearch(const IntVect&  ivDst,
+                                const RealVect& xi_dst_cent,
+                                const int       dst_block_num,
+                                const RealVect& dx) const;
+   
 #endif
 
    virtual Vector<RealVect> displacements(const Vector<RealVect>&   dstCoords,
@@ -245,6 +279,8 @@ protected:
    Vector<MagBlockCoordSys *> m_coord_vec;
 
    std::string m_interpolation_scheme;
+   bool m_use_curvature_interpolation;
+   bool m_mapping_diagnostics;
 };
 
 

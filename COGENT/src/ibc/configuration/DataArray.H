@@ -42,6 +42,10 @@ class DataArray : public GridFunction
 
       void setData( const DataArray& data );
 
+      void updateData( const FArrayBox& data );
+
+      const FArrayBox& getData() const {return m_data;}
+
       /// Returns the box over which the object data is defined
       /**
        * Returns the box over which the object data is defined

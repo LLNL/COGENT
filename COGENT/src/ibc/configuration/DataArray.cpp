@@ -23,6 +23,14 @@ DataArray::setData( const DataArray& a_data )
 }   
 
 
+void
+DataArray::updateData( const FArrayBox& a_data )
+{
+   // Copy on overlap
+   m_data.copy(a_data);
+}   
+
+
 void DataArray::setPointwise(FArrayBox&                 a_data,
                              const MultiBlockLevelGeom& a_geometry,
                              const FArrayBox&           a_real_coords,

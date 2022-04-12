@@ -34,13 +34,21 @@ GKSystemBC::GKSystemBC( ParmParse& a_pp,
 
    const std::string coord_sys_type( determineCoordSysType( m_phase_geometry ) );
 
-   parsePotential( a_pp, coord_sys_type );
+   bool fixed_efield = false;
+   a_pp.query("gksystem.fixed_efield", fixed_efield);
+   bool no_efield = false;
+   a_pp.query("gksystem.zero_efield", no_efield);  // zero_efield is deprecated
+   a_pp.query("gksystem.no_efield", no_efield);
+   if ( !(fixed_efield || no_efield) ) {
+      parsePotential( a_pp, coord_sys_type );
+
+      const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
+      mag_geom.defineEllipticOpBC( *m_potential_bcs );
+   }
+                                          
    parseKineticSpecies( a_pp, coord_sys_type, a_state.dataKinetic() );
    //   parseFluidSpecies( a_pp, coord_sys_type, a_state.dataFluid() );
 
-   const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
-   mag_geom.defineEllipticOpBC( *m_potential_bcs );
-   
    int ghost = (m_phase_geometry.secondOrder()) ? 0 : 1;
    const DisjointBoxLayout& dbl = m_phase_geometry.gridsFull();
    m_mapped_velocity.define(dbl, SpaceDim, ghost * IntVect::Unit);

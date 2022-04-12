@@ -38,8 +38,6 @@ public:
     */
    virtual ~Diffusion();
 
-   virtual void updateBoundaries( const EllipticOpBC&  bc );
-
    /// Construct the operator coefficients
    /**
     * Computes the operator coefficients.
@@ -49,9 +47,9 @@ public:
     *
     */
 
-   virtual void setOperatorCoefficients( const LevelData<FluxBox>&           unmapped_coefficients_fc,
-                                         const LevelData<FluxBox>&           mapped_coefficients_fc,
-                                         const EllipticOpBC&                 bc );
+   virtual void setOperatorCoefficients( const LevelData<FluxBox>&  unmapped_coefficients_fc,
+                                         const LevelData<FluxBox>&  mapped_coefficients_fc,
+                                         EllipticOpBC&              bc );
 
    virtual void updateImExPreconditioner( const LevelData<FArrayBox>&      mshift,
                                           const EllipticOpBC&              bc );
@@ -83,8 +81,6 @@ public:
    static const char* pp_name;
    
 protected:
-
-   bool m_coefficients_defined;
 
    MBHypreSolver* m_preconditioner;
    MBHypreSolver* m_imex_preconditioner;

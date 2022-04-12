@@ -94,11 +94,13 @@ public:
                               const int                         step,
                               const int                         stage,
                               const double                      shift,
-                              const int                         component);
+                              const int                         component,
+                              const std::string& );
 
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
                              const FluidSpeciesPtrVect&        fluid_species_rhs,
+                             const std::string&,
                              const int                         component );
    
    virtual void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
@@ -139,7 +141,12 @@ protected:
                                              LevelData<FluxBox>& D_tensor_mapped,
                                              const Real          mass,
                                              const Real          time) const;
-   
+
+   virtual void computeBottomLeftCoefficients(LevelData<FluxBox>&         a_tensor,
+                                              LevelData<FluxBox>&         a_tensor_mapped,
+                                              const LevelData<FArrayBox>& a_parallel_velocity,
+                                              const Real                  a_species_mass) const;
+
 private:
 
   

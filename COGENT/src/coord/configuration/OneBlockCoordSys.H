@@ -126,6 +126,9 @@ class OneBlockCoordSys
   
   double getRBtoroidal() const;
 
+  double rmin() const {return m_rmin;}
+  double rmax() const {return m_rmax;}
+
    protected:
 
 

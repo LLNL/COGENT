@@ -79,7 +79,6 @@ GKPoisson::init( const ParmParse&  a_pp,
    m_mblx_ptr = NULL;
    m_include_FLR_effects = false;
    m_phase_geom = NULL;
-   m_model = "GyroPoisson";
    m_verbosity = false;
 
    m_FLR_bc_buffer = 5;
@@ -97,12 +96,12 @@ GKPoisson::init( const ParmParse&  a_pp,
    // at box boundaries.
    const DisjointBoxLayout& grids = m_geometry.grids();
    m_mapped_coefficients.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
-   m_unmapped_coefficients.define(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+   m_unmapped_coefficients.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
    if (m_include_FLR_effects) {
      m_mapped_coeffs_FLR_1.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
      m_mapped_coeffs_FLR_2.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
-     m_unmapped_coeffs_FLR_1.define(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
-     m_unmapped_coeffs_FLR_2.define(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+     m_unmapped_coeffs_FLR_1.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
+     m_unmapped_coeffs_FLR_2.define(grids, SpaceDim*SpaceDim, IntVect::Unit);
    }
 
    if ( m_geometry.shearedMBGeom() ) {
@@ -219,28 +218,18 @@ GKPoisson::allocatePreconditioner( const MagGeom&                  a_geom,
                                   
 
 void
-GKPoisson::updateBoundaries( const EllipticOpBC&  a_bc )
-{
-   // N.B.: The operator coefficient must be computed prior to calling this function
-   CH_TIME("GKPoisson::updateBoundaries");
-   setBc(a_bc);
-   
-   computeBcDivergence( m_bc_divergence );
-}
-
-
-void
 GKPoisson::setOperatorCoefficients( const LevelData<FArrayBox>&  a_ion_mass_density,
-                                    const EllipticOpBC&          a_bc,
+                                    EllipticOpBC&                a_bc,
                                     const bool                   a_update_preconditioner )
 {
    CH_TIME("GKPoisson::setOperatorCoefficients");
 
-   computeCoefficients(a_ion_mass_density, 
+   computeCoefficients(a_ion_mass_density,
+                       a_bc,
                        m_mapped_coefficients, 
                        m_unmapped_coefficients );
 
-   updateBoundaries(a_bc);
+   updateBoundaryData(m_unmapped_coefficients, a_bc);
 
    if ( a_update_preconditioner ) {
       updatePreconditioner( m_preconditioner, 
@@ -264,12 +253,13 @@ GKPoisson::updatePreconditioner( MBSolver*              a_preconditioner,
 void
 GKPoisson::setOperatorCoefficients( const PS::KineticSpeciesPtrVect&  a_kin_species,
                                     const LevelData<FArrayBox>&       a_ion_mass_density,
-                                    const EllipticOpBC&               a_bc,
+                                    EllipticOpBC&                     a_bc,
                                     const bool                        a_update_preconditioner )
 {
    CH_TIME("GKPoisson::setOperatorCoefficients");
 
-   computeCoefficients(a_ion_mass_density, 
+   computeCoefficients(a_ion_mass_density,
+                       a_bc,
                        m_mapped_coefficients, 
                        m_unmapped_coefficients );
 
@@ -284,7 +274,7 @@ GKPoisson::setOperatorCoefficients( const PS::KineticSpeciesPtrVect&  a_kin_spec
                               m_unmapped_coeffs_FLR_2 );
    }
 
-   updateBoundaries(a_bc);
+   updateBoundaryData(m_unmapped_coefficients, a_bc);
 
    if ( a_update_preconditioner ) {
       updatePreconditioner( m_preconditioner, 
@@ -297,7 +287,7 @@ GKPoisson::setOperatorCoefficients( const PS::KineticSpeciesPtrVect&  a_kin_spec
 
 void
 GKPoisson::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_mass_density,
-                                    const EllipticOpBC&         a_bc,
+                                    EllipticOpBC&               a_bc,
                                     const bool                  a_update_preconditioner,
                                     double&                     a_lo_value,
                                     double&                     a_hi_value,
@@ -335,6 +325,7 @@ GKPoisson::setOperatorCoefficients( const LevelData<FArrayBox>& a_ion_mass_densi
 
 void
 GKPoisson::computeCoefficients(const LevelData<FArrayBox>& a_ion_mass_density,
+                               const EllipticOpBC&         a_bc,
                                LevelData<FluxBox>&         a_mapped_coefficients,
                                LevelData<FluxBox>&         a_unmapped_coefficients )
 {
@@ -385,13 +376,6 @@ GKPoisson::computeCoefficients(const LevelData<FArrayBox>& a_ion_mass_density,
    const LevelData<FluxBox>& par_coeff = m_geometry.getEllipticOpParCoeff();
    const LevelData<FluxBox>& perp_coeff_mapped = m_geometry.getEllipticOpPerpCoeffMapped();
    const LevelData<FluxBox>& par_coeff_mapped  = m_geometry.getEllipticOpParCoeffMapped();
-
-   LevelData<FluxBox> radial_coeff( grids, SpaceDim*SpaceDim, 2*IntVect::Unit );
-   LevelData<FluxBox> radial_coeff_mapped( grids, SpaceDim*SpaceDim, 2*IntVect::Unit );
-   if (m_model == "RadialGyroPoisson") {
-      m_geometry.getEllipticOpRadCoeff(radial_coeff);
-      m_geometry.getEllipticOpRadCoeffMapped(radial_coeff_mapped);
-   }
   
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
 
@@ -410,9 +394,12 @@ GKPoisson::computeCoefficients(const LevelData<FArrayBox>& a_ion_mass_density,
       FluxBox polarization_fac(box, 1);
       polarization_fac.setVal(1.0);
       polarization_fac *= m_larmor_number2;
-      polarization_fac.mult(density_sum_face[dit],box, 0, 0);
-      polarization_fac.divide(BFieldMag[dit], box, 0, 0);
-      polarization_fac.divide(BFieldMag[dit], box, 0, 0);
+      
+      if (!m_boussinesq) {
+         polarization_fac.mult(density_sum_face[dit],box, 0, 0);
+         polarization_fac.divide(BFieldMag[dit], box, 0, 0);
+         polarization_fac.divide(BFieldMag[dit], box, 0, 0);
+      }
       
       FluxBox tmp_perp(box, SpaceDim * SpaceDim);
       tmp_perp.copy(perp_coeff[dit]);
@@ -451,22 +438,13 @@ GKPoisson::computeCoefficients(const LevelData<FArrayBox>& a_ion_mass_density,
 
       }
 
-      else if (m_model == "RadialGyroPoisson") {
-
-         for (int n=0; n<SpaceDim*SpaceDim; ++n) {
-            radial_coeff[dit].mult(polarization_fac, box, 0, n);
-            radial_coeff_mapped[dit].mult(polarization_fac, box, 0, n);
-         }
-         grown_unmapped_coefficients[dit].copy(radial_coeff[dit]);
-         grown_mapped_coefficients[dit].copy(radial_coeff_mapped[dit]);
-      }
-      
-
       else {
          MayDay::Error("GKPoisson:: unknown model is specified");
       }
    }
    
+   modifyForNeumannAndNaturalBCs(a_bc, grown_unmapped_coefficients, grown_mapped_coefficients);
+
    if (!m_second_order) {
 
       grown_unmapped_coefficients.exchange();
@@ -542,13 +520,6 @@ GKPoisson::computeCoefficientsFLR_1(const LevelData<FArrayBox>&  a_ion_mass_dens
    const LevelData<FluxBox>& par_coeff = m_geometry.getEllipticOpParCoeff();
    const LevelData<FluxBox>& perp_coeff_mapped = m_geometry.getEllipticOpPerpCoeffMapped();
    const LevelData<FluxBox>& par_coeff_mapped  = m_geometry.getEllipticOpParCoeffMapped();
-
-   LevelData<FluxBox> radial_coeff( grids, SpaceDim*SpaceDim, 2*IntVect::Unit );
-   LevelData<FluxBox> radial_coeff_mapped( grids, SpaceDim*SpaceDim, 2*IntVect::Unit );
-   if (m_model == "RadialGyroPoisson") {
-      m_geometry.getEllipticOpRadCoeff(radial_coeff);
-      m_geometry.getEllipticOpRadCoeffMapped(radial_coeff_mapped);
-   }
   
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
 
@@ -607,18 +578,7 @@ GKPoisson::computeCoefficientsFLR_1(const LevelData<FArrayBox>&  a_ion_mass_dens
          grown_mapped_coefficients[dit].copy(tmp_perp_mapped);
 
       }
-
-      else if (m_model == "RadialGyroPoisson") {
-
-         for (int n=0; n<SpaceDim*SpaceDim; ++n) {
-            radial_coeff[dit].mult(polarization_fac, box, 0, n);
-            radial_coeff_mapped[dit].mult(polarization_fac, box, 0, n);
-         }
-         grown_unmapped_coefficients[dit].copy(radial_coeff[dit]);
-         grown_mapped_coefficients[dit].copy(radial_coeff_mapped[dit]);
-      }
       
-
       else {
          MayDay::Error("GKPoisson:: unknown model is specified");
       }
@@ -703,13 +663,6 @@ GKPoisson::computeCoefficientsFLR_2(const LevelData<FArrayBox>&  a_ion_mass_dens
    const LevelData<FluxBox>& par_coeff = m_geometry.getEllipticOpParCoeff();
    const LevelData<FluxBox>& perp_coeff_mapped = m_geometry.getEllipticOpPerpCoeffMapped();
    const LevelData<FluxBox>& par_coeff_mapped  = m_geometry.getEllipticOpParCoeffMapped();
-
-   LevelData<FluxBox> radial_coeff( grids, SpaceDim*SpaceDim, 2*IntVect::Unit );
-   LevelData<FluxBox> radial_coeff_mapped( grids, SpaceDim*SpaceDim, 2*IntVect::Unit );
-   if (m_model == "RadialGyroPoisson") {
-      m_geometry.getEllipticOpRadCoeff(radial_coeff);
-      m_geometry.getEllipticOpRadCoeffMapped(radial_coeff_mapped);
-   }
   
    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
 
@@ -743,16 +696,6 @@ GKPoisson::computeCoefficientsFLR_2(const LevelData<FArrayBox>&  a_ion_mass_dens
          grown_unmapped_coefficients[dit].copy(tmp_perp);
          grown_mapped_coefficients[dit].copy(tmp_perp_mapped);
 
-      }
-
-      else if (m_model == "RadialGyroPoisson") {
-
-         for (int n=0; n<SpaceDim*SpaceDim; ++n) {
-            radial_coeff[dit].mult(polarization_fac, box, 0, n);
-            radial_coeff_mapped[dit].mult(polarization_fac, box, 0, n);
-         }
-         grown_unmapped_coefficients[dit].copy(radial_coeff[dit]);
-         grown_mapped_coefficients[dit].copy(radial_coeff_mapped[dit]);
       }
 
       else {
@@ -831,14 +774,6 @@ GKPoisson::getMinMax(LevelData<FluxBox>& a_data, double& a_min, double& a_max) c
    MPI_Allreduce(&local_max, &a_max, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 #endif
 }
-
-//void
-//GKPoisson::setModel(const std::string& a_model)
-//{
-//   m_model = a_model;
-//}
-
-
 
 void
 GKPoisson::solvePreconditioner( const LevelData<FArrayBox>& a_r,
@@ -998,7 +933,22 @@ GKPoisson::parseParameters( const ParmParse&   a_pp )
    if (a_pp.contains("model")) {
       a_pp.get( "model", m_model );
    }
+   else {
+      m_model = "GyroPoisson";
+   }
 
+   if (a_pp.contains("boussinesq")) {
+      a_pp.get("boussinesq", m_boussinesq);
+   }
+   else {
+      m_boussinesq = false;
+   }
+
+   if (m_boussinesq == true && m_model != "PerpGyroPoisson")
+   {
+      MayDay::Error("GKPoisson:: Boussinesq approximation is only implemented for PerpGyroPoisson model");
+   }
+   
    a_pp.query( "include_FLR_effects", m_include_FLR_effects );
    if (m_include_FLR_effects) {
      a_pp.query("FLR_plot_switch_func", m_plot_FLR_switch);

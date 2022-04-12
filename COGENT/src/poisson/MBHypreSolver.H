@@ -174,6 +174,8 @@ public:
    void copyFromHypreVector( const HYPRE_SStructVector&  in,
                              LevelData<FArrayBox>&       out ) const;
 
+   LevelData<FArrayBox> m_rhs_from_bc;
+
    // Hypre data structures
 
    bool m_hypre_allocated;
@@ -220,6 +222,8 @@ public:
    int m_MGR_amg_print_level;
    int m_MGR_cpoint;
    int m_MGR_amg_max_iter;
+   bool m_MGR_schur;
+   double m_MGR_amg_threshold;
    double m_MGR_frelax_amg_threshold;
    int m_MGR_frelax_method;
    int m_MGR_interp_type;
