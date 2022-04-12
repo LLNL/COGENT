@@ -1,0 +1,28 @@
+USE_HDF=TRUE
+MPI=TRUE
+USE_TIMER=TRUE
+
+DEPXX=CC
+CXX=CC
+MPICXX=CC
+FC=ftn
+
+XTRACPPFLAGS:= -std=c++11
+#XTRALIBFLAGS:= -L$(OLCF_NETLIB_LAPACK_ROOT)/lib64 -llapack -lblas
+
+#mpich stuff for cray build
+#MVAPICH2_DIR=/opt/cray/pe/mpich/8.1.10/ofi/gnu/9.1
+#XTRACXXFLAGS +=-I$(MVAPICH2_DIR)/include
+#XTRACPPFLAGS +=-I$(MVAPICH2_DIR)/include
+#XTRALIBFLAGS +=-L$(MVAPICH2_DIR)/lib -lmpi
+##XTRALIBFLAGS +=-L/opt/cray/pe/mpich/8.1.10/gtl/lib/ -lmpi_gtl_cuda
+#XTRALIBFLAGS +=-L/opt/cray/pe/mpich/8.1.10/gtl/lib/ -lmpi_gtl_hsa
+
+HDFINCFLAGS=-I$(HDF5_ROOT)/include -DH5_USE_110_API
+HDFLIBFLAGS=-L$(HDF5_ROOT)/lib -lhdf5 -lz
+
+HDFMPIINCFLAGS=-I$(HDF5_ROOT)/include -DH5_USE_110_API
+HDFMPILIBFLAGS=-L$(HDF5_ROOT)/lib -lhdf5 -lz
+
+PETSC_DIR=/gpfs/alpine/world-shared/geo127/petsc/arch-crusher-opt-cray
+PETSC_ARCH=""

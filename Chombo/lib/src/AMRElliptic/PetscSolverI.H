@@ -222,7 +222,8 @@ int PetscSolver<T>::create_mat_vec( const T& a_phi )
         }
 
       ierr = MatCreate(wcomm,&m_mat);CHKERRQ(ierr);
-      ierr = MatSetOptionsPrefix(m_mat,"");CHKERRQ(ierr);
+      ierr = MatSetOptionsPrefix(m_mat,m_prestring);CHKERRQ(ierr);
+      //ierr = MatSetOptionsPrefix(m_mat,"");CHKERRQ(ierr);
 
       ierr = MatSetSizes(m_mat,NN,NN,PETSC_DECIDE,PETSC_DECIDE);CHKERRQ(ierr);
       ierr = MatSetBlockSize(m_mat,nc);CHKERRQ(ierr);
@@ -232,6 +233,10 @@ int PetscSolver<T>::create_mat_vec( const T& a_phi )
       ierr = MatSeqAIJSetPreallocation(m_mat,nnzrow, d_nnz);CHKERRQ(ierr);
       ierr = MatMPIAIJSetPreallocation(m_mat,nnzrow, d_nnz, nnzrow/2, o_nnz);CHKERRQ(ierr);
       ierr = MatSetOption(m_mat,MAT_NEW_NONZERO_ALLOCATION_ERR,PETSC_FALSE) ;CHKERRQ(ierr);
+
+#if defined(PETSC_HAVE_HYPRE)
+  ierr = MatHYPRESetPreallocation(m_mat,nnzrow, d_nnz, nnzrow/2, o_nnz);CHKERRQ(ierr);
+#endif
       
       if ( d_nnz )
         {

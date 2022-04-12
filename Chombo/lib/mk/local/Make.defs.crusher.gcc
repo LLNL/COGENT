@@ -1,0 +1,22 @@
+USE_HDF=FALSE
+MPI=TRUE
+USE_TIMER=TRUE
+
+DEPXX=CC
+CXX=CC
+MPICXX=CC
+FC=ftn
+
+XTRACPPFLAGS:= -std=c++11
+#XTRALIBFLAGS:= -L$(OLCF_NETLIB_LAPACK_ROOT)/lib64 -llapack -lblas
+
+HDFINCFLAGS=-I$(HDF5_ROOT)/include -DH5_USE_110_API
+HDFLIBFLAGS=-L$(HDF5_ROOT)/lib -lhdf5 -lz
+
+HDFMPIINCFLAGS=-I$(HDF5_ROOT)/include -DH5_USE_110_API
+HDFMPILIBFLAGS=-L$(HDF5_ROOT)/lib -lhdf5 -lz
+
+#PETSC_DIR=/gpfs/alpine/geo127/proj-shared/spock/petsc/current/arch-opt-cray-kokkos
+#PETSC_DIR=/gpfs/alpine/geo127/proj-shared/spock/petsc/current/arch-opt-cray
+#PETSC_DIR=/gpfs/alpine/world-shared/geo127/petsc/arch-spock-opt-gcc10.3
+#PETSC_ARCH=""
