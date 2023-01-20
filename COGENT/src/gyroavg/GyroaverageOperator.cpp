@@ -1,7 +1,7 @@
 #include "GyroaverageOperator.H"
 #include "Directions.H"
 #include "PhaseGeom.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 
 #include "NamespaceHeader.H"
 

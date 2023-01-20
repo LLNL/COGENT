@@ -1,0 +1,62 @@
+rhs = 1.e2
+
+#####################################################
+# Geometry Parameters
+#####################################################
+geom.geometry_file = "/usr/gapps/cogent/baselines/4d_pdebug/DIII-D_old_vorticity/COGENT_mapping"
+geom.field_coefficients_file = "/usr/gapps/cogent/baselines/4d_pdebug/DIII-D_old_vorticity/DCT_coefficients.txt"
+geom.verbose  = true
+geom.Btor_scale  = -3.5
+geom.field_aligned = false
+geom.subgrid_geometry = false
+geom.subgrid_refinement = 2 2
+geom.axisymmetric = false
+
+#####################################################
+# Grid Parameters
+#####################################################
+grid.numcells.core         =  22 128
+grid.numcells.pf_radial    =  8
+grid.numcells.lpf_poloidal =  16
+grid.numcells.rpf_poloidal =  16
+grid.numcells.sol_radial   =  10
+
+grid.decomp.core.configuration =  2  4
+grid.decomp.core.phase         =  2  4  3  4   48
+
+grid.decomp.lpf.configuration  =  1  1
+grid.decomp.lpf.phase          =  1  1  3  4   12
+
+grid.decomp.rpf.configuration  =  1  1
+grid.decomp.rpf.phase          =  1  1  3  4   12
+
+grid.decomp.csol.configuration  =  1  4 
+grid.decomp.csol.phase          =  1  4  3  4  48
+
+grid.decomp.lsol.configuration  =  1  1
+grid.decomp.lsol.phase          =  1  1  3  4  12
+
+grid.decomp.rsol.configuration  =  1  1
+grid.decomp.rsol.phase          =  1  1  3  4  12
+
+#####################################################
+# Boundary Condition Parameters
+#####################################################
+BC.poloidal_inner_div.type = "dirichlet"
+BC.poloidal_inner_div.value = 1.
+BC.poloidal_outer_div.type = "dirichlet"
+BC.poloidal_outer_div.value = 1.
+BC.radial_core.type = "neumann"
+BC.radial_core.value = -100.
+BC.radial_sol.type = "dirichlet"
+BC.radial_sol.value = 1.
+BC.radial_pf.type = "dirichlet"
+BC.radial_pf.value = 1.
+
+#####################################################
+# Solver Parameters
+#####################################################
+linear_solver.method = "AMG"
+linear_solver.max_iter = 20
+linear_solver.tol = 1.e-6
+linear_solver.verbose = true

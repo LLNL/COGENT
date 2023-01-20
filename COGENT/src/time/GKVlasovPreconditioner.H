@@ -48,6 +48,7 @@ class GKVlasovPreconditioner : public Preconditioner<T,Ops>
       m_ops->solveVlasovOpPCImEx( this,
                                   a_Y, 
                                   a_X, 
+                                  Preconditioner<T,Ops>::getSysID(),
                                   m_species_idx );
       return;
     }

@@ -121,8 +121,6 @@ BC.hydrogen.mu_upper.function = "maxwellian_phase_func"
 
 BC.potential.radial_lower.type = "neumann"
 BC.potential.radial_upper.type = "neumann"
-BC.potential.poloidal_lower.type = "neumann"
-BC.potential.poloidal_upper.type = "neumann"
 
 #####################################################
 # Collisions Definitions

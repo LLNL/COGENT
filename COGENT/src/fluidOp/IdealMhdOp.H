@@ -5,7 +5,7 @@
 #include "FluidVarBC.H"
 #include "Diffusion.H"
 #include "Poisson.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 
 #include "EdgeDataBox.H"
 
@@ -77,7 +77,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -85,7 +85,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -98,7 +98,8 @@ public:
                                bool,
                                const FluidSpecies&,
                                const PS::GlobalDOFFluidSpecies&,
-                               int );
+                               const int,
+                               const int );
 
    virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 const PS::KineticSpeciesPtrVect&,
@@ -116,18 +117,20 @@ public:
                               const int                         step,
                               const int                         stage,
                               const double                      shift,
-                              const int                         component );
+                              const int                         component,
+                              const std::string& );
 
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
                              const FluidSpeciesPtrVect&        fluid_species_rhs,
+                             const std::string&,
                              const int                         component );
 
    virtual bool trivialSolutionOp() const {return true;}
    
-   virtual void getMemberVar( LevelData<FArrayBox>&  a_Var,
-                        const FluidSpecies&          a_fluid_species,
-                        const string&                a_name ) const;
+   virtual void getMemberVar( LevelData<FArrayBox>&  a_var,
+                              const CFGVars&         a_fluid_vars,
+                              const string&          a_name ) const;
 
    virtual CFGVars* createStateVariable( const string&       a_pp_prefix,
                                          const std::string&  a_name,
@@ -181,7 +184,6 @@ private:
    LevelData<FArrayBox> m_Nmatrix;
    LevelData<FArrayBox> m_Xphys;
    LevelData<FArrayBox> m_g_y; // used only when solving virtual B
-   LevelData<FArrayBox> m_cellVol;
    bool m_twoDaxisymm;
    
    // allocate containers for species fluid variables
@@ -196,7 +198,9 @@ private:
    LevelData<FArrayBox> m_eneDen_cc;
    LevelData<FArrayBox> m_momDen_virtual_cc;
    LevelData<FArrayBox> m_magField_virtual_cc;
-   
+   //
+   LevelData<FArrayBox> m_B_covar_cc;   
+
    // allocate containers for derived variables
    //
    LevelData<FArrayBox> m_pressure;
@@ -409,9 +413,12 @@ private:
                              const LevelData<FluxBox>&    a_F_mapped,
                              const int                    a_mapped ) const;
 
-   void computeMappedCurrentDensity( LevelData<FArrayBox>&  a_JaJ0_phys,
-                               const LevelData<FluxBox>&    a_B_contra ) const;
-   
+   void getJ0_2Dvirtual( LevelData<FArrayBox>&  a_J0,
+                   const FluidSpecies&          a_fluid_species ) const;
+
+   void getJ0_3D( LevelData<FArrayBox>&  a_J0,
+            const FluidSpecies&          a_fluid_species ) const;
+
    void computeMappedCurrentDensity( LevelData<FArrayBox>&  a_JaJ0_phys,
                                const LevelData<FArrayBox>&  a_By_contra ) const;
    

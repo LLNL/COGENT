@@ -3,6 +3,7 @@
 
 #include "MultiBlockLevelGeom.H"
 #include "GridFunction.H"
+#include "DataArray.H"
 
 #include "NamespaceHeader.H"
 
@@ -56,13 +57,13 @@ public:
    virtual RefCountedPtr<EllipticOpBC> clone( const bool extrapolated = false ) const = 0;
 
    bool hasNeumannCondition() const;
-   
+
+   bool hasNaturalCondition() const;
+
    bool hasCoupledBoundary() const;
 
-   enum EllipticBCType {UNDEFINED = -1, DIRICHLET, NEUMANN, EXTRAPOLATED};
+   enum EllipticBCType {UNDEFINED = -1, DIRICHLET, NEUMANN, MAPPED_NEUMANN, NATURAL, EXTRAPOLATED};
 
-protected:
-   
    RefCountedPtr<GridFunction> getBlockBCData( const int  block_number,
                                                const int  dir,
                                                const int  side ) const
@@ -70,8 +71,29 @@ protected:
       return m_bc_block_data[block_number*2*SpaceDim + dir + side*SpaceDim];
    }
 
+   void setNeumannNaturalFactor( const int  block_number,
+                                 const int  dir,
+                                 const int  side,
+                                 DataArray* factor  )
+   {
+      m_bc_neu_nat_factor[block_number*2*SpaceDim + dir + side*SpaceDim] = RefCountedPtr<DataArray>(factor);
+   }
+
+   RefCountedPtr<DataArray> getNeumannNaturalFactor( const int  block_number,
+                                                     const int  dir,
+                                                     const int  side ) const
+   {
+      return m_bc_neu_nat_factor[block_number*2*SpaceDim + dir + side*SpaceDim];
+   }
+
+protected:
+   
+   void copyBaseData( const EllipticOpBC& data );
+   void setExtrapolatedType();
+
    Vector<RefCountedPtr<GridFunction> > m_bc_function;
    Vector<RefCountedPtr<GridFunction> > m_bc_block_data;
+   Vector<RefCountedPtr<DataArray> > m_bc_neu_nat_factor;
    Vector<std::string> m_bdry_name;
    Vector<int> m_bc_type;
    Vector<std::string> m_bc_subtype;

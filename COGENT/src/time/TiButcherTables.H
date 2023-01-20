@@ -232,6 +232,7 @@ namespace TiButcherTables{
                             Real**              a_c,
                             Real**              a_bi_emb,
                             Real**              a_be_emb,
+                            int&                a_pinterp,
                             Real**              a_binterpi,
                             Real**              a_binterpe )
   {
@@ -242,6 +243,7 @@ namespace TiButcherTables{
       a_nstages = 3;
       a_order = 1;
       a_order_emb = 0;
+      a_pinterp = 1;
 
       const Real
         Ae[3][3] = {{0.0,0.0,0.0},
@@ -259,7 +261,7 @@ namespace TiButcherTables{
                         a_nstages,
                         &Ae[0][0], &Ai[0][0],
                         NULL, NULL,
-                        1,
+                        a_pinterp,
                         NULL, NULL );
   
     } else if (a_name == "2a") {
@@ -272,6 +274,7 @@ namespace TiButcherTables{
       a_nstages = 2;
       a_order = 2;
       a_order_emb = 0;
+      a_pinterp = 1;
   
       const Real
         Ae[2][2] = {{0.0,0.0},
@@ -287,7 +290,7 @@ namespace TiButcherTables{
                         a_nstages,
                         &Ae[0][0], &Ai[0][0],
                         NULL, NULL,
-                        1,
+                        a_pinterp,
                         NULL, NULL );
   
     } else if (a_name == "2c") {
@@ -300,6 +303,7 @@ namespace TiButcherTables{
       a_nstages = 3;
       a_order = 2;
       a_order_emb = 0;
+      a_pinterp = 1;
   
       const Real
         Ae[3][3] = {{0,0,0},
@@ -320,7 +324,7 @@ namespace TiButcherTables{
                         a_nstages,
                         &Ae[0][0], &Ai[0][0],
                         NULL, NULL,
-                        1,
+                        a_pinterp,
                         NULL, &binterpi[0][0] );
   
     } else if (a_name == "2e") {
@@ -333,6 +337,7 @@ namespace TiButcherTables{
       a_nstages = 3;
       a_order = 2;
       a_order_emb = 0;
+      a_pinterp = 2;
   
       const Real
         Ae[3][3] = {{0,0,0},
@@ -353,7 +358,7 @@ namespace TiButcherTables{
                         a_nstages,
                         &Ae[0][0], &Ai[0][0],
                         NULL, NULL,
-                        2,
+                        a_pinterp,
                         NULL, &binterpi[0][0] );
   
     } else if (a_name == "3") {
@@ -366,6 +371,7 @@ namespace TiButcherTables{
       a_nstages = 4;
       a_order = 3;
       a_order_emb = 0;
+      a_pinterp = 2;
   
       const Real
         Ae[4][4] = {{0,0,0,0},
@@ -389,7 +395,7 @@ namespace TiButcherTables{
                         a_nstages,
                         &Ae[0][0], &Ai[0][0],
                         NULL, NULL,
-                        2,
+                        a_pinterp,
                         NULL, &binterpi[0][0] );
   
     } else if (a_name == "4") {
@@ -401,6 +407,7 @@ namespace TiButcherTables{
       a_nstages = 6;
       a_order = 4;
       a_order_emb = 0;
+      a_pinterp = 1;
   
       const Real 
         Ae[6][6] = {{0,0,0,0,0,0},
@@ -430,7 +437,7 @@ namespace TiButcherTables{
                         a_nstages,
                         &Ae[0][0], &Ai[0][0],
                         NULL, NULL,
-                        1,
+                        a_pinterp,
                         NULL, &binterpi[0][0] );
   
     } else if (a_name == "5") {
@@ -443,6 +450,7 @@ namespace TiButcherTables{
       a_nstages = 8;
       a_order = 5;
       a_order_emb = 0;
+      a_pinterp = 1;
   
       const Real
         Ae[8][8] = {{0,0,0,0,0,0,0,0},
@@ -478,7 +486,7 @@ namespace TiButcherTables{
                         a_nstages,
                         &Ae[0][0], &Ai[0][0],
                         NULL, NULL,
-                        1,
+                        a_pinterp,
                         NULL, &binterpi[0][0] );
   
     } else if (a_name == "rk4") {
@@ -487,6 +495,7 @@ namespace TiButcherTables{
       a_nstages = 4;
       a_order = 4;
       a_order_emb = 0;
+      a_pinterp = 0;
   
       const Real
         A[4][4] = {{0,0,0,0},
@@ -503,7 +512,7 @@ namespace TiButcherTables{
                         a_nstages,
                         &A[0][0], &A[0][0],
                         &b[0], &b[0],
-                        0,
+                        a_pinterp,
                         NULL, NULL );
   
     } else {
@@ -517,6 +526,7 @@ namespace TiButcherTables{
       a_nstages = 6;
       a_order = 4;
       a_order_emb = 0;
+      a_pinterp = 1;
   
       const Real 
         Ae[6][6] = {{0,0,0,0,0,0},
@@ -546,7 +556,7 @@ namespace TiButcherTables{
                         a_nstages,
                         &Ae[0][0], &Ai[0][0],
                         NULL, NULL,
-                        1,
+                        a_pinterp,
                         NULL, &binterpi[0][0] );
   
     }

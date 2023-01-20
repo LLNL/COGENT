@@ -78,6 +78,43 @@ void FluidVarBC::apply(FluidSpecies&  a_species_phys,
   
 }
 
+void FluidVarBC::applyCellBC( const FluidSpecies&    a_species_phys,
+                              LevelData<FArrayBox>&  a_var,
+                              const Real&            a_time )
+{
+   CH_TIME("FluidVarBC::applyCellBC()");
+   const MagGeom& geometry( a_species_phys.configurationSpaceGeometry() );
+   const MagCoordSys& coord_sys( dynamic_cast<const MagCoordSys&>( *geometry.getCoordSys()) );
+
+   // define boundary Layout, Data, and bc Types
+   defineBoundaryLDT( a_species_phys );
+
+   // apply BCs to cell variable
+   const LevelData<FluxBox>& velocity = a_species_phys.velocity();
+   FluidBCUtils::setCellBC( a_var,
+                            velocity,
+                            m_block_bdry_layouts,
+                            m_block_bdry_data,
+                            m_block_bc_type,
+                            geometry );
+   
+   if(m_insulator_conductor_bc) { // apply InsulatorConductorBC if defined
+      m_InsulatorConductorBC->applyBC( a_var, m_block_bdry_layouts, m_block_bc_type, geometry, a_time );
+   }
+   
+//#define NEW_CODIM_CORNER_BC_METHOD
+#ifdef NEW_CODIM_CORNER_BC_METHOD
+   CodimBC::setCodimCornerValues( a_var, coord_sys );
+#else
+   // fills both physical and internal corners with extrapolation
+   CodimBC::setCodimBoundaryValues( a_var, coord_sys );
+   
+   // copy internal corners with non-corner values via exchange
+   geometry.fillCorners(a_var, a_var.ghostVect(), SpaceDim); 
+#endif
+  
+}
+
 void FluidVarBC::applyFluxBC(const FluidSpecies&  a_species_phys,
                              LevelData<FluxBox>&  a_dst,
                              const Real           a_time )

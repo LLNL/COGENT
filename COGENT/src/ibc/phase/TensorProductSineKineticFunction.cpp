@@ -98,7 +98,7 @@ void TensorProductSineKineticFunction::parseParameters( ParmParse& a_pp )
    a_pp.queryarr( "wavevector", temp, 0, PDIM );
    m_wavevector = RealVect( temp );
 
-   ParmParse ppsg("sparsegrid");
+   ParmParse ppsg("sparse_grids");
    m_useSG = false; // Don't use sparse grids by default
    ppsg.query( "useSGstencils", m_useSG);
    

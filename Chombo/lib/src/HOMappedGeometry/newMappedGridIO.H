@@ -39,13 +39,15 @@ using std::istream;
    - \b a_data    : data
    - \b a_names   : names of variables.
    - \b a_CoordSys: coordinate system
+   - \b a_writeMapping: if false, don't write the second ("map") file
 */
 void WriteMappedUGHDF5(const string&               a_fileRoot,
                        const DisjointBoxLayout&    a_grids,
                        const LevelData<FArrayBox>& a_data,
                        const NewCoordSys&  a_CoordSys,
                        const Box& a_domainBox,
-                       const Real& a_time);
+                       const Real& a_time,
+                       bool a_writeMapping=true);
 
 
 
@@ -71,6 +73,7 @@ void WriteMappedUGHDF5(const string&               a_fileRoot,
    a_vectRatio :  refinement ratio at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
 
    This is blocking.
 
@@ -85,7 +88,8 @@ WriteMappedAMRHierarchyHDF5(const string& fileRoot,
                             const Real& a_dt,
                             const Real& a_time,
                             const Vector<int>& a_vectRatio,
-                            const int& a_numLevels);
+                            const int& a_numLevels,
+                            bool a_writeMapping=true);
 
 
 ///
@@ -106,6 +110,7 @@ WriteMappedAMRHierarchyHDF5(const string& fileRoot,
    a_vectRatio :  refinement ratio at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
    This is blocking.
 */
 void
@@ -116,7 +121,8 @@ WriteMappedAMRHierarchyHDF5(const string& fileRoot,
                             const Box& a_baseDomainBox,
                             const Vector<int>& a_vectRatio,
                             const int& a_numLevels,
-                            const Real& a_time);
+                            const Real& a_time,
+                            bool a_writeMapping=true);
 
 
 
@@ -136,13 +142,15 @@ WriteMappedAMRHierarchyHDF5(const string& fileRoot,
    - \b a_data    : data
    - \b a_names   : names of variables.
    - \b a_CoordSys: multiblock coordinate system
+   - \b a_writeMapping: if false, don't write the second ("map") file 
 */
 void WriteMappedUGHDF5(const string&               a_fileRoot,
                        const DisjointBoxLayout&    a_grids,
                        const LevelData<FArrayBox>& a_data,
                        const MultiBlockCoordSys&  a_CoordSys,
                        const Box& a_domainBox,
-                       const Real& a_time);
+                       const Real& a_time,
+                       bool a_writeMapping=true);
 
 
 void WriteMappedUGHDF5(const string&               a_fileRoot,
@@ -151,7 +159,8 @@ void WriteMappedUGHDF5(const string&               a_fileRoot,
                        const MultiBlockCoordSys&  a_CoordSys,
                        const Box& a_domainBox,
                        const Vector<string>& outputNames,
-                       const Real& a_time);
+                       const Real& a_time,
+                       bool a_writeMapping=true);
 
 
 ///
@@ -177,6 +186,7 @@ b
    a_vectRatio :  refinement ratio at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
 
    This is blocking.
 
@@ -191,7 +201,8 @@ WriteMappedAMRHierarchyHDF5(const string& fileRoot,
                             const Real& a_dt,
                             const Real& a_time,
                             const Vector<int>& a_vectRatio,
-                            const int& a_numLevels);
+                            const int& a_numLevels,
+                            bool a_writeMapping=true);
 
 
 ///
@@ -212,6 +223,7 @@ WriteMappedAMRHierarchyHDF5(const string& fileRoot,
    a_vectRatio :  refinement ratio at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
    This is blocking.
 */
 void
@@ -222,7 +234,8 @@ WriteMappedAMRHierarchyHDF5(const string& fileRoot,
                             const Box& a_baseDomainBox,
                             const Vector<int>& a_vectRatio,
                             const int& a_numLevels,
-                            const Real& a_time);
+                            const Real& a_time,
+                            bool a_writeMapping=true);
 
 
 ///
@@ -243,6 +256,7 @@ WriteMappedAMRHierarchyHDF5(const string& fileRoot,
    a_vectRatios:  refinement ratio in each direction at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
    This is blocking.
 */
 void
@@ -254,7 +268,8 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
     const Box& a_baseDomainBox,
     const Vector<IntVect>& a_vectRatios,
     const int& a_numLevels,
-    const Real& a_time);
+    const Real& a_time,
+    bool a_writeMapping=true);
 
 
 ///
@@ -279,6 +294,7 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
    a_vectRatios:  refinement ratio in each direction at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
 
    This is blocking.
 
@@ -294,7 +310,8 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
     const Real& a_dt,
     const Real& a_time,
     const Vector<IntVect>& a_vectRatio,
-    const int& a_numLevels);
+    const int& a_numLevels,
+    bool a_writeMapping=true);
 
 
 ///
@@ -318,6 +335,7 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
    a_vectRatio :  refinement ratio in each direction at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
 
    This is blocking.
 
@@ -333,7 +351,8 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
     const Real& a_dt,
     const Real& a_time,
     const Vector<IntVect>& a_vectRatios,
-    const int& a_numLevels);
+    const int& a_numLevels,
+    bool a_writeMapping=true);
 
 
 ///
@@ -354,6 +373,8 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
    a_vectRatio :  refinement ratio in each direction at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
+
    This is blocking.
 */
 void
@@ -364,7 +385,9 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
     const Vector<const NewCoordSys* >& a_vectCoordsys,
     const Box& a_baseDomainBox,
     const Vector<IntVect>& a_vectRatios,
-    const int& a_numLevels, const Real& a_time);
+    const int& a_numLevels,
+    const Real& a_time,
+    bool a_writeMapping=true);
 
 
 #endif // CH_USE_HDF5

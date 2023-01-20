@@ -29,9 +29,15 @@ inline int checkCommandLineArgs( int a_argc, char* a_argv[] )
 static const char help[] = "COGENT";
 #endif
 
-typedef enum {native, petsc, sundials} TimeIntegrationImplementation;
+typedef enum {  single_domain, 
+                multidomain, 
+                sparse_grids } SimulationType;
 
-TimeIntegrationImplementation parseParams( ParmParse &a_pp)
+typedef enum {  native, 
+                petsc, 
+                sundials  } TimeIntegrationImplementation;
+
+TimeIntegrationImplementation parseParamsTI( ParmParse& a_pp)
 {
   /* default: use native time integrator */
   TimeIntegrationImplementation ti_impl = native;
@@ -47,6 +53,24 @@ TimeIntegrationImplementation parseParams( ParmParse &a_pp)
   }
 
   return ti_impl;
+}
+
+SimulationType parseParamsSimType( ParmParse& a_pp)
+{
+  /* default: single system */
+  SimulationType sim_type = single_domain;
+
+  std::string sim_type_name = "single_domain";
+  a_pp.query("simulation_type", sim_type_name);
+
+  if      (sim_type_name == "single_domain")  sim_type = single_domain;
+  else if (sim_type_name == "multidomain")    sim_type = multidomain;
+  else if (sim_type_name == "sparse_grids")   sim_type = sparse_grids;
+  else {
+    MayDay::Error("Invalid value for simulation_type");
+  }
+
+  return sim_type;
 }
 
 int main( int a_argc, char* a_argv[] )
@@ -66,9 +90,19 @@ int main( int a_argc, char* a_argv[] )
    if (status==0) {
 
       ParmParse pp( a_argc-2, a_argv+2, NULL, a_argv[1] );
-      auto ti_impl = parseParams(pp);
+      auto ti_impl = parseParamsTI(pp);
+      auto sim_type = parseParamsSimType(pp);
 
-      AppCtxt* system = new GKSystem(pp);
+      AppCtxt* system(NULL);
+      if (sim_type == single_domain) {
+        system = new GKSystem(pp);
+      } else if (sim_type == multidomain) {
+        system = new MultidomainSimulation(pp);
+      } else if (sim_type == sparse_grids) {
+        system = new SparseGridsSimulation(pp);
+      } else {
+        MayDay::Error("Invalid value for sim_type");
+      }
 
       Simulation<ODEVector,AppCtxt>* simulation(NULL); 
       if (ti_impl == petsc) {

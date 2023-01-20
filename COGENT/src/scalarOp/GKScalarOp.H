@@ -7,7 +7,6 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "FluidSpecies.H"
-#include "EField.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -42,13 +41,14 @@ class GKScalarOp
        */
 
    virtual void accumulateRHS( GKRHSData&                     rhs,
-                                  const KineticSpeciesPtrVect&       kinetic_species,
-                                  const CFG::FluidSpeciesPtrVect&    fluid_species,
-                                  const ScalarPtrVect&               scalars,
-                                  const CFG::EField&                 E_field,
-                                  const bool                         implicit,
-                                  const bool                         recompute_kinetic_terms,
-                                  const Real                         time);
+                               const KineticSpeciesPtrVect&       kinetic_species,
+                               const CFG::FluidSpeciesPtrVect&    fluid_species,
+                               const ScalarPtrVect&               scalars,
+                               const CFG::EMFields&               EM_fields,
+                               const CFG::PhiOps&                 phi_ops,
+                               const bool                         implicit,
+                               const bool                         recompute_kinetic_terms,
+                               const Real                         time);
 
       /// Compute a stable time step.
       /**

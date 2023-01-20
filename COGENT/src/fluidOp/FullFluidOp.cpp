@@ -116,7 +116,7 @@ void FullFluidOp::accumulateRHS(FluidSpeciesPtrVect&               a_rhs,
                                 const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                 const FluidSpeciesPtrVect&         a_fluid_species,
                                 const PS::ScalarPtrVect&           a_scalars,
-                                const EField&                      a_E_field,
+                                const EMFields&                    a_EM_fields,
                                 const int                          a_fluidVecComp,
                                 const Real                         a_time)
 {
@@ -130,7 +130,7 @@ void FullFluidOp::accumulateExplicitRHS(FluidSpeciesPtrVect&               a_rhs
                                         const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                         const FluidSpeciesPtrVect&         a_fluid_species,
                                         const PS::ScalarPtrVect&           a_scalars,
-                                        const EField&                      a_E_field,
+                                        const EMFields&                    a_EM_fields,
                                         const int                          a_fluidVecComp,
                                         const Real                         a_time)
 {
@@ -169,7 +169,7 @@ void FullFluidOp::accumulateExplicitRHS(FluidSpeciesPtrVect&               a_rhs
    const Real mass = soln_fluid.mass();
    const Real charge = soln_fluid.charge();
    
-   updateRHSs( rhs_fluid, soln_fluid, a_E_field.getCellCenteredField(), mass, charge );
+   updateRHSs( rhs_fluid, soln_fluid, a_EM_fields.getEFieldCell(), mass, charge );
 
 }
 
@@ -178,7 +178,7 @@ void FullFluidOp::accumulateImplicitRHS(FluidSpeciesPtrVect&              a_rhs,
                                         const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
                                         const FluidSpeciesPtrVect&        a_fluid_species,
                                         const PS::ScalarPtrVect&          a_scalars,
-                                        const EField&                     a_E_field,
+                                        const EMFields&                   a_EM_fields,
                                         const int                         a_fluidVecComp,
                                         const Real                        a_time )
 {
@@ -195,7 +195,8 @@ void FullFluidOp::defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS
                                  bool                                                         a_im,
                                  const FluidSpecies&                                          a_fluid_species,
                                  const PS::GlobalDOFFluidSpecies&                             a_global_dofs,
-                                 int                                                          a_species_idx )
+                                 const int                                                    a_species_idx,
+                                 const int                                                    a_id )
 {
   if (a_im && m_is_time_implicit) {
     CH_assert(a_pc.size() == a_dof_list.size());
@@ -209,6 +210,7 @@ void FullFluidOp::defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS
   
     PS::Preconditioner<PS::ODEVector,PS::AppCtxt> *pc;
     pc = new PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>;
+    pc->setSysID(a_id);
     dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
     dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
@@ -286,7 +288,8 @@ void FullFluidOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
                                const int                        a_step,
                                const int                        a_stage,
                                const double                     a_shift,
-                               const int                        a_component)
+                               const int                        a_component,
+                               const std::string& )
 {
    CH_TIME("FullFluidOp::updatePCImEx()");
    
@@ -298,6 +301,7 @@ void FullFluidOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
 void FullFluidOp::solvePCImEx(FluidSpeciesPtrVect&              a_fluid_species_solution,
                               const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                               const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                              const std::string&,
                               const int                         a_component )
 {
    CH_TIME("FullFluidOp::solvePCImEx()");

@@ -72,10 +72,10 @@ void Arbitrary::setPointwise( FArrayBox&                 a_data,
       cc_coords.copy(a_real_coords);
    }
    else if (m_coord_type == "toroidal") {
-      block_coord_sys.getToroidalCoords( cc_coords, false);
+      block_coord_sys.getToroidalCoords( cc_coords, a_real_coords, false);
    }
    else if (m_coord_type == "flux") {
-      block_coord_sys.getToroidalCoords( cc_coords, true);
+      block_coord_sys.getToroidalCoords( cc_coords, a_real_coords, true);
    }
    else {
       block_coord_sys.getCellCenteredMappedCoords( cc_coords );

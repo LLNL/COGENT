@@ -7,7 +7,8 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "FluidSpecies.H"
-#include "EField.H"
+#include "EMFields.H"
+#include "PhiOps.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -45,7 +46,8 @@ class ScalarOpInterface
                                           const KineticSpeciesPtrVect&       kinetic_species,
                                           const CFG::FluidSpeciesPtrVect&    fluid_species,
                                           const ScalarPtrVect&               scalars,
-                                          const CFG::EField&                 E_field,
+                                          const CFG::EMFields&               EM_fields,
+                                          const CFG::PhiOps&                 phi_ops,
                                           const int                          component,
                                           const Real                         time ) = 0;
 
@@ -53,7 +55,7 @@ class ScalarOpInterface
                                           const KineticSpeciesPtrVect&       kinetic_species,
                                           const CFG::FluidSpeciesPtrVect&    fluid_species,
                                           const ScalarPtrVect&               scalars,
-                                          const CFG::EField&                 E_field,
+                                          const CFG::EMFields&               EM_fields,
                                           const int                          component,
                                           const bool                         recompute_kinetic_terms,
                                           const Real                         time ) = 0;

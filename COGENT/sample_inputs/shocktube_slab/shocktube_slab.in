@@ -14,7 +14,7 @@ simulation.max_time            = 0.02 # 0.2
 simulation.cfl_number          = 0.75
 simulation.checkpoint_interval = 10000
 simulation.checkpoint_prefix   = "chk"
-simulation.plot_interval       = 80
+#simulation.plot_interval       = 80
 simulation.plot_time_interval  = 0.02
 simulation.plot_prefix         = "plt"
 
@@ -64,6 +64,8 @@ gksystem.magnetic_geometry_mapping.slab.Bz_outer = 1.0
 
 gksystem.magnetic_geometry_mapping.second_order = true
 
+gksystem.no_efield = true
+
 #####################################################
 # Phase Space Geometry Definitions
 #####################################################
@@ -71,13 +73,6 @@ phase_space_mapping.v_parallel_max = 1.0
 phase_space_mapping.mu_max = 2.0
 phase_space_mapping.velocity_type = "gyrokinetic"
 phase_space_mapping.second_order = true
-
-#####################################################
-# Poisson Operator Definitions
-#####################################################
-gksystem.fixed_efield = true
-gksystem.zero_efield = true
-gkpoisson.verbose = true
 
 #####################################################
 # Species Definitions
@@ -93,12 +88,12 @@ fluid_species.1.magneticField_virtual = 0
 
 #fluid_model.neutrals.advScheme = "uw1"
 #fluid_model.neutrals.advScheme = "quick"
+#fluid_model.neutrals.advScheme = "TVDminmod"
 fluid_model.neutrals.advScheme = "weno5"
 fluid_model.neutrals.tau = 1.0e-2
 fluid_model.neutrals.etaMin = 0.0e-2
 fluid_model.neutrals.implicitMhd = 0
 fluid_model.neutrals.implicitViscosity = 1
-#fluid_model.neutrals.advScheme = "TVDminmod"
 
 #####################################################
 # Initial Condition Definitions
@@ -114,11 +109,11 @@ IC.neutrals.energyDensity.function = "energyDensity_IC"
 #####################################################
 BC.mom0_visc.radial_lower.type = "dirichlet"
 BC.mom0_visc.radial_upper.type = "dirichlet"
-BC.mom0_visc.poloidal_lower.type = "neumann"
-BC.mom0_visc.poloidal_upper.type = "neumann"
+BC.mom0_visc.poloidal_lower.type = "dirichlet"
+BC.mom0_visc.poloidal_upper.type = "dirichlet"
 
-BC.mom1_visc.radial_lower.type = "neumann"
-BC.mom1_visc.radial_upper.type = "neumann"
+BC.mom1_visc.radial_lower.type = "dirichlet"
+BC.mom1_visc.radial_upper.type = "dirichlet"
 BC.mom1_visc.poloidal_lower.type = "dirichlet"
 BC.mom1_visc.poloidal_upper.type = "dirichlet"
 
@@ -144,12 +139,14 @@ mom0_visc.linear_solver.precond.method = "AMG"
 mom0_visc.linear_solver.precond.max_iter = 20
 mom0_visc.linear_solver.precond.tol = 1.e-6
 mom0_visc.linear_solver.precond.verbose = true
+mom0_visc.linear_solver.precond.amg_old_setup = true
 mom0_visc.second_order = true
 
 mom1_visc.linear_solver.precond.method = "AMG"
 mom1_visc.linear_solver.precond.max_iter = 20
 mom1_visc.linear_solver.precond.tol = 1.e-6
 mom1_visc.linear_solver.precond.verbose = true
+mom1_visc.linear_solver.precond.amg_old_setup = true
 mom1_visc.second_order = true
 
 #####################################################

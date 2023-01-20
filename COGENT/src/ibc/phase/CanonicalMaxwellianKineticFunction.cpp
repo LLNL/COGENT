@@ -343,7 +343,7 @@ void CanonicalMaxwellianKineticFunction::parseParameters( ParmParse& a_pp )
    
    CH_assert( m_perturbation_parm[1]>=0 );
    
-   ParmParse ppsg("sparsegrid");
+   ParmParse ppsg("sparse_grids");
    m_useSG = false; // Don't use sparse grids by default
    ppsg.query( "useSGstencils", m_useSG);
    

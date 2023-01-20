@@ -347,6 +347,39 @@ public:
    }
 
    void setVarScaling(Real* const, const Real) const;
+
+   void interpolateFrom(  const GKState&  a_src )
+   {
+     CH_assert(m_is_defined);
+     CH_assert(a_src.m_is_defined);
+
+     {
+        const KineticSpeciesPtrVect& src_species( a_src.dataKinetic() );
+        KineticSpeciesPtrVect& dst_species( dataKinetic() );
+        CH_assert( src_species.size() == dst_species.size() );
+        for (int i = 0; i < dst_species.size(); i++) {
+          dst_species[i]->interpolateFrom( *src_species[i] );
+        }
+     }
+
+     {
+        const CFG::FluidSpeciesPtrVect& src_species( a_src.dataFluid() );
+        CFG::FluidSpeciesPtrVect& dst_species( dataFluid() );
+        CH_assert( src_species.size() == dst_species.size() );
+        for (int i = 0; i < dst_species.size(); i++) {
+          dst_species[i]->interpolateFrom( *src_species[i] );
+        }
+     }
+
+     {
+        const ScalarPtrVect& src_scalars(  a_src.dataScalar() );
+        ScalarPtrVect& dst_scalars(  dataScalar() );
+        CH_assert( src_scalars.size() == dst_scalars.size() );
+        for (int i = 0; i < dst_scalars.size(); i++) {
+          *dst_scalars[i] = *src_scalars[i];
+        }
+     }
+   }
    
 private:
 

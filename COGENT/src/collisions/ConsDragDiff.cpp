@@ -17,9 +17,8 @@ ConsDragDiff::ConsDragDiff( const string& a_species_name, const string& a_ppcls_
     : m_cls_only(false),
       moment_op( MomentOp::instance() ),
       m_first_call(true),
-      m_first_stage(true),
       m_it_counter(0),
-      m_update_freq(-1),
+      m_update_freq(1),
       m_time_implicit(true),
       m_diagnostics(false),
       m_verbosity(a_verbosity),
@@ -75,9 +74,9 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
     }
     m_fBJ_vel_ghost.define(dbl, 1, velGhost);
   }
-  LevelData<FArrayBox> m_fBJ_vel_ghost(dbl, 1, 2*IntVect::Unit);
+
   for (DataIterator dit(soln_fBJ.dataIterator()); dit.ok(); ++dit) {
-    m_fBJ_vel_ghost[dit].copy(soln_fBJ[dit]);
+    m_fBJ_vel_ghost[dit].copy(soln_fBJ[dit], dbl[dit]);
   }
   //since we only need ghost information in velocity space only
   // use simple exchange, instead of fillInternalGhosts
@@ -149,25 +148,31 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   //need actual Upar for pressure moment
   if (!m_dens.isDefined()) m_dens.define(mag_geom.grids(), 1, CFG::IntVect::Zero);
   if (!m_ushift.isDefined()) m_ushift.define(mag_geom.grids(), 1, CFG::IntVect::Zero);
-  
-  if ((m_it_counter % m_update_freq == 0 && m_first_stage) || m_first_call) {
-    soln_species.numberDensity(m_dens);
-    soln_species.ParallelMomentum(m_ushift);
-    CFG::DataIterator cfg_dit = m_ushift.dataIterator();
-    for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit)
-      {
-	m_ushift[cfg_dit].divide(m_dens[cfg_dit]);
-      }
+
+  // optimize performace by cashing m_ushift variable and only updating it
+  // every so often. In the results we degrade energy conservation a bit,
+  // becasue the mean velocity used in the calculation of the distribution temeprature
+  // will be slightly out of sink with the m_ushift variable that is used to evaluate
+  // the "conservative" value of the temeprature (see Justin's thesis for details).
+  // This should not affect momentum conservation.
+  if ((m_it_counter % m_update_freq == 0) || m_first_call) {
+     soln_species.numberDensity(m_dens);
+     soln_species.parallelParticleFlux(m_ushift);
+     CFG::DataIterator cfg_dit = m_ushift.dataIterator();
+     for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit)
+     {
+        m_ushift[cfg_dit].divide(m_dens[cfg_dit]);
+     }
   }
 
-  moment_op.compute(vpar_moms, soln_species, Jpsi, ParallelMomKernel<FArrayBox>());
+  moment_op.compute(vpar_moms, soln_species, Jpsi, ParallelVelKernel<FArrayBox>());
   moment_op.compute(pres_moms, soln_species, Jpsi, PressureKernel<FArrayBox>(m_ushift));
   LevelData<FArrayBox> inj_vpar_moms;
   LevelData<FArrayBox> inj_pres_moms;
   phase_geom.injectConfigurationToPhase(vpar_moms, inj_vpar_moms);
   phase_geom.injectConfigurationToPhase(pres_moms, inj_pres_moms);
 
-  // create conseravetive mean parallel velocity and Temperature
+  // create conservative mean parallel velocity and Temperature
   LevelData<FArrayBox> Upar(inj_vpar_moms.getBoxes(), 1, IntVect::Zero);
   LevelData<FArrayBox> Temp(inj_vpar_moms.getBoxes(), 1, IntVect::Zero);
   DataIterator mdit = Upar.dataIterator();
@@ -194,7 +199,7 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   }
   
   if (m_cls_freq_func == NULL) {
-    if ((m_it_counter % m_update_freq == 0 && m_first_stage) || m_first_call) {
+    if ((m_it_counter % m_update_freq == 0) || m_first_call) {
       mag_geom.divideJonValid(m_dens);
       LevelData<FArrayBox> dens_inj;
       phase_geom.injectConfigurationToPhase(m_dens, dens_inj);
@@ -249,8 +254,6 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   }
   
   m_first_call = false;
-  m_first_stage = false;
-
 }
 
 
@@ -328,6 +331,12 @@ inline void ConsDragDiff::printParameters( const KineticSpeciesPtrVect&  soln )
    int num_mu_cells = domain_box.size(MU_DIR);
    int num_vp_cells = domain_box.size(VPARALLEL_DIR);
 
+   // check to ensure that fourth-order one-sided calculations do not
+   // reach into undefined physical ghosts
+   if ( procID() == 0 && (num_vp_cells < 5 || num_mu_cells < 5) ){
+     MayDay::Error( "total number of velocity cells is too few for physically meaningful results" );
+   }
+
    // get magnetic field, density, and pressure, etc..
    const CFG::MagGeom & mag_geom = phase_geom.magGeom();
    const LevelData<FArrayBox>& inj_B = phase_geom.getBFieldMagnitude();
@@ -339,13 +348,10 @@ inline void ConsDragDiff::printParameters( const KineticSpeciesPtrVect&  soln )
    CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, ghost_cfg);
 
    soln_species.numberDensity(dens_cfg);
-   soln_species.ParallelMomentum(Upar_cfg);
+   soln_species.parallelVelocity(Upar_cfg);
+   soln_species.pressure(temp_cfg,Upar_cfg);
+   
    CFG::DataIterator cfg_dit = Upar_cfg.dataIterator();
-   for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit)
-   {
-       Upar_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
-   }
-   soln_species.pressureMoment(temp_cfg,Upar_cfg);
    for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit)
    {
        temp_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
@@ -456,10 +462,10 @@ inline void ConsDragDiff::printParameters( const KineticSpeciesPtrVect&  soln )
    const Real Peclet_vp = dvp/sqrt(2.0*min_Temp/mass);
    const Real Peclet_mu = dmu/2.0/min_TonB;
    if ( procID() == 0 && !(Peclet_vp < 1) ){
-     MayDay::Warning( "vpar grid spacing too large for physically meaninful results" );
+     MayDay::Warning( "vpar grid spacing too large for physically meaningful results" );
    }
    if ( procID() == 0 && !(Peclet_mu < 1) ){
-     MayDay::Warning( "mu grid spacing too large for physically meaninful results" );
+     MayDay::Warning( "mu grid spacing too large for physically meaningful results" );
    }
 
    std::string cls_only_str("false");
@@ -485,7 +491,6 @@ void ConsDragDiff::preTimeStep(const KineticSpeciesPtrVect& a_soln_mapped,
                                const KineticSpeciesPtrVect& a_soln_physical )
 {
    m_it_counter+=1;
-   m_first_stage = true;
 }
 
 Real ConsDragDiff::computeTimeScale( const KineticSpeciesPtrVect&  soln, const int a_idx )
@@ -528,7 +533,7 @@ void ConsDragDiff::diagnostics(const LevelData<FArrayBox>& a_rhs,
   
   //Plot parallel momentum source
   CFG::LevelData<CFG::FArrayBox> parMom_src( mag_geom.grids(), 1, CFG::IntVect::Zero );
-  moment_op.compute(parMom_src, a_rhs_species, a_rhs, ParallelMomKernel<FArrayBox>());
+  moment_op.compute(parMom_src, a_rhs_species, a_rhs, ParallelVelKernel<FArrayBox>());
   phase_geom.plotConfigurationData( "parMom_src", parMom_src, a_time );
   
   //Plot energy source

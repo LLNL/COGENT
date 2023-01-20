@@ -140,10 +140,20 @@ class BandedMatrix
     inline
     void finalAssembly()
     {
+#ifdef CH_MPI
+      {
+        int nonzero_pattern = (m_nonzero_pattern ? 1 : 0);
+        MPI_Allreduce(  MPI_IN_PLACE, 
+                        &nonzero_pattern, 
+                        1,
+                        MPI_INT,
+                        MPI_MAX,
+                        MPI_COMM_WORLD );
+        m_nonzero_pattern = (nonzero_pattern == 1 ? true : false);
+      }
+#endif
+
       if (m_nonzero_pattern) {
-        if(!procID()) {
-          std::cout << "    Note (BandedMatrix.H): nonzero pattern changed.\n";
-        }
         setupDataExchange();
       }
       m_nonzero_pattern = false;

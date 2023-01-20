@@ -1,4 +1,5 @@
 #include "VelCoordSys.H"
+#include "newMappedGridIO.H"
 
 #include "NamespaceHeader.H"
 
@@ -108,6 +109,52 @@ VelCoordSys::getFaceAreas( LevelData<FluxBox>& a_areas ) const
   for (dit.begin(); dit.ok(); ++dit) {
     getFaceAreas(a_areas[dit]);
   }
+}
+
+
+
+void VelCoordSys::plotCellData( const string&               a_file_name,  
+                                const LevelData<FArrayBox>& a_data,
+                                const double&               a_time ) const
+{
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+
+   Box domain_box = grids.physDomain().domainBox();
+   domain_box.grow(a_data.ghostVect());
+   WriteMappedUGHDF5(a_file_name.c_str(), grids, a_data, *this, domain_box, a_time);
+}
+
+
+
+void VelCoordSys::plotFaceData( const string&             a_file_name,
+                                const LevelData<FluxBox>& a_data,
+                                const double&             a_time ) const
+{
+   const DisjointBoxLayout& grids = a_data.disjointBoxLayout();
+
+   LevelData<FArrayBox> data_cell(grids, a_data.nComp(), a_data.ghostVect());
+
+   DataIterator dit = grids.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit) {
+      const FluxBox& this_data = a_data[dit];
+      FArrayBox& this_data_cell = data_cell[dit];
+      this_data_cell.setVal(0.);
+      for (int dir=0; dir<SpaceDim; dir++) {
+         const FArrayBox& this_data_dir = this_data[dir];
+         FArrayBox shift_fab(this_data_dir.box(), this_data_dir.nComp());
+         shift_fab.copy(this_data_dir);
+
+         shift_fab.shiftHalf(dir,-1);
+         this_data_cell.plus(shift_fab);
+         shift_fab.shiftHalf(dir,2);
+         this_data_cell.plus(shift_fab);
+      }
+      this_data_cell.mult(0.5/SpaceDim);
+   }
+
+   Box domain_box = grids.physDomain().domainBox();
+   domain_box.grow(a_data.ghostVect());
+   WriteMappedUGHDF5(a_file_name.c_str(), grids, data_cell, *this, domain_box, a_time);
 }
 
 

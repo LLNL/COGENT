@@ -1154,6 +1154,70 @@ MagBlockCoordSys::getEdgeCenteredRealCoords( const int a_dir, FArrayBox& a_x ) c
 
 
 void
+MagBlockCoordSys::computeFaceUnitNormal( const int   a_dir,
+                                         FArrayBox&  a_normal ) const
+{
+   CH_assert(a_normal.nComp() == SpaceDim);
+
+   FArrayBox dXdxi(a_normal.box(), SpaceDim*SpaceDim);
+   getCellCentereddXdxi(dXdxi);
+
+   FORT_FACE_UNIT_NORMAL(CHF_BOX(a_normal.box()),
+                         CHF_CONST_FRA(dXdxi),
+                         CHF_CONST_INT(a_dir),
+                         CHF_FRA(a_normal));
+
+}
+
+
+void
+MagBlockCoordSys::computeFaceUnitTangent( const int   a_tdir,
+                                          FArrayBox&  a_tangent ) const
+{
+   CH_assert(a_tangent.nComp() == SpaceDim);
+
+   FArrayBox dXdxi(a_tangent.box(), SpaceDim*SpaceDim);
+   getCellCentereddXdxi(dXdxi);
+
+   FORT_FACE_UNIT_TANGENT(CHF_BOX(a_tangent.box()),
+                          CHF_CONST_FRA(dXdxi),
+                          CHF_CONST_INT(a_tdir),
+                          CHF_FRA(a_tangent));
+
+}
+
+
+void
+MagBlockCoordSys::getFaceTangentTensor( const int   a_dir,
+                                        FArrayBox&  a_data ) const
+{
+   CH_assert(a_data.nComp() == SpaceDim*SpaceDim);
+
+   const Box& box = a_data.box();
+   FArrayBox tangent(box, SpaceDim);
+
+   a_data.setVal(0.);
+   
+   for ( int tdir=0; tdir<SpaceDim; ++tdir ) {
+      if ( tdir != a_dir) {
+
+         computeFaceUnitTangent(tdir, tangent);
+
+         for (BoxIterator bit(box); bit.ok(); ++bit) {
+            IntVect iv = bit();
+
+            for (int i=0; i<SpaceDim; ++i) {
+               for (int j=0; j<SpaceDim; ++j) {
+                  a_data(iv,i*SpaceDim + j) += tangent(iv,i) * tangent(iv,j); 
+               }
+            }
+         }
+      }
+   }
+}
+
+
+void
 MagBlockCoordSys::computeFluxSurfaceUnitTangent( FArrayBox& a_data ) const
 {
    CH_assert(a_data.nComp() == SpaceDim);
@@ -1331,6 +1395,31 @@ MagBlockCoordSys::getToroidalCoords(FArrayBox&  a_coords,
 
     for (int dir=0; dir<SpaceDim; ++dir) {
       coord[dir] = X(iv,dir);
+    }
+
+    convertPhysicalCoordToToroidal(coord, a_use_flux_coord);
+
+     for (int dir=0; dir<SpaceDim; ++dir) {
+      a_coords(iv,dir) = coord[dir];
+    }
+  }
+}
+
+void
+MagBlockCoordSys::getToroidalCoords(FArrayBox&        a_coords,
+                                    const FArrayBox&  a_real_coords,
+                                    const bool        a_use_flux_coord) const
+{
+  Box box = a_coords.box();
+
+  CH_assert((a_real_coords.box()).contains(box));
+   
+  RealVect coord;
+  for (BoxIterator bit(box); bit.ok(); ++bit) {
+    IntVect iv = bit();
+
+    for (int dir=0; dir<SpaceDim; ++dir) {
+      coord[dir] = a_real_coords(iv,dir);
     }
 
     convertPhysicalCoordToToroidal(coord, a_use_flux_coord);

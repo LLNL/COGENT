@@ -6,7 +6,7 @@
 #include "Diffusion.H"
 #include "OneFieldNeutralsOp.H"
 #include "TwoFieldNeutralsPC.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 
 #include "NamespaceHeader.H"
 
@@ -54,7 +54,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -62,7 +62,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -75,7 +75,8 @@ public:
                                bool,
                                const FluidSpecies&,
                                const PS::GlobalDOFFluidSpecies&,
-                               int );
+                               const int,
+                               const int );
 
    virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 const PS::KineticSpeciesPtrVect&,
@@ -93,17 +94,19 @@ public:
                               const int                         step,
                               const int                         stage,
                               const double                      shift,
-                              const int                         component);
+                              const int                         component,
+                              const std::string& );
 
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
                              const FluidSpeciesPtrVect&        fluid_species_rhs,
+                             const std::string&,
                              const int                         component );
    
    virtual void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
                            const FluidSpeciesPtrVect&         fluid_species,
                            const PS::ScalarPtrVect&           scalars,
-                           const EField&                      E_field,
+                           const EMFields&                    EM_fields,
                            const double                       time );
 
    virtual bool trivialSolutionOp() const {return true;}
@@ -138,7 +141,12 @@ protected:
                                              LevelData<FluxBox>& D_tensor_mapped,
                                              const Real          mass,
                                              const Real          time) const;
-   
+
+   virtual void computeBottomLeftCoefficients(LevelData<FluxBox>&         a_tensor,
+                                              LevelData<FluxBox>&         a_tensor_mapped,
+                                              const LevelData<FArrayBox>& a_parallel_velocity,
+                                              const Real                  a_species_mass) const;
+
 private:
 
   
@@ -161,7 +169,7 @@ private:
                               const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                               const FluidSpeciesPtrVect&         fluid_species,
                               const PS::ScalarPtrVect&           scalars,
-                              const EField&                      E_field,
+                              const EMFields&                    EM_fields,
                               const int                          component,
                               const Real                         time);
 
@@ -234,18 +242,19 @@ private:
    bool m_fixed_recycling;
    bool m_first_call;
    bool m_extrapolate_density;
-   bool m_analytic_pc; // Setting for enabling the analytic preconditioner
-   
+
    std::string m_advScheme;
    std::string m_opt_string;
    
+   bool m_analytic_pc; // Setting for enabling the analytic preconditioner
+   
+   TwoFieldNeutralsPC* m_twofieldneutrals_pc; // The analytic preconditioner
+
    Diffusion*        m_diffusion_op;
    EllipticOpBC*     m_diffusion_bc;
 
    Diffusion*        m_viscosity_op;
    mutable EllipticOpBC*     m_viscosity_bc;
-
-   TwoFieldNeutralsPC* m_twofieldneutrals_pc; // The analytic preconditioner
 
    std::vector<FluidVarBC*>  m_fluid_bc;
    

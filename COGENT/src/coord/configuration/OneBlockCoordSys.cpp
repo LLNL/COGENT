@@ -37,18 +37,13 @@ OneBlockCoordSys::OneBlockCoordSys( ParmParse&      a_parm_parse,
    
    a_parm_parse.get("theta_min", m_thetamin);
    a_parm_parse.get("theta_max", m_thetamax);
-   CH_assert(m_thetamin>=0.0 && m_thetamax<=3.141592653589793); 
+   //   CH_assert(m_thetamin>=0.0 && m_thetamax<=3.141592653589793); 
 
 #if CFG_DIM==3
    a_parm_parse.get("phi_min", m_phimin);
    a_parm_parse.get("phi_max", m_phimax);
 #endif
    
-   a_parm_parse.get("Rscale", m_Rscale);
-   a_parm_parse.get("Zscale", m_Zscale);
-   a_parm_parse.get("a", m_a); // curvature parameter
-   a_parm_parse.get("b", m_b); // curvature parameter
-
    std::string conf_output; /// Output message after magnetic geometry is created
    /// Get magnetic field type
    /// Check for "B_type" entry
@@ -83,8 +78,6 @@ OneBlockCoordSys::OneBlockCoordSys( ParmParse&      a_parm_parse,
       cout << "Constructing oneblock geometry..." << endl;
       cout << "rmin = " << m_rmin << ", rmax = " << m_rmax<<endl;
       cout << "thetamin = " << m_thetamin << ", thetamax = " << m_thetamax<<endl;
-      cout << "Rscale = " << m_Rscale << ", Zscale = " << m_Zscale << endl;
-      cout << "a = " << m_a << ", b = " << m_b << endl;
 #if CFG_DIM==3
       cout << "phi_min = " << m_phimin << ", phi_max = " << m_phimax<<endl;
 #endif

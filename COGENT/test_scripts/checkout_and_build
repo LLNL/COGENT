@@ -39,6 +39,7 @@ DEBUG=FALSE
 MPICXX=mpicxx
 MPICC=mpicc
 CXX=g++
+XTRACXXFLAGS=-march=native
 CC=gcc
 FC=gfortran
 HYPRE_DIR=hypre
@@ -117,6 +118,7 @@ fi
 # Install the Chombo makefile
 sed -e "s:MASTER_MPICXX:"$MPICXX":" \
     -e "s:MASTER_CXX:"$CXX":" \
+    -e "s:MASTER_XTRACXXFLAGS:"$XTRACXXFLAGS":" \
     -e "s:MASTER_CC:"$CC":" \
     -e "s:MASTER_FC:"$FC":" \
     -e "s:MASTER_HDF5_SERIAL_DIR:"$HDF5_SERIAL_DIR":" \

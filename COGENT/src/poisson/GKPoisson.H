@@ -80,8 +80,6 @@ public:
                                                   const int                       discretization_order,
                                                   MultiBlockLevelExchangeCenter*  mblx_ptr );
 
-   virtual void updateBoundaries( const EllipticOpBC&  bc );
-
    /// Construct the GKP operator coefficients
    /**
     * Computes the GKP operator coefficients.  The polarization density
@@ -92,22 +90,23 @@ public:
     */
 
    virtual void setOperatorCoefficients( const LevelData<FArrayBox>& ni,
-                                         const EllipticOpBC&         bc,
+                                         EllipticOpBC&               bc,
                                          const bool                  update_preconditioner );
 
    virtual void setOperatorCoefficients( const PS::KineticSpeciesPtrVect& kin_species,
                                          const LevelData<FArrayBox>&      ni,
-                                         const EllipticOpBC&              bc,
+                                         EllipticOpBC&                    bc,
                                          const bool                       update_preconditioner );
 
    virtual void setOperatorCoefficients( const LevelData<FArrayBox>& ion_mass_density,
-                                         const EllipticOpBC&         bc,
+                                         EllipticOpBC&               bc,
                                          const bool                  update_preconditioner,
                                          double&                     lo_value,
                                          double&                     hi_value,
                                          LevelData<FArrayBox>&       radial_gkp_divergence_average);
    
    virtual void computeCoefficients( const LevelData<FArrayBox>&,
+                                     const EllipticOpBC&  bc,
                                      LevelData<FluxBox>&,
                                      LevelData<FluxBox>& );
 
@@ -119,6 +118,12 @@ public:
                                   LevelData<FluxBox>&,
                                   LevelData<FluxBox>& );
 
+   void updateBoundaryDataAddingCoefs( EllipticOpBC&  bc,
+                                       const bool     homogeneous_bcs = false)
+   {
+      updateBoundaryData(m_unmapped_coefficients, bc, homogeneous_bcs);
+   }
+   
    virtual void updatePreconditioner( MBSolver*              preconditioner,
                                       LevelData<FArrayBox>&  volume_reciprocal,
                                       LevelData<FluxBox>&    mapped_coefficients,
@@ -126,6 +131,9 @@ public:
 
    virtual void solvePreconditioner( const LevelData<FArrayBox>& in,
                                      LevelData<FArrayBox>&       out );
+   
+   virtual void applyPCOp(const LevelData<FArrayBox>& in_vec,
+                          LevelData<FArrayBox>& matvec);
 
    virtual void multiplyCoefficients( LevelData<FluxBox>& data,
                                       const bool mapped_coeff ) const;
@@ -136,6 +144,8 @@ public:
 
    void setFLRObjects( const PS::KineticSpeciesPtrVect&);
 
+   bool isBoussinesq() const {return m_boussinesq;}
+   
    inline void setModel(const std::string& model) {m_model = model;};
 
    /// parseParameters function
@@ -218,7 +228,9 @@ private:
               const Real       larmor_number,
               const Real       debye_number,
               const bool       initialize_precond );
+   
    int m_verbosity;
+   bool m_boussinesq;
    std::string m_model;
 
    LHSTermType m_LHS_term_type;

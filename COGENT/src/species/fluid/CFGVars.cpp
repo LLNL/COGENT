@@ -1,5 +1,5 @@
 #include "CFGVars.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 
 #include "NamespaceHeader.H"
 
@@ -11,6 +11,17 @@ CFGVars::CFGVars( const string&       a_pp_prefix,
      m_name(a_name),
      m_geometry(a_geometry)
 {
+   ParmParse pp(a_pp_prefix.c_str());
+
+   if ( pp.contains("plotMemberVars") ) {
+      pp.get("plotMemberVars", m_plotMemberVars);
+      if(m_plotMemberVars) {
+         int n(0);
+         pp.query( "plotMemberVars.number", n );
+         m_plotMemberVarNames.resize( n );
+         pp.queryarr( "plotMemberVars.list", m_plotMemberVarNames, 0, n );
+      }
+   }
 }
 
 
@@ -20,6 +31,8 @@ const CFGVars& CFGVars::operator=( const CFGVars& a_rhs )
    {
       m_pp_prefix = a_rhs.m_pp_prefix;
       m_name = a_rhs.m_name;
+
+      m_plotMemberVarNames = a_rhs.m_plotMemberVarNames;
 
       m_cell_data.resize(0);
       for (int i=0; i<a_rhs.num_cell_vars(); ++i) {
@@ -250,57 +263,26 @@ bool CFGVars::conformsTo( const CFGVars&  a_rhs,
 }
 
 
-RefCountedPtr<CFGVars>
-CFGVars::clone( const IntVect&  a_ghost_vect,
-                const bool      a_copy_data ) const
+void
+CFGVars::interpFaceVarToCell( LevelData<FArrayBox>&  a_cell_var,
+                              const string&          a_face_var_name ) const
 {
-   CFGVars* field_ptr = new CFGVars( m_pp_prefix, m_name, m_geometry );
 
-   for (int i=0; i<num_cell_vars(); ++i) {
-      const LevelData<FArrayBox>& this_cell_data = cell_var(i);
+   CH_assert( face_var(a_face_var_name).isDefined() );
+   SpaceUtils::interpFaceVectorToCell(a_cell_var,face_var(a_face_var_name),"c2");
 
-      field_ptr->addCellVar(m_cell_data_var_name[i], this_cell_data.nComp(), a_ghost_vect);
-
-      LevelData<FArrayBox>& new_cell_data = field_ptr->cell_var(i);
-
-      if (a_copy_data) {
-         for (DataIterator dit( new_cell_data.dataIterator() ); dit.ok(); ++dit) {
-            new_cell_data[dit].copy(this_cell_data[dit]);
-         }
-      }
-   }
-
-   for (int i=0; i<num_face_vars(); ++i) {
-      const LevelData<FluxBox>& this_face_data = face_var(i);
-      
-      field_ptr->addFaceVar(m_face_data_var_name[i], this_face_data.nComp(), a_ghost_vect);
-
-      LevelData<FluxBox>& new_face_data = field_ptr->face_var(i);
-
-      if (a_copy_data) {
-         for (DataIterator dit( new_face_data.dataIterator() ); dit.ok(); ++dit) {
-            new_face_data[dit].copy(this_face_data[dit]);
-         }
-      }
-   }
-   
-   for (int i=0; i<num_edge_vars(); ++i) {
-      const LevelData<EdgeDataBox>& this_edge_data = edge_var(i);
-      
-      field_ptr->addEdgeVar(m_edge_data_var_name[i], this_edge_data.nComp(), a_ghost_vect);
-
-      LevelData<EdgeDataBox>& new_edge_data = field_ptr->edge_var(i);
-
-      if (a_copy_data) {
-         for (DataIterator dit( new_edge_data.dataIterator() ); dit.ok(); ++dit) {
-            new_edge_data[dit].copy(this_edge_data[dit],0,0,this_edge_data.nComp());
-         }
-      }
-   }
-
-   return RefCountedPtr<CFGVars>(field_ptr);
 }
 
+
+void
+CFGVars::interpEdgeVarToCell( LevelData<FArrayBox>&  a_cell_var,
+                              const string&          a_edge_var_name ) const
+{
+
+   CH_assert( edge_var(a_edge_var_name).isDefined() );
+   SpaceUtils::interpEdgesToCell(a_cell_var,edge_var(a_edge_var_name),"c2");
+
+}
 
 #include "NamespaceFooter.H"
 

@@ -184,21 +184,18 @@ GKPoissonBoltzmann::computePotentialAndElectronDensity(
 
 void
 GKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>&  a_ion_mass_density,
-                                             const EllipticOpBC&          a_bc )
-
+                                             EllipticOpBC&                a_bc )
 {
-   setBc(a_bc);
+   computeCoefficients( a_ion_mass_density, a_bc, m_mapped_coefficients, m_unmapped_coefficients );
 
-   computeCoefficients( a_ion_mass_density, m_mapped_coefficients, m_unmapped_coefficients );
-
-   computeBcDivergence( m_bc_divergence );
+   updateBoundaryData(m_unmapped_coefficients, a_bc);
 }
 
 
 
 void
 GKPoissonBoltzmann::setOperatorCoefficients( const LevelData<FArrayBox>&  a_ion_mass_density,
-                                             const EllipticOpBC&          a_bc,
+                                             EllipticOpBC&                a_bc,
                                              double&                      a_lo_value,
                                              double&                      a_hi_value,
                                              LevelData<FArrayBox>&        a_radial_gkp_divergence_average )

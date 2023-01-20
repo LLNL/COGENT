@@ -203,7 +203,7 @@ void GKVlasovAMG::createHypreData()
       for (int dir=0; dir<CFG_DIM+1; ++dir) {
 
          for (int m=1; m<=m_stencil_radius; ++m) {
-            // Stencil offsets along postive leg
+            // Stencil offsets along positive leg
             n++;
             m_offsets[n] = new int[CH_SPACEDIM];
             for (int tdir=0; tdir<CH_SPACEDIM; ++tdir) {
@@ -226,7 +226,6 @@ void GKVlasovAMG::createHypreData()
                }
             }
          }
-                                             
       }
 
       /* Create an empty stencil object */
@@ -493,7 +492,7 @@ void GKVlasovAMG::constructMatrix( const string&                                
                     (!(side == Side::LoHiSide::Lo && at_lo_interface) &&
                      !(side == Side::LoHiSide::Hi && at_hi_interface) ) ) {
 
-                  int coupling_comp = dir + ((sign(side)+1)/2)*(CFG_DIM+1);
+                  int coupling_comp = dir + ((1-sign(side))/2)*(CFG_DIM+1);
                   for (int n=0; n<this_couplings(iv,coupling_comp).size(); ++n) {
                      IntVect coupling = this_couplings(iv,coupling_comp)[n];
                      double value = this_weights(iv,coupling_comp)[n];
@@ -615,7 +614,7 @@ GKVlasovAMG::addUnstructuredMatrixEntries(
                         fac = 1.;
                      }
 
-                     int coupling_comp = dir + ((sign(side)+1)/2)*(CFG_DIM+1);
+                     int coupling_comp = dir + ((1-sign(side))/2)*(CFG_DIM+1);
                      for (int m=0; m<this_structured_couplings(iv,coupling_comp).size(); ++m) {
                         IntVect stencil_box_iv = this_structured_couplings(iv,coupling_comp)[m];
 

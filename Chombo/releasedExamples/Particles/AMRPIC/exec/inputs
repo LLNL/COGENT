@@ -21,7 +21,7 @@ fixed_box_size = 32
 fill_ratio = 0.75
 
 checkpoint_interval = -1
-plot_interval = 0
+plot_interval = 1
 plot_prefix  = plt
 chk_prefix = chk
 
@@ -35,3 +35,4 @@ poissonInterpType = 2
 # average cell mass on the base level, which is (domain_length / n_cell)**DIM
 # since the mean density is 1.0.
 threshFac = 1.5
+

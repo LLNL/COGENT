@@ -59,36 +59,39 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
     domain_boxes[block_number] = Box(lo, hi);
   }
 
-  bool is_periodic[SpaceDim];
+  //  bool is_periodic[SpaceDim];
+  //  for (int dir=0; dir<SpaceDim; ++dir) {
+  //    is_periodic[dir] = a_is_periodic[dir];
+  //  }
   for (int dir=0; dir<SpaceDim; ++dir) {
-    is_periodic[dir] = a_is_periodic[dir];
+    m_periodic[dir] = a_is_periodic[dir];
   }
 
   for ( int block_number = 0; block_number < m_num_blocks; ++block_number ) {
 
      if (m_mag_geom_type == "miller") {
-        MillerBlockCoordSys* block_coords = new MillerBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic));
+        MillerBlockCoordSys* block_coords = new MillerBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], m_periodic));
         m_coord_vec.push_back(block_coords);
         m_spread_radially = block_coords->getConstMinorrad() != 0;
      }
      else if (m_mag_geom_type == "slab") {
-        SlabBlockCoordSys* block_coords = new SlabBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic),
+        SlabBlockCoordSys* block_coords = new SlabBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], m_periodic),
                                                                  block_number, m_num_blocks, BLOCK_SEPARATION);
         m_coord_vec.push_back(block_coords);
      }
 #if CFG_DIM==3
      else if (m_mag_geom_type == "toroidal") {
-       ToroidalBlockCoordSys* block_coords = new ToroidalBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic),
+       ToroidalBlockCoordSys* block_coords = new ToroidalBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], m_periodic),
                                                                     block_number, m_num_blocks, BLOCK_SEPARATION);
        m_coord_vec.push_back(block_coords);
      }
 #endif
      else if (m_mag_geom_type == "cylindrical") {
-        CylindricalBlockCoordSys* block_coords = new CylindricalBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic));
+        CylindricalBlockCoordSys* block_coords = new CylindricalBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], m_periodic));
         m_coord_vec.push_back(block_coords);
      }
      else if (m_mag_geom_type == "oneblock") {
-        OneBlockCoordSys* block_coords = new OneBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], is_periodic));
+        OneBlockCoordSys* block_coords = new OneBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], m_periodic));
         m_coord_vec.push_back(block_coords);
      }
   }

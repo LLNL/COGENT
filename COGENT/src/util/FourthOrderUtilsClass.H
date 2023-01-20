@@ -5,6 +5,7 @@
 
 #include "FArrayBox.H"
 #include "FluxBox.H"
+#include "EdgeDataBox.H"
 #include "LevelData.H"
 
 #include "NamespaceHeader.H"
@@ -30,7 +31,7 @@
  * The plan is for a class that uses FourthOrderUtil to have its own version of m_useSG that gets set by a parm parse of the input
  * parameter
  *
- * sparsegrids.useSGstencils
+ * sparse_grids.useSGstencils
  *
  */
 
@@ -62,6 +63,8 @@ public:
    void fourthOrderAverageGen( LevelData<FArrayBox>& a_phi, 
                                int a_sgn = 1);
 
+   void fourthOrderAverageGen( LevelData<EdgeDataBox>& a_phi, 
+                               int a_sgn = 1);
 
    //void fourthOrderAverageGen( LevelData<FArrayBox>& a_phi, 
    //                         const ProblemDomain& a_domain, 
@@ -73,7 +76,10 @@ public:
    void fourthOrderAverageSG(LevelData<FluxBox>& a_phi,
 							 int a_sgn = 1);
    
-   // Cell-(averaged/centered) to face-(averaged/centered)
+   void fourthOrderAverageSG(LevelData<EdgeDataBox>& a_phi,
+							 int a_sgn = 1);
+   
+	// Cell-(averaged/centered) to face-(averaged/centered)
    void fourthOrderCellToFace( LevelData<FluxBox>& a_faceData, 
                                 const LevelData<FArrayBox>& a_cellData);
 
@@ -114,7 +120,10 @@ public:
 								 int a_dir, 
 								 int a_sgn = 1);
 
-   // Used by fourthOrderAverage when applied to cell-(centered/averaged) LevelData<FArrayBox>
+   void fourthOrderAverageEdgeSG(EdgeDataBox& a_phi, 
+                               int a_sgn = 1);
+
+// Used by fourthOrderAverage when applied to cell-(centered/averaged) LevelData<FArrayBox>
    void fourthOrderAverageCellSG(FArrayBox& a_phi,
                                int a_sgn = 1);
 

@@ -4,6 +4,7 @@
 #include "FluidOpInterface.H"
 #include "FluidVarBC.H"
 #include "Diffusion.H"
+#include "EMFields.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -77,7 +78,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -85,7 +86,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -98,7 +99,8 @@ public:
                                bool,
                                const FluidSpecies&,
                                const PS::GlobalDOFFluidSpecies&,
-                               int );
+                               const int,
+                               const int );
 
    virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 const PS::KineticSpeciesPtrVect&,
@@ -116,17 +118,19 @@ public:
                               const int                         step,
                               const int                         stage,
                               const double                      shift,
-                              const int                         component);
+                              const int                         componen,
+                              const std::string& );
 
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
                              const FluidSpeciesPtrVect&        fluid_species_rhs,
+                             const std::string&,
                              const int                         component );
 
    virtual void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
                            const FluidSpeciesPtrVect&         fluid_species,
                            const PS::ScalarPtrVect&           scalars,
-                           const EField&                      E_field,
+                           const EMFields&                    EM_field,
                            const double                       time );
    
    virtual bool trivialSolutionOp() const {return true;}
@@ -174,7 +178,7 @@ protected:
    /// Computes normal ion particle flux integrated over a face
    void computeIntegratedNormalIonParticleFlux(LevelData<FluxBox>&                ion_particle_flux,
                                                const PS::KineticSpeciesPtrVect&   species,
-                                               const EField&                      E_field,
+                                               const EMFields&                    EM_fields,
                                                const Real&                        time) const;
 
    
@@ -183,10 +187,7 @@ protected:
    
    void computeChargeExchangeRate(LevelData<FArrayBox>&   chx_rate,
                                   const Real              time) const;
-   
-   void convertCellToFace(LevelData<FluxBox>&         a_face_data,
-                          const LevelData<FArrayBox>& a_cell_data) const;
-   
+      
    void setZero( LevelData<FArrayBox>& data ) const;
    void setZero( LevelData<FluxBox>& data ) const;
    
@@ -223,7 +224,7 @@ private:
                               const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                               const FluidSpeciesPtrVect&         fluid_species,
                               const PS::ScalarPtrVect&           scalars,
-                              const EField&                      E_field,
+                              const EMFields&                    EM_fields,
                               const int                          component,
                               const Real                         time);
    

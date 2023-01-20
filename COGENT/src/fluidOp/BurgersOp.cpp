@@ -75,7 +75,7 @@ void BurgersOp::accumulateRHS(  FluidSpeciesPtrVect&               a_rhs,
                                 const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                 const FluidSpeciesPtrVect&         a_fluid_species,
                                 const PS::ScalarPtrVect&           a_scalars,
-                                const EField&                      a_E_field,
+                                const EMFields&                    a_EM_fields,
                                 const int                          a_fluidVecComp,
                                 const Real                         a_time)
 {
@@ -116,7 +116,7 @@ void BurgersOp::accumulateExplicitRHS(  FluidSpeciesPtrVect&               a_rhs
                                         const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                         const FluidSpeciesPtrVect&         a_fluid_species,
                                         const PS::ScalarPtrVect&           a_scalars,
-                                        const EField&                      a_E_field,
+                                        const EMFields&                    a_EM_fields,
                                         const int                          a_fluidVecComp,
                                         const Real                         a_time)
 {
@@ -254,7 +254,7 @@ void BurgersOp::accumulateExplicitRHS(  FluidSpeciesPtrVect&               a_rhs
 
    /*
    if (!m_is_time_implicit) {
-      accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
+      accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_fluidVecComp, a_time);
    }
    */
 
@@ -265,12 +265,12 @@ void BurgersOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rhs,
                                        const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                        const FluidSpeciesPtrVect&         a_fluid_species,
                                        const PS::ScalarPtrVect&           a_scalars,
-                                       const EField&                      a_E_field,
+                                       const EMFields&                    a_EM_fields,
                                        const int                          a_fluidVecComp,
                                        const Real                         a_time)
 {
   if (m_is_time_implicit) {
-    accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
+     accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_EM_fields, a_fluidVecComp, a_time);
   }
 }
 
@@ -284,7 +284,8 @@ void BurgersOp::defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::
                                bool                                                         a_im,
                                const FluidSpecies&                                          a_fluid_species,
                                const PS::GlobalDOFFluidSpecies&                             a_global_dofs,
-                               int                                                          a_species_idx )
+                               const int                                                    a_species_idx,
+                               const int                                                    a_id )
 {
   if (a_im && m_is_time_implicit) {
     CH_assert(a_pc.size() == a_dof_list.size());
@@ -298,6 +299,7 @@ void BurgersOp::defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::
   
     PS::Preconditioner<PS::ODEVector,PS::AppCtxt> *pc;
     pc = new PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>;
+    pc->setSysID(a_id);
     dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
     dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
@@ -375,7 +377,8 @@ void BurgersOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
                              const int                        a_step,
                              const int                        a_stage,
                              const double                     a_shift,
-                             const int                        a_component)
+                             const int                        a_component,
+                             const std::string& )
 {
    CH_TIME("BurgersOp::updatePCImEx");
    
@@ -392,6 +395,7 @@ void BurgersOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
 void BurgersOp::solvePCImEx(  FluidSpeciesPtrVect&              a_fluid_species_solution,
                               const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                               const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                              const std::string&,
                               const int                         a_component )
 {
    CH_TIME("BurgersOp::solvePCImEx");
@@ -495,8 +499,8 @@ void BurgersOp::computeDiffusionCoefficients(LevelData<FluxBox>& a_D_tensor,
       m_geometry.fillInternalGhosts( D_cell );
       fourthOrderCellToFaceCenters(D_face, D_cell);
       
-      m_geometry.getEllipticOpRadCoeff(D_tmp);
-      m_geometry.getEllipticOpRadCoeffMapped(D_tmp_mapped);
+      m_geometry.getCustomEllipticOpCoeff(D_tmp, "radial");
+      m_geometry.getCustomEllipticOpCoeffMapped(D_tmp_mapped, "radial");
       
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          for (int dir = 0; dir < SpaceDim; dir++) {

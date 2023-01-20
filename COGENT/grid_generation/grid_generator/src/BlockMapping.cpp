@@ -31,11 +31,11 @@ inline double signum(const double a_x)
 
 
 BlockMapping::BlockMapping(const string& a_field_file_name,
-			   const int     a_block_number,
-			   const double  a_psi_bigEnd,
-			   const int     a_nExtrp,
-			   const double  a_trans_length,
-			   const double  a_blending_factor)
+                           const int     a_block_number,
+                           const double  a_psi_bigEnd,
+                           const int     a_nExtrp,
+                           const double  a_trans_length,
+                           const double  a_blending_factor)
   : m_block_number(a_block_number),
     m_psi_smallEnd(1.0),
     m_psi_bigEnd(a_psi_bigEnd),
@@ -87,32 +87,161 @@ BlockMapping::getPhysicalCoordinates(FArrayBox& a_physical_coordinates,
 {
    /*
     Compute the block mapping on valid cells 
-    Namely, for a given mapped coordinate compute its physical coordinate.
+    For a given nodal mapped coordinate compute its physical coordinate.
+    NB:: the box type is cell-centered though
    */
+ 
+   CH_TIME("BlockMapping::getPhysicalCoordinates");
    
    const Box& box(a_physical_coordinates.box());
-   int n_theta = box.size(1) - 1;
-  
-   Box box_1d(IntVect(0,0), IntVect(box.size(0),0));
-   m_block_cut_dir.define(box_1d,2);
    
-   for (int pol_index=0; pol_index<box.size(1) - m_nExtrp; pol_index++) {
+   // Compute block cut coordinates and local directions
+   Box cut_box(IntVect(0,0), IntVect(box.size(0)-1,0));
+   m_block_cut_coords.define(cut_box,2);
+   m_block_cut_dir.define(cut_box,2);
+   initializeBlockCut(m_block_cut_coords, m_block_cut_dir);
+   
+   // To speed-up ray tracing we decompose the poloidal direction
+   DisjointBoxLayout grids;
+   Vector<Box> grid_boxes;
+   int decomp_num;
 
-      //Get poloidal coordinate (arc length)
-      double length = getPoloidalArcLength(pol_index, "cosine");
+   Box modified_box(box);
+   modified_box.growHi(1, -m_nExtrp);
+   
+   getPoloidalDisjointBoxLayout(grids, grid_boxes, decomp_num, modified_box);
+   
+   LevelData<FArrayBox> phys_coords_decomposed(grids, 2, IntVect::Zero);
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
       
-      //Get a radial grid line for the given arc length coordinate
-      Box box_radial_line(IntVect(0,pol_index), IntVect(box.size(0)-1,pol_index));
-      FArrayBox radialGridLine(box_radial_line,2);
-      getRadialGridLine(radialGridLine, a_mapping, length);
-      a_physical_coordinates.copy(radialGridLine);
+      // Create a box to store a single radial grid line
+      Box poloidal_box(grids[dit]);
+      poloidal_box.growHi(0, 1-poloidal_box.size()[RADIAL_DIR]);
+      
+      for (BoxIterator bit(poloidal_box); bit.ok(); ++bit) {
+         
+         IntVect iv = bit();
+         
+         int pol_index = iv[POLOIDAL_DIR];
+         
+         //Get poloidal coordinate (arc length)
+         double length = getPoloidalArcLength(pol_index, "cosine");
+      
+         //Get a radial grid line for the given arc length coordinate
+         Box box_radial_line(IntVect(0,pol_index), IntVect(box.size(RADIAL_DIR)-1,pol_index));
+         FArrayBox radialGridLine(box_radial_line,2);
+         getRadialGridLine(radialGridLine, a_mapping, length);
+         phys_coords_decomposed[dit].copy(radialGridLine);
+      }
    }
    
-   //Grid extrapolation (sometimes used to extend grid in dvertor legs)
+   // Assemble data back to a single FArrayBox for output purposes
+   assembleDecomposedData(a_physical_coordinates, phys_coords_decomposed, grid_boxes, decomp_num);
+   
+   
+   // Grid extrapolation (sometimes used to extend the grid in dthe ivertor leg region)
+   // Because the number of extrapolated cells is typically small, do not
+   // decompose/parallelize this calculation
    if (m_nExtrp>0) {
       Box box_extrp(IntVect(0,box.size(1) - m_nExtrp), IntVect(box.size(0)-1,box.size(1)-1));
       extrapolateGrid(a_physical_coordinates,box_extrp);
    }
+}
+
+void
+BlockMapping::getPoloidalDisjointBoxLayout(DisjointBoxLayout&   a_grids,
+                                           Vector<Box>&         a_boxes,
+                                           int&                 a_decomp_num,
+                                           const Box&           a_box) const
+{
+   int n_proc = numProc();
+   int n_pol = a_box.size(POLOIDAL_DIR);
+   
+   a_decomp_num = (n_pol>n_proc) ? n_proc : n_pol;
+   int n_loc_pol = (n_pol>n_proc) ? int(n_pol/n_proc) : 1;
+   
+   IntVect domain_hi_end = a_box.bigEnd();
+   IntVect domain_lo_end = a_box.smallEnd();
+      
+   
+   Vector<int> proc_ids;
+   
+   for(int i = 0; i < a_decomp_num; i++) {
+      
+      int pol_ind_lo = (domain_lo_end[1] + i * n_loc_pol);
+      int pol_ind_hi = (domain_lo_end[1] + (i+1) * n_loc_pol - 1);
+          
+      if (i == a_decomp_num - 1) {
+         pol_ind_hi = domain_hi_end[POLOIDAL_DIR];
+      }
+
+      IntVect lo_end(domain_lo_end[RADIAL_DIR], pol_ind_lo);
+      IntVect hi_end(domain_hi_end[RADIAL_DIR], pol_ind_hi);
+      
+      Box box(lo_end, hi_end);
+      int procID = i;
+
+      a_boxes.push_back( box );
+      proc_ids.push_back( procID );
+      
+   }
+   a_grids.define( a_boxes, proc_ids );
+}
+
+
+void
+BlockMapping::assembleDecomposedData(FArrayBox&                    a_data,
+                                     const LevelData<FArrayBox>&   a_data_decomp,
+                                     const Vector<Box>&            a_grid_boxes,
+                                     const int&                    a_decomp_num ) const
+{
+   /*
+    Puts decomposed LevelData<FArrayBox> onto a single FArrayBox visible by all procs
+    We assume that each proc contains only one box (we created grids that way)
+    Also, the processor IDs assigned to grids correspond to 0 .. a_decomp_num-1
+   */
+   
+   CH_TIME("BlockMapping::assembleDecomposedData");
+   
+   FArrayBox this_data;
+   
+   Vector<FArrayBox> all_data(numProc());
+   
+   // Fill local data
+   for (int ivec = 0; ivec < numProc(); ivec++) {
+      if (procID() == ivec && ivec < a_decomp_num) {
+         this_data.define(a_grid_boxes[ivec], 2);
+         
+         // Iterate over boxes of decomposed object to find the box needed
+         for (DataIterator dit( a_data_decomp.dataIterator() ); dit.ok(); ++dit) {
+            if (a_data_decomp[dit].box() == a_grid_boxes[ivec]) {
+               this_data.copy(a_data_decomp[dit]);
+            }
+         }
+      }
+      else {
+         if (procID() == ivec) {
+            // Or perhas should use the empty constructor to create invalid FArrayBox
+            Box empty_box;
+            this_data.define(empty_box,1);
+         }
+      }
+   }
+
+#ifdef CH_MPI
+   // Gather data across all processors and put it onto all processors
+   for (int ivec = 0; ivec < numProc(); ivec++) {
+      gather(all_data, this_data, ivec);
+   }
+   
+   // Create global interpolation FArrayBox objects on all procs
+   for (int ivec = 0; ivec < a_decomp_num; ivec++) {
+      a_data.copy(all_data[ivec], a_grid_boxes[ivec]);
+   }
+#else
+   a_data.copy(this_data, a_grid_boxes[0]);
+#endif
 }
 
 void BlockMapping::readFieldFromDCTFile(const string& a_file_name)
@@ -177,7 +306,13 @@ void BlockMapping::readFieldFromDCTFile(const string& a_file_name)
    MPI_Bcast(m_psi_coefs.dataPtr(), num_values, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 #endif
 
+#ifdef CH_MPI
+   if (procID() == 0) {
+#endif
    fieldCoefficientsFile.close();
+#ifdef CH_MPI
+   }
+#endif
    
    
    if ((m_psi_expansion_order != -1) && ((m_psi_expansion_order > NR || m_psi_expansion_order > NZ))) {
@@ -723,25 +858,8 @@ BlockMapping::getRadialGridLine(FArrayBox& a_radialGridLine,
 
          if (is_cut) {
             //get points on a block cut
-            if (m_straight_block_bndry || iv[RADIAL_DIR]==1) {
-               RealVect cut_coord = getCutCoords(psi_coords(iv,0));
-               point[0] = cut_coord[0];
-               point[1] = cut_coord[1];
-            }
-         
-            else {
-               pushToFluxSurface(point,psi_coords(iv,0));
-            }
-         
-            //store block cut directions
-            //this being set at a block boundary, before m_block_cut_dir is used for interior calculation
-            RealVect this_cut_dir;
-            this_cut_dir[0] = point[0] - a_radialGridLine(old_index,0);
-            this_cut_dir[1] = point[1] - a_radialGridLine(old_index,1);
-            this_cut_dir /= vectMag(this_cut_dir);
-            this_cut_dir *=signum(psi_coords(iv,0) - psi_coords(old_index,0));
-            m_block_cut_dir(iv,0) = this_cut_dir[0];
-            m_block_cut_dir(iv,1) = this_cut_dir[1];
+            point[0] = m_block_cut_coords(iv,0);
+            point[1] = m_block_cut_coords(iv,1);
          }
 
          else {
@@ -770,12 +888,67 @@ BlockMapping::getRadialGridLine(FArrayBox& a_radialGridLine,
    
 }
 
+void
+BlockMapping::initializeBlockCut(FArrayBox&  a_block_cut_coords,
+                                 FArrayBox&  a_block_cut_dir) const
+{
+   /*
+    Computes coordinates and directional vector
+    along a block cut
+    */
+   
+   FArrayBox psi_coords(a_block_cut_coords.box(),1);
+   getNormFluxCoordinates(psi_coords);
+   
+   for (BoxIterator bit(a_block_cut_coords.box());bit.ok();++bit) {
+      IntVect iv = bit();
+
+      if (iv[RADIAL_DIR]==0) {
+         a_block_cut_coords(iv,0) = m_Xpoint[0];
+         a_block_cut_coords(iv,1) = m_Xpoint[1];
+      }
+      
+      else {
+         //compute block cut coordinates
+         IntVect old_index(iv);
+         old_index[RADIAL_DIR] = iv[RADIAL_DIR] - 1;
+         RealVect point;
+         point[0] = a_block_cut_coords(old_index,0);
+         point[1] = a_block_cut_coords(old_index,1);
+
+         if (m_straight_block_bndry || iv[RADIAL_DIR]==1) {
+            RealVect cut_coord = getStraightCutCoords(psi_coords(iv,0));
+            point[0] = cut_coord[0];
+            point[1] = cut_coord[1];
+         }
+         
+         else {
+            pushToFluxSurface(point,psi_coords(iv,0));
+         }
+
+         a_block_cut_coords(iv,0) = point[0];
+         a_block_cut_coords(iv,1) = point[1];
+         
+         //compute block cut directions
+         RealVect this_cut_dir;
+         this_cut_dir[0] = point[0] - a_block_cut_coords(old_index,0);
+         this_cut_dir[1] = point[1] - a_block_cut_coords(old_index,1);
+         this_cut_dir /= vectMag(this_cut_dir);
+         this_cut_dir *=signum(psi_coords(iv,0) - psi_coords(old_index,0));
+      
+         a_block_cut_dir(iv,0) = this_cut_dir[0];
+         a_block_cut_dir(iv,1) = this_cut_dir[1];
+         
+      }
+   }
+}
+
 RealVect
-BlockMapping::getCutCoords( const double a_psi ) const
+BlockMapping::getStraightCutCoords( const double a_psi ) const
 {
    /*
     Return a physical coordinate corresponding to the intersection
-    of the curve psi(R,Z)=a_psi and the block cut
+    of the curve psi(R,Z)=a_psi and the straight block cut
    */
    
 
@@ -1079,11 +1252,8 @@ BlockMapping::getPsiTang(const RealVect& a_X, const int a_block_number) const
       }
       
       else {
-         RealVect axis(m_core_cut_dir);
-         axis *= -0.1;
-         axis += m_Xpoint;
          RealVect r_loc(a_X);
-         r_loc -= axis;
+         r_loc -= m_magAxis;
          double vect_prod =r_loc[0]*Bfield[1] - r_loc[1]*Bfield[0];
          double sign = (vect_prod > 0) ? 1.0 : -1.0;
          tang_vect /= Bmag;
@@ -1420,6 +1590,8 @@ BlockMapping::getArcLengthMapping(Vector<RealVect*> & a_mapping,
                                   const int           a_block_id) const
 {
 
+   CH_TIME("BlockMapping::getArcLengthMapping");
+   
    /*
     Compute arc-length mapping along separatrix
     a_mapping is the array of points (RealVect's), which start at Xptn,
@@ -1473,7 +1645,8 @@ BlockMapping::getArcLengthMapping(Vector<RealVect*> & a_mapping,
       dist_to_X -= m_Xpoint;
       double dist_to_X_mag = sqrt(pow(dist_to_X[0],2) + pow(dist_to_X[1],2));
       
-      
+      //Check to see if we have returned to the Xpt for the core region, or
+      //if we have reached the specified block_lenght for the divertor leg regions
       if ((a_block_id == LCORE && !first_step && dist_to_X_mag < m_dl && length_curr > 4.0*m_dl) ||
           (a_block_id != LCORE && (a_block_length < length_curr )) ) {
          
@@ -1605,6 +1778,291 @@ BlockMapping::extrapolateGrid(FArrayBox& a_physical_coordinates, const Box& a_bo
       a_physical_coordinates(iv,0) = a_physical_coordinates(index1,0) + increment[0];
       a_physical_coordinates(iv,1) = a_physical_coordinates(index1,1) + increment[1];
    }
+}
+
+void
+BlockMapping::printToroidalFluxAndSafetyFactorProfiles() const
+{
+   
+   /*
+    Compute and print toroidal flux function and safety factor
+    */
+   
+   Vector<Real> a_toroidal_flux; // at the upper cell face
+   Vector<Real> a_norm_pol_flux; // at the upper cell face
+   Vector<Real> a_safety_factor; // at the cell center
+   Vector<Real> a_radial_midplane_coords; // at the cell center
+   
+   // Radial step at the outer midplane
+   double dr(0.001);
+   
+   // Estimate number of poloidal steps
+   double n_pol(128);
+   
+   // This object contains toroidal flux
+   // integrated up to the current value of mid_plane point
+   double this_toroidal_flux(0.);
+   
+   // Initialize mid_plane point
+   RealVect midplane_point(m_magAxis);
+   midplane_point[RADIAL_DIR] += (1.0/2.0)*dr;
+   double psi_norm_middle = getNormMagneticFlux(midplane_point);
+   
+   RealVect midplane_outer_point(midplane_point);
+   midplane_outer_point[RADIAL_DIR] += dr/2.0;
+   double psi_norm_outer = getNormMagneticFlux(midplane_outer_point);
+
+   RealVect midplane_inner_point(m_magAxis);
+   double psi_norm_inner = getNormMagneticFlux(midplane_inner_point);
+   
+   // Do the first calculation of the toroidal flux
+   // Have to do it separatelly becasue of the polar coordinates singularity
+   // here each cell is a triangle. Becasue both toroidal and poloidal fluxes
+   // behaves as r^2 near the magnetic axis, we could possibly use the
+   // quadrilateral cell approach (which is used next), by
+   // placing inner boundary really close to the axis. The error in toroidal flux
+   // caluclation would still only be second order.
+   RealVect this_point(midplane_point);
+   RealVect this_point_outer_corner(midplane_outer_point);
+   RealVect this_point_inner_corner(m_magAxis);
+
+   // This object contains toroidal flux integrated over the flux shell
+   double delta_toroidal_flux(0.);
+   
+   bool end_is_reached = false;
+   bool first_step = true;
+   
+   int counter(0);
+   
+   while (!end_is_reached) {
+
+      double dl_pol = 2*PI*dr/2.0/n_pol;
+
+      RealVect next_point(this_point);
+      
+      // Check if we completed the loop
+      RealVect point_to_midplane(this_point);
+      point_to_midplane -= midplane_point;
+      double dist_to_midplane = vectMag(point_to_midplane);
+
+      if (dist_to_midplane < dl_pol
+         && this_point[POLOIDAL_DIR] < midplane_point[POLOIDAL_DIR]
+         && !first_step) {
+         
+         next_point = midplane_point;
+            
+         end_is_reached = true;
+      }
+      else  {
+         //Specific block id doesn't matter, but it should
+         //be a top block for CCW integration
+         RealVect tang_vect = getPsiTang(this_point,LCORE);
+         next_point += tang_vect * dl_pol;
+         pushToFluxSurface(next_point, psi_norm_middle);
+      }
+         
+      RealVect next_point_outer_corner(next_point);
+      pushToFluxSurface(next_point_outer_corner, psi_norm_outer);
+   
+      double cell_area = cellArea(m_magAxis,
+                                  this_point_outer_corner,
+                                  next_point_outer_corner);
+      
+      RealVect cell_center(this_point);
+      cell_center += next_point;
+      cell_center /= 2.0;
+      
+      double cell_area_over_R = cell_area/cell_center[RADIAL_DIR];
+   
+      delta_toroidal_flux += cell_area_over_R;
+      
+      // Update for the next poloidal step
+      this_point = next_point;
+      this_point_outer_corner = next_point_outer_corner;
+      
+      first_step = false;
+ 
+      // Sanity check
+      counter++;
+      if (counter > 2* n_pol) {
+         MayDay::Error("printToroidalFluxAndSafetyFactorProfiles::something is wrong!!!");
+      }
+   }
+   
+   // Compute and store the first value of safety factor
+   double delta_poloidal_flux = abs(getMagneticFluxFromDCT(midplane_outer_point)
+                                  - getMagneticFluxFromDCT(midplane_inner_point) );
+   
+   double this_safety_factor = delta_toroidal_flux / delta_poloidal_flux / (2*PI);
+   a_safety_factor.push_back(this_safety_factor);
+   a_radial_midplane_coords.push_back(midplane_point[RADIAL_DIR]);
+
+   // Compute and store the first value of toroidal flux function
+   this_toroidal_flux += delta_toroidal_flux;
+   a_toroidal_flux.push_back(this_toroidal_flux);
+   a_norm_pol_flux.push_back(psi_norm_outer);
+   
+
+   // Performing integration over the rest of the radial domain
+   // Here, each cell is a quadrilateral
+   
+   midplane_point[RADIAL_DIR] += dr;
+
+   midplane_outer_point = midplane_point;
+   midplane_outer_point[RADIAL_DIR] += dr/2.0;
+
+   midplane_inner_point = midplane_point;
+   midplane_inner_point[RADIAL_DIR] -= dr/2.0;
+
+   psi_norm_outer = getNormMagneticFlux(midplane_outer_point);
+   psi_norm_inner = getNormMagneticFlux(midplane_inner_point);
+   psi_norm_middle = getNormMagneticFlux(midplane_point);
+   
+   delta_poloidal_flux = abs(getMagneticFluxFromDCT(midplane_outer_point)
+                           - getMagneticFluxFromDCT(midplane_inner_point) );
+   
+   while (psi_norm_outer < 1.0)
+   {
+      delta_toroidal_flux = 0.;
+
+      this_point = midplane_point;
+      this_point_inner_corner = midplane_inner_point;
+      this_point_outer_corner = midplane_outer_point;
+
+      first_step = true;
+      end_is_reached = false;
+      counter = 0;
+      while (!end_is_reached) {
+
+         double radius = midplane_point[RADIAL_DIR]-m_magAxis[RADIAL_DIR];
+         double dl_pol = 2*PI*radius/n_pol;
+         
+         RealVect next_point(this_point);
+         
+         // Check if we completed the loop
+         RealVect point_to_midplane(this_point);
+         point_to_midplane -= midplane_point;
+         double dist_to_midplane = vectMag(point_to_midplane);
+
+         if (dist_to_midplane < dl_pol
+            && this_point[POLOIDAL_DIR] < midplane_point[POLOIDAL_DIR]
+            && !first_step) {
+            
+            next_point = midplane_point;
+               
+            end_is_reached = true;
+         }
+         else  {
+            //Specific block id doesn't matter, but it should
+            //be a top block for CCW integration
+            RealVect tang_vect = getPsiTang(this_point,LCORE);
+            next_point += tang_vect * dl_pol;
+            pushToFluxSurface(next_point, psi_norm_middle);
+         }
+         
+         RealVect next_point_outer_corner(next_point);
+         pushToFluxSurface(next_point_outer_corner, psi_norm_outer);
+      
+         RealVect next_point_inner_corner(next_point);
+         pushToFluxSurface(next_point_inner_corner, psi_norm_inner);
+      
+         double cell_area = cellArea(this_point_inner_corner,
+                                     this_point_outer_corner,
+                                     next_point_inner_corner,
+                                     next_point_outer_corner);
+         
+         RealVect cell_center(this_point);
+         cell_center += next_point;
+         cell_center /= 2.0;
+           
+         double cell_area_over_R = cell_area/cell_center[RADIAL_DIR];
+      
+         delta_toroidal_flux += cell_area_over_R;
+         
+         // Update for the next poloidal step
+         this_point = next_point;
+         this_point_inner_corner = next_point_inner_corner;
+         this_point_outer_corner = next_point_outer_corner;
+         
+         first_step = false;
+         // Sanity check
+         counter++;
+         if (counter > 2* n_pol) {
+            MayDay::Error("printToroidalFluxAndSafetyFactorProfiles::something is wrong!!!");
+         }
+      }
+
+      // Compute and store safety factor as a function of R
+      this_safety_factor = delta_toroidal_flux / delta_poloidal_flux / (2*PI);
+      a_safety_factor.push_back(this_safety_factor);
+      a_radial_midplane_coords.push_back(midplane_point[RADIAL_DIR]);
+
+      // Compute and store toroidal flux function as a function of psi_norm
+      this_toroidal_flux += delta_toroidal_flux;
+      a_toroidal_flux.push_back(this_toroidal_flux);
+      a_norm_pol_flux.push_back(psi_norm_outer);
+      
+      // Update quantities for the next radial step
+      midplane_point[RADIAL_DIR] += dr;
+      
+      midplane_outer_point = midplane_point;
+      midplane_outer_point[RADIAL_DIR] += dr/2.0;
+
+      midplane_inner_point = midplane_point;
+      midplane_inner_point[RADIAL_DIR] -= dr/2.0;
+
+      psi_norm_outer = getNormMagneticFlux(midplane_outer_point);
+      psi_norm_inner = getNormMagneticFlux(midplane_inner_point);
+      psi_norm_middle = getNormMagneticFlux(midplane_point);
+      
+      delta_poloidal_flux = abs(getMagneticFluxFromDCT(midplane_outer_point)
+                                - getMagneticFluxFromDCT(midplane_inner_point) );
+      
+   }
+   
+   // Output the data
+   FILE* fcogent;
+   int vect_size = a_toroidal_flux.size();
+   fcogent = fopen("toroidal_flux_data", "w");
+   for (int i=0; i<vect_size; ++i) {
+      fprintf(fcogent, "%20.12e %20.12e %20.12e %20.12e \n",
+              a_toroidal_flux[i]/a_toroidal_flux[vect_size-1],
+              a_norm_pol_flux[i],
+              a_safety_factor[i],
+              a_radial_midplane_coords[i]);
+   }
+   fclose(fcogent);
+}
+
+double
+BlockMapping::cellArea(const RealVect& a_1,
+                       const RealVect& a_2,
+                       const RealVect& a_3) const
+{
+   /*
+    Return physical cell area of a triangle
+    */
+   
+   RealVect X1(a_2);
+   X1 -= a_1;
+   
+   RealVect X2(a_3);
+   X2 -= a_1;
+
+   return 0.5 * abs(X1[1]*X2[0]-X1[0]*X2[1]);
+}
+
+double
+BlockMapping::cellArea(const RealVect& a_SE,
+                       const RealVect& a_SW,
+                       const RealVect& a_NE,
+                       const RealVect& a_NW) const
+{
+   /*
+    Return physical cell area of a quadrilateral
+    */
+
+   return cellArea(a_SE, a_SW, a_NE) + cellArea(a_SW, a_NE, a_NW);
 }
 
 double

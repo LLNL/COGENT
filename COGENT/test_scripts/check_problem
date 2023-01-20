@@ -26,7 +26,7 @@ if [ -d "$prob_dir" ]; then
    # Loop over the plot file subdirectories
    m=0
    success=1
-   for base_plot_dir in $base_dir/$prob_dir/*; do
+   for base_plot_dir in $base_dir/$prob_dir/plt_*; do
       if [ -d "$base_plot_dir" ]; then
          for base_file in $base_plot_dir/*.hdf5; do
             plot_dir=`echo $base_plot_dir | sed 's/.*\(\/\)//'`

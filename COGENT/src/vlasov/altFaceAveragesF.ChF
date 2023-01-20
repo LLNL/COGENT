@@ -410,3 +410,44 @@ c.......assign face value
       return
       end
 
+c ----------------------------------------------------------
+c  average face values based linear, 2nd-order centered
+c
+c  facePhi <=> face-centered phi value
+c  cellPhi  => cell-centered phi
+c  faceVel  => normal velocity on faces
+c  faceBox  =>
+c  idir     =>
+c  -------------------------------------------------------------
+      subroutine C2FACEVALUES(CHF_FRA[facePhi],
+     &                        CHF_CONST_FRA[cellPhi],
+     &                        CHF_BOX[faceBox],
+     &                        CHF_CONST_INT[idir] )
+
+
+      integer n, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3);
+      mm = CHF_ID(idir, 4)]
+
+      do n=0, (CHF_NCOMP[facePhi]-1)
+         CHF_MULTIDO[faceBox;i;j;k;l;m]
+
+          val = (cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm],n)
+     &        +  cellPhi(CHF_IX[i;j;k;l;m],n))/two
+
+c.......assign face value
+        facePhi(CHF_IX[i;j;k;l;m],n) = val
+
+        CHF_ENDDO
+      enddo
+
+      return
+      end
+

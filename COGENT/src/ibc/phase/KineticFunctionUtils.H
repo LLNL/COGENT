@@ -2,8 +2,7 @@
 #define _KINETIC_FUNCTION_UTILS_H_
 
 #include "FourthOrderUtil.H"
-
-#include "FourthOrderUtilsClass.H"
+#include "FourthOrderUtilsClass.H.multidim"
 
 #include "NamespaceHeader.H"
 

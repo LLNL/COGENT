@@ -68,14 +68,14 @@ class Kernel
 
       virtual void computeVelCfgComp(LevelData<T>&             vel_cfg_comp,
                                      const PhaseGeom&          phase_geom,
-                                     const LevelData<FluxBox>& field,
+                                     const CFG::EMFields&      EM_fields,
                                      const int                 option) const;
 
       ///Computes projections of the physical velocity components onto normals in configuration directions
 
       virtual void computeVelCfgCompNormals(LevelData<T>&             vel_cfg_comp,
                                             const PhaseGeom&          phase_geom,
-                                            const LevelData<FluxBox>& field,
+                                            const CFG::EMFields&      EM_fields,
                                             const int                 option) const;
 
 };
@@ -204,11 +204,11 @@ class MassDensityKernel : public Kernel<T>
        virtual int nComponents() const { return 1; }
 };
 
-/// Momentum kernel.
+/// Guiding center velocity kernel.
 /**
  */
 template <class T>
-class MomentumDensityKernel : public Kernel<T>
+class GuidingCenterVelocityKernel : public Kernel<T>
 {
    public:
 
@@ -217,11 +217,15 @@ class MomentumDensityKernel : public Kernel<T>
       *  Initialized with field, which is used to get phase-velocity
       */
 
-      MomentumDensityKernel( const LevelData<FluxBox>& field )
-         : m_field(field) {;}
+      GuidingCenterVelocityKernel(const LevelData<FluxBox>& field,
+                                  const CFG::EMFields&      EM_fields,
+                                  const LevelData<FluxBox>& Apar_derivatives,
+                                  const int velocity_option)
+         : m_EM_fields(EM_fields),
+           m_velocity_option(velocity_option) {;}
       
       /// virtual destructor added to silence compiler complaints (MAD 1/5/18)
-      virtual ~MomentumDensityKernel() {;}
+      virtual ~GuidingCenterVelocityKernel() {;}
 
       /// Computes the integrand for a guiding center momentum density moment (i.e., m*n*Vgc) calculation.
       /**
@@ -256,7 +260,8 @@ class MomentumDensityKernel : public Kernel<T>
 
 private:
    
-      const LevelData<FluxBox>& m_field;
+      const CFG::EMFields& m_EM_fields;
+      const int m_velocity_option;
 
 };
 
@@ -748,12 +753,12 @@ class ParallelEnergyKernel : public Kernel<T>
 /**
  */
 template <class T>
-class ParallelMomKernel : public Kernel<T>
+class ParallelVelKernel : public Kernel<T>
 {
    public:
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
-      virtual ~ParallelMomKernel() {;}
+      virtual ~ParallelVelKernel() {;}
 
       /// Computes the integrand for a ParallelMom moment calculation.
       /**
@@ -799,18 +804,22 @@ class ParallelMomKernel : public Kernel<T>
 /**
  */
 template <class T>
-class ParticleFluxKernel : public Kernel<T>
+class RadialParticleFluxKernel : public Kernel<T>
 {
    public:
        /// Constructor with initialization.
        /**
         *  Initialized with potentail, which is used to get phase-velocity
         */
-       ParticleFluxKernel( const LevelData<FluxBox>& field )
-          : m_field(field) {;}
+       RadialParticleFluxKernel(const LevelData<FluxBox>& field,
+                                const CFG::EMFields&      EM_fields,
+                                const LevelData<FluxBox>& Apar_derivatives,
+                                const int velocity_option)
+          : m_EM_fields(EM_fields),
+            m_velocity_option(velocity_option) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
-      virtual ~ParticleFluxKernel() {;}
+      virtual ~RadialParticleFluxKernel() {;}
 
       /// Computes the integrand for a ParticleFlux moment calculation.
       /**
@@ -853,27 +862,32 @@ class ParticleFluxKernel : public Kernel<T>
 
     private:
 
-        const LevelData<FluxBox>& m_field;
+        const CFG::EMFields& m_EM_fields;
+        const int m_velocity_option;
 };
 
 /// Heat flux kernel.
 /**
  */
 template <class T>
-class HeatFluxKernel : public Kernel<T>
+class RadialHeatFluxKernel : public Kernel<T>
 {
    public:
        /// Constructor with initialization.
        /**
         *  Initialized with potentail, which is used to get phase-velocity
         */
-       HeatFluxKernel( const LevelData<FluxBox>& field,
-                       const LevelData<FArrayBox>& phi)
-          : m_field(field),
-            m_phi(phi) {;}
+       RadialHeatFluxKernel(const LevelData<FluxBox>& field,
+                            const CFG::EMFields&      EM_fields,
+                            const LevelData<FluxBox>& Apar_derivatives,
+                            const LevelData<FArrayBox>& phi,
+                            const int velocity_option )
+          : m_EM_fields(EM_fields),
+            m_phi(phi),
+            m_velocity_option(velocity_option) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
-      virtual ~HeatFluxKernel() {;}
+      virtual ~RadialHeatFluxKernel() {;}
 
       /// Computes the integrand for a HeatFlux moment calculation.
       /**
@@ -916,89 +930,30 @@ class HeatFluxKernel : public Kernel<T>
 
     private:
 
-        const LevelData<FluxBox>& m_field;
+        const CFG::EMFields&      m_EM_fields;
         const LevelData<FArrayBox>& m_phi;
+        const int m_velocity_option;
 
 };
-
-/// Perpendicular current density kernel.
-/**
- */
-template <class T>
-class PerpCurrentDensityKernel : public Kernel<T>
-{
-public:
-   /// Constructor with initialization.
-   /**
-    *  Initialized with potentail, which is used to get phase-velocity
-    */
-   PerpCurrentDensityKernel( const LevelData<FluxBox>& field )
-      : m_field(field) {;}
-   
-   /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
-   virtual ~PerpCurrentDensityKernel() {;}
-   
-   /// Computes the integrand for a PerpCurrent moment calculation.
-   /**
-    * Computes the integrand by multiplying the input distribution function
-    * by the perpendicular component of the drift velocity.
-    *
-    * The number of kernel components is CFG_DIM.  If the distribution function
-    * has more than one component, the first component of the result
-    * will contain the moment of the first distribution function component,
-    * the next component will contain the moment of the second
-    * distribution function component, etc.  Upon entry, it is assumed
-    * that result has already been initialized with the distribution function
-    * correspondingly, ie., the first component contains the first
-    * component of the distribution function, the next component
-    * contain the second component of the distribution function, etc.
-    *
-    * @param[out] result Cell-averaged integrand.
-    * @param[in] kinetic_species Kinetic species object.
-    */
-   virtual void eval( LevelData<T>& result,
-                     const KineticSpecies& kinetic_species ) const;
-   
-   /// Returns the kernel scale.
-   /**
-    * Returns the kernel scale, which is 1..
-    *
-    * @param[in] kinetic_species Kinetic species object.
-    * @return real-valued scale to be applied in configuration space.
-    */
-   virtual Real scale( const KineticSpecies& kinetic_species ) const
-   { return kinetic_species.charge(); }
-   
-   /// Returns the number of kernel components
-   /**
-    * Returns the number of kernel components.
-    *
-    * @param[in] kinetic_species Kinetic species object.
-    */
-   virtual int nComponents() const { return CFG_DIM; }
-   
-private:
-   
-   const LevelData<FluxBox>& m_field;
-};
-
 
 /// Guding Center Poloidal Momentum moment.
 /**
  */
 template <class T>
-class GuidingCenterPoloidalMomKernel : public Kernel<T>
+class GuidingCenterPoloidalVelKernel : public Kernel<T>
 {
    public:
        /// Constructor with initialization.
        /**
         *  Initialized with potentail, which is used to get phase-velocity
         */
-       GuidingCenterPoloidalMomKernel( const LevelData<FluxBox>& field )
-          : m_field(field) {;}
+       GuidingCenterPoloidalVelKernel( const LevelData<FluxBox>& field,
+                                       const CFG::EMFields&      EM_fields,
+                                       const LevelData<FluxBox>& Apar_derivatives )
+          : m_EM_fields(EM_fields) {;}
 
       /// virtual destructor added to silence compiler complaints (DFM 2/4/09)
-      virtual ~GuidingCenterPoloidalMomKernel() {;}
+      virtual ~GuidingCenterPoloidalVelKernel() {;}
 
       /// Computes the integrand for a PoloidalMom moment calculation.
       /**
@@ -1041,7 +996,7 @@ class GuidingCenterPoloidalMomKernel : public Kernel<T>
 
     private:
 
-        const LevelData<FluxBox>& m_field;
+        const CFG::EMFields& m_EM_fields;
 };
 
 /// Magnetization kernel.

@@ -17,55 +17,9 @@
 
 #include "mappedAdvectionF_F.H"
 #include "FourthOrderUtil.H"
+#include "FourthOrderUtilsClass.H.multidim"
 
 #include "NamespaceHeader.H"
-
-
-void
-computeMappedFourthOrderFlux(LevelData<FluxBox>& a_compCoordFlux,
-                             LevelData<FluxBox>& a_faceVel,
-                             const LevelData<FArrayBox>& a_phi,
-                             const LevelData<FArrayBox>* a_cellAdvVel,
-                             const FourthOrderCoordSys* a_FOCS,
-                             const RealVect& a_dx,
-                             bool a_limitFaceValues
-                             )
-{
-  const DisjointBoxLayout grids = a_phi.getBoxes();
-
-  // Compute computational-grid cell averages
-  LevelData<FArrayBox> phi_cg(grids, a_phi.nComp(), a_phi.ghostVect() );
-  cellUJToCellU( phi_cg, a_phi, a_FOCS );
-  phi_cg.exchange();
-//  LevelData<FArrayBox> vel_cg( grids, a_cellAdvVel->nComp(), a_cellAdvVel->ghostVect() );
-//  cellUJToCellU( vel_cg, *a_cellAdvVel );
-
-  // construct appropriately accurate face-averages of phi and advVel
-  LevelData<FluxBox> facePhi( grids, phi_cg.nComp(), phi_cg.ghostVect() );
-  fourthOrderCellToFace(facePhi, phi_cg );
-
-  //computeFaceAverages( facePhi, phi_cg );
-  facePhi.exchange();
-
-//  computeFaceAverages( faceVel, vel_cg );
-  fourthOrderCellToFace( a_faceVel, *a_cellAdvVel );
-  //computeFaceAverages( a_faceVel, *a_cellAdvVel );
-  a_faceVel.exchange();
-
-  // if we're limiting the face-centered values, do it here
-  if (a_limitFaceValues)
-  {
-     applyMappedLimiter(facePhi, phi_cg, a_faceVel, a_FOCS, a_dx);
-  }
-
-  // compute computational-space fluxes -
-  //   need all three fluxes on each face, so compCoordFlux has
-  //   dimension (SpaceDim * nComp)
-  CH_assert(a_compCoordFlux.nComp() == SpaceDim*phi_cg.nComp());
-
-  computeCompFaceFluxes( a_compCoordFlux, facePhi, a_faceVel, true );
-  a_compCoordFlux.exchange();
-}
 
 
 void
@@ -217,6 +171,97 @@ computeCompFaceFluxes( LevelData<FluxBox>& a_uTimesV,
    } // end loop over boxes
 }
 
+// The SG-friendly version
+void
+computeCompFaceFluxesSG( LevelData<FluxBox>& a_uTimesV,
+                       const LevelData<FluxBox>& a_u,
+                       const LevelData<FluxBox>& a_v,
+                       bool a_useFourthOrder)
+{
+  CH_TIME("computeCompFaceFluxes SG version");
+
+   // Compute the SpaceDim-by-nComp face-averaged fluxes in computational
+   // space, where a_v is the SpaceDim-dimensional velocity vector and
+   // a_u is the nComp-dim state vector
+   int ncomp = a_u.nComp();
+   CH_assert(a_v.nComp() == SpaceDim);
+   CH_assert(a_uTimesV.nComp() == SpaceDim * ncomp);
+   CH_assert(a_uTimesV.ghostVect() == IntVect::Unit);
+	
+	FourthOrderUtil FourthOrderOperators; //Object that holds various fourth-order operations 
+	FourthOrderOperators.setSG(true); //Whether to use the SG versions of fourth order stencils
+	int deavg_sign = -1.0;
+   int reavg_sign = 1.0;
+  
+	LevelData<FluxBox> u_ptvals( a_u.disjointBoxLayout(), ncomp, a_u.ghostVect() );
+	LevelData<FluxBox> v_ptvals( a_v.disjointBoxLayout(), SpaceDim, a_v.ghostVect() );
+
+	for (auto dit(a_u.dataIterator()); dit.ok(); ++dit)
+	{
+		for (int j=0; j < SpaceDim; ++j)
+		{
+			u_ptvals[dit][j].copy(a_u[dit][j]);
+		}
+	}
+	
+	for (auto dit(a_v.dataIterator()); dit.ok(); ++dit)
+	{
+		for (int j=0; j < SpaceDim; ++j)
+		{
+			v_ptvals[dit][j].copy(a_v[dit][j]);
+		}
+	}
+
+	FourthOrderOperators.fourthOrderAverageGen(u_ptvals, deavg_sign);
+	FourthOrderOperators.fourthOrderAverageGen(v_ptvals, deavg_sign);
+
+	u_ptvals.exchange();
+	v_ptvals.exchange();
+
+   // loop over boxes
+   DataIterator dit = u_ptvals.dataIterator();
+   for (dit.begin(); dit.ok(); ++dit)
+   {
+      FluxBox& thisUV = a_uTimesV[dit];
+      const FluxBox& thisU = u_ptvals[dit];
+      const FluxBox& thisV = v_ptvals[dit];
+
+      // loop over faces (index "d" in notes)
+      for (int faceDir=0; faceDir<SpaceDim; faceDir++)
+      {
+         FArrayBox& thisUVdir = thisUV[faceDir];
+         const FArrayBox& thisUdir = thisU[faceDir];
+         const FArrayBox& thisVdir = thisV[faceDir];
+
+         // compute <u_p><v_d> tensor
+         Box intersectBox(thisUdir.box());
+         intersectBox &= thisVdir.box();
+         intersectBox &= thisUVdir.box();
+
+			thisUVdir.setVal(0.0);
+         FORT_INCREMENTFACEPROD(CHF_FRA(thisUVdir),
+                                CHF_CONST_FRA(thisUdir),
+                                CHF_CONST_FRA(thisVdir),
+                                CHF_BOX(intersectBox));
+
+		}
+	}
+	
+
+	FourthOrderOperators.fourthOrderAverageGen(a_uTimesV, reavg_sign);
+
+}
+
+void
+computeCompFaceFluxesGen( LevelData<FluxBox>& a_uTimesV,
+                       const LevelData<FluxBox>& a_u,
+                       const LevelData<FluxBox>& a_v,
+                       bool a_useFourthOrder,
+							  bool a_useSG)
+{
+   if (a_useSG) { computeCompFaceFluxesSG(a_uTimesV, a_u, a_v, a_useFourthOrder); }
+	else { computeCompFaceFluxes(a_uTimesV, a_u, a_v, a_useFourthOrder); }
+}
 
 void
 computeCompFaceFluxesNormal( LevelData<FluxBox>& a_uTimesV,

@@ -1782,7 +1782,30 @@ c     local variables
 
       return
       end
-     
+
+
+      subroutine enforce_positivity(
+     &     CHF_FRA[data],
+     &     CHF_BOX[gridbox]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n], comp
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+
+         do comp = 0, CHF_NCOMP[data]-1
+
+           if (data(CHF_IX[i;j;k;l;m;n],comp).le.zero) then
+             data(CHF_IX[i;j;k;l;m;n],comp) = zero
+           endif 
+
+         enddo
+
+      CHF_ENDDO
+
+      return
+      end     
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
  
       subroutine vector_norm(

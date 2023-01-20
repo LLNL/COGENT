@@ -5,6 +5,7 @@
 #include <map>
 #include <string>
 
+#include "GKSystemParameters.H"
 #include "GKVlasov.H"
 #include "GKCollisions.H"
 #include "GKNeutrals.H"
@@ -21,8 +22,13 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "GKFluidOp.H"
-#include "EFieldAmpere.H"
 #include "VorticityOp.H"
+#include "VorticityBEOp.H"
+#include "EMVorticityBEOp.H"
+#include "EMFields.H"
+#include "PhiOps.H"
+#include "PhiAmpereOps.H"
+#include "AparOps.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -80,6 +86,9 @@ public:
       m_transport(NULL),
       m_fluidOp(NULL),
       m_scalarOp(NULL),
+      m_VorticityOp(NULL),
+      m_phi_ops(NULL),
+      m_Apar_ops(NULL),
       m_boltzmann_electron(NULL),
       m_units(NULL),
       m_initial_conditions(NULL),
@@ -88,29 +97,27 @@ public:
       m_kinetic_ghosts(4),
       m_fluid_ghosts(4),
       m_fixed_efield(false),
-      m_zero_efield(false),
+      m_no_efield(false),
       m_transport_model_on(false),     
       m_enforce_quasineutrality(false),
       m_step_const_kin_coeff_fluidop(false),
+      m_enable_ti_optimizations(true),
       m_history(false),
       m_hist_freq(1),
       m_last_hist(0),
       m_hist_count(0),
       m_expand_incr(100),
       m_hist_fieldname("field"),
-      m_dt_vlasov_expl(DBL_MAX),
       m_dt_collisions_expl(DBL_MAX),
       m_dt_transport_expl(DBL_MAX),
       m_dt_fluids_expl(DBL_MAX),
       m_dt_scalars_expl(DBL_MAX),
       m_dt_neutrals_expl(DBL_MAX),
-      m_dt_vlasov_imex(DBL_MAX),
       m_dt_collisions_imex(DBL_MAX),
       m_dt_transport_imex(DBL_MAX),
       m_dt_fluids_imex(DBL_MAX),
       m_dt_scalars_imex(DBL_MAX),
       m_dt_neutrals_imex(DBL_MAX),
-      m_time_scale_vlasov(-1),
       m_time_scale_collisions(-1),
       m_time_scale_transport(-1),
       m_time_scale_fluids(-1),
@@ -136,7 +143,8 @@ public:
     * @param[in] state         Current simulation state
     * @param[in] step_number   Simulation time step number
     */
-   Real dtScaleVlasov( const GKState& state, const int step_number )
+   const std::vector<std::pair<std::string,Real> > &
+   dtScaleVlasov( const GKState& state, const int step_number )
    {
       return m_time_scale_vlasov;
    }
@@ -209,13 +217,17 @@ public:
     * @param[in] stage  stage number
     */
 
-   void define( const GKState& a_state );
+   void define( const GKState&, const GKSystemParameters& );
+   void defineShell( const GKState&, const GKSystemParameters& );
 
    bool isDefined() const { return m_is_defined; }
    
    void initializeElectricField(  const GKState& state, 
                                   const int cur_step, 
                                   const double cur_time );
+   void initializeElectricFieldShell( const GKState& state, 
+                                      const int cur_step, 
+                                      const double cur_time );
  
    void initializeKineticSpeciesPhysical( KineticSpeciesPtrVect&,
                                           const double );
@@ -235,10 +247,10 @@ public:
          m_initial_conditions->initializeSystem( a_state, a_time );
       }
       else {
-         m_initial_conditions->initializeSystem( a_state, m_phi, a_time );
+         m_initial_conditions->initializeSystem( a_state, m_initial_phi, a_time );
       }
       m_fluidOp->initialize( a_state.dataFluid(), a_time );
-      enforceQuasiNeutrality( a_state.dataKinetic(), m_phi );
+      enforceQuasiNeutrality( a_state.dataKinetic(), m_initial_phi );
    }
 
    /// Set electrostatic potential from initial conditions
@@ -250,7 +262,7 @@ public:
    inline
    void initializePotential( const Real a_time )
    {
-      m_initial_conditions->initializePotentialField( m_phi, a_time );
+      m_initial_conditions->initializePotentialField( m_initial_phi, a_time );
    }
    
    void initializeTI (  const int,
@@ -262,12 +274,11 @@ public:
    void preTimeStep  (const int,const Real,const GKState&,const GKState&);
    void postTimeStep (const int,const Real, const Real, GKState&);
    void postTimeStage(const int, const Real, const Real, GKState&, const int);
-   
-   void setElectricField( const GKState&                   state_comp,
-                          const int                        step,
-                          CFG::LevelData<CFG::FArrayBox>&  phi,
-                          CFG::EField&                     E_field,
-                          const bool                       inject_field = true) const;
+
+   void setEMFields( const GKState&   state_comp,
+                     const int        step,
+                     CFG::EMFields&   EM_fields,
+                     const bool       phase_space_update = true) const;
 
    inline bool trivialSolutionOp() const { return m_trivial_solution_op; }
 
@@ -290,7 +301,8 @@ public:
                               void*,
                               const std::string&,
                               const std::string&,
-                              bool);
+                              bool,
+                              const int);
 
    void updateMultiPhysicsPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                               const GKState&,
@@ -302,7 +314,7 @@ public:
 
    void solveSolutionPC( GKRHSData&, const GKState&, int a_idx=-1);
 
-   void solveFluidOpPCImEx( GKRHSData&, const GKState&, int a_idx=-1);
+   void solveFluidOpPCImEx( GKRHSData&, const GKState&, const std::string&, int a_idx=-1);
 
    void solveVlasovOpPCImEx(  Preconditioner<ODEVector,AppCtxt>* const,
                               GKRHSData&, 
@@ -322,6 +334,13 @@ public:
    };
 
    inline
+   const CFG::LevelData<CFG::FArrayBox>& boltzmannElectronNumberDensity() const
+   {
+     CH_assert(usingBoltzmannElectrons());
+     return m_boltzmann_electron->numberDensity();
+   }
+
+   inline
    bool fixedEField() const { return m_fixed_efield; };
 
    inline bool usingAmpereLaw() const { return m_ampere_law; }
@@ -333,210 +352,52 @@ public:
 
    const CFG::LevelData<CFG::FluxBox>& getErAverageFace() const
    {
-      CFG::EFieldAmpere& efield = static_cast<CFG::EFieldAmpere&>(*m_E_field);
-      return efield.getErAverageFace();
+      return m_EM_fields.getEFieldFace();
    }
 
    const CFG::LevelData<CFG::FArrayBox>& getErAverageCell() const
    {
-      CFG::EFieldAmpere& efield = static_cast<CFG::EFieldAmpere&>(*m_E_field);
-      return efield.getErAverageCell();
+      CFG::PhiAmpereOps* phi_ops = static_cast<CFG::PhiAmpereOps*>(m_phi_ops);
+      return phi_ops->getErAverageCell();
    }
 
    const CFG::LevelData<CFG::FluxBox>& getETildeFace() const
    {
-      CFG::EFieldAmpere& efield = static_cast<CFG::EFieldAmpere&>(*m_E_field);
-      return efield.getETildeFace();
+      CFG::PhiAmpereOps* phi_ops = static_cast<CFG::PhiAmpereOps*>(m_phi_ops);
+      return phi_ops->getErAverageFace();
    }
 
    const CFG::LevelData<CFG::FArrayBox>& getETildeCell() const
    {
-      CFG::EFieldAmpere& efield = static_cast<CFG::EFieldAmpere&>(*m_E_field);
-      return efield.getETildeCell();
+      CFG::PhiAmpereOps* phi_ops = static_cast<CFG::PhiAmpereOps*>(m_phi_ops);
+      return phi_ops->getETildeCell();
    }
 
    const CFG::LevelData<CFG::FArrayBox>& getPhi() const
    {
-      return m_phi;
+      return m_EM_fields.getPhi();
    }
 
    void setErAverage(const LevelData<FluxBox>& Er_face_injected);
    void setErAverage(const LevelData<FArrayBox>& Er_cell_injected);
    void setETilde( const LevelData<FluxBox>& E_tilde_face_injected );
    void setETilde( const LevelData<FArrayBox>& E_tilde_cell_injected);
-   void setPhi( const LevelData<FArrayBox>& phi_injected);
-    
-   void plotDistributionFunction( const std::string&    filename,
-                                  const KineticSpecies& soln_species,
-                                  const double&         time ) const;
+   void setInitialPhi( const LevelData<FArrayBox>& phi_injected);
 
-   void plotFluid( const std::string&       filename,
-                   const CFG::FluidSpecies& fluid_species,
-                   const string&            var_name,
-                   const double&            time ) const;
-      
-   void plotFluidAtCellFromFaceNorms( const std::string&        filename,
-                                      const CFG::FluidSpecies&  fluid_species,
-                                      const string&             var_name,
-                                      const double&             time ) const;
+   const CFG::EMFields& getEMFields() const {return m_EM_fields;}
 
-   void plotFluidAtCellFromEdgeTans( const std::string&        filename,
-                                     const CFG::FluidSpecies&  fluid_species,
-                                     const string&             var_name,
-                                     const double&             time ) const;
-   
-   void plotFluidOpMember( const std::string&        filename,
-                           const CFG::FluidSpecies&  fluid_species,
-                           const std::string&        member_var_name,
-                           const double              time ) const;
-   
-   void plotDeltaF( const std::string&    filename,
-                    const KineticSpecies& soln_species,
-                    const double&         time ) const;
-
-   void plotDistributionFunctionAtMu( const std::string&    filename,
-                                      const KineticSpecies& soln_species,
-                                      const int             mu,
-                                      const double&         time ) const;
-
-   void plotBStarParallel( const std::string&    filename,
-                           const KineticSpecies& soln_species,
-                           const double&         time ) const;
-
-   void plotVParallelTheta( const std::string&    filename,
-                            const KineticSpecies& soln_species,
-                            const int             radial_index,
-                            const int             toroidal_index,
-                            const int             mu_index,
-                            const double&         time ) const;
-
-   void plotbfVParallelTheta( const std::string&    filename,
-			      const KineticSpecies& soln_species,
-			      const int             radial_index,
-			      const int             toroidal_index,
-			      const int             mu_index,
-			      const double&         time ) const;
-
-   void plotRTheta( const std::string&    filename,
-                    const KineticSpecies& soln_species,
-                    const int             vpar_index,
-                    const int             mu_index,
-                    const double&         time ) const;
-
-   void plotVParallelMu( const std::string&    filename,
-                         const KineticSpecies& soln_species,
-                         const int             radial_index,
-                         const int             poloidal_index,
-                         const int             toroidal_index,
-                         const double&         time ) const;
-
-   void plotChargeDensity( const std::string&    filename,
-                           const KineticSpecies& soln_species,
-                           const double&         time ) const;
-
-   void plotChargeDensity( const std::string&     filename,
-                           const KineticSpeciesPtrVect& species,
-                           const double&          time ) const;
-
-   void plotMomentum(const std::string&     filename,
-                     const KineticSpecies&  soln_species,
-                     const double&          time ) const;
-   
-   void plotParallelVelocity( const std::string&    filename,
-                              const KineticSpecies& soln_species,
-                              const double&         time ) const;
-   
-   void plotParallelMomentum( const std::string&    filename,
-                              const KineticSpecies& soln_species,
-                              const double&         time ) const;
-
-   void plotPoloidalMomentum( const std::string&    filename,
-                              const KineticSpecies& kinetic_species,
-                              const double&         time ) const;
-
-   void plotEnergyDensity(const std::string&    filename,
-                          const KineticSpecies& soln_species,
-                          const double&         time ) const;
-
-   void plotKineticEnergyDensity(const std::string&    filename,
-                                 const KineticSpecies& soln_species,
-                                 const double&         time ) const;
-
-   void plotPerpEnergyDensity( const std::string&    filename,
-                         const KineticSpecies& soln_species,
-                         const double&         time ) const;
-
-   void plotParallelEnergyDensity( const std::string&    filename,
-                         const KineticSpecies& soln_species,
-                         const double&         time ) const;
-   
-   void plotPressure( const std::string&    filename,
-                      const KineticSpecies& soln_species,
-                      const double&         time ) const;
-
-   void plotParallelPressure( const std::string&    filename,
-                             const KineticSpecies& soln_species,
-                             const double&         time ) const;
-
-   void plotPerpPressure(const std::string&    filename,
-                         const KineticSpecies& soln_species,
-                         const double&         time ) const;
-   
-   void plotGradPoverN(const std::string&    filename,
-                       const KineticSpecies& soln_species,
-                       const double&         time ) const;
-
-   void plotTemperature( const std::string&    filename,
-                         const KineticSpecies& soln_species,
-                         const double&         time ) const;
-
-   void plotPerpTemperature(const std::string&    filename,
-                            const KineticSpecies& soln_species,
-                            const double&         time ) const;
-
-   void plotParallelTemperature(const std::string&    filename,
-                                const KineticSpecies& soln_species,
-                                const double&         time ) const;
-   
-   void plotParallelHeatFlux( const std::string&    filename,
-                              const KineticSpecies& soln_species,
-                              const double&         time ) const;
-
-   void plotTotalParallelHeatFlux(const std::string&    filename,
-                                  const KineticSpecies& soln_species,
-                                  const double&         time ) const;
-
-
-   void plotFourthMoment( const std::string&    filename,
-                          const KineticSpecies& soln_species,
-                          const double&         time ) const;
-
-   void plotParticleFlux( const std::string&    filename,
-                          const KineticSpecies& soln_species,
-                          const double&         time ) const;
-
-   void plotHeatFlux( const std::string&    filename,
-                      const KineticSpecies& soln_species,
-                      const double&         time ) const;
-
-   void plotPotential( const std::string& filename,
-                       const bool&        non_zonal_comp,
-                       const double&      time ) const;
-
-   void plotEField( const std::string& filename,
-                    const double&      time ) const;
-   
-   void plotExBData(const std::string& filename,
-                    const double&      time ) const;
-
-   void plotAmpereErIncrement( const std::string&                filename,
-                               const CFG::FluidSpeciesPtrVect&   soln_fluid,
-                               const ScalarPtrVect&              soln_scalar,
-			       const double&                     time ) const;
+   const CFG::PhiOps& getPhiOps() const {return *m_phi_ops;}
+  
+   void getEField( CFG::LevelData<CFG::FArrayBox>& ) const;
+   void getEField( CFG::LevelData<CFG::FluxBox>& ) const;
+   void getEField( LevelData<FluxBox>& ) const;
 
    void setupFieldHistories( ParmParse& a_ppsim );
 
-   void writeFieldHistory( int cur_step, double cur_time, bool startup_flag );
+   void writeFieldHistory(  int cur_step, 
+                            double cur_time, 
+                            bool startup_flag,
+                            const std::string& prefix = "");
   
       /// Write checkpoint file.
       /**
@@ -593,6 +454,10 @@ public:
      return m_gyroavg_ops;
    }
 
+   inline const PhaseGeom* phaseGeometry() const { return m_phase_geometry; }
+   inline const GKUnits* units() const { return m_units; }
+   inline const CFG::GKFluidOp* fluidOp() const { return m_fluidOp; }
+
 private:
    
    /// Parse parameters.
@@ -602,7 +467,7 @@ private:
     *
     * \param[in] ppgksys gksystem input database.
     */
-   void parseParameters( ParmParse& ppgksys );
+   void setParameters( const GKSystemParameters& );
 
    void fillPhysicalKineticSpeciesGhostCells(const double);
    void fillPhysicalFluidSpeciesGhostCells(const double);
@@ -655,7 +520,7 @@ private:
                             const KineticSpeciesPtrVect&         kinetic_species_phys,
                             const CFG::FluidSpeciesPtrVect&      fluid_species,
                             const ScalarPtrVect&                 scalars,
-                            const CFG::EField&                   E_field,
+                            const CFG::EMFields&                 EM_fields,
                             const opType                         op_type,
                             const Real&                          time);
    
@@ -663,7 +528,8 @@ private:
                              const KineticSpeciesPtrVect&         kinetic_species,
                              const CFG::FluidSpeciesPtrVect&      fluid_species,
                              const ScalarPtrVect&                 scalars,
-                             const CFG::EField&                   E_field,
+                             const CFG::EMFields&                 EM_fields,
+                             const CFG::PhiOps&                   phi_ops,
                              const opType                         op_type,
                              const bool                           recompute_kinetic_terms,
                              const Real&                          time);
@@ -684,11 +550,13 @@ private:
    void enforceQuasiNeutrality( KineticSpeciesPtrVect&          species,
                                 CFG::LevelData<CFG::FArrayBox>& potential ) const;
    
+   void computeEField( CFG::LevelData<CFG::FluxBox>& ) const;
+
    inline
    void computeQuasiNeutralElectronDensity(
       CFG::LevelData<CFG::FArrayBox>&       a_quasineutral_density,
       CFG::LevelData<CFG::FArrayBox>&       a_potential,
-      const CFG::EllipticOpBC&              a_bc, 
+      CFG::EllipticOpBC&                    a_bc, 
       const CFG::LevelData<CFG::FArrayBox>& a_ion_density) const;
    
    inline
@@ -705,9 +573,12 @@ private:
    GKScalarOp*                    m_scalarOp;
    CFG::VorticityOp*              m_VorticityOp;
 
-   CFG::EField*                   m_E_field;
-   CFG::EField*                   m_E_field_ImOpImEx;
-   CFG::LevelData<CFG::FArrayBox> m_phi;
+   CFG::EMFields                  m_EM_fields;
+   CFG::EMFields                  m_EM_fields_ImOpImEx;
+   CFG::LevelData<CFG::FArrayBox> m_initial_phi;
+
+   CFG::PhiOps*                   m_phi_ops;
+   CFG::AparOps*                  m_Apar_ops;
 
    CFG::BoltzmannElectron*        m_boltzmann_electron;
 
@@ -730,13 +601,14 @@ private:
    bool                           m_ampere_law;
    bool                           m_ampere_cold_electrons;
    bool                           m_fixed_efield;
-   bool                           m_zero_efield;
+   bool                           m_no_efield;
    bool                           m_transport_model_on;
    bool                           m_neutrals_model_on;
    bool                           m_enforce_quasineutrality;
    bool                           m_Esol_extrapolation;
    bool                           m_dealignment_corrections;
    bool                           m_old_vorticity_model;
+   bool                           m_EM_effects;
    bool                           m_skip_efield_stage_update;
    
    /* The following 4 flags are relevant only for IMEX time integration */
@@ -749,6 +621,7 @@ private:
    bool m_state_includes_potential;
    bool m_trivial_solution_op;
    bool m_step_const_kin_coeff_fluidop;
+   bool m_enable_ti_optimizations;
 
    bool m_history;   // whether to write out histories
    int m_hist_freq;  // how often to write out field history
@@ -760,21 +633,21 @@ private:
 
    /* stable time step sizes and time scales */
 
-   Real m_dt_vlasov_expl;
+   std::vector<std::pair<std::string,Real> > m_dt_vlasov_expl;
    Real m_dt_collisions_expl;
    Real m_dt_transport_expl;
    Real m_dt_fluids_expl;
    Real m_dt_scalars_expl;
    Real m_dt_neutrals_expl;
 
-   Real m_dt_vlasov_imex;
+   std::vector<std::pair<std::string,Real> > m_dt_vlasov_imex;
    Real m_dt_collisions_imex;
    Real m_dt_transport_imex;
    Real m_dt_fluids_imex;
    Real m_dt_scalars_imex;
    Real m_dt_neutrals_imex;
 
-   Real m_time_scale_vlasov;
+   std::vector<std::pair<std::string,Real> > m_time_scale_vlasov;
    Real m_time_scale_collisions;
    Real m_time_scale_transport;
    Real m_time_scale_fluids;

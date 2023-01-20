@@ -4,7 +4,7 @@
 #include "FluidOpInterface.H"
 #include "FluidVarBC.H"
 #include "Diffusion.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 
 #include "EdgeDataBox.H"
 
@@ -64,7 +64,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -72,7 +72,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -85,7 +85,8 @@ public:
                                bool,
                                const FluidSpecies&,
                                const PS::GlobalDOFFluidSpecies&,
-                               int );
+                               const int,
+                               const int );
 
    virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                 const PS::KineticSpeciesPtrVect&,
@@ -103,11 +104,13 @@ public:
                               const int                         step,
                               const int                         stage,
                               const double                      shift,
-                              const int                         component );
+                              const int                         component,
+                              const std::string& );
 
    virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                              const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
                              const FluidSpeciesPtrVect&        fluid_species_rhs,
+                             const std::string&,
                              const int                         component );
 
    virtual bool trivialSolutionOp() const {return true;}
@@ -234,7 +237,7 @@ private:
                               const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                               const FluidSpeciesPtrVect&         fluid_species,
                               const PS::ScalarPtrVect&           scalars,
-                              const EField&                      E_field,
+                              const EMFields&                    EM_fields,
                               const int                          component,
                               const Real                         time);
    

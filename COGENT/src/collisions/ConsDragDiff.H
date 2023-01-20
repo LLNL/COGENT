@@ -86,7 +86,6 @@ private:
   string m_species_name;
   MomentOp& moment_op;
   bool m_first_call;
-  bool m_first_stage;
   int m_it_counter;
   int m_update_freq;
   bool m_time_implicit;

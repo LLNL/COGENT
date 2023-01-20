@@ -1,0 +1,62 @@
+#
+# Makefile for the AMD Programming Environment on Crusher
+# 
+# Uses AMD Optimizing CPU Libraries (AOCL) BLIS and libFLAME for multithreaded (OpenMP) BLAS
+# (Basic Linear Algebra Subroutines) and LAPACK (Linear Algebra routines) support, respectively.
+#
+# https://developer.amd.com/amd-aocl/
+#
+# AOCL-BLIS is an optimized implementation of BLIS for AMD processors.
+# BLIS is a portable software framework for instantiating high-performance
+# BLAS-like dense linear algebra libraries.
+#
+# https://developer.amd.com/amd-aocl/blas-library/
+# https://github.com/amd/blis
+#
+# AOCL-libFLAME is a portable library for dense matrix computations, providing
+# the complete functionality present in Linear Algebra Package (LAPACK). 
+#
+# https://developer.amd.com/amd-aocl/blas-library/#libflame
+# https://github.com/amd/libflame
+#
+# cd $HOME/Chombo/lib/mk
+# ln -sf local/Make.defs.crusher.amd.omp.blis Make.defs.local
+#
+# Module requirements:
+#
+#   module load PrgEnv-amd/8.3.3
+#
+USE_HDF=TRUE
+MPI=TRUE
+USE_TIMER=TRUE
+DEPXX=CC
+
+CC=amdclang
+CXX=amdclang++
+FC=amdflang
+
+XTRACPPFLAGS:= -march=native -O3 -std=c++14 -fopenmp -ffast-math --optimize=fast -DFLAME -I$(HOME)/amd/amd-libflame/include
+
+XTRALIBFLAGS:= -fopenmp -L$(HOME)/amd/amd-libflame/lib/LP64 -Wl,-rpath,$(HOME)/amd/amd-libflame/lib/LP64 -lflame -L$(HOME)/amd/amd-blis/lib/LP64 -Wl,-rpath,$(HOME)/amd/amd-blis/lib/LP64 -lblis-mt -lflang
+
+#mpich stuff for cray build
+#MVAPICH2_DIR=/opt/cray/pe/mpich/8.1.10/ofi/gnu/9.1
+#XTRACXXFLAGS +=-I$(MVAPICH2_DIR)/include
+#XTRACPPFLAGS +=-I$(MVAPICH2_DIR)/include
+#XTRALIBFLAGS +=-L$(MVAPICH2_DIR)/lib -lmpi
+##XTRALIBFLAGS +=-L/opt/cray/pe/mpich/8.1.10/gtl/lib/ -lmpi_gtl_cuda
+#XTRALIBFLAGS +=-L/opt/cray/pe/mpich/8.1.10/gtl/lib/ -lmpi_gtl_hsa
+
+# module load hdf5/1.12.1
+#HDF5_ROOT=$(OLCF_HDF5_ROOT)
+
+HDFINCFLAGS=-I$(MPICH_DIR)/include -I$(HDF5_ROOT)/include -DH5_USE_110_API
+HDFLIBFLAGS=-L$(HDF5_ROOT)/lib -lhdf5 -lz
+
+HDFMPIINCFLAGS=-I$(MPICH_DIR)/include -I$(HDF5_ROOT)/include -DH5_USE_110_API
+HDFMPILIBFLAGS=-L$(HDF5_ROOT)/lib -lhdf5 -lz
+
+#PETSC_DIR=/gpfs/alpine/world-shared/geo127/petsc/arch-crusher-opt-cray-int64
+#PETSC_DIR=/gpfs/alpine/world-shared/geo127/petsc/arch-crusher-opt-cray-int64-ftn
+PETSC_DIR=/gpfs/alpine/world-shared/geo127/petsc/arch-crusher-opt-amd
+PETSC_ARCH=""

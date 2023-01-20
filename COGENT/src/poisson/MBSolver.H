@@ -97,9 +97,16 @@ public:
                               LevelData<FArrayBox>& beta_coefficient,
                               const EllipticOpBC&   bc );
 
-   const LevelData<FArrayBox>& getBCRhsContrib() const {return m_rhs_from_bc;}
-
    string getMethod() const {return m_method;}
+
+   void setMethod(const string& method ) {m_method = method;}
+
+   void addAdvectionMatrixBlock( const int                   a_block_row,
+                                 const int                   a_block_column,
+                                 const LevelData<FArrayBox>& a_alpha_coefficient,
+                                 const LevelData<FluxBox>&   a_vector_coefficient,
+                                 const EllipticOpBC&         a_bc);
+
    double getTol() const {return m_method_tol;}
    int getMaxIter() const {return m_method_max_iter;}
    bool getVerbose() const {return m_method_verbose;}
@@ -122,6 +129,12 @@ protected:
                                              LevelData<FluxBox>&    tensor_coefficient,
                                              LevelData<FArrayBox>&  beta_coefficient,
                                              const EllipticOpBC&    bc ) = 0;
+
+  virtual void addAdvectionMatrixBlockGeneral( const int                   a_block_row,
+                                               const int                   a_block_column,
+                                               const LevelData<FArrayBox>& a_alpha_coefficient,
+                                               const LevelData<FluxBox>&   a_vector_coefficient,
+                                               const EllipticOpBC&         a_bc) { return; }
 
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
@@ -149,13 +162,22 @@ protected:
                                   const bool       fourthOrder,
                                   FArrayBox&       stencil_values) const;
 
+   void
+   constructAdvectionStencils( const string&                            scheme,
+                               const LevelData<FluxBox>&                mapped_velocity,
+                               LevelData<BaseFab<Vector<IntVect> > >&   couplings,
+                               LevelData<BaseFab<Vector<Real> > >&      weights,
+                               const EllipticOpBC&                      bc) const;
+
    void modifyStencilForBCs( const Vector<CoDim1Stencil>&  codim1_stencil,
                              const Vector<CoDim2Stencil>&  codim2_stencil,
                              const IntVect&                iv,
                              FArrayBox&                    stencil_values,
                              FArrayBox&                    rhs_from_bc,
+                             const int                     rhs_from_bc_comp,
                              const bool                    rhs_from_bc_only,
-                             const bool                    force_codim2_condense ) const;
+                             const bool                    force_codim2_condense,
+                             const bool                    update_rhs) const;
 
    void constructBoundaryStencils( const bool                        fourth_order,
                                    const EllipticOpBC&               bc,
@@ -168,11 +190,22 @@ protected:
                              const bool                              include_bvs,
                              LevelData<FArrayBox>&                   data ) const;
 
+   double getBV( const EllipticOpBC&      bc,
+                 const MagBlockCoordSys&  coord_sys,
+                 const int                block_number,
+                 const int                dir,
+                 const Side::LoHiSide&    side,
+                 const IntVect            iv_face ) const;
+
+   void getNeumannNaturalFactor( const EllipticOpBC&  bc,
+                                 LevelData<FluxBox>&  bc_factor ) const;
+
    void computeFluxNormalFromStencil( const LevelData<FArrayBox>&                        in,
                                       LevelData<FluxBox>&                                tensor_coefficient,
                                       const Vector< Tuple<BlockBoundary, 2*SpaceDim> >&  block_boundaries,
                                       const Vector< Vector<CoDim1Stencil> >&             codim1_stencils,
                                       const Vector< Vector<CoDim2Stencil> >&             codim2_stencils,
+                                      const EllipticOpBC&                                bc,
                                       FArrayBox&                                         stencil_values,
                                       const bool                                         fourthOrder,
                                       const bool                                         extrapolate_from_interior,
@@ -185,6 +218,7 @@ protected:
                              const Vector< Tuple<BlockBoundary, 2*SpaceDim> >&  block_boundaries,
                              const Vector< Vector<CoDim1Stencil> >&             codim1_stencils,
                              const Vector< Vector<CoDim2Stencil> >&             codim2_stencils,
+                             const EllipticOpBC&                                bc,
                              FArrayBox&                                         stencil_values,
                              const bool                                         fourthOrder,
                              const LevelData<FArrayBox>&                        rhs_from_bc ) const;
@@ -199,8 +233,6 @@ protected:
    MultiBlockCoordSys* m_coord_sys_ptr;
 
    MultiBlockLevelExchangeCenter* m_mblex_potential_Ptr; 
-
-   LevelData<FArrayBox> m_rhs_from_bc;
 
    int m_discretization_order;
 

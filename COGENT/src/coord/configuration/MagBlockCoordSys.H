@@ -293,7 +293,13 @@ void
        */
       double mappingError( const Box& box ) const;
 
-   /// Computes the flux surface unit tangent vector
+      void computeFaceUnitNormal( const int dir, FArrayBox& normal ) const;
+
+      void computeFaceUnitTangent( const int tdir, FArrayBox& tangent ) const;
+
+      void getFaceTangentTensor( const int dir, FArrayBox&  data ) const;
+
+      /// Computes the flux surface unit tangent vector
       /**
        * @param[out] data  flux surface unit tangent vector
        */
@@ -391,6 +397,10 @@ void
   
       void  getToroidalCoords(FArrayBox&  coords,
                               const bool  use_flux_coord) const;
+   
+      void  getToroidalCoords(FArrayBox&        coords,
+                              const FArrayBox&  real_coords,
+                              const bool        use_flux_coord) const;
    
       void convertPhysicalCoordToToroidal(RealVect&   coord,
                                           const bool  use_flux_coord) const;

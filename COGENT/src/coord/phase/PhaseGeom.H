@@ -9,15 +9,17 @@
 #include "PhaseBlockCoordSys.H"
 #include "PhaseGrid.H"
 #include "BlockRegister.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 #include "EdgeDataBox.H"
 #include "CoDimCopyManager.H"
+#include "PhaseCoDim2Stencil.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "MagGeom.H"
 #include "MultiBlockLevelGeom.H"
 #include "MultiBlockLevelExchangeAverage.H"
+#include "EMFields.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -36,8 +38,7 @@ public:
    /**
       Constructors, destructor and defines
    */
-   PhaseGeom( ParmParse&                              parm_parse,
-              const RefCountedPtr<PhaseCoordSys>&     coord_sys,
+   PhaseGeom( const RefCountedPtr<PhaseCoordSys>&     coord_sys,
               const RefCountedPtr<PhaseGrid>&         grids,
               const RefCountedPtr<CFG::MagGeom>&      mag_geom,
               const RefCountedPtr<VEL::VelCoordSys>&  vel_coords,
@@ -49,6 +50,7 @@ public:
               const RefCountedPtr<PhaseCoordSys>&         coord_sys,
               const RefCountedPtr<VEL::VelCoordSys>&      vel_coords,
               const RefCountedPtr<VelocityNormalization>& vel_normalization,
+              const string&                               name,
               double                                      mass,
               double                                      charge,
               bool                                        is_gyrokinetic = false );
@@ -60,6 +62,8 @@ public:
    void define();
 
    void defineSpeciesState( double mass, double charge_state );
+
+   void reportMemoryUsage( const string& species_name ) const;
 
    /// Computes the phase space velocities R_dot and v_dot
    /**
@@ -82,27 +86,26 @@ public:
     * @param[in]  phi   Potential
     * @param[out] velocity Phase space velocity
     */
-   void updateVelocities( const LevelData<FluxBox>& Efield,
+   void updateVelocities( const CFG::EMFields&      EMfields,
                           LevelData<FluxBox>&       velocity,
                           const int                 option,
                           const bool                gyrokinetic) const;
 
-   void computeGKVelocities( const LevelData<FluxBox>& Efield,
-                             LevelData<FluxBox>&       velocity_grown,
-                             const bool                gyrokinetic, 
-                             const int                 option ) const;
+   void computeGKVelocities( const CFG::EMFields&  EM_fields,
+                             LevelData<FluxBox>&   velocity_grown,
+                             const bool            gyrokinetic, 
+                             const int             option ) const;
 
    void computeTestVelocities( LevelData<FluxBox>& velocity ) const;
 
-   void updateMappedVelocities( const LevelData<FluxBox>& Efield,
+   void updateMappedVelocities( const CFG::EMFields&      EM_fields,
                                 LevelData<FluxBox>&       velocity ) const;
 
    //Updates normal velocities, velocity options correspond to
    //0 --  full GK velocity
    //1 --  drifts only (includes both gradB/curlb and ExB)
    //2 --  no 0-order parallel terms (that cancel each other for an FS-averaged Maxwellian)
-   void updateVelocityNormals( const CFG::LevelData<CFG::FArrayBox>& Efield_cell,
-                               const CFG::LevelData<CFG::FArrayBox>& phi_node,
+   void updateVelocityNormals( const CFG::EMFields&      EM_fields,
                                const bool                fourth_order_Efield,
                                LevelData<FluxBox>&       velocity,
                                const int                 velocity_option = 0 ) const;
@@ -308,7 +311,7 @@ public:
      fillTransversePhysicalGhosts( a_v, CFG_DIM);
      return;
    }
-
+  
    /// Compute the phase space flux divergence(F) assuming that the input
    /// flux F already contains metric and Jacobian values. Difference between
    /// this function and mappgedGridDivergnceWithoutNT is 1) this function
@@ -326,6 +329,15 @@ public:
                                                        const LevelData<FluxBox>&   F ) const;
 
    void fillTransverseGhosts( LevelData<FluxBox>& a_data, const bool do_block_exchange ) const;
+   
+   void extrapolateAtPhysicalBoundaries(LevelData<FArrayBox>&  dfn,
+                                        const int              order,
+                                        const int              nghosts) const;
+
+   void constructCoDim2BoundaryStencils( const bool                             fourth_order,
+                                         Vector< Vector<PhaseCoDim2Stencil> >&  codim2_stencils ) const;
+
+   void fillCoDim2BoundaryGhosts( LevelData<FArrayBox>&  data ) const;
 
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
@@ -678,7 +690,7 @@ public:
                                    const LevelData<FluxBox>& vector) const;
 
    enum velocity_option {FULL_VELOCITY, PARALLEL_STREAMING_VELOCITY, DRIFT_VELOCITY, EXB_DRIFT_VELOCITY,
-                         MAGNETIC_DRIFT_VELOCITY, NO_ZERO_ORDER_TERMS};
+                         MAGNETIC_DRIFT_VELOCITY, NO_ZERO_ORDER_TERMS, DIAGNOSTICS, TOROIDAL_VELOCITY};
    
    double getLarmorNumber() const {return m_larmor_number;}
 
@@ -828,6 +840,7 @@ private:
    bool m_speciesDefined;
    RealVect m_freestream_components;
    int m_use_spatial_vel_norm;
+   Vector<double> m_miller_vel_parms;
 
    LevelData<FArrayBox>*  m_vel_norm;
    LevelData<FluxBox>*  m_vel_norm_face;
@@ -841,10 +854,10 @@ private:
    double m_charge_state;
    
 #if CFG_DIM == 3
-   void getShearedGhostBoxLayout();
+   void getShearedGhostBoxLayouts();
    
-   BoxLayout m_shearedGhostBLLoEnd;
-   BoxLayout m_shearedGhostBLHiEnd;
+   Vector<BoxLayout> m_shearedGhostBLLoEnd;
+   Vector<BoxLayout> m_shearedGhostBLHiEnd;
 #endif   
    LevelData<FArrayBox> * m_sheared_remapped_index;
    LevelData<FArrayBox> * m_sheared_interp_stencil;
@@ -871,6 +884,8 @@ private:
 
    mutable GyroaverageOperator const *m_gyroavg_op;
    bool m_is_gyrokinetic;
+
+   Vector< Vector<PhaseCoDim2Stencil> > m_codim2_stencils;
 
    void getExtrablockExchangeLayout( const int                 dir,
                                      const int                 codim,

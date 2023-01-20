@@ -33,6 +33,7 @@ MBTridiagonalSolver::MBTridiagonalSolver( const MultiBlockLevelGeom&  a_geom,
    m_A_diagonal_offset = (stencil_box.numPts() - 1) / 2;
 
    m_A_radial.define(m_geometry.gridsFull(), 3, IntVect::Zero);
+   m_rhs_from_bc.define(m_geometry.gridsFull(), 1, IntVect::Zero);
 }
       
 
@@ -205,12 +206,12 @@ MBTridiagonalSolver::constructTridiagonalMatrix( LevelData<FArrayBox>&          
 
                 tmp_stencil_values.setVal(0.);
 
-                accumStencilMatrixEntries(iv, dir, side, dir2, this_coef, dx,
-                                          a_fourth_order, tmp_stencil_values);
+                accumStencilMatrixEntries(iv, dir, side, dir2, this_coef,
+                                          dx, a_fourth_order, tmp_stencil_values);
 
                 modifyStencilForBCs( codim1_stencils[block_number], codim2_stencils[block_number],
-                                     iv, tmp_stencil_values, a_rhs_from_bc[dit],
-                                     update_rhs_from_bc_only, force_codim2_condense );
+                                     iv, tmp_stencil_values, a_rhs_from_bc[dit], 0,
+                                     update_rhs_from_bc_only, force_codim2_condense, true );
 
                 a_stencil_values += tmp_stencil_values;
              }
@@ -576,15 +577,15 @@ MBTridiagonalSolver::isCoreRadialPeriodicOrNeumannBC( const EllipticOpBC& a_bc )
       const ProblemDomain& domain = (geom.getBlockCoordSys(0)).domain();
 
       if ( domain.isPeriodic(RADIAL_DIR) ||
-           (a_bc.getBCType(0, RADIAL_DIR, 0) == EllipticOpBC::NEUMANN &&
-            a_bc.getBCType(0, RADIAL_DIR, 1) == EllipticOpBC::NEUMANN) ) {
+           (a_bc.getBCType(0, RADIAL_DIR, 0) == EllipticOpBC::MAPPED_NEUMANN &&
+            a_bc.getBCType(0, RADIAL_DIR, 1) == EllipticOpBC::MAPPED_NEUMANN) ) {
          flag = true;
       }
    }
 
    if ( typeid(a_bc) == typeid(SNCoreEllipticOpBC) ) {
-      if ( a_bc.getBCType(0, RADIAL_DIR, 0) == EllipticOpBC::NEUMANN &&
-           a_bc.getBCType(0, RADIAL_DIR, 1) == EllipticOpBC::NEUMANN ) {
+      if ( a_bc.getBCType(0, RADIAL_DIR, 0) == EllipticOpBC::MAPPED_NEUMANN &&
+           a_bc.getBCType(0, RADIAL_DIR, 1) == EllipticOpBC::MAPPED_NEUMANN ) {
          flag = true;
       }
    }

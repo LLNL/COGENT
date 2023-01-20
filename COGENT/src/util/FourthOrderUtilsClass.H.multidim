@@ -1,0 +1,36 @@
+#if CH_SPACEDIM==1
+#ifndef  _D1_FOURTHORDERUTIL_H_
+#define  _D1_FOURTHORDERUTIL_H_
+#include "FourthOrderUtilsClass.H"
+#endif
+#endif
+#if CH_SPACEDIM==2
+#ifndef  _D2_FOURTHORDERUTIL_H_
+#define  _D2_FOURTHORDERUTIL_H_
+#include "FourthOrderUtilsClass.H"
+#endif
+#endif
+#if CH_SPACEDIM==3
+#ifndef  _D3_FOURTHORDERUTIL_H_
+#define  _D3_FOURTHORDERUTIL_H_
+#include "FourthOrderUtilsClass.H"
+#endif
+#endif
+#if CH_SPACEDIM==4
+#ifndef  _D4_FOURTHORDERUTIL_H_
+#define  _D4_FOURTHORDERUTIL_H_
+#include "FourthOrderUtilsClass.H"
+#endif
+#endif
+#if CH_SPACEDIM==5
+#ifndef  _D5_FOURTHORDERUTIL_H_
+#define  _D5_FOURTHORDERUTIL_H_
+#include "FourthOrderUtilsClass.H"
+#endif
+#endif
+#if CH_SPACEDIM==6
+#ifndef  _D6_FOURTHORDERUTIL_H_
+#define  _D6_FOURTHORDERUTIL_H_
+#include "FourthOrderUtilsClass.H"
+#endif
+#endif

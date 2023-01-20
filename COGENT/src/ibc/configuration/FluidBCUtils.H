@@ -12,7 +12,7 @@
 #include "BoxIterator.H"
 #include "FluidSpecies.H"
 #include "EdgeDataBox.H"
-#include "SpaceUtils.H"
+#include "SpaceUtils.H.multidim"
 #include "CONSTANTS.H"
 
 #include "MagGeomF_F.H"

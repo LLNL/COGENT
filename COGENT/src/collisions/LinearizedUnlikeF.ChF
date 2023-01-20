@@ -23,11 +23,11 @@ c       ***Calculate local v_th=sqrt(2*T/m) and collision frequencies
 #if CH_SPACEDIM==5
         b = bmag(i0,i1,i2,CHF_LBOUND[bmag;3],CHF_LBOUND[bmag;4])
         vth_b=sqrt(2.0*Tb(i0,i1,i2,CHF_LBOUND[Tb;3],CHF_LBOUND[Tb;4])/mb)
-        xb=sqrt((i3+0.5)*(i3+0.5)*dx(0)*dx(0)+(i4+0.5)*dx(1)*b/mb)/vth_b
+        xb=sqrt((i3+0.5)*(i3+0.5)*dx(0)*dx(0)+(i4+0.5)*dx(1)*b/ma)/vth_b
 #else
         b = bmag(i0,i1,CHF_LBOUND[bmag;2],CHF_LBOUND[bmag;3])
         vth_b=sqrt(2.0*Tb(i0,i1,CHF_LBOUND[Tb;2],CHF_LBOUND[Tb;3])/mb)
-        xb=sqrt((i2+0.5)*(i2+0.5)*dx(0)*dx(0)+(i3+0.5)*dx(1)*b/mb)/vth_b
+        xb=sqrt((i2+0.5)*(i2+0.5)*dx(0)*dx(0)+(i3+0.5)*dx(1)*b/ma)/vth_b
 #endif
         nu_D = (NuD(xb) / vth_b**3) * (sqrt(2.0/ma))**3
 

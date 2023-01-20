@@ -666,8 +666,8 @@ SingleNullBlockCoordSys::realCoord( const RealVect& a_Xi ) const
        MayDay::Error("SingleNullBlockCoordSys::realCoord(): unrecognized m_phys_coord_type");
     }
 #endif
-
-    return X;
+   
+   return X;
 }
 
 
@@ -1285,6 +1285,8 @@ SingleNullBlockCoordSys::setInterp( const ParmParse&       a_pp,
    // points span the valid block.  There are an additional m_toroidal_ghosts points in the
    // lower and upper toroidal directions to provide a ghost cell region.
 
+   CH_TIME("SingleNullBlockCoordSys::setInterp");
+  
    const POL::Box& box_pol = a_interp_node_coords_pol.box();
    POL::IntVect lo = box_pol.smallEnd();
    POL::IntVect hi = box_pol.bigEnd();
@@ -1296,7 +1298,7 @@ SingleNullBlockCoordSys::setInterp( const ParmParse&       a_pp,
 
    FArrayBox interp_node_coords(box,3);
    FArrayBox interp_node_data(box,3);
-   
+      
    double toroidal_node_spacing 
       = (upperMappedCoordinate(TOROIDAL_DIR) - lowerMappedCoordinate(TOROIDAL_DIR)) / (n_toroidal - 1);
    
@@ -1572,6 +1574,8 @@ RealVect
 SingleNullBlockCoordSys::traceField( const RealVect&  a_X,
                                      const double&    a_toroidal_increment ) const
 {
+
+   CH_TIME("SingleNullBlockCoordSys::traceField");
    
    double step = a_toroidal_increment / double(m_field_trace_step_num);
    RealVect X = a_X;
@@ -1581,7 +1585,7 @@ SingleNullBlockCoordSys::traceField( const RealVect&  a_X,
 
       // Get the field unit vector
       array<double,3> b = m_poloidal_util->computeBUnit(restrictToPoloidal(X));
-
+      
       // Set the tracing direction
       RealVect direction;
       for (int n=0; n<3; ++n) {
@@ -1637,24 +1641,25 @@ SingleNullBlockCoordSys::getPoloidalDisjointBoxLayout(DisjointBoxLayout&   a_gri
       int num_iter_rad;
       //Begin with dividing radial direction
       for(int n = 0; n < num_iter+1; n++) {
-	 int test = int(floor(n_rad/pow(2,n)));
+         int test = int(floor(n_rad/pow(2,n)));
          if (test < n_opt) {
-	    n_loc_rad = int(floor(n_rad/pow(2,n-1)));
+            n_loc_rad = int(floor(n_rad/pow(2,n-1)));
             num_iter_rad = n-1;
             break;
          }
-	 num_iter_rad = n;
-	 n_loc_rad = int(floor(n_rad/pow(2,n)));
+         num_iter_rad = n;
+         n_loc_rad = int(floor(n_rad/pow(2,n)));
       }
 
       //Now divide poloidal direction
       n_loc_pol = n_pol;
       for(int n = 0; n < num_iter - num_iter_rad + 1; n++) {
- 	 int test = int(floor(n_pol/pow(2,n)));
+         int test = int(floor(n_pol/pow(2,n)));
          if (test  < n_opt) {
-	    n_loc_pol = int(floor(n_pol/pow(2,n-1)));
+            n_loc_pol = int(floor(n_pol/pow(2,n-1)));
             break;
          }
+         n_loc_pol = int(floor(n_pol/pow(2,n)));
       }
    }
 
@@ -1710,7 +1715,9 @@ SingleNullBlockCoordSys::assembleDecomposedData(FArrayBox&                    a_
 {
    // We assume that each proc contains only one box (we created grids that way)
    // Also, the processor IDs assigned to grids correspond to 0 .. a_decomp_num-1
-   
+
+   CH_TIME("SingleNullBlockCoordSys::assembleDecomposedData"); 
+  
    FArrayBox this_interp_node_data;
    FArrayBox this_interp_node_coords;
    

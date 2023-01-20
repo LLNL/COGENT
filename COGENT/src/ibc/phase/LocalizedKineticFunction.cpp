@@ -112,7 +112,7 @@ void LocalizedKineticFunction::parseParameters( ParmParse& a_pp )
 
    a_pp.get( "floor", m_floor );
    
-   ParmParse ppsg("sparsegrid");
+   ParmParse ppsg("sparse_grids");
 
    m_useSG = false; //Don't use sparse grids by default
    ppsg.query( "useSGstencils", m_useSG );

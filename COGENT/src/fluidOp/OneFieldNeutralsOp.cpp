@@ -3,6 +3,7 @@
 #include "FluidVarBCFactory.H"
 #include "FourthOrderUtil.H"
 #include "SimpleDivergence.H"
+#include "SpaceUtils.H.multidim"
 #include "inspect.H"
 
 #undef CH_SPACEDIM
@@ -105,7 +106,7 @@ void OneFieldNeutralsOp::accumulateRHS(FluidSpeciesPtrVect&               a_rhs,
                                        const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                        const FluidSpeciesPtrVect&         a_fluid_species,
                                        const PS::ScalarPtrVect&           a_scalars,
-                                       const EField&                      a_E_field,
+                                       const EMFields&                    a_EM_fields,
                                        const int                          a_fluidVecComp,
                                        const Real                         a_time)
 {
@@ -206,12 +207,12 @@ void OneFieldNeutralsOp::accumulateExplicitRHS(FluidSpeciesPtrVect&             
                                                const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                                const FluidSpeciesPtrVect&         a_fluid_species,
                                                const PS::ScalarPtrVect&           a_scalars,
-                                               const EField&                      a_E_field,
+                                               const EMFields&                    a_EM_fields,
                                                const int                          a_fluidVecComp,
                                                const Real                         a_time)
 {
   if (!m_is_time_implicit) {
-    accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
+     accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_EM_fields, a_fluidVecComp, a_time);
   }
 }
 
@@ -220,19 +221,19 @@ void OneFieldNeutralsOp::accumulateImplicitRHS(FluidSpeciesPtrVect&             
                                                const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                                const FluidSpeciesPtrVect&         a_fluid_species,
                                                const PS::ScalarPtrVect&           a_scalars,
-                                               const EField&                      a_E_field,
+                                               const EMFields&                    a_EM_fields,
                                                const int                          a_fluidVecComp,
                                                const Real                         a_time)
 {
   if (m_is_time_implicit) {
-    accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
+     accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_EM_fields, a_fluidVecComp, a_time);
   }
 }
 
 void OneFieldNeutralsOp::preOpEval(const PS::KineticSpeciesPtrVect&   a_kinetic_species,
                                    const FluidSpeciesPtrVect&         a_fluid_species,
                                    const PS::ScalarPtrVect&           a_scalars,
-                                   const EField&                      a_E_field,
+                                   const EMFields&                    a_EM_fields,
                                    const double                       a_time )
 {
    CH_TIME("OneFieldNeutralsOp::preOpEval");
@@ -269,7 +270,7 @@ void OneFieldNeutralsOp::preOpEval(const PS::KineticSpeciesPtrVect&   a_kinetic_
    // Compute normal particle flux thourgh a cell face (NT * Gamma_phys * dA_mapped )
    if (m_dens_recycling_bc) {
       if (!m_ion_normal_flux.isDefined()) m_ion_normal_flux.define(grids, 1, IntVect::Zero);
-      computeIntegratedNormalIonParticleFlux( m_ion_normal_flux, a_kinetic_species, a_E_field, a_time );
+      computeIntegratedNormalIonParticleFlux( m_ion_normal_flux, a_kinetic_species, a_EM_fields, a_time );
    }
 }
 
@@ -300,7 +301,7 @@ void OneFieldNeutralsOp::computeIonChargeDensity(LevelData<FArrayBox>&          
 
 void OneFieldNeutralsOp::computeIntegratedNormalIonParticleFlux(LevelData<FluxBox>&                a_ion_particle_flux,
                                                                 const PS::KineticSpeciesPtrVect&   a_species,
-                                                                const EField&                      a_E_field,
+                                                                const EMFields&                    a_EM_fields,
                                                                 const Real&                        a_time) const
 {
 
@@ -326,8 +327,12 @@ void OneFieldNeutralsOp::computeIntegratedNormalIonParticleFlux(LevelData<FluxBo
       //Gyroaverage calculation requires phi. Pass zero phi for now. Fix later
       LevelData<FArrayBox> phi_tmp(grids, 1, IntVect::Zero);
       setZero(phi_tmp);
-      m_vlasov->computeIntegratedMomentFluxNormals(ion_species_mapped_flux, this_species, phi_tmp, a_E_field,
-                                                   PS::PhaseGeom::FULL_VELOCITY, "particle", a_time);
+      m_vlasov->computeIntegratedMomentFluxNormals(ion_species_mapped_flux,
+                                                   this_species,
+                                                   a_EM_fields,
+                                                   PS::PhaseGeom::FULL_VELOCITY,
+                                                   PS::DensityKernel<PS::FluxBox>(),
+                                                   a_time);
 
       for (DataIterator dit(a_ion_particle_flux.dataIterator()); dit.ok(); ++dit) {
          a_ion_particle_flux[dit] += ion_species_mapped_flux[dit];
@@ -344,7 +349,8 @@ void OneFieldNeutralsOp::defineBlockPC(std::vector<PS::Preconditioner<PS::ODEVec
                                        bool                                                         a_im,
                                        const FluidSpecies&                                          a_fluid_species,
                                        const PS::GlobalDOFFluidSpecies&                             a_global_dofs,
-                                       int                                                          a_species_idx )
+                                       const int                                                    a_species_idx,
+                                       const int                                                    a_id )
 {
   if (a_im && m_is_time_implicit) {
     CH_assert(a_pc.size() == a_dof_list.size());
@@ -358,6 +364,7 @@ void OneFieldNeutralsOp::defineBlockPC(std::vector<PS::Preconditioner<PS::ODEVec
   
     PS::Preconditioner<PS::ODEVector,PS::AppCtxt> *pc;
     pc = new PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>;
+    pc->setSysID(a_id);
     dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
     dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
@@ -435,7 +442,8 @@ void OneFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
                                       const int                        a_step,
                                       const int                        a_stage,
                                       const double                     a_shift,
-                                      const int                        a_component)
+                                      const int                        a_component,
+                                      const std::string& )
 {
    CH_TIME("OneFieldNeutralsOp::updatePCImEx");
    
@@ -468,6 +476,7 @@ void OneFieldNeutralsOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_s
 void OneFieldNeutralsOp::solvePCImEx(FluidSpeciesPtrVect&              a_fluid_species_solution,
                                      const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                                      const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                                     const std::string&,
                                      const int                         a_component )
 {
    CH_TIME("OneFieldNeutralsOp::solvePCImEx");
@@ -546,7 +555,8 @@ void OneFieldNeutralsOp::computeDiffusionCoefficients(LevelData<FluxBox>& a_D_te
       }
 
       // Get diffusion coefficient on faces
-      convertCellToFace(D_face, D_cell);
+      int order = (m_geometry.secondOrder()) ? 2 : 4;
+      SpaceUtils::interpToFaces(D_face, D_cell, order);
       
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          D_tmp[dit].copy(perp_coeff[dit]);
@@ -625,8 +635,8 @@ void OneFieldNeutralsOp::computeDiffusionCoefficients(LevelData<FluxBox>& a_D_te
       m_geometry.fillInternalGhosts( D_cell );
       fourthOrderCellToFaceCenters(D_face, D_cell);
       
-      m_geometry.getEllipticOpRadCoeff(D_tmp);
-      m_geometry.getEllipticOpRadCoeffMapped(D_tmp_mapped);
+      m_geometry.getCustomEllipticOpCoeff(D_tmp, "radial");
+      m_geometry.getCustomEllipticOpCoeffMapped(D_tmp_mapped, "radial");
       
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          for (int dir = 0; dir < SpaceDim; dir++) {
@@ -861,41 +871,6 @@ void OneFieldNeutralsOp::fillGhostCells(FluidSpecies&  a_species_phys,
       // Fill ghost cells on physical boundaries
       m_fluid_variable_bc->apply( a_species_phys, a_time );
    }
-}
-
-void OneFieldNeutralsOp::convertCellToFace(LevelData<FluxBox>&         a_face_data,
-                                           const LevelData<FArrayBox>& a_cell_data) const
-{
-   const DisjointBoxLayout& grids = m_geometry.grids();
-
-   int order = (m_geometry.secondOrder()) ? 2 : 4;
-
-   if (order == 4) {
-      CH_assert(a_cell_data.ghostVect() >= 2*IntVect::Unit );
-   }
-   
-   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
-
-       for (int dir=0; dir<SpaceDim; dir++) {
-       
-       Box box(grids[dit]);
-          
-       if (order == 4 && (a_face_data.ghostVect() >= IntVect::Unit)) {
-          for (int tdir(0); tdir<SpaceDim; tdir++) {
-             if (tdir!=dir) {
-                const int TRANSVERSE_GROW(1);
-                box.grow( tdir, TRANSVERSE_GROW );
-             }
-          }
-       }
-       
-       SpaceUtils::faceInterpolate(dir,
-                                   surroundingNodes(box,dir),
-                                   order,
-                                   a_cell_data[dit],
-                                   a_face_data[dit][dir] );
-       }
-    }
 }
 
 void OneFieldNeutralsOp::setZero( LevelData<FArrayBox>& a_data ) const

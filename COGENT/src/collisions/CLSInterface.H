@@ -87,7 +87,8 @@ class CLSInterface
                                   bool,
                                   const KineticSpecies&,
                                   const GlobalDOFKineticSpecies&,
-                                  int ) { }
+                                  const int,
+                                  const int ) { }
 
       virtual void updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                                   const KineticSpecies&,

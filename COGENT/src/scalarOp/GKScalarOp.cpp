@@ -97,7 +97,8 @@ void GKScalarOp::accumulateRHS( GKRHSData&                         a_rhs,
                                 const KineticSpeciesPtrVect&       a_kinetic_species,
                                 const CFG::FluidSpeciesPtrVect&    a_fluid_species,
                                 const ScalarPtrVect&               a_scalars,
-                                const CFG::EField&                 a_E_field,
+                                const CFG::EMFields&               a_EM_fields,
+                                const CFG::PhiOps&                 a_phi_ops,
                                 const bool                         a_implicit,
                                 const bool                         a_recompute_kinetic_terms,
                                 const Real                         a_time)
@@ -109,11 +110,11 @@ void GKScalarOp::accumulateRHS( GKRHSData&                         a_rhs,
       ScalarOpInterface& scalarOperator( scalarOp( component_name ) );
       if ( a_implicit ) {
          scalarOperator.accumulateImplicitRHS( a_rhs, a_kinetic_species, a_fluid_species, a_scalars,
-                                               a_E_field, component, a_recompute_kinetic_terms, a_time );
+                                               a_EM_fields, component, a_recompute_kinetic_terms, a_time );
       }
       else {
          scalarOperator.accumulateExplicitRHS( a_rhs, a_kinetic_species, a_fluid_species, a_scalars,
-                                               a_E_field, component, a_time );
+                                               a_EM_fields, a_phi_ops, component, a_time );
       }
    }
 }

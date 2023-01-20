@@ -1,6 +1,7 @@
 #ifndef _LOGRECTPHASECOORDSYS_H_
 #define _LOGRECTPHASECOORDSYS_H_
 
+#include "GKSystemParameters.H"
 #include "PhaseCoordSys.H"
 
 #undef CH_SPACEDIM
@@ -26,7 +27,7 @@ public:
     */
    LogRectPhaseCoordSys();
 
-   LogRectPhaseCoordSys( ParmParse&                                  pp,
+   LogRectPhaseCoordSys( const GKSystemParameters&                   params,
                          const RefCountedPtr<CFG::LogRectCoordSys>&  mag_coords,
                          const RefCountedPtr<VEL::VelCoordSys>&      vel_coords,
                          const Vector<ProblemDomain>&                domains );
@@ -61,7 +62,7 @@ public:
 
 private:
   
-   void getDecompositionParams( ParmParse& pp );
+   void getDecompositionParams( const GKSystemParameters& );
 
    IntVect m_decomposition;
 

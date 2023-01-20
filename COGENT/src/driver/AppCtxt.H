@@ -22,11 +22,11 @@ class AppCtxt
     
     virtual void writePlotFile(const char*, const int, const double& ) = 0;
     virtual void writeFieldHistory(int, double, bool) = 0;
-    virtual void writeCheckpointFile( HDF5Handle&, 
+    virtual void writeCheckpointFile( const std::string&, 
                                       const int, 
                                       const double, 
                                       const double ) = 0;
-    virtual void readCheckpointFile(  HDF5Handle&,
+    virtual void readCheckpointFile(  const std::string&,
                                       int&,
                                       double&, 
                                       double& ) = 0;
@@ -90,7 +90,8 @@ class AppCtxt
                           const ODEVector&,
                           const std::string&,
                           const std::string&,
-                          bool ) = 0;
+                          bool,
+                          const int i = -1) = 0;
     
     virtual void 
     updateMultiPhysicsPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
@@ -102,23 +103,27 @@ class AppCtxt
                               const bool ) = 0;
     
     virtual void solveSolutionPC( ODEVector&, 
-                                  const ODEVector&, 
+                                  const ODEVector&,
+                                  const int a_id = -1,
                                   int a_i = -1 ) = 0;
     
     virtual void solveFluidOpPCImEx(ODEVector&, 
                                     const ODEVector&, 
+                                    const std::string&,
+                                    const int a_id = -1,
                                     int a_i = -1 ) = 0;
     
     virtual void 
     solveVlasovOpPCImEx(  Preconditioner<ODEVector,AppCtxt>* const,
                           ODEVector&, 
                           const ODEVector&, 
+                          const int a_id = -1,
                           int a_i = -1 ) = 0;
     
     virtual bool isLinear() = 0;
     virtual void printFunctionCounts() = 0;
     
-    virtual void defineODEVector( ODEVector& ) const = 0;
+    virtual void defineODEVector( ODEVector& ) = 0;
     
     virtual void useScales( const bool ) = 0;
     virtual void setScaleTolerance(const Real a_tol) = 0;
@@ -142,6 +147,15 @@ class AppCtxt
 
     virtual const std::string& tiClass() const = 0;
     virtual const std::string& tiMethod() const = 0;
+
+    virtual void copyDOFs(  ODEVector&, 
+                            const ODEVector&,
+                            const DOFList&,
+                            const int ) const = 0;
+
+    virtual void getVec(  const ODEVector&,
+                          const int,
+                          ODEVector& ) const = 0;
 };
 
 #include "NamespaceFooter.H"

@@ -286,7 +286,8 @@ void GKCollisions::defineMultiPhysicsPC(std::vector<Preconditioner<ODEVector,App
                                         void*                                             a_ops,
                                         const std::string&                                a_out_string,
                                         const std::string&                                a_opt_string,
-                                        bool                                              a_im )
+                                        bool                                              a_im,
+                                        const int                                         a_id )
 {
   for (int species(0); species<a_soln.size(); species++) {
     const KineticSpecies&           soln_species(*(a_soln[species]));
@@ -298,8 +299,17 @@ void GKCollisions::defineMultiPhysicsPC(std::vector<Preconditioner<ODEVector,App
 
       CLSInterface&             CLS(collisionModel(species_name,species_name_bkgr));
 
-      CLS.defineBlockPC(a_pc, a_dof_list, a_x, a_ops, a_out_string, a_opt_string, a_im,
-                      soln_species, gdofs_species, species);
+      CLS.defineBlockPC(  a_pc, 
+                          a_dof_list, 
+                          a_x, 
+                          a_ops, 
+                          a_out_string, 
+                          a_opt_string, 
+                          a_im,
+                          soln_species, 
+                          gdofs_species, 
+                          species,
+                          a_id );
      }
    }
 }

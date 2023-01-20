@@ -237,10 +237,30 @@ void BandedMatrix::setupDataExchange()
   CH_assert(n == n_nonlocal_elements);
 
 #ifdef CH_MPI
-  MPI_Allreduce(MPI_IN_PLACE,list_nonlocal_elements.data(),N_nonlocal_elements,
-                MPI_INT,MPI_MAX,MPI_COMM_WORLD);
-  MPI_Allreduce(MPI_IN_PLACE,list_rank_needed_by.data(),N_nonlocal_elements,
-                MPI_INT,MPI_MAX,MPI_COMM_WORLD);
+  {
+    int block_size = 50000, block_start = 0;
+    while (block_start < N_nonlocal_elements) {
+      int size;
+      if ((block_start+block_size) > N_nonlocal_elements) {
+        size = N_nonlocal_elements - block_start;
+      } else {
+        size = block_size;
+      }
+      MPI_Allreduce(  MPI_IN_PLACE,
+                      (list_nonlocal_elements.data()+block_start),
+                      size,
+                      MPI_INT,
+                      MPI_MAX,
+                      MPI_COMM_WORLD );
+      MPI_Allreduce(  MPI_IN_PLACE,
+                      (list_rank_needed_by.data()+block_start),
+                      size,
+                      MPI_INT,
+                      MPI_MAX,
+                      MPI_COMM_WORLD );
+      block_start += size;
+    }
+  }
 #endif
 
   for (int n(0); n < N_nonlocal_elements; n++) {
@@ -249,8 +269,24 @@ void BandedMatrix::setupDataExchange()
     }
   }
 #ifdef CH_MPI
-  MPI_Allreduce(MPI_IN_PLACE,list_rank_possessed_by.data(),N_nonlocal_elements,
-                MPI_INT,MPI_MAX,MPI_COMM_WORLD);
+  {
+    int block_size = 50000, block_start = 0;
+    while (block_start < N_nonlocal_elements) {
+      int size;
+      if ((block_start+block_size) > N_nonlocal_elements) {
+        size = N_nonlocal_elements - block_start;
+      } else {
+        size = block_size;
+      }
+      MPI_Allreduce(  MPI_IN_PLACE,
+                      (list_rank_possessed_by.data()+block_start),
+                      size,
+                      MPI_INT,
+                      MPI_MAX,
+                      MPI_COMM_WORLD  );
+      block_start += size;
+    }
+  }
 #endif
 
   m_data_exchange.define( list_nonlocal_elements, list_rank_possessed_by, list_rank_needed_by);

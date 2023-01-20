@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright 1998-2019 Lawrence Livermore National Security, LLC and other
+ * Copyright (c) 1998 Lawrence Livermore National Security, LLC and other
  * HYPRE Project Developers. See the top-level COPYRIGHT file for details.
  *
  * SPDX-License-Identifier: (Apache-2.0 OR MIT)
@@ -32,7 +32,7 @@ hypre_PFMGCreate( MPI_Comm  comm )
    (pfmg_data -> dxyz)[2]          = 0.0;
    (pfmg_data -> relax_type)       = 1;       /* weighted Jacobi */
    (pfmg_data -> jacobi_weight)    = 0.0;
-   (pfmg_data -> usr_jacobi_weight)= 0;     /* no user Jacobi weight */
+   (pfmg_data -> usr_jacobi_weight) = 0;    /* no user Jacobi weight */
    (pfmg_data -> rap_type)         = 0;
    (pfmg_data -> num_pre_relax)    = 1;
    (pfmg_data -> num_post_relax)   = 1;
@@ -42,7 +42,7 @@ hypre_PFMGCreate( MPI_Comm  comm )
 
    /* initialize */
    (pfmg_data -> num_levels)  = -1;
-#if defined(HYPRE_USING_CUDA)
+#if 0 //defined(HYPRE_USING_CUDA) || defined(HYPRE_USING_HIP)
    (pfmg_data -> devicelevel) = 200;
 #endif
    return (void *) pfmg_data;
@@ -95,19 +95,19 @@ hypre_PFMGDestroy( void *pfmg_vdata )
          hypre_StructVectorDestroy(pfmg_data -> x_l[0]);
          for (l = 0; l < ((pfmg_data -> num_levels) - 1); l++)
          {
-            hypre_StructGridDestroy(pfmg_data -> grid_l[l+1]);
-            hypre_StructGridDestroy(pfmg_data -> P_grid_l[l+1]);
-            hypre_StructMatrixDestroy(pfmg_data -> A_l[l+1]);
+            hypre_StructGridDestroy(pfmg_data -> grid_l[l + 1]);
+            hypre_StructGridDestroy(pfmg_data -> P_grid_l[l + 1]);
+            hypre_StructMatrixDestroy(pfmg_data -> A_l[l + 1]);
             hypre_StructMatrixDestroy(pfmg_data -> P_l[l]);
-            hypre_StructVectorDestroy(pfmg_data -> b_l[l+1]);
-            hypre_StructVectorDestroy(pfmg_data -> x_l[l+1]);
-            hypre_StructVectorDestroy(pfmg_data -> tx_l[l+1]);
+            hypre_StructVectorDestroy(pfmg_data -> b_l[l + 1]);
+            hypre_StructVectorDestroy(pfmg_data -> x_l[l + 1]);
+            hypre_StructVectorDestroy(pfmg_data -> tx_l[l + 1]);
          }
 
-	 hypre_TFree(pfmg_data -> data, HYPRE_MEMORY_DEVICE);
-	 hypre_TFree(pfmg_data -> data_const, HYPRE_MEMORY_HOST);
+         hypre_TFree(pfmg_data -> data, HYPRE_MEMORY_DEVICE);
+         hypre_TFree(pfmg_data -> data_const, HYPRE_MEMORY_HOST);
 
-          hypre_TFree(pfmg_data -> cdir_l, HYPRE_MEMORY_HOST);
+         hypre_TFree(pfmg_data -> cdir_l, HYPRE_MEMORY_HOST);
          hypre_TFree(pfmg_data -> active_l, HYPRE_MEMORY_HOST);
          hypre_TFree(pfmg_data -> grid_l, HYPRE_MEMORY_HOST);
          hypre_TFree(pfmg_data -> P_grid_l, HYPRE_MEMORY_HOST);
@@ -287,7 +287,7 @@ hypre_PFMGSetJacobiWeight( void  *pfmg_vdata,
    hypre_PFMGData *pfmg_data = (hypre_PFMGData *)pfmg_vdata;
 
    (pfmg_data -> jacobi_weight)    = weight;
-   (pfmg_data -> usr_jacobi_weight)= 1;
+   (pfmg_data -> usr_jacobi_weight) = 1;
 
    return hypre_error_flag;
 }
@@ -507,8 +507,8 @@ hypre_PFMGPrintLogging( void *pfmg_vdata,
          {
             for (i = 0; i < num_iterations; i++)
             {
-               hypre_printf("Residual norm[%d] = %e   ",i,norms[i]);
-               hypre_printf("Relative residual norm[%d] = %e\n",i,rel_norms[i]);
+               hypre_printf("Residual norm[%d] = %e   ", i, norms[i]);
+               hypre_printf("Relative residual norm[%d] = %e\n", i, rel_norms[i]);
             }
          }
       }
@@ -539,7 +539,7 @@ hypre_PFMGGetFinalRelativeResidualNorm( void   *pfmg_vdata,
       }
       else if (num_iterations == max_iter)
       {
-         *relative_residual_norm = rel_norms[num_iterations-1];
+         *relative_residual_norm = rel_norms[num_iterations - 1];
       }
       else
       {
@@ -550,10 +550,10 @@ hypre_PFMGGetFinalRelativeResidualNorm( void   *pfmg_vdata,
    return hypre_error_flag;
 }
 
-#if defined(HYPRE_USING_CUDA)
+#if 0 //defined(HYPRE_USING_CUDA) || defined(HYPRE_USING_HIP)
 HYPRE_Int
 hypre_PFMGSetDeviceLevel( void *pfmg_vdata,
-			  HYPRE_Int   device_level  )
+                          HYPRE_Int   device_level  )
 {
    hypre_PFMGData *pfmg_data = (hypre_PFMGData *)pfmg_vdata;
 

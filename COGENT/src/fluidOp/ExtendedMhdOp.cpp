@@ -342,7 +342,7 @@ void ExtendedMhdOp::accumulateExplicitRHS( FluidSpeciesPtrVect&        a_rhs,
                                   const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
                                   const FluidSpeciesPtrVect&        a_fluid_species,
                                   const PS::ScalarPtrVect&          a_scalars,
-                                  const EField&                     a_E_field,
+                                  const EMFields&                   a_EM_fields,
                                   const int                         a_fluidVecComp,
                                   const Real                        a_time )
 {
@@ -365,7 +365,7 @@ void ExtendedMhdOp::accumulateImplicitRHS( FluidSpeciesPtrVect&        a_rhs,
                                   const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
                                   const FluidSpeciesPtrVect&        a_fluid_species,
                                   const PS::ScalarPtrVect&          a_scalars,
-                                  const EField&                     a_E_field,
+                                  const EMFields&                   a_EM_fields,
                                   const int                         a_fluidVecComp,
                                   const Real                        a_time )
 {
@@ -978,7 +978,7 @@ void ExtendedMhdOp::postTimeEval( FluidSpecies&  a_species_comp,
 }
 
 void ExtendedMhdOp::getMemberVar( LevelData<FArrayBox>&  a_Var,
-                            const FluidSpecies&          a_fluid_species,
+                            const CFGVars&               a_fluid_vars,
                             const string&                a_name ) const
 {
    const DisjointBoxLayout& grids( m_geometry.grids() );
@@ -1191,7 +1191,8 @@ void ExtendedMhdOp::defineBlockPC(std::vector<PS::Preconditioner<PS::ODEVector,P
                                   bool                                                          a_im,
                                   const FluidSpecies&                                           a_fluid_species,
                                   const PS::GlobalDOFFluidSpecies&                              a_global_dofs,
-                                  int                                                           a_species_idx )
+                                  const int                                                     a_species_idx,
+                                  const int                                                     a_id )
 {
   if (a_im) {
     CH_assert(a_pc.size() == a_dof_list.size());
@@ -1205,6 +1206,7 @@ void ExtendedMhdOp::defineBlockPC(std::vector<PS::Preconditioner<PS::ODEVector,P
   
     PS::Preconditioner<PS::ODEVector,PS::AppCtxt> *pc;
     pc = new PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>;
+    pc->setSysID(a_id);
     dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
       (pc)->define(a_soln_vec, a_gkops, *this, m_opt_string, m_opt_string, a_im);
     dynamic_cast<PS::FluidOpPreconditioner<PS::ODEVector,PS::AppCtxt>*>
@@ -1282,7 +1284,8 @@ void ExtendedMhdOp::updatePCImEx(const FluidSpeciesPtrVect&     a_fluid_species,
                               const int                         a_step,
                               const int                         a_stage,
                               const double                      a_shift,
-                              const int                         a_component)
+                              const int                         a_component,
+                              const std::string& )
 {
    CH_TIME("ExtendedMhdOp::updatePCImEx()");
      
@@ -1296,6 +1299,7 @@ void ExtendedMhdOp::updatePCImEx(const FluidSpeciesPtrVect&     a_fluid_species,
 void ExtendedMhdOp::solvePCImEx( FluidSpeciesPtrVect&     a_fluid_species_solution,
                         const PS::KineticSpeciesPtrVect&  a_kinetic_species_rhs,
                         const FluidSpeciesPtrVect&        a_fluid_species_rhs,
+                        const std::string&,
                         const int                         a_component )
 {
    CH_TIME("ExtendedMhdOp::solvePCImEx()");
@@ -4805,8 +4809,8 @@ void ExtendedMhdOp::updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
    //
    m_geometry.applyAxisymmetricCorrection( m_m0JaFluxVisc_cf );
    m_geometry.applyAxisymmetricCorrection( m_m1JaFluxVisc_cf );
-   m_geometry.computedxidXProductAverage(m_m0JaFluxVisc_norm, m_m0JaFluxVisc_cf, 0);
-   m_geometry.computedxidXProductAverage(m_m1JaFluxVisc_norm, m_m1JaFluxVisc_cf, 0);
+   m_geometry.computedxidXProductNorm(m_m0JaFluxVisc_norm, m_m0JaFluxVisc_cf);
+   m_geometry.computedxidXProductNorm(m_m1JaFluxVisc_norm, m_m1JaFluxVisc_cf);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       m_momJaFluxVisc_norm[dit].copy( m_m0JaFluxVisc_norm[dit],0,0,1 ); 
       m_momJaFluxVisc_norm[dit].copy( m_m1JaFluxVisc_norm[dit],0,1,1 );
@@ -4839,7 +4843,7 @@ void ExtendedMhdOp::updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
    // since Flux is already multiplied by Jacobian
    //
    m_geometry.applyAxisymmetricCorrection( m_enJaFluxVisc_cf );
-   m_geometry.computedxidXProductAverage(m_enJaFluxVisc_norm, m_enJaFluxVisc_cf, 0);
+   m_geometry.computedxidXProductNorm(m_enJaFluxVisc_norm, m_enJaFluxVisc_cf);
 
    LevelData<FArrayBox>& rhs_ene_ion( a_rhs_fluid.cell_var("energyDensity") );
    m_geometry.mappedGridDivergenceFromFluxNorms(m_enJaFluxVisc_norm, m_dummyDiv);

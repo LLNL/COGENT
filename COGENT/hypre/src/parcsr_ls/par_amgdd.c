@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright 1998-2019 Lawrence Livermore National Security, LLC and other
+ * Copyright (c) 1998 Lawrence Livermore National Security, LLC and other
  * HYPRE Project Developers. See the top-level COPYRIGHT file for details.
  *
  * SPDX-License-Identifier: (Apache-2.0 OR MIT)
@@ -360,7 +360,7 @@ hypre_BoomerAMGDDGetNumGhostLayers( void      *data,
 
 HYPRE_Int
 hypre_BoomerAMGDDSetUserFACRelaxation( void *data,
-   HYPRE_Int (*userFACRelaxation)( void *amgdd_vdata , HYPRE_Int level, HYPRE_Int cycle_param ))
+                                       HYPRE_Int (*userFACRelaxation)( void *amgdd_vdata, HYPRE_Int level, HYPRE_Int cycle_param ))
 {
    hypre_ParAMGDDData  *amgdd_data = (hypre_ParAMGDDData*) data;
 

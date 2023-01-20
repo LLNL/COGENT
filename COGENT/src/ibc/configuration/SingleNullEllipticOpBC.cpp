@@ -190,9 +190,6 @@ SingleNullEllipticOpBC::getBCType( const int  a_block_number,
             bc_type = m_bc_type[TOROIDAL_CORE];
          }
 #endif
-         else {
-            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
-         }
          break;
       case SingleNullBlockCoordSys::MCSOL:
       case SingleNullBlockCoordSys::LCSOL:
@@ -205,9 +202,6 @@ SingleNullEllipticOpBC::getBCType( const int  a_block_number,
             bc_type = m_bc_type[TOROIDAL_SOL];
          }
 #endif
-         else {
-            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
-         }
          break;
       case SingleNullBlockCoordSys::LSOL:
          if (a_dir == RADIAL_DIR && a_side == 1) {
@@ -220,9 +214,6 @@ SingleNullEllipticOpBC::getBCType( const int  a_block_number,
 #endif
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             bc_type = m_bc_type[POLOIDAL_INNER_DIV];
-         }
-         else {
-            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
       case SingleNullBlockCoordSys::RSOL:
@@ -237,9 +228,6 @@ SingleNullEllipticOpBC::getBCType( const int  a_block_number,
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             bc_type = m_bc_type[POLOIDAL_OUTER_DIV];
          }
-         else {
-            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
-         }
          break;
       case SingleNullBlockCoordSys::LPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
@@ -253,9 +241,6 @@ SingleNullEllipticOpBC::getBCType( const int  a_block_number,
          else if (a_dir == POLOIDAL_DIR && a_side == 1) {
             bc_type = m_bc_type[POLOIDAL_INNER_DIV];
          }
-         else {
-            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
-         }
          break;
       case SingleNullBlockCoordSys::RPF:
          if (a_dir == RADIAL_DIR && a_side == 0) {
@@ -268,9 +253,6 @@ SingleNullEllipticOpBC::getBCType( const int  a_block_number,
 #endif
          else if (a_dir == POLOIDAL_DIR && a_side == 0) {
             bc_type = m_bc_type[POLOIDAL_OUTER_DIV];
-         }
-         else {
-            MayDay::Error("SingleNullEllipticOpBC::getBCType(): Invalid argument");
          }
          break;
       default:
@@ -1024,6 +1006,12 @@ void SingleNullEllipticOpBC::parseParameters( ParmParse& a_pp )
       else if (bc_type == "neumann") {
          m_bc_type[i] = NEUMANN;
       }
+      else if (bc_type == "mapped_neumann") {
+         m_bc_type[i] = MAPPED_NEUMANN;
+      }
+      else if (bc_type == "natural") {
+         m_bc_type[i] = NATURAL;
+      }
       else {
          MayDay::Error("SingleNullEllipticOpBC::parseParameter(): Unrecognized potential bc type");
       }
@@ -1063,24 +1051,15 @@ SingleNullEllipticOpBC::clone( const bool a_extrapolated ) const
 
    // Copy the data members set by the full constructor (i.e., the one with the ParmParse
    // argument).  
-   
    result->m_name = m_name;
    result->m_poloidal_blocks_per_sector = m_poloidal_blocks_per_sector;
    result->m_verbosity = m_verbosity;
 
-   // Copy the data set by calls to setBCType(), etc.
+   // Copy the rest of the data owned by the EllipticOpBC base class
+   result->copyBaseData(*this);
 
-   for (int i=0; i<m_bc_type.size(); ++i) {
-      (result->m_bc_type)[i] = a_extrapolated? EXTRAPOLATED: m_bc_type[i];
-   }
-   for (int i=0; i<m_bc_value.size(); ++i) {
-      (result->m_bc_value)[i] = m_bc_value[i];
-   }
-   for (int i=0; i<m_bc_subtype.size(); ++i) {
-      (result->m_bc_subtype)[i] = m_bc_subtype[i];
-   }
-   for (int i=0; i<m_bc_block_data.size(); ++i) {
-      (result->m_bc_block_data)[i] = m_bc_block_data[i];
+   if ( a_extrapolated ) {
+      result->setExtrapolatedType();
    }
 
    return result;

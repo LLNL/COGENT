@@ -44,9 +44,9 @@ public:
 
    virtual IntVect getDecomposition(int block) const {return m_decomposition;}
 
-   virtual const EllipticOpBC& getDivergenceCleaningBC() const {return *m_divergence_cleaning_bc;}
+   virtual EllipticOpBC* getDivergenceCleaningBC() {return m_divergence_cleaning_bc;}
 
-   bool isPeriodic( const int dir ) const;
+   bool isPeriodic( const int dir ) const {return m_periodic[dir];}
   
    string getMagBlockGeomType() const {return m_mag_geom_type;}
   
@@ -95,6 +95,8 @@ private:
    int m_num_blocks;
 
    Vector<MagBlockCoordSys *> m_coord_vec;
+
+   bool m_periodic[CFG_DIM];
    
 #if CFG_DIM ==3 
    //applies toroidal periodicity

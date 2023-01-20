@@ -17,7 +17,8 @@
 FluidNeutrals::FluidNeutrals( ParmParse& a_ppntr, const int a_verbosity )
    : m_verbosity(a_verbosity),
      m_neutr_vel(NULL),
-     m_neutr_temp(NULL)
+     m_neutr_temp(NULL),
+     m_first_call_tscale(true)
 {
    parseParameters( a_ppntr );
 
@@ -164,12 +165,12 @@ void FluidNeutrals::evalNtrRHS(KineticSpecies&                   a_rhs_species,
 
       //Get ion species temperature
       CFG::LevelData<CFG::FArrayBox> ion_parallelVel_cfg( mag_geom.grids(), 1, ghost_cfg );
-      soln_species.ParallelMomentum( ion_parallelVel_cfg );
+      soln_species.parallelParticleFlux( ion_parallelVel_cfg );
       for (CFG::DataIterator dit(ion_density_cfg.dataIterator()); dit.ok(); ++dit) {
          ion_parallelVel_cfg[dit].divide(ion_density_cfg[dit]);
       }
       CFG::LevelData<CFG::FArrayBox> ion_temperature_cfg( mag_geom.grids(), 1, ghost_cfg );
-      soln_species.pressureMoment(ion_temperature_cfg, ion_parallelVel_cfg);
+      soln_species.pressure(ion_temperature_cfg, ion_parallelVel_cfg);
       for (CFG::DataIterator dit(ion_density_cfg.dataIterator()); dit.ok(); ++dit) {
         ion_temperature_cfg[dit].divide(ion_density_cfg[dit]);
       }
@@ -524,8 +525,7 @@ Real FluidNeutrals::TimeScale(const KineticSpeciesPtrVect& a_soln, const int a_s
   //and that charge-exchange process is the stiffest process  
 
 
-  static bool first_call_tscale = true;
-  if (first_call_tscale) {
+  if (m_first_call_tscale) {
     double dens_norm, vel_norm, temp_norm;
     computeChxNormalization(m_ionization_norm, m_chx_norm, dens_norm, vel_norm, temp_norm, m_SI_input);
   }
@@ -538,7 +538,7 @@ Real FluidNeutrals::TimeScale(const KineticSpeciesPtrVect& a_soln, const int a_s
     time_scale = 1.0/m_ionization_norm;
   }
 
-  first_call_tscale = false;
+  m_first_call_tscale = false;
 
   return time_scale;
 }
@@ -556,10 +556,9 @@ void FluidNeutrals::diagnostics(const LevelData<FArrayBox>& a_rhs,
   CFG::LevelData<CFG::FArrayBox> particle_src( mag_geom.grids(), 1, CFG::IntVect::Zero );                                                                                 
   a_rhs_species.numberDensity( particle_src );                                                                                                                              
   phase_geom.plotConfigurationData( "particle_src", particle_src, a_time );                                                                                                 
-
-  //Plot parallel momentum source                                                                                                                                         
+  //Plot parallel particle flux (nVpar) source
   CFG::LevelData<CFG::FArrayBox> parMom_src( mag_geom.grids(), 1, CFG::IntVect::Zero );
-  a_rhs_species.ParallelMomentum( parMom_src );
+  a_rhs_species.parallelParticleFlux( parMom_src );
   phase_geom.plotConfigurationData( "parMom_src", parMom_src, a_time );
 
 }

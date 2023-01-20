@@ -147,7 +147,7 @@ void Linearized::addConservativeTerms(KineticSpecies& a_rhs_species,
 
    // Compute momentum restoring factor
    CFG::LevelData<CFG::FArrayBox> moment_rest( mag_geom.grids(), 1, CFG::IntVect::Zero );
-   m_moment_op.compute(moment_rest, a_rhs_species, a_tp_rhs_coll, ParallelMomKernel<FArrayBox>());
+   m_moment_op.compute(moment_rest, a_rhs_species, a_tp_rhs_coll, ParallelVelKernel<FArrayBox>());
 
    //Calculate normalizing factors
    if (m_first_step) {
@@ -165,7 +165,7 @@ void Linearized::addConservativeTerms(KineticSpecies& a_rhs_species,
          m_norm_energy[cfg_dit].divide(a_rhs_species.mass());
       }
       
-      m_moment_op.compute(m_norm_momentum, a_rhs_species, kern_moment_norm, ParallelMomKernel<FArrayBox>());
+      m_moment_op.compute(m_norm_momentum, a_rhs_species, kern_moment_norm, ParallelVelKernel<FArrayBox>());
    }
 
    // Calculate field-particle (FP) collisional RHS

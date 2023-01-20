@@ -2066,6 +2066,20 @@ SingleNullCoordSys::readParams( ParmParse& a_pp_grid,
    else {
      m_interpolation_scheme = "mapped";
    }
+
+   if ( a_pp_geom.contains("use_curvature_interpolation") ) {
+      a_pp_geom.query( "use_curvature_interpolation", m_use_curvature_interpolation);
+   }
+   else {
+     m_use_curvature_interpolation = false;
+   }
+
+   if ( a_pp_geom.contains("mapping_diagnostics") ) {
+      a_pp_geom.query( "mapping_diagnostics", m_mapping_diagnostics);
+   }
+   else {
+     m_mapping_diagnostics = false;
+   }
    
    a_pp_geom.get( "toroidal_width_over_2pi", m_toroidal_width);
    CH_assert(m_toroidal_width > 0. && m_toroidal_width <= 1.);
@@ -3041,11 +3055,152 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
 {
    CH_TIME("SingleNullCoordSys::toroidalBlockRemapping");
    
-   int src_toroidal_sector = toroidalBlockNumber(a_nSrc);
+   const SingleNullBlockCoordSys* src_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nSrc);
+   RealVect X = src_coord_sys->realCoord(a_xiSrc);
+  
+   RealVect X_dst_cent;    //Physical coord of the dst cell center
+   RealVect X_dst_pol_hi;  //Physical coord of the dst cell hi-poloidal face center
+   RealVect X_dst_pol_lo;  //Physical coord of the dst cell lo-poloidal face center
+   RealVect xi_dst;        //Mapped coord of the dst point
+   RealVect xi_dst_cent;   //Mapped coord of the dst cell center
+
+   // Loop over valid poloidal cells (corresponding to the same flux surface and toroidal angle)
+   // to find the closest dst cell and the block it belongs to
+   findClosestValidCellCenter(xi_dst_cent, X_dst_cent, X_dst_pol_lo, X_dst_pol_hi, a_nDst, a_nSrc, a_xiSrc, X, a_side);
+   
+   xi_dst[RADIAL_DIR] = xi_dst_cent[RADIAL_DIR];
+   xi_dst[TOROIDAL_DIR] = xi_dst_cent[TOROIDAL_DIR];
+
+   // Get the poloidal mapped coordinate;
+   // we call dst_block as "trail_block", becasue we might revise dst_block later
+   const SingleNullBlockCoordSys* trial_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nDst);
+   const RealVect& trial_dx = trial_coord_sys->getMappedCellSize();
+   applyToroidalPeriodicity(X, a_side);
+   xi_dst[POLOIDAL_DIR] = getInterpMappedPoloidalCoord(X, X_dst_cent, X_dst_pol_hi, X_dst_pol_lo, xi_dst_cent, trial_dx);
+   
+   // In principle, we could use a_ivDst (designating the interpolation cell triad) as already found closest valid cell-center.
+   // Even if getInterpMappedPoloidalCoord calcualtion actually places the dst point into the
+   // neighbouring cell, it should not matter much for the subsequnet interpolation of the ghost values
+   // which will just be relavant to the originally-centered triad of cells. Nevetheless we improve a_ivDst
+   // by making it consistent with the global index of the dst cell center.
+   for (int dir=0; dir<SpaceDim; ++dir) {
+     a_ivDst[dir] = floor(xi_dst[dir]/trial_dx[dir]);
+   }
+   
+   // Test consistency between the closes center search and
+   // getInterpMappedPoloidalCoord() calculation
+   if (m_mapping_diagnostics) {
+     testClosestCenterSearch(a_ivDst, xi_dst_cent, a_nDst, trial_dx);
+   }
+        
+   // If a_ivDst corresponds to the poloidal ghost cell, it means that the interpolation stencil
+   // will reach into two layers of ghosts. Here, we change the block and a_ivDst such that
+   // it corresponds to the last valid cell of a neighboring block (we might not need to do that).
+   if ( fixPoloidalBlock( a_nDst, a_ivDst ) ) {
+
+      const SingleNullBlockCoordSys* coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nDst);
+      const RealVect& dx = coord_sys->getMappedCellSize();
+
+      xi_dst_cent = xi_dst;
+      xi_dst_cent[POLOIDAL_DIR] = (a_ivDst[POLOIDAL_DIR] + 0.5)*dx[POLOIDAL_DIR];
+      X_dst_cent = coord_sys -> realCoord(xi_dst_cent);
+      
+      RealVect xi_dst_pol_hi(xi_dst);
+      xi_dst_pol_hi[POLOIDAL_DIR] = (a_ivDst[POLOIDAL_DIR] + 1.0)*dx[POLOIDAL_DIR];
+      X_dst_pol_hi = coord_sys -> realCoord(xi_dst_pol_hi);
+
+      RealVect xi_dst_pol_lo(xi_dst);
+      xi_dst_pol_lo[POLOIDAL_DIR] = (a_ivDst[POLOIDAL_DIR] )*dx[POLOIDAL_DIR];
+      X_dst_pol_lo = coord_sys -> realCoord(xi_dst_pol_lo);
+
+      // Get the poloidal mapped coordinate
+      xi_dst[POLOIDAL_DIR] = getInterpMappedPoloidalCoord(X, X_dst_cent, X_dst_pol_hi, X_dst_pol_lo, xi_dst_cent, dx);
+   
+      if (m_mapping_diagnostics) {
+         // Check to see if the poloidal mapped coordinate was placed by
+         // the getInterpMappedPoloidalCoord() into the neighbouring cell.
+         // Even if that is the case (which we might want to know), we are not
+         // going to change a_ivDst.
+         IntVect iv_test;
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            iv_test[dir] = floor(xi_dst[dir]/dx[dir]);
+         }
+      
+         if ( iv_test != a_ivDst ) {
+            cout<<"fixPoloidalBlock had issues at X="<<X<<endl;
+         }
+      }
+   }
+   
+   const SingleNullBlockCoordSys* dst_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nDst);
+   const RealVect& dx_dst = dst_coord_sys->getMappedCellSize();
+   
+   /*
+    Get interpolation coefficients (interpolation stencil) and offsets.
+    The last argument of interpolation_stencil controls the saw tooth BC case
+    (a) value is less than zero -- treat that cell as an interior cell;
+    however still shift an interpolation stencil to avoid the info from poloildal BCs
+    (b) Value is between one and zero -- transition cell that is not entirely in the tooth
+    (c) Value is larger than one -- cell is entirely inside the tooth
+   */
+
+   a_interpStencilOffsets[0] = -1.;
+   a_interpStencilOffsets[1] =  0.;
+   a_interpStencilOffsets[2] =  1.;
+
+   // Set default value to a negative (designates inner cells)
+   int stenc_size = a_interpStecil.size();
+   a_interpStecil[stenc_size-1] = -1.0;
+   
+   // Update the last interpolation stencil coefficient
+   // and offsets for the sawtooth BC
+   setSawtoothBCCoeff(a_interpStencilOffsets,
+                      a_interpStecil,
+                      *src_coord_sys,
+                      *dst_coord_sys,
+                      a_ivDst,
+                      xi_dst,
+                      a_xiSrc,
+                      a_nDst,
+                      a_side);
+
+   
+   // We use currently three cells to interpolate;
+   // the interpolation error is h^3.
+   int order = 3;
+
+   if (m_interpolation_scheme == "mapped") {
+     getInterpolationCoefficients(a_interpStecil, a_interpStencilOffsets, xi_dst, a_ivDst, dx_dst, order);
+   }
+   else if (m_interpolation_scheme == "physical") {
+     getInterpolationCoefficients(a_interpStecil, a_interpStencilOffsets, X, a_ivDst, *dst_coord_sys, m_use_curvature_interpolation);
+   }
+   else {
+     MayDay::Error("SingleNullCoordSys::toroidalBlockRemapping(): Invalid interpolation scheme type");
+   }
+   
+   // Run diagnostics to see if mapping twist and shear is tolerable 
+   if (m_mapping_diagnostics) {
+     runMappingDiagnostics(a_xiSrc, a_ivDst, a_nDst, *src_coord_sys, *dst_coord_sys, a_side);
+   }
+}
+
+void
+SingleNullCoordSys::findClosestValidCellCenter(RealVect&             a_xi_dst_cent,
+                                               RealVect&             a_X_dst_cent,
+                                               RealVect&             a_X_dst_pol_lo,
+                                               RealVect&             a_X_dst_pol_hi,
+                                               int&                  a_nDst,
+                                               const int             a_nSrc,
+                                               const RealVect&       a_xiSrc,
+                                               const RealVect&       a_X,
+                                               const Side::LoHiSide& a_side) const
+{
    
    // Determine the toroidal sector containing the input point, which is assumed to
-   // lie in a ghost cell on the toroidal a_side of src_toroidal_sector.  Periodicity
-   // is assumed in the toroidal direction.
+   // lie in a ghost cell on the toroidal a_side of src_toroidal_sector.
+   // Periodicity is assumed in the toroidal direction.
+   int src_toroidal_sector = toroidalBlockNumber(a_nSrc);
    int dst_toroidal_sector;
    if (a_side == Side::LoHiSide::Lo) dst_toroidal_sector = src_toroidal_sector - 1;
    if (a_side == Side::LoHiSide::Hi) dst_toroidal_sector = src_toroidal_sector + 1;
@@ -3059,31 +3214,19 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    const SingleNullBlockCoordSys* src_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nSrc);
    double delta_Phi_lo = src_coord_sys->lowerMappedCoordinate(TOROIDAL_DIR) - a_xiSrc[TOROIDAL_DIR];
    double delta_Phi_hi = a_xiSrc[TOROIDAL_DIR] - src_coord_sys->upperMappedCoordinate(TOROIDAL_DIR);
-
-   RealVect X = src_coord_sys->realCoord(a_xiSrc);
-
-   // Get the poloidal (R,Z) coordinates of the input point
-   POL::RealVect X_src_pol = src_coord_sys->restrictPhysCoordToPoloidal(X);
-
-   // Determine the poloidal block of dst_toroidal_sector containing the point.  Determine the
-   // corresponding mapped coordinate with respect to that block (which only differs from the
-   // src mapped coordinate in the toroidal component).
    
-   RealVect X_dst_cent;    //Physical coord of the dst cell center
-   RealVect X_dst_pol_hi;  //Physical coord of the dst cell hi-poloidal face center
-   RealVect X_dst_pol_lo;  //Physical coord of the dst cell lo-poloidal face center
-   RealVect xi_dst;        //Mapped coord of the dst point
-   RealVect xi_dst_cent;   //Mapped coord of the dst cell center
+   // Mapped coord of the dst point
+   RealVect xi_dst;
    
    // Assume flux-aligned mapping
    xi_dst[RADIAL_DIR] = a_xiSrc[RADIAL_DIR];
    
-   double R_X = sqrt(X[0]*X[0] + X[1]*X[1]);
-   double Z_X = X[2];
+   // Poloidal {R,Z} coordinates of the physical dst point
+   double R_X = sqrt(a_X[0]*a_X[0] + a_X[1]*a_X[1]);
+   double Z_X = a_X[2];
 
    // Figure out in which poloidal block a_xiSrc is valid by determining which poloidal plane it belongs
    // to and then doing a brute force search of that plane for the closest cell center
-
    double d_min = DBL_MAX;
    int dst_poloidal_block;
    int i_tor_saved;
@@ -3091,7 +3234,7 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
    for (int poloidal_block=0; poloidal_block<m_num_poloidal_blocks; ++poloidal_block) {
 
       int src_poloidal_block = poloidalBlockNumber(a_nSrc);
-	
+   
       if (sameMagFluxSurf(src_poloidal_block, poloidal_block)) {
 
          int block_number = blockNumber(poloidal_block, dst_toroidal_sector);
@@ -3113,7 +3256,7 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
          IntVect hi = domain_box.bigEnd();
          lo[TOROIDAL_DIR] = hi[TOROIDAL_DIR] = i_tor;
          lo[RADIAL_DIR] = hi[RADIAL_DIR] = floor(a_xiSrc[RADIAL_DIR] / dx[RADIAL_DIR]);
-	 
+    
          Box search_box(lo,hi);
          CH_assert(search_box.ok());
          FArrayBox phys_coords(search_box,SpaceDim);
@@ -3121,7 +3264,7 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
 
          for (BoxIterator bit(search_box); bit.ok(); ++bit) {
             IntVect iv = bit();
-	   
+      
             RealVect X_phys;
             for (int n=0; n<SpaceDim; ++n) {
                X_phys[n] = phys_coords(iv,n);
@@ -3133,133 +3276,50 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
                d_min = d;
                i_tor_saved = i_tor;
                dst_poloidal_block = poloidal_block;
-               X_dst_cent = X_phys;
+               a_X_dst_cent = X_phys;
 
-               xi_dst_cent = xi_dst;
-               xi_dst_cent[POLOIDAL_DIR] = (iv[POLOIDAL_DIR] + 0.5)*dx[POLOIDAL_DIR];
-	     
+               a_xi_dst_cent = xi_dst;
+               a_xi_dst_cent[POLOIDAL_DIR] = (iv[POLOIDAL_DIR] + 0.5)*dx[POLOIDAL_DIR];
+        
                RealVect xi_dst_pol_hi(xi_dst);
                xi_dst_pol_hi[POLOIDAL_DIR] = (iv[POLOIDAL_DIR] + 1.0)*dx[POLOIDAL_DIR];
-               X_dst_pol_hi = coord_sys -> realCoord(xi_dst_pol_hi);
+               a_X_dst_pol_hi = coord_sys -> realCoord(xi_dst_pol_hi);
 
                RealVect xi_dst_pol_lo(xi_dst);
                xi_dst_pol_lo[POLOIDAL_DIR] = (iv[POLOIDAL_DIR] )*dx[POLOIDAL_DIR];
-               X_dst_pol_lo = coord_sys -> realCoord(xi_dst_pol_lo);
+               a_X_dst_pol_lo = coord_sys -> realCoord(xi_dst_pol_lo);
             }
          }
       }
    }
- 
+   
    a_nDst = blockNumber(dst_poloidal_block, dst_toroidal_sector);
-   const SingleNullBlockCoordSys* trial_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nDst);
-   const RealVect& trial_dx = trial_coord_sys->getMappedCellSize();
+}
 
-   // Get the poloidal mapped coordinate
-   applyToroidalPeriodicity(X, a_side);
-   xi_dst[POLOIDAL_DIR] = getInterpMappedPoloidalCoord(X, X_dst_cent, X_dst_pol_hi, X_dst_pol_lo, xi_dst_cent, trial_dx);
-   
-   // Get the global index of the dst cell center
-   for (int dir=0; dir<SpaceDim; ++dir) {
-     a_ivDst[dir] = floor(xi_dst[dir]/trial_dx[dir]);
-   }
 
-   IntVect iv_saved = a_ivDst;
-   RealVect saved_X_dst_cent = X_dst_cent;
-   
-   if ( fixPoloidalBlock( a_nDst, a_ivDst ) ) {
-
-      const SingleNullBlockCoordSys* coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nDst);
-      const RealVect& dx = coord_sys->getMappedCellSize();
-      const Box& domain_box = coord_sys->domain().domainBox();
-      IntVect lo = domain_box.smallEnd();
-      IntVect hi = domain_box.bigEnd();
-      lo[TOROIDAL_DIR] = hi[TOROIDAL_DIR] = i_tor_saved;
-      lo[RADIAL_DIR] = hi[RADIAL_DIR] = floor(a_xiSrc[RADIAL_DIR] / dx[RADIAL_DIR]);
-	 
-      Box search_box(lo,hi);
-      CH_assert(search_box.ok());
-      FArrayBox phys_coords(search_box,SpaceDim);
-      coord_sys->getCellCenteredRealCoords(phys_coords);
-
-      RealVect X_phys;
-      for (int n=0; n<SpaceDim; ++n) {
-         X_phys[n] = phys_coords(a_ivDst,n);
-      }
-
-      X_dst_cent = X_phys;
-
-      xi_dst_cent = xi_dst;
-      xi_dst_cent[POLOIDAL_DIR] = (a_ivDst[POLOIDAL_DIR] + 0.5)*dx[POLOIDAL_DIR];
-	     
-      RealVect xi_dst_pol_hi(xi_dst);
-      xi_dst_pol_hi[POLOIDAL_DIR] = (a_ivDst[POLOIDAL_DIR] + 1.0)*dx[POLOIDAL_DIR];
-      X_dst_pol_hi = coord_sys -> realCoord(xi_dst_pol_hi);
-
-      RealVect xi_dst_pol_lo(xi_dst);
-      xi_dst_pol_lo[POLOIDAL_DIR] = (a_ivDst[POLOIDAL_DIR] )*dx[POLOIDAL_DIR];
-      X_dst_pol_lo = coord_sys -> realCoord(xi_dst_pol_lo);
-
-      // Get the poloidal mapped coordinate
-      //      applyToroidalPeriodicity(X);
-      xi_dst[POLOIDAL_DIR] = getInterpMappedPoloidalCoord(X, X_dst_cent, X_dst_pol_hi, X_dst_pol_lo, xi_dst_cent, trial_dx);
-   
-#if 0
-      // Get the global index of the dst cell center
-      IntVect iv_test;
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         iv_test[dir] = floor(xi_dst[dir]/trial_dx[dir]);
-      }
-      
-      if ( iv_test != a_ivDst ) {
-         MayDay::Error("SingleNullCoordSys::toroidalBlockRemapping(): fixPoloidalBlock didn't work, need to investigate");
-      }
-
-#endif      
-   }
-   
-   const SingleNullBlockCoordSys* dst_coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_nDst);
-   const RealVect& dx_dst = dst_coord_sys->getMappedCellSize();
-   
-   // If this warning comes out it means that the dst point is not really
-   // within the cell we though it should be (from the closest center search)
-   // This can potentially happen if the dst point is very near poloidal cell
-   // boundary (and can potentially be in a different block, if near a block bndry).
-   // All this is perhaps OK, since we should have sufficient number of ghost cell
-   // in mapping and data available.
-#if 0
-   IntVect iv_test;
-   for (int dir=0; dir<SpaceDim; ++dir) {
-      iv_test[dir] = floor(xi_dst_cent[dir]/dx_dst[dir]);
-   }
-   if ( procID()==0 && a_ivDst != iv_test ) {
-      MayDay::Warning("SingleNullCoordSys::toroidalBlockRemapping: closest center search failed");
-   }
-#endif
-
+void
+SingleNullCoordSys::setSawtoothBCCoeff(Vector<int>&                     a_interpStencilOffsets,
+                                       Vector<Real>&                    a_interpStecil,
+                                       const SingleNullBlockCoordSys&   a_src_coord_sys,
+                                       const SingleNullBlockCoordSys&   a_dst_coord_sys,
+                                       const IntVect&                   a_ivDst,
+                                       const RealVect&                  a_xiDst,
+                                       const RealVect&                  a_xiSrc,
+                                       const int                        a_nDst,
+                                       const Side::LoHiSide&            a_side) const
+{
    /*
-    Get interpolation coefficients (interpolation stencil) and offsets
-    The last argument of interpolation_stencil controls saw tooth BC case
-    (a) value is less than zero -- treat that cell as an interior cell;
-    however still shift an interpolation stencil to avoid the info from poloildal BCs
-    (b) Value is between one and zero -- transition cell that is not entirely in the tooth
-    (c) Value is larger than one -- cell is entirely inside the tooth
+   Handle the saw-tooth boundary stencil coefficeints, also
+   set offset such that we only interpolate from valid cells.
    
-    For now we assume that the poloidal size of the cells at the block interafce is not
-    more than a factor of 2 different. Otherwise, there may be a situation, where
-    a_ivDst is far from the domain boundary, but the lower/upper corner of that cell
-    belongs to saw tooth.
+   For now we assume that the poloidal size of the cells at the
+   block interafce is not more than a factor of 2 different.
+   Otherwise, there may be a situation, where a_ivDst is far
+   from the domain boundary, but the lower/upper corner of that
+   cell belongs to saw tooth.
    */
-
-   a_interpStencilOffsets[0] = -1.;
-   a_interpStencilOffsets[1] =  0.;
-   a_interpStencilOffsets[2] =  1.;
-
-   // Set default value to a negative (designates inner cells)
-   int stenc_size = a_interpStecil.size();
-   a_interpStecil[stenc_size-1] = -1.0;
    
-   //Handle the saw-tooth boundary stencil coefficeints
-   Box dst_domain_box = dst_coord_sys->domain().domainBox();
+   Box dst_domain_box = a_dst_coord_sys.domain().domainBox();
    
    if ( a_ivDst[POLOIDAL_DIR] <= dst_domain_box.smallEnd(POLOIDAL_DIR) &&
         containsPhysicalBoundary(a_nDst, POLOIDAL_DIR, Side::LoHiSide::Lo) ) {
@@ -3268,21 +3328,21 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
          a_interpStencilOffsets[n] += shift;
       }
 
-      const RealVect& dx_src = src_coord_sys->getMappedCellSize();
+      const RealVect& dx_src = a_src_coord_sys.getMappedCellSize();
 
       RealVect xiSrc_lo_pol(a_xiSrc);
       xiSrc_lo_pol[POLOIDAL_DIR] -= 0.5 * dx_src[POLOIDAL_DIR];
-      RealVect X_lo_pol = src_coord_sys->realCoord(xiSrc_lo_pol);
+      RealVect X_lo_pol = a_src_coord_sys.realCoord(xiSrc_lo_pol);
       applyToroidalPeriodicity(X_lo_pol, a_side);
 
       RealVect xiSrc_hi_pol(a_xiSrc);
       xiSrc_hi_pol[POLOIDAL_DIR] += 0.5 * dx_src[POLOIDAL_DIR];
-      RealVect X_hi_pol = src_coord_sys->realCoord(xiSrc_hi_pol);
+      RealVect X_hi_pol = a_src_coord_sys.realCoord(xiSrc_hi_pol);
       applyToroidalPeriodicity(X_hi_pol, a_side);
 
-      RealVect xi_dst_bnd(xi_dst);
-      xi_dst_bnd[POLOIDAL_DIR] = dst_coord_sys->lowerMappedCoordinate(POLOIDAL_DIR);
-      RealVect X_dst_bnd = dst_coord_sys->realCoord(xi_dst_bnd);
+      RealVect xi_dst_bnd(a_xiDst);
+      xi_dst_bnd[POLOIDAL_DIR] = a_dst_coord_sys.lowerMappedCoordinate(POLOIDAL_DIR);
+      RealVect X_dst_bnd = a_dst_coord_sys.realCoord(xi_dst_bnd);
 
       RealVect X_hi_to_lo(X_hi_pol);
       X_hi_to_lo -= X_lo_pol;
@@ -3301,21 +3361,21 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
          a_interpStencilOffsets[n] -= shift;
       }
       
-      const RealVect& dx_src = src_coord_sys->getMappedCellSize();
+      const RealVect& dx_src = a_src_coord_sys.getMappedCellSize();
 
       RealVect xiSrc_lo_pol(a_xiSrc);
       xiSrc_lo_pol[POLOIDAL_DIR] -= 0.5 * dx_src[POLOIDAL_DIR];
-      RealVect X_lo_pol = src_coord_sys->realCoord(xiSrc_lo_pol);
+      RealVect X_lo_pol = a_src_coord_sys.realCoord(xiSrc_lo_pol);
       applyToroidalPeriodicity(X_lo_pol, a_side);
 
       RealVect xiSrc_hi_pol(a_xiSrc);
       xiSrc_hi_pol[POLOIDAL_DIR] += 0.5 * dx_src[POLOIDAL_DIR];
-      RealVect X_hi_pol = src_coord_sys->realCoord(xiSrc_hi_pol);
+      RealVect X_hi_pol = a_src_coord_sys.realCoord(xiSrc_hi_pol);
       applyToroidalPeriodicity(X_hi_pol, a_side);
 
-      RealVect xi_dst_bnd(xi_dst);
-      xi_dst_bnd[POLOIDAL_DIR] = dst_coord_sys->upperMappedCoordinate(POLOIDAL_DIR);
-      RealVect X_dst_bnd = dst_coord_sys->realCoord(xi_dst_bnd);
+      RealVect xi_dst_bnd(a_xiDst);
+      xi_dst_bnd[POLOIDAL_DIR] = a_dst_coord_sys.upperMappedCoordinate(POLOIDAL_DIR);
+      RealVect X_dst_bnd = a_dst_coord_sys.realCoord(xi_dst_bnd);
 
       RealVect X_hi_to_lo(X_hi_pol);
       X_hi_to_lo -= X_lo_pol;
@@ -3326,46 +3386,7 @@ SingleNullCoordSys::toroidalBlockRemapping( IntVect&               a_ivDst,
       int stenc_size = a_interpStecil.size();
       a_interpStecil[stenc_size-1] = tooth_height_fac / X_hi_to_lo.radSquared();
    }
-
-   // We use currently three cells to interpolate;
-   // the interpolation error is h^3.
-   int order = 3;
-
-   if (m_interpolation_scheme == "mapped") {
-     getInterpolationCoefficients(a_interpStecil, a_interpStencilOffsets, xi_dst, a_ivDst, dx_dst, order);
-   }
-   else if (m_interpolation_scheme == "physical") {
-     getInterpolationCoefficients(a_interpStecil, a_interpStencilOffsets, X, a_ivDst, *dst_coord_sys);
-   }
-   else {
-     MayDay::Error("SingleNullCoordSys::toroidalBlockRemapping(): Invalid interpolation scheme type");
-   }
-
-#if 0
-   if ( a_ivDst[POLOIDAL_DIR] <= dst_domain_box.smallEnd(POLOIDAL_DIR) &&
-        containsPhysicalBoundary(a_nDst, POLOIDAL_DIR, Side::LoHiSide::Lo) ||
-        a_ivDst[POLOIDAL_DIR] >= dst_domain_box.bigEnd(POLOIDAL_DIR) &&
-        containsPhysicalBoundary(a_nDst, POLOIDAL_DIR, Side::LoHiSide::Hi) ) {
-      for (int n=0; n<a_interpStecil.size(); ++n) a_interpStecil[n] = 0.;
-   }
-#endif
-
-#if 0
-   if ( a_ivDst[POLOIDAL_DIR] <= dst_domain_box.smallEnd(POLOIDAL_DIR) &&
-        containsPhysicalBoundary(a_nDst, POLOIDAL_DIR, Side::LoHiSide::Lo) ) {
-      cout << a_ivDst[POLOIDAL_DIR] << " " << dst_domain_box.smallEnd(POLOIDAL_DIR) << " " << a_interpStencilOffsets[0] << " " << a_interpStencilOffsets[1] << " " << a_interpStencilOffsets[2] << endl;
-   }
-#endif
-
-#if 0
-   if ( a_ivDst[POLOIDAL_DIR] >= dst_domain_box.bigEnd(POLOIDAL_DIR) &&
-        containsPhysicalBoundary(a_nDst, POLOIDAL_DIR, Side::LoHiSide::Hi) ) {
-      cout << a_ivDst[POLOIDAL_DIR] << " " << dst_domain_box.bigEnd(POLOIDAL_DIR) << " " << a_interpStencilOffsets[0] << " " << a_interpStencilOffsets[1] << " " << a_interpStencilOffsets[2] << endl;
-   }
-#endif
-
 }
-
 
 void
 SingleNullCoordSys::getInterpolationCoefficients( Vector<Real>&    a_coeff,
@@ -3423,13 +3444,13 @@ SingleNullCoordSys::getInterpolationCoefficients( Vector<Real>&    a_coeff,
    a_coeff[2] = coeffHi;
 }
 
-
 void
-SingleNullCoordSys::getInterpolationCoefficients( Vector<Real>&                  a_coeff,
-                                                  Vector<int>&                   a_offsets,
-                                                  const RealVect&                a_X,
-                                                  const IntVect&                 a_iv0_dst,
-                                                  const SingleNullBlockCoordSys& a_coords_dst) const
+SingleNullCoordSys::getInterpolationCoefficients(Vector<Real>&                  a_coeff,
+                                                 Vector<int>&                   a_offsets,
+                                                 const RealVect&                a_X,
+                                                 const IntVect&                 a_iv0_dst,
+                                                 const SingleNullBlockCoordSys& a_coords_dst,
+                                                 const bool                     a_include_curvature) const
 
 {
    //Get physical coordinate of the dst cell-center
@@ -3444,48 +3465,92 @@ SingleNullCoordSys::getInterpolationCoefficients( Vector<Real>&                 
       }
    }
    RealVect X_cent = a_coords_dst.realCoord(xi_dest_cent);
-   Real R_cent = sqrt(X_cent[0]*X_cent[0] + X_cent[1]*X_cent[1]);
-   Real Z_cent = X_cent[2];
+   Real R2 = sqrt(X_cent[0]*X_cent[0] + X_cent[1]*X_cent[1]);
+   Real Z2 = X_cent[2];
 
    //Get physical coordinate of the hi cell-center
    RealVect xi_dest_hi(xi_dest_cent);
    xi_dest_hi[POLOIDAL_DIR] += dx[POLOIDAL_DIR];
    RealVect X_hi = a_coords_dst.realCoord(xi_dest_hi);
-   Real R_hi = sqrt(X_hi[0]*X_hi[0] + X_hi[1]*X_hi[1]);
-   Real Z_hi = X_hi[2];
+   Real R3 = sqrt(X_hi[0]*X_hi[0] + X_hi[1]*X_hi[1]);
+   Real Z3 = X_hi[2];
 
    //Get physical coordinate of the lo cell-center
    RealVect xi_dest_lo(xi_dest_cent);
    xi_dest_lo[POLOIDAL_DIR] -= dx[POLOIDAL_DIR];
    RealVect X_lo = a_coords_dst.realCoord(xi_dest_lo);
-   Real R_lo = sqrt(X_lo[0]*X_lo[0] + X_lo[1]*X_lo[1]);
-   Real Z_lo = X_lo[2];
+   Real R1 = sqrt(X_lo[0]*X_lo[0] + X_lo[1]*X_lo[1]);
+   Real Z1 = X_lo[2];
    
    //Get (R,Z) coordinate of the destination point
-   Real R_point = sqrt(a_X[0]*a_X[0] + a_X[1]*a_X[1]);
-   Real Z_point = a_X[2];
+   Real R = sqrt(a_X[0]*a_X[0] + a_X[1]*a_X[1]);
+   Real Z = a_X[2];
 
-   Real d0;
-   Real d1;
-   Real d2;
+   Real d0,d1,d2;
    
-   // Check if radial points are monotonically increasing/decreasing
-   if ((R_hi - R_cent)*(R_cent - R_lo) > 0 && abs(R_hi-R_lo)>abs(Z_hi-Z_lo)) {
-      d0 = R_lo - R_point;
-      d1 = R_cent - R_point;
-      d2 = R_hi - R_point;
-   }
-   // else use Z points
-   else if ( (Z_hi - Z_cent)*(Z_cent - Z_lo) > 0 && abs(Z_hi-Z_lo)>abs(R_hi-R_lo)) {
-      d0 = Z_lo - Z_point;
-      d1 = Z_cent - Z_point;
-      d2 = Z_hi - Z_point;
-   }
+   bool use_no_curvature_approach(false);
+
+   //Introduce this parameter to avoid NaNs due to machine precision
+   double tol = 1.0e-7;
    
-   else {
-      MayDay::Error("getInterpolationCoefficients:: flux-surface appears to be too curved");
+   if (a_include_curvature) {
+
+     //Get the origin (R0,Z0), and the radius (rad)
+     //of a circle that goes through {1,2,3}={lo,cent,hi} points
+     Real R0 = (R3*R3*(Z1-Z2)+(R1*R1+(Z1-Z2)*(Z1-Z3))*(Z2-Z3)+R2*R2*(-Z1+Z3))/(2*(R3*(Z1-Z2)+R1*(Z2-Z3)+R2*(-Z1+Z3)));
+     Real Z0 = (-R2*R2*R3+R1*R1*(-R2+R3)+R3*(Z1-Z2)*(Z1+Z2)+R1*(R2*R2-R3*R3+Z2*Z2-Z3*Z3)+R2*(R3*R3-Z1*Z1+Z3*Z3))/(2*(R3*(Z1-Z2)+R1*(Z2-Z3)+R2*(-Z1+Z3)));
+     Real rad = sqrt(((pow(R1-R2,2)+pow(Z1-Z2,2))*(pow(R1-R3,2)+pow(Z1-Z3,2))*(pow(R2-R3,2)+pow(Z2-Z3,2)))/(4*pow(R3*(-Z1+Z2)+R2*(Z1-Z3)+R1*(-Z2+Z3),2)));
+     
+     //Get vector lengths 
+     Real length_hi   = sqrt(pow(R3-R0,2)+pow(Z3-Z0,2));
+     Real length_cent = sqrt(pow(R2-R0,2)+pow(Z2-Z0,2));
+     Real length_lo   = sqrt(pow(R1-R0,2)+pow(Z1-Z0,2));
+     Real length      = sqrt(pow(R-R0,2)+pow(Z-Z0,2));
+
+     //Get polar angle for hi and lo points
+     Real alpha_hi = acos(((R3-R0)*(R2-R0)+(Z3-Z0)*(Z2-Z0))/(length_hi*length_cent));
+     Real alpha_lo = -acos(((R1-R0)*(R2-R0)+(Z1-Z0)*(Z2-Z0))/(length_lo*length_cent));
+
+     //Determine the angle for the destination point
+     Real sign;
+     if (alpha_hi - alpha_lo < Pi) {
+       sign = ((R-R2)*(R3-R2)+(Z-Z2)*(Z3-Z2)>0) ? 1.0 : -1.0;
+     }
+     else {
+       sign = ((R-R2)*(R3-R0)+(Z-Z2)*(Z3-Z0)>0) ? 1.0 : -1.0;
+     }
+
+     Real cosine = ((R-R0)*(R2-R0)+(Z-Z0)*(Z2-Z0))/(length*length_cent);
+     Real alpha = (1-cosine > tol) ? sign * acos(cosine) : 0.0;
+
+     d0 = alpha_lo-alpha;
+     d1 = -alpha;
+     d2 = alpha_hi-alpha;
+
+     //Check to see if the points are nearly colinear (rad of curvature is large)
+     if (abs(d0-d1)<tol || abs(d0-d2)<tol || abs(d2-d1)<tol) use_no_curvature_approach = true;
    }
-   
+
+   if (!a_include_curvature || use_no_curvature_approach) {
+
+     // Check if radial points are monotonically increasing/decreasing                                                                                       
+     if ((R3 - R2)*(R2 - R1) > 0 && abs(R3-R1)>abs(Z3-Z1)) {
+       d0 = R1 - R;
+       d1 = R2 - R;
+       d2 = R3 - R;
+     }
+     // else use Z points
+     else if ( (Z3 - Z2)*(Z2 - Z1) > 0 && abs(Z3-Z1)>abs(R3-R1)) {
+       d0 = Z1 - Z;
+       d1 = Z2 - Z;
+       d2 = Z3 - Z;
+     }
+
+     else {
+       MayDay::Error("getInterpolationCoefficients:: flux-surface appears to be too curved");
+     }
+   }
+
    //Get inerpolation coefficients
    Real coeffLo = d1*d2/(d0-d1)/(d0-d2);
    Real coeffCent = d2*d0/(d1-d2)/(d1-d0);
@@ -3499,7 +3564,7 @@ SingleNullCoordSys::getInterpolationCoefficients( Vector<Real>&                 
 
 void
 SingleNullCoordSys::applyToroidalPeriodicity(RealVect& a_x,
-					     const Side::LoHiSide&  a_side) const
+                                             const Side::LoHiSide&  a_side) const
 {
 
   double phi_max = m_toroidal_width;
@@ -3528,11 +3593,11 @@ SingleNullCoordSys::applyToroidalPeriodicity(RealVect& a_x,
 
 Real
 SingleNullCoordSys::getInterpMappedPoloidalCoord(const RealVect& a_X,
-						 const RealVect& a_X_dst_pol_cent,
-						 const RealVect& a_X_dst_pol_hi,
-						 const RealVect& a_X_dst_pol_lo,
-						 const RealVect& a_xi_dst_cent,
-						 const RealVect& a_dx) const
+                                                 const RealVect& a_X_dst_pol_cent,
+                                                 const RealVect& a_X_dst_pol_hi,
+                                                 const RealVect& a_X_dst_pol_lo,
+                                                 const RealVect& a_xi_dst_cent,
+                                                 const RealVect& a_dx) const
 {
   /*
     This function assumes that all vectors lie in the same toroidal plane
@@ -3576,6 +3641,143 @@ SingleNullCoordSys::getInterpMappedPoloidalCoord(const RealVect& a_X,
   }
 
   return result;
+}
+
+void
+SingleNullCoordSys::runMappingDiagnostics(const RealVect&                  a_xiSrc,
+                                          const IntVect&                   a_ivDst,
+					  const int                        a_nDst,
+                                          const SingleNullBlockCoordSys&   a_coords_dst,
+                                          const SingleNullBlockCoordSys&   a_coords_src,
+                                          const Side::LoHiSide&            a_side) const
+{
+
+  /*
+    Attempt to measure twist and shear of the mapping
+   */
+  
+   const RealVect& dx_src = a_coords_dst.getMappedCellSize();
+   const RealVect& dx_dst = a_coords_src.getMappedCellSize();
+   
+   //Get physical coordinate of the NW src cell corner
+   //NB: in principle, we don't have to apply toroidal periodicty here
+   //because we only compare poloidal coordinates, but do it anyways
+   RealVect xiSrc_NW(a_xiSrc);
+   xiSrc_NW[RADIAL_DIR] += -0.5 * dx_src[RADIAL_DIR];
+   xiSrc_NW[POLOIDAL_DIR] += 0.5 * dx_src[POLOIDAL_DIR];
+   RealVect xSrc_NW = a_coords_src.realCoord(xiSrc_NW);
+   applyToroidalPeriodicity(xSrc_NW, a_side);
+   Real R_NW = sqrt(xSrc_NW[0]*xSrc_NW[0] + xSrc_NW[1]*xSrc_NW[1]);
+   Real Z_NW = xSrc_NW[2];
+
+   //Get the real coord of the SE src cell corner
+   RealVect xiSrc_SE(a_xiSrc);
+   xiSrc_SE[RADIAL_DIR] += 0.5 * dx_src[RADIAL_DIR];
+   xiSrc_SE[POLOIDAL_DIR] += -0.5 * dx_src[POLOIDAL_DIR];
+   RealVect xSrc_SE = a_coords_src.realCoord(xiSrc_SE);
+   applyToroidalPeriodicity(xSrc_SE, a_side);
+   Real R_SE = sqrt(xSrc_SE[0]*xSrc_SE[0] + xSrc_SE[1]*xSrc_SE[1]);
+   Real Z_SE = xSrc_SE[2];
+   
+   //Get physical coordinate of the dst cell-center
+   RealVect xi_dest_cent;
+   for (int dir=0; dir<SpaceDim; ++dir) {
+       xi_dest_cent[dir] = (a_ivDst[dir] + 0.5) * dx_dst[dir];
+   }
+   
+   //Measure shear at NW corner by comparing the distances between
+   //the center of the West face of the dst cell to the NW corner of the src cell and
+   //the center of the West face of the dst cell to the NW corner of the neighboring dst cell
+   RealVect xi_dest_centW(xi_dest_cent);
+   xi_dest_centW[RADIAL_DIR] -= 0.5*dx_dst[RADIAL_DIR];
+   RealVect X_dest_centW = a_coords_dst.realCoord(xi_dest_centW);
+   Real R_dest_centW = sqrt(X_dest_centW[0]*X_dest_centW[0] + X_dest_centW[1]*X_dest_centW[1]);
+   Real Z_dest_centW = X_dest_centW[2];
+
+   RealVect xi_dest_hiW(xi_dest_cent);
+   xi_dest_hiW[POLOIDAL_DIR] += 1.5*dx_dst[POLOIDAL_DIR];
+   xi_dest_hiW[RADIAL_DIR] -= 0.5*dx_dst[RADIAL_DIR];
+   RealVect X_dest_hiW = a_coords_dst.realCoord(xi_dest_hiW);
+   Real R_dest_hiW = sqrt(X_dest_hiW[0]*X_dest_hiW[0] + X_dest_hiW[1]*X_dest_hiW[1]);
+   Real Z_dest_hiW = X_dest_hiW[2];
+   
+   Real distance_dst_cell_hi = sqrt(pow(R_dest_hiW-R_dest_centW,2)+pow(Z_dest_hiW-Z_dest_centW,2));
+   Real distance_src_hi = sqrt(pow(R_NW-R_dest_centW,2)+pow(Z_NW-Z_dest_centW,2));
+   
+   if (distance_src_hi > distance_dst_cell_hi) {
+     Real ratio = distance_src_hi / distance_dst_cell_hi;
+     cout<<"NW shear measure = "<<ratio<<" at iv = "<<a_ivDst<<" block id = "<<a_nDst<<endl;
+   }
+   
+   //Measure shear at  corner by comparing the distances between                                                                                           
+   //the center of the East face of the dst cell to the SE corner of the src cell and                                                                         
+   //the center of the East face of the dst cell to the SE corner of the neighboring dst cell
+   RealVect xi_dest_centE(xi_dest_cent);
+   xi_dest_centE[RADIAL_DIR] += 0.5*dx_dst[RADIAL_DIR];
+   RealVect X_dest_centE = a_coords_dst.realCoord(xi_dest_centE);
+   Real R_dest_centE = sqrt(X_dest_centE[0]*X_dest_centE[0] + X_dest_centE[1]*X_dest_centE[1]);
+   Real Z_dest_centE = X_dest_centE[2];
+
+   RealVect xi_dest_loE(xi_dest_cent);
+   xi_dest_loE[POLOIDAL_DIR] -= 1.5*dx_dst[POLOIDAL_DIR];
+   xi_dest_loE[RADIAL_DIR] += 0.5*dx_dst[RADIAL_DIR];
+   RealVect X_dest_loE = a_coords_dst.realCoord(xi_dest_loE);
+   Real R_dest_loE = sqrt(X_dest_loE[0]*X_dest_loE[0] + X_dest_loE[1]*X_dest_loE[1]);
+   Real Z_dest_loE = X_dest_loE[2];
+   
+   //These "distance" quantites are the vector products without division by the vector lenghts
+   //(assuming the vector lenghts are all close to the radius of curvature)
+   Real distance_dst_cell_lo = sqrt(pow(R_dest_loE-R_dest_centE,2)+pow(Z_dest_loE-Z_dest_centE,2));
+   Real distance_src_lo = sqrt(pow(R_SE-R_dest_centE,2)+pow(Z_SE-Z_dest_centE,2));
+   
+   if (distance_src_lo > distance_dst_cell_lo) {
+     Real ratio = distance_src_lo / distance_dst_cell_lo;
+     cout<<"SE shear measure = "<<ratio<<" at iv = "<<a_ivDst<<" block id = "<<a_nDst<<endl;
+   }
+   
+}
+
+void
+SingleNullCoordSys::testClosestCenterSearch(const IntVect&  a_ivDst,
+                                            const RealVect& a_xi_dst_cent,
+                                            const int       a_dst_block_num,
+                                            const RealVect& a_dx) const
+{
+   /*
+    If the point was too close to a face, the interpolated mapped
+    coordinate can be placed in a different cell that as predicted
+    by the closestCellCenter search. We test it here. NB: we need
+    to exclude obvious failures related to the sawtooth boundary.
+    */
+      
+   IntVect iv_test;
+   for (int dir=0; dir<SpaceDim; ++dir) {
+     iv_test[dir] = floor(a_xi_dst_cent[dir]/a_dx[dir]);
+   }
+
+   const SingleNullBlockCoordSys* coord_sys = (SingleNullBlockCoordSys*)getCoordSys(a_dst_block_num);
+   const ProblemDomain& domain = coord_sys->domain();
+   const Box& domain_box = domain.domainBox();
+
+   int poloidal_block = poloidalBlockNumber(a_dst_block_num);
+   
+   bool sawtooth_region(false);
+   
+   if ((poloidal_block == SingleNullBlockCoordSys::RPF ||
+       poloidal_block == SingleNullBlockCoordSys::RSOL) &&
+       iv_test[POLOIDAL_DIR] == domain_box.smallEnd(POLOIDAL_DIR)) {
+      sawtooth_region = true;
+   }
+
+   if ((poloidal_block == SingleNullBlockCoordSys::LPF ||
+       poloidal_block == SingleNullBlockCoordSys::LSOL) &&
+       iv_test[POLOIDAL_DIR] == domain_box.bigEnd(POLOIDAL_DIR)) {
+      sawtooth_region = true;
+   }
+
+   if (a_ivDst != iv_test && !sawtooth_region) {
+     cout<<"closest center search failed for iv="<<iv_test<<" in poloidal block="<<poloidal_block<<endl;
+   }
 }
 
 #endif

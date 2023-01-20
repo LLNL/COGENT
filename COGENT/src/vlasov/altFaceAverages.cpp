@@ -111,6 +111,12 @@ AltFaceAverages::computeFaceAverages(LevelData<FluxBox>&         a_face_phi,
                                CHF_BOX( face_box ),
                                CHF_CONST_INT( dir ) );
          }
+         else if (a_method == "c2") {
+            FORT_C2FACEVALUES(CHF_FRA( this_face_phi_dir ),
+                               CHF_CONST_FRA( this_cell_phi ),
+                               CHF_BOX( face_box ),
+                               CHF_CONST_INT( dir ) );
+         }
          else if (a_method == "weno5") {
             FORT_WENO5FACEVALUES(CHF_FRA( this_face_phi_dir ),
                                CHF_CONST_FRA( this_cell_phi ),

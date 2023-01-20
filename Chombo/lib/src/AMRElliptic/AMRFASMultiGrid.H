@@ -59,6 +59,12 @@ public:
   // Number of multigrid iterations taken
   int m_iter;
 
+  // initial rnorm
+  Real m_initial_rnorm;
+
+  // current rnorm
+  Real m_rnorm;
+  
 private:
   virtual void FMG(Vector<T*>& a_phi,
                    const Vector<T*>& a_rhs,
@@ -225,39 +231,39 @@ void AMRFASMultiGrid<T>::solveNoInit( Vector<T*>& a_phi,
         this->m_op[ilev]->setToZero(*(a_phi[ilev]));
       }
 
-  Real initial_rnorm = 0;
+  m_initial_rnorm = 0;
   if ( !m_avoid_norms )
     {
       CH_TIME("Initial AMR Residual");
-      initial_rnorm = this->computeAMRResidual( a_phi, a_rhs, l_max, l_base );
+      m_initial_rnorm = this->computeAMRResidual( a_phi, a_rhs, l_max, l_base );
     }
 
   if (this->m_convergenceMetric != 0.)
     {
-      initial_rnorm = this->m_convergenceMetric;
+      m_initial_rnorm = this->m_convergenceMetric;
     }
 
   // set bottom solver convergence norm and solver tolerance
-  this->m_bottomSolver->setConvergenceMetrics(initial_rnorm, this->m_bottomSolverEpsCushion*this->m_eps);
+  this->m_bottomSolver->setConvergenceMetrics(m_initial_rnorm, this->m_bottomSolverEpsCushion*this->m_eps);
 
-  Real rnorm = initial_rnorm;
-  Real norm_last = 2*initial_rnorm;
+  m_rnorm = m_initial_rnorm;
+  Real norm_last = 2*m_initial_rnorm;
 
   int iter=0;
   if (this->m_verbosity >= 2 && !m_avoid_norms )
     {
     // indentation in the output is to ensure that the :: lines up with the output from AMRMultigrid
-      pout() << " AMRFASMultiGrid:: iteration = " << iter << ", residual norm = " << rnorm << std::endl;
+      pout() << " AMRFASMultiGrid:: iteration = " << iter << ", residual norm = " << m_rnorm << std::endl;
     }
 
-  bool goNorm = rnorm > this->m_normThresh || m_avoid_norms;       //iterate if norm is not small enough
-  bool goRedu = rnorm > this->m_eps*initial_rnorm || m_avoid_norms;//iterate if initial norm is not reduced enough
+  bool goNorm = m_rnorm > this->m_normThresh || m_avoid_norms;       //iterate if norm is not small enough
+  bool goRedu = m_rnorm > this->m_eps*m_initial_rnorm || m_avoid_norms;//iterate if initial norm is not reduced enough
   bool goIter = iter < this->m_iterMax;                            //iterate if iter < max iteration count
-  bool goHang = iter < this->m_imin || rnorm <(1-this->m_hang)*norm_last; //iterate if we didn't hang
+  bool goHang = iter < this->m_imin || m_rnorm <(1-this->m_hang)*norm_last; //iterate if we didn't hang
   bool goMin = iter < this->m_iterMin ; // iterate if iter < min
   while (goMin || (goIter && goRedu && goHang && goNorm))
     {
-      norm_last = rnorm;
+      norm_last = m_rnorm;
 
       //this generates a correction from the current residual
       CH_START(vtimer);
@@ -302,21 +308,21 @@ void AMRFASMultiGrid<T>::solveNoInit( Vector<T*>& a_phi,
       iter++;
       if ( !m_avoid_norms )
         {
-          rnorm = this->computeAMRResidual( a_phi, a_rhs, l_max, l_base );
+          m_rnorm = this->computeAMRResidual( a_phi, a_rhs, l_max, l_base );
 
           if (this->m_verbosity >= 2)
             {
-              pout() << " AMRFASMultiGrid:: iteration = " << iter << ", residual norm = " << rnorm;
-              if (rnorm > 0.0)
+              pout() << " AMRFASMultiGrid:: iteration = " << iter << ", residual norm = " << m_rnorm;
+              if (m_rnorm > 0.0)
                 {
-                  pout() << ", rate = " << norm_last/rnorm;
+                  pout() << ", rate = " << norm_last/m_rnorm;
                 }
               pout() << std::endl;
             }
 
-          goNorm = rnorm > this->m_normThresh;                        //keep iterating if norm is not small enough
-          goRedu = rnorm > this->m_eps*initial_rnorm;                 //keep iterating if initial norm is not reduced enough
-          goHang = iter < this->m_imin || rnorm <(1-this->m_hang)*norm_last;//keep iterating if we didn't hang
+          goNorm = m_rnorm > this->m_normThresh;                        //keep iterating if norm is not small enough
+          goRedu = m_rnorm > this->m_eps*m_initial_rnorm;                 //keep iterating if initial norm is not reduced enough
+          goHang = iter < this->m_imin || m_rnorm <(1-this->m_hang)*norm_last;//keep iterating if we didn't hang
         }
       goIter = iter < this->m_iterMax;                            //keep iterating if iter < max iteration count
       goMin = iter < this->m_iterMin ; // keep iterating if iter < min
@@ -325,7 +331,7 @@ void AMRFASMultiGrid<T>::solveNoInit( Vector<T*>& a_phi,
   this->m_exitStatus = int(!goRedu) + int(!goIter)*2 + int(!goHang)*4 + int(!goNorm)*8;
   if (this->m_verbosity >= 2 && !m_avoid_norms)
     {
-      pout() << "    AMRFASMultiGrid:: iteration = " << iter << ", residual norm = " << rnorm << std::endl;
+      pout() << "    AMRFASMultiGrid:: iteration = " << iter << ", residual norm = " << m_rnorm << std::endl;
     }
   if (this->m_verbosity > 1)
     {
@@ -507,10 +513,10 @@ this->m_op[ilev-1]->write(this->m_residual[ilev-1],"zf_coarse_res_1.hdf5");
 #endif
 
       // Compute the tau correction on the covered region, L_c (R(u_f)), and put it in m_correction[ilev-1]
-       // Do not pass in fine level here - we've already done refluxing
-//      this->m_op[ilev-1]->AMROperatorNC( *(this->m_correction[ilev-1]), *(a_phi[ilev]), *(a_phi[ilev-1]), true, this->m_op[ilev]);
+      // Do not pass in fine level here - we've already done refluxing
+      //      this->m_op[ilev-1]->AMROperatorNC( *(this->m_correction[ilev-1]), *(a_phi[ilev]), *(a_phi[ilev-1]), true, this->m_op[ilev]);
       T undefined;
-      this->m_op[ilev-1]->AMROperatorNC( *(this->m_correction[ilev-1]), undefined, *(a_phi[ilev-1]), true, this->m_op[ilev]);
+      this->m_op[ilev-1]->AMROperatorNC( *(this->m_correction[ilev-1]), undefined, *(a_phi[ilev-1]), false, this->m_op[ilev]);
 
 #ifdef FAS_PRINT
 this->m_op[ilev-1]->write(this->m_correction[ilev-1],"zf_coarse_Lu.hdf5");

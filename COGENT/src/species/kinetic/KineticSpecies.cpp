@@ -78,126 +78,173 @@ void KineticSpecies::gyroaveragedChargeDensity( CFG::LevelData<CFG::FArrayBox>& 
 }
 
 
-void KineticSpecies::momentumDensity( CFG::LevelData<CFG::FArrayBox>& a_momentum,
-				      const LevelData<FluxBox>& a_field,
-				      const double larmor  ) const
+void KineticSpecies::fluidVelocity(CFG::LevelData<CFG::FArrayBox>& a_velocity,
+                                   const LevelData<FluxBox>& a_field,
+                                   const CFG::EMFields&      a_EM_fields,
+                                   const LevelData<FluxBox>& a_Apar_derivatives,
+                                   const double larmor  ) const
 {
+   /*
+      Computes Vfluid = V_gc + c/qn * curl (M * b)
+      M = int( -mu * dfn * d^3v) is the magnetization
+      make use of curl (M * b) = M*curlb + gradM x b
+    
+      This function returns R Phi Z components in 2D
+      and X, Y, Z components in 3D
+    */
+   
+   CH_assert(a_velocity.nComp() == 3);
+   
    const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
 
-   CFG::LevelData<CFG::FArrayBox> guidingCenterMom;
-   guidingCenterMom.define(a_momentum); 
-   m_moment_op.compute( guidingCenterMom, *this, MomentumDensityKernel<FArrayBox>(a_field) );
-  
+   CFG::LevelData<CFG::FArrayBox> gc_particle_flux;
+   gc_particle_flux.define(a_velocity);
 
-   CFG::LevelData<CFG::FArrayBox> magnetization(a_momentum.disjointBoxLayout(), 1, a_momentum.ghostVect());
+#if CFG_DIM == 2
+   CFG::LevelData<CFG::FArrayBox> gc_flow_rz(a_velocity.disjointBoxLayout(), 2, a_velocity.ghostVect());
+   m_moment_op.compute( gc_flow_rz,
+                       *this,
+                        GuidingCenterVelocityKernel<FArrayBox>(a_field, a_EM_fields, a_Apar_derivatives, PhaseGeom::DIAGNOSTICS) );
+
+   CFG::LevelData<CFG::FArrayBox> gc_flow_phi(a_velocity.disjointBoxLayout(), 2, a_velocity.ghostVect());
+   m_moment_op.compute( gc_flow_phi,
+                       *this,
+                        GuidingCenterVelocityKernel<FArrayBox>(a_field, a_EM_fields, a_Apar_derivatives, PhaseGeom::TOROIDAL_VELOCITY) );
+   
+   for (CFG::DataIterator dit(gc_particle_flux.dataIterator()); dit.ok(); ++dit) {
+      gc_particle_flux[dit].copy(gc_flow_rz[dit],0,0,1);
+      gc_particle_flux[dit].copy(gc_flow_phi[dit],0,1,1);
+      gc_particle_flux[dit].copy(gc_flow_rz[dit],1,2,1);
+   }
+#else
+   m_moment_op.compute( gc_particle_flux, *this,
+                        GuidingCenterVelocityKernel<FArrayBox>(a_field, a_EM_fields, a_Apar_derivatives, PhaseGeom::DIAGNOSTICS) );
+#endif
+   
+   // Compute magnetization M
+   CFG::LevelData<CFG::FArrayBox> magnetization(a_velocity.disjointBoxLayout(), 1,
+                                                a_velocity.ghostVect());
    m_moment_op.compute( magnetization, *this, MagnetizationKernel<FArrayBox>() );
 
-   CFG::LevelData<CFG::FArrayBox> magnetization_grown(a_momentum.disjointBoxLayout(), 1, a_momentum.ghostVect()+2*CFG::IntVect::Unit);
-   
-   //Extrapolating magnetization moment into the two layers of ghost cells
+   CFG::LevelData<CFG::FArrayBox> magnetization_grown(a_velocity.disjointBoxLayout(), 1,
+                                                      a_velocity.ghostVect()+2*CFG::IntVect::Unit);
+
+   // Extrapolate to physical ghosts
    for (CFG::DataIterator dit(magnetization.dataIterator()); dit.ok(); ++dit) {
-     int block_number( coords.whichBlock( mag_geom.gridsFull()[dit] ) );
-     const CFG::MagBlockCoordSys& block_coord_sys = (const CFG::MagBlockCoordSys&)(*(coords.getCoordSys(block_number)));
-     const CFG::ProblemDomain& block_domain = block_coord_sys.domain();
      magnetization_grown[dit].copy(magnetization[dit]);
-     fourthOrderCellExtrapAtDomainBdry(magnetization_grown[dit], block_domain, mag_geom.gridsFull()[dit]);
    }
    mag_geom.fillInternalGhosts(magnetization_grown);
+
+   int order = 2;
+   int nghosts = 2;
+   mag_geom.extrapolateAtPhysicalBoundaries(magnetization_grown, order, nghosts);
    
-   //Compute radial component of the magnetization gradient (part of curlM calculation)
-   CFG::LevelData<CFG::FArrayBox> gradM_mapped(a_momentum.disjointBoxLayout(), CFG_DIM,
-                                               a_momentum.ghostVect()+CFG::IntVect::Unit);
-  
-   mag_geom.computeMappedPoloidalGradientWithGhosts(magnetization_grown,gradM_mapped,2);
+   // Compute magnetization gradient, gradM
+   CFG::LevelData<CFG::FArrayBox> gradM_mapped(a_velocity.disjointBoxLayout(), 3,
+                                               a_velocity.ghostVect()+CFG::IntVect::Unit);
    
-   CFG::LevelData<CFG::FArrayBox> gradM_phys;
-   gradM_phys.define(gradM_mapped);
-   mag_geom.unmapPoloidalGradient(gradM_mapped, gradM_phys);
+#if CFG_DIM == 2
+   CFG::LevelData<CFG::FArrayBox> gradM_mapped_poloidal(a_velocity.disjointBoxLayout(), 2,
+                                               a_velocity.ghostVect()+CFG::IntVect::Unit);
    
-   //Get magnetic geometry data
+   mag_geom.computeMappedGradient(magnetization_grown, gradM_mapped_poloidal, order);
+   mag_geom.injectPoloidalVector(gradM_mapped_poloidal, gradM_mapped);
+   
+#else
+   mag_geom.computeMappedGradient(magnetization_grown, gradM_mapped, order);
+#endif
+
+   CFG::LevelData<CFG::FArrayBox> gradM_phys(a_velocity.disjointBoxLayout(), 3,
+                                             a_velocity.ghostVect()+CFG::IntVect::Unit);
+   
+   mag_geom.unmapGradient(gradM_mapped, gradM_phys);
+   
+   // Get magnetic geometry data
    const CFG::LevelData<CFG::FArrayBox>& bunit = mag_geom.getCCBFieldDir();
    const CFG::LevelData<CFG::FArrayBox>& curlb = mag_geom.getCCCurlBFieldDir();
 
-   double fac = larmor / 2.0 / m_charge;
-
-   CFG::LevelData<CFG::FArrayBox> Mcurlb;
-   Mcurlb.define(a_momentum);
-   CFG::LevelData<CFG::FArrayBox> bxgradM;
-   bxgradM.define(a_momentum);
-
-   for (CFG::DataIterator dit(a_momentum.dataIterator()); dit.ok(); ++dit) {
-      
-     //Compute M*curl(b) term
-     Mcurlb[dit].copy(magnetization[dit],0,0,1);
-     Mcurlb[dit].copy(magnetization[dit],0,1,1);
-     Mcurlb[dit].mult(curlb[dit],0,0,1);
-     Mcurlb[dit].mult(curlb[dit],2,1,1);
-     Mcurlb[dit].mult(fac);
-
-     //Compute b x gradM term
-     bxgradM[dit].copy(gradM_phys[dit],1,0,1);
-     bxgradM[dit].mult(bunit[dit],1,0,1);
-     bxgradM[dit].mult(-1.0,0,1);
-
-     bxgradM[dit].copy(gradM_phys[dit],0,1,1);
-     bxgradM[dit].mult(bunit[dit],1,1,1);
-
-     bxgradM[dit].mult(fac);
- 
-     //Add the poloidal component of the guiding center velocity and the curl of magnetization
-     a_momentum[dit].copy(guidingCenterMom[dit],0,0,CFG_DIM);
-     a_momentum[dit].plus(Mcurlb[dit],0,0,CFG_DIM);
-     a_momentum[dit].plus(bxgradM[dit],0,0,CFG_DIM);
-   }
-
-
-
-}
-
-void KineticSpecies::ParallelMomentum( CFG::LevelData<CFG::FArrayBox>& a_ParallelMom ) const
-{
-   m_moment_op.compute( a_ParallelMom, *this, ParallelMomKernel<FArrayBox>() );
-}
-
-void KineticSpecies::ParallelVelocity( CFG::LevelData<CFG::FArrayBox>& a_ParallelVel ) const
-{
-   //const CFG::MagGeom& mag_geom = m_geometry->magGeom();
+   // Create objects to store gradMxb and Mcurlb
+   CFG::LevelData<CFG::FArrayBox> gradMxb(a_velocity.disjointBoxLayout(), 3, a_velocity.ghostVect());
+   CFG::LevelData<CFG::FArrayBox> Mcurlb(a_velocity.disjointBoxLayout(), 3, a_velocity.ghostVect());
    
-   CFG::LevelData<CFG::FArrayBox> density;
-   density.define(a_ParallelVel);
+   // Compute gradM x b
+   mag_geom.crossProduct(gradMxb, gradM_phys, bunit);
+   
+   // Compute n*Vflow
+   for (CFG::DataIterator dit(a_velocity.dataIterator()); dit.ok(); ++dit) {
+
+      // Compute M*curlb
+      for (int nComp=0; nComp<3; ++nComp) {
+         Mcurlb[dit].copy(magnetization[dit],0,nComp,1);
+         Mcurlb[dit].mult(curlb[dit],nComp,nComp,1);
+      }
+      
+      // Perform normalization
+      double fac = larmor / 2.0 / m_charge;
+      gradMxb[dit].mult(fac);
+      Mcurlb[dit].mult(fac);
+      
+      // Collect all terms
+      a_velocity[dit].copy(gc_particle_flux[dit],0,0,3);
+      a_velocity[dit].plus(Mcurlb[dit],0,0,3);
+      a_velocity[dit].plus(gradMxb[dit],0,0,3);
+   }
+   
+   // Divide by density to get the flow velocity
+   CFG::LevelData<CFG::FArrayBox> density(a_velocity.disjointBoxLayout(), 1,
+                                          a_velocity.ghostVect());
    m_moment_op.compute( density, *this, DensityKernel<FArrayBox>() );
 
-   m_moment_op.compute( a_ParallelVel, *this, ParallelMomKernel<FArrayBox>() );
-
-// Note that ParallelMomKernel is actually the Number Density Flux (not the Mass Density)
    for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
-      a_ParallelVel[dit].divide(density[dit]);
+      for (int nComp=0; nComp<3; ++nComp) {
+         a_velocity[dit].divide(density[dit], 0, nComp, 1);
+      }
+   }
+}
+
+void KineticSpecies::parallelVelocity( CFG::LevelData<CFG::FArrayBox>& a_parallel_vel ) const
+{
+   CFG::LevelData<CFG::FArrayBox> density;
+   density.define(a_parallel_vel);
+   m_moment_op.compute( density, *this, DensityKernel<FArrayBox>() );
+
+   m_moment_op.compute( a_parallel_vel, *this, ParallelVelKernel<FArrayBox>() );
+
+   for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
+      a_parallel_vel[dit].divide(density[dit]);
    }
 }
 
 
-void KineticSpecies::PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& a_PoloidalMom,
-                                       const LevelData<FluxBox>& a_field,
-                                       const double a_larmor  ) const
+void KineticSpecies::parallelParticleFlux( CFG::LevelData<CFG::FArrayBox>& a_particle_flux ) const
+{
+   m_moment_op.compute( a_particle_flux, *this, ParallelVelKernel<FArrayBox>() );
+}
+
+void KineticSpecies::poloidalParticleFlux(CFG::LevelData<CFG::FArrayBox>& a_particle_flux,
+                                          const LevelData<FluxBox>& a_field,
+                                          const CFG::EMFields&      a_EM_fields,
+                                          const LevelData<FluxBox>& a_Apar_derivatives,
+                                          const double a_larmor  ) const
 {
 
 
    const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
 
-   CFG::LevelData<CFG::FArrayBox> guidingCenterPoloidalMom;
-   guidingCenterPoloidalMom.define(a_PoloidalMom); 
-   m_moment_op.compute( guidingCenterPoloidalMom, *this, GuidingCenterPoloidalMomKernel<FArrayBox>(a_field) );
+   CFG::LevelData<CFG::FArrayBox> gc_particle_flux;
+   gc_particle_flux.define(a_particle_flux);
+   m_moment_op.compute( gc_particle_flux, *this, GuidingCenterPoloidalVelKernel<FArrayBox>(a_field, a_EM_fields, a_Apar_derivatives) );
    
    CFG::LevelData<CFG::FArrayBox> magnetization;
-   magnetization.define(a_PoloidalMom);
+   magnetization.define(a_particle_flux);
    m_moment_op.compute( magnetization, *this, MagnetizationKernel<FArrayBox>() );
 
-   CFG::LevelData<CFG::FArrayBox> magnetization_grown(a_PoloidalMom.disjointBoxLayout(),1,
-                                                      a_PoloidalMom.ghostVect()+2*CFG::IntVect::Unit);
+   CFG::LevelData<CFG::FArrayBox> magnetization_grown(a_particle_flux.disjointBoxLayout(),1,
+                                                      a_particle_flux.ghostVect()+2*CFG::IntVect::Unit);
    
-   //Extrapolating magnetization moment into the two layers of ghost cells
+   //Extrapolating magnetization moment into two layers of ghost cells
    for (CFG::DataIterator dit(magnetization.dataIterator()); dit.ok(); ++dit) {
       int block_number( coords.whichBlock( mag_geom.gridsFull()[dit] ) );
       const CFG::MagBlockCoordSys& block_coord_sys = (const CFG::MagBlockCoordSys&)(*(coords.getCoordSys(block_number)));
@@ -208,8 +255,8 @@ void KineticSpecies::PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& a_Poloida
    mag_geom.fillInternalGhosts(magnetization_grown);
    
    //Compute radial component of the magnetization gradient (part of curlM calculation)
-   CFG::LevelData<CFG::FArrayBox> gradM_mapped(a_PoloidalMom.disjointBoxLayout(), 2,
-                                               a_PoloidalMom.ghostVect()+CFG::IntVect::Unit);
+   CFG::LevelData<CFG::FArrayBox> gradM_mapped(a_particle_flux.disjointBoxLayout(), 2,
+                                               a_particle_flux.ghostVect()+CFG::IntVect::Unit);
   
    mag_geom.computeMappedPoloidalGradientWithGhosts(magnetization_grown,gradM_mapped,2);
    
@@ -229,7 +276,7 @@ void KineticSpecies::PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& a_Poloida
    
    double fac = a_larmor / 2.0 / m_charge;
 
-   for (CFG::DataIterator dit(a_PoloidalMom.dataIterator()); dit.ok(); ++dit) {
+   for (CFG::DataIterator dit(a_particle_flux.dataIterator()); dit.ok(); ++dit) {
       
       //Compute curl of Magnetization vector
       curlb_pol[dit].mult(magnetization[dit]);
@@ -238,19 +285,20 @@ void KineticSpecies::PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& a_Poloida
       gradM_r[dit].mult(fac);
       
       //Add the poloidal component of the guiding center velocity and the curl of magnetization
-      a_PoloidalMom[dit].copy(guidingCenterPoloidalMom[dit]);
-      a_PoloidalMom[dit].plus(curlb_pol[dit]);
-      a_PoloidalMom[dit].plus(gradM_r[dit]);
+      a_particle_flux[dit].copy(gc_particle_flux[dit]);
+      a_particle_flux[dit].plus(curlb_pol[dit]);
+      a_particle_flux[dit].plus(gradM_r[dit]);
    }
-
-
 }
 
-void KineticSpecies::ParticleFlux( CFG::LevelData<CFG::FArrayBox>& a_ParticleFlux,
-                                   const LevelData<FluxBox>& field  ) const
+void KineticSpecies::radialParticleFlux(CFG::LevelData<CFG::FArrayBox>& a_particle_flux,
+                                        const LevelData<FluxBox>&       a_field,
+                                        const CFG::EMFields&            a_EM_fields,
+                                        const LevelData<FluxBox>&       a_Apar_derivatives,
+                                        const int                       a_velocity_option) const
 
 {
-   m_moment_op.compute( a_ParticleFlux, *this, ParticleFluxKernel<FArrayBox>(field) );
+   m_moment_op.compute( a_particle_flux, *this, RadialParticleFluxKernel<FArrayBox>(a_field, a_EM_fields, a_Apar_derivatives, a_velocity_option) );
 
    const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    CFG::FluxSurface flux_surface(mag_geom, false);
@@ -258,32 +306,35 @@ void KineticSpecies::ParticleFlux( CFG::LevelData<CFG::FArrayBox>& a_ParticleFlu
    CFG::LevelData<CFG::FArrayBox> particle_loc_tmp(mag_geom.grids(), 1, CFG::IntVect::Zero);
 
    // Get flux-surfaced averaged component
-   for (CFG::DataIterator dit(a_ParticleFlux.dataIterator()); dit.ok(); ++dit) {
-     particle_loc_tmp[dit].copy(a_ParticleFlux[dit], 0, 0, 1);
+   for (CFG::DataIterator dit(a_particle_flux.dataIterator()); dit.ok(); ++dit) {
+     particle_loc_tmp[dit].copy(a_particle_flux[dit], 0, 0, 1);
    }
    flux_surface.averageAndSpread(particle_loc_tmp, particle_flux_tmp);
    
-   for (CFG::DataIterator dit(a_ParticleFlux.dataIterator()); dit.ok(); ++dit) {
-     a_ParticleFlux[dit].copy(particle_flux_tmp[dit], 0, 0, 1);
+   for (CFG::DataIterator dit(a_particle_flux.dataIterator()); dit.ok(); ++dit) {
+     a_particle_flux[dit].copy(particle_flux_tmp[dit], 0, 0, 1);
    }
    
    // Get flux-surface integrated component
-   for (CFG::DataIterator dit(a_ParticleFlux.dataIterator()); dit.ok(); ++dit) {
-     particle_loc_tmp[dit].copy(a_ParticleFlux[dit], 1, 0, 1);
+   for (CFG::DataIterator dit(a_particle_flux.dataIterator()); dit.ok(); ++dit) {
+     particle_loc_tmp[dit].copy(a_particle_flux[dit], 1, 0, 1);
    }
    flux_surface.integrateAndSpread(particle_loc_tmp, particle_flux_tmp);
    
-   for (CFG::DataIterator dit(a_ParticleFlux.dataIterator()); dit.ok(); ++dit) {
-     a_ParticleFlux[dit].copy(particle_flux_tmp[dit], 0, 1, 1);
+   for (CFG::DataIterator dit(a_particle_flux.dataIterator()); dit.ok(); ++dit) {
+     a_particle_flux[dit].copy(particle_flux_tmp[dit], 0, 1, 1);
    }
 }
 
-void KineticSpecies::HeatFlux(CFG::LevelData<CFG::FArrayBox>& a_HeatFlux,
-                              const LevelData<FluxBox>& a_field,
-                              const LevelData<FArrayBox>& a_phi  ) const
+void KineticSpecies::radialHeatFlux(CFG::LevelData<CFG::FArrayBox>& a_heat_flux,
+                                    const LevelData<FluxBox>&       a_field,
+                                    const CFG::EMFields&            a_EM_fields,
+                                    const LevelData<FluxBox>&       a_Apar_derivatives,
+                                    const LevelData<FArrayBox>&     a_phi,
+                                    const int                       a_velocity_option) const
 
 {
-   m_moment_op.compute( a_HeatFlux, *this, HeatFluxKernel<FArrayBox>(a_field, a_phi) );
+   m_moment_op.compute( a_heat_flux, *this, RadialHeatFluxKernel<FArrayBox>(a_field, a_EM_fields, a_Apar_derivatives, a_phi, a_velocity_option) );
 
    const CFG::MagGeom& mag_geom = m_geometry->magGeom();
    CFG::FluxSurface flux_surface(mag_geom, false);
@@ -291,50 +342,43 @@ void KineticSpecies::HeatFlux(CFG::LevelData<CFG::FArrayBox>& a_HeatFlux,
    CFG::LevelData<CFG::FArrayBox> heat_loc_tmp(mag_geom.grids(), 1, CFG::IntVect::Zero);
 
    // Get flux-surfaced averaged component
-   for (CFG::DataIterator dit(a_HeatFlux.dataIterator()); dit.ok(); ++dit) {
-     heat_loc_tmp[dit].copy(a_HeatFlux[dit], 0, 0, 1);
+   for (CFG::DataIterator dit(a_heat_flux.dataIterator()); dit.ok(); ++dit) {
+     heat_loc_tmp[dit].copy(a_heat_flux[dit], 0, 0, 1);
    }
    flux_surface.averageAndSpread(heat_loc_tmp, heat_flux_tmp);
   
-   for (CFG::DataIterator dit(a_HeatFlux.dataIterator()); dit.ok(); ++dit) {
-     a_HeatFlux[dit].copy(heat_flux_tmp[dit], 0, 0, 1);
+   for (CFG::DataIterator dit(a_heat_flux.dataIterator()); dit.ok(); ++dit) {
+     a_heat_flux[dit].copy(heat_flux_tmp[dit], 0, 0, 1);
    }
   
    // Get flux-surface integrated component
-   for (CFG::DataIterator dit(a_HeatFlux.dataIterator()); dit.ok(); ++dit) {
-     heat_loc_tmp[dit].copy(a_HeatFlux[dit], 1, 0, 1);
+   for (CFG::DataIterator dit(a_heat_flux.dataIterator()); dit.ok(); ++dit) {
+     heat_loc_tmp[dit].copy(a_heat_flux[dit], 1, 0, 1);
    }
    flux_surface.integrateAndSpread(heat_loc_tmp, heat_flux_tmp);
   
-   for (CFG::DataIterator dit(a_HeatFlux.dataIterator()); dit.ok(); ++dit) {
-     a_HeatFlux[dit].copy(heat_flux_tmp[dit], 0, 1, 1);
+   for (CFG::DataIterator dit(a_heat_flux.dataIterator()); dit.ok(); ++dit) {
+     a_heat_flux[dit].copy(heat_flux_tmp[dit], 0, 1, 1);
    }
 }
 
-void KineticSpecies::parallelHeatFluxMoment( CFG::LevelData<CFG::FArrayBox>& a_parallelHeatFlux,
-                                             CFG::LevelData<CFG::FArrayBox>& a_vparshift ) const
+void KineticSpecies::parallelHeatFlux(CFG::LevelData<CFG::FArrayBox>& a_parallel_heat_flux,
+                                      CFG::LevelData<CFG::FArrayBox>& a_vparshift ) const
 {
-   m_moment_op.compute( a_parallelHeatFlux, *this, ParallelHeatFluxKernel<FArrayBox>(a_vparshift) );
+   m_moment_op.compute( a_parallel_heat_flux, *this, ParallelHeatFluxKernel<FArrayBox>(a_vparshift) );
 }
 
-void KineticSpecies::perpCurrentDensity( CFG::LevelData<CFG::FArrayBox>& a_PerpCurrentDensity,
-                                         const LevelData<FluxBox>& a_field  ) const
-{
-   m_moment_op.compute( a_PerpCurrentDensity, *this, PerpCurrentDensityKernel<FArrayBox>(a_field) );
-   
-}
-
-void KineticSpecies::pressureMoment( CFG::LevelData<CFG::FArrayBox>& a_pressure,
-                                     CFG::LevelData<CFG::FArrayBox>& a_vparshift ) const
+void KineticSpecies::pressure(CFG::LevelData<CFG::FArrayBox>& a_pressure,
+                              CFG::LevelData<CFG::FArrayBox>& a_vparshift ) const
 {
    m_moment_op.compute( a_pressure, *this, PressureKernel<FArrayBox>(a_vparshift) );
 }
 
-void KineticSpecies::pressureMoment( CFG::LevelData<CFG::FArrayBox>& a_pressure ) const
+void KineticSpecies::pressure( CFG::LevelData<CFG::FArrayBox>& a_pressure ) const
 {
    CFG::LevelData<CFG::FArrayBox> vpar;
    vpar.define( a_pressure );
-   this->ParallelVelocity(vpar);
+   this->parallelVelocity(vpar);
 
    m_moment_op.compute( a_pressure, *this, PressureKernel<FArrayBox>(vpar) );
 }
@@ -349,7 +393,7 @@ void KineticSpecies::parallelPressure( CFG::LevelData<CFG::FArrayBox>& a_pressur
 {
    CFG::LevelData<CFG::FArrayBox> vpar;
    vpar.define( a_pressure );
-   this->ParallelVelocity(vpar);
+   this->parallelVelocity(vpar);
 
    m_moment_op.compute( a_pressure, *this, ParallelPressureKernel<FArrayBox>(vpar) );
 }
@@ -367,8 +411,8 @@ void KineticSpecies::temperature( CFG::LevelData<CFG::FArrayBox>& a_temperature 
 
    CFG::LevelData<CFG::FArrayBox> vpar;
    vpar.define( a_temperature );
-   m_moment_op.compute( vpar, *this, ParallelMomKernel<FArrayBox>() );
-// Note that ParallelMomKernel is actually the Number Density Flux (not the Mass Density)
+   m_moment_op.compute( vpar, *this, ParallelVelKernel<FArrayBox>() );
+
    for (CFG::DataIterator dit(vpar.dataIterator()); dit.ok(); ++dit) {
       vpar[dit].divide(density[dit]);
    }
@@ -387,8 +431,8 @@ void KineticSpecies::parallelTemperature( CFG::LevelData<CFG::FArrayBox>& a_temp
 
    CFG::LevelData<CFG::FArrayBox> vpar;
    vpar.define( a_temperature );
-   m_moment_op.compute( vpar, *this, ParallelMomKernel<FArrayBox>() );
-// Note that ParallelMomKernel is actually the Number Density Flux (not the Mass Density)
+   m_moment_op.compute( vpar, *this, ParallelVelKernel<FArrayBox>() );
+
    for (CFG::DataIterator dit(vpar.dataIterator()); dit.ok(); ++dit) {
       vpar[dit].divide(density[dit]);
    }
@@ -411,19 +455,19 @@ void KineticSpecies::perpTemperature( CFG::LevelData<CFG::FArrayBox>& a_temperat
    }
 }
 
-void KineticSpecies::energyMoment( CFG::LevelData<CFG::FArrayBox>& a_energy,
-                                   const CFG::LevelData<CFG::FArrayBox>& a_phi) const
+void KineticSpecies::energyDensity( CFG::LevelData<CFG::FArrayBox>& a_energy,
+                                    const CFG::LevelData<CFG::FArrayBox>& a_phi) const
 {
    m_moment_op.compute( a_energy, *this, EnergyKernel<FArrayBox>(a_phi) );
 }
 
-void KineticSpecies::kineticEnergyMoment( CFG::LevelData<CFG::FArrayBox>& a_energy) const
+void KineticSpecies::kineticEnergyDensity( CFG::LevelData<CFG::FArrayBox>& a_energy) const
 {
    m_moment_op.compute( a_energy, *this, KineticEnergyKernel<FArrayBox>() );
 }
 
-void KineticSpecies::kineticEnergyMoment( CFG::LevelData<CFG::FArrayBox>&  a_energy,
-                                          const LevelData<FArrayBox>&      a_function) const
+void KineticSpecies::kineticEnergyDensity( CFG::LevelData<CFG::FArrayBox>&  a_energy,
+                                           const LevelData<FArrayBox>&      a_function) const
 {
    m_moment_op.compute( a_energy, *this, a_function, KineticEnergyKernel<FArrayBox>() );
 }
@@ -734,26 +778,22 @@ Real KineticSpecies::minValue() const
 
 
 void KineticSpecies::computeVelocity(LevelData<FluxBox>&       a_velocity,
-                                     const LevelData<FluxBox>& a_E_field,
+                                     const CFG::EMFields&      a_EMfields,
                                      const bool                a_include_FLR,
                                      const int                 a_velocity_option,
                                      const Real&               a_time,
                                      const bool                a_apply_axisymmetric_correction) const
 {
    CH_TIMERS("KineticSpecies::computeVelocity");
-   //CH_TIMER("copy_velocity_chombo", t_copy_velocity_chombo);
    CH_TIMER("copy_velocity_fort", t_copy_velocity_fort);
 
    CH_assert(a_velocity.ghostVect() <= m_velocity.ghostVect());
    CH_assert(a_velocity.nComp() == m_velocity.nComp());
    
-//   if (m_velocity_option != a_velocity_option) {
-       m_geometry->updateVelocities(  a_E_field, 
-                                      m_velocity, 
-                                      a_velocity_option, 
-                                      (isGyrokinetic() && a_include_FLR) );
-//       m_velocity_option = a_velocity_option;
-//   }
+   m_geometry->updateVelocities(a_EMfields,
+                                m_velocity,
+                                a_velocity_option,
+                                (isGyrokinetic() && a_include_FLR) );
 
    CH_START(t_copy_velocity_fort);
    for (DataIterator dit(m_velocity.dataIterator()); dit.ok(); ++dit) {
@@ -775,34 +815,17 @@ void KineticSpecies::computeVelocity(LevelData<FluxBox>&       a_velocity,
       fourthOrderAverage(a_velocity);
       a_velocity.exchange();
    }
-   
-   
-#if 0
-   // This test is left to compare the speeds of Chombo naitve (no logner in Fortran)
-   // versus the local Fotran code used above). Dan hopes that DIM 1,2,3, should
-   // be optimized in Chombo, but perhaps not 4,5,6. Brian suggeted using tamplated code
-   // used for CFarrayBox performCopy
-   CH_START(t_copy_velocity_chombo);
-   for (DataIterator dit(m_velocity.dataIterator()); dit.ok(); ++dit) {
-      a_velocity[dit].copy(m_velocity[dit]);
-   }
-   CH_STOP(t_copy_velocity_chombo);
-
-#endif
-
 }
 
 
 void KineticSpecies::computeMappedVelocityNormals(LevelData<FluxBox>& a_velocity_normal,
-                                                  const CFG::LevelData<CFG::FArrayBox>& a_E_field_cell,
-                                                  const CFG::LevelData<CFG::FArrayBox>& a_phi_node,
+                                                  const CFG::EMFields& a_EM_fields,
                                                   const bool a_fourth_order_Efield,
                                                   const int  a_velocity_option) const
 {
    const DisjointBoxLayout& dbl( m_dist_func.getBoxes() );
    a_velocity_normal.define( dbl, 1, IntVect::Unit );
-   m_geometry->updateVelocityNormals( a_E_field_cell, 
-                                      a_phi_node, 
+   m_geometry->updateVelocityNormals( a_EM_fields,
                                       a_fourth_order_Efield, 
                                       a_velocity_normal, 
                                       a_velocity_option );
@@ -810,7 +833,9 @@ void KineticSpecies::computeMappedVelocityNormals(LevelData<FluxBox>& a_velocity
 
 
 void KineticSpecies::computeMappedVelocity(LevelData<FluxBox>& a_velocity,
-                                           const LevelData<FluxBox>& a_E_field,
+                                           //                                           const LevelData<FluxBox>& a_E_field,
+                                           const CFG::EMFields&      a_EMfields,
+                                           const LevelData<FluxBox>& a_Apar_derivatives,
                                            const bool a_include_FLR,
                                            const Real&  a_time) const
 {
@@ -818,7 +843,7 @@ void KineticSpecies::computeMappedVelocity(LevelData<FluxBox>& a_velocity,
    CH_TIME("KineticSpecies::computeMappedVelocity");
 
    computeVelocity( a_velocity, 
-                    a_E_field, 
+                    a_EMfields,
                     a_include_FLR, 
                     PhaseGeom::FULL_VELOCITY, 
                     a_time, 

@@ -15,13 +15,13 @@ smooth_ghosts_path = script_location + '/smooth_ghosts'
 
 ######### USER-SPECIFIED INPUT ###################################
 
-psiNormInner = 0.8                              # normalized flux at the inner core boundary
-psiNormOuter = 1.1                              # normalized flux at the outer sol boundary
-n_psiCORE = 48                                  # number of radial cells in the core region
-n_thetaCORE = 32                                # number of poloidal cells in the core region
-n_thetaInnerLeg = 6                             # number of poloidal cells in the inner leg
-n_thetaOuterLeg = 6                             # number of poloidal cells in the outer leg
-n_psiPF = 20                                    # number of radial cells in the PF region
+psiNormInner = 0.8                              # normalized flux at the inner core boundary (includes ghost region)
+psiNormOuter = 1.1                              # normalized flux at the outer sol boundary (includes ghost region)
+n_psiCORE = 48                                  # number of radial cells in the core region (includes ghost cells)
+n_thetaCORE = 32                                # number of poloidal cells in the core region (does not include ghost cells)
+n_thetaInnerLeg = 6                             # number of poloidal cells in the inner leg (includes ghost cells)
+n_thetaOuterLeg = 6                             # number of poloidal cells in the outer leg (includes ghost cells)
+n_psiPF = 20                                    # number of radial cells in the PF region (includes ghost cells)
 n_thetaMCORE = 20                               # number of poloidal cells in the mcore region (set to 0 for original 8 blocks)
 
 n_extrpInnerLeg = 2                             # number of poloidal extrapolation cells in the inner leg
@@ -43,7 +43,7 @@ compute_critical_points = 1                     # should we compute critical poi
 output_gridUE = 1                               # should we output data for gridUE generator?
 
 run_GridGenerator = True                        # should we run grid generator (or only do the plotting of existing output)?
-smooth_Ghosts = True                           # should we extrapolate smooth ghost cells?
+smooth_Ghosts = True                            # should we extrapolate smooth ghost cells?
 plot_block_valid = True                         # should we plot grid blocks with physical ghosts?
 plot_block_ghost = True                         # should we plot grid blocks with all ghosts?
 

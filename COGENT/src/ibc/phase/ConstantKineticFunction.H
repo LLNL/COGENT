@@ -126,7 +126,7 @@ class ConstantKineticFunction : public KineticFunction
          if (m_verbosity) {
             printParameters();
          }
-		 ParmParse ppsg("sparsegrid");
+		 ParmParse ppsg("sparse_grids");
 		 
 		 m_useSG = false;  //Don't use sparse grids by default
 		 ppsg.query( "useSGstencils", m_useSG );

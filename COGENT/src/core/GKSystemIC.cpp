@@ -20,7 +20,7 @@ GKSystemIC::GKSystemIC( ParmParse& a_pp,
 {
    a_pp.query( "gksystem.verbosity", m_verbosity );
 
-   parsePotential( a_pp );
+   parsePotentials( a_pp );
    parseKineticSpecies( a_pp, a_state.dataKinetic() );
 }
 
@@ -130,7 +130,7 @@ const CFG::GridFunction& GKSystemIC::fluidSpeciesIC( const std::string& a_name )
 }
 
 
-void GKSystemIC::parsePotential( ParmParse& a_pp )
+void GKSystemIC::parsePotentials( ParmParse& a_pp )
 {
    CFG::GridFunctionLibrary* library = CFG::GridFunctionLibrary::getInstance();
    ParmParse pppot( "IC.potential" );
@@ -138,6 +138,13 @@ void GKSystemIC::parsePotential( ParmParse& a_pp )
    pppot.query( "function", function_name );
    RefCountedPtr<CFG::GridFunction> ic( library->find( function_name ) );
    m_fluid_ics.insert( FluidSpeciesICMap::value_type( "potential", ic ) );
+   
+   ParmParse ppApar( "IC.A_parallel" );
+   if (ppApar.contains( "function")) {
+      ppApar.get( "function", function_name );
+      RefCountedPtr<CFG::GridFunction> ic( library->find( function_name ) );
+      m_fluid_ics.insert( FluidSpeciesICMap::value_type( "A_parallel", ic ) );
+   }
 }
 
 

@@ -1,4 +1,603 @@
 ------------------------------------------------------------------------
+r1901 | debo | 2023-01-20 13:51:40 -0800 (Fri, 20 Jan 2023) | 1 line
+
+Added an input flag to turn off performance-related optimizations that reduce time accuracy (on by default) ("gksystem.enable_ti_optimizations"); added the option to write out the serialized ODE vector to file (binary) at the same time as other solution outputs ("simulation.write_ode_vec"); added a utility code to compute diff between two ODE vector binary files (utils/odevec_diff.cpp); Newton solver prints reason convergence reason at exit
+------------------------------------------------------------------------
+r1900 | debo | 2023-01-19 21:50:24 -0800 (Thu, 19 Jan 2023) | 1 line
+
+removed nfs temp file
+------------------------------------------------------------------------
+r1899 | mdorr | 2023-01-13 19:47:45 -0800 (Fri, 13 Jan 2023) | 3 lines
+
+Undefining ALFVEN_WAVE_TEST
+
+
+------------------------------------------------------------------------
+r1898 | mdorr | 2023-01-13 14:47:38 -0800 (Fri, 13 Jan 2023) | 3 lines
+
+Adding checks to ensure that the specified solver type is either BiCGStab or GMRES
+
+
+------------------------------------------------------------------------
+r1897 | mdorr | 2023-01-12 19:17:22 -0800 (Thu, 12 Jan 2023) | 3 lines
+
+Adding the ability to specify parameters for the two subsolvers associated with the EM Alfven preconditioner.  Modified GKOps::setEMFields to only compute the Apar derivatives when the last boolean argument (renamed a_phase_space_update) is true.
+
+
+------------------------------------------------------------------------
+r1896 | ricketson1 | 2023-01-12 12:39:00 -0800 (Thu, 12 Jan 2023) | 1 line
+
+Implemented improved method for generating SGCT grids that can accommodate increased anisotropy in resolution.
+------------------------------------------------------------------------
+r1895 | mdorf | 2023-01-10 14:11:18 -0800 (Tue, 10 Jan 2023) | 1 line
+
+Added a hyper-viscosity term to the EMVorticity model
+------------------------------------------------------------------------
+r1894 | mdorr | 2023-01-10 11:44:43 -0800 (Tue, 10 Jan 2023) | 3 lines
+
+Improving a couple comments and removing some unintentionally committed code.
+
+
+------------------------------------------------------------------------
+r1893 | mdorr | 2023-01-10 10:29:04 -0800 (Tue, 10 Jan 2023) | 7 lines
+
+Refactoring to generalize interfaces related to electromagnetic	field data.
+
+Previously, an EField object was used to store the electric field (in all of its various forms: cell/face-centered in configuration space and face-centered injected into phase space).  When a function needed electric field information, either a reference to the entire EField object was passed in, or just a LevelData obtained from an accessor, as in the calculation of the gyrokinetic velocity.  The EField object also provided all of the operations needed to update the potential (phi), in addition to the corresponding electric field.
+
+Now, a new EMFields class is used to contain all electromagnetic field information (currently phi, E-field, Apar, Apar derivatives (needed for the GK velocity)).  All function	interfaces that	previously included an EField object (or something it provided) have been changed to use an EMFields object reference instead.  These interfaces will therefore not have to be changed as the electromagetic model is further developed, only EMFields.  EMFields is purely a container class.  Its members are intended to be updated by two new classes PhiOps and AparOps.  PhiOps (and derived special-case classes PhiAmpereOps and PhiSelfConsistentBCOps) provide the operations previously provided by EField (and corresponding special case derived classes) for updating the potential phi and corresponding electric field.  Analogously, AparOps provides the operations needed to update the data related to Apar in EMFields, currently its spatial and temporal derivates (provided by an EMVorticityOp).
+
+
+------------------------------------------------------------------------
+r1892 | debo | 2022-12-14 18:17:42 -0800 (Wed, 14 Dec 2022) | 1 line
+
+Minor fix to screen output formatting
+------------------------------------------------------------------------
+r1891 | mdorf | 2022-11-16 10:31:07 -0800 (Wed, 16 Nov 2022) | 1 line
+
+Updated diagnostics capabilities
+------------------------------------------------------------------------
+r1890 | mdorr | 2022-11-11 13:10:33 -0800 (Fri, 11 Nov 2022) | 3 lines
+
+Modified the PhaseGeom plot routines to include a ProblemDomain with as many ghost cells as the data being plotted, which is needed in order to inspect physical ghost cell values in VisIt.
+
+
+------------------------------------------------------------------------
+r1889 | debo | 2022-11-10 14:00:10 -0800 (Thu, 10 Nov 2022) | 1 line
+
+added further info in a sparse grids error messa
+------------------------------------------------------------------------
+r1888 | mdorf | 2022-10-31 11:54:00 -0700 (Mon, 31 Oct 2022) | 1 line
+
+Fixed a bug in the implementation of the ExB current for the divFreeVel = true option
+------------------------------------------------------------------------
+r1887 | mdorr | 2022-10-28 17:48:22 -0700 (Fri, 28 Oct 2022) | 6 lines
+
+Fixing bug in coupling_comp index calculation
+
+---This line, and those below, will be ignored--
+
+M    vlasov/GKVlasovAMG.cpp
+
+------------------------------------------------------------------------
+r1886 | mdorf | 2022-10-21 15:29:57 -0700 (Fri, 21 Oct 2022) | 1 line
+
+Fixed a bug in the calculation of SelfConsistent BCs for the case of multiple ion species used together with the velocity renormalization; added local utilities to compute dot product for LevelData's
+------------------------------------------------------------------------
+r1885 | mdorr | 2022-10-14 20:34:06 -0700 (Fri, 14 Oct 2022) | 3 lines
+
+Updating the Alfven wave EM preconditioner
+
+
+------------------------------------------------------------------------
+r1884 | mdorr | 2022-10-13 19:12:46 -0700 (Thu, 13 Oct 2022) | 3 lines
+
+Recommitting Hypre 2.25.0
+
+
+------------------------------------------------------------------------
+r1883 | mdorr | 2022-10-13 17:34:54 -0700 (Thu, 13 Oct 2022) | 3 lines
+
+Temporarily removing Hypre to brute force resolve an apparent tree conflict introduced by r1881
+
+
+------------------------------------------------------------------------
+r1882 | mdorr | 2022-10-13 13:58:26 -0700 (Thu, 13 Oct 2022) | 3 lines
+
+Fixing accidental commit in r1881
+
+
+------------------------------------------------------------------------
+r1881 | mdorr | 2022-10-13 13:23:23 -0700 (Thu, 13 Oct 2022) | 3 lines
+
+Updating to Hypre 2.25.0
+
+
+------------------------------------------------------------------------
+r1880 | mdorf | 2022-08-09 15:48:54 -0700 (Tue, 09 Aug 2022) | 1 line
+
+1. Fixed a bug in the full EM vorticity preconditioner; 2. Fixed a bug in the LinearizedUnlike operator (found by Alex Knyazev); 3. Added BpolMagnitude output to the magnetic field data diagnostics
+------------------------------------------------------------------------
+r1879 | mdorr | 2022-08-02 19:44:23 -0700 (Tue, 02 Aug 2022) | 3 lines
+
+Adding another version of the Alfven wave EMVorticity preconditioner.
+
+
+------------------------------------------------------------------------
+r1878 | mdorf | 2022-08-01 15:01:23 -0700 (Mon, 01 Aug 2022) | 1 line
+
+Added BE option for the EMVorticity model; also added enforcement of pointwise positivity
+------------------------------------------------------------------------
+r1877 | mdorf | 2022-07-25 18:24:19 -0700 (Mon, 25 Jul 2022) | 1 line
+
+Added capability to compute toroidal flux function and safety factor; also added a matlab script to read onetwo files and post-process plasma profiles by flattening at the core boundary and extrapolating to sol.
+------------------------------------------------------------------------
+r1876 | mdorr | 2022-07-14 14:37:45 -0700 (Thu, 14 Jul 2022) | 3 lines
+
+Adding the ability to specify the AMG strong threshold for the MGR coarse correction solve from the input.
+
+
+------------------------------------------------------------------------
+r1875 | mdorr | 2022-07-12 15:55:07 -0700 (Tue, 12 Jul 2022) | 3 lines
+
+Fixing the assignment of global DOFs for multiple fluid species.
+
+
+------------------------------------------------------------------------
+r1874 | mdorr | 2022-07-06 22:41:59 -0700 (Wed, 06 Jul 2022) | 3 lines
+
+Updating PhaseGeom::getShearedGhostBoxLayouts() to only perform the "no man's land" optimization for single null geometries.  Some other refactoring and cleanup, including the removal of a hardwired parameter that was likely problem-dependent.
+
+
+------------------------------------------------------------------------
+r1873 | mdorf | 2022-07-03 19:36:58 -0700 (Sun, 03 Jul 2022) | 1 line
+
+Added several preconditioning options for the electromagnetic vorticity model
+------------------------------------------------------------------------
+r1872 | mdorr | 2022-06-30 14:35:07 -0700 (Thu, 30 Jun 2022) | 3 lines
+
+Adding an approximate ideal restriction (AIR) option for use with Hypre's BoomerAMG solver.
+
+
+------------------------------------------------------------------------
+r1871 | mdorr | 2022-06-24 20:26:02 -0700 (Fri, 24 Jun 2022) | 3 lines
+
+Restoring the MGR_schur flag accidentally omitted in r1868.
+
+
+------------------------------------------------------------------------
+r1870 | mdorr | 2022-06-22 16:09:12 -0700 (Wed, 22 Jun 2022) | 3 lines
+
+Changing the MGR frelax_method default from 2 to 1
+
+
+------------------------------------------------------------------------
+r1869 | mdorr | 2022-06-16 22:02:29 -0700 (Thu, 16 Jun 2022) | 3 lines
+
+Changing BiCGStab and GMRES tolerances from absolute to relative.  Regression tests updated accordingly.
+
+
+------------------------------------------------------------------------
+r1868 | mdorr | 2022-06-16 20:34:26 -0700 (Thu, 16 Jun 2022) | 3 lines
+
+Updating MBSolver and MBHypreSolver files per Joshua's r1865 commit to his branch
+
+
+------------------------------------------------------------------------
+r1863 | mdorr | 2022-06-14 16:17:13 -0700 (Tue, 14 Jun 2022) | 3 lines
+
+Adding the ability to include matrix blocks corresponding to discretizations of advection operators.  This is a partial merge of Joshua's two field neutrals branch.
+
+
+------------------------------------------------------------------------
+r1860 | mdorr | 2022-06-10 11:01:30 -0700 (Fri, 10 Jun 2022) | 3 lines
+
+Fixing problem affecting the plotting of configuration space state variables that aren't a fluid species.
+
+
+------------------------------------------------------------------------
+r1859 | mdorf | 2022-06-07 15:09:41 -0700 (Tue, 07 Jun 2022) | 1 line
+
+Updated EM vorticity model
+------------------------------------------------------------------------
+r1856 | mdorf | 2022-06-05 12:24:38 -0700 (Sun, 05 Jun 2022) | 1 line
+
+Added initial implementation of electromagnetic effects to the vorticity model
+------------------------------------------------------------------------
+r1855 | mdorr | 2022-05-31 12:49:48 -0700 (Tue, 31 May 2022) | 3 lines
+
+Modifying the construction of the sheared interpolation ghost box layouts to fix the "no mans's land" problem 
+
+
+------------------------------------------------------------------------
+r1854 | mdorr | 2022-05-31 11:10:26 -0700 (Tue, 31 May 2022) | 7 lines
+
+Fixing the assignment of degrees of freedom for the case of more than one species variable in VorticityOp.
+
+Changing the degrees of freedom vector argument of the ODEVector copy member to a const reference.
+
+
+
+
+------------------------------------------------------------------------
+r1852 | mdorf | 2022-05-18 12:08:43 -0700 (Wed, 18 May 2022) | 1 line
+
+Major refactoring of the vorticity model; added vorticty diffusion term to the new vorticity model
+------------------------------------------------------------------------
+r1851 | mdorr | 2022-05-17 16:04:49 -0700 (Tue, 17 May 2022) | 3 lines
+
+Adding GKPoisson::updateBoundaryDataAddingCoefs() to pick up the unmapped coefficients before calling EllipticOp::updateBoundaryData.  Modified the associated calls in VorticityOp.  
+
+
+------------------------------------------------------------------------
+r1850 | mdorf | 2022-05-09 19:02:30 -0700 (Mon, 09 May 2022) | 1 line
+
+Added a memory diagnostics and a capability to run simulations from a precomputed geometry and Bfield data
+------------------------------------------------------------------------
+r1849 | debo | 2022-04-28 18:17:58 -0700 (Thu, 28 Apr 2022) | 1 line
+
+1) PETSc Interface: setting default preconditioner side to right, 2) Adding species-wise diagnostics when reporting Vlasov timescales and CFL, 3) Vlasov timescales now uses the same computation as dt (that includes linear stability formula) - hence, reported CFL and CFL in input file are now consistent for the fastest scale
+------------------------------------------------------------------------
+r1848 | debo | 2022-04-28 13:14:10 -0700 (Thu, 28 Apr 2022) | 1 line
+
+PETSc interface: fixed bug that made the code use preconditioner even if input file asked for no preconditioner
+------------------------------------------------------------------------
+r1847 | debo | 2022-04-27 15:41:48 -0700 (Wed, 27 Apr 2022) | 1 line
+
+PETSc interface: minor rearrangement of setting intial dt so that it works with input files where CFL is specified
+------------------------------------------------------------------------
+r1846 | mdorr | 2022-04-26 18:16:57 -0700 (Tue, 26 Apr 2022) | 3 lines
+
+Replacing some unneeded FluxBoxes with FArrayBoxes
+
+
+------------------------------------------------------------------------
+r1845 | mdorr | 2022-04-26 17:11:30 -0700 (Tue, 26 Apr 2022) | 3 lines
+
+Fixing an array dimensioning bug in LogRectEllipticOp.cpp resulting from the assumption of a single block.
+
+
+------------------------------------------------------------------------
+r1844 | mdorf | 2022-04-25 16:01:15 -0700 (Mon, 25 Apr 2022) | 1 line
+
+Added a simple drift-fludi model; extended vorticity model to include fluid species
+------------------------------------------------------------------------
+r1842 | angus1 | 2022-03-24 12:17:18 -0700 (Thu, 24 Mar 2022) | 1 line
+
+fixed a bug in IdealMhdOp for 3D runs. Updated 
+------------------------------------------------------------------------
+r1841 | mdorr | 2022-03-21 10:19:52 -0700 (Mon, 21 Mar 2022) | 3 lines
+
+Removing boundary condition specifications at periodic boundaries, which have always been ignored but now generate an error
+
+
+------------------------------------------------------------------------
+r1840 | mdorr | 2022-03-19 13:18:26 -0700 (Sat, 19 Mar 2022) | 7 lines
+
+Changed zero_efield to no_efield to make it clearer that no efield is included at all.  However, zero_efield will also still work in existing inputs.
+
+Now automatically setting fixed_efield true when no_efield is true, eliminating the need to include it in the input.
+
+Updated sample inputs correspondingly
+
+
+------------------------------------------------------------------------
+r1839 | angus1 | 2022-03-18 14:56:45 -0700 (Fri, 18 Mar 2022) | 1 line
+
+missed a file during previous commit.
+------------------------------------------------------------------------
+r1838 | angus1 | 2022-03-18 14:52:31 -0700 (Fri, 18 Mar 2022) | 1 line
+
+fixed bug in divergence of viscosity calc used in MHD fluid Ops.
+------------------------------------------------------------------------
+r1837 | mdorf | 2022-03-12 20:04:27 -0800 (Sat, 12 Mar 2022) | 1 line
+
+Extended the prescribed source model to support relaxation and thermalization; added codim2 ghost filling for 5D anomalous transport; removed stage check for parallel velocity update in the ConsDragDiff collision model; removed setting Neumann factor for Vorticity preconditioner
+------------------------------------------------------------------------
+r1836 | mdorr | 2022-03-03 15:11:07 -0800 (Thu, 03 Mar 2022) | 3 lines
+
+Adding a member to fill codim 2 cells at the phase space physical boundary.
+
+
+------------------------------------------------------------------------
+r1835 | mdorf | 2022-03-02 18:23:46 -0800 (Wed, 02 Mar 2022) | 1 line
+
+some cosmetic changes to ConsDragDiffusion collision model
+------------------------------------------------------------------------
+r1833 | mdorr | 2022-02-26 15:50:19 -0800 (Sat, 26 Feb 2022) | 3 lines
+
+Setting the number of ghost cells for the unmapped coefficients to IntVect::Unit
+
+
+------------------------------------------------------------------------
+r1831 | debo | 2022-02-25 18:15:37 -0800 (Fri, 25 Feb 2022) | 1 line
+
+Implemented a way to have multiple block PCs for the RHS of a fluidOp
+------------------------------------------------------------------------
+r1829 | mdorr | 2022-02-24 20:04:16 -0800 (Thu, 24 Feb 2022) | 3 lines
+
+Removing an assumption that the mapped and unmapped coefficients passed into EllipticOp::modifyForNeumannAndNaturalBCs() have the same number of ghost cells 
+
+
+------------------------------------------------------------------------
+r1828 | mdorf | 2022-02-23 13:22:04 -0800 (Wed, 23 Feb 2022) | 1 line
+
+Major refactoring of the GKVorticity class; also extended vorticity diffusion options
+------------------------------------------------------------------------
+r1826 | mdorr | 2022-02-10 15:05:30 -0800 (Thu, 10 Feb 2022) | 3 lines
+
+Correcting the modifications resulting from the imposition of true Neumann or natural boundary conditions in the block formulation of the polarization density corrected vorticity model preconditioner.
+
+
+------------------------------------------------------------------------
+r1823 | mdorr | 2022-01-31 18:26:43 -0800 (Mon, 31 Jan 2022) | 3 lines
+
+Adding an option to swap the C and F point variables in the MGR solver, set the interpolation and restriction options to 2 and 0, respectively, and set the maximum iterations to 1.  This combination causes the C-reduced Schur complement of the block formulation of the polarization density corrected vorticity operator to match the original fourth-order scalar operator, which is then solved by AMG.  Also added an input to specify the strong threshold parameter for AMG.
+
+
+------------------------------------------------------------------------
+r1822 | mdorf | 2022-01-27 19:23:03 -0800 (Thu, 27 Jan 2022) | 1 line
+
+Added operator splitting time integration scheme for the vorticity problem
+------------------------------------------------------------------------
+r1819 | mdorf | 2022-01-25 09:00:18 -0800 (Tue, 25 Jan 2022) | 1 line
+
+Fixed a bug in the skeleton implementation of logical sheath BCs
+------------------------------------------------------------------------
+r1818 | debo | 2021-12-16 21:15:11 -0800 (Thu, 16 Dec 2021) | 1 line
+
+BandedMatrix: doing MPI_Allreduce in blocks to not exceed a wierd message size limit - this fixes the imex_collisions memscape error; fixed a small bug that could have led to MPI freeze.
+------------------------------------------------------------------------
+r1817 | mdorf | 2021-12-14 18:06:47 -0800 (Tue, 14 Dec 2021) | 1 line
+
+Extending the dissipation term option in the electron vorticity equation and preconditioner
+------------------------------------------------------------------------
+r1816 | mdorr | 2021-12-10 15:14:58 -0800 (Fri, 10 Dec 2021) | 5 lines
+
+Adding the ability to specify physical (in addition to the previous mapped) Neumann or natural boundary conditions in operators derived from EllipticOp using EllipticOpBC.  The new Neumann condition is now specified as "neumann" in inputs, with the previous mapped Neumann specifed as "mapped_neumann".  The nightly tests and sample_inputs have been updated correspondingly.
+
+Adding three new test codes to test the new boundary conditions in slab, annular and single null geometries
+
+
+------------------------------------------------------------------------
+r1815 | mdorr | 2021-12-06 17:08:48 -0800 (Mon, 06 Dec 2021) | 3 lines
+
+Adding a potential scaling factor in the electron vorticity preconditioner
+
+
+------------------------------------------------------------------------
+r1814 | mdorr | 2021-12-06 14:20:20 -0800 (Mon, 06 Dec 2021) | 3 lines
+
+Removing the need to independently specify rmin and rmax for the miller poloidal velocity test option.  These parameters are now obtained from OneBlockCoordSys.
+
+
+------------------------------------------------------------------------
+r1813 | mdorf | 2021-12-06 13:15:48 -0800 (Mon, 06 Dec 2021) | 1 line
+
+Adding reading (from a g-file) and plotting of the boundary wall geometry to the grid generator
+------------------------------------------------------------------------
+r1812 | mdorr | 2021-12-05 17:36:47 -0800 (Sun, 05 Dec 2021) | 3 lines
+
+Adding a dissipation term to the electron vorticity equation and preconditioner
+
+
+------------------------------------------------------------------------
+r1811 | mdorf | 2021-12-04 19:34:10 -0800 (Sat, 04 Dec 2021) | 1 line
+
+Adding the g-file for DIII-D_119919
+------------------------------------------------------------------------
+r1810 | mdorf | 2021-12-04 16:22:51 -0800 (Sat, 04 Dec 2021) | 1 line
+
+Adding DIII-D grid examples
+------------------------------------------------------------------------
+r1809 | mdorf | 2021-12-04 16:20:10 -0800 (Sat, 04 Dec 2021) | 1 line
+
+Adding parallel capabilities to the COGENT grid generator; also improving matlab routines
+------------------------------------------------------------------------
+r1808 | mdorr | 2021-12-01 17:11:09 -0800 (Wed, 01 Dec 2021) | 3 lines
+
+Adding ParmParsing of miller velocity test parameters
+
+
+------------------------------------------------------------------------
+r1807 | mdorr | 2021-11-24 13:31:04 -0800 (Wed, 24 Nov 2021) | 3 lines
+
+Removing an unnecessary preconditioner update performed even when the a_update_potential argument is passed in as false
+
+
+------------------------------------------------------------------------
+r1806 | mdorr | 2021-11-23 16:13:25 -0800 (Tue, 23 Nov 2021) | 3 lines
+
+Setting base class geometry pointer in overridden define() member
+
+
+------------------------------------------------------------------------
+r1805 | mdorf | 2021-11-22 19:25:30 -0800 (Mon, 22 Nov 2021) | 1 line
+
+Adding safety factor diagnostics
+------------------------------------------------------------------------
+r1804 | mdorr | 2021-11-19 09:13:02 -0800 (Fri, 19 Nov 2021) | 3 lines
+
+Changing computeBcDivergence() to call computeFluxDivergence() instead of repeating nearly the same code.  The one small difference between the two only effected the neoclassical tests, but only negligibly so.  
+
+
+------------------------------------------------------------------------
+r1803 | mdorr | 2021-11-16 10:44:22 -0800 (Tue, 16 Nov 2021) | 3 lines
+
+Modifying script to only compare files in the plt_* subdirectories
+
+
+------------------------------------------------------------------------
+r1802 | mdorf | 2021-11-14 09:52:54 -0800 (Sun, 14 Nov 2021) | 1 line
+
+Fixed a bug introduced in r1801 that broke the 4D COGENT build
+------------------------------------------------------------------------
+r1801 | mdorf | 2021-11-13 19:39:11 -0800 (Sat, 13 Nov 2021) | 1 line
+
+Added diagnostics to plot 2D poloidal meshes at the lo and hi side of the toroidal block interface
+------------------------------------------------------------------------
+r1800 | jchristopher | 2021-11-10 11:34:50 -0800 (Wed, 10 Nov 2021) | 1 line
+
+Updated formatting and minor fixes to 2x2 block-matrix TwoFieldNeutrals diffusion terms
+------------------------------------------------------------------------
+r1799 | mdorf | 2021-11-04 17:46:46 -0700 (Thu, 04 Nov 2021) | 1 line
+
+Cleaned-up toroidalBlockRemapping function and added a new interpolation method that includes mapping curvature
+------------------------------------------------------------------------
+r1798 | mdorr | 2021-10-27 12:24:54 -0700 (Wed, 27 Oct 2021) | 3 lines
+
+Adding XTRACXXFLAGS macro to build scripts
+
+
+------------------------------------------------------------------------
+r1797 | mdorr | 2021-10-20 22:05:04 -0700 (Wed, 20 Oct 2021) | 3 lines
+
+Adding a slab geometry option
+
+
+------------------------------------------------------------------------
+r1796 | mdorr | 2021-10-19 20:48:36 -0700 (Tue, 19 Oct 2021) | 3 lines
+
+Adding a new test velocity, where the velocity is defined by the flux surface poloidal tangent vector in a Miller-type geometry defined from a mapping file
+
+
+------------------------------------------------------------------------
+r1795 | mdorf | 2021-10-18 14:39:56 -0700 (Mon, 18 Oct 2021) | 1 line
+
+Added second part of the code for Boussinesq correction option
+------------------------------------------------------------------------
+r1794 | mdorf | 2021-10-16 10:30:47 -0700 (Sat, 16 Oct 2021) | 1 line
+
+Added C2 option for advection and Boussinesq option for GKPoisson
+------------------------------------------------------------------------
+r1793 | mdorr | 2021-10-15 13:50:58 -0700 (Fri, 15 Oct 2021) | 3 lines
+
+Changing the matrix construction internal test to use the solver's MultiBlockLevelExchange object rather than the geometry's fillInternalGhosts, which may use a different interpolation order.  Added a right-hand side plot.
+
+
+------------------------------------------------------------------------
+r1792 | jchristopher | 2021-10-14 16:26:25 -0700 (Thu, 14 Oct 2021) | 1 line
+
+Updated multiblock x-point test to be a system of equations. Currently both solution components should return the same value.
+------------------------------------------------------------------------
+r1791 | jchristopher | 2021-10-14 16:24:37 -0700 (Thu, 14 Oct 2021) | 1 line
+
+A few minor fixes to rhs_from_bc. Now only the current component gets set to zero and multiplied by alpha.
+------------------------------------------------------------------------
+r1790 | mdorr | 2021-10-14 12:30:05 -0700 (Thu, 14 Oct 2021) | 3 lines
+
+Adding rhs_from_bc component to modifyStencilFromBCs argument list
+
+
+------------------------------------------------------------------------
+r1789 | mdorr | 2021-10-14 09:59:20 -0700 (Thu, 14 Oct 2021) | 3 lines
+
+Correcting the number of components in the m_rhs_from_bc member.
+
+
+------------------------------------------------------------------------
+r1788 | mdorr | 2021-10-06 21:16:29 -0700 (Wed, 06 Oct 2021) | 3 lines
+
+Adding multiblock solver X-point test
+
+
+------------------------------------------------------------------------
+r1787 | mdorr | 2021-10-06 21:11:26 -0700 (Wed, 06 Oct 2021) | 3 lines
+
+Changing an accessor to return a pointer instead of a reference
+
+
+------------------------------------------------------------------------
+r1786 | mdorf | 2021-10-06 09:56:01 -0700 (Wed, 06 Oct 2021) | 1 line
+
+Fixed Fortran out-of-bound index error in diagnostics
+------------------------------------------------------------------------
+r1785 | mdorr | 2021-09-28 19:47:37 -0700 (Tue, 28 Sep 2021) | 3 lines
+
+Removing Dirichlet-defaulted boundary condition.  Uncommented corresponding lines in a sample input that depended upon it (and the regression test)
+
+
+------------------------------------------------------------------------
+r1784 | debo | 2021-09-27 18:33:11 -0700 (Mon, 27 Sep 2021) | 1 line
+
+Small bugfix in SG-friendly version of averaging for cells; added the option of plotting individual sparse grids solutions interpolated onto the full grid
+------------------------------------------------------------------------
+r1783 | ricketson1 | 2021-09-23 12:39:24 -0700 (Thu, 23 Sep 2021) | 1 line
+
+Bug fix in the sparse grid version of computeCompFaceFluxes and its call from GKVlasov
+------------------------------------------------------------------------
+r1782 | mdorr | 2021-09-22 11:34:38 -0700 (Wed, 22 Sep 2021) | 3 lines
+
+Doing another commit message test.
+
+
+------------------------------------------------------------------------
+r1781 | mdorr | 2021-09-22 10:33:37 -0700 (Wed, 22 Sep 2021) | 3 lines
+
+Fixing an output message (and testing new commit message workaround for LLNL).
+
+
+------------------------------------------------------------------------
+r1780 | mdorf | 2021-09-19 14:02:18 -0700 (Sun, 19 Sep 2021) | 1 line
+
+Fixed cylindrical Bcomponent diagnostcs
+------------------------------------------------------------------------
+r1779 | debo | 2021-09-15 15:18:55 -0700 (Wed, 15 Sep 2021) | 1 line
+
+removed an unused var
+------------------------------------------------------------------------
+r1778 | debo | 2021-09-15 11:11:24 -0700 (Wed, 15 Sep 2021) | 1 line
+
+1) Overhauled the process of selecting and plotting various diagnostics; 2) For sparse grids, use combination technique on each diagnostic rather than entire phase space solution; 3) Making SpaceUtils, SGInterp, and Lee's FourthOrderUtils multidim; and other small changes
+------------------------------------------------------------------------
+r1777 | ricketson1 | 2021-09-13 14:07:47 -0700 (Mon, 13 Sep 2021) | 1 line
+
+(De)averaging between cell averages and cell centers implemented for sparse grid interpolation
+------------------------------------------------------------------------
+r1776 | debo | 2021-09-01 15:58:00 -0700 (Wed, 01 Sep 2021) | 1 line
+
+added missing file; squashed warnings; removed commented code
+------------------------------------------------------------------------
+r1775 | debo | 2021-09-01 14:41:00 -0700 (Wed, 01 Sep 2021) | 1 line
+
+Implemented multidomain and sparse grids simulation capabilities
+------------------------------------------------------------------------
+r1774 | mdorf | 2021-08-27 16:41:21 -0700 (Fri, 27 Aug 2021) | 1 line
+
+Extended Reyonlds-stress term to work with the 4D code; fixed calculation of the normalized flux for the 5D toroidal geometry
+------------------------------------------------------------------------
+r1773 | angus1 | 2021-08-26 13:41:37 -0700 (Thu, 26 Aug 2021) | 1 line
+
+removing some unused members from OneBlockCoordSys class
+------------------------------------------------------------------------
+r1772 | mdorf | 2021-08-17 16:00:23 -0700 (Tue, 17 Aug 2021) | 1 line
+
+Added new diagnostics capabilities (mainly to plot ExB fluxes); set default calculation of RS-term to use UW3 scheme
+------------------------------------------------------------------------
+r1771 | mdorr | 2021-08-10 14:48:34 -0700 (Tue, 10 Aug 2021) | 3 lines
+
+Changing the MGR solver to use an index array to specify the C and F points
+
+
+------------------------------------------------------------------------
+r1770 | ricketson1 | 2021-08-04 13:29:06 -0700 (Wed, 04 Aug 2021) | 1 line
+
+Adding sparse grid stencils to advectUtils and their calls in GKVlasov.  Also getting rid of a wrapper function in advectUtil/mappedAdvectionFlux that's never used (GKVlasov implements its own version of the wrapper)
+------------------------------------------------------------------------
+r1769 | debo | 2021-07-20 20:31:32 -0700 (Tue, 20 Jul 2021) | 1 line
+
+Bugfix in ARK Butcher tables that cause a memory leak; removed MBPETScSolver option from TwoFieldNeutralPC
+------------------------------------------------------------------------
+r1768 | mdorr | 2021-07-19 19:51:58 -0700 (Mon, 19 Jul 2021) | 3 lines
+
+Fixing memory leaks
+
+
+------------------------------------------------------------------------
+r1767 | ricketson1 | 2021-07-16 12:03:14 -0700 (Fri, 16 Jul 2021) | 1 line
+
+Fixed fortran indes overflow bug in sparse grid cell averaging stencil
+------------------------------------------------------------------------
 r1766 | debo | 2021-07-14 11:45:48 -0700 (Wed, 14 Jul 2021) | 1 line
 
 Small corrections to the external time integrator interfaces

@@ -168,11 +168,11 @@ BC.potential.poloidal_inner_div.type = "dirichlet"
 BC.potential.poloidal_inner_div.value = 0.0
 BC.potential.poloidal_outer_div.type = "dirichlet"
 BC.potential.poloidal_outer_div.value = 0.0
-BC.potential.radial_core.type = "neumann"
+BC.potential.radial_core.type = "mapped_neumann"
 BC.potential.radial_core.value = 0.
-BC.potential.radial_sol.type = "neumann"
+BC.potential.radial_sol.type = "mapped_neumann"
 BC.potential.radial_sol.value = 0.
-BC.potential.radial_pf.type = "neumann"
+BC.potential.radial_pf.type = "mapped_neumann"
 BC.potential.radial_pf.value = 0.0
 
 #####################################################

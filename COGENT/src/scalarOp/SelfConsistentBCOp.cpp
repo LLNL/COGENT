@@ -25,7 +25,8 @@ void SelfConsistentBCOp::accumulateExplicitRHS(GKRHSData&                       
                                                const KineticSpeciesPtrVect&       a_kinetic_species,
                                                const CFG::FluidSpeciesPtrVect&    a_fluid_species,
                                                const ScalarPtrVect&               a_scalars,
-                                               const CFG::EField&                 a_E_field,
+                                               const CFG::EMFields&               a_EM_fields,
+                                               const CFG::PhiOps&                 a_phi_ops,
                                                const int                          a_component,
                                                const Real                         a_time )
 {
@@ -53,16 +54,7 @@ void SelfConsistentBCOp::accumulateExplicitRHS(GKRHSData&                       
       m_rhs.define(a_kinetic_species, a_fluid_species, a_scalars);
     }
     
-    const CFG::MagGeom& mag_geom = m_geometry.magGeom();
-    const CFG::DisjointBoxLayout& grids_cfg = mag_geom.gridsFull();
-
-    //Phi is only required for gyroaveraged calculation, set it to zero for now
-    CFG::LevelData<CFG::FArrayBox> zero_phi(grids_cfg, 1, CFG::IntVect::Zero);
-    for (CFG::DataIterator dit(zero_phi.dataIterator()); dit.ok(); ++dit) {
-      zero_phi[dit].setVal(0.);
-    }
-    
-    m_vlasov->accumulateRHS(m_rhs, a_kinetic_species, zero_phi, a_E_field, false, a_time);
+    m_vlasov->accumulateRHS(m_rhs, a_kinetic_species, a_EM_fields, a_phi_ops, false, a_time);
     
     ScalarPtrVect& rhs_scalar = a_rhs.dataScalar();
     Vector<Real>& rhs_scalar_data = rhs_scalar[a_rhs.getScalarComponent("Er_boundary")]->data();
@@ -79,7 +71,7 @@ void SelfConsistentBCOp::accumulateImplicitRHS(GKRHSData&                       
                                                const KineticSpeciesPtrVect&       a_kinetic_species,
                                                const CFG::FluidSpeciesPtrVect&    a_fluid_species,
                                                const ScalarPtrVect&               a_scalars,
-                                               const CFG::EField&                 a_E_field,
+                                               const CFG::EMFields&               a_EM_fields,
                                                const int                          a_component,
                                                const bool                         a_recompute_kinetic_terms,
                                                const Real                         a_time )

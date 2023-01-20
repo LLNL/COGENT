@@ -64,16 +64,8 @@ void OneDimData::parseParameters( ParmParse& a_pp )
 
 void OneDimData::checkGeometryValidity( const MultiBlockLevelGeom& a_geometry ) const
 {
-   const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
-   
-   if (m_coord_type == "flux" || m_coord_type == "outer_midplane") {
-      bool not_sn( typeid(coord_sys) != typeid(SNCoreCoordSys) );
-      not_sn &= (typeid(coord_sys) != typeid(SingleNullCoordSys));
-      if ( not_sn ) {
-         const std::string msg( "Arbitrary: Attempt to use not a single-null geometry with the flux or outer_midplane options. ");
-         MayDay::Error( msg.c_str() );
-      }
-   }
+  //const MultiBlockCoordSys& coord_sys( *(a_geometry.coordSysPtr()) );
+  //Presently the capbaility works for any geometry, but we might need this later
 }
 
 void OneDimData::setPointwise(FArrayBox&                 a_data,

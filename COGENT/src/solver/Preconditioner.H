@@ -10,6 +10,7 @@ class Preconditioner
 {
   public:
 
+    Preconditioner() { m_sys_id = -1; }
     virtual ~Preconditioner() {;}
 
     virtual void define(const T&, 
@@ -39,7 +40,12 @@ class Preconditioner
 
     virtual const std::string typeName() { return "BaseClass"; }
 
+    inline void setSysID(const int a_id) { m_sys_id = a_id; }
+    inline int getSysID() const { return m_sys_id; }
+
   protected:
+
+    int m_sys_id;
 
   private:
 

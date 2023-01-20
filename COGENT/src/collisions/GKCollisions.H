@@ -83,7 +83,8 @@ class GKCollisions
                                 void*,
                                 const std::string&,
                                 const std::string&,
-                                bool);
+                                bool,
+                                const int );
 
       void updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                                 const KineticSpeciesPtrVect&,

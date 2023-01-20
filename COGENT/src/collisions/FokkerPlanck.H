@@ -120,7 +120,8 @@ public:
                       bool,
                       const KineticSpecies&,
                       const GlobalDOFKineticSpecies&,
-                      int );
+                      const int,
+                      const int );
 
   virtual void updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                               const KineticSpecies&,
@@ -193,6 +194,10 @@ private:
    CFG::LevelData<CFG::FArrayBox> m_energy_cons;
 
    std::string m_opt_string;
+
+   bool m_first_call_preTimeStep,
+        m_first_call_computeReferenceSolution,
+        m_first_call_computePotentialsAndCoeffs;
 
    /// Computes the Rosenbluth potentials
    void evalRosenbluthPotentials( LevelData<FArrayBox>& phi,

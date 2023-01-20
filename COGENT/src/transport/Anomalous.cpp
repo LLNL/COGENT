@@ -128,7 +128,11 @@ void Anomalous::evalTpmRHS( KineticSpecies&               a_rhs_species,
   }
   
   // compute simple diffusion for 3D
-  if (SpaceDim == 5) {
+ if (SpaceDim == 5) {
+   // NB: for some reasons BC classes do not properly fill codim2 ghosts
+   // for the case of 3D SN field-aligned geometry, so use the
+   // alternative functionality here 
+    phase_geom.fillCoDim2BoundaryGhosts(m_fB);
     computeRhs3D(m_rhs_transport, phase_geom);
   }
    
@@ -479,7 +483,7 @@ void Anomalous::computeCfgMoments(const LevelData<FArrayBox>& a_fB,
     CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_geom.grids(), 1, cfg_ghostVect);
 
     m_moment_op.compute(dens_cfg, a_soln_species, a_fB, DensityKernel<FArrayBox>());
-    m_moment_op.compute(Upar_cfg, a_soln_species, a_fB, ParallelMomKernel<FArrayBox>());
+    m_moment_op.compute(Upar_cfg, a_soln_species, a_fB, ParallelVelKernel<FArrayBox>());
     m_moment_op.compute(four_cfg, a_soln_species, a_fB, FourthMomentKernel<FArrayBox>());
     m_moment_op.compute(perp_cfg, a_soln_species, a_fB, PerpEnergyKernel<FArrayBox>());
     CFG::DataIterator cfg_dit = dens_cfg.dataIterator();
@@ -1029,7 +1033,7 @@ Anomalous::computeBeta(LevelData<FArrayBox>& a_beta,
       CFG::LevelData<CFG::FArrayBox> perp_cfg(mag_grids, 1, cfg_ghostVect);
 
       m_moment_op.compute(dens_cfg, a_soln_species, m_fB_beta, DensityKernel<FArrayBox>());
-      m_moment_op.compute(Upar_cfg, a_soln_species, m_fB_beta, ParallelMomKernel<FArrayBox>());
+      m_moment_op.compute(Upar_cfg, a_soln_species, m_fB_beta, ParallelVelKernel<FArrayBox>());
       m_moment_op.compute(four_cfg, a_soln_species, m_fB_beta, FourthMomentKernel<FArrayBox>());
       m_moment_op.compute(perp_cfg, a_soln_species, m_fB_beta, PerpEnergyKernel<FArrayBox>());
       CFG::DataIterator cfg_dit = dens_cfg.dataIterator();

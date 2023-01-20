@@ -52,7 +52,7 @@ LogicalSheathBC::computeSheathBC(LevelData<FArrayBox>& a_phi_bc,
    //Get ion parallel current or other data on the boundary,
    // UNCOMMENT THIS CODE ONCE IT'S TESTED
    /*
-    LevelData<FArrayBox> bdry_ion_current(bdry_dbl, 1, IntVect::Zero);
+    LevelData<FArrayBox> bdry_ion_current(m_grids_inj, 1, IntVect::Zero);
     computeBoundaryIonCurrent(bdry_ion_current, a_species);
    */
    
@@ -125,12 +125,14 @@ void
 LogicalSheathBC::computeBoundaryIonCurrent(LevelData<FArrayBox>& a_bdry_ion_current,
                                            const KineticSpeciesPtrVect& a_species) const
 {
-   LevelData<FArrayBox> bdry_kernel(m_grids_inj, 1, IntVect::Zero);
-   for (DataIterator dit( m_grids_inj ); dit.ok(); ++dit) {
+   const DisjointBoxLayout& grids_full( m_bdry_layout->disjointBoxLayout() );
+   
+   LevelData<FArrayBox> bdry_kernel(grids_full, 1, IntVect::Zero);
+   for (DataIterator dit( grids_full ); dit.ok(); ++dit) {
       bdry_kernel[dit].setVal(0.0);
    }
 
-   LevelData<FArrayBox> this_bdry_data(m_grids_inj, 1, IntVect::Zero);
+   LevelData<FArrayBox> this_bdry_data(grids_full, 1, IntVect::Zero);
    
    for (int s_index(0); s_index<a_species.size(); s_index++) {
 
@@ -141,7 +143,7 @@ LogicalSheathBC::computeBoundaryIonCurrent(LevelData<FArrayBox>& a_bdry_ion_curr
       const LevelData<FArrayBox>& dfn = species_physical.distributionFunction();
       fillBoundaryData(this_bdry_data, dfn);
       
-      for (DataIterator dit( m_grids_inj ); dit.ok(); ++dit) {
+      for (DataIterator dit( grids_full ); dit.ok(); ++dit) {
          this_bdry_data[dit].mult(species_physical.charge());
          bdry_kernel[dit].plus(this_bdry_data[dit]);
       }

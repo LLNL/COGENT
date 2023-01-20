@@ -237,6 +237,7 @@ class COGENTTimeIntegration : public Simulation<Vector,System>
       Real        m_plot_time;
       int         m_last_plot;
       std::string m_plot_prefix;
+      bool        m_write_odevec;
 
       System* m_system;
       TimeIntegrator<Vector, System>* m_integrator;
@@ -279,13 +280,10 @@ COGENTTimeIntegration<Vector,System>::loadRestartFile( ParmParse& a_ppsim )
 {
    std::string restartFile;
    a_ppsim.query( "restart_file", restartFile );
-#ifdef CH_USE_HDF5
-   HDF5Handle handle( restartFile, HDF5Handle::OPEN_RDONLY );
-   m_system->readCheckpointFile( handle, m_cur_step, m_cur_time, m_cur_dt );
-   handle.close();
-#else
-   MayDay::Error("restart only defined with hdf5");
-#endif
+   m_system->readCheckpointFile(  restartFile, 
+                                  m_cur_step, 
+                                  m_cur_time, 
+                                  m_cur_dt );
 }
 
 static int plottedonce = 0;
@@ -295,6 +293,16 @@ COGENTTimeIntegration<Vector,System>::writePlotFile()
 {
    if (m_verbosity >= 3) {
       pout() << "COGENTTimeIntegration<Vector,System>::writePlotFile" << endl;
+   }
+
+   if (m_write_odevec) {
+
+     char iter_str[10];
+     sprintf(iter_str, "%05d", m_cur_step);
+     std::string fname = "odevec_" + std::string(iter_str);
+
+     m_U.writeToFile( fname );
+
    }
 
 #ifdef CH_USE_HDF5
@@ -310,14 +318,7 @@ COGENTTimeIntegration<Vector,System>::writePlotFile()
       sprintf( iter_str, "%s", m_plot_prefix.c_str());
    }
 
-   //if (m_verbosity >= 2) {
-   //   pout() << "plot file name = " << iter_str << endl;
-   //}
-
-   // HDF5Handle handle( iter_str, HDF5Handle::CREATE );
-   // Instead of dummy file with prefix, use prefix for all plot files.
    m_system->writePlotFile( iter_str, m_cur_step, m_cur_time);
-   // handle.close();
 #else
    MayDay::Error( "plotting only defined with hdf5" );
 #endif
@@ -336,26 +337,10 @@ COGENTTimeIntegration<Vector,System>::writeHistFile(bool startup_flag)
 template <class Vector, class System> inline void
 COGENTTimeIntegration<Vector,System>::writeCheckpointFile()
 {
-   if (m_verbosity>=3) {
-      pout() << "COGENTTimeIntegration<Vector,System>::writeCheckpointFile" << endl;
-   }
-
-#ifdef CH_USE_HDF5
-   char iter_str[100];
-
-   sprintf( iter_str, "%s%04d.%dd.hdf5",
-            m_checkpoint_prefix.c_str(), m_cur_step, SpaceDim );
-
-   if (m_verbosity>=2) {
-      pout() << "checkpoint file name = " << iter_str << endl;
-   }
-
-   HDF5Handle handle( iter_str, HDF5Handle::CREATE );
-   m_system->writeCheckpointFile( handle, m_cur_step, m_cur_time, m_cur_dt );
-   handle.close();
-#else
-   MayDay::Error( "restart only defined with hdf5" );
-#endif
+   m_system->writeCheckpointFile( m_checkpoint_prefix, 
+                                  m_cur_step, 
+                                  m_cur_time, 
+                                  m_cur_dt );
 }
 
 template <class Vector, class System> inline void
@@ -392,6 +377,7 @@ COGENTTimeIntegration<Vector,System>::COGENTTimeIntegration()
        m_plot_time(0.0),
        m_last_plot(0),
        m_plot_prefix( "plt" ),
+       m_write_odevec(false),
        m_system( NULL ),
        m_compute_op_matrices(false),
        m_op_matrices_tolerance(1e-6)
@@ -434,6 +420,8 @@ void COGENTTimeIntegration<Vector,System>::initialize(  ParmParse&    a_pp,
    m_system->printDiagnostics();
 
    m_system->defineODEVector(m_U);
+   m_U.printLoadBalanceInfo();
+
    m_system->copyStateToArray( m_U );
    m_system->defineODEVector(m_U_old);
 
@@ -708,6 +696,7 @@ void COGENTTimeIntegration<Vector,System>::parseParameters( ParmParse& a_ppsim )
    a_ppsim.query( "plot_time_interval", m_plot_time_interval );
    if( m_plot_time_interval>0.0 ) m_plot_interval = 0;
    a_ppsim.query( "plot_prefix", m_plot_prefix );
+   a_ppsim.query( "write_ode_vec", m_write_odevec );
 
 
    // compute linearized operator matrices?

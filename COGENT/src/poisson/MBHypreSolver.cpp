@@ -3,10 +3,12 @@
 #include "BlockRegister.H"
 #include "SparseCoupling.H"
 #include "MBSolverF_F.H"
+#include "MagGeom.H"
 
 #include "_hypre_sstruct_mv.h"
 //#include "_hypre_parcsr_ls.h"
 
+#include "AMRIO.H"
 
 #include "NamespaceHeader.H"
 
@@ -26,16 +28,21 @@ MBHypreSolver::MBHypreSolver( const MultiBlockLevelGeom&      a_geom,
      m_AMG_solver_allocated(false),
      m_ILU_solver_allocated(false),
      m_MGR_solver_allocated(false),
-     m_MGR_aff_solver_allocated(false),
+     m_mgr_CF_indexes(NULL),
      m_matrix_initialized(false),
      m_matrix_finalized(false)
 {
+   m_rhs_from_bc.define(a_geom.grids(), a_nvar, IntVect::Zero);
+   m_advection_rhs_from_bc.define(a_geom.grids(), a_nvar, IntVect::Zero);
    createHypreData();
 }
       
 
 MBHypreSolver::~MBHypreSolver()
 {
+   for (int n=0; n<m_advection_stencil_size; ++n) delete [] m_advection_offsets[n];
+   delete [] m_advection_offsets;
+
    destroyHypreData();
 }
 
@@ -138,16 +145,50 @@ MBHypreSolver::setMethodParams( const ParmParse&  a_pp )
    }
    else if ( m_method == "MGR" ) {
       if ( a_pp.query("cpoint", m_MGR_cpoint) == 0 ) m_MGR_cpoint = 1;
+      if ( a_pp.query("mgr_schur", m_MGR_schur) == 0 ) m_MGR_schur = false;
+      if ( a_pp.query("mgr_schur_1", m_MGR_schur_1) == 0 ) m_MGR_schur_1 = false;
       if ( a_pp.query("print_level", m_MGR_print_level) == 0 ) m_MGR_print_level = 0;
       if ( a_pp.query("amg_print_level", m_MGR_amg_print_level) == 0 ) m_MGR_amg_print_level = 0;
+      if ( a_pp.query("amg_tol", m_MGR_amg_tol) == 0 ) m_MGR_amg_tol = 0.;
       if ( a_pp.query("amg_max_iter", m_MGR_amg_max_iter) == 0 ) m_MGR_amg_max_iter = 1;
-      if ( a_pp.query("frelax_amg_threshold", m_MGR_frelax_amg_threshold) == 0 ) m_MGR_frelax_amg_threshold = 0.6;
-      if ( a_pp.query("frelax_method", m_MGR_frelax_method) == 0 ) m_MGR_frelax_method = 2;
+      if ( a_pp.query("amg_threshold", m_MGR_amg_threshold) == 0 ) m_MGR_amg_threshold = 0.25;
+      if ( a_pp.query("amg_verbose", m_MGR_amg_verbose) == 0 ) m_MGR_amg_verbose = false;
       if ( a_pp.query("interp_type", m_MGR_interp_type) == 0 ) m_MGR_interp_type = 3;
       if ( a_pp.query("restrict_type", m_MGR_restrict_type) == 0 ) m_MGR_restrict_type = 0;
-      if ( a_pp.query("relax_type", m_MGR_relax_type) == 0 ) m_MGR_relax_type = 0;
-      if ( a_pp.query("aff_amg_max_iter", m_MGR_aff_amg_max_iter) == 0 ) m_MGR_aff_amg_max_iter = 2;
-      if ( a_pp.query("aff_amg_tol", m_MGR_aff_amg_tol) == 0 ) m_MGR_aff_amg_tol = 0.;
+
+      if ( a_pp.query("relax_type", m_MGR_relax_type) != 0 ) {
+         // For backward compatibility with old inputs, check to see if frelax_method has been specified.
+         // If so, and relax_type has also been specified, make sure they are the same
+         int frelax_method;
+         if ( (a_pp.query("frelax_method", frelax_method) != 0) && frelax_method != m_MGR_relax_type ) {
+            MayDay::Error("MBHypreSolver::setMethodParams: Different values of frelax_method and relax_type specified");
+         }
+      }
+      else if ( a_pp.query("frelax_method", m_MGR_relax_type) != 0 ) {
+         // If frelax_method was specified as 1, change it to 0
+         if ( m_MGR_relax_type == 1 ) m_MGR_relax_type == 0; 
+      }
+      else {
+         m_MGR_relax_type = 0;
+      }
+
+      // Override certain inputs that need to be set in a particular way when MGR is being used to solve
+      // a block system by constructing a Schur complement, solving it, and then backsolving
+      if ( m_MGR_schur && m_MGR_schur_1 ) {
+         MayDay::Error("MBHypreSolver::setMethodParams: m_MGR_schur and m_MGR_schur_1 cannot both be true");
+      }
+      if ( m_MGR_schur ) {
+         m_MGR_cpoint = 0;
+      }
+      else if ( m_MGR_schur_1 ) {
+         m_MGR_cpoint = 1;
+      }
+      if ( m_MGR_schur || m_MGR_schur_1 ) {
+         m_MGR_interp_type = 2;
+         m_MGR_restrict_type = 0;
+         m_MGR_relax_type = 0;
+      }
+      
    }
    else if ( m_method == "ILU" ) {
       if ( a_pp.query("type", m_ILU_type) == 0 ) m_ILU_type = 1;
@@ -170,6 +211,9 @@ MBHypreSolver::setMethodParams( const ParmParse&  a_pp )
       if ( a_pp.query("max_schur_iter", m_ILU_max_schur_iter) ) m_ILU_max_schur_iter = 5;
       if ( a_pp.query("tol", m_ILU_tol) ) m_ILU_tol = 1.e-7;
       if ( a_pp.query("print_level", m_ILU_print_level) ) m_ILU_print_level = 0;
+   }
+   else if ( m_method == "AIR" ) {
+      if ( a_pp.query("air_restrict_type", m_AIR_restrict_type) == 0 ) m_AIR_restrict_type = 1;
    }
    else {
       MayDay::Error("MBHypreSolver::setMethodParams(): unknown method");
@@ -205,7 +249,7 @@ MBHypreSolver::solve( const LevelData<FArrayBox>&  a_rhs,
       rhs.define(a_rhs);
 
       for (DataIterator dit(rhs.dataIterator()); dit.ok(); ++dit) {
-         rhs[dit] += m_rhs_from_bc[dit];
+        rhs[dit] += m_rhs_from_bc[dit];
       }
 
       copyToHypreVector(rhs, m_b);
@@ -224,7 +268,7 @@ MBHypreSolver::solve( const LevelData<FArrayBox>&  a_rhs,
       AMG_preconditioned_GMRES( m_A, m_A, m_b, m_method_tol, m_method_max_iter,
                                 m_precond_tol, m_precond_max_iter, m_method_verbose, m_x );
    }
-   else if ( m_method == "AMG" ) {
+   else if ( m_method == "AMG" || m_method == "AIR" ) {
       AMG( m_A, m_b, m_method_tol, m_method_max_iter, m_method_verbose, m_x );
    }
    else if ( m_method == "ILU" ) {
@@ -250,6 +294,11 @@ MBHypreSolver::dumpMatrix(const string&  a_file_name) const
    HYPRE_SStructMatrixPrint(a_file_name.c_str(), m_A, 0);
 }
 
+void
+MBHypreSolver::dumpVector(const string& a_file_name) const
+{
+  HYPRE_SStructVectorPrint(a_file_name.c_str(), m_b, 0);
+}
 
 
 void
@@ -273,13 +322,16 @@ MBHypreSolver::finalizeMatrix()
    m_matrix_finalized = true;
 
    if ( m_method == "AMG" ) {
-      AMGSetup(m_A);
+      AMGSetup(m_A, m_x, m_b);
    }
    else if ( m_method == "ILU" ) {
       ILUSetup(m_A);
    }
    else if ( m_method == "MGR" ) {
       MGRSetup(m_A);
+   }
+   else if ( m_method == "AIR" ) {
+      AIRSetup(m_A);
    }
 
    //   dumpMatrix("HYPRE_MATRIX.A");
@@ -445,18 +497,72 @@ MBHypreSolver::createHypreData()
    m_hypre_allocated = true;
 }
 
+void
+MBHypreSolver::constructAdvectionOffsets()
+{
+   m_advection_stencil_size = 2*(SpaceDim)*m_advection_stencil_radius + 1;
+   m_advection_offsets = new int*[m_advection_stencil_size];
+
+   // Stencil center offset
+   int n = 0;
+   m_advection_offsets[n] = new int[CH_SPACEDIM];
+   for (int dir=0; dir<CH_SPACEDIM; ++dir) {
+      m_advection_offsets[n][dir] = 0;
+   }
+
+   for (int dir=0; dir<SpaceDim; ++dir) {
+
+     for (int m=1; m<=m_advection_stencil_radius; ++m) {
+       // Stencil offsets along positive leg
+       n++;
+       m_advection_offsets[n] = new int[CH_SPACEDIM];
+       for (int tdir=0; tdir<CH_SPACEDIM; ++tdir) {
+	 if (tdir == dir) {
+           m_advection_offsets[n][tdir] = m;
+	 }
+         else {
+           m_advection_offsets[n][tdir] = 0;
+         }
+       }
+       // Stencil offsets along negative leg
+       n++;
+       m_advection_offsets[n] = new int[CH_SPACEDIM];
+       for (int tdir=0; tdir<CH_SPACEDIM; ++tdir) {
+         if (tdir == dir) {
+           m_advection_offsets[n][tdir] = -m;
+         }
+         else {
+           m_advection_offsets[n][tdir] = 0;
+         }
+       }
+     }
+   }
+}
+
 
 void
 MBHypreSolver::createGraph( const Box& a_stencil_box,
                             const int  a_radius )
 {
-   // Define the discretization stencil for the system matrix A
+   // First construct the offsets for advection terms in the operator, if any.  N.B.: It is currently
+   // assumed such offsets are a subset of the offsets computed below for the second-order
+   // elliptic term.  It is also assumed that the advection operator is discretized using either
+   // second-order, centered differences ("C2") or first-order upwind ("UW1").  If any other
+   // scheme options are added, it is essential to ensure that the corresponding offsets remain
+   // within those of the second-order term.  Otherwise, the code below will need to be generalized
+   // compute the graph object from the union of the offsets of the advection and second-order terms.
+   
+   m_advection_stencil_radius = 1;
+   constructAdvectionOffsets();
+
+   // Now construct the offsets for the second-order term and the corresponding Hypre graph object
 
    {
       /* Define the geometry of the stencil. Each represents a
          relative offset (in the index space). */
 
       int stencil_size = a_stencil_box.numPts();
+
 
       int** offsets = new int*[stencil_size];
       int n = -1;
@@ -549,14 +655,13 @@ MBHypreSolver::destroyHypreData()
             m_mgr_cindexes = NULL;
          }
 
+         if(m_mgr_CF_indexes)
+            hypre_TFree(m_mgr_CF_indexes, HYPRE_MEMORY_HOST);
+         m_mgr_CF_indexes = NULL;
+
          if (m_mgr_amg_solver) HYPRE_BoomerAMGDestroy(m_mgr_amg_solver);
          HYPRE_MGRDestroy(m_par_MGR_solver);
          m_MGR_solver_allocated = false;
-
-         if (m_MGR_aff_solver_allocated) {
-            HYPRE_BoomerAMGDestroy(m_MGR_aff_solver);
-            m_MGR_aff_solver_allocated = false;
-         }
       }
 
       if (m_A) {
@@ -576,6 +681,48 @@ MBHypreSolver::destroyHypreData()
    }
 }
 
+int MBHypreSolver::findStructuredEntry( const int      a_block_column,
+					const Box&     a_stencil_box,
+					const IntVect& a_iv ) const
+{
+   /*
+     The Hypre matrix coefficients corresponding to the equation centered at cell a_iv are
+     identified by an entry number, which is returned by this function.  Regular "stencil"
+     couplings to cells are enumerated first, followed by the unstructured couplings to
+     cells in other blocks contained in a_unstructured_ivs.
+   */
+   bool found_entry = false;
+
+   // Search the structured entries
+   
+   int entry = a_block_column * a_stencil_box.numPts();
+
+
+   for (BoxIterator bit(a_stencil_box); bit.ok(); ++bit) {
+      if (bit() == a_iv) {
+         found_entry = true;
+         break;
+      }
+      entry++;
+   }
+
+   // bool found_entry = false;
+
+   // int entry;
+   // for (entry=0; entry<m_advection_stencil_size; ++entry) {
+   //    IntVect offset(m_advection_offsets[entry]);
+   //    offset += a_iv_center;
+   //    if (offset == a_iv) {
+   // 	 found_entry = true;
+   // 	 break;
+   //    }
+   // }
+
+   CH_assert(found_entry);
+
+
+   return entry;
+}
 
 int
 MBHypreSolver::findHypreEntry( const int          a_block_column,
@@ -715,7 +862,7 @@ MBHypreSolver::addUnstructuredMatrixEntries( const int                          
             alphaPtr = &a_alpha_coefficient[dit];
          }
 
-         const Box& domainBox = (m_coord_sys_ptr->mappingBlocks())[block_number];
+         const Box& domain_box = (m_coord_sys_ptr->mappingBlocks())[block_number];
          const IntVectSet& this_ghosts_fab = ghosts[dit];
          if ( stencil[dit] != NULL ) {
             const IVSFAB<MBStencil>& this_stencil = *stencil[dit];
@@ -730,7 +877,7 @@ MBHypreSolver::addUnstructuredMatrixEntries( const int                          
             for (IVSIterator ivsit(interblock_ivs); ivsit.ok(); ++ivsit) {
                IntVect iv = ivsit();
                Box stencil_box = stencil_offsets + iv;
-               Box stencil_box_valid = stencil_box & domainBox;
+               Box stencil_box_valid = stencil_box & domain_box;
                IntVectSet extra_block_ghosts = stencil_box & this_ghosts_fab;
 
                double alpha = alphaPtr? alphaPtr->operator()(iv): 1.;
@@ -739,22 +886,29 @@ MBHypreSolver::addUnstructuredMatrixEntries( const int                          
                const IntVectSet& unstructured_couplings = a_unstructured_coupling[dit](iv);
 
                for (int dir=0; dir<SpaceDim; ++dir) {
-                  bool at_lo_block_interface = lo_block_interface[dir] && (iv[dir] == domainBox.smallEnd(dir));
-                  bool at_hi_block_interface = hi_block_interface[dir] && (iv[dir] == domainBox.bigEnd(dir));
+                  bool at_lo_interface = lo_block_interface[dir] && (iv[dir] == domain_box.smallEnd(dir));
+                  bool at_hi_interface = hi_block_interface[dir] && (iv[dir] == domain_box.bigEnd(dir));
                   bool force_codim2_condense = lo_block_interface[dir] || hi_block_interface[dir];
                
+                  bool at_lo_boundary = (!at_lo_interface && iv[dir] == domain_box.smallEnd(dir));
+                  bool at_hi_boundary = (!at_hi_interface && iv[dir] == domain_box.bigEnd(dir));
+
+                  int bc_type = EllipticOpBC::UNDEFINED;
+                  if ( at_lo_boundary ) bc_type = a_bc.getBCType(block_number, dir, Side::LoHiSide::Lo);
+                  if ( at_hi_boundary ) bc_type = a_bc.getBCType(block_number, dir, Side::LoHiSide::Hi);
+
                   for (SideIterator sit; sit.ok(); ++sit) {
                      Side::LoHiSide side = sit();
 
                      IntVect iv_face;
+                     iv_face = iv;
+                     iv_face.shift(dir,side);
 
                      // Halve the contributions on face contained in block interfaces to effect averaging
                      double fac;
-                     if ( (at_lo_block_interface && side == Side::LoHiSide::Lo) ||
-                          (at_hi_block_interface && side == Side::LoHiSide::Hi) ) {
+                     if ( (at_lo_interface && side == Side::LoHiSide::Lo) ||
+                          (at_hi_interface && side == Side::LoHiSide::Hi) ) {
                         fac = m_flux_average[dir]? 0.5: 1.0;
-                        iv_face = iv;
-                        iv_face.shift(dir,side);
                      }
                      else {
                         fac = 1.;
@@ -769,7 +923,7 @@ MBHypreSolver::addUnstructuredMatrixEntries( const int                          
 
                         FArrayBox dummy;
                         modifyStencilForBCs( a_codim1_stencils[block_number], a_codim2_stencils[block_number],
-                                             iv, a_stencil_values, dummy, false, force_codim2_condense );
+                                             iv, a_stencil_values, dummy, 0, false, force_codim2_condense, false );
 
                         BoxIterator bit(stencil_box);
                         for (bit.begin(); bit.ok(); ++bit) {
@@ -785,8 +939,8 @@ MBHypreSolver::addUnstructuredMatrixEntries( const int                          
                                  // contribution to the BlockRegister data.  The minus sign accounts for the
                                  // normal component, which is negated on the adacent cell.  Also, since we
                                  // have not yet accounted for the regular stencil contributions, do that now.
-                                 if ( (at_lo_block_interface && side == Side::LoHiSide::Lo) ||
-                                      (at_hi_block_interface && side == Side::LoHiSide::Hi) ) {
+                                 if ( (at_lo_interface && side == Side::LoHiSide::Lo) ||
+                                      (at_hi_interface && side == Side::LoHiSide::Hi) ) {
                                     data[dir](iv_face).add(stencil_box_iv, -s);
 
                                     int entry = findHypreEntry(a_block_column, stencil_box, 
@@ -818,8 +972,8 @@ MBHypreSolver::addUnstructuredMatrixEntries( const int                          
                                     // If we are on a block interface, add the stencil contribution to the
                                     // BlockRegister data.  The minus sign accounts for the normal component,
                                     // which is negated on the adacent cell.
-                                    if ( (at_lo_block_interface && side == Side::LoHiSide::Lo) ||
-                                         (at_hi_block_interface && side == Side::LoHiSide::Hi) ) {
+                                    if ( (at_lo_interface && side == Side::LoHiSide::Lo) ||
+                                         (at_hi_interface && side == Side::LoHiSide::Hi) ) {
                                        data[dir](iv_face).add(interp_cell, -values[k]);
                                     }
 
@@ -928,6 +1082,258 @@ MBHypreSolver::addUnstructuredMatrixEntries( const int                          
    }
 }
 
+void
+MBHypreSolver::addAdvectionUnstructuredMatrixEntries( const int                                     a_block_row,
+						      const int                                     a_block_column,
+                                                      const LevelData<FArrayBox>&                   a_alpha_coefficient,
+						      const LevelData<BaseFab<Vector<IntVect> > >&  a_structured_couplings,
+						      const LevelData<BaseFab<Vector<Real> > >&     a_structured_weights,
+						      const LayoutData< BaseFab<IntVectSet> >&      a_unstructured_couplings,
+						      HYPRE_SStructMatrix&                          a_matrix ) const
+{
+   CH_TIMERS("MBHypreSolver::addAdvectionUnstructuredMatrixEntries()");
+   CH_TIMER("add_stencil_contrib",t_add_stencil_contrib);
+   CH_TIMER("add_extrablock_contrib",t_add_extrablock_contrib);
+
+   if ( m_mblex_potential_Ptr ) {
+
+      const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys_ptr->boundaries();
+      const LayoutData< RefCountedPtr< IVSFAB<MBStencil> > >& stencil = m_mblex_potential_Ptr->stencils();
+
+      const DisjointBoxLayout & grids = m_geometry.gridsFull();
+
+      BlockBaseRegister<BaseFab<SparseCoupling> > block_register(m_coord_sys_ptr, grids, 0);
+
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         const Box & box = grids[dit];
+
+         int block_number = m_coord_sys_ptr->whichBlock(box);
+
+         const NewCoordSys* block_coord_sys = m_coord_sys_ptr->getCoordSys(block_number);
+         RealVect dx = block_coord_sys->dx();
+
+         const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
+         bool lo_block_interface[CH_SPACEDIM];
+         bool hi_block_interface[CH_SPACEDIM];
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            lo_block_interface[dir] = this_block_boundaries[dir].isInterface();
+            hi_block_interface[dir] = this_block_boundaries[dir + SpaceDim].isInterface();
+         }
+
+         const FArrayBox* alphaPtr = NULL;
+         if ( a_alpha_coefficient.isDefined() ) {
+            alphaPtr = &a_alpha_coefficient[dit];
+         }
+
+         const BaseFab<Vector<IntVect> >& this_structured_couplings = a_structured_couplings[dit];
+         const BaseFab<Vector<Real> >& this_structured_weights = a_structured_weights[dit];
+
+         const Box& domainBox = (m_coord_sys_ptr->mappingBlocks())[block_number];
+         if ( stencil[dit] != NULL ) {
+            const IVSFAB<MBStencil>& this_stencil = *stencil[dit];
+
+            BaseFab<SparseCoupling> data[CFG_DIM];
+            for(int dir=0; dir<CFG_DIM; ++dir ) {
+               if (m_flux_average[dir]) {
+                  data[dir].define(surroundingNodes(box, dir), 1);
+               }
+            }
+
+            // Here, we loop over all cells whose stencil is affected by a block boundary
+            IntVectSet interblock_ivs = getInterBlockCoupledCells(block_number, m_advection_stencil_radius, box);
+            for (IVSIterator ivsit(interblock_ivs); ivsit.ok(); ++ivsit) {
+               IntVect iv = ivsit();
+
+               double alpha = alphaPtr? alphaPtr->operator()(iv): 1.;
+
+               // Get all of the indices that are sparsely coupled to this cell
+               const IntVectSet& unstructured_couplings = a_unstructured_couplings[dit](iv);
+
+               for (int dir=0; dir<CFG_DIM; ++dir) {
+                  bool at_lo_interface = lo_block_interface[dir] && (iv[dir] == domainBox.smallEnd(dir));
+                  bool at_hi_interface = hi_block_interface[dir] && (iv[dir] == domainBox.bigEnd(dir));
+
+                  Box stencil_box(iv,iv);
+                  stencil_box.grow(m_advection_stencil_radius);
+                  Box stencil_box_valid = stencil_box & domainBox;
+
+                  for (SideIterator sit; sit.ok(); ++sit) {
+                     Side::LoHiSide side = sit();
+
+                     if ( (side == Side::LoHiSide::Lo && at_lo_interface) ||
+                          (side == Side::LoHiSide::Hi && at_hi_interface) ) {
+
+                        IntVect iv_face;
+
+                        // Halve the contributions on face contained in block interfaces to effect averaging
+                        double fac;
+                        if ( (at_lo_interface && side == Side::LoHiSide::Lo) ||
+                             (at_hi_interface && side == Side::LoHiSide::Hi) ) {
+                           fac = m_flux_average[dir]? 0.5: 1.0;
+                           iv_face = iv;
+                           iv_face.shift(dir,side);
+                        }
+                        else {
+                           fac = 1.;
+                        }
+
+                        int coupling_comp = dir + ((1-sign(side))/2)*CFG_DIM;
+                        for (int m=0; m<this_structured_couplings(iv,coupling_comp).size(); ++m) {
+                           IntVect stencil_box_iv = this_structured_couplings(iv,coupling_comp)[m];
+                           
+                           double s = fac * this_structured_weights(iv,coupling_comp)[m];
+
+                           if ( s != 0. ) {
+
+                              if ( stencil_box_valid.contains(stencil_box_iv) ) {
+
+                                 CH_START(t_add_stencil_contrib);
+                                 // If the current side of cell iv is on a block interface, add the stencil
+                                 // contribution to the BlockRegister data.
+                                 // The minus sign accounts for the normal component, which is negated on
+                                 // the adacent cell.  Also, since we have not
+                                 // yet accounted for the regular stencil contributions, do that now.
+                                 if ( (at_lo_interface && side == Side::LoHiSide::Lo) || 
+                                      (at_hi_interface && side == Side::LoHiSide::Hi) ) {
+                                    if (m_flux_average[dir]) {
+                                       // Need to defer alpha multiplication until after flux averaging
+                                       data[dir](iv_face).add(stencil_box_iv, -s);
+                                    }
+                                    
+                                    int entry = findHypreEntry(a_block_column, stencil_box, unstructured_couplings, stencil_box_iv);
+
+                                    double value = s * alpha;
+                                    
+                                    int num_entries = 1;
+                                    HYPRE_SStructMatrixAddToValues(a_matrix, block_number, iv.dataPtr(),
+                                                                   a_block_row, num_entries, &entry, &value);
+                                 }
+                                 CH_STOP(t_add_stencil_contrib);
+                              }
+                              else if ( (stencil_box_iv[dir] < domainBox.smallEnd(dir) 
+                                         && lo_block_interface[dir]) ||
+                                        (stencil_box_iv[dir] > domainBox.bigEnd(dir)
+                                         && hi_block_interface[dir]) ) {
+
+                                 CH_START(t_add_extrablock_contrib);
+
+                                 const MBStencil& elements = this_stencil(stencil_box_iv, 0);
+                                 int num_unstructured_entries = elements.size();
+                                 double * values = new double[num_unstructured_entries];
+                                 int * entries = new int[num_unstructured_entries];
+
+                                 MBStencilIterator stit(elements);
+                                 int k = 0;
+                                 for (stit.begin(); stit.ok(); ++stit) {
+                                    const MBStencilElement& stencilElement = stit();
+                                    IntVect interp_cell = stencilElement.cell();
+
+                                    entries[k] = findHypreEntry(a_block_column, stencil_box, unstructured_couplings, interp_cell);
+                                    values[k] = s * stencilElement.weight();
+                                    
+                                    // If we are on a block interface, add the stencil contribution to the
+                                    // BlockRegister data.  The minus sign accounts for the normal component,
+                                    // which is negated on the adacent cell.  Need to defer multiplication by
+                                    // alpha until after the flux averaging.
+                                    if ( m_flux_average[dir] &&
+                                         ((at_lo_interface && side == Side::LoHiSide::Lo) ||
+                                          (at_hi_interface && side == Side::LoHiSide::Hi)) ) {
+                                       data[dir](iv_face).add(interp_cell, -values[k]);
+                                    }
+
+                                    values[k] *= alpha;
+                                    k++;
+                                 }
+
+                                 HYPRE_SStructMatrixAddToValues(a_matrix, block_number, iv.dataPtr(),
+                                                                a_block_row, num_unstructured_entries, entries, values);
+
+                                 delete [] entries;
+                                 delete [] values;
+                                 
+                                 CH_STOP(t_add_extrablock_contrib);
+                              }
+                           }
+                        }
+                     }
+                  }
+               }
+            }
+
+            // Store the contributions at block interfaces
+            for (int dir=0; dir<CFG_DIM; dir++) {
+               if ( m_flux_average[dir] ) {
+                  for (SideIterator sit; sit.ok(); ++sit) {
+                     Side::LoHiSide side = sit();
+                     if (block_register.hasInterface(dit(), dir, side)) {
+                         block_register.store(data[dir], dit(), dir, side);
+                     }
+                  }
+               }
+            }
+         }
+      }
+
+      // Exchange the block interface contributions and accumulate them to the matrix
+      block_register.exchange();
+
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         int block_number = m_coord_sys_ptr->whichBlock(grids[dit]);
+
+         const FArrayBox* alphaPtr = NULL;
+         if ( a_alpha_coefficient.isDefined() ) {
+            alphaPtr = &a_alpha_coefficient[dit];
+         }
+
+         for (SideIterator sit; sit.ok(); ++sit) {
+            Side::LoHiSide side = sit();
+            for (int dir=0; dir<CFG_DIM; dir++) {
+               if ( m_flux_average[dir] && block_register.hasInterface(dit(), dir, side) ) {
+                  Box faceBox = adjCellBox(grids[dit], dir, side, 1);
+                  // if Lo, then shift +1; if Hi, then shift -1
+                  faceBox.shiftHalf(dir, -sign(side));
+                  BaseFab<SparseCoupling> otherFab(faceBox, 1);
+                  block_register.fill(otherFab, dit(), dir, side, side);
+                  BoxIterator bit(faceBox);
+                  for (bit.begin(); bit.ok(); ++bit) {
+                     IntVect iv_face = bit();
+                     IntVect iv(iv_face);
+                     iv.shift(dir,-side);
+
+                     Box stencil_box(iv,iv);
+                     stencil_box.grow(dir, m_advection_stencil_radius);
+                     
+                     const IntVectSet& unstructured_couplings = a_unstructured_couplings[dit](iv);
+
+                     double alpha = alphaPtr? alphaPtr->operator()(iv): 1.;
+
+                     SparseCoupling& coupling = otherFab(iv_face,0);
+                     int num_entries = coupling.size();
+                     double * values = new double[num_entries];
+                     int * entries = new int[num_entries];
+
+                     int k = 0;
+                     for (SparseCouplingIterator it(coupling); it.ok(); ++it) {
+                        IntVect index = coupling[it()];
+                        entries[k] = findHypreEntry(a_block_column, stencil_box, unstructured_couplings, index);
+                        values[k] = coupling.weight(index) * alpha;
+                        k++;
+                     }
+
+                     HYPRE_SStructMatrixAddToValues(a_matrix, block_number, iv.dataPtr(),
+                                                    a_block_row, num_entries, entries, values);
+
+                     delete [] entries;
+                     delete [] values;
+
+                  }
+               }
+            }
+         }
+      }
+   }
+
+}
 
 void
 MBHypreSolver::constructHypreMatrix( LevelData<FArrayBox>&               a_alpha_coefficient, 
@@ -950,12 +1356,21 @@ MBHypreSolver::constructHypreMatrix( LevelData<FArrayBox>&               a_alpha
    
 #if 0
 
+   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries 
+      = m_coord_sys_ptr->boundaries();
+
+   Vector< Vector<CoDim1Stencil> > codim1_stencils;
+   Vector< Vector<CoDim2Stencil> > codim2_stencils;
+
+   constructBoundaryStencils(a_fourth_order, a_bc, codim1_stencils, codim2_stencils);
+
    testMatrixConstruct( a_alpha_coefficient, 
                         a_tensor_coefficient,
                         a_beta_coefficient,
                         block_boundaries,
                         codim1_stencils,
                         codim2_stencils,
+                        a_bc,
                         a_stencil_values,
                         a_fourth_order,
                         a_rhs_from_bc );
@@ -995,16 +1410,17 @@ MBHypreSolver::constructHypreMatrixBlock( const int                           a_
    const DisjointBoxLayout& grids = m_geometry.grids();
    const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys_ptr->boundaries();
 
-   LevelData<FArrayBox> diagonal_plot(grids, 1, IntVect::Zero);
-
    Vector< Vector<CoDim1Stencil> > codim1_stencils;
    Vector< Vector<CoDim2Stencil> > codim2_stencils;
 
    constructBoundaryStencils(a_fourth_order, a_bc, codim1_stencils, codim2_stencils );
 
+   LevelData<FluxBox> bc_factor;
+   getNeumannNaturalFactor(a_bc, bc_factor);
+
 #if 0
    // This is a newer implementation in which the loops over directions and
-   // sides is outside the loop over cells
+   // sides are outside the loop over cells
    
    // Set the intra-block matrix entries
 
@@ -1012,8 +1428,6 @@ MBHypreSolver::constructHypreMatrixBlock( const int                           a_
      const Box& box = grids[dit];
      IntVect lower(box.loVect());
      IntVect upper(box.hiVect());
-
-     diagonal_plot[dit].setVal(0.);
 
      int block_number = m_coord_sys_ptr->whichBlock(box);
      const RealVect& dx = (m_coord_sys_ptr->getCoordSys(block_number))->dx();
@@ -1054,6 +1468,8 @@ MBHypreSolver::constructHypreMatrixBlock( const int                           a_
         for (SideIterator sit; sit.ok(); ++sit) {
            Side::LoHiSide side = sit();
 
+           int bc_type = a_bc.getBCType(block_number, dir, side);
+
            for (int dir2=0; dir2<SpaceDim; ++dir2) {
 
               int ii = 0;
@@ -1071,17 +1487,24 @@ MBHypreSolver::constructHypreMatrixBlock( const int                           a_
                  bool update_rhs_from_bc_only = (at_lo_interface && side == Side::LoHiSide::Lo)
                                              || (at_hi_interface && side == Side::LoHiSide::Hi);
 
-                 accumStencilMatrixEntries(iv, dir, side, dir2, this_coef, dx,
-                                           a_fourth_order, a_stencil_values);
+                 bool at_lo_boundary = (!at_lo_interface && iv[dir] == domain_box.smallEnd(dir));
+                 bool at_hi_boundary = (!at_hi_interface && iv[dir] == domain_box.bigEnd(dir));
+                 bool at_boundary = at_lo_boundary || at_hi_boundary;
+
+                 if (  !(bc_type == EllipticOpBC::NATURAL && at_boundary) ) {
+
+                    accumStencilMatrixEntries(iv, dir, side, dir2, this_coef,
+                                              dx, a_fourth_order, a_stencil_values);
+                 }
 
                  modifyStencilForBCs( codim1_stencils[block_number], codim2_stencils[block_number],
-                                      iv, a_stencil_values, a_rhs_from_bc[dit],
+                                      iv, a_stencil_values, a_rhs_from_bc[dit], a_block_row,
                                       update_rhs_from_bc_only, force_codim2_condense );
 
                  if ( alpha ) {
                     double alpha_val = alpha->operator()(iv);
                     a_stencil_values *= alpha_val;
-                    a_rhs_from_bc[dit](iv,0) *= alpha_val;
+                    a_rhs_from_bc[dit](iv, a_block_row) *= alpha_val;
                  }
 
                  double* this_stencil_values = a_stencil_values.dataPtr(0);
@@ -1089,7 +1512,6 @@ MBHypreSolver::constructHypreMatrixBlock( const int                           a_
                  if ( add_beta ) {
                     this_stencil_values[a_diagonal_offset] += beta->operator()(iv);
                  }
-                 diagonal_plot[dit](iv,0) += this_stencil_values[a_diagonal_offset];
 
                  for (int jj=0; jj<stencil_size; jj++) {
                     values[ii+jj] += this_stencil_values[jj];
@@ -1116,13 +1538,18 @@ MBHypreSolver::constructHypreMatrixBlock( const int                           a_
    FArrayBox tmp_stencil_values(a_stencil_values.box(), a_stencil_values.nComp());
    double * stencil_values = a_stencil_values.dataPtr(0);
 
-   setZero(a_rhs_from_bc);
+   // We set only the current component to zero, however this will need to be re-thought
+   // once we have inhomogenous BCs on the off-diagonal spots of the block matrix.
+   for(DataIterator dit(grids); dit.ok(); ++dit)
+     {
+       a_rhs_from_bc[dit].setVal(0., a_block_row);
+     }
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
      const Box & box = grids[dit];
 
      int block_number = m_coord_sys_ptr->whichBlock(box);
-     const NewCoordSys& block_coord_sys = *(m_coord_sys_ptr->getCoordSys(block_number));
+     const MagBlockCoordSys& block_coord_sys = *(MagBlockCoordSys*)(m_coord_sys_ptr->getCoordSys(block_number));
      RealVect dx = block_coord_sys.dx();
 
      const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
@@ -1141,7 +1568,7 @@ MBHypreSolver::constructHypreMatrixBlock( const int                           a_
         }
      }
 
-     const Box& domainBox = (m_coord_sys_ptr->mappingBlocks())[block_number];
+     const Box& domain_box = (m_coord_sys_ptr->mappingBlocks())[block_number];
 
      FluxBox& this_coef = a_tensor_coefficient[dit];
 
@@ -1168,35 +1595,60 @@ MBHypreSolver::constructHypreMatrixBlock( const int                           a_
        // addUnstructuredMatrixEntries().
 
        for (int dir=0; dir<SpaceDim; ++dir) {
-          bool at_lo_interface = (lo_block_interface[dir] && iv[dir] == domainBox.smallEnd(dir));
-          bool at_hi_interface = (hi_block_interface[dir] && iv[dir] == domainBox.bigEnd(dir));
+          bool at_lo_interface = (lo_block_interface[dir] && iv[dir] == domain_box.smallEnd(dir));
+          bool at_hi_interface = (hi_block_interface[dir] && iv[dir] == domain_box.bigEnd(dir));
           bool force_codim2_condense = lo_block_interface[dir] || hi_block_interface[dir];
+
+          bool at_lo_boundary = (!at_lo_interface && iv[dir] == domain_box.smallEnd(dir));
+          bool at_hi_boundary = (!at_hi_interface && iv[dir] == domain_box.bigEnd(dir));
+
+          int bc_type = EllipticOpBC::UNDEFINED;
+          if ( at_lo_boundary ) bc_type = a_bc.getBCType(block_number, dir, Side::LoHiSide::Lo);
+          if ( at_hi_boundary ) bc_type = a_bc.getBCType(block_number, dir, Side::LoHiSide::Hi);
 
           for (SideIterator sit; sit.ok(); ++sit) {
              Side::LoHiSide side = sit();
 
              bool update_rhs_from_bc_only = (at_lo_interface && side == Side::LoHiSide::Lo)
-                || (at_hi_interface && side == Side::LoHiSide::Hi);
+                                         || (at_hi_interface && side == Side::LoHiSide::Hi);
+
+             bool update_rhs = !((at_lo_boundary && 
+                                  (bc_type == EllipticOpBC::NATURAL || bc_type == EllipticOpBC::NEUMANN) ) ||
+                                 (at_hi_boundary &&
+                                  (bc_type == EllipticOpBC::NATURAL || bc_type == EllipticOpBC::NEUMANN) ));
 
              for (int dir2=0; dir2<SpaceDim; ++dir2) {
 
                 tmp_stencil_values.setVal(0.);
 
-                accumStencilMatrixEntries(iv, dir, side, dir2, this_coef, dx,
-                                          a_fourth_order, tmp_stencil_values);
+                accumStencilMatrixEntries(iv, dir, side, dir2, this_coef,
+                                          dx, a_fourth_order, tmp_stencil_values);
 
                 modifyStencilForBCs( codim1_stencils[block_number], codim2_stencils[block_number],
-                                     iv, tmp_stencil_values, a_rhs_from_bc[dit],
-                                     update_rhs_from_bc_only, force_codim2_condense );
+                                     iv, tmp_stencil_values, a_rhs_from_bc[dit], a_block_row,
+                                     update_rhs_from_bc_only, force_codim2_condense, update_rhs );
 
                 a_stencil_values += tmp_stencil_values;
+             }
+
+             // Add the right-hand side contributions from Neumann and natural boundary
+             // conditions.  Contributions from other types of boundary conditions have
+             // already been taken care of by the modifyStencilForBCs immediately above.
+             if ( ((at_lo_boundary && side == Side::LoHiSide::Lo) || 
+                   (at_hi_boundary && side == Side::LoHiSide::Hi)) &&
+                  (bc_type == EllipticOpBC::NEUMANN || bc_type == EllipticOpBC::NATURAL) ) {
+                IntVect iv_face = iv;
+                if (side == Side::LoHiSide::Hi) iv_face[dir]++;
+                
+                double bv = getBV(a_bc, block_coord_sys, block_number, dir, side, iv_face);
+                a_rhs_from_bc[dit](iv,0) += bv * bc_factor[dit][dir](iv_face,0);
              }
           }
        }
 
        if ( alpha ) {
           a_stencil_values *= alpha->operator()(iv);
-          a_rhs_from_bc[dit](iv,0) *= alpha->operator()(iv);
+          a_rhs_from_bc[dit](iv, a_block_row) *= alpha->operator()(iv);
        }
 
        if ( beta ) {
@@ -1241,8 +1693,8 @@ MBHypreSolver::constructHypreMatrixBlock( const int                           a_
 
      }
 
-     HYPRE_SStructMatrixSetBoxValues(a_matrix, block_number, lower.dataPtr(), upper.dataPtr(),
-                                     a_block_row, stencil_size, entries, values);
+     HYPRE_SStructMatrixAddToBoxValues(a_matrix, block_number, lower.dataPtr(), upper.dataPtr(),
+                                       a_block_row, stencil_size, entries, values);
 
      delete [] values;
    }
@@ -1256,6 +1708,154 @@ MBHypreSolver::constructHypreMatrixBlock( const int                           a_
                                 codim1_stencils, codim2_stencils, a_matrix);
 }
 
+
+void MBHypreSolver::addAdvectionMatrixBlockGeneral( const int                                     a_block_row,
+                                                    const int                                     a_block_column,
+                                                    const LevelData<FArrayBox>&                   a_alpha_coefficient,
+                                                    const LevelData<FluxBox>&                     a_vector_coefficient,
+                                                    const EllipticOpBC&                           a_bc)
+{
+  CH_TIMERS("MBHypreSolver::addAdvectionMatrixBlockGeneral()");
+  const int coupling_comps = 2*SpaceDim;
+  const IntVect coupling_ghosts = IntVect::Unit;
+  const DisjointBoxLayout& grids = m_geometry.grids();
+  LevelData<BaseFab<Vector<IntVect> > > couplings(grids, coupling_comps, coupling_ghosts);
+  LevelData<BaseFab<Vector<Real> > > weights(grids, coupling_comps, coupling_ghosts);
+
+  // We set m_advection_rhs_from_bc to zero here. Then constructAdvectionStencils puts
+  // a 1 in the location where we want to keep the boundary values. This is for
+  // zero-order extrapolation of the boundary values. For higher-order, something
+  // different needs to be done.
+  
+  LevelData<FArrayBox> multFactor;
+  multFactor.define(grids, m_nvar, IntVect::Zero);
+  for(DataIterator dit(m_advection_rhs_from_bc.dataIterator()); dit.ok(); ++dit) {
+    m_advection_rhs_from_bc[dit].setVal(0., a_block_column);
+    multFactor[dit].setVal(0., a_block_column);
+  }
+
+  // Construct the stencils corresponding to second-order centered differencing.  First-order
+  // upwind ("UW1") is also a valid option here.  
+  constructAdvectionStencils("C2", a_vector_coefficient, couplings, weights, a_bc);
+
+  addAdvectionMatrixBlockCoupled(a_block_row,
+                                 a_block_column,
+                                 a_alpha_coefficient,
+                                 couplings,
+                                 weights,
+                                 a_bc,
+                                 m_A_stencil_values);
+}
+
+// Alpha coefficient needs to contain a_shift * physical_volume / mapped_volume; where a_shift
+// is the time-step size coefficient (1/dt)?
+void MBHypreSolver::addAdvectionMatrixBlockCoupled( const int                                     a_block_row,
+                                                    const int                                     a_block_column,
+                                                    const LevelData<FArrayBox>&                   a_alpha_coefficient,
+                                                    const LevelData<BaseFab<Vector<IntVect> > >&  a_structured_couplings,
+                                                    const LevelData<BaseFab<Vector<Real> > >&     a_structured_weights,
+                                                    const EllipticOpBC&                           a_bc,
+                                                    const FArrayBox&                              a_stencil_values)
+{
+  CH_TIMERS("MBHypreSolver::addAdvectionMatrixBlockCoupled()");
+  CH_TIMER("add_struct_matrix",t_add_struct_matrix);
+  CH_TIMER("add_unstruct_matrix",t_add_unstruct_matrix);
+  CH_TIMER("amg_setup",t_amg_setup);
+  CH_TIMER("hypre_assemble",t_hypre_assemble);
+  const DisjointBoxLayout& grids = m_geometry.gridsFull();
+
+  bool lo_block_interface[SpaceDim];
+  bool hi_block_interface[SpaceDim];
+  bool lo_block_boundary[SpaceDim];
+  bool hi_block_boundary[SpaceDim];
+
+  Box stencil_offsets = a_stencil_values.box();
+  int radius = (stencil_offsets.size(0)-1)/2;
+  CH_assert(radius >= m_advection_stencil_radius);
+  stencil_offsets -= radius*IntVect::Unit;
+
+  CH_START(t_add_struct_matrix);
+  const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = m_coord_sys_ptr->boundaries();
+  for (DataIterator dit(grids); dit.ok(); ++dit) {
+    const Box& box = grids[dit];
+    int block_number = m_coord_sys_ptr->whichBlock(box);
+    const Box& block_box = (m_coord_sys_ptr->mappingBlocks())[block_number];
+
+    const FArrayBox* alpha = NULL;
+    if ( a_alpha_coefficient.isDefined() ) {
+      alpha = &a_alpha_coefficient[dit];
+    }
+
+    // const FArrayBox& this_volume = m_volume[dit];
+    // const NewCoordSys& block_coord_sys = *(m_coord_sys_ptr->getCoordSys(block_number));
+
+    const FArrayBox& alpha_coeff = a_alpha_coefficient[dit];
+    const BaseFab<Vector<IntVect> >& this_couplings = a_structured_couplings[dit];
+    const BaseFab<Vector<Real> >& this_weights = a_structured_weights[dit];
+
+    const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
+    for (int dir=0; dir<SpaceDim; ++dir) {
+      lo_block_interface[dir] = this_block_boundaries[dir].isInterface();
+      hi_block_interface[dir] = this_block_boundaries[dir + SpaceDim].isInterface();
+      lo_block_boundary[dir] = this_block_boundaries[dir].isDomainBoundary();
+      hi_block_boundary[dir] = this_block_boundaries[dir + SpaceDim].isDomainBoundary();
+    }
+
+    // Set the intra-block matrix entries
+
+    for (BoxIterator bit(box); bit.ok(); ++bit) {
+      IntVect iv = bit();
+      Box stencil_box = stencil_offsets + iv;
+
+      // Initialize the matrix with a_shift times the identity.  The J (= physical cell volume
+      // divided by mapped cell volume) factor is needed because the matrix being constructed
+      // here is assumed to act on vectors in the physical frame, but the time-integration
+      // shift is done in the computational frame
+      // int center_entry = findStructuredEntry(a_block_column, stencil_box, iv);
+      // double center_value = alpha_coeff(iv,0);
+      // HYPRE_SStructMatrixSetValues(m_A, block_number, iv.dataPtr(), 0, 1, &center_entry,
+      //                              &center_value);
+
+      for (int dir=0; dir<SpaceDim; ++dir) {
+        bool at_lo_interface = lo_block_interface[dir] && (iv[dir] == block_box.smallEnd(dir));
+        bool at_hi_interface = hi_block_interface[dir] && (iv[dir] == block_box.bigEnd(dir));
+
+        for (SideIterator sit; sit.ok(); ++sit) {
+          Side::LoHiSide side = sit();
+
+          // Couplings corresponding to faces at block interfaces are handled later
+          if ( m_mblex_potential_Ptr == NULL || 
+               (!(side == Side::LoHiSide::Lo && at_lo_interface) &&
+                !(side == Side::LoHiSide::Hi && at_hi_interface) ) ) {
+
+            int coupling_comp = dir + ((1-sign(side))/2)*(SpaceDim);
+            for (int n=0; n<this_couplings(iv,coupling_comp).size(); ++n) {
+              IntVect coupling = this_couplings(iv,coupling_comp)[n];
+              double value = this_weights(iv,coupling_comp)[n]*alpha_coeff(iv,0);
+
+              // Zero the couplings across physical boundaries
+              if ( (coupling[dir] < block_box.smallEnd(dir) && lo_block_boundary[dir]) ||
+                   (coupling[dir] > block_box.bigEnd(dir)   && hi_block_boundary[dir]) ) {
+                value = 0.;
+              }
+
+              int entry = findStructuredEntry(a_block_column, stencil_box, coupling);
+              HYPRE_SStructMatrixAddToValues(m_A, block_number, iv.dataPtr(), a_block_row,
+                                             1, &entry, &value);
+            }
+          }
+
+        }
+      }
+    }
+  }
+  CH_STOP(t_add_struct_matrix);
+
+  CH_START(t_add_unstruct_matrix);
+  addAdvectionUnstructuredMatrixEntries(a_block_row, a_block_column, a_alpha_coefficient, a_structured_couplings,
+                                        a_structured_weights, m_A_unstructured_coupling, m_A);
+  CH_STOP(t_add_unstruct_matrix);
+}
 
 void
 MBHypreSolver::extrapGhosts( const EllipticOpBC&   a_bc,
@@ -1274,7 +1874,9 @@ MBHypreSolver::extrapGhosts( const EllipticOpBC&   a_bc,
 
 
 void
-MBHypreSolver::AMGSetup( const HYPRE_SStructMatrix& a_matrix )
+MBHypreSolver::AMGSetup( const HYPRE_SStructMatrix&  a_matrix,
+                         const HYPRE_SStructVector&  a_x,
+                         const HYPRE_SStructVector&  a_b )
 {
    CH_TIME("MBHypreSolver::AMGSetup");
 
@@ -1292,13 +1894,17 @@ MBHypreSolver::AMGSetup( const HYPRE_SStructMatrix& a_matrix )
    else {
       HYPRE_BoomerAMGSetCoarsenType(m_par_AMG_solver, m_AMG_coarsen_type);
    }
+
    HYPRE_BoomerAMGSetStrongThreshold(m_par_AMG_solver, m_AMG_strong_threshold);
 
    HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
 
-   HYPRE_ParVector par_b;  // not used, but needs to be passed to HYPRE_BoomerAMGSetup
-   HYPRE_ParVector par_x;  // not used, but needs to be passed to HYPRE_BoomerAMGSetup
+   HYPRE_ParVector par_b;
+   HYPRE_SStructVectorGetObject(a_b, (void **) &par_b);
+
+   HYPRE_ParVector par_x;
+   HYPRE_SStructVectorGetObject(a_x, (void **) &par_x);
 
    HYPRE_BoomerAMGSetup(m_par_AMG_solver, par_A, par_b, par_x);
 
@@ -1364,6 +1970,10 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
          m_mgr_cindexes = NULL;
       }
 
+      if(m_mgr_CF_indexes)
+         hypre_TFree(m_mgr_CF_indexes, HYPRE_MEMORY_HOST);
+      m_mgr_CF_indexes = NULL;
+
       if (m_mgr_amg_solver) HYPRE_BoomerAMGDestroy(m_mgr_amg_solver);
       HYPRE_MGRDestroy(m_par_MGR_solver);
    }
@@ -1394,6 +2004,7 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
       m_mgr_cindexes[i][0] = m_MGR_cpoint;
    }
 
+
    HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
    HYPRE_ParVector par_b;  // apparently not used, but needs to be passed to HYPRE_*Setup
@@ -1401,35 +2012,26 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
 
    HYPRE_MGRCreate(&m_par_MGR_solver);
 
-   /* set MGR data by block */
-   HYPRE_BigInt rowstart = hypre_ParCSRMatrixFirstRowIndex(par_A);
-   HYPRE_BigInt rowend = hypre_ParCSRMatrixLastRowIndex(par_A);
-   HYPRE_Int fsize = (rowend - rowstart + 1)/2 ;
-   HYPRE_BigInt next_block = rowstart + fsize;
+   // Create and set the marker array defining the C and F points
+   setMGRCFIndexes(&m_mgr_CF_indexes);
+   HYPRE_MGRSetCpointsByPointMarkerArray(m_par_MGR_solver, mgr_bsize, m_mgr_nlevels,
+                                         m_mgr_num_cindexes, m_mgr_cindexes, m_mgr_CF_indexes);
 
-   HYPRE_BigInt idx_array[2] = {rowstart,next_block};
-   HYPRE_MGRSetCpointsByContiguousBlock( m_par_MGR_solver, mgr_bsize, m_mgr_nlevels,
-                                         idx_array, m_mgr_num_cindexes, m_mgr_cindexes);
-
-   /* set intermediate coarse grid strategy */
+   // Set intermediate coarse grid strategy
    HYPRE_MGRSetNonCpointsToFpoints(m_par_MGR_solver, mgr_non_c_to_f);
-   /* set F relaxation strategy */
-   HYPRE_MGRSetFRelaxMethod(m_par_MGR_solver, m_MGR_frelax_method);
-   /* set relax type for single level F-relaxation and post-relaxation */
+   // Set relax type for single level F-relaxation and post-relaxation */
    HYPRE_MGRSetRelaxType(m_par_MGR_solver, m_MGR_relax_type);
    HYPRE_MGRSetNumRelaxSweeps(m_par_MGR_solver, mgr_num_relax_sweeps);
-   /* set interpolation type */
+   // Set interpolation type
    HYPRE_MGRSetRestrictType(m_par_MGR_solver, m_MGR_restrict_type);
    HYPRE_MGRSetNumRestrictSweeps(m_par_MGR_solver, mgr_num_restrict_sweeps);
    HYPRE_MGRSetInterpType(m_par_MGR_solver, m_MGR_interp_type);
    HYPRE_MGRSetNumInterpSweeps(m_par_MGR_solver, mgr_num_interp_sweeps);
-   /* set print level */
+   // Set print level
    HYPRE_MGRSetPrintLevel(m_par_MGR_solver, m_MGR_print_level);
 
-   HYPRE_MGRSetGlobalsmoothType(m_par_MGR_solver, mgr_gsmooth_type);
-   HYPRE_MGRSetMaxGlobalsmoothIters( m_par_MGR_solver, mgr_num_gsmooth_sweeps );
-   HYPRE_Int num_functions = 1;
-   HYPRE_MGRSetLevelFRelaxNumFunctions(m_par_MGR_solver, &num_functions);
+   HYPRE_MGRSetGlobalSmoothType(m_par_MGR_solver, mgr_gsmooth_type);
+   HYPRE_MGRSetMaxGlobalSmoothIters( m_par_MGR_solver, mgr_num_gsmooth_sweeps );
 
    //========== Create AMG coarse grid solver ====================
 
@@ -1456,58 +2058,147 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
    HYPRE_BoomerAMGSetSmoothType(m_mgr_amg_solver, 6);
    HYPRE_BoomerAMGSetSmoothNumSweeps(m_mgr_amg_solver, 1);
    HYPRE_BoomerAMGSetMaxIter(m_mgr_amg_solver, m_MGR_amg_max_iter);
-   HYPRE_BoomerAMGSetTol(m_mgr_amg_solver, 0.0);
+   HYPRE_BoomerAMGSetTol(m_mgr_amg_solver, m_MGR_amg_tol);
    HYPRE_BoomerAMGSetPrintLevel(m_mgr_amg_solver, m_MGR_amg_print_level);
+   HYPRE_BoomerAMGSetStrongThreshold(m_mgr_amg_solver, m_MGR_amg_threshold);
 
    /* set the MGR coarse solver. Comment out to use default Coarse Grid solver in MGR */
    HYPRE_MGRSetCoarseSolver( m_par_MGR_solver, HYPRE_BoomerAMGSolve,
                              HYPRE_BoomerAMGSetup, m_mgr_amg_solver);
-
-   //========== Create AFF fine grid solver ====================
-
-   //   if ( m_MGR_frelax_method == 1 ) {
-   //      hypre_MGRSetFrelaxPrintLevel(m_par_MGR_solver, 2);
-   //   }
-
-   if ( m_MGR_frelax_method == 2 ) {
-
-      if ( !m_MGR_aff_solver_allocated ) {
-         HYPRE_BoomerAMGCreate(&m_MGR_aff_solver);
-         m_MGR_aff_solver_allocated = true;
-      }
-
-      HYPRE_BoomerAMGSetMaxIter(m_MGR_aff_solver, m_MGR_aff_amg_max_iter);
-      HYPRE_BoomerAMGSetTol(m_MGR_aff_solver, m_MGR_aff_amg_tol);
-      HYPRE_BoomerAMGSetRelaxOrder(m_MGR_aff_solver, 1);
-
-      HYPRE_BoomerAMGSetStrongThreshold(m_MGR_aff_solver, m_MGR_frelax_amg_threshold);
-      HYPRE_BoomerAMGSetCoarsenType(m_MGR_aff_solver, 6);
-
-      // uses L1-GS forward solve for down cycle. Could also use 3 instead of 13
-      HYPRE_BoomerAMGSetCycleRelaxType(m_MGR_aff_solver, 13, 1);
-      // uses L1-GS backward solve for up cycle. Could also use option 4 instead of 14 
-      HYPRE_BoomerAMGSetCycleRelaxType(m_MGR_aff_solver, 14, 2);
-      // uses Gaussian Elimination on the Coarsest grid.
-      HYPRE_BoomerAMGSetCycleRelaxType(m_MGR_aff_solver, 9, 3);
-
-      HYPRE_BoomerAMGSetSmoothType(m_MGR_aff_solver, 5); // 6 = Schwarz, 9 = Euclid, 5 = ILU
-      HYPRE_BoomerAMGSetSmoothNumLevels(m_MGR_aff_solver, 1); // > 1 for coarser levels
-
-      HYPRE_BoomerAMGSetNumSweeps(m_MGR_aff_solver, 1);
-      HYPRE_BoomerAMGSetPrintLevel(m_MGR_aff_solver, m_MGR_amg_print_level);
-      HYPRE_BoomerAMGSetNumFunctions(m_MGR_aff_solver, 1);
-
-      HYPRE_BoomerAMGSetup(m_MGR_aff_solver, par_A, par_b, par_x);
-
-      // set the MGR aff solver. Comment out to use internal solvers in MGR 
-      HYPRE_MGRSetFSolver(m_par_MGR_solver, HYPRE_BoomerAMGSolve, HYPRE_BoomerAMGSetup, m_MGR_aff_solver);
-   }
 
    //========== MGR setup ====================
 
    HYPRE_MGRSetup(m_par_MGR_solver, par_A, par_b, par_x);
 
    m_MGR_solver_allocated = true;
+}
+
+
+void
+MBHypreSolver::setMGRCFIndexes( HYPRE_Int** a_CF_indexes )
+{
+   const DisjointBoxLayout& grids = m_geometry.grids();
+
+   int num_local_dof = 0;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      num_local_dof += grids[dit].numPts();
+   }
+   num_local_dof *= m_nvar;
+
+   *a_CF_indexes = hypre_CTAlloc(HYPRE_Int, num_local_dof, HYPRE_MEMORY_HOST);
+
+   // The index ordering is determined by the Hypre convention
+   HYPRE_Int* ptr = *a_CF_indexes;
+   for (int part=0; part<m_coord_sys_ptr->numBlocks(); ++part) {
+      for (int var=0; var<m_nvar; ++var) {
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            const Box& box = grids[dit];
+            int block_number = m_coord_sys_ptr->whichBlock(box);
+
+            if ( block_number == part ) {
+               for (BoxIterator bit(box); bit.ok(); ++bit) {
+                  *ptr++ = var;
+               }
+            }
+         }
+      }
+   }
+} 
+
+
+void MBHypreSolver::AIRSetup( const HYPRE_SStructMatrix& a_matrix )
+{
+   CH_TIME("MBHypreSolver::AIRSetup");
+
+   if ( m_AMG_solver_allocated ) {
+      HYPRE_BoomerAMGDestroy(m_par_AMG_solver);
+   }
+   
+   HYPRE_BoomerAMGCreate(&m_par_AMG_solver);
+
+   /*
+     Instructions from Ruipeng Li (11/6/2019):
+
+     To use the AIR (approximate ideal restriction) algorithm in hypre, you need to set
+     HYPRE_BoomerAMGSetRestriction(amg_solver, restri_type) with restri_type = 1, or 2 for distance-1
+     and -2 AIR respectively. Distance-2 is more expensive to build and leads to a denser restriction
+     operator than the distance-1 but should approximate the ideal restriction better. Do not use aggressive
+     coarsening with AIR ( i.e., HYPRE_ParCSRHybridSetAggNumLevels(amg, 0) ). 
+
+     For hyperbolic problems like advection dominant, highly nonsymmetric, using very simple interpolation
+     like 1-pt interpolation was often found enough, set HYPRE_BoomerAMGSetInterpType(amg, 100) for that.
+     Also,  C/F relaxations can be helpful, in the paper, we used FFC, which can be set by
+     HYPRE_BoomerAMGSetGridRelaxPoints(amg_solver, grid_relax_points); with          
+         grid_relax_points[2][0] = -1; // F
+         grid_relax_points[2][1] = -1; // F
+         grid_relax_points[2][2] =  1; // C
+
+     These options can be found in hypre, src/test/ij.c, search for air or AIR to see the default settings.
+   */
+
+   HYPRE_BoomerAMGSetRestriction(m_par_AMG_solver, m_AIR_restrict_type);
+
+   HYPRE_Int **grid_relax_points = NULL;
+   HYPRE_Int ns_down = 1;
+   HYPRE_Int ns_up = 3;
+   HYPRE_Int ns_coarse = 1;
+   /* this is a 2-D 4-by-k array using Double pointers */
+   grid_relax_points = hypre_CTAlloc(HYPRE_Int*, 4, HYPRE_MEMORY_HOST);
+   grid_relax_points[0] = NULL;
+   grid_relax_points[1] = hypre_CTAlloc(HYPRE_Int, ns_down, HYPRE_MEMORY_HOST);
+   grid_relax_points[2] = hypre_CTAlloc(HYPRE_Int, ns_up, HYPRE_MEMORY_HOST);
+   grid_relax_points[3] = hypre_CTAlloc(HYPRE_Int, ns_coarse, HYPRE_MEMORY_HOST);
+   /* down cycle: C */
+   for (int i=0; i<ns_down; i++) {
+      grid_relax_points[1][i] = 0;//1;
+   }
+   /* up cycle: F */
+   //for (int i=0; i<ns_up; i++)
+   //{
+   if (ns_up == 3) {
+      grid_relax_points[2][0] = -1; // F
+      grid_relax_points[2][1] = -1; // F
+      grid_relax_points[2][2] =  1; // C
+   }
+   else if (ns_up == 2) {
+      grid_relax_points[2][0] = -1; // F
+      grid_relax_points[2][1] = -1; // F
+   }
+   //}
+   /* coarse: all */
+   for (int i=0; i<ns_coarse; i++) {
+      grid_relax_points[3][i] = 0;
+   }
+   HYPRE_BoomerAMGSetGridRelaxPoints(m_par_AMG_solver, grid_relax_points);
+
+   HYPRE_BoomerAMGSetRelaxType(m_par_AMG_solver, 0);  // Jacobi
+
+   HYPRE_Int interp_type = 100;  // 1-pt
+   HYPRE_BoomerAMGSetInterpType(m_par_AMG_solver, interp_type);
+   
+   HYPRE_BoomerAMGSetAggNumLevels(m_par_AMG_solver, 0);
+
+   HYPRE_BoomerAMGSetMaxCoarseSize(m_par_AMG_solver, 0);
+
+   //   HYPRE_BoomerAMGSetStrongThreshold(m_par_AMG_solver, 0.25);
+   //   HYPRE_BoomerAMGSetStrongThresholdR(m_par_AMG_solver, 0.25);
+   //   HYPRE_BoomerAMGSetCoarsenType(m_par_AMG_solver, 6);  // Falgout coarsening
+   //   HYPRE_BoomerAMGSetCycleRelaxType(m_par_AMG_solver, 3, 3); // hybrid Gauss-Seidel on coarsest level
+   //   HYPRE_BoomerAMGSetCycleRelaxType(m_par_AMG_solver, 9, 3); // Gaussian elimination on coarsest level
+   //   HYPRE_BoomerAMGSetCycleType(m_par_AMG_solver, 1);  // V = 1, W = 2
+   //   HYPRE_BoomerAMGSetCycleNumSweeps(m_par_AMG_solver, 1, 1);  // 1 sweep on down cycle
+   //   HYPRE_BoomerAMGSetCycleNumSweeps(m_par_AMG_solver, 1, 2);  // 1 sweep on up cycle
+   //   HYPRE_BoomerAMGSetCycleNumSweeps(m_par_AMG_solver, 1, 3);  // 1 sweeps on coarsest level
+
+   m_AMG_solver_allocated = true;
+
+   HYPRE_ParCSRMatrix par_A;
+   HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
+
+   HYPRE_ParVector par_b;  // not used, but needs to be passed to HYPRE_BoomerAMGSetup
+   HYPRE_ParVector par_x;  // not used, but needs to be passed to HYPRE_BoomerAMGSetup
+
+   HYPRE_BoomerAMGSetup(m_par_AMG_solver, par_A, par_b, par_x);
 }
 
 
@@ -1599,7 +2290,12 @@ MBHypreSolver::MGR( const HYPRE_SStructMatrix&  a_matrix,
    CH_TIMERS("MBHypreSolver::MGR");
 
    // Set the convergence criteria
-   HYPRE_MGRSetMaxIter(m_par_MGR_solver, a_max_iter);
+   if ( m_MGR_schur || m_MGR_schur_1 ) {
+      HYPRE_MGRSetMaxIter(m_par_MGR_solver, 1);
+   }
+   else {
+      HYPRE_MGRSetMaxIter(m_par_MGR_solver, a_max_iter);
+   }
    HYPRE_MGRSetTol(m_par_MGR_solver, a_tol);
    
    HYPRE_ParCSRMatrix    par_A;
@@ -1612,6 +2308,21 @@ MBHypreSolver::MGR( const HYPRE_SStructMatrix&  a_matrix,
    // Do the solve
    HYPRE_MGRSolve(m_par_MGR_solver, par_A, par_b, par_x);
       
+   if ( m_MGR_amg_verbose ) {
+
+      int num_iterations;
+      HYPRE_BoomerAMGGetNumIterations(m_mgr_amg_solver, &num_iterations);
+
+      HYPRE_Real final_res_norm;
+      HYPRE_BoomerAMGGetFinalRelativeResidualNorm(m_mgr_amg_solver, &final_res_norm);
+
+      if ( procID()==0 ) {
+         cout << "        --> MGR AMG coarse solver residual = " << final_res_norm << " after "
+              << num_iterations << " iterations" << endl;
+      }
+
+   }
+
    if ( a_verbose ) {
       // Get the convergence data
       int num_iterations;
@@ -1752,7 +2463,6 @@ MBHypreSolver::copyFromHypreVector( const HYPRE_SStructVector&  a_in,
       }
    }
 } 
-
 
 
 #include "NamespaceFooter.H"

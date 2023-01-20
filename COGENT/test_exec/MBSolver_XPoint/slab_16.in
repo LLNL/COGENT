@@ -1,0 +1,29 @@
+#####################################################
+# Computational Grid Definitions
+#####################################################
+slab.num_cells = 16 16
+slab.x_max = 1.
+slab.z_max = 1.
+slab.By_inner = 0.
+slab.By_outer = 0.
+slab.axisymmetric = false
+
+#####################################################
+# Boundary Condition Definitions
+#####################################################
+BC.potential.radial_lower.type = "dirichlet"
+BC.potential.radial_lower.value = 0.
+BC.potential.radial_upper.type = "dirichlet"
+BC.potential.radial_upper.value = 0.
+BC.potential.poloidal_lower.type = "dirichlet"
+BC.potential.poloidal_lower.value = 2.
+BC.potential.poloidal_upper.type = "dirichlet"
+BC.potential.poloidal_upper.value = 0.
+
+#####################################################
+# Solver Parameters
+#####################################################
+linear_solver.method = "AMG"
+linear_solver.max_iter = 80
+linear_solver.tol = 1.e-6
+linear_solver.verbose = true

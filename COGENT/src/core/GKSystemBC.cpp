@@ -34,13 +34,21 @@ GKSystemBC::GKSystemBC( ParmParse& a_pp,
 
    const std::string coord_sys_type( determineCoordSysType( m_phase_geometry ) );
 
-   parsePotential( a_pp, coord_sys_type );
+   bool fixed_efield = false;
+   a_pp.query("gksystem.fixed_efield", fixed_efield);
+   bool no_efield = false;
+   a_pp.query("gksystem.zero_efield", no_efield);  // zero_efield is deprecated
+   a_pp.query("gksystem.no_efield", no_efield);
+   if ( !(fixed_efield || no_efield) ) {
+      parsePotential( a_pp, coord_sys_type );
+
+      const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
+      mag_geom.defineEllipticOpBC( *m_potential_bcs );
+   }
+                                          
    parseKineticSpecies( a_pp, coord_sys_type, a_state.dataKinetic() );
    //   parseFluidSpecies( a_pp, coord_sys_type, a_state.dataFluid() );
 
-   const CFG::MagGeom& mag_geom = m_phase_geometry.magGeom();
-   mag_geom.defineEllipticOpBC( *m_potential_bcs );
-   
    int ghost = (m_phase_geometry.secondOrder()) ? 0 : 1;
    const DisjointBoxLayout& dbl = m_phase_geometry.gridsFull();
    m_mapped_velocity.define(dbl, SpaceDim, ghost * IntVect::Unit);
@@ -80,26 +88,28 @@ void GKSystemBC::executeInternalExchanges( CFG::FluidSpecies& a_fluid ) const
 }
 
 
-void GKSystemBC::fillGhostCells( GKState&                               a_state,
-                                 const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                                 const LevelData<FluxBox>&              a_E_field,
-                                 const Real&                            a_time ) const
+void GKSystemBC::fillGhostCells( GKState&              a_state,
+                                 const CFG::EMFields&  a_EM_fields,
+                                 const Real&           a_time ) const
 {
-   fillKineticSpeciesGhostCells( a_state.dataKinetic(), a_phi, a_E_field, a_time );
-   fillFluidSpeciesGhostCells( a_state.dataFluid(), a_E_field, a_time );
+   fillKineticSpeciesGhostCells( a_state.dataKinetic(), a_EM_fields, a_time );
+   fillFluidSpeciesGhostCells( a_state.dataFluid(), a_time );
 }
 
 
 inline
-void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&                 a_species,
-                                               const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                                               const LevelData<FluxBox>&              a_E_field,
-                                               const Real&                            a_time ) const
+void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&  a_species,
+                                               const CFG::EMFields&    a_EM_fields,
+                                               const Real&             a_time ) const
 {
    CH_TIMERS("GKSystemBC::fillKineticSpeciesGhostCells");
    CH_TIMER("computeMappedVelocity", t_compute_mapped_velocity);
    CH_TIMER("executeExchanges", t_execute_exchanges);
    CH_TIMER("apply_bc", t_apply_bc);
+
+   const CFG::LevelData<CFG::FArrayBox>& phi = a_EM_fields.getPhi();
+   const LevelData<FluxBox>& Apar_derivatives = a_EM_fields.getAparDerivs();
+
    for (int s_index(0); s_index<a_species.size(); s_index++) {
 
       // It is important to fill internal ghosts prior to physical
@@ -113,12 +123,12 @@ void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&           
       CH_STOP(t_execute_exchanges);
 
       CH_START(t_compute_mapped_velocity);
-      species_physical.computeMappedVelocity( m_mapped_velocity, a_E_field, false, a_time );
+      species_physical.computeMappedVelocity( m_mapped_velocity, a_EM_fields, Apar_derivatives, false, a_time );
       CH_STOP(t_compute_mapped_velocity);
 
       CH_START(t_apply_bc);
       KineticSpeciesBC& ksbc( kineticSpeciesBC( species_physical.name() ) );
-      ksbc.apply( a_species, s_index, a_phi, m_mapped_velocity, a_time );
+      ksbc.apply( a_species, s_index, phi, m_mapped_velocity, a_time );
       CH_STOP(t_apply_bc);
 
       // For the case of a SN sheared geoemtry need to
@@ -133,9 +143,8 @@ void GKSystemBC::fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&           
 }
 
 inline
-void GKSystemBC::fillFluidSpeciesGhostCells( CFG::FluidSpeciesPtrVect&              a_species,
-                                             const LevelData<FluxBox>&              a_E_field,
-                                             const Real&                            a_time ) const
+void GKSystemBC::fillFluidSpeciesGhostCells( CFG::FluidSpeciesPtrVect&  a_species,
+                                             const Real&                a_time ) const
 {
    for (int s(0); s<a_species.size(); s++) {
 
@@ -156,19 +165,17 @@ void GKSystemBC::fillFluidSpeciesGhostCells( CFG::FluidSpeciesPtrVect&          
 
 /// deprecated ////////////////////
 
-void GKSystemBC::fillGhostCells( KineticSpeciesPtrVect&                 a_species, 
-                                 const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                                 const LevelData<FluxBox>&              a_E_field,
-                                 const Real&                            a_time ) const
+void GKSystemBC::fillGhostCells( KineticSpeciesPtrVect&  a_species, 
+                                 const CFG::EMFields&    a_EM_fields,
+                                 const Real&             a_time ) const
 {
-   fillKineticSpeciesGhostCells( a_species, a_phi, a_E_field, a_time );
+   fillKineticSpeciesGhostCells( a_species, a_EM_fields, a_time );
 }
 
 void GKSystemBC::fillGhostCells(CFG::FluidSpeciesPtrVect&  a_species,
-				const LevelData<FluxBox>&  a_E_field,
 				const Real&                a_time ) const
 {
-  fillFluidSpeciesGhostCells( a_species, a_E_field, a_time );
+  fillFluidSpeciesGhostCells( a_species, a_time );
 }
 
 /// deprecated ////////////////////

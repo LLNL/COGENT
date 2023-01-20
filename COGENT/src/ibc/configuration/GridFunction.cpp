@@ -1,7 +1,7 @@
 #include "GridFunction.H"
 #include "MagGeom.H"
 #include "FourthOrderUtil.H"
-#include "FourthOrderUtilsClass.H"
+#include "FourthOrderUtilsClass.H.multidim"
 
 #include "NamespaceHeader.H"
 
@@ -194,11 +194,11 @@ void GridFunction::setCellAverages(FArrayBox&                  a_data,
    setPointwise( tmp, a_geometry, a_real_coords, a_normalized_flux, a_block_number );
    
    const MagBlockCoordSys& coord_sys = getCoordSys(a_geometry, a_block_number);
-   //FourthOrderUtil FourthOrderOperators; //Object that holds various fourth-order operatiosns
+   FourthOrderUtil FourthOrderOperators; //Object that holds various fourth-order operatiosns
    //const bool useSG = ((MagGeom&)a_geometry).useSG(); // decide whether to use SG stenciles based on MagGeom 
-   //FourthOrderOperators.setSG(false);
-   fourthOrderAverageCell( tmp, coord_sys.domain(), box );
-   //FourthOrderOperators.fourthOrderAverageCellGen( tmp, coord_sys.domain(), box );
+   FourthOrderOperators.setSG(false);
+   //fourthOrderAverageCell( tmp, coord_sys.domain(), box );
+   FourthOrderOperators.fourthOrderAverageCellGen( tmp, coord_sys.domain(), box );
    
    a_data.copy( tmp, box );
 }

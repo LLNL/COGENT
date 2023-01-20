@@ -70,6 +70,8 @@ gksystem.magnetic_geometry_mapping.second_order = true
 gksystem.kinetic_ghost_width = 0
 gksystem.fluid_ghost_width = 2
 
+gksystem.no_efield = true
+
 #####################################################
 # Phase Space Geometry Definitions
 #####################################################
@@ -77,13 +79,6 @@ phase_space_mapping.v_parallel_max = 1.0
 phase_space_mapping.mu_max = 2.0
 phase_space_mapping.velocity_type = "gyrokinetic"
 phase_space_mapping.second_order = true
-
-#####################################################
-# Poisson Operator Definitions
-#####################################################
-gksystem.fixed_efield = true
-gksystem.zero_efield = true
-gkpoisson.verbose = true
 
 #####################################################
 # Species Definitions
@@ -132,31 +127,23 @@ IC.plasma.magneticField_2.function = "Bz_grid_func"
 #####################################################
 BC.mom0_visc.radial_lower.type = "dirichlet"
 BC.mom0_visc.radial_upper.type = "dirichlet"
-BC.mom0_visc.poloidal_lower.type = "neumann"
-BC.mom0_visc.poloidal_upper.type = "neumann"
 BC.mom0_visc.toroidal_lower.type = "neumann"
 BC.mom0_visc.toroidal_upper.type = "neumann"
 
 BC.mom1_visc.radial_lower.type = "neumann"
 BC.mom1_visc.radial_upper.type = "neumann"
-BC.mom1_visc.poloidal_lower.type = "dirichlet"
-BC.mom1_visc.poloidal_upper.type = "dirichlet"
 BC.mom1_visc.toroidal_lower.type = "neumann"
 BC.mom1_visc.toroidal_upper.type = "neumann"
 
 BC.mom2_visc.radial_lower.type = "neumann"
 BC.mom2_visc.radial_upper.type = "neumann"
-BC.mom2_visc.poloidal_lower.type = "neumann"
-BC.mom2_visc.poloidal_upper.type = "neumann"
 BC.mom2_visc.toroidal_lower.type = "dirichlet"
 BC.mom2_visc.toroidal_upper.type = "dirichlet"
 
 BC.Apar_init.radial_lower.type = "dirichlet"
 BC.Apar_init.radial_upper.type = "dirichlet"
-BC.Apar_init.poloidal_lower.type = "dirichlet"
-BC.Apar_init.poloidal_upper.type = "dirichlet"
-#BC.Apar_init.toroidal_lower.type = "dirichlet"
-#BC.Apar_init.toroidal_upper.type = "dirichlet"
+BC.Apar_init.toroidal_lower.type = "dirichlet"
+BC.Apar_init.toroidal_upper.type = "dirichlet"
 
 BC.plasma.density.radial_lower.type = "neumann"
 BC.plasma.density.radial_upper.type = "neumann"

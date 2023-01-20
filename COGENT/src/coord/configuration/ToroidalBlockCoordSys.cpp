@@ -377,7 +377,7 @@ ToroidalBlockCoordSys::getNormMagneticFlux( const FArrayBox& a_physical_coordina
    RealVect X_mag_sep(X_mag_axis);
    X_mag_sep[RADIAL_DIR] += m_a;
    
-   double physFluxOnAxis = getMagneticFlux(X_mag_axis);
+   double physFluxOnAxis = 0.0;
    double physFluxOnSep = getMagneticFlux(X_mag_sep);
    
    getMagneticFlux(a_physical_coordinates, a_magnetic_flux);
@@ -395,7 +395,7 @@ ToroidalBlockCoordSys::getNormMagneticFlux( const RealVect& a_physical_coordinat
    RealVect X_mag_sep(X_mag_axis);
    X_mag_sep[RADIAL_DIR] += m_a;
    
-   double physFluxOnAxis = getMagneticFlux(X_mag_axis);
+   double physFluxOnAxis = 0.0; 
    double physFluxOnSep = getMagneticFlux(X_mag_sep);
    
    double physFlux = getMagneticFlux(a_physical_coordinate);
@@ -428,8 +428,8 @@ ToroidalBlockCoordSys::getMagneticFlux( const Real a_r) const
    //Becasue we need a flux value at the separatrix for
    //normalized flux calculations, should have flux function
    //defined at least till separatrix
-   Real r_in = m_rmin - 4.0 * m_dx[RADIAL_DIR];
-   Real r_out = Max(m_a,m_rmax) + 4.0 * m_dx[RADIAL_DIR];
+   Real r_in = m_rmin - 6.0 * m_dx[RADIAL_DIR];
+   Real r_out = Max(m_a,m_rmax) + 6.0 * m_dx[RADIAL_DIR];
 
    if (!m_is_flux_defined) {
       initializeMagneticFluxFunction(r_in, r_out);
@@ -456,7 +456,14 @@ ToroidalBlockCoordSys::getMagneticFlux( const Real a_r) const
       
       Real dr = m_dx[RADIAL_DIR] / 2.0;
       Real r_lo_bnd = r_in + dr;
-      int n = (a_r > r_lo_bnd) ?  floor((a_r - r_lo_bnd)/dr) : 0;
+
+      int n;
+      if (a_r > r_lo_bnd) {
+	n = floor((a_r - r_lo_bnd)/dr);
+      }
+      else {
+	MayDay::Error("ToroidalBlockCoordSys:: magnetic flux is requested outside of defined region");
+      }
       
       Real r_lo = r_lo_bnd + n * dr;
       Real coeff_lo = 1.0 - (a_r - r_lo)/dr;

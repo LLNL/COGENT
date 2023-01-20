@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright 1998-2019 Lawrence Livermore National Security, LLC and other
+ * Copyright (c) 1998 Lawrence Livermore National Security, LLC and other
  * HYPRE Project Developers. See the top-level COPYRIGHT file for details.
  *
  * SPDX-License-Identifier: (Apache-2.0 OR MIT)
@@ -15,8 +15,10 @@
  * BoxLoop macros:
  *--------------------------------------------------------------------------*/
 
-#ifndef HYPRE_NEWBOXLOOP_HEADER
-#define HYPRE_NEWBOXLOOP_HEADER
+#ifndef HYPRE_BOXLOOP_HOST_HEADER
+#define HYPRE_BOXLOOP_HOST_HEADER
+
+#if !defined(HYPRE_USING_RAJA) && !defined(HYPRE_USING_KOKKOS) && !defined(HYPRE_USING_CUDA) && !defined(HYPRE_USING_HIP) && !defined(HYPRE_USING_DEVICE_OPENMP) && !defined(HYPRE_USING_SYCL)
 
 #ifdef HYPRE_USING_OPENMP
 #define HYPRE_BOX_REDUCTION
@@ -25,17 +27,19 @@
 #else
 #define Pragma(x) _Pragma(HYPRE_XSTR(x))
 #endif
+#define OMP0 Pragma(omp parallel for HYPRE_BOX_REDUCTION HYPRE_SMP_SCHEDULE)
 #define OMP1 Pragma(omp parallel for private(HYPRE_BOX_PRIVATE) HYPRE_BOX_REDUCTION HYPRE_SMP_SCHEDULE)
-#else
+#else /* #ifdef HYPRE_USING_OPENMP */
+#define OMP0
 #define OMP1
-#endif
+#endif /* #ifdef HYPRE_USING_OPENMP */
 
 typedef struct hypre_Boxloop_struct
 {
-   HYPRE_Int lsize0,lsize1,lsize2;
-   HYPRE_Int strides0,strides1,strides2;
-   HYPRE_Int bstart0,bstart1,bstart2;
-   HYPRE_Int bsize0,bsize1,bsize2;
+   HYPRE_Int lsize0, lsize1, lsize2;
+   HYPRE_Int strides0, strides1, strides2;
+   HYPRE_Int bstart0, bstart1, bstart2;
+   HYPRE_Int bsize0, bsize1, bsize2;
 } hypre_Boxloop;
 
 #define zypre_newBoxLoop0Begin(ndim, loop_size)                               \
@@ -236,17 +240,19 @@ typedef struct hypre_Boxloop_struct
          {
 
 
-#define hypre_LoopBegin(size,idx)                                             \
+#define hypre_LoopBegin(size, idx)                                            \
 {                                                                             \
    HYPRE_Int idx;                                                             \
-   for (idx = 0;idx < size;idx ++)                                            \
+   OMP0                                                                       \
+   for (idx = 0; idx < size; idx ++)                                          \
    {
 
 #define hypre_LoopEnd()                                                       \
   }                                                                           \
 }
 
-#define hypre_newBoxLoopGetIndex zypre_BoxLoopGetIndex
+#define hypre_BoxLoopGetIndex    zypre_BoxLoopGetIndex
+
 #define hypre_BoxLoopBlock       zypre_BoxLoopBlock
 #define hypre_BoxLoop0Begin      zypre_newBoxLoop0Begin
 #define hypre_BoxLoop0End        zypre_newBoxLoop0End
@@ -276,3 +282,6 @@ typedef struct hypre_Boxloop_struct
         hypre_BoxLoop2End(i1, i2)
 
 #endif
+
+#endif /* #ifndef HYPRE_BOXLOOP_HOST_HEADER */
+

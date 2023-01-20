@@ -2,8 +2,6 @@
 #define  _FLUIDOPINTERFACE_H_
 
 #include "FluidSpecies.H"
-#include "EField.H"
-#include "inspect.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -56,7 +54,7 @@ class FluidOpInterface
                                           const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                                           const FluidSpeciesPtrVect&         fluid_species,
                                           const PS::ScalarPtrVect&           scalars,
-                                          const EField&                      E_field,
+                                          const EMFields&                    EM_fields,
                                           const int                          component,
                                           const Real                         time) = 0;
 
@@ -64,20 +62,20 @@ class FluidOpInterface
                                           const PS::KineticSpeciesPtrVect&   kinetic_species,
                                           const FluidSpeciesPtrVect&         fluid_species,
                                           const PS::ScalarPtrVect&           scalars,
-                                          const EField&                      E_field,
+                                          const EMFields&                    EM_field,
                                           const int                          component,
                                           const Real                         time) = 0;
 
       virtual void preSolutionOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const double                       time ) {;}
 
       virtual void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
                               const FluidSpeciesPtrVect&         fluid_species,
                               const PS::ScalarPtrVect&           scalars,
-                              const EField&                      E_field,
+                              const EMFields&                    EM_fields,
                               const double                       time ) {;}
       
       virtual void postTimeEval( FluidSpecies&  a_species_comp,
@@ -94,9 +92,9 @@ class FluidOpInterface
 
       virtual void enforcePositivity( FluidSpecies&  a_species_comp ) {;}
 
-      virtual void getMemberVar( LevelData<FArrayBox>&  a_Var,
-                           const FluidSpecies&          a_fluid_species,
-                           const string&                a_name ) const 
+      virtual void getMemberVar( LevelData<FArrayBox>&  a_var,
+                                 const CFGVars&         a_fluid_vars,
+                                 const string&          a_name ) const 
       { cout << "getMemberVar: default getMemberVar() " << endl;}
       
       virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
@@ -108,7 +106,8 @@ class FluidOpInterface
                                   bool,
                                   const FluidSpecies&,
                                   const PS::GlobalDOFFluidSpecies&,
-                                  int ) { }
+                                  const int,
+                                  const int ) { }
 
       virtual void updateBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
                                    const PS::KineticSpeciesPtrVect&,
@@ -139,7 +138,8 @@ class FluidOpInterface
                                  const int                        step,
                                  const int                        stage,
                                  const double                     shift,
-                                 const int                        component) {}
+                                 const int                        component,
+                                 const std::string&               op_name ) {}
 
       virtual void solveSolutionPC( FluidSpeciesPtrVect&              fluid_species_solution,
                                     const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
@@ -158,6 +158,7 @@ class FluidOpInterface
       virtual void solvePCImEx( FluidSpeciesPtrVect&              fluid_species_solution,
                                 const PS::KineticSpeciesPtrVect&  kinetic_species_rhs,
                                 const FluidSpeciesPtrVect&        fluid_species_rhs,
+                                const std::string&,
                                 const int                         component )
       {
          // The default solution operator is just the identity

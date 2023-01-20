@@ -37,6 +37,7 @@ getUnitSquareGrid(const int  a_n_radial,
 
 int main( int a_argc, char* a_argv[] )
 {
+   
 #ifdef CH_MPI
    // Start MPI
    MPI_Init( &a_argc, &a_argv );
@@ -119,8 +120,17 @@ int main( int a_argc, char* a_argv[] )
    Vector<RealVect*> mappingInnerLeg;
    block_mapping_tmp.getArcLengthMapping(mappingInnerLeg, inner_div_leg_length, LPF);
    
-   cout<<"Done constructing arc-length mapping"<<endl;
+   if (procID()==0) {
+      cout<<"Done constructing arc-length mapping"<<endl;
+   }
 
+   //Compute and print toroidal flux function and safety factor profiles
+   bool print_toroidal_flux_and_q(false);
+   if (procID()==0) {
+      if (print_toroidal_flux_and_q){
+         block_mapping_tmp.printToroidalFluxAndSafetyFactorProfiles();
+      }
+   }
    
    /*
     Step 2: Loop over blocks and assemble the grid
@@ -233,10 +243,13 @@ int main( int a_argc, char* a_argv[] )
     Step 3: Output the grid
    */
    
-   output.writeGrid(grid, n_thetaMCORE, output_gridUe);
+   if (procID()==0) {
+      output.writeGrid(grid, n_thetaMCORE, output_gridUe);
+   }
    
   
 #ifdef CH_MPI
+   CH_TIMER_REPORT();
    MPI_Finalize();
 #endif
 
