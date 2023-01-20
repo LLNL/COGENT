@@ -1,0 +1,58 @@
+#
+# Makefile for the Cray Programming Environment on Crusher
+#
+# Uses Cray parallel multithreaded (OpenMP) LibSci for BLAS (Basic Linear Algebra Subroutines)
+# and LAPACK (Linear Algebra routines) support.
+#
+# cd $HOME/Chombo/lib/mk
+# ln -sf local/Make.defs.crusher.cray.omp Make.defs.local
+#
+# Module requirements:
+#
+#   module load PrgEnv-cray/8.3.3
+#
+USE_HDF=TRUE
+MPI=FALSE
+USE_TIMER=TRUE
+DEPXX=CC
+
+CXX=CC
+MPICXX=CC
+FC=ftn
+
+# See Chombo/lib/mk/Make.defs for defaults
+XTRACPPFLAGS:= -std=c++14 -fopenmp
+
+# module load netlib-scalapack
+# OLCF_NETLIB_SCALAPACK_ROOT
+
+# libsci_compiler_mp: Parallel multithreaded (OpenMP)
+XTRALIBFLAGS:= -fopenmp -lsci_cray_mp -L/opt/rocm-5.2.0/llvm/lib -Wl,-rpath,/opt/rocm-5.2.0/llvm/lib -lflang
+
+# libsci_compiler_mpi: Parallel multithreaded (OpenMP) w/MPI 
+#XTRALIBFLAGS:= -fopenmp -lsci_cray_mpi -L/opt/rocm-5.2.0/llvm/lib -Wl,-rpath,/opt/rocm-5.2.0/llvm/lib -lflang
+
+#XTRAFFLAGS += -ffree-form
+#XTRALIBFLAGS:= -L$(OLCF_NETLIB_LAPACK_ROOT)/lib64 -llapack -lblas
+
+#mpich stuff for cray build
+#MVAPICH2_DIR=/opt/cray/pe/mpich/8.1.10/ofi/gnu/9.1
+#XTRACXXFLAGS +=-I$(MVAPICH2_DIR)/include
+#XTRACPPFLAGS +=-I$(MVAPICH2_DIR)/include
+#XTRALIBFLAGS +=-L$(MVAPICH2_DIR)/lib -lmpi
+##XTRALIBFLAGS +=-L/opt/cray/pe/mpich/8.1.10/gtl/lib/ -lmpi_gtl_cuda
+#XTRALIBFLAGS +=-L/opt/cray/pe/mpich/8.1.10/gtl/lib/ -lmpi_gtl_hsa
+
+# module load hdf5/1.12.1
+#HDF5_ROOT=$(OLCF_HDF5_ROOT)
+
+HDFINCFLAGS=-I$(MPICH_DIR)/include -I$(HDF5_ROOT)/include -DH5_USE_110_API
+HDFLIBFLAGS=-L$(HDF5_ROOT)/lib -lhdf5 -lz
+
+HDFMPIINCFLAGS=-I$(MPICH_DIR)/include -I$(HDF5_ROOT)/include -DH5_USE_110_API
+HDFMPILIBFLAGS=-L$(HDF5_ROOT)/lib -lhdf5 -lz
+
+#PETSC_DIR=/gpfs/alpine/world-shared/geo127/petsc/arch-crusher-opt-cray-int64
+#PETSC_DIR=/gpfs/alpine/world-shared/geo127/petsc/arch-crusher-opt-cray-int64-ftn
+PETSC_DIR=/gpfs/alpine/world-shared/geo127/petsc/arch-crusher-opt-amd
+PETSC_ARCH=""

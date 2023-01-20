@@ -35,13 +35,15 @@
    - \b a_data    : data
    - \b a_names   : names of variables.
    - \b a_CoordSys: coordinate system
+   - \b a_writeMapping: if false, don't write the second ("map") file
 */
 void WriteMappedUGHDF5(const string&               a_fileRoot,
                        const DisjointBoxLayout&    a_grids,
                        const LevelData<FArrayBox>& a_data,
                        const NewCoordSys&  a_CoordSys,
                        const Box& a_domainBox,
-                       const Real& a_time)
+                       const Real& a_time,
+                       bool a_writeMapping)
 {
   // simplest thing to do here is to just call the AMR version...
   const Vector<DisjointBoxLayout> vectGrids(1, a_grids);
@@ -52,7 +54,7 @@ void WriteMappedUGHDF5(const string&               a_fileRoot,
 
   WriteMappedAMRHierarchyHDF5(a_fileRoot, vectGrids, vectData,
                               vectCoordSys, a_domainBox, refRatio,
-                              numLevels, a_time);
+                              numLevels, a_time, a_writeMapping);
 
 }
 
@@ -85,6 +87,7 @@ void WriteMappedUGHDF5(const string&               a_fileRoot,
    a_vectRatio :  refinement ratio at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file\\ 
 
    This is blocking.
 
@@ -99,7 +102,8 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
                             const Real& a_dt,
                             const Real& a_time,
                             const Vector<int>& a_vectRatio,
-                            const int& a_numLevels)
+                            const int& a_numLevels,
+                            bool a_writeMapping)
 {
   // first, write out data to "regular" hdf5 file:
   std::vector<char> iter_str(a_fileRoot.size()+25);
@@ -123,86 +127,89 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
                         refRatios,
                         a_numLevels);
 
-
-  // now create node-centered data for geometric info
-  Vector<LevelData<NodeFArrayBox>* > vectNodeLoc(a_numLevels, NULL);
-  int dimension = a_vectCoordSys[0]->dimension();
-  for (int level=0; level<a_numLevels; level++)
+  //  only write mapping output if requested
+  if (a_writeMapping)
     {
-      const DisjointBoxLayout& levelGrids = a_vectGrids[level];
-      // use same ghosting as cell-centered data used
-      IntVect ghostVect = a_vectData[level]->ghostVect();
-      vectNodeLoc[level] = new LevelData<NodeFArrayBox>(levelGrids,
-                                                        dimension,
-                                                        ghostVect);
-
-      LevelData<NodeFArrayBox>& levelNodeData = *vectNodeLoc[level];
-      const NewCoordSys& levelCS = *(a_vectCoordSys[level]);
-      DataIterator dit = levelGrids.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit)
+      // now create node-centered data for geometric info
+      Vector<LevelData<NodeFArrayBox>* > vectNodeLoc(a_numLevels, NULL);
+      int dimension = a_vectCoordSys[0]->dimension();
+      for (int level=0; level<a_numLevels; level++)
         {
-          NodeFArrayBox& thisNodeFAB = levelNodeData[dit];
-          // node-centered FAB
-          FArrayBox& thisFAB = thisNodeFAB.getFab();
-          levelCS.getNodeRealCoordinates(thisFAB, thisFAB.box());
-        } // end loop over grids
-
-    } // end loop over levels
-
-  // create names
-  Vector<string> locationNames(dimension);
-  for (int i=0; i<dimension; i++)
-    {
-      if (i ==0)
+          const DisjointBoxLayout& levelGrids = a_vectGrids[level];
+          // use same ghosting as cell-centered data used
+          IntVect ghostVect = a_vectData[level]->ghostVect();
+          vectNodeLoc[level] = new LevelData<NodeFArrayBox>(levelGrids,
+                                                            dimension,
+                                                            ghostVect);
+          
+          LevelData<NodeFArrayBox>& levelNodeData = *vectNodeLoc[level];
+          const NewCoordSys& levelCS = *(a_vectCoordSys[level]);
+          DataIterator dit = levelGrids.dataIterator();
+          for (dit.begin(); dit.ok(); ++dit)
+            {
+              NodeFArrayBox& thisNodeFAB = levelNodeData[dit];
+              // node-centered FAB
+              FArrayBox& thisFAB = thisNodeFAB.getFab();
+              levelCS.getNodeRealCoordinates(thisFAB, thisFAB.box());
+            } // end loop over grids
+          
+        } // end loop over levels
+      
+      // create names
+      Vector<string> locationNames(dimension);
+      for (int i=0; i<dimension; i++)
         {
-          locationNames[0] = "x";
+          if (i ==0)
+            {
+              locationNames[0] = "x";
+            }
+          else if (i == 1)
+            {
+              locationNames[1] = "y";
+            }
+          else if (i == 2)
+            {
+              locationNames[2] = "z";
+            }
+          else if (i == 3)
+            {
+              locationNames[3] = "u";
+            }
+          else if (i == 4)
+            {
+              locationNames[4] = "v";
+            }
+          else if (i == 5)
+            {
+              locationNames[5] = "w";
+            }
         }
-      else if (i == 1)
+      
+      sprintf(&(iter_str[0]), "%s%dd.map.hdf5", a_fileRoot.c_str(), SpaceDim);
+      string gridInfoFileName(&(iter_str[0]));
+      
+      // now call nodal WriteAMRHierarchy function...
+      WriteAMRHierarchyHDF5(gridInfoFileName,
+                            a_vectGrids,
+                            vectNodeLoc,
+                            locationNames,
+                            a_baseDomain,
+                            dx[0],
+                            a_dt,
+                            a_time,
+                            a_vectRatio,
+                            a_numLevels);
+      
+      // clean up after ourselves here
+      for (int level=0; level<a_numLevels; level++)
         {
-          locationNames[1] = "y";
+          if (vectNodeLoc[level] != NULL)
+            {
+              delete vectNodeLoc[level];
+              vectNodeLoc[level] = NULL;
+            }
         }
-      else if (i == 2)
-        {
-          locationNames[2] = "z";
-        }
-      else if (i == 3)
-        {
-          locationNames[3] = "u";
-        }
-      else if (i == 4)
-        {
-          locationNames[4] = "v";
-        }
-      else if (i == 5)
-        {
-          locationNames[5] = "w";
-        }
-    }
-
-  sprintf(&(iter_str[0]), "%s%dd.map.hdf5", a_fileRoot.c_str(), SpaceDim);
-  string gridInfoFileName(&(iter_str[0]));
-
-  // now call nodal WriteAMRHierarchy function...
-  WriteAMRHierarchyHDF5(gridInfoFileName,
-                        a_vectGrids,
-                        vectNodeLoc,
-                        locationNames,
-                        a_baseDomain,
-                        dx[0],
-                        a_dt,
-                        a_time,
-                        a_vectRatio,
-                        a_numLevels);
-
-  // clean up after ourselves here
-  for (int level=0; level<a_numLevels; level++)
-    {
-      if (vectNodeLoc[level] != NULL)
-        {
-          delete vectNodeLoc[level];
-          vectNodeLoc[level] = NULL;
-        }
-    }
+    }  // end if writeMapping
 }
 
 
@@ -224,6 +231,8 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
    a_vectRatio :  refinement ratio at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
+
    This is blocking.
 */
 void
@@ -234,7 +243,8 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
                             const Box& a_baseDomainBox,
                             const Vector<int>& a_vectRatio,
                             const int& a_numLevels,
-                            const Real& a_time)
+                            const Real& a_time,
+                            bool a_writeMapping)
 {
 
   // create names for the variables and placeholder values for dt and time,
@@ -260,7 +270,8 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
                               dt,
                               a_time,
                               a_vectRatio,
-                              a_numLevels);
+                              a_numLevels,
+                              a_writeMapping);
 }
 
 
@@ -285,6 +296,7 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
    a_vectRatio :  refinement ratio in each direction at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
 
    This is blocking.
 
@@ -300,7 +312,8 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
     const Real& a_dt,
     const Real& a_time,
     const Vector<IntVect>& a_vectRatios,
-    const int& a_numLevels)
+    const int& a_numLevels,
+    bool a_writeMapping)
 {
   // first, write out data to "regular" hdf5 file:
   char iter_str[160];
@@ -322,87 +335,91 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
       a_vectRatios,
       a_numLevels);
 
-
-  // now create node-centered data for geometric info
-  Vector<LevelData<NodeFArrayBox>* > vectNodeLoc(a_numLevels, NULL);
-  int dimension = a_vectCoordSys[0]->dimension();
-  for (int level=0; level<a_numLevels; level++)
+  // only write mapping file if requested
+  if (a_writeMapping)
     {
-      const DisjointBoxLayout& levelGrids = a_vectGrids[level];
-      // use same ghosting as cell-centered data used
-      IntVect ghostVect = a_vectData[level]->ghostVect();
-      vectNodeLoc[level] = new LevelData<NodeFArrayBox>(levelGrids,
-                                                        dimension,
-                                                        ghostVect);
-
-      LevelData<NodeFArrayBox>& levelNodeData = *vectNodeLoc[level];
-      const NewCoordSys& levelCS = *(a_vectCoordSys[level]);
-      DataIterator dit = levelGrids.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit)
+      
+      // now create node-centered data for geometric info
+      Vector<LevelData<NodeFArrayBox>* > vectNodeLoc(a_numLevels, NULL);
+      int dimension = a_vectCoordSys[0]->dimension();
+      for (int level=0; level<a_numLevels; level++)
         {
-          NodeFArrayBox& thisNodeFAB = levelNodeData[dit];
-          // node-centered FAB
-          FArrayBox& thisFAB = thisNodeFAB.getFab();
-          levelCS.getNodeRealCoordinates(thisFAB, thisFAB.box());
-        } // end loop over grids
-
-    } // end loop over levels
-
-  // create names
-  Vector<string> locationNames(dimension);
-  for (int i=0; i<dimension; i++)
-    {
-      if (i ==0)
+          const DisjointBoxLayout& levelGrids = a_vectGrids[level];
+          // use same ghosting as cell-centered data used
+          IntVect ghostVect = a_vectData[level]->ghostVect();
+          vectNodeLoc[level] = new LevelData<NodeFArrayBox>(levelGrids,
+                                                            dimension,
+                                                            ghostVect);
+          
+          LevelData<NodeFArrayBox>& levelNodeData = *vectNodeLoc[level];
+          const NewCoordSys& levelCS = *(a_vectCoordSys[level]);
+          DataIterator dit = levelGrids.dataIterator();
+          for (dit.begin(); dit.ok(); ++dit)
+            {
+              NodeFArrayBox& thisNodeFAB = levelNodeData[dit];
+              // node-centered FAB
+              FArrayBox& thisFAB = thisNodeFAB.getFab();
+              levelCS.getNodeRealCoordinates(thisFAB, thisFAB.box());
+            } // end loop over grids
+          
+        } // end loop over levels
+      
+      // create names
+      Vector<string> locationNames(dimension);
+      for (int i=0; i<dimension; i++)
         {
-          locationNames[0] = "x";
+          if (i ==0)
+            {
+              locationNames[0] = "x";
+            }
+          else if (i == 1)
+            {
+              locationNames[1] = "y";
+            }
+          else if (i == 2)
+            {
+              locationNames[2] = "z";
+            }
+          else if (i == 3)
+            {
+              locationNames[3] = "u";
+            }
+          else if (i == 4)
+            {
+              locationNames[4] = "v";
+            }
+          else if (i == 5)
+            {
+              locationNames[5] = "w";
+            }
         }
-      else if (i == 1)
+      
+      sprintf(iter_str, "%s%dd.map.hdf5", a_fileRoot.c_str(), SpaceDim);
+      string gridInfoFileName(iter_str);
+      
+      // now call nodal WriteAMRHierarchy function...
+      WriteAnisotropicAMRHierarchyHDF5(
+                                       gridInfoFileName,
+                                       a_vectGrids,
+                                       vectNodeLoc,
+                                       locationNames,
+                                       a_baseDomain,
+                                       dx,
+                                       a_dt,
+                                       a_time,
+                                       a_vectRatios,
+                                       a_numLevels);
+      
+      // clean up after ourselves here
+      for (int level=0; level<a_numLevels; level++)
         {
-          locationNames[1] = "y";
+          if (vectNodeLoc[level] != NULL)
+            {
+              delete vectNodeLoc[level];
+              vectNodeLoc[level] = NULL;
+            }
         }
-      else if (i == 2)
-        {
-          locationNames[2] = "z";
-        }
-      else if (i == 3)
-        {
-          locationNames[3] = "u";
-        }
-      else if (i == 4)
-        {
-          locationNames[4] = "v";
-        }
-      else if (i == 5)
-        {
-          locationNames[5] = "w";
-        }
-    }
-
-  sprintf(iter_str, "%s%dd.map.hdf5", a_fileRoot.c_str(), SpaceDim);
-  string gridInfoFileName(iter_str);
-
-  // now call nodal WriteAMRHierarchy function...
-  WriteAnisotropicAMRHierarchyHDF5(
-      gridInfoFileName,
-      a_vectGrids,
-      vectNodeLoc,
-      locationNames,
-      a_baseDomain,
-      dx,
-      a_dt,
-      a_time,
-      a_vectRatios,
-      a_numLevels);
-
-  // clean up after ourselves here
-  for (int level=0; level<a_numLevels; level++)
-    {
-      if (vectNodeLoc[level] != NULL)
-        {
-          delete vectNodeLoc[level];
-          vectNodeLoc[level] = NULL;
-        }
-    }
+    } // end if writeMapping
 }
 
 
@@ -424,6 +441,8 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
    a_vectRatio :  refinement ratio in each direction at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
+
    This is blocking.
 */
 void
@@ -435,7 +454,8 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
     const Box& a_baseDomainBox,
     const Vector<IntVect>& a_vectRatios,
     const int& a_numLevels,
-    const Real& a_time)
+    const Real& a_time,
+    bool a_writeMapping)
 {
 
   // create names for the variables and placeholder values for dt and time,
@@ -462,7 +482,8 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
       dt,
       a_time,
       a_vectRatios,
-      a_numLevels);
+      a_numLevels,
+      a_writeMapping);
 }
 
 
@@ -482,13 +503,15 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
    - \b a_data    : data
    - \b a_names   : names of variables.
    - \b a_CoordSys: multiblock coordinate system
+   - \b a_writeMapping: if false, don't write the second ("map") file 
 */
 void WriteMappedUGHDF5(const string&               a_fileRoot,
                        const DisjointBoxLayout&    a_grids,
                        const LevelData<FArrayBox>& a_data,
                        const MultiBlockCoordSys&  a_CoordSys,
                        const Box& a_domainBox,
-                       const Real& a_time)
+                       const Real& a_time,
+                       bool a_writeMapping)
 {
   // simplest thing to do here is to just call the AMR version...
   const Vector<DisjointBoxLayout> vectGrids(1, a_grids);
@@ -499,7 +522,7 @@ void WriteMappedUGHDF5(const string&               a_fileRoot,
 
   WriteMappedAMRHierarchyHDF5(a_fileRoot, vectGrids, vectData,
                               vectCoordSys, a_domainBox, refRatio,
-                              numLevels, a_time);
+                              numLevels, a_time, a_writeMapping);
 
 }
 
@@ -511,7 +534,8 @@ void WriteMappedUGHDF5(const string&               a_fileRoot,
                        const MultiBlockCoordSys&  a_CoordSys,
                        const Box& a_domainBox,
                        const Vector<string>& outputNames,
-                       const Real& a_time)
+                       const Real& a_time,
+                       bool a_writeMapping)
 {
   // simplest thing to do here is to just call the AMR version...
   const Vector<DisjointBoxLayout> vectGrids(1, a_grids);
@@ -524,7 +548,7 @@ void WriteMappedUGHDF5(const string&               a_fileRoot,
 
   WriteMappedAMRHierarchyHDF5(a_fileRoot, vectGrids, vectData, outputNames,
                               vectCoordSys, a_domainBox, dt, a_time, refRatio,
-                              numLevels);
+                              numLevels, a_writeMapping);
 
 }
 
@@ -550,6 +574,7 @@ void WriteMappedUGHDF5(const string&               a_fileRoot,
    a_vectRatio :  refinement ratio at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
 
    This is blocking.
 
@@ -564,7 +589,8 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
                             const Real& a_dt,
                             const Real& a_time,
                             const Vector<int>& a_vectRatio,
-                            const int& a_numLevels)
+                            const int& a_numLevels,
+                            bool a_writeMapping)
 {
   // first, write out data to "regular" hdf5 file:
   char iter_str[160];
@@ -586,91 +612,94 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
                         a_vectRatio,
                         a_numLevels);
 
-
-  // now create node-centered data for geometric info
-  Vector<LevelData<NodeFArrayBox>* > vectNodeLoc(a_numLevels, NULL);
-
-  int dimension = baseCoordSysPtr->dimension();
-  for (int level=0; level<a_numLevels; level++)
+  // write mapping file if requested
+  if (a_writeMapping)
     {
-      const DisjointBoxLayout& levelGrids = a_vectGrids[level];
-      // use same ghosting as cell-centered data used
-      IntVect ghostVect = a_vectData[level]->ghostVect();
-      vectNodeLoc[level] = new LevelData<NodeFArrayBox>(levelGrids,
-                                                        dimension,
-                                                        ghostVect);
-
-      LevelData<NodeFArrayBox>& levelNodeData = *vectNodeLoc[level];
-      const MultiBlockCoordSys& levelCS = *(a_vectCoordSys[level]);
-      DataIterator dit = levelGrids.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit)
+      // now create node-centered data for geometric info
+      Vector<LevelData<NodeFArrayBox>* > vectNodeLoc(a_numLevels, NULL);
+      
+      int dimension = baseCoordSysPtr->dimension();
+      for (int level=0; level<a_numLevels; level++)
         {
-          const Box& gridBox = levelGrids[dit];
-          NodeFArrayBox& thisNodeFAB = levelNodeData[dit];
-          // node-centered FAB
-          FArrayBox& thisFAB = thisNodeFAB.getFab();
-          const NewCoordSys* blockCS = levelCS.getCoordSys(gridBox);
-
-          blockCS->getNodeRealCoordinates(thisFAB, thisFAB.box());
-        } // end loop over grids
-
-    } // end loop over levels
-
-  // create names
-
-  // create names
-  Vector<string> locationNames(dimension);
-  for (int i=0; i<dimension; i++)
-    {
-      if (i ==0)
+          const DisjointBoxLayout& levelGrids = a_vectGrids[level];
+          // use same ghosting as cell-centered data used
+          IntVect ghostVect = a_vectData[level]->ghostVect();
+          vectNodeLoc[level] = new LevelData<NodeFArrayBox>(levelGrids,
+                                                            dimension,
+                                                            ghostVect);
+          
+          LevelData<NodeFArrayBox>& levelNodeData = *vectNodeLoc[level];
+          const MultiBlockCoordSys& levelCS = *(a_vectCoordSys[level]);
+          DataIterator dit = levelGrids.dataIterator();
+          for (dit.begin(); dit.ok(); ++dit)
+            {
+              const Box& gridBox = levelGrids[dit];
+              NodeFArrayBox& thisNodeFAB = levelNodeData[dit];
+              // node-centered FAB
+              FArrayBox& thisFAB = thisNodeFAB.getFab();
+              const NewCoordSys* blockCS = levelCS.getCoordSys(gridBox);
+              
+              blockCS->getNodeRealCoordinates(thisFAB, thisFAB.box());
+            } // end loop over grids
+          
+        } // end loop over levels
+      
+      // create names
+      
+      // create names
+      Vector<string> locationNames(dimension);
+      for (int i=0; i<dimension; i++)
         {
-          locationNames[0] = "x";
+          if (i ==0)
+            {
+              locationNames[0] = "x";
+            }
+          else if (i == 1)
+            {
+              locationNames[1] = "y";
+            }
+          else if (i == 2)
+            {
+              locationNames[2] = "z";
+            }
+          else if (i == 3)
+            {
+              locationNames[3] = "u";
+            }
+          else if (i == 4)
+            {
+              locationNames[4] = "v";
+            }
+          else if (i == 5)
+            {
+              locationNames[5] = "w";
+            }
         }
-      else if (i == 1)
+      sprintf(iter_str, "%s%dd.map.hdf5", a_fileRoot.c_str(), SpaceDim);
+      string gridInfoFileName(iter_str);
+      
+      // now call nodal WriteAMRHierarchy function...
+      WriteAMRHierarchyHDF5(gridInfoFileName,
+                            a_vectGrids,
+                            vectNodeLoc,
+                            locationNames,
+                            a_baseDomain,
+                            dx[0],
+                            a_dt,
+                            a_time,
+                            a_vectRatio,
+                            a_numLevels);
+      
+      // clean up after ourselves here
+      for (int level=0; level<a_numLevels; level++)
         {
-          locationNames[1] = "y";
+          if (vectNodeLoc[level] != NULL)
+            {
+              delete vectNodeLoc[level];
+              vectNodeLoc[level] = NULL;
+            }
         }
-      else if (i == 2)
-        {
-          locationNames[2] = "z";
-        }
-      else if (i == 3)
-        {
-          locationNames[3] = "u";
-        }
-      else if (i == 4)
-        {
-          locationNames[4] = "v";
-        }
-      else if (i == 5)
-        {
-          locationNames[5] = "w";
-        }
-    }
-  sprintf(iter_str, "%s%dd.map.hdf5", a_fileRoot.c_str(), SpaceDim);
-  string gridInfoFileName(iter_str);
-
-  // now call nodal WriteAMRHierarchy function...
-  WriteAMRHierarchyHDF5(gridInfoFileName,
-                        a_vectGrids,
-                        vectNodeLoc,
-                        locationNames,
-                        a_baseDomain,
-                        dx[0],
-                        a_dt,
-                        a_time,
-                        a_vectRatio,
-                        a_numLevels);
-
-  // clean up after ourselves here
-  for (int level=0; level<a_numLevels; level++)
-    {
-      if (vectNodeLoc[level] != NULL)
-        {
-          delete vectNodeLoc[level];
-          vectNodeLoc[level] = NULL;
-        }
-    }
+    } // end if writeMapping
 }
 
 
@@ -696,6 +725,7 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
    a_vectRatios:  refinement ratio in each direction at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
 
    This is blocking.
 
@@ -711,7 +741,8 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
     const Real& a_dt,
     const Real& a_time,
     const Vector<IntVect>& a_vectRatios,
-    const int& a_numLevels)
+    const int& a_numLevels,
+    bool a_writeMapping)
 {
   // first, write out data to "regular" hdf5 file:
   char iter_str[160];
@@ -734,92 +765,96 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
       a_vectRatios,
       a_numLevels);
 
-
-  // now create node-centered data for geometric info
-  Vector<LevelData<NodeFArrayBox>* > vectNodeLoc(a_numLevels, NULL);
-
-  int dimension = baseCoordSysPtr->dimension();
-  for (int level=0; level<a_numLevels; level++)
+  // write mapping file if requested
+  if (a_writeMapping)
     {
-      const DisjointBoxLayout& levelGrids = a_vectGrids[level];
-      // use same ghosting as cell-centered data used
-      IntVect ghostVect = a_vectData[level]->ghostVect();
-      vectNodeLoc[level] = new LevelData<NodeFArrayBox>(levelGrids,
-                                                        dimension,
-                                                        ghostVect);
-
-      LevelData<NodeFArrayBox>& levelNodeData = *vectNodeLoc[level];
-      const MultiBlockCoordSys& levelCS = *(a_vectCoordSys[level]);
-      DataIterator dit = levelGrids.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit)
+      
+      // now create node-centered data for geometric info
+      Vector<LevelData<NodeFArrayBox>* > vectNodeLoc(a_numLevels, NULL);
+      
+      int dimension = baseCoordSysPtr->dimension();
+      for (int level=0; level<a_numLevels; level++)
         {
-          const Box& gridBox = levelGrids[dit];
-          NodeFArrayBox& thisNodeFAB = levelNodeData[dit];
-          // node-centered FAB
-          FArrayBox& thisFAB = thisNodeFAB.getFab();
-          const NewCoordSys* blockCS = levelCS.getCoordSys(gridBox);
-
-          blockCS->getNodeRealCoordinates(thisFAB, thisFAB.box());
-        } // end loop over grids
-
-    } // end loop over levels
-
-  // create names
-
-  // create names
-  Vector<string> locationNames(dimension);
-  for (int i=0; i<dimension; i++)
-    {
-      if (i ==0)
+          const DisjointBoxLayout& levelGrids = a_vectGrids[level];
+          // use same ghosting as cell-centered data used
+          IntVect ghostVect = a_vectData[level]->ghostVect();
+          vectNodeLoc[level] = new LevelData<NodeFArrayBox>(levelGrids,
+                                                            dimension,
+                                                            ghostVect);
+          
+          LevelData<NodeFArrayBox>& levelNodeData = *vectNodeLoc[level];
+          const MultiBlockCoordSys& levelCS = *(a_vectCoordSys[level]);
+          DataIterator dit = levelGrids.dataIterator();
+          for (dit.begin(); dit.ok(); ++dit)
+            {
+              const Box& gridBox = levelGrids[dit];
+              NodeFArrayBox& thisNodeFAB = levelNodeData[dit];
+              // node-centered FAB
+              FArrayBox& thisFAB = thisNodeFAB.getFab();
+              const NewCoordSys* blockCS = levelCS.getCoordSys(gridBox);
+              
+              blockCS->getNodeRealCoordinates(thisFAB, thisFAB.box());
+            } // end loop over grids
+          
+        } // end loop over levels
+      
+      // create names
+      
+      // create names
+      Vector<string> locationNames(dimension);
+      for (int i=0; i<dimension; i++)
         {
-          locationNames[0] = "x";
+          if (i ==0)
+            {
+              locationNames[0] = "x";
+            }
+          else if (i == 1)
+            {
+              locationNames[1] = "y";
+            }
+          else if (i == 2)
+            {
+              locationNames[2] = "z";
+            }
+          else if (i == 3)
+            {
+              locationNames[3] = "u";
+            }
+          else if (i == 4)
+            {
+              locationNames[4] = "v";
+            }
+          else if (i == 5)
+            {
+              locationNames[5] = "w";
+            }
         }
-      else if (i == 1)
+      sprintf(iter_str, "%s%dd.map.hdf5", a_fileRoot.c_str(), SpaceDim);
+      string gridInfoFileName(iter_str);
+      
+      // now call nodal WriteAMRHierarchy function...
+      WriteAnisotropicAMRHierarchyHDF5(
+                                       gridInfoFileName,
+                                       a_vectGrids,
+                                       vectNodeLoc,
+                                       locationNames,
+                                       a_baseDomain,
+                                       dx,
+                                       a_dt,
+                                       a_time,
+                                       a_vectRatios,
+                                       a_numLevels);
+      
+      // clean up after ourselves here
+      for (int level=0; level<a_numLevels; level++)
         {
-          locationNames[1] = "y";
+          if (vectNodeLoc[level] != NULL)
+            {
+              delete vectNodeLoc[level];
+              vectNodeLoc[level] = NULL;
+            }
         }
-      else if (i == 2)
-        {
-          locationNames[2] = "z";
-        }
-      else if (i == 3)
-        {
-          locationNames[3] = "u";
-        }
-      else if (i == 4)
-        {
-          locationNames[4] = "v";
-        }
-      else if (i == 5)
-        {
-          locationNames[5] = "w";
-        }
-    }
-  sprintf(iter_str, "%s%dd.map.hdf5", a_fileRoot.c_str(), SpaceDim);
-  string gridInfoFileName(iter_str);
-
-  // now call nodal WriteAMRHierarchy function...
-  WriteAnisotropicAMRHierarchyHDF5(
-      gridInfoFileName,
-      a_vectGrids,
-      vectNodeLoc,
-      locationNames,
-      a_baseDomain,
-      dx,
-      a_dt,
-      a_time,
-      a_vectRatios,
-      a_numLevels);
-
-  // clean up after ourselves here
-  for (int level=0; level<a_numLevels; level++)
-    {
-      if (vectNodeLoc[level] != NULL)
-        {
-          delete vectNodeLoc[level];
-          vectNodeLoc[level] = NULL;
-        }
-    }
+    } // end if writing mapping file
 }
 
 
@@ -841,6 +876,8 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
    a_vectRatio :  refinement ratio at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
+
    This is blocking.
 */
 void
@@ -851,7 +888,8 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
                             const Box& a_baseDomainBox,
                             const Vector<int>& a_vectRatio,
                             const int& a_numLevels,
-                            const Real& a_time)
+                            const Real& a_time,
+                            bool a_writeMapping)
 {
 
   // create names for the variables and placeholder values for dt and time,
@@ -876,7 +914,8 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
                               dt,
                               a_time,
                               a_vectRatio,
-                              a_numLevels);
+                              a_numLevels,
+                              a_writeMapping);
 }
 
 
@@ -898,6 +937,8 @@ WriteMappedAMRHierarchyHDF5(const string& a_fileRoot,
    a_vectRatio :  refinement ratio in each direction at all levels
    (ith entry is refinement ratio between levels i and i + 1).\\
    a_numLevels :  number of levels to output.\\
+   a_writeMapping: if false, don't write the second ("map") file \\
+
    This is blocking.
 */
 void
@@ -909,7 +950,8 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
     const Box& a_baseDomainBox,
     const Vector<IntVect>& a_vectRatios,
     const int& a_numLevels,
-    const Real& a_time)
+    const Real& a_time,
+    bool a_writeMapping)
 {
 
   // create names for the variables and placeholder values for dt and time,
@@ -927,16 +969,17 @@ WriteAnisotropicMappedAMRHierarchyHDF5(
     }
 
   WriteAnisotropicMappedAMRHierarchyHDF5(
-      a_fileRoot,
-      a_vectGrids,
-      a_vectData,
-      compNames,
-      a_vectCoordSys,
-      a_baseDomainBox,
-      dt,
-      a_time,
-      a_vectRatios,
-      a_numLevels);
+                                         a_fileRoot,
+                                         a_vectGrids,
+                                         a_vectData,
+                                         compNames,
+                                         a_vectCoordSys,
+                                         a_baseDomainBox,
+                                         dt,
+                                         a_time,
+                                         a_vectRatios,
+                                         a_numLevels,
+                                         a_writeMapping);
 }
 
 

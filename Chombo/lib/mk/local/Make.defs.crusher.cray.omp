@@ -1,13 +1,21 @@
 USE_HDF=TRUE
 MPI=TRUE
 USE_TIMER=TRUE
-
 DEPXX=CC
 CXX=CC
 MPICXX=CC
 FC=ftn
+#XTRACPPFLAGS:= -std=c++11 -fopenmp
+XTRACPPFLAGS:= -std=c++14 -fopenmp
 
-XTRACPPFLAGS:= -std=c++11
+
+# libsci_compiler_mp: Parallel multithreaded (OpenMP)
+# libsci_cray_mp.so.5 => /opt/cray/pe/lib64/libsci_cray_mp.so.5
+XTRALIBFLAGS:= -fopenmp -lsci_cray_mp
+
+# libsci_compiler_mpi: Parallel multithreaded (OpenMP) w/MPI 
+#XTRALIBFLAGS:= -fopenmp -lsci_cray_mpi
+
 #XTRAFFLAGS += -ffree-form
 #XTRALIBFLAGS:= -L$(OLCF_NETLIB_LAPACK_ROOT)/lib64 -llapack -lblas
 
@@ -18,6 +26,9 @@ XTRACPPFLAGS:= -std=c++11
 #XTRALIBFLAGS +=-L$(MVAPICH2_DIR)/lib -lmpi
 ##XTRALIBFLAGS +=-L/opt/cray/pe/mpich/8.1.10/gtl/lib/ -lmpi_gtl_cuda
 #XTRALIBFLAGS +=-L/opt/cray/pe/mpich/8.1.10/gtl/lib/ -lmpi_gtl_hsa
+
+# module load hdf5/1.12.1
+HDF5_ROOT=$(OLCF_HDF5_ROOT)
 
 HDFINCFLAGS=-I$(HDF5_ROOT)/include -DH5_USE_110_API
 HDFLIBFLAGS=-L$(HDF5_ROOT)/lib -lhdf5 -lz
