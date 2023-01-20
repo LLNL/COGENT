@@ -311,7 +311,7 @@ void LinearizedUnlike::fieldPartCollRHS(LevelData<FArrayBox>& a_rhs_coll,
    
    //Compute int(vpar*CTP_ba(delta_f_b),d3v)
    CFG::LevelData<CFG::FArrayBox> tmp_cfg( mag_geom.grids(), 1, CFG::IntVect::Zero);
-   m_moment_op.compute(tmp_cfg, a_species_b, m_tmp_dfn_noGhosts, ParallelMomKernel<FArrayBox>());
+   m_moment_op.compute(tmp_cfg, a_species_b, m_tmp_dfn_noGhosts, ParallelVelKernel<FArrayBox>());
    
    LevelData<FArrayBox> injected_data_R;
    phase_geom.injectConfigurationToPhase(tmp_cfg, injected_data_R);
@@ -408,7 +408,7 @@ void LinearizedUnlike::computeRandQTerms(LevelData<FArrayBox>&       a_R,
       
    //Compute int(vpar*CTP_ab(ma*vpar*F0a),d3v)
    CFG::LevelData<CFG::FArrayBox> tmp_cfg(mag_geom.grids(), 1, CFG::IntVect::Zero);
-   m_moment_op.compute(tmp_cfg, a_species, a_R, ParallelMomKernel<FArrayBox>());
+   m_moment_op.compute(tmp_cfg, a_species, a_R, ParallelVelKernel<FArrayBox>());
       
    LevelData<FArrayBox> injected_data_R;
    phase_geom.injectConfigurationToPhase(tmp_cfg, injected_data_R);
@@ -471,11 +471,11 @@ void LinearizedUnlike::computeRandQTerms(LevelData<FArrayBox>&       a_R,
 void LinearizedUnlike::computeMaxwellianFit(LevelData<FArrayBox>&             a_F0,
                                             CFG::LevelData<CFG::FArrayBox>&   a_temperature,
                                             CFG::LevelData<CFG::FArrayBox>&   a_density,
-					    LevelData<FArrayBox>&             a_temperature_inj,
+                                            LevelData<FArrayBox>&             a_temperature_inj,
                                             LevelData<FArrayBox>&             a_density_inj,
                                             const KineticSpecies&             a_species,
                                             const LevelData<FArrayBox>&       a_dfn,
-					    const Real                        a_time) const
+                                            const Real                        a_time) const
 {
     CH_TIME("LinearizedUnlike::computeMaxwellianFit");
 
@@ -486,14 +486,14 @@ void LinearizedUnlike::computeMaxwellianFit(LevelData<FArrayBox>&             a_
     mag_geom.divideJonValid(a_density);
    
     CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.grids(), 1, CFG::IntVect::Zero );
-    a_species.ParallelMomentum( ParallelMom );
+    a_species.parallelParticleFlux( ParallelMom );
     mag_geom.divideJonValid(ParallelMom);
-   
+    
     for (CFG::DataIterator dit(a_density.dataIterator()); dit.ok(); ++dit) {
       ParallelMom[dit].divide(a_density[dit]);
     }
 
-    a_species.pressureMoment(a_temperature, ParallelMom);
+    a_species.pressure(a_temperature, ParallelMom);
     mag_geom.divideJonValid(a_temperature);
    
     for (CFG::DataIterator dit(a_density.dataIterator()); dit.ok(); ++dit) {
@@ -579,7 +579,7 @@ void LinearizedUnlike::getClsFreqNorm(LevelData<FArrayBox>&             a_cls_no
        CFG::BoxIterator bit(cls_norm_cfg[dit].box());
        for (bit.begin(); bit.ok(); ++bit) {
          CFG::IntVect iv = bit();
-         double fac1 = m_charge_a * m_charge_b * (m_mass_a + m_mass_b) /
+         double fac1 = abs(m_charge_a) * abs(m_charge_b) * (m_mass_a + m_mass_b) /
                            (m_mass_a * a_Tb[dit](iv,0) + m_mass_b * a_Ta[dit](iv,0));
          double fac2 = sqrt(a_Na[dit](iv,0)/a_Ta[dit](iv,0)*pow(m_charge_a,2) +
                             a_Nb[dit](iv,0)/a_Tb[dit](iv,0)*pow(m_charge_b,2));
@@ -816,7 +816,7 @@ void LinearizedUnlike::diagnostics(const KineticSpecies&  a_rhs_species,
    file_name = "ParticleSink_" + to_string(a_species);
    mag_geom.plotCellData(file_name, cfg_data, 0.);
    
-   a_rhs_species.ParallelMomentum( cfg_data );
+   a_rhs_species.parallelParticleFlux( cfg_data );
    CFG::DataIterator cfg_dit = cfg_data.dataIterator();
    for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
       cfg_data[cfg_dit].mult(m_mass_a);
@@ -842,7 +842,7 @@ void LinearizedUnlike::diagnostics(const KineticSpecies&  a_rhs_species,
    for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {
       zero_cfg[cfg_dit].setVal(0.);
    }
-   a_rhs_species.pressureMoment(cfg_data, zero_cfg);
+   a_rhs_species.pressure(cfg_data, zero_cfg);
    mag_geom.divideJonValid(cfg_data);
  
    for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit) {

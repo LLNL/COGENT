@@ -35,11 +35,9 @@ public:
   virtual ~MagGeom();
 
   /*@}*/
-
+   
    void getMetricTerms( LevelData<FluxBox>& N,
                         LevelData<FluxBox>& tanGradN ) const;
-
-   void getMetricTerms( LevelData<FluxBox>& N) const;
    
    void setMetricTerms( const DisjointBoxLayout&, 
                         const IntVect&           ) const;
@@ -224,6 +222,8 @@ public:
 
    void applyAxisymmetricCorrection( LevelData<FluxBox>& data ) const;
 
+   void checkMappingConsistency() const;
+   
    void checkMultiblockMappingConsistency() const;
 
    double maxBlockBoundaryDifference(LevelData<FluxBox>& data) const;
@@ -233,6 +233,10 @@ public:
    void getMagneticFlux(LevelData<FArrayBox>& psi) const;
 
    void getMagneticFlux(LevelData<FluxBox>& psi) const;
+   
+   void computeBFieldDirXCurvature( LevelData<FluxBox>& bXkappa ) const;
+
+   void computeBFieldDirXCurvature( LevelData<FArrayBox>& bXkappa ) const;
    
    const LevelData<FArrayBox>& getCellCenteredRealCoords() const {return m_cell_centered_real_coords;}
    
@@ -293,6 +297,7 @@ public:
                                        const string&       type) const;
    
    void getBPoloidalDir(LevelData<FluxBox>& BPoloidalDir_fc) const;
+   void getBpoloidalMag(LevelData<FArrayBox>& BPoloidalMag_cc) const;
    
    void getFluxSurfaceNormDir(LevelData<FluxBox>& fluxSurfaceNormDir) const;
    
@@ -315,8 +320,6 @@ public:
                       const double&             time ) const;
 
    void writeGeometryData( const DisjointBoxLayout& grids, const double& time ) const;
-
-   bool fullyPeriodic() const {return m_fully_periodic;}
     
    bool extrablockExchange() const {return m_extrablock_exchange;}
 
@@ -353,6 +356,11 @@ public:
    void extrapolateToPhysicalGhosts(LevelData<FArrayBox>&   data,
                                     const bool              fourth_order) const;
 
+   void extrapolateAtPhysicalBoundaries(LevelData<FArrayBox>&  a_dfn,
+                                        const int              a_order,
+                                        const int              a_nghosts) const;
+
+  
    void defineEllipticOpBC( EllipticOpBC& bc ) const {m_coord_sys->defineEllipticOpBC(bc);}
 
    const MagBlockCoordSys& getBlockCoordSys(const Box& box) const;
@@ -431,12 +439,14 @@ public:
    void computeParallelProjection(LevelData<FArrayBox>& parComp,
                                   const LevelData<FArrayBox>& vector) const;
     
-   //Compute vector projection onto the direction of phi x bpol
+   //Compute vector projection onto the radial direction of e_phi x bpol or e_r
    void computeRadialProjection( LevelData<FArrayBox>& radComp,
-                                 const LevelData<FArrayBox>& vector) const;
+                                 const LevelData<FArrayBox>& vector,
+                                 const bool is_bfield_dir = true) const;
 
    void computeRadialProjection( LevelData<FluxBox>& radComp,
-                                 const LevelData<FluxBox>& vector) const;
+                                 const LevelData<FluxBox>& vector,
+                                 const bool is_bfield_dir = true) const;
 
    //Compute vector projection onto the direction of bpol
    void computePoloidalProjection( LevelData<FArrayBox>& polComp,
@@ -444,7 +454,18 @@ public:
    
    void computePoloidalProjection( LevelData<FluxBox>& polComp,
                                    const LevelData<FluxBox>& vector) const;
+
+   //Compute vector projection onto the direction of bphi
+   void computeToroidalProjection( LevelData<FArrayBox>& phiComp,
+                                   const LevelData<FArrayBox>& vector) const;
    
+   void computeToroidalProjection( LevelData<FluxBox>& phiComp,
+                                   const LevelData<FluxBox>& vector) const;
+
+   //Converts physical components to e_r, b_phi, b_pol components
+   void convertToFSProjections(LevelData<FArrayBox>& a_vector) const;
+   void convertToFSProjections(LevelData<FluxBox>& a_vector) const;
+
    // Compute cylindrical components of a Cartesian vector
    void convertCartesianToCylindrical(LevelData<FArrayBox>& vect_cyl,
                                       const LevelData<FArrayBox>& vect_cart) const;
@@ -471,7 +492,11 @@ public:
    void computeMappedGradient( const LevelData<FArrayBox>&  phi,
                                      LevelData<FluxBox>&    field,
                                const int                    order ) const;
-  
+
+   void computeMappedGradient( const LevelData<FArrayBox>&  phi,
+                                     LevelData<FArrayBox>&  field,
+                               const int                    order ) const;
+
   
    double volumeIntegrate( const LevelData<FArrayBox>& data ) const;
  
@@ -487,6 +512,8 @@ public:
 
    bool useSG() const {return m_useSG;}
    
+   bool isWritingInitializaionData() const {return m_is_writing_initialization_data;}
+   
 #if CFG_DIM == 3
 
    int shearedInterpOrder() const {return m_sheared_interp_order;}
@@ -500,7 +527,7 @@ public:
    void  plotToroidalSliceData(const string&                file_name,
                                const LevelData<FArrayBox>&  data,
                                const int                    toroidal_index,
-			       const Side::LoHiSide&        side) const;
+                               const Side::LoHiSide&        side) const;
 #endif
 
    Vector<Box> getBoundaryBoxes( const int block_number, const int dir, const Side::LoHiSide& side ) const
@@ -514,11 +541,31 @@ public:
    void convertCellToFace(LevelData<FluxBox>&         face_data,
                           const LevelData<FArrayBox>& cell_data) const;
    
+   void writeInitializationData();
+   void readInitializationData();
+
+   void crossProduct(LevelData<FArrayBox>&  a_product,
+                     const LevelData<FArrayBox>&  a_1,
+                     const LevelData<FArrayBox>&  a_2 ) const;
+
+   void crossProduct(LevelData<FluxBox>&  a_product,
+                     const LevelData<FluxBox>&  a_1,
+                     const LevelData<FluxBox>&  a_2 ) const;
+
+   Real dotProduct( const LevelData<FArrayBox>&  data_1,
+                    const LevelData<FArrayBox>&  data_2 ) const;
+
+
 private:
 
-   void setRealCoords();
+   void setMagneticField(const DisjointBoxLayout&   grids,
+                         const IntVect&             ghostVect);
 
-   void setNormalizedMagneticFlux();
+   void setRealCoords(const DisjointBoxLayout&  grids,
+                      const IntVect&            ghostVect);
+
+   void setNormalizedMagneticFlux(const DisjointBoxLayout&  grids,
+                                  const IntVect&            ghostVect);
 
    void computeFieldData( LevelData<FArrayBox>& BField,
                           LevelData<FArrayBox>& BFieldMag,
@@ -568,13 +615,13 @@ private:
    double modelMagFlux( const RealVect& xi) const;
    
    
-   /// Computes perpendicular [(I - b * bT)] and parallel [b * bT] matrices that are used in eliptic operators
-   void computeEllipticOpCoefficients(LevelData<FluxBox>& a_perp_coeff,
-                                      LevelData<FluxBox>& a_par_coeff ) const;
+   /// Precomputes perpendicular [(I - b * bT)] and parallel [b * bT] matrices that are used in eliptic operators
+   void setEllipticOpCoefficients(const DisjointBoxLayout&   grids,
+                                  const IntVect&             ghostVect);
 
-   /// Computes mapped perpendicular [NT*(I - b * bT)*NJinv] and parallel [NT*(b * bT)*NJinv] matrices that are used in eliptic operators
-   void computeEllipticOpCoefficientsMapped(LevelData<FluxBox>& a_perp_coeff,
-                                            LevelData<FluxBox>& a_par_coeff ) const;
+   /// Precomputes mapped perpendicular [NT*(I - b * bT)*NJinv] and parallel [NT*(b * bT)*NJinv] matrices that are used in eliptic operators
+   void setEllipticOpCoefficientsMapped(const DisjointBoxLayout&   grids,
+                                        const IntVect&             ghostVect );
   
    /// Computes mapped face-averaged coefficients by subgrid integrations
    void computeSubGridEllipticOpCoefficientsMapped(FluxBox& perp_coeff,
@@ -586,8 +633,8 @@ private:
                                const DisjointBoxLayout& grids,
                                const double& time) const;
 
-   
-   
+   void reportMemoryUsage() const;
+
    LevelData<FArrayBox> m_magFS_mapping_cell;
    LevelData<FluxBox> m_magFS_mapping_face;
    
@@ -616,6 +663,7 @@ private:
    mutable LevelData<FArrayBox> m_Xphys;
 
    mutable LevelData<FluxBox> m_metrics;
+   mutable LevelData<FluxBox> m_tanGradN;
    mutable LevelData<FluxBox> m_N_face_centered;
    mutable LevelData<FluxBox> m_NJinverse_face_centered;
    mutable LevelData<EdgeDataBox> m_NJinverse_edge_centered;
@@ -663,12 +711,13 @@ private:
    mutable bool m_velocity_data_cached;
 
    bool m_correct_field;
-   bool m_fully_periodic;
    bool m_extrablock_exchange;
    bool m_sheared_mb_geom;
    bool m_dealignment_corrections;
    bool m_model_flux_function; 
    bool m_second_order;
+   bool m_is_writing_initialization_data;
+   bool m_is_reading_initialization_data;
    bool m_useSG; // whether to use sparse grid-friendly stencils
    
    //Copier m_exchangeCopier2nd;
@@ -678,7 +727,7 @@ private:
 #if CFG_DIM == 3
    
    void initializeShearedMBGeom(const DisjointBoxLayout& grids);
-   void getShearedGhostBoxLayout();
+   void setShearedGhostBoxLayout();
    void getMagShearInterpCoeff(LevelData<FArrayBox>& remapped_iv,
                                LevelData<FArrayBox>& interp_stencil,
                                LevelData<FArrayBox>& interp_stencil_offsets,

@@ -1,6 +1,7 @@
 #include "Diffusion.H"
 #include "DiffusionF_F.H"
 #include "FourthOrderUtil.H"
+#include "ToroidalBlockLevelExchangeCenter.H"
 
 #include "NamespaceHeader.H"
 
@@ -27,13 +28,19 @@ Diffusion::Diffusion( const ParmParse&  a_pp,
    
    int preconditioner_order = 2;
 
-   if ( a_geom.extrablockExchange() ) {
-      m_mblx_ptr = new MagFluxAlignedMBLEXCenter;
-      m_mblx_ptr->define(&a_geom, preconditioner_order, preconditioner_order);
+   if ( m_geometry.shearedMBGeom() ) {
+     m_mblx_ptr = new ToroidalBlockLevelExchangeCenter(m_geometry, preconditioner_order, preconditioner_order);
    }
    else {
-      m_mblx_ptr = NULL;
+      if ( m_geometry.extrablockExchange() ) {
+         m_mblx_ptr = new MagFluxAlignedMBLEXCenter;
+         m_mblx_ptr->define(&m_geometry, preconditioner_order, preconditioner_order);
+      }
+      else {
+         m_mblx_ptr = NULL;
+      }
    }
+
 
    m_preconditioner      = new MBHypreSolver(a_geom, 1, preconditioner_order, m_mblx_ptr);
    m_imex_preconditioner = new MBHypreSolver(a_geom, 1, preconditioner_order, m_mblx_ptr);

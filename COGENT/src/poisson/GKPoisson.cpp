@@ -13,6 +13,8 @@
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 
+
+
 #include "NamespaceHeader.H"
  
 const char* GKPoisson::pp_name = {"gkpoisson"};
@@ -394,7 +396,6 @@ GKPoisson::computeCoefficients(const LevelData<FArrayBox>& a_ion_mass_density,
       FluxBox polarization_fac(box, 1);
       polarization_fac.setVal(1.0);
       polarization_fac *= m_larmor_number2;
-      
       if (!m_boussinesq) {
          polarization_fac.mult(density_sum_face[dit],box, 0, 0);
          polarization_fac.divide(BFieldMag[dit], box, 0, 0);
@@ -782,6 +783,12 @@ GKPoisson::solvePreconditioner( const LevelData<FArrayBox>& a_r,
    m_preconditioner->solve(a_r, a_z, true);
 }
 
+void
+GKPoisson::applyPCOp(const LevelData<FArrayBox>& a_in_vec,
+                     LevelData<FArrayBox>&       a_matvec )
+{
+   m_preconditioner->multiplyMatrix(a_in_vec, a_matvec);
+}
 
 
 void

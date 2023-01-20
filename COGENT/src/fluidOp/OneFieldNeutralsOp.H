@@ -4,6 +4,7 @@
 #include "FluidOpInterface.H"
 #include "FluidVarBC.H"
 #include "Diffusion.H"
+#include "EMFields.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -77,7 +78,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -85,7 +86,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -129,7 +130,7 @@ public:
    virtual void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
                            const FluidSpeciesPtrVect&         fluid_species,
                            const PS::ScalarPtrVect&           scalars,
-                           const EField&                      E_field,
+                           const EMFields&                    EM_field,
                            const double                       time );
    
    virtual bool trivialSolutionOp() const {return true;}
@@ -177,7 +178,7 @@ protected:
    /// Computes normal ion particle flux integrated over a face
    void computeIntegratedNormalIonParticleFlux(LevelData<FluxBox>&                ion_particle_flux,
                                                const PS::KineticSpeciesPtrVect&   species,
-                                               const EField&                      E_field,
+                                               const EMFields&                    EM_fields,
                                                const Real&                        time) const;
 
    
@@ -186,10 +187,7 @@ protected:
    
    void computeChargeExchangeRate(LevelData<FArrayBox>&   chx_rate,
                                   const Real              time) const;
-   
-   void convertCellToFace(LevelData<FluxBox>&         a_face_data,
-                          const LevelData<FArrayBox>& a_cell_data) const;
-   
+      
    void setZero( LevelData<FArrayBox>& data ) const;
    void setZero( LevelData<FluxBox>& data ) const;
    
@@ -226,7 +224,7 @@ private:
                               const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                               const FluidSpeciesPtrVect&         fluid_species,
                               const PS::ScalarPtrVect&           scalars,
-                              const EField&                      E_field,
+                              const EMFields&                    EM_fields,
                               const int                          component,
                               const Real                         time);
    

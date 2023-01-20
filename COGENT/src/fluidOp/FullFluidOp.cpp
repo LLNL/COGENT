@@ -116,7 +116,7 @@ void FullFluidOp::accumulateRHS(FluidSpeciesPtrVect&               a_rhs,
                                 const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                 const FluidSpeciesPtrVect&         a_fluid_species,
                                 const PS::ScalarPtrVect&           a_scalars,
-                                const EField&                      a_E_field,
+                                const EMFields&                    a_EM_fields,
                                 const int                          a_fluidVecComp,
                                 const Real                         a_time)
 {
@@ -130,7 +130,7 @@ void FullFluidOp::accumulateExplicitRHS(FluidSpeciesPtrVect&               a_rhs
                                         const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                         const FluidSpeciesPtrVect&         a_fluid_species,
                                         const PS::ScalarPtrVect&           a_scalars,
-                                        const EField&                      a_E_field,
+                                        const EMFields&                    a_EM_fields,
                                         const int                          a_fluidVecComp,
                                         const Real                         a_time)
 {
@@ -169,7 +169,7 @@ void FullFluidOp::accumulateExplicitRHS(FluidSpeciesPtrVect&               a_rhs
    const Real mass = soln_fluid.mass();
    const Real charge = soln_fluid.charge();
    
-   updateRHSs( rhs_fluid, soln_fluid, a_E_field.getCellCenteredField(), mass, charge );
+   updateRHSs( rhs_fluid, soln_fluid, a_EM_fields.getEFieldCell(), mass, charge );
 
 }
 
@@ -178,7 +178,7 @@ void FullFluidOp::accumulateImplicitRHS(FluidSpeciesPtrVect&              a_rhs,
                                         const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
                                         const FluidSpeciesPtrVect&        a_fluid_species,
                                         const PS::ScalarPtrVect&          a_scalars,
-                                        const EField&                     a_E_field,
+                                        const EMFields&                   a_EM_fields,
                                         const int                         a_fluidVecComp,
                                         const Real                        a_time )
 {

@@ -34,6 +34,32 @@ void SparseGridsSimulation::define()
   SanityChecks(num_cells_fg);
   ComputeSGDimsAndCoeffs( num_cells_fg, m_combination );
 
+  double sum_coeff = 0.;
+  bool check_sum = CheckCoeffSum( m_combination, sum_coeff );
+  bool dims_equal = false;
+  std::vector<int> num_divs(m_ndims, 0);
+  while (!check_sum && !dims_equal) {
+    ShrinkFinestResolution( num_cells_fg, num_divs, dims_equal );
+	 ComputeSGDimsAndCoeffs( num_cells_fg, m_combination );
+	 check_sum = CheckCoeffSum( m_combination, sum_coeff );
+  }
+  if ( !check_sum ) {
+    if (!procID()) {
+      fprintf(stderr, "Error in SparseGridsSimulation::ComputeSGDimsAndCoeffs()\n");
+      fprintf(stderr, "  Combination technique yielded coefficients that ");
+      fprintf(stderr, "  do not add up to 1.0. Sum of coeffs = %f\n", sum_coeff);
+      fprintf(stderr, "  The full grid size may be too anisotropic for using ");
+      fprintf(stderr, "  sparse grids. Try making the full grid more isotropic ");
+      fprintf(stderr, "  or change the dimensions participating in sparse grids.");
+    }
+#ifdef CH_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+    MayDay::Error("See message");
+  }
+
+  GrowFineResolutions( m_combination, num_divs );
+
   m_num_systems = m_combination.size();
 
   m_coeffs_vec.resize(m_num_systems);
@@ -121,6 +147,36 @@ void SparseGridsSimulation::SanityChecks(const GridDimensions& a_num_cells_fg)
   return;
 }
 
+void SparseGridsSimulation::ShrinkFinestResolution ( GridDimensions& a_num_cells_fg, std::vector<int>& a_num_divisions, bool& a_dims_all_equal )
+{
+  // Find the finest resolution
+  int max_res = 0;
+  for (int d=0; d < m_ndims; d++) {
+    if (a_num_cells_fg[d] > max_res) { max_res = a_num_cells_fg[d]; }
+  }
+  int num_equal_dims = 0;
+  // Divide it by two wherever it appears, and track the dimensions where that's happened
+  for (int d=0; d < m_ndims; d++) {
+    if (a_num_cells_fg[d] == max_res) {
+      a_num_cells_fg[d] /= 2;
+		a_num_divisions[d] +=1; 
+		num_equal_dims += 1;
+	 }
+  }
+  // Check if all dimensions were the same
+  if (num_equal_dims == m_ndims) { a_dims_all_equal = true; }
+}
+
+void SparseGridsSimulation::GrowFineResolutions( std::vector<SGCTElem>& a_combination, std::vector<int> a_num_doublings )
+{
+  int num_systems = a_combination.size();
+  for (int i=0; i < num_systems; i++) {
+    for (int d=0; d < m_ndims; d++) {
+      a_combination[i]._dim_[d] *= pow(2, a_num_doublings[d]);
+    }
+  }
+}
+
 void SparseGridsSimulation::ComputeSGDimsAndCoeffs( const GridDimensions&   a_num_cells_fg,
                                                     std::vector<SGCTElem>&  a_combination )
 {
@@ -161,7 +217,7 @@ void SparseGridsSimulation::ComputeSGDimsAndCoeffs( const GridDimensions&   a_nu
     MayDay::Error("See message");
   }
 
-  double sum_coeff = 0;
+  /*double sum_coeff = 0;
   for (int i=0; i<a_combination.size(); i++) {
     sum_coeff += a_combination[i]._coeff_;
   }
@@ -170,14 +226,29 @@ void SparseGridsSimulation::ComputeSGDimsAndCoeffs( const GridDimensions&   a_nu
       fprintf(stderr, "Error in SparseGridsSimulation::ComputeSGDimsAndCoeffs()\n");
       fprintf(stderr, "  Combination technique yielded coefficients that ");
       fprintf(stderr, "  do not add up to 1.0. Sum of coeffs = %f\n", sum_coeff);
+      fprintf(stderr, "  The full grid size may be too anisotropic for using ");
+      fprintf(stderr, "  sparse grids. Try making the full grid more isotropic ");
+      fprintf(stderr, "  or change the dimensions participating in sparse grids.");
     }
 #ifdef CH_MPI
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
     MayDay::Error("See message");
-  }
+  }*/
 
   return;
+}
+
+bool SparseGridsSimulation::CheckCoeffSum( std::vector<SGCTElem>& a_combination, double& a_sum_coeff)
+{
+   a_sum_coeff = 0.0;
+	double sum_to_one = true;
+	for (int i=0; i<a_combination.size(); i++) {
+      a_sum_coeff += a_combination[i]._coeff_;
+	}
+	if (a_sum_coeff != 1.0) sum_to_one = false;
+
+	return sum_to_one;
 }
 
 void SparseGridsSimulation::GetCTGridSizes( const int                     a_N,
@@ -330,45 +401,23 @@ void SparseGridsSimulation::writeFGPlotFile(  const char    *prefix,
                                           varname,
                                           cur_step ) );
   
-      if ((varname == "efield") && (!m_ops_fg->usingAmpereLaw())) {
 
-        CFG::LevelData<CFG::FluxBox> var_fg;
-        {
-          int ncomp(0);
-          std::vector< CFG::LevelData<CFG::FluxBox>* > vars_sg(m_num_systems, nullptr);
-          for (int s(0); s<m_num_systems; s++) {
-            vars_sg[s] = new CFG::LevelData<CFG::FluxBox>;
-            m_diagnostics[s]->getCfgVar( *(vars_sg[s]), varname );
-            ncomp = vars_sg[s]->nComp();
-          }
-          m_diagnostics_fg->defineCfgVar( var_fg, ncomp );
-          CFG::SGInterp::combine( &var_fg, vars_sg, m_coeffs_vec );
-          for (int s(0); s<m_num_systems; s++) {
-            delete vars_sg[s];
-          }
+      CFG::LevelData<CFG::FArrayBox> var_fg;
+      {
+        int ncomp(0);
+        std::vector< CFG::LevelData<CFG::FArrayBox>* > vars_sg(m_num_systems, nullptr);
+        for (int s(0); s<m_num_systems; s++) {
+          vars_sg[s] = new CFG::LevelData<CFG::FArrayBox>;
+          m_diagnostics[s]->getCfgVar( *(vars_sg[s]), varname, non_zonal );
+          ncomp = vars_sg[s]->nComp();
         }
-        m_diagnostics_fg->plotCfgVar(var_fg, filename, cur_time);
-
-      } else {
-
-        CFG::LevelData<CFG::FArrayBox> var_fg;
-        {
-          int ncomp(0);
-          std::vector< CFG::LevelData<CFG::FArrayBox>* > vars_sg(m_num_systems, nullptr);
-          for (int s(0); s<m_num_systems; s++) {
-            vars_sg[s] = new CFG::LevelData<CFG::FArrayBox>;
-            m_diagnostics[s]->getCfgVar( *(vars_sg[s]), varname, non_zonal );
-            ncomp = vars_sg[s]->nComp();
-          }
-          m_diagnostics_fg->defineCfgVar( var_fg, ncomp );
-          CFG::SGInterp::combine( &var_fg, vars_sg, m_coeffs_vec );
-          for (int s(0); s<m_num_systems; s++) {
-            delete vars_sg[s];
-          }
+        m_diagnostics_fg->defineCfgVar( var_fg, ncomp );
+        CFG::SGInterp::combine( &var_fg, vars_sg, m_coeffs_vec );
+        for (int s(0); s<m_num_systems; s++) {
+          delete vars_sg[s];
         }
-        m_diagnostics_fg->plotCfgVar(var_fg, filename, cur_time);
-
       }
+      m_diagnostics_fg->plotCfgVar(var_fg, filename, cur_time);
     }
   }
   
@@ -690,37 +739,20 @@ void SparseGridsSimulation::writeSGFGPlotFile(  const char    *prefix,
                                           varname,
                                           cur_step ) );
   
-      if ((varname == "efield") && (!m_ops_fg->usingAmpereLaw())) {
 
-        CFG::LevelData<CFG::FluxBox> var_fg;
-        {
-          int ncomp(0);
-          std::vector< CFG::LevelData<CFG::FluxBox>* > vars_sg(1, nullptr);
-          vars_sg[0] = new CFG::LevelData<CFG::FluxBox>;
-          m_diagnostics[a_s]->getCfgVar( *(vars_sg[0]), varname );
-          ncomp = vars_sg[0]->nComp();
-          m_diagnostics_fg->defineCfgVar( var_fg, ncomp );
-          CFG::SGInterp::combine( &var_fg, vars_sg, std::vector<Real>(1,1.0) );
-          delete vars_sg[0];
-        }
-        m_diagnostics_fg->plotCfgVar(var_fg, filename, cur_time);
 
-      } else {
-
-        CFG::LevelData<CFG::FArrayBox> var_fg;
-        {
-          int ncomp(0);
-          std::vector< CFG::LevelData<CFG::FArrayBox>* > vars_sg(1, nullptr);
-          vars_sg[0] = new CFG::LevelData<CFG::FArrayBox>;
-          m_diagnostics[a_s]->getCfgVar(*(vars_sg[0]),varname,non_zonal );
-          ncomp = vars_sg[0]->nComp();
-          m_diagnostics_fg->defineCfgVar( var_fg, ncomp );
-          CFG::SGInterp::combine( &var_fg, vars_sg, std::vector<Real>(1,1.0) );
-          delete vars_sg[0];
-        }
-        m_diagnostics_fg->plotCfgVar(var_fg, filename, cur_time);
-
+      CFG::LevelData<CFG::FArrayBox> var_fg;
+      {
+        int ncomp(0);
+        std::vector< CFG::LevelData<CFG::FArrayBox>* > vars_sg(1, nullptr);
+        vars_sg[0] = new CFG::LevelData<CFG::FArrayBox>;
+        m_diagnostics[a_s]->getCfgVar(*(vars_sg[0]),varname,non_zonal );
+        ncomp = vars_sg[0]->nComp();
+        m_diagnostics_fg->defineCfgVar( var_fg, ncomp );
+        CFG::SGInterp::combine( &var_fg, vars_sg, std::vector<Real>(1,1.0) );
+        delete vars_sg[0];
       }
+      m_diagnostics_fg->plotCfgVar(var_fg, filename, cur_time);
     }
   }
   

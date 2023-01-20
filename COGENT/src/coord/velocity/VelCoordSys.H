@@ -56,6 +56,14 @@ class VelCoordSys : public CartesianCS
       /// access function -- returns const reference to grids
       const DisjointBoxLayout& grids() const {return m_grids;}
 
+      void plotCellData( const string&               file_name,  
+                         const LevelData<FArrayBox>& data,
+                         const double&               time ) const;
+
+      void plotFaceData( const string&             file_name,  
+                         const LevelData<FluxBox>& data,
+                         const double&             time ) const;
+
       /**
        * Object ParmParse name.
        */

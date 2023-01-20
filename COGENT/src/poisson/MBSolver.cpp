@@ -213,6 +213,18 @@ MBSolver::constructMatrixBlock( const int             a_block_row,
 }
 
 
+void MBSolver::addAdvectionMatrixBlock( const int                   a_block_row,
+                                        const int                   a_block_column,
+                                        const LevelData<FArrayBox>& a_alpha_coefficient,
+                                        const LevelData<FluxBox>&   a_vector_coefficient,
+                                        const EllipticOpBC&         a_bc)
+{
+   addAdvectionMatrixBlockGeneral(a_block_row,
+                                  a_block_column,
+                                  a_alpha_coefficient,
+                                  a_vector_coefficient,
+                                  a_bc);
+}
 
 void
 MBSolver::averageAtBlockBoundaries(LevelData<FluxBox>& a_data) const
@@ -577,6 +589,184 @@ MBSolver::accumStencilMatrixEntries(const IntVect    a_index,
    }
 }
 
+
+void
+MBSolver::constructAdvectionStencils( const string&                           a_scheme,
+                                      const LevelData<FluxBox>&               a_mapped_normal_velocity,
+                                      LevelData<BaseFab<Vector<IntVect> > >&  a_couplings,
+                                      LevelData<BaseFab<Vector<Real> > >&     a_weights,
+                                      const EllipticOpBC&                     a_bc) const
+{
+   CH_TIME("MBSolver::constructAdvectionStencils");
+   CH_assert(a_mapped_normal_velocity.nComp() == 1);
+   
+   string method = "C2";
+
+   const DisjointBoxLayout& grids( m_geometry.gridsFull() );
+
+   // The dimensioning of the following temporary arrays may need to be increased if other methods are added
+   double method_stencil_weights[3];
+   double method_stencil_weights_dirichlet[3];
+   double method_stencil_weights_neumann[3];
+   IntVect coupling_iv[3];
+   double coupling_weight[3];
+
+   int method_stencil_length;
+   if ( a_scheme == "UW1" ) {
+      method_stencil_length = 1;
+      method_stencil_weights[0] = 1.;
+      method_stencil_weights_dirichlet[0] = -1.;
+      method_stencil_weights_neumann[0] = 1.;
+   }
+   else if ( a_scheme== "C2" ) {
+      method_stencil_length = 2;
+      method_stencil_weights[0] = 0.5;
+      method_stencil_weights[1] = 0.5;
+      method_stencil_weights_dirichlet[0] = 1.5;
+      method_stencil_weights_dirichlet[1] = -0.5;
+      method_stencil_weights_neumann[0] = -1.;
+      method_stencil_weights_neumann[1] = 1.;
+   }
+   else {
+      MayDay::Error("MBSolver::constructAdvectionStencils(): unknown advection scheme");
+   }
+
+   CH_assert(method_stencil_length <= 3);  // See comment above
+
+   MultiBlockCoordSys* coord_sys_ptr = m_geometry.coordSysPtr();
+   const Vector< Tuple<BlockBoundary, 2*SpaceDim> >& block_boundaries = coord_sys_ptr->boundaries();
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const FluxBox& this_vel( a_mapped_normal_velocity[dit] );
+      BaseFab<Vector<IntVect> >& this_couplings = a_couplings[dit];
+      BaseFab<Vector<Real> >& this_weights = a_weights[dit];
+
+      const MagBlockCoordSys& block_coord_sys( ((MagGeom&)m_geometry).getBlockCoordSys(grids[dit]) );
+
+      const Box& block_box = block_coord_sys.domain().domainBox();
+
+      int block_number = coord_sys_ptr->whichBlock(grids[dit]);
+      const Tuple<BlockBoundary, 2*SpaceDim>& this_block_boundaries = block_boundaries[block_number];
+
+      for (int dir=0; dir<SpaceDim; dir++) {
+         Box face_box = surroundingNodes(grids[dit], dir);
+         Box block_face_box = surroundingNodes(block_box, dir);
+
+         bool lo_block_boundary = this_block_boundaries[dir].isDomainBoundary();
+         bool hi_block_boundary = this_block_boundaries[dir + SpaceDim].isDomainBoundary();
+         int lo_bc_type = a_bc.getBCType(block_number, dir, 0);
+         int hi_bc_type = a_bc.getBCType(block_number, dir, 0);
+
+         for (BoxIterator bit(face_box); bit.ok(); ++bit) {
+            IntVect iv_face = bit();
+            IntVect iv_lo_cell = iv_face; iv_lo_cell[dir]--;
+            IntVect iv_hi_cell = iv_face;
+
+            double v = this_vel[dir](iv_face, 0);
+
+            if ( a_scheme == "UW1" ) {
+               if ( v >= 0. ) {
+                  if (lo_block_boundary && iv_face[dir] == block_face_box.smallEnd(dir)) {
+                     coupling_iv[0] = iv_hi_cell;
+                  } else {
+                     coupling_iv[0] = iv_lo_cell;
+                  }
+               }
+               else {
+                  if (hi_block_boundary && iv_face[dir] == block_face_box.bigEnd(dir)) {
+                     coupling_iv[0] = iv_lo_cell;
+                  } else {
+                     coupling_iv[0] = iv_hi_cell;
+                  }
+               }
+            }
+            else if ( a_scheme == "C2" ) {
+               if (lo_block_boundary && iv_face[dir] == block_face_box.smallEnd(dir)) {
+                  coupling_iv[0] = iv_hi_cell;
+                  coupling_iv[1] = iv_hi_cell; coupling_iv[1][dir]++;
+               }
+               else if (hi_block_boundary && iv_face[dir] == block_face_box.bigEnd(dir)) {
+                  coupling_iv[0] = iv_lo_cell;
+                  coupling_iv[1] = iv_lo_cell; coupling_iv[1][dir]--;
+               } else {
+                  coupling_iv[0] = iv_hi_cell;
+                  coupling_iv[1] = iv_lo_cell;
+               }
+            }
+            else {
+               MayDay::Error("MBSolver::constructAdvectionStencils(): unknown advection scheme");
+            }
+
+            int bc_type = EllipticOpBC::EllipticBCType::UNDEFINED;
+            if ( a_scheme == "UW1" ) {
+               if ((lo_block_boundary && iv_face[dir] == block_face_box.smallEnd(dir) && v >= 0.)) {
+                  bc_type = a_bc.getBCType(block_number, dir, 0);
+               } else if (hi_block_boundary && iv_face[dir] == block_face_box.bigEnd(dir) && v < 0.) {
+                  bc_type = a_bc.getBCType(block_number, dir, 1);
+               }
+            }
+            else if ( a_scheme == "C2" ) {
+               if ((lo_block_boundary && iv_face[dir] == block_face_box.smallEnd(dir))) {
+                  bc_type = a_bc.getBCType(block_number, dir, 0);
+               } else if (hi_block_boundary && iv_face[dir] == block_face_box.bigEnd(dir)) {
+                  bc_type = a_bc.getBCType(block_number, dir, 1);
+               }
+            }
+            else {
+               MayDay::Error("MBSolver::constructAdvectionStencils(): unknown advection scheme");
+            }
+
+            if (bc_type == EllipticOpBC::EllipticBCType::DIRICHLET) {
+              for (int m=0; m<method_stencil_length; ++m) {
+                coupling_weight[m] = method_stencil_weights_dirichlet[m] * v;
+              }
+            } else if (bc_type == EllipticOpBC::EllipticBCType::NEUMANN) {
+              for (int m=0; m<method_stencil_length; ++m) {
+                coupling_weight[m] = method_stencil_weights_neumann[m] * v;
+              }
+            } else {
+              for (int m=0; m<method_stencil_length; ++m) {
+                coupling_weight[m] = method_stencil_weights[m] * v;
+              }
+            }
+
+            // Update the couplings on the low side of the current face.
+            for (int m=0; m<method_stencil_length; ++m) {
+               int num_couplings = this_couplings(iv_lo_cell,dir).size();
+               bool new_coupling = true;
+               for (int n=0; n<num_couplings; ++n) {
+                  if ( (this_couplings(iv_lo_cell,dir))[n] == coupling_iv[m] ) {
+                     this_weights(iv_lo_cell,dir)[n] += coupling_weight[m];
+                     new_coupling = false;
+                     break;
+                  }
+               }
+               if ( new_coupling ) {
+                  this_couplings(iv_lo_cell,dir).push_back(coupling_iv[m]);
+                  this_weights(iv_lo_cell,dir).push_back(coupling_weight[m]);
+               }
+            }               
+
+            // Update the couplings on the high side of the current face.
+            for (int m=0; m<method_stencil_length; ++m) {
+               int num_couplings = this_couplings(iv_hi_cell,dir + SpaceDim).size();
+               bool new_coupling = true;
+               for (int n=0; n<num_couplings; ++n) {
+                  if ( (this_couplings(iv_hi_cell,dir + SpaceDim))[n] == coupling_iv[m] ) {
+                     this_weights(iv_hi_cell,dir + SpaceDim)[n] -= coupling_weight[m];
+                     new_coupling = false;
+                     break;
+                  }
+               }
+               if ( new_coupling ) {
+                  this_couplings(iv_hi_cell,dir + SpaceDim).push_back(coupling_iv[m]);
+                  this_weights(iv_hi_cell,dir + SpaceDim).push_back(-coupling_weight[m]);  // N.B.: minus for outward normal on lo face
+               }
+            }
+         }
+      }
+   }
+}
 
 void
 MBSolver::modifyStencilForBCs( const Vector<CoDim1Stencil>&  a_codim1_stencils,

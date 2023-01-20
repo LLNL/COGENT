@@ -124,6 +124,13 @@ int main( int a_argc, char* a_argv[] )
       cout<<"Done constructing arc-length mapping"<<endl;
    }
 
+   //Compute and print toroidal flux function and safety factor profiles
+   bool print_toroidal_flux_and_q(false);
+   if (procID()==0) {
+      if (print_toroidal_flux_and_q){
+         block_mapping_tmp.printToroidalFluxAndSafetyFactorProfiles();
+      }
+   }
    
    /*
     Step 2: Loop over blocks and assemble the grid

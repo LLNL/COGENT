@@ -34,8 +34,8 @@ public:
 
    virtual void accumulateRHS( GKRHSData&                             rhs,
                                const KineticSpeciesPtrVect&           kinetic_phys,
-                               const CFG::LevelData<CFG::FArrayBox>&  phi,
-                               const CFG::EField&                     E_field,
+                               const CFG::EMFields&                   EM_fields,
+                               const CFG::PhiOps&                     phi_ops,
                                const bool                             implicit,
                                const Real&                            time );
 
@@ -57,8 +57,7 @@ public:
                          double&                                hi_value,
                          CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
                          const KineticSpecies&                  soln_species,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::EField&                     E_field,
+                         const CFG::EMFields&                   EM_fields,
                          const int                              velocity_option,
                          const Real                             time );
 
@@ -67,8 +66,7 @@ public:
                          double&                                hi_value,
                          CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
                          const KineticSpecies&                  soln_species,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::EField&                     E_field,
+                         const CFG::EMFields&                   EM_fields,
                          const int                              velocity_option,
                          const Real                             time );
 
@@ -77,8 +75,7 @@ public:
                          double&                                hi_value,
                          CFG::LevelData<CFG::FArrayBox>&        radial_flux_divergence_average,
                          const KineticSpecies&                  soln_species,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::EField&                     E_field,
+                         const CFG::EMFields&                   EM_fields,
                          const int                              velocity_option,
                          const Real                             time );
 

@@ -15,9 +15,10 @@ LogRectEllipticOpBC::LogRectEllipticOpBC(const int& a_nblocks)
 
 LogRectEllipticOpBC::LogRectEllipticOpBC( const std::string&  a_name,
                                           ParmParse&          a_pp,
+                                          const int           a_nblocks,
                                           const bool*         a_is_periodic,
                                           const int&          a_verbosity )
-   : EllipticOpBC(NUM_BOUNDARIES, 1),
+   : EllipticOpBC(NUM_BOUNDARIES, a_nblocks),
      m_name(a_name),
      m_verbosity(a_verbosity)
 {

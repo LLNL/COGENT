@@ -175,7 +175,7 @@ void TwoFieldNeutralsOp::accumulateRHS(FluidSpeciesPtrVect&               a_rhs,
                                        const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                        const FluidSpeciesPtrVect&         a_fluid_species,
                                        const PS::ScalarPtrVect&           a_scalars,
-                                       const EField&                      a_E_field,
+                                       const EMFields&                    a_EM_fields,
                                        const int                          a_fluidVecComp,
                                        const Real                         a_time)
 {
@@ -211,12 +211,12 @@ void TwoFieldNeutralsOp::accumulateExplicitRHS(FluidSpeciesPtrVect&             
                                                const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                                const FluidSpeciesPtrVect&         a_fluid_species,
                                                const PS::ScalarPtrVect&           a_scalars,
-                                               const EField&                      a_E_field,
+                                               const EMFields&                    a_EM_fields,
                                                const int                          a_fluidVecComp,
                                                const Real                         a_time)
 {
    if (!m_is_time_implicit) {
-     accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
+      accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_EM_fields, a_fluidVecComp, a_time);
    }
 }
 
@@ -225,12 +225,12 @@ void TwoFieldNeutralsOp::accumulateImplicitRHS(FluidSpeciesPtrVect&             
                                                const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                                const FluidSpeciesPtrVect&         a_fluid_species,
                                                const PS::ScalarPtrVect&           a_scalars,
-                                               const EField&                      a_E_field,
+                                               const EMFields&                    a_EM_fields,
                                                const int                          a_fluidVecComp,
                                                const Real                         a_time)
 {
   if (m_is_time_implicit) {
-    accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
+     accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_EM_fields, a_fluidVecComp, a_time);
   }
 }
 
@@ -360,7 +360,8 @@ void TwoFieldNeutralsOp::accumulateParAdvectionTerms(FluidSpecies&        a_flui
    
    // Get parallel velocity on faces
    LevelData<FluxBox> velocity_on_faces( grids, 1, IntVect::Unit );
-   convertCellToFace(velocity_on_faces, parallel_vel);
+   int order = (m_geometry.secondOrder()) ? 2 : 4;
+   SpaceUtils::interpToFaces(velocity_on_faces, parallel_vel, order);
        
    // Force zero flux on radial faces for the flux-aligned grids
    for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
@@ -463,7 +464,8 @@ void TwoFieldNeutralsOp::accumulatePerpAdvectionTerms(FluidSpecies&        a_flu
       bool fourth_order = (m_geometry.secondOrder()) ? false : true;
       m_geometry.extrapolateToPhysicalGhosts(fac_cell, fourth_order);
    }
-   convertCellToFace(fac_face, fac_cell);
+   int order = (m_geometry.secondOrder()) ? 2 : 4;
+   SpaceUtils::interpToFaces(fac_face, fac_cell, order);
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       for (int dir=0; dir<SpaceDim; dir++) {
@@ -840,7 +842,8 @@ void TwoFieldNeutralsOp::computeDiffusionCoefficients(LevelData<FluxBox>& a_elli
       bool fourth_order = (m_geometry.secondOrder()) ? false : true;
       m_geometry.extrapolateToPhysicalGhosts(D_cell, fourth_order);
    }
-   convertCellToFace(D_face, D_cell);
+   int order = (m_geometry.secondOrder()) ? 2 : 4;
+   SpaceUtils::interpToFaces(D_face, D_cell, order);
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       a_ellip_coeff[dit].copy(perp_coeff[dit]);
@@ -888,9 +891,9 @@ void TwoFieldNeutralsOp::computeViscosityCoefficients(LevelData<FluxBox>&       
       bool fourth_order = (m_geometry.secondOrder()) ? false : true;
       m_geometry.extrapolateToPhysicalGhosts(D_cell, fourth_order);
    }
-   convertCellToFace(D_face, D_cell);
-      
-   
+   int order = (m_geometry.secondOrder()) ? 2 : 4;
+   SpaceUtils::interpToFaces(D_face, D_cell, order);
+         
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       a_ellip_coeff[dit].copy(perp_coeff[dit]);
       a_ellip_coeff[dit] += par_coeff[dit];
@@ -947,7 +950,8 @@ TwoFieldNeutralsOp::computeBottomLeftCoefficients(LevelData<FluxBox>&         a_
       bool fourth_order = (m_geometry.secondOrder()) ? false : true;
       m_geometry.extrapolateToPhysicalGhosts(D_cell, fourth_order);
    }
-   convertCellToFace(D_face, D_cell);
+   int order = (m_geometry.secondOrder()) ? 2 : 4;
+   SpaceUtils::interpToFaces(D_face, D_cell, order);
       
    
    for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -986,7 +990,7 @@ void TwoFieldNeutralsOp::computeAtomicRates(LevelData<FArrayBox>&   a_ionization
 void TwoFieldNeutralsOp::preOpEval(const PS::KineticSpeciesPtrVect&   a_kinetic_species,
                                    const FluidSpeciesPtrVect&         a_fluid_species,
                                    const PS::ScalarPtrVect&           a_scalars,
-                                   const EField&                      a_E_field,
+                                   const EMFields&                    a_EM_fields,
                                    const double                       a_time )
 {
    CH_TIME("TwoFieldNeutralsOp::preOpEval");
@@ -1026,13 +1030,13 @@ void TwoFieldNeutralsOp::preOpEval(const PS::KineticSpeciesPtrVect&   a_kinetic_
          m_ion_parallel_vel.define(grids, 1, ghostVectMom);
       }
       const PS::KineticSpecies& this_species( *(a_kinetic_species[0]) );
-      this_species.ParallelVelocity( m_ion_parallel_vel );
+      this_species.parallelVelocity( m_ion_parallel_vel );
    }
    
    // Compute normal particle flux thourgh a cell face (NT * Gamma_phys * dA_mapped )
    if (m_dens_recycling_bc && !m_fixed_recycling) {
       if (!m_ion_normal_flux.isDefined()) m_ion_normal_flux.define(grids, 1, IntVect::Zero);
-      computeIntegratedNormalIonParticleFlux( m_ion_normal_flux, a_kinetic_species, a_E_field, a_time );
+      computeIntegratedNormalIonParticleFlux( m_ion_normal_flux, a_kinetic_species, a_EM_fields, a_time );
    }
    
    if (m_dens_recycling_bc && m_fixed_recycling) {
@@ -1051,7 +1055,8 @@ void TwoFieldNeutralsOp::preOpEval(const PS::KineticSpeciesPtrVect&   a_kinetic_
          tmp[dit].copy(m_ion_parallel_vel[dit]);
       }
       m_geometry.extrapolateToPhysicalGhosts(tmp, fourth_order);
-      convertCellToFace(m_ion_parallel_vel_face, tmp);
+      int order = (m_geometry.secondOrder()) ? 2 : 4;
+      SpaceUtils::interpToFaces(m_ion_parallel_vel_face, tmp, order);
    }
 }
 

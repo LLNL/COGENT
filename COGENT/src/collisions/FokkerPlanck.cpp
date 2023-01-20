@@ -1185,20 +1185,20 @@ void FokkerPlanck::computeReferenceSolution(const KineticSpeciesPtrVect& a_soln,
     CFG::LevelData<CFG::FArrayBox> density( mag_geom.grids(), 1, CFG::IntVect::Zero );
     soln_species.numberDensity( density );
   
-    CFG::LevelData<CFG::FArrayBox> ParallelMom( mag_geom.grids(), 1, CFG::IntVect::Zero );
-    soln_species.ParallelMomentum( ParallelMom );
+    CFG::LevelData<CFG::FArrayBox> parallel_velocity( mag_geom.grids(), 1, CFG::IntVect::Zero );
+    soln_species.parallelParticleFlux( parallel_velocity );
   
     for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
-      ParallelMom[dit].divide(density[dit]);
+      parallel_velocity[dit].divide(density[dit]);
     }
     CFG::LevelData<CFG::FArrayBox> pressure( mag_geom.grids(), 1, CFG::IntVect::Zero );
-    soln_species.pressureMoment(pressure, ParallelMom);
+    soln_species.pressure(pressure, parallel_velocity);
   
     for (CFG::DataIterator dit(density.dataIterator()); dit.ok(); ++dit) {
       pressure[dit].divide(density[dit]);
     }
   
-    MaxwellianKernel<FArrayBox> maxwellian(density,pressure,ParallelMom);
+    MaxwellianKernel<FArrayBox> maxwellian(density,pressure,parallel_velocity);
     maxwellian.eval(m_F0,soln_species);
     phase_geom.multJonValid(m_F0);
     convertToCellCenters(phase_geom, m_F0);
@@ -1608,7 +1608,7 @@ void FokkerPlanck::computeEnergyConservationFactor( const KineticSpecies&       
                                 CHF_CONST_REALVECT(vel_dx) );
     }
     
-    a_species.kineticEnergyMoment(m_fp_kinetic_energy, untamed_rhs);
+    a_species.kineticEnergyDensity(m_fp_kinetic_energy, untamed_rhs);
     
     for (CFG::DataIterator dit(m_energy_cons.dataIterator()); dit.ok(); ++dit) {
       m_fp_kinetic_energy[dit].abs();

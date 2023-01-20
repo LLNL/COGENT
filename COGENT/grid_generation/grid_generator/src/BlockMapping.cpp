@@ -1780,6 +1780,291 @@ BlockMapping::extrapolateGrid(FArrayBox& a_physical_coordinates, const Box& a_bo
    }
 }
 
+void
+BlockMapping::printToroidalFluxAndSafetyFactorProfiles() const
+{
+   
+   /*
+    Compute and print toroidal flux function and safety factor
+    */
+   
+   Vector<Real> a_toroidal_flux; // at the upper cell face
+   Vector<Real> a_norm_pol_flux; // at the upper cell face
+   Vector<Real> a_safety_factor; // at the cell center
+   Vector<Real> a_radial_midplane_coords; // at the cell center
+   
+   // Radial step at the outer midplane
+   double dr(0.001);
+   
+   // Estimate number of poloidal steps
+   double n_pol(128);
+   
+   // This object contains toroidal flux
+   // integrated up to the current value of mid_plane point
+   double this_toroidal_flux(0.);
+   
+   // Initialize mid_plane point
+   RealVect midplane_point(m_magAxis);
+   midplane_point[RADIAL_DIR] += (1.0/2.0)*dr;
+   double psi_norm_middle = getNormMagneticFlux(midplane_point);
+   
+   RealVect midplane_outer_point(midplane_point);
+   midplane_outer_point[RADIAL_DIR] += dr/2.0;
+   double psi_norm_outer = getNormMagneticFlux(midplane_outer_point);
+
+   RealVect midplane_inner_point(m_magAxis);
+   double psi_norm_inner = getNormMagneticFlux(midplane_inner_point);
+   
+   // Do the first calculation of the toroidal flux
+   // Have to do it separatelly becasue of the polar coordinates singularity
+   // here each cell is a triangle. Becasue both toroidal and poloidal fluxes
+   // behaves as r^2 near the magnetic axis, we could possibly use the
+   // quadrilateral cell approach (which is used next), by
+   // placing inner boundary really close to the axis. The error in toroidal flux
+   // caluclation would still only be second order.
+   RealVect this_point(midplane_point);
+   RealVect this_point_outer_corner(midplane_outer_point);
+   RealVect this_point_inner_corner(m_magAxis);
+
+   // This object contains toroidal flux integrated over the flux shell
+   double delta_toroidal_flux(0.);
+   
+   bool end_is_reached = false;
+   bool first_step = true;
+   
+   int counter(0);
+   
+   while (!end_is_reached) {
+
+      double dl_pol = 2*PI*dr/2.0/n_pol;
+
+      RealVect next_point(this_point);
+      
+      // Check if we completed the loop
+      RealVect point_to_midplane(this_point);
+      point_to_midplane -= midplane_point;
+      double dist_to_midplane = vectMag(point_to_midplane);
+
+      if (dist_to_midplane < dl_pol
+         && this_point[POLOIDAL_DIR] < midplane_point[POLOIDAL_DIR]
+         && !first_step) {
+         
+         next_point = midplane_point;
+            
+         end_is_reached = true;
+      }
+      else  {
+         //Specific block id doesn't matter, but it should
+         //be a top block for CCW integration
+         RealVect tang_vect = getPsiTang(this_point,LCORE);
+         next_point += tang_vect * dl_pol;
+         pushToFluxSurface(next_point, psi_norm_middle);
+      }
+         
+      RealVect next_point_outer_corner(next_point);
+      pushToFluxSurface(next_point_outer_corner, psi_norm_outer);
+   
+      double cell_area = cellArea(m_magAxis,
+                                  this_point_outer_corner,
+                                  next_point_outer_corner);
+      
+      RealVect cell_center(this_point);
+      cell_center += next_point;
+      cell_center /= 2.0;
+      
+      double cell_area_over_R = cell_area/cell_center[RADIAL_DIR];
+   
+      delta_toroidal_flux += cell_area_over_R;
+      
+      // Update for the next poloidal step
+      this_point = next_point;
+      this_point_outer_corner = next_point_outer_corner;
+      
+      first_step = false;
+ 
+      // Sanity check
+      counter++;
+      if (counter > 2* n_pol) {
+         MayDay::Error("printToroidalFluxAndSafetyFactorProfiles::something is wrong!!!");
+      }
+   }
+   
+   // Compute and store the first value of safety factor
+   double delta_poloidal_flux = abs(getMagneticFluxFromDCT(midplane_outer_point)
+                                  - getMagneticFluxFromDCT(midplane_inner_point) );
+   
+   double this_safety_factor = delta_toroidal_flux / delta_poloidal_flux / (2*PI);
+   a_safety_factor.push_back(this_safety_factor);
+   a_radial_midplane_coords.push_back(midplane_point[RADIAL_DIR]);
+
+   // Compute and store the first value of toroidal flux function
+   this_toroidal_flux += delta_toroidal_flux;
+   a_toroidal_flux.push_back(this_toroidal_flux);
+   a_norm_pol_flux.push_back(psi_norm_outer);
+   
+
+   // Performing integration over the rest of the radial domain
+   // Here, each cell is a quadrilateral
+   
+   midplane_point[RADIAL_DIR] += dr;
+
+   midplane_outer_point = midplane_point;
+   midplane_outer_point[RADIAL_DIR] += dr/2.0;
+
+   midplane_inner_point = midplane_point;
+   midplane_inner_point[RADIAL_DIR] -= dr/2.0;
+
+   psi_norm_outer = getNormMagneticFlux(midplane_outer_point);
+   psi_norm_inner = getNormMagneticFlux(midplane_inner_point);
+   psi_norm_middle = getNormMagneticFlux(midplane_point);
+   
+   delta_poloidal_flux = abs(getMagneticFluxFromDCT(midplane_outer_point)
+                           - getMagneticFluxFromDCT(midplane_inner_point) );
+   
+   while (psi_norm_outer < 1.0)
+   {
+      delta_toroidal_flux = 0.;
+
+      this_point = midplane_point;
+      this_point_inner_corner = midplane_inner_point;
+      this_point_outer_corner = midplane_outer_point;
+
+      first_step = true;
+      end_is_reached = false;
+      counter = 0;
+      while (!end_is_reached) {
+
+         double radius = midplane_point[RADIAL_DIR]-m_magAxis[RADIAL_DIR];
+         double dl_pol = 2*PI*radius/n_pol;
+         
+         RealVect next_point(this_point);
+         
+         // Check if we completed the loop
+         RealVect point_to_midplane(this_point);
+         point_to_midplane -= midplane_point;
+         double dist_to_midplane = vectMag(point_to_midplane);
+
+         if (dist_to_midplane < dl_pol
+            && this_point[POLOIDAL_DIR] < midplane_point[POLOIDAL_DIR]
+            && !first_step) {
+            
+            next_point = midplane_point;
+               
+            end_is_reached = true;
+         }
+         else  {
+            //Specific block id doesn't matter, but it should
+            //be a top block for CCW integration
+            RealVect tang_vect = getPsiTang(this_point,LCORE);
+            next_point += tang_vect * dl_pol;
+            pushToFluxSurface(next_point, psi_norm_middle);
+         }
+         
+         RealVect next_point_outer_corner(next_point);
+         pushToFluxSurface(next_point_outer_corner, psi_norm_outer);
+      
+         RealVect next_point_inner_corner(next_point);
+         pushToFluxSurface(next_point_inner_corner, psi_norm_inner);
+      
+         double cell_area = cellArea(this_point_inner_corner,
+                                     this_point_outer_corner,
+                                     next_point_inner_corner,
+                                     next_point_outer_corner);
+         
+         RealVect cell_center(this_point);
+         cell_center += next_point;
+         cell_center /= 2.0;
+           
+         double cell_area_over_R = cell_area/cell_center[RADIAL_DIR];
+      
+         delta_toroidal_flux += cell_area_over_R;
+         
+         // Update for the next poloidal step
+         this_point = next_point;
+         this_point_inner_corner = next_point_inner_corner;
+         this_point_outer_corner = next_point_outer_corner;
+         
+         first_step = false;
+         // Sanity check
+         counter++;
+         if (counter > 2* n_pol) {
+            MayDay::Error("printToroidalFluxAndSafetyFactorProfiles::something is wrong!!!");
+         }
+      }
+
+      // Compute and store safety factor as a function of R
+      this_safety_factor = delta_toroidal_flux / delta_poloidal_flux / (2*PI);
+      a_safety_factor.push_back(this_safety_factor);
+      a_radial_midplane_coords.push_back(midplane_point[RADIAL_DIR]);
+
+      // Compute and store toroidal flux function as a function of psi_norm
+      this_toroidal_flux += delta_toroidal_flux;
+      a_toroidal_flux.push_back(this_toroidal_flux);
+      a_norm_pol_flux.push_back(psi_norm_outer);
+      
+      // Update quantities for the next radial step
+      midplane_point[RADIAL_DIR] += dr;
+      
+      midplane_outer_point = midplane_point;
+      midplane_outer_point[RADIAL_DIR] += dr/2.0;
+
+      midplane_inner_point = midplane_point;
+      midplane_inner_point[RADIAL_DIR] -= dr/2.0;
+
+      psi_norm_outer = getNormMagneticFlux(midplane_outer_point);
+      psi_norm_inner = getNormMagneticFlux(midplane_inner_point);
+      psi_norm_middle = getNormMagneticFlux(midplane_point);
+      
+      delta_poloidal_flux = abs(getMagneticFluxFromDCT(midplane_outer_point)
+                                - getMagneticFluxFromDCT(midplane_inner_point) );
+      
+   }
+   
+   // Output the data
+   FILE* fcogent;
+   int vect_size = a_toroidal_flux.size();
+   fcogent = fopen("toroidal_flux_data", "w");
+   for (int i=0; i<vect_size; ++i) {
+      fprintf(fcogent, "%20.12e %20.12e %20.12e %20.12e \n",
+              a_toroidal_flux[i]/a_toroidal_flux[vect_size-1],
+              a_norm_pol_flux[i],
+              a_safety_factor[i],
+              a_radial_midplane_coords[i]);
+   }
+   fclose(fcogent);
+}
+
+double
+BlockMapping::cellArea(const RealVect& a_1,
+                       const RealVect& a_2,
+                       const RealVect& a_3) const
+{
+   /*
+    Return physical cell area of a triangle
+    */
+   
+   RealVect X1(a_2);
+   X1 -= a_1;
+   
+   RealVect X2(a_3);
+   X2 -= a_1;
+
+   return 0.5 * abs(X1[1]*X2[0]-X1[0]*X2[1]);
+}
+
+double
+BlockMapping::cellArea(const RealVect& a_SE,
+                       const RealVect& a_SW,
+                       const RealVect& a_NE,
+                       const RealVect& a_NW) const
+{
+   /*
+    Return physical cell area of a quadrilateral
+    */
+
+   return cellArea(a_SE, a_SW, a_NE) + cellArea(a_SW, a_NE, a_NW);
+}
+
 double
 BlockMapping::vectProd(const RealVect& a_1, const RealVect& a_2) const
 {

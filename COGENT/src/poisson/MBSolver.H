@@ -98,6 +98,15 @@ public:
                               const EllipticOpBC&   bc );
 
    string getMethod() const {return m_method;}
+
+   void setMethod(const string& method ) {m_method = method;}
+
+   void addAdvectionMatrixBlock( const int                   a_block_row,
+                                 const int                   a_block_column,
+                                 const LevelData<FArrayBox>& a_alpha_coefficient,
+                                 const LevelData<FluxBox>&   a_vector_coefficient,
+                                 const EllipticOpBC&         a_bc);
+
    double getTol() const {return m_method_tol;}
    int getMaxIter() const {return m_method_max_iter;}
    bool getVerbose() const {return m_method_verbose;}
@@ -120,6 +129,12 @@ protected:
                                              LevelData<FluxBox>&    tensor_coefficient,
                                              LevelData<FArrayBox>&  beta_coefficient,
                                              const EllipticOpBC&    bc ) = 0;
+
+  virtual void addAdvectionMatrixBlockGeneral( const int                   a_block_row,
+                                               const int                   a_block_column,
+                                               const LevelData<FArrayBox>& a_alpha_coefficient,
+                                               const LevelData<FluxBox>&   a_vector_coefficient,
+                                               const EllipticOpBC&         a_bc) { return; }
 
    void averageAtBlockBoundaries(LevelData<FluxBox>& data) const;
 
@@ -146,6 +161,13 @@ protected:
                                   const RealVect&  dx,
                                   const bool       fourthOrder,
                                   FArrayBox&       stencil_values) const;
+
+   void
+   constructAdvectionStencils( const string&                            scheme,
+                               const LevelData<FluxBox>&                mapped_velocity,
+                               LevelData<BaseFab<Vector<IntVect> > >&   couplings,
+                               LevelData<BaseFab<Vector<Real> > >&      weights,
+                               const EllipticOpBC&                      bc) const;
 
    void modifyStencilForBCs( const Vector<CoDim1Stencil>&  codim1_stencil,
                              const Vector<CoDim2Stencil>&  codim2_stencil,

@@ -155,18 +155,22 @@ c     local variables
      &     CHF_BOX[box],
      &     CHF_CONST_FRA[bunit],
      &     CHF_CONST_FRA[vector],
+     &     CHF_CONST_FRA[coords],
+     &     CHF_CONST_REALVECT[axis],
+     &     CHF_CONST_INT[is_bfield_dir],
      &     CHF_CONST_FRA1[vector_r]
      &     )
 
 c     local variables
       integer CHF_DDECL[i;j;k] 
-      double precision fac
+      double precision fac, sign, r, z, r_xy
 
       CHF_MULTIDO[box;i;j;k]
 
          fac = sqrt(bunit(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],0) 
-     &             +bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2))                
-        
+     &             +bunit(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],2))   
+
+
          if (CHF_NCOMP[vector]. eq. 2) then 
 
            vector_r(CHF_IX[i;j;k]) = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],2)/fac
@@ -178,8 +182,27 @@ c     local variables
            vector_r(CHF_IX[i;j;k]) = vector(CHF_IX[i;j;k],0) * bunit(CHF_IX[i;j;k],2)/fac
      &                             - vector(CHF_IX[i;j;k],2) * bunit(CHF_IX[i;j;k],0)/fac 
 
-
          endif
+
+
+c        *** Correct sign if the coordinate outer e_r direction is chosen
+
+         if (is_bfield_dir .ne. 1) then
+
+#if CH_SPACEDIM==2
+           r = coords(CHF_IX[i;j;k],0) - axis(0)
+           z = coords(CHF_IX[i;j;k],1) - axis(1)
+#else
+           r_xy = sqrt(coords(CHF_IX[i;j;k],0)**2 + coords(CHF_IX[i;j;k],1)**2)
+           r = r_xy - axis(0)
+           z = coords(CHF_IX[i;j;k],2) - axis(2)
+#endif
+           sign = r * bunit(CHF_IX[i;j;k],2) - z * bunit(CHF_IX[i;j;k],0)  
+           sign =  sign / abs(r * bunit(CHF_IX[i;j;k],2) - z * bunit(CHF_IX[i;j;k],0))
+
+           vector_r(CHF_IX[i;j;k]) = vector_r(CHF_IX[i;j;k]) * sign
+
+         endif           
       
       CHF_ENDDO
       
@@ -219,6 +242,29 @@ c     local variables
 
       return
       end
+
+      subroutine compute_toroidal_projection(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[bunit],
+     &     CHF_CONST_FRA[vector],
+     &     CHF_CONST_FRA1[vector_phi]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k] 
+      double precision fac
+
+      CHF_MULTIDO[box;i;j;k]
+
+         fac = sqrt(bunit(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],1))                
+        
+         vector_phi(CHF_IX[i;j;k]) = vector(CHF_IX[i;j;k],1) * bunit(CHF_IX[i;j;k],1)/fac
+      
+      CHF_ENDDO
+
+      return
+      end
+
 
       subroutine convert_cartesian_to_cylindrical(
      &     CHF_BOX[box],
@@ -1305,6 +1351,26 @@ c     local variables
        ExB(CHF_IX[i;j;k],0) = ExB(CHF_IX[i;j;k],0) / Bmag(CHF_IX[i;j;k])**2
        ExB(CHF_IX[i;j;k],1) = ExB(CHF_IX[i;j;k],1) / Bmag(CHF_IX[i;j;k])**2
        ExB(CHF_IX[i;j;k],2) = ExB(CHF_IX[i;j;k],2) / Bmag(CHF_IX[i;j;k])**2
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+      subroutine compute_cross_product(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[a1],
+     &     CHF_CONST_FRA[a2],
+     &     CHF_FRA[a1xa2])
+c     local variables
+      integer CHF_DDECL[i;j;k]
+
+      CHF_MULTIDO[box;i;j;k]
+       
+       a1xa2(CHF_IX[i;j;k],0) = a1(CHF_IX[i;j;k],1)*a2(CHF_IX[i;j;k],2) - a1(CHF_IX[i;j;k],2)*a2(CHF_IX[i;j;k],1)
+       a1xa2(CHF_IX[i;j;k],1) = a1(CHF_IX[i;j;k],2)*a2(CHF_IX[i;j;k],0) - a1(CHF_IX[i;j;k],0)*a2(CHF_IX[i;j;k],2)
+       a1xa2(CHF_IX[i;j;k],2) = a1(CHF_IX[i;j;k],0)*a2(CHF_IX[i;j;k],1) - a1(CHF_IX[i;j;k],1)*a2(CHF_IX[i;j;k],0)
 
       CHF_ENDDO
 

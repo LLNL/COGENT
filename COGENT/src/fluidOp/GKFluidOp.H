@@ -5,6 +5,7 @@
 #include "FluidOpInterface.H"
 #include "FluidSpecies.H"
 #include "ParmParse.H"
+#include "EMFields.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -54,20 +55,20 @@ class GKFluidOp
                                   const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                                   const FluidSpeciesPtrVect&         fluid_species,
                                   const PS::ScalarPtrVect&           scalars,
-                                  const EField&                      E_field,
+                                  const EMFields&                    EM_fields,
                                   const bool                         implicit,
                                   const Real                         time);
 
       void preSolutionOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                               const FluidSpeciesPtrVect&         fluid_species,
                               const PS::ScalarPtrVect&           scalars,
-                              const EField&                      E_field,
+                              const EMFields&                    EM_fields,
                               const double                       time );
 
       void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                       const FluidSpeciesPtrVect&         fluid_species,
                       const PS::ScalarPtrVect&           scalars,
-                      const EField&                      E_field,
+                      const EMFields&                    EM_fields,
                       const double                       time );
       
       void postTimeEval( FluidSpeciesPtrVect&  a_species_comp,
@@ -84,7 +85,7 @@ class GKFluidOp
                           const double          a_time );
       
       void getMemberVarForPlotting( LevelData<FArrayBox>&  a_Var,
-                              const FluidSpecies&          a_fluid_species,
+                              const CFGVars&               a_fluid_vars,
                               const string                 a_var_name ) const;
 
       virtual void convertToPhysical( FluidSpeciesPtrVect&  a_fluid_species_phys,

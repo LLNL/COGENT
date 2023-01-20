@@ -10,6 +10,12 @@
 #include "SGInterp.H.multidim"
 #include "GyroaverageOperator.H"
 
+#undef CH_SPACEDIM
+#define CH_SPACEDIM CFG_DIM
+#include "EMFields.H"
+#undef CH_SPACEDIM
+#define CH_SPACEDIM PDIM
+
 #include "NamespaceHeader.H"
 namespace CFG = CFG_NAMESPACE;
 namespace VEL = VEL_NAMESPACE;
@@ -81,60 +87,68 @@ class KineticSpecies
        */
       virtual void gyroaveragedChargeDensity( CFG::LevelData<CFG::FArrayBox>& rho ) const;
 
-      /// Returns species momentum density.
+      /// Returns species fluid velocity (guiding center + diamagnetic)
       /**
        */
-      virtual void momentumDensity( CFG::LevelData<CFG::FArrayBox>& momentum,
-				    const LevelData<FluxBox>& field,
-				    const double larmor ) const;
+      virtual void fluidVelocity(CFG::LevelData<CFG::FArrayBox>& momentum,
+                                 const LevelData<FluxBox>& field,
+                                 const CFG::EMFields&  EM_fields,
+                                 const LevelData<FluxBox>& Apar_derivatives,
+                                 const double larmor ) const;
 
-      /// Returns species parallel momentum (n * Vpar).
+      /// Returns species parallel particle flux (n * Vpar).
       /**
        */
-      virtual void ParallelMomentum( CFG::LevelData<CFG::FArrayBox>& Parallel_Vel ) const;
+      virtual void parallelParticleFlux( CFG::LevelData<CFG::FArrayBox>& Parallel_Vel ) const;
 
       /// Returns species parallel velocity (Vpar).
       /**
        */
-      virtual void ParallelVelocity( CFG::LevelData<CFG::FArrayBox>& Parallel_Vel ) const;
+      virtual void parallelVelocity( CFG::LevelData<CFG::FArrayBox>& Parallel_Vel ) const;
    
-      /// Returns species poloidal momentum (n * Vpol).
+      /// Returns species poloidal particle flux (n * Vpol).
       /**
        */
-      virtual void PoloidalMomentum( CFG::LevelData<CFG::FArrayBox>& Poloidal_Vel,
-                                     const LevelData<FluxBox>& field,
-                                     const double larmor  ) const; 
+      virtual void poloidalParticleFlux(CFG::LevelData<CFG::FArrayBox>& Poloidal_Vel,
+                                        const LevelData<FluxBox>& field,
+                                        const CFG::EMFields&      EM_fields,
+                                        const LevelData<FluxBox>& Apar_derivatives,
+                                        const double larmor  ) const;
 
       /// Returns species radial particle flux.
       /**
        */
-      virtual void ParticleFlux( CFG::LevelData<CFG::FArrayBox>& Particle_Flux,
-                                 const LevelData<FluxBox>& field,
-                                 const int velocity_option) const;
+      virtual void radialParticleFlux(CFG::LevelData<CFG::FArrayBox>& particle_flux,
+                                      const LevelData<FluxBox>& field,
+                                      const CFG::EMFields&      EM_fields,
+                                      const LevelData<FluxBox>& Apar_derivatives,
+                                      const int velocity_option) const;
 
       /// Returns species radial heat flux.
       /**
        */
-      virtual void HeatFlux( CFG::LevelData<CFG::FArrayBox>& Heat_Flux,
-                             const LevelData<FluxBox>& field,
-                             const LevelData<FArrayBox>& phi,
-                             const int velocity_option) const;
+      virtual void radialHeatFlux(CFG::LevelData<CFG::FArrayBox>& heat_flux,
+                                  const LevelData<FluxBox>& field,
+                                  const CFG::EMFields&      EM_fields,
+                                  const LevelData<FluxBox>& Apar_derivatives,
+                                  const LevelData<FArrayBox>& phi,
+                                  const int velocity_option) const;
 
       /// Returns species parallel heat flux.
       /**
        */
-      virtual void parallelHeatFluxMoment( CFG::LevelData<CFG::FArrayBox>& parallelHeatFlux,
-                                           CFG::LevelData<CFG::FArrayBox>& vparshift ) const;
+      virtual void parallelHeatFlux(CFG::LevelData<CFG::FArrayBox>& parallelHeatFlux,
+                                    CFG::LevelData<CFG::FArrayBox>& vparshift ) const;
 
       /// Returns species pressure.
       /**
        */
-      virtual void pressureMoment( CFG::LevelData<CFG::FArrayBox>& pressure,
-                                   CFG::LevelData<CFG::FArrayBox>& vparshift ) const;
+      virtual void pressure( CFG::LevelData<CFG::FArrayBox>& pressure,
+                             CFG::LevelData<CFG::FArrayBox>& vparshift ) const;
       /// Returns species pressure.
       /**
        */
-      virtual void pressureMoment( CFG::LevelData<CFG::FArrayBox>& pressure ) const;
+      virtual void pressure( CFG::LevelData<CFG::FArrayBox>& pressure ) const;
 
       /// Returns species parallel pressure.
       /**
@@ -171,8 +185,8 @@ class KineticSpecies
       /// Returns species energy density.
       /**
        */
-      virtual void energyMoment( CFG::LevelData<CFG::FArrayBox>& energy,
-                                 const CFG::LevelData<CFG::FArrayBox>& phi) const;
+      virtual void energyDensity( CFG::LevelData<CFG::FArrayBox>& energy,
+                                  const CFG::LevelData<CFG::FArrayBox>& phi) const;
 
       /// Returns species parallel energy density.
       /**
@@ -187,13 +201,13 @@ class KineticSpecies
       /// Returns species kinetic energy density
       /**
        */
-      virtual void kineticEnergyMoment(CFG::LevelData<CFG::FArrayBox>& energy) const;
+      virtual void kineticEnergyDensity(CFG::LevelData<CFG::FArrayBox>& energy) const;
 
       /// Returns species kinetic energy for an arbitrary FArrayBox
       /**
        */
-      virtual void kineticEnergyMoment(CFG::LevelData<CFG::FArrayBox>& energy,
-                                       const LevelData<FArrayBox>& dfn) const;
+      virtual void kineticEnergyDensity(CFG::LevelData<CFG::FArrayBox>& energy,
+                                        const LevelData<FArrayBox>& dfn) const;
 
       /// Returns species fourth velocity space moment.
       /**
@@ -291,20 +305,20 @@ class KineticSpecies
       Real minValue() const;
 
       void computeVelocity( LevelData<FluxBox>& velocity,
-                            const LevelData<FluxBox>& E_field,
+                            const CFG::EMFields&           a_EMfields,
                             const bool include_FLR,
                             const int  velocity_option,
                             const Real& time,
                             const bool  apply_axisymmetric_correction = true) const;
 
       void computeMappedVelocityNormals( LevelData<FluxBox>& velocity,
-                                         const CFG::LevelData<CFG::FArrayBox>& E_field_cell,
-                                         const CFG::LevelData<CFG::FArrayBox>& phi_node,
+                                         const CFG::EMFields&  EM_fields,
                                          const bool fourth_order_Efield,
                                          const int  velocity_option ) const;
 
       void computeMappedVelocity( LevelData<FluxBox>& velocity,
-                                  const LevelData<FluxBox>& E_field,
+                                  const CFG::EMFields&           EMfields,
+                                  const LevelData<FluxBox>& Apar_derivatives,
                                   const bool include_FLR,
                                   const Real& time) const;
 

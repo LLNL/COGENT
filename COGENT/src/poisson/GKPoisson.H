@@ -118,6 +118,12 @@ public:
                                   LevelData<FluxBox>&,
                                   LevelData<FluxBox>& );
 
+   void updateBoundaryDataAddingCoefs( EllipticOpBC&  bc,
+                                       const bool     homogeneous_bcs = false)
+   {
+      updateBoundaryData(m_unmapped_coefficients, bc, homogeneous_bcs);
+   }
+   
    virtual void updatePreconditioner( MBSolver*              preconditioner,
                                       LevelData<FArrayBox>&  volume_reciprocal,
                                       LevelData<FluxBox>&    mapped_coefficients,
@@ -125,6 +131,9 @@ public:
 
    virtual void solvePreconditioner( const LevelData<FArrayBox>& in,
                                      LevelData<FArrayBox>&       out );
+   
+   virtual void applyPCOp(const LevelData<FArrayBox>& in_vec,
+                          LevelData<FArrayBox>& matvec);
 
    virtual void multiplyCoefficients( LevelData<FluxBox>& data,
                                       const bool mapped_coeff ) const;

@@ -2,6 +2,7 @@
 #define  _AMPEREERAVERAGEOP_H_
 
 #include "FluidOpInterface.H"
+#include "CellVar.H"
 
 #include "NamespaceHeader.H"
 
@@ -44,7 +45,7 @@ class AmpereErAverageOp
                                           const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                                           const FluidSpeciesPtrVect&         fluid_species,
                                           const PS::ScalarPtrVect&           scalars,
-                                          const EField&                      E_field,
+                                          const EMFields&                    EM_fields,
                                           const int                          component,
                                           const Real                         time) {;}
 
@@ -52,7 +53,7 @@ class AmpereErAverageOp
                                           const PS::KineticSpeciesPtrVect&   kinetic_species,
                                           const FluidSpeciesPtrVect&         fluid_species,
                                           const PS::ScalarPtrVect&           scalars,
-                                          const EField&                      E_field,
+                                          const EMFields&                    EM_fields,
                                           const int                          component,
                                           const Real                         time) {;}
 

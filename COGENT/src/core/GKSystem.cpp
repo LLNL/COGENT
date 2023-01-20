@@ -8,12 +8,14 @@
 #include "SingleNullPhaseCoordSys.H"
 #include "SNCorePhaseCoordSys.H"
 #include "VelocityNormalization.H"
+#include "SpaceUtils.H.multidim"
 #include "Directions.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "LoadBalance.H"
 #include "FluidOpVarFactory.H"
+#include "CFGVars.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -43,6 +45,7 @@ GKSystem::GKSystem( int a_sys_id )
      m_using_electrons(false),
      m_enforce_stage_positivity(false),
      m_enforce_step_positivity(false),
+     m_enforce_positivity_pointwise(false),
      m_enforce_step_floor(false),
      m_max_grid_size(0),
      m_kinetic_ghosts(4),
@@ -54,7 +57,6 @@ GKSystem::GKSystem( int a_sys_id )
      m_ti_method("4"),
      m_use_scales(false),
      m_scale_tol(1e-12),
-     m_dt_vlasov(-1),
      m_dt_collisions(-1),
      m_dt_transport(-1),
      m_dt_neutrals(-1)
@@ -1040,6 +1042,7 @@ GKSystem::createKineticSpecies( KineticSpeciesPtrVect& a_kinetic_species,
                                 phase_coords,
                                 velocity_coords,
                                 velocity_normalization,
+                                name,
                                 mass,
                                 charge,
                                 is_gyrokinetic  ));
@@ -1098,9 +1101,22 @@ void GKSystem::enforcePositivity( KineticSpeciesPtrVect& a_soln )
 {
    for (int n(0); n<a_soln.size(); n++) {
       KineticSpecies* kinetic_species( a_soln[n].operator->() );
-      m_positivity_post_processor.enforce( 
-              kinetic_species->distributionFunction(),
-              kinetic_species->maxValue() );
+
+      if (m_enforce_positivity_pointwise) {
+	// Replaces all negative values with zeroes (does not conserve particles)
+	LevelData<FArrayBox>& dfn = kinetic_species->distributionFunction();
+	SpaceUtils::enforcePositivity(dfn);
+      }
+      else {
+	// Enforces positivity with particle conservation. However,
+	// this requires ghost cells (including corners) to be properly filled
+	// Presently, we have NaNs in all ghosts after restart.
+	// Thus, this capability does not preserve the restart functionality.
+	// Also, due to NaNs in ghosts, it is not clear whether it even works properly
+	m_positivity_post_processor.enforce( 
+					    kinetic_species->distributionFunction(),
+					    kinetic_species->maxValue() );
+      }
    }
 }
 
@@ -1218,15 +1234,9 @@ void GKSystem::writePlotFile(const char    *prefix,
                                            m_sys_id,
                                            m_sys_id_str ) );
 
-       if ((varname == "efield") && (!m_gk_ops->usingAmpereLaw())) {
-         CFG::LevelData<CFG::FluxBox> var;
-         m_diagnostics->getCfgVar(var, varname);
-         m_diagnostics->plotCfgVar(var, filename, cur_time);
-       } else {
-         CFG::LevelData<CFG::FArrayBox> var;
-         m_diagnostics->getCfgVar(var, varname, non_zonal);
-         m_diagnostics->plotCfgVar(var, filename, cur_time);
-       }
+        CFG::LevelData<CFG::FArrayBox> var;
+        m_diagnostics->getCfgVar(var, varname, non_zonal);
+        m_diagnostics->plotCfgVar(var, filename, cur_time);
      }
    }
 
@@ -1319,95 +1329,89 @@ void GKSystem::writePlotFile(const char    *prefix,
 
       for (int species(0); species<fluids.size(); species++) {
 
-         const CFG::FluidSpecies& fluid_species( 
-            static_cast<const CFG::FluidSpecies&>(*(fluids[species])) );
-      
-         for (int n=0; n<fluid_species.num_cell_vars(); ++n) {
+         const CFG::CFGVars& fluid_vars = *(fluids[species]);
 
-           CFG::LevelData<CFG::FArrayBox> var;
-           m_diagnostics->getFluidCellVar( var, 
-                                      fluid_species, 
-                                      fluid_species.cell_var_name(n) );
+         for (int n=0; n<fluid_vars.num_cell_vars(); ++n) {
 
-           std::string filename;
-           if (  fluid_species.num_cell_vars() == 1 &&
-                 fluid_species.name() == fluid_species.cell_var_name(0) ) {
-             filename = plotFileName( prefix,
-                                      fluid_species.name(),
-                                      cur_step,
-                                      m_sys_id,
-                                      m_sys_id_str );
-           } else {
-             filename = plotFileName( prefix,
-                                      fluid_species.cell_var_name(n),
-                                      fluid_species.name(),
-                                      cur_step,
-                                      species + 1,
-                                      m_sys_id,
-                                      m_sys_id_str );
-           }
+            CFG::LevelData<CFG::FArrayBox> var;
+            m_diagnostics->getFluidCellVar( var, 
+                                            fluid_vars, 
+                                            fluid_vars.cell_var_name(n) );
 
-           m_diagnostics->plotCfgVar( var, filename, cur_time );
+            std::string filename;
+            if (  fluid_vars.num_cell_vars() == 1 &&
+                  fluid_vars.name() == fluid_vars.cell_var_name(0) ) {
+               filename = plotFileName( prefix,
+                                        fluid_vars.name(),
+                                        cur_step,
+                                        m_sys_id,
+                                        m_sys_id_str );
+            } else {
+               filename = plotFileName( prefix,
+                                        fluid_vars.cell_var_name(n),
+                                        fluid_vars.name(),
+                                        cur_step,
+                                        species + 1,
+                                        m_sys_id,
+                                        m_sys_id_str );
+            }
 
+            m_diagnostics->plotCfgVar( var, filename, cur_time );
          }
          
-         for (int n=0; n<fluid_species.num_face_vars(); ++n) {
+         for (int n=0; n<fluid_vars.num_face_vars(); ++n) {
 
-           CFG::LevelData<CFG::FArrayBox> var;
-           m_diagnostics->getFluidFaceVarAtCell( var, 
-                                            fluid_species, 
-                                            fluid_species.face_var_name(n) );
+            CFG::LevelData<CFG::FArrayBox> var;
+            m_diagnostics->getFluidFaceVarAtCell( var, 
+                                                  fluid_vars, 
+                                                  fluid_vars.face_var_name(n) );
 
-           std::string filename (plotFileName( prefix,
-                                               fluid_species.face_var_name(n),
-                                               fluid_species.name(),
-                                               cur_step,
-                                               species + 1,
-                                               m_sys_id,
-                                               m_sys_id_str ));
+            std::string filename (plotFileName( prefix,
+                                                fluid_vars.face_var_name(n),
+                                                fluid_vars.name(),
+                                                cur_step,
+                                                species + 1,
+                                                m_sys_id,
+                                                m_sys_id_str ));
 
-           m_diagnostics->plotCfgVar( var, filename, cur_time );
-
+            m_diagnostics->plotCfgVar( var, filename, cur_time );
          }
          
-         for (int n=0; n<fluid_species.num_edge_vars(); ++n) {
+         for (int n=0; n<fluid_vars.num_edge_vars(); ++n) {
 
-           CFG::LevelData<CFG::FArrayBox> var;
-           m_diagnostics->getFluidEdgeVarAtCell( var, 
-                                            fluid_species, 
-                                            fluid_species.edge_var_name(n) );
+            CFG::LevelData<CFG::FArrayBox> var;
+            m_diagnostics->getFluidEdgeVarAtCell( var, 
+                                                  fluid_vars, 
+                                                  fluid_vars.edge_var_name(n) );
 
-           std::string filename (plotFileName( prefix,
-                                               fluid_species.edge_var_name(n),
-                                               fluid_species.name(),
-                                               cur_step,
-                                               species + 1,
-                                               m_sys_id,
-                                               m_sys_id_str ));
+            std::string filename (plotFileName( prefix,
+                                                fluid_vars.edge_var_name(n),
+                                                fluid_vars.name(),
+                                                cur_step,
+                                                species + 1,
+                                                m_sys_id,
+                                                m_sys_id_str ));
 
-           m_diagnostics->plotCfgVar( var, filename, cur_time );
-
+            m_diagnostics->plotCfgVar( var, filename, cur_time );
          }
          
-         if ( fluid_species.m_plotMemberVars == 1 ) {
-            std::vector<string> varname = fluid_species.m_plotMemberVarNames;
+         if ( fluid_vars.m_plotMemberVars == 1 ) {
+            std::vector<string> varname = fluid_vars.m_plotMemberVarNames;
             for (int i(0); i<varname.size(); i++) {
                std::string filename (plotFileName( prefix,
                                                    varname[i],
-                                                   fluid_species.name(),
+                                                   fluid_vars.name(),
                                                    cur_step,
                                                    species + 1,
                                                    m_sys_id,
                                                    m_sys_id_str ));
                CFG::LevelData<CFG::FArrayBox> var;
-               m_diagnostics->getFluidOpMember(  var, fluid_species, varname[i] );
+               m_diagnostics->getFluidOpMember(  var, fluid_vars, varname[i] );
                m_diagnostics->plotCfgVar( var, filename, cur_time );
             }
          }
       }
    }
-
-   return;
 }
 
       
@@ -1536,6 +1540,12 @@ void GKSystem::writeCheckpointFile( const std::string& a_chkpt_prefix,
    m_gk_ops->writeCheckpointFile( handle );
 
    handle.close();
+   
+   //Save geometry data initialization
+   if (m_mag_geom->isWritingInitializaionData()) {
+      m_mag_geom->writeInitializationData();
+   }
+   
 #else
    MayDay::Error( "restart only defined with hdf5" );
 #endif
@@ -1603,7 +1613,7 @@ void GKSystem::readCheckpointFile( const std::string& a_chkpt_fname,
       LevelData<FArrayBox> phi_injected;
       m_phase_geom->injectConfigurationToPhase(phi, phi_injected);
       read( handle, phi_injected, "data", phi_injected.disjointBoxLayout() );
-      m_gk_ops->setPhi( phi_injected );
+      m_gk_ops->setInitialPhi( phi_injected );
    }
 
    KineticSpeciesPtrVect& kinetic_species( m_state_comp.dataKinetic() );
@@ -1644,7 +1654,7 @@ void GKSystem::readCheckpointFile( const std::string& a_chkpt_fname,
 
    m_gk_ops->readCheckpointFile( handle, a_cur_step );
    handle.close();
-
+   
 #else
    MayDay::Error("restart only defined with hdf5");
 #endif
@@ -1709,8 +1719,8 @@ void printTimeStep( const Real& a_dt,
                     const Real& a_dt_current  )
 {
    if (a_dt>= 0) {
-      cout << a_name << a_dt
-           << " (time scale), " << a_dt_current / a_dt << " (CFL)\n";
+     printf("    %-20s: %1.3e (time scale), %1.4f (CFL)\n", 
+            a_name.c_str(), a_dt, a_dt_current/a_dt);
    }
 }
 
@@ -1753,11 +1763,14 @@ void GKSystem::postTimeStep(ODEVector&  a_vec,
   m_dt_neutrals = m_gk_ops->dtScaleNeutrals( m_state_comp, a_cur_step );
 
   if ((procID() == 0) && (m_sys_id < 0)) {
-    cout << "  dt = " << a_dt << std::endl;
-    printTimeStep( m_dt_vlasov,     "    Vlasov    : ", a_dt ); 
-    printTimeStep( m_dt_collisions, "    Collisions: ", a_dt ); 
-    printTimeStep( m_dt_transport,  "    Transport : ", a_dt ); 
-    printTimeStep( m_dt_neutrals,   "    Neutrals  : ", a_dt ); 
+    printf("  dt = %f\n", a_dt);
+    for (int i = 0; i < m_dt_vlasov.size(); i++) {
+      std::string name_str = "Vlasov (" + m_dt_vlasov[i].first + ")"; 
+      printTimeStep( m_dt_vlasov[i].second, name_str, a_dt ); 
+    }
+    printTimeStep( m_dt_collisions, "Collisions", a_dt ); 
+    printTimeStep( m_dt_transport, "Transport", a_dt ); 
+    printTimeStep( m_dt_neutrals, "Neutrals", a_dt ); 
   }
 
   copyStateToArray( a_vec );
@@ -1886,6 +1899,7 @@ void GKSystem::setParameters( const GKSystemParameters& a_params )
 
    m_enforce_stage_positivity = a_params.enforceStagePositivity();
    m_enforce_step_positivity = a_params.enforceStepPositivity();
+   m_enforce_positivity_pointwise = a_params.enforcePositivityPointwise();
    if (m_enforce_stage_positivity || m_enforce_step_positivity) {
 
       int n_iter = a_params.positivityNIter();

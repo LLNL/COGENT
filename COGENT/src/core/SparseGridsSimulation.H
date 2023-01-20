@@ -294,6 +294,16 @@ class SparseGridsSimulation : public MultidomainSimulation
     void ComputeSGDimsAndCoeffs(  const GridDimensions&,
                                   std::vector<SGCTElem>& );
 
+	 bool CheckCoeffSum( std::vector<SGCTElem>&, double& );
+
+	 void ShrinkFinestResolution( GridDimensions&,
+	   									std::vector<int>&,
+											bool& );
+
+	 void GrowFineResolutions( std::vector<SGCTElem>&, 
+	 									std::vector<int> );
+
+
     /* Compute all grids such that the base2 logs of the size 
      * in each dimension adds up to the input argument */
     void GetCTGridSizes(const int, 

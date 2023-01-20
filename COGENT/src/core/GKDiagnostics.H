@@ -5,6 +5,7 @@
 
 #include "NamespaceHeader.H"
 
+
 class GKDiagnostics
 {
   public:
@@ -30,10 +31,7 @@ class GKDiagnostics
     void getCfgVar(  CFG::LevelData<CFG::FArrayBox>&,
                      const std::string&,
                      const bool& ) const;
- 
-    void getCfgVar(  CFG::LevelData<CFG::FluxBox>&,
-                     const std::string& ) const;
- 
+  
     void getCfgVar( CFG::LevelData<CFG::FArrayBox>&,
                     const std::string&,
                     const KineticSpecies& ) const;
@@ -73,19 +71,19 @@ class GKDiagnostics
                              const std::string& ) const;
  
     void getFluidCellVar(  CFG::LevelData<CFG::FArrayBox>&,
-                           const CFG::FluidSpecies&,
+                           const CFG::CFGVars&,
                            const string& ) const;
 
     void getFluidFaceVarAtCell(  CFG::LevelData<CFG::FArrayBox>&,
-                                 const CFG::FluidSpecies&,
+                                 const CFG::CFGVars&,
                                  const string& ) const;
 
     void getFluidEdgeVarAtCell(  CFG::LevelData<CFG::FArrayBox>&,
-                                 const CFG::FluidSpecies&,
+                                 const CFG::CFGVars&,
                                  const string& ) const;
 
     void getFluidOpMember( CFG::LevelData<CFG::FArrayBox>&,
-                           const CFG::FluidSpecies&,
+                           const CFG::CFGVars&,
                            const std::string& ) const;
 
     template <typename T>
@@ -187,6 +185,10 @@ class GKDiagnostics
 
     void getPotential( CFG::LevelData<CFG::FArrayBox>&, const bool& ) const;
 
+    void getEField( CFG::LevelData<CFG::FArrayBox>&) const;
+  
+    void getExBData( CFG::LevelData<CFG::FArrayBox>& a_var ) const;
+   
     void getDistributionFunction( LevelData<FArrayBox>&,
                                   const KineticSpecies& ) const;
 
@@ -200,14 +202,14 @@ class GKDiagnostics
     void getChargeDensity( CFG::LevelData<CFG::FArrayBox>&, 
                            const KineticSpecies& ) const;
  
-    void getMomentum( CFG::LevelData<CFG::FArrayBox>&, 
-                      const KineticSpecies& ) const;
+    void getFluidVelocity( CFG::LevelData<CFG::FArrayBox>&,
+                           const KineticSpecies& ) const;
 
-    void getParallelMomentum(  CFG::LevelData<CFG::FArrayBox>&, 
-                               const KineticSpecies& ) const;
+    void getParallelParticleFlux( CFG::LevelData<CFG::FArrayBox>&,
+                                  const KineticSpecies& ) const;
 
-    void getPoloidalMomentum(  CFG::LevelData<CFG::FArrayBox>&, 
-                               const KineticSpecies& ) const;
+    void getPoloidalParticleFlux(CFG::LevelData<CFG::FArrayBox>&,
+                                 const KineticSpecies& ) const;
 
     void getParallelVelocity(  CFG::LevelData<CFG::FArrayBox>&, 
                                const KineticSpecies& ) const;
@@ -233,8 +235,8 @@ class GKDiagnostics
     void getPerpPressure(  CFG::LevelData<CFG::FArrayBox>&, 
                            const KineticSpecies& ) const;
 
-    void getGradPoverN(  CFG::LevelData<CFG::FArrayBox>&, 
-                         const KineticSpecies& ) const;
+    void getRadialForceBalance( CFG::LevelData<CFG::FArrayBox>&,
+                                const KineticSpecies& ) const;
 
     void getTemperature( CFG::LevelData<CFG::FArrayBox>&, 
                          const KineticSpecies& ) const;
@@ -254,11 +256,14 @@ class GKDiagnostics
     void getFourthMoment( CFG::LevelData<CFG::FArrayBox>&, 
                           const KineticSpecies& ) const;
 
-    void getParticleFlux( CFG::LevelData<CFG::FArrayBox>&, 
+    void getRadialCurrent(CFG::LevelData<CFG::FArrayBox>&,
                           const KineticSpecies& ) const;
 
-    void getHeatFlux( CFG::LevelData<CFG::FArrayBox>&, 
-                      const KineticSpecies& ) const;
+    void getRadialParticleFlux(CFG::LevelData<CFG::FArrayBox>&,
+                               const KineticSpecies& ) const;
+  
+    void getRadialHeatFlux(CFG::LevelData<CFG::FArrayBox>&,
+                           const KineticSpecies& ) const;
 
     void getExBHeatFlux( CFG::LevelData<CFG::FArrayBox>&, 
                          const KineticSpecies& ) const;
@@ -268,16 +273,13 @@ class GKDiagnostics
 
     void getChargeDensity( CFG::LevelData<CFG::FArrayBox>&, 
                            const KineticSpeciesPtrVect& ) const;
-
-    template <typename T>
-    inline void getEField( T& a_var) const
-    {
-      m_ops->getEField( a_var );
-    }
-    void getExBData( CFG::LevelData<CFG::FArrayBox>& a_var ) const
-    {
-      m_ops->getExBData( a_var );
-    }
+  
+    void computeRadialFlux( CFG::LevelData<CFG::FArrayBox>&,
+                            const KineticSpecies&,
+                            const CFG::LevelData<CFG::FArrayBox>&,
+                            const CFG::EMFields&,
+                            const int,
+                            const Kernel<FluxBox>&) const;
 
     const GKOps* m_ops;
     const PhaseGeom* m_phase_geometry;

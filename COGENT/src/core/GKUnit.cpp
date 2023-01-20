@@ -47,9 +47,17 @@ GKUnits::GKUnits()
    denom = m_scale[NUMBER_DENSITY] * m_scale[CHARGE] * m_scale[CHARGE];
    m_scale[DEBYE_LENGTH] = sqrt( m_scale[PERMITTIVITY] * tempJoules / denom );
 
+   denom = m_scale[PERMITTIVITY] * Constants::MASS_OF_ELECTRON;
+   Real omega_pe = sqrt(m_scale[CHARGE] * m_scale[CHARGE] * m_scale[NUMBER_DENSITY] / denom);
+   
+   m_scale[ELECTRON_SKIN_DEPTH] = Constants::SPEED_OF_LIGHT / omega_pe;
+   m_scale[ION_SKIN_DEPTH] = sqrt(masskg/Constants::MASS_OF_ELECTRON) * m_scale[ELECTRON_SKIN_DEPTH];
+   
    // Nondmensional Parameters
    m_larmor_number = m_scale[GYRORADIUS] / m_scale[LENGTH];
    m_debye_number = m_scale[DEBYE_LENGTH] / m_scale[LENGTH];
+   m_ion_skin_number = m_scale[ION_SKIN_DEPTH] /m_scale[LENGTH];
+   m_electron_skin_number = m_scale[ELECTRON_SKIN_DEPTH] /m_scale[LENGTH];
 
 }
 
@@ -137,11 +145,15 @@ void GKUnits::print( std::ostream& a_out ) const
    a_out << "  GYROFREQUENCY       [1/s]: " << m_scale[GYROFREQUENCY] << endl;
    a_out << "  GYRORADIUS            [m]: " << m_scale[GYRORADIUS] << endl;
    a_out << "  DEBYE LENGTH          [m]: " << m_scale[DEBYE_LENGTH] << endl;
+   a_out << "  ION_SKIN_DEPTH        [m]: " << m_scale[ION_SKIN_DEPTH] << endl;
+   a_out << "  ELECTRON_SKIN_DEPTH   [m]: " << m_scale[ELECTRON_SKIN_DEPTH] << endl;
    a_out << endl;
    a_out << "==== Dimensionless Parameters =========================================" << endl;
    a_out << endl;
    a_out << "  LARMOR NUMBER            : " << m_larmor_number << endl;
    a_out << "  DEBYE NUMBER             : " << m_debye_number << endl;
+   a_out << "  ION SKIN NUMBER          : " << m_ion_skin_number << endl;
+   a_out << "  ELECTRON SKIN NUMBER     : " << m_electron_skin_number << endl;
    a_out << endl;
    a_out << "***********************************************************************" << endl;
 }

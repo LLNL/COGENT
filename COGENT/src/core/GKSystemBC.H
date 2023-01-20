@@ -10,6 +10,7 @@
 #define CH_SPACEDIM CFG_DIM
 #include "FluidVarBC.H"
 #include "GridFunction.H"
+#include "EMFields.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -24,21 +25,18 @@ class GKSystemBC
       ~GKSystemBC();
 
       // fills ghost cells on the physical domain
-      void fillGhostCells( GKState&                               state,
-                           const CFG::LevelData<CFG::FArrayBox>&  phi,
-                           const LevelData<FluxBox>&              E_field,
-                           const Real&                            time ) const;
+      void fillGhostCells( GKState&              state,
+                           const CFG::EMFields&  EM_fields,
+                           const Real&           time ) const;
 
 /// deprecated ////////////////////
 
-      void fillGhostCells( KineticSpeciesPtrVect&                 species, 
-                           const CFG::LevelData<CFG::FArrayBox>&  phi,
-                           const LevelData<FluxBox>&              E_field,
-                           const Real&                            time ) const;
+      void fillGhostCells( KineticSpeciesPtrVect&  species, 
+                           const CFG::EMFields&    EM_fields,
+                           const Real&             time ) const;
 
-      void fillGhostCells( CFG::FluidSpeciesPtrVect&              species,
-                           const LevelData<FluxBox>&              E_field,
-                           const Real&                            time ) const;
+      void fillGhostCells( CFG::FluidSpeciesPtrVect&  species,
+                           const Real&                time ) const;
 
 /// deprecated ////////////////////
 
@@ -65,14 +63,12 @@ class GKSystemBC
       void executeInternalExchanges( CFG::FluidSpecies& a_fluid ) const;
 
       inline
-      void fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&                 species,
-                                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                                         const LevelData<FluxBox>&              E_field,
-                                         const Real&                            time ) const;
+      void fillKineticSpeciesGhostCells( KineticSpeciesPtrVect&  species,
+                                         const CFG::EMFields&    EM_fields,
+                                         const Real&             time ) const;
    
       inline
       void fillFluidSpeciesGhostCells( CFG::FluidSpeciesPtrVect&  species,
-                                       const LevelData<FluxBox>&  E_field,
                                        const Real&                time ) const;
 
       void parsePotential( ParmParse& a_pp,

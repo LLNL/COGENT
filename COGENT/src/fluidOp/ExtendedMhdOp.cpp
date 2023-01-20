@@ -342,7 +342,7 @@ void ExtendedMhdOp::accumulateExplicitRHS( FluidSpeciesPtrVect&        a_rhs,
                                   const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
                                   const FluidSpeciesPtrVect&        a_fluid_species,
                                   const PS::ScalarPtrVect&          a_scalars,
-                                  const EField&                     a_E_field,
+                                  const EMFields&                   a_EM_fields,
                                   const int                         a_fluidVecComp,
                                   const Real                        a_time )
 {
@@ -365,7 +365,7 @@ void ExtendedMhdOp::accumulateImplicitRHS( FluidSpeciesPtrVect&        a_rhs,
                                   const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
                                   const FluidSpeciesPtrVect&        a_fluid_species,
                                   const PS::ScalarPtrVect&          a_scalars,
-                                  const EField&                     a_E_field,
+                                  const EMFields&                   a_EM_fields,
                                   const int                         a_fluidVecComp,
                                   const Real                        a_time )
 {
@@ -978,7 +978,7 @@ void ExtendedMhdOp::postTimeEval( FluidSpecies&  a_species_comp,
 }
 
 void ExtendedMhdOp::getMemberVar( LevelData<FArrayBox>&  a_Var,
-                            const FluidSpecies&          a_fluid_species,
+                            const CFGVars&               a_fluid_vars,
                             const string&                a_name ) const
 {
    const DisjointBoxLayout& grids( m_geometry.grids() );

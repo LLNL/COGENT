@@ -10,8 +10,8 @@
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
-#include "EFieldAmpere.H"
-#include "EFieldSelfConsistentBC.H"
+#include "PhiSelfConsistentBCOps.H"
+#include "PhiAmpereOps.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -61,14 +61,15 @@ GKVlasovAmpere::GKVlasovAmpere( ParmParse&                      pp,
 
 void GKVlasovAmpere::accumulateRHS( GKRHSData&                            a_rhs,
                                     const KineticSpeciesPtrVect&          a_kinetic_phys,
-                                    const CFG::LevelData<CFG::FArrayBox>& a_phi,
-                                    const CFG::EField&                    a_E_field,
+                                    const CFG::EMFields&                  a_EM_fields,
+                                    const CFG::PhiOps&                    a_phi_ops,
                                     const bool                            a_implicit,
                                     const Real&                           a_time )
 {
    KineticSpeciesPtrVect& rhs_kinetic = a_rhs.dataKinetic();
 
-   const CFG::MagGeom& mag_geom( a_E_field.configurationSpaceGeometry());
+   const PhaseGeom& geometry( (a_kinetic_phys[0])->phaseSpaceGeometry() );
+   const CFG::MagGeom& mag_geom = geometry.magGeom();
    const CFG::DisjointBoxLayout& mag_grids = mag_geom.gridsFull();
    const CFG::MagCoordSys& coords = *mag_geom.getCoordSys();
 
@@ -93,8 +94,7 @@ void GKVlasovAmpere::accumulateRHS( GKRHSData&                            a_rhs,
                          hi_value,
                          species_radial_flux_divergence_average,
                          soln_species,
-                         a_phi,
-                         a_E_field,
+                         a_EM_fields,
                          PhaseGeom::FULL_VELOCITY,
                          a_time );
       } else {
@@ -103,8 +103,7 @@ void GKVlasovAmpere::accumulateRHS( GKRHSData&                            a_rhs,
                          hi_value,
                          species_radial_flux_divergence_average,
                          soln_species,
-                         a_phi,
-                         a_E_field,
+                         a_EM_fields,
                          PhaseGeom::FULL_VELOCITY,
                          a_time );
       }
@@ -128,7 +127,7 @@ void GKVlasovAmpere::accumulateRHS( GKRHSData&                            a_rhs,
   
      if ( m_self_consistent_bcs_only ) {
   
-        const CFG::EFieldSelfConsistentBC& E_field_scbc = static_cast<const CFG::EFieldSelfConsistentBC&>(a_E_field);
+        const CFG::PhiSelfConsistentBCOps& E_field_scbc = static_cast<const CFG::PhiSelfConsistentBCOps&>(a_phi_ops);
   
         rhs_scalar_data[0] = - lo_radial_flux_divergence_average / E_field_scbc.getRadialGKPDivergenceAverageLo();
         rhs_scalar_data[1] = - hi_radial_flux_divergence_average / E_field_scbc.getRadialGKPDivergenceAverageHi();
@@ -142,7 +141,7 @@ void GKVlasovAmpere::accumulateRHS( GKRHSData&                            a_rhs,
            Er[dit].copy(total_radial_flux_divergence_average[dit]);
         }
   
-        const CFG::EFieldAmpere& E_field_ampere = static_cast<const CFG::EFieldAmpere&>(a_E_field);
+        const CFG::PhiAmpereOps& E_field_ampere = static_cast<const CFG::PhiAmpereOps&>(a_phi_ops);
   
         rhs_scalar_data[0] = - lo_radial_flux_divergence_average / E_field_ampere.getRadialGKPDivergenceAverageLo();
         rhs_scalar_data[1] = - hi_radial_flux_divergence_average / E_field_ampere.getRadialGKPDivergenceAverageHi();
@@ -171,8 +170,7 @@ GKVlasovAmpere::evalRHSExplicit( KineticSpecies&                        a_rhs_sp
                                  double&                                a_hi_value,
                                  CFG::LevelData<CFG::FArrayBox>&        a_radial_flux_divergence_average,
                                  const KineticSpecies&                  a_soln_species,
-                                 const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                                 const CFG::EField&                     a_E_field,
+                                 const CFG::EMFields&                   a_EM_fields,
                                  const int                              a_velocity_option,
                                  const Real                             a_time )
 {
@@ -181,8 +179,7 @@ GKVlasovAmpere::evalRHSExplicit( KineticSpecies&                        a_rhs_sp
             a_hi_value,
             a_radial_flux_divergence_average,
             a_soln_species,
-            a_phi,
-            a_E_field,
+            a_EM_fields,
             a_velocity_option,
             a_time );
   return;
@@ -194,8 +191,7 @@ GKVlasovAmpere::evalRHSImplicit( KineticSpecies&                        a_rhs_sp
                                  double&                                a_hi_value,
                                  CFG::LevelData<CFG::FArrayBox>&        a_radial_flux_divergence_average,
                                  const KineticSpecies&                  a_soln_species,
-                                 const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                                 const CFG::EField&                     a_E_field,
+                                 const CFG::EMFields&                   a_EM_fields,
                                  const int                              a_velocity_option,
                                  const Real                             a_time )
 {
@@ -217,8 +213,7 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                        a_rhs_species,
                          double&                                a_hi_value,
                          CFG::LevelData<CFG::FArrayBox>&        a_radial_flux_divergence_average,
                          const KineticSpecies&                  a_soln_species,
-                         const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                         const CFG::EField&                     a_E_field,
+                         const CFG::EMFields&                   a_EM_fields,
                          const int                              a_velocity_option,
                          const Real                             a_time )
 {
@@ -235,7 +230,7 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                        a_rhs_species,
    IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
    
    if ( geometry.divFreeVelocity() ) {
-      bool fourth_order_Efield = !a_E_field.secondOrder();
+      bool fourth_order_Efield = !a_EM_fields.secondOrder();
       
       if ( !m_flux_normal.isDefined()) {
          m_flux_normal.define( dbl, 1, ghostVect );
@@ -243,9 +238,7 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                        a_rhs_species,
        
        computeIntegratedFluxNormals(m_flux_normal,
                                     a_soln_species,
-                                    a_phi,
-                                    a_E_field.getCellCenteredField(),
-                                    a_E_field.getPhiNode(),
+                                    a_EM_fields,
                                     fourth_order_Efield,
                                     a_velocity_option,
                                     a_time);
@@ -270,8 +263,7 @@ GKVlasovAmpere::evalRHS( KineticSpecies&                        a_rhs_species,
    
       computePhysicalFlux(m_flux,
                           a_soln_species,
-                          a_phi,
-                          a_E_field,
+                          a_EM_fields,
                           a_velocity_option,
                           a_time,
                           true);
@@ -529,9 +521,9 @@ GKVlasovAmpere::computeRadialFluxDivergence(const RefCountedPtr<PhaseGeom>&  a_g
     
    if (!m_volume.isDefined()) {
       m_volume.define(grids, 1, IntVect::Zero);
-      a_geometry->getCellVolumes(m_volume);
    }
-    
+   a_geometry->getCellVolumes(m_volume);
+   
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       m_phase_divergence_bdry[dit] /= m_volume[dit];
    }
@@ -820,9 +812,9 @@ GKVlasovAmpere::computeRadialNormalFluxDivergence(const RefCountedPtr<PhaseGeom>
 
    if (!m_volume.isDefined()) {
       m_volume.define(grids, 1, IntVect::Zero);
-      a_geometry->getCellVolumes(m_volume);
    }
-      
+   a_geometry->getCellVolumes(m_volume);
+
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       m_phase_divergence_bdry[dit] /= m_volume[dit];
    }

@@ -302,7 +302,7 @@ void IdealMhdOp::accumulateExplicitRHS( FluidSpeciesPtrVect&        a_rhs,
                                   const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
                                   const FluidSpeciesPtrVect&        a_fluid_species,
                                   const PS::ScalarPtrVect&          a_scalars,
-                                  const EField&                     a_E_field,
+                                  const EMFields&                   a_EM_fields,
                                   const int                         a_fluidVecComp,
                                   const Real                        a_time )
 {
@@ -327,7 +327,7 @@ void IdealMhdOp::accumulateImplicitRHS( FluidSpeciesPtrVect&        a_rhs,
                                   const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
                                   const FluidSpeciesPtrVect&        a_fluid_species,
                                   const PS::ScalarPtrVect&          a_scalars,
-                                  const EField&                     a_E_field,
+                                  const EMFields&                   a_EM_field,
                                   const int                         a_fluidVecComp,
                                   const Real                        a_time )
 {
@@ -349,25 +349,27 @@ void IdealMhdOp::accumulateImplicitRHS( FluidSpeciesPtrVect&        a_rhs,
 }
 
 void IdealMhdOp::getMemberVar( LevelData<FArrayBox>&  a_Var,
-                         const FluidSpecies&          a_fluid_species,
-                         const string&                a_name ) const
+                               const CFGVars&         a_fluid_vars,
+                               const string&          a_name ) const
 {
+   const FluidSpecies& fluid_species = static_cast<const FluidSpecies&>(a_fluid_vars);
+
    const DisjointBoxLayout& grids( m_geometry.grids() );
    const IntVect ghostVect = 0*IntVect::Unit;
    //const IntVect& ghostVect( soln_data.ghostVect() );
    
    if(a_name=="electricField") {
       a_Var.define(grids, SpaceDim, ghostVect);
-      if(a_fluid_species.m_evolve_magneticField_virtual==1) {
-         const LevelData<FArrayBox>& magField_phys_cc( a_fluid_species.cell_var("magneticField_virtual") );
+      if(fluid_species.m_evolve_magneticField_virtual==1) {
+         const LevelData<FArrayBox>& magField_phys_cc( fluid_species.cell_var("magneticField_virtual") );
          LevelData<FArrayBox>& vel_phys_cc = m_dummyFArray_spaceDim;
-         a_fluid_species.velocity(vel_phys_cc);  // in-plane velocity vector
+         fluid_species.velocity(vel_phys_cc);  // in-plane velocity vector
          computePhysicalElectricField( a_Var, vel_phys_cc, magField_phys_cc, 1 );
       }
-      else if(a_fluid_species.m_evolve_magneticField==1) {
-         const LevelData<FluxBox>& magField_contra_cf( a_fluid_species.face_var("magneticField") );
+      else if(fluid_species.m_evolve_magneticField==1) {
+         const LevelData<FluxBox>& magField_contra_cf( fluid_species.face_var("magneticField") );
          LevelData<FArrayBox>& vel_phys_cc = m_dummyFArray_spaceDim;
-         a_fluid_species.velocity(vel_phys_cc);  // in-plane velocity vector
+         fluid_species.velocity(vel_phys_cc);  // in-plane velocity vector
          LevelData<FArrayBox> magField_phys_cc;
          magField_phys_cc.define(grids, SpaceDim, ghostVect);
          SpaceUtils::interpFaceVectorToCell(magField_phys_cc,magField_contra_cf,"c2");
@@ -385,11 +387,11 @@ void IdealMhdOp::getMemberVar( LevelData<FArrayBox>&  a_Var,
    }
    if(a_name=="currentDensity") {
       a_Var.define(grids, SpaceDim, ghostVect);
-      if(a_fluid_species.m_evolve_magneticField_virtual==1) {
-         getJ0_2Dvirtual( a_Var, a_fluid_species );
+      if(fluid_species.m_evolve_magneticField_virtual==1) {
+         getJ0_2Dvirtual( a_Var, fluid_species );
       }
-      else if(a_fluid_species.m_evolve_magneticField==1) {
-         getJ0_3D( a_Var, a_fluid_species );
+      else if(fluid_species.m_evolve_magneticField==1) {
+         getJ0_3D( a_Var, fluid_species );
       }
       //for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
       //   a_Var[dit].copy(m_JaJ0_cc[dit]); // off by time stage
@@ -398,8 +400,8 @@ void IdealMhdOp::getMemberVar( LevelData<FArrayBox>&  a_Var,
    }
    if(a_name=="divB") {
       a_Var.define(grids, 1, IntVect::Zero);
-      CH_assert(a_fluid_species.m_evolve_magneticField==1);
-      const LevelData<FluxBox>& magField_contra_cf( a_fluid_species.face_var("magneticField") );
+      CH_assert(fluid_species.m_evolve_magneticField==1);
+      const LevelData<FluxBox>& magField_contra_cf( fluid_species.face_var("magneticField") );
       computePhysicalDivergence( a_Var, magField_contra_cf, 0);
    }
    if(a_name=="divCurlE") {

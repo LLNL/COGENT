@@ -66,15 +66,6 @@ FluidSpecies::FluidSpecies( const string&     a_pp_prefix,
    //if ( pp.contains("currentDensity_virtual") ) {
    //   pp.get("currentDensity_virtual", m_evolve_currentDensity_virtual);
    //}
-   if ( pp.contains("plotMemberVars") ) {
-      pp.get("plotMemberVars", m_plotMemberVars);
-      if(m_plotMemberVars) {
-         int n(0);
-         pp.query( "plotMemberVars.number", n );
-         m_plotMemberVarNames.resize( n );
-         pp.queryarr( "plotMemberVars.list", m_plotMemberVarNames, 0, n );
-      }
-   }
    if ( pp.contains("adiabatic_coefficient") ) {
       pp.get("adiabatic_coefficient", m_gamma);
    }
@@ -517,28 +508,6 @@ FluidSpecies::convertToPhysical()
 
 }
 
-
-void
-FluidSpecies::interpFaceVarToCell( LevelData<FArrayBox>&  a_cell_var,
-                             const string&                a_face_var_name ) const
-{
-
-   CH_assert( face_var(a_face_var_name).isDefined() );
-   SpaceUtils::interpFaceVectorToCell(a_cell_var,face_var(a_face_var_name),"c2");
-   
-}
-
-
-void
-FluidSpecies::interpEdgeVarToCell( LevelData<FArrayBox>&  a_cell_var,
-                             const string&                a_edge_var_name ) const
-{
-
-   CH_assert( edge_var(a_edge_var_name).isDefined() );
-   SpaceUtils::interpEdgesToCell(a_cell_var,edge_var(a_edge_var_name),"c2");
-   
-}
-   
    
 void
 FluidSpecies::convertFromPhysical()

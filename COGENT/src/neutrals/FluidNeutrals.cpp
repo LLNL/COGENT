@@ -165,12 +165,12 @@ void FluidNeutrals::evalNtrRHS(KineticSpecies&                   a_rhs_species,
 
       //Get ion species temperature
       CFG::LevelData<CFG::FArrayBox> ion_parallelVel_cfg( mag_geom.grids(), 1, ghost_cfg );
-      soln_species.ParallelMomentum( ion_parallelVel_cfg );
+      soln_species.parallelParticleFlux( ion_parallelVel_cfg );
       for (CFG::DataIterator dit(ion_density_cfg.dataIterator()); dit.ok(); ++dit) {
          ion_parallelVel_cfg[dit].divide(ion_density_cfg[dit]);
       }
       CFG::LevelData<CFG::FArrayBox> ion_temperature_cfg( mag_geom.grids(), 1, ghost_cfg );
-      soln_species.pressureMoment(ion_temperature_cfg, ion_parallelVel_cfg);
+      soln_species.pressure(ion_temperature_cfg, ion_parallelVel_cfg);
       for (CFG::DataIterator dit(ion_density_cfg.dataIterator()); dit.ok(); ++dit) {
         ion_temperature_cfg[dit].divide(ion_density_cfg[dit]);
       }
@@ -556,10 +556,9 @@ void FluidNeutrals::diagnostics(const LevelData<FArrayBox>& a_rhs,
   CFG::LevelData<CFG::FArrayBox> particle_src( mag_geom.grids(), 1, CFG::IntVect::Zero );                                                                                 
   a_rhs_species.numberDensity( particle_src );                                                                                                                              
   phase_geom.plotConfigurationData( "particle_src", particle_src, a_time );                                                                                                 
-
-  //Plot parallel momentum source                                                                                                                                         
+  //Plot parallel particle flux (nVpar) source
   CFG::LevelData<CFG::FArrayBox> parMom_src( mag_geom.grids(), 1, CFG::IntVect::Zero );
-  a_rhs_species.ParallelMomentum( parMom_src );
+  a_rhs_species.parallelParticleFlux( parMom_src );
   phase_geom.plotConfigurationData( "parMom_src", parMom_src, a_time );
 
 }

@@ -44,6 +44,8 @@ class BlockMapping
                            const FArrayBox&  coords,
                            const int         dir) const;
    
+   void printToroidalFluxAndSafetyFactorProfiles() const;
+   
    int m_block_number;
    RealVect m_Xpoint, m_magAxis;
 
@@ -131,6 +133,15 @@ class BlockMapping
    
    double projection(const RealVect& vec,
                      const RealVect& targ) const;
+   
+   double cellArea(const RealVect& x1,
+                   const RealVect& x2,
+                   const RealVect& x3) const;
+
+   double cellArea(const RealVect& x1,
+                   const RealVect& x2,
+                   const RealVect& x3,
+                   const RealVect& x4) const;
    
    RealVect rotation(const RealVect&   vec,
                      const int         dir) const;

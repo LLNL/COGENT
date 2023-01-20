@@ -58,6 +58,7 @@ class GKSystemParameters
 
     inline bool enforceStagePositivity() const { return m_enforce_stage_positivity; }
     inline bool enforceStepPositivity() const { return m_enforce_step_positivity; }
+    inline bool enforcePositivityPointwise() const {return m_enforce_positivity_pointwise;}
 
     inline int positivityNIter() const { return m_positivity_n_iter; }
     inline bool positivityVerbose() const { return m_positivity_verbose; }
@@ -67,6 +68,7 @@ class GKSystemParameters
     inline bool absoluteFloor() const { return m_absolute_floor; }
  
     inline bool oldVorticityModel() const { return m_old_vorticity_model; }
+    inline bool includeEMeffects() const { return m_EM_effects; }
     inline bool fixedEField() const { return m_fixed_efield; }
     inline bool noEField() const { return m_no_efield; }
 
@@ -91,6 +93,7 @@ class GKSystemParameters
     inline bool enforceQuasineutrality() const { return m_enforce_quasineutrality; }
 
     inline bool stepConstKineticCoeffFluidOp() const { return m_step_const_kin_coeff_fluidop; }
+    inline bool enableTIOptimizations() const { return m_enable_ti_optimizations; }
 
     inline void numCells(const std::vector<int>& a_num_cells)
     {
@@ -153,6 +156,7 @@ class GKSystemParameters
 
     bool m_enforce_stage_positivity;
     bool m_enforce_step_positivity;
+    bool m_enforce_positivity_pointwise;
 
     int m_positivity_n_iter;
     bool m_positivity_verbose;
@@ -162,6 +166,7 @@ class GKSystemParameters
     bool m_absolute_floor;
 
     bool m_old_vorticity_model;
+    bool m_EM_effects;
     bool m_fixed_efield;
     bool m_no_efield;
 
@@ -183,6 +188,7 @@ class GKSystemParameters
 
     bool m_enforce_quasineutrality;
     bool m_step_const_kin_coeff_fluidop;
+    bool m_enable_ti_optimizations;
 };
 
 #include "NamespaceFooter.H"

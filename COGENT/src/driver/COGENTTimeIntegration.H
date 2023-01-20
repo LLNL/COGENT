@@ -236,6 +236,7 @@ class COGENTTimeIntegration : public Simulation<Vector,System>
       Real        m_plot_time;
       int         m_last_plot;
       std::string m_plot_prefix;
+      bool        m_write_odevec;
 
       System* m_system;
       TimeIntegrator<Vector, System>* m_integrator;
@@ -291,6 +292,16 @@ COGENTTimeIntegration<Vector,System>::writePlotFile()
 {
    if (m_verbosity >= 3) {
       pout() << "COGENTTimeIntegration<Vector,System>::writePlotFile" << endl;
+   }
+
+   if (m_write_odevec) {
+
+     char iter_str[10];
+     sprintf(iter_str, "%05d", m_cur_step);
+     std::string fname = "odevec_" + std::string(iter_str);
+
+     m_U.writeToFile( fname );
+
    }
 
 #ifdef CH_USE_HDF5
@@ -365,6 +376,7 @@ COGENTTimeIntegration<Vector,System>::COGENTTimeIntegration()
        m_plot_time(0.0),
        m_last_plot(0),
        m_plot_prefix( "plt" ),
+       m_write_odevec(false),
        m_system( NULL ),
        m_compute_op_matrices(false),
        m_op_matrices_tolerance(1e-6)
@@ -683,6 +695,7 @@ void COGENTTimeIntegration<Vector,System>::parseParameters( ParmParse& a_ppsim )
    a_ppsim.query( "plot_time_interval", m_plot_time_interval );
    if( m_plot_time_interval>0.0 ) m_plot_interval = 0;
    a_ppsim.query( "plot_prefix", m_plot_prefix );
+   a_ppsim.query( "write_ode_vec", m_write_odevec );
 
 
    // compute linearized operator matrices?

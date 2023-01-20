@@ -71,6 +71,8 @@ class GKUnits
          GYROFREQUENCY,         /**< [\f$s^{-1}\f$] */
          GYRORADIUS,            /**< [\f$m\f$] */
          DEBYE_LENGTH,          /**< [\f$m\f$] */
+         ION_SKIN_DEPTH,        /**< [\f$m\f$] */
+         ELECTRON_SKIN_DEPTH,   /**< [\f$m\f$] */
          COUNT};
 
       /// Constructor.
@@ -168,6 +170,20 @@ class GKUnits
        */
       Real debyeNumber() const { return m_debye_number; }
 
+      /// Return the charactersitic ion skin number.
+      /**
+       * Returns the ratio of the characteristic ion skin depth to the
+       * characteristic length.
+       */
+      Real ionSkinNumber() const { return m_ion_skin_number; }
+
+      /// Return the charactersitic electron skin number.
+      /**
+       * Returns the ratio of the characteristic electron skin depth to the
+       * characteristic length.
+       */
+      Real electronSkinNumber() const { return m_electron_skin_number; }
+
       /// Print charactersitic scales to output stream.
       /**
        *  @param[in] out the output stream.
@@ -181,6 +197,8 @@ class GKUnits
       Real m_scale[COUNT];
       Real m_larmor_number;
       Real m_debye_number;
+      Real m_ion_skin_number;
+      Real m_electron_skin_number;
 
       /// Check that the input type is valid.
       /**

@@ -241,7 +241,7 @@ void PrescribedSources::computeThermalizationSrc(LevelData<FArrayBox>&  a_src,
 
   if ((m_it_counter % m_update_freq == 0) || m_first_call) {
     CFG::LevelData<CFG::FArrayBox> kin_energ(mag_geom.grids(), 1, CFG::IntVect::Zero);
-    a_kinetic_species.kineticEnergyMoment(kin_energ);
+    a_kinetic_species.kineticEnergyDensity(kin_energ);
 
     CFG::FluxSurface flux_surface(mag_geom);
     CFG::LevelData<CFG::FArrayBox> fs_kin_energ(mag_geom.grids(), 1, CFG::IntVect::Zero);
@@ -489,7 +489,7 @@ void PrescribedSources::diagnostics(const LevelData<FArrayBox>& a_rhs,
   
   //Plot parallel momentum source
   CFG::LevelData<CFG::FArrayBox> parMom_src( mag_geom.grids(), 1, CFG::IntVect::Zero );
-  moment_op.compute(parMom_src, a_rhs_species, a_rhs, ParallelMomKernel<FArrayBox>());
+  moment_op.compute(parMom_src, a_rhs_species, a_rhs, ParallelVelKernel<FArrayBox>());
   phase_geom.plotConfigurationData( "parMom_src", parMom_src, a_time );
   
   //Plot energy source

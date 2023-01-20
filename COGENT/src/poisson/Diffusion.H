@@ -89,7 +89,7 @@ protected:
    LevelData<FluxBox> m_unmapped_coefficients; //face-centered
    LevelData<FArrayBox> m_volume_reciprocal;
    
-   MagFluxAlignedMBLEXCenter* m_mblx_ptr;
+   MultiBlockLevelExchangeCenter* m_mblx_ptr;
 
    bool m_precond_verbose;
    bool m_precond_precond_verbose;

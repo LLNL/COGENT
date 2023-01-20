@@ -7,12 +7,14 @@
 #include "AppCtxt.H"
 #include "MultiPhysicsPreconditioner.H"
 #include "GKVlasovAMG.H"
+#include "MomentOp.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 #include "GridFunction.H"
 #include "GridFunctionLibrary.H"
-#include "EField.H"
+#include "EMFields.H"
+#include "PhiOps.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
 
@@ -46,8 +48,8 @@ public:
 
    virtual void accumulateRHS( GKRHSData&                             rhs,
                                const KineticSpeciesPtrVect&           kinetic_phys,
-                               const CFG::LevelData<CFG::FArrayBox>&  phi,
-                               const CFG::EField&                     E_field,
+                               const CFG::EMFields&                   EM_fields,
+                               const CFG::PhiOps&                     phi_ops,
                                const bool                             implicit,
                                const Real&                            time );
 
@@ -55,23 +57,24 @@ public:
    /**
     * Computes and returns an estimate of the maximum stable time step.
     */
+   const std::vector<std::pair<std::string,Real> >&
+   computeDtExplicitTI(const CFG::EMFields&         EM_fields,
+                       const KineticSpeciesPtrVect& soln,
+                       const Real&                  time );
 
-   Real computeDtExplicitTI(const CFG::EField&           Efield_cfg,
-                            const KineticSpeciesPtrVect& soln,
-                            const Real&                  time );
-
-   Real computeDtImExTI( const CFG::EField&           Efield_cfg,
-                         const KineticSpeciesPtrVect& soln,
-                         const Real&                  time );
+   const std::vector<std::pair<std::string,Real> >&
+   computeDtImExTI( const CFG::EMFields&         EM_fields,
+                    const KineticSpeciesPtrVect& soln,
+                    const Real&                  time );
 
    /// Compute the time scale.
    /**
     * Computes and returns an estimate of the Vlasov time scale.
     */
-   Real computeTimeScale( const CFG::EField&           EField_cfg,
-                          const KineticSpeciesPtrVect& soln,
-                          const Real&                  time );
-
+   const std::vector<std::pair<std::string,Real> >&
+   computeTimeScales(const CFG::EMFields&         EM_fields,
+                     const KineticSpeciesPtrVect& soln,
+                     const Real&                  time );
 
    static const char* pp_name;
    
@@ -88,39 +91,33 @@ public:
    // divergence-free method
    void evalRHSExplicit( KineticSpecies&                        rhs,
                          const KineticSpecies&                  soln,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::EField&                     Efield,
+                         const CFG::EMFields&                   EM_fields,
                          const int                              velocity_option,
                          const Real                             time );
 
    void evalRHSImplicit( KineticSpecies&                        rhs,
                          const KineticSpecies&                  soln,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::EField&                     Efield,
+                         const CFG::EMFields&                   EM_fields,
                          const int                              velocity_option,
                          const Real                             time );
 
    void evalRHS(         KineticSpecies&                        rhs,
                          const KineticSpecies&                  soln,
-                         const CFG::LevelData<CFG::FArrayBox>&  phi,
-                         const CFG::EField&                     Efield,
+                         const CFG::EMFields&                   EM_fields,
                          const int                              velocity_option,
                          const Real                             time );
 
 
    void computePhysicalFlux(  LevelData<FluxBox>&                    flux_phys,
                               const KineticSpecies&                  soln_species,
-                              const CFG::LevelData<CFG::FArrayBox>&  phi,
-                              const CFG::EField&                     E_field,
+                              const CFG::EMFields&                   EM_fields,
                               const int                              velocity_option,
                               const Real                             time,
                               const bool                             apply_axisym_corr);
 
    void computeIntegratedFluxNormals(LevelData<FluxBox>&                    flux_normal,
                                      const KineticSpecies&                  soln_species,
-                                     const CFG::LevelData<CFG::FArrayBox>&  phi,
-                                     const CFG::LevelData<CFG::FArrayBox>&  Efield_cell,
-                                     const CFG::LevelData<CFG::FArrayBox>&  phi_node,
+                                     const CFG::EMFields&                   EM_fields,
                                      const bool                             fourth_order_Efield,
                                      const int                              velocity_option,
                                      const Real                             time );
@@ -128,10 +125,9 @@ public:
    
    void computeIntegratedMomentFluxNormals(CFG::LevelData<CFG::FluxBox>&          flux_normal,
                                            const KineticSpecies&                  soln_species,
-                                           const CFG::LevelData<CFG::FArrayBox>&  phi,
-                                           const CFG::EField&                     E_field,
+                                           const CFG::EMFields&                   EM_fields,
                                            const int                              velocity_option,
-                                           const string&                          moment_type,
+                                           const Kernel<FluxBox>&                 kernel,
                                            const Real                             time);
    
    void defineMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
@@ -147,8 +143,7 @@ public:
 
    void updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                              const KineticSpeciesPtrVect&,
-                             const CFG::LevelData<CFG::FArrayBox>&,
-                             const CFG::EField&,
+                             const CFG::EMFields&,
                              const GlobalDOFKineticSpeciesPtrVect&,
                              const Real, 
                              const int,
@@ -171,7 +166,7 @@ public:
    void updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                        const KineticSpecies&,
                        const CFG::LevelData<CFG::FArrayBox>&  phi,
-                       const CFG::EField&                     E_field,
+                       const CFG::EMFields&                   EM_fields,
                        const GlobalDOFKineticSpecies&,
                        const Real,
                        const int,
@@ -235,12 +230,6 @@ public:
                                           const PhaseGeom&          geom,
                                           Real                      cfl);
 
-   Real computeMappedTimeScaleSpecies(const LevelData<FluxBox>& faceVel,
-                                      const PhaseGeom&          geom);
-
-   Real computeMappedTimeScaleSpeciesFromNormals(const LevelData<FluxBox>& velocity_normal,
-                                                 const PhaseGeom&          geom);
-
    //Computes delta_dfn (does not contain either B_star or J)
    void computeDeltaF(const KineticSpecies&         a_soln_species,
                       const LevelData<FArrayBox>&   a_dfn_no_bstar,
@@ -254,8 +243,7 @@ public:
 
    void testEnergyConservation(const LevelData<FArrayBox>&            rhs,
                                const KineticSpecies&                  soln_species,
-                               const CFG::LevelData<CFG::FArrayBox>&  phi,
-                               const CFG::EField&                     E_field);
+                               const CFG::EMFields&                   EM_fields);
   
 
    /// Initializes the kinetic species data.
@@ -274,10 +262,9 @@ public:
                                     const bool                  second_order = false ) const;
 
    
-   void getEFieldwFLR(  LevelData<FluxBox>&,
-                        const KineticSpecies&,
-                        const CFG::LevelData<CFG::FArrayBox>&,
-                        const CFG::EField& );
+   void getEFieldwFLR( LevelData<FluxBox>&,
+                       const KineticSpecies&,
+                       const CFG::EMFields& );
 
    Real m_larmor_number;
 
@@ -327,7 +314,9 @@ public:
    int m_update_pc_freq;
    bool m_update_pc_skip_stage;
 
-	bool m_useSG; // Whether to use sparse grid-friendly stencils when computing fluxes, etc.
+	 bool m_useSG; // Whether to use sparse grid-friendly stencils when computing fluxes, etc.
+
+   std::vector<std::pair<std::string, Real> > m_timescales, m_dt;
 };
 
 #include "NamespaceFooter.H"

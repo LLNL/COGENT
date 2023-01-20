@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright 1998-2019 Lawrence Livermore National Security, LLC and other
+ * Copyright (c) 1998 Lawrence Livermore National Security, LLC and other
  * HYPRE Project Developers. See the top-level COPYRIGHT file for details.
  *
  * SPDX-License-Identifier: (Apache-2.0 OR MIT)
@@ -7,6 +7,7 @@
 
 #include "seq_mv.h"
 #include "_hypre_utilities.hpp"
+#include "seq_mv.hpp"
 
 #if defined(HYPRE_USING_CUSPARSE)
 #if CUSPARSE_VERSION >= CUSPARSE_NEWAPI_VERSION
@@ -37,10 +38,10 @@ hypre_CSRMatrixToCusparseSpMat_core( HYPRE_Int      n,
    cusparseSpMatDescr_t matA;
 
    /*
-   assert( (hypre_CSRMatrixNumRows(A) - offset != 0) &&
-           (hypre_CSRMatrixNumCols(A) != 0) &&
-           (hypre_CSRMatrixNumNonzeros(A) != 0) &&
-           "Matrix has no nonzeros");
+   hypre_assert( (hypre_CSRMatrixNumRows(A) - offset != 0) &&
+                 (hypre_CSRMatrixNumCols(A) != 0) &&
+                 (hypre_CSRMatrixNumNonzeros(A) != 0) &&
+                 "Matrix has no nonzeros");
    */
 
    HYPRE_CUSPARSE_CALL( cusparseCreateCsr(&matA,
@@ -67,7 +68,7 @@ hypre_CSRMatrixToCusparseSpMat_core( HYPRE_Int      n,
  */
 cusparseSpMatDescr_t
 hypre_CSRMatrixToCusparseSpMat(const hypre_CSRMatrix *A,
-                                     HYPRE_Int        offset)
+                               HYPRE_Int        offset)
 {
    return hypre_CSRMatrixToCusparseSpMat_core( hypre_CSRMatrixNumRows(A),
                                                hypre_CSRMatrixNumCols(A),
@@ -87,8 +88,8 @@ hypre_CSRMatrixToCusparseSpMat(const hypre_CSRMatrix *A,
  */
 cusparseDnVecDescr_t
 hypre_VectorToCusparseDnVec(const hypre_Vector *x,
-                                  HYPRE_Int     offset,
-                                  HYPRE_Int     size_override)
+                            HYPRE_Int     offset,
+                            HYPRE_Int     size_override)
 {
    const cudaDataType data_type = hypre_HYPREComplexToCudaDataType();
 
@@ -101,6 +102,33 @@ hypre_VectorToCusparseDnVec(const hypre_Vector *x,
    return vecX;
 }
 
+/*
+ * @brief Creates a cuSPARSE dense matrix descriptor from a hypre_Vector
+ * @param[in] *x Pointer to a hypre_Vector
+ * @return cuSPARSE dense matrix descriptor
+ * @warning Assumes CSRMatrix uses doubles for values
+ */
+cusparseDnMatDescr_t
+hypre_VectorToCusparseDnMat(const hypre_Vector *x)
+{
+   HYPRE_Int             storage = hypre_VectorMultiVecStorageMethod(x);
+   HYPRE_Int             num_vectors = hypre_VectorNumVectors(x);
+   HYPRE_Int             size = hypre_VectorSize(x);
+   HYPRE_Complex        *data = hypre_VectorData(x);
+
+   cudaDataType          data_type = hypre_HYPREComplexToCudaDataType();
+   cusparseDnMatDescr_t  matX;
+
+   HYPRE_CUSPARSE_CALL( cusparseCreateDnMat(&matX,
+                                            size,
+                                            num_vectors,
+                                            (storage == 0) ? size : num_vectors,
+                                            data,
+                                            data_type,
+                                            (storage == 0) ? CUSPARSE_ORDER_COL : CUSPARSE_ORDER_ROW) );
+   return matX;
+}
+
+
 #endif // #if CUSPARSE_VERSION >= CUSPARSE_NEWAPI_VERSION
 #endif // #if defined(HYPRE_USING_CUSPARSE)
-

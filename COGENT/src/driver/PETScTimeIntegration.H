@@ -57,6 +57,7 @@ class PetscTimeIntegrator : public Simulation<AppVec,System>
     inline void setShift          (Real a_a)    { m_shift = a_a; }
 
     inline Real getCFL()  { return m_cfl; }
+    inline bool usePC() { return m_use_PC; }
 
     void writeHistFile(bool);
     void writePlotFile();
@@ -64,6 +65,9 @@ class PetscTimeIntegrator : public Simulation<AppVec,System>
 
     AppVec m_U, m_F, m_U0, m_F0;
     Preconditioner<AppVec,System>* m_preCond;
+
+    /* Walltime measurements */
+    clock_t m_iter_start, m_iter_end;
 
   private:
 
@@ -95,7 +99,8 @@ class PetscTimeIntegrator : public Simulation<AppVec,System>
           m_epsilon_jfnk;
 
     bool  m_is_linear,
-          m_is_Jac_allocated;
+          m_is_Jac_allocated,
+          m_use_PC;
 
     Vec           m_Y;
     TS            m_ts;
@@ -159,8 +164,10 @@ static PetscErrorCode IFunctionIMEX(  TS        ts,
 
   context->m_U0 = context->m_U;
   context->m_F0 = context->m_F;
-  context->m_preCond->setBaseSolution(context->m_U);
-  context->m_preCond->setBaseRHS(context->m_F, context->m_U);
+  if (context->usePC()) {
+    context->m_preCond->setBaseSolution(context->m_U);
+    context->m_preCond->setBaseRHS(context->m_F, context->m_U);
+  }
 
   VecAYPX(F,-1.0,Ydot);
 
@@ -186,11 +193,13 @@ static PetscErrorCode IJacobianIMEX(  TS        ts,
   context->setTime((Real)t);
 
   context->cpAppVecFromPetsc( Y, context->m_U );
-  context->m_preCond->update( context->m_U,
-                              (Real) t,
-                              cur_step+1,
-                              stage,
-                              (Real) a );
+  if (context->usePC()) {
+    context->m_preCond->update( context->m_U,
+                                (Real) t,
+                                cur_step+1,
+                                stage,
+                                (Real) a );
+  }
 
   return 0;
 }
@@ -253,6 +262,14 @@ static PetscErrorCode PCFunctionIMEX( PC  pc,
   PetscTimeIntegrator<ODEVector,AppCtxt>* context
    = (PetscTimeIntegrator<ODEVector,AppCtxt>*) ctxt;
 
+  if (!context->usePC()) {
+    if (!procID()) {
+      printf("Error in PCFunctionIMEX():\n");
+      printf("  PC is set to none, so why is this function being called?!\n");
+    }
+    MayDay::Error("See error message");
+  }
+
   context->cpAppVecFromPetsc( X, context->m_U );
   context->m_F.zero();
   context->m_preCond->apply(context->m_F, context->m_U);
@@ -276,10 +293,6 @@ static PetscErrorCode PreTimeStep(TS ts)
 
   TSType ts_type; 
   TSGetType( ts, &ts_type );
-
-  if (context->getVerbosity() >= 1) {
-    if (procID()==0) cout << endl << "Step " << cur_step+1 << endl;
-  }
 
   Vec Y; 
   TSGetSolution( ts, &Y );
@@ -318,6 +331,14 @@ static PetscErrorCode PreTimeStep(TS ts)
 
   context->setOldTime( cur_time );
 
+  if (context->getVerbosity() >= 1) {
+    TSGetTimeStep( ts, &dt );
+    if (procID()==0) {
+      printf("Step %d (dt = %lf, cur_time = %f)\n", cur_step+1, dt, cur_time);
+    }
+  }
+
+  context->m_iter_start = clock();
   return 0;
 }
 
@@ -325,6 +346,17 @@ static PetscErrorCode PostTimeStep(TS ts)
 {
   PetscTimeIntegrator<ODEVector,AppCtxt> *context;
   TSGetApplicationContext( ts, &context );
+
+  context->m_iter_end = clock();
+
+  double iter_walltime = ((double) (context->m_iter_end - context->m_iter_start)) / CLOCKS_PER_SEC;
+  double iter_walltime_g;
+#ifdef CH_MPI
+  MPI_Allreduce(&iter_walltime,&iter_walltime_g,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+#else
+  iter_walltime_g = iter_walltime;
+#endif
+
   AppCtxt* system = context->getSystem();
 
   int cur_step, 
@@ -353,13 +385,9 @@ static PetscErrorCode PostTimeStep(TS ts)
   if (verbosity >= 1) {
     system->printDiagnostics();
     if(procID()==0) {
-      cout  << "Step " 
-            << cur_step 
-            << " completed, simulation time is "
-            << cur_time 
-            << endl 
-            << "----" 
-            << endl;
+      printf("Step %d completed, simulation time is %f, dt is %lf, iteration wctime=%f (seconds).\n", 
+              cur_step, cur_time, dt, iter_walltime_g);
+      printf("----\n");
     }
   }
 
@@ -481,7 +509,8 @@ PetscTimeIntegrator<AppVec,System>::PetscTimeIntegrator( )
     m_shift(1.0),
     m_epsilon_jfnk(1e-6),
     m_is_linear("true"),
-    m_is_Jac_allocated(false)
+    m_is_Jac_allocated(false),
+    m_use_PC(true)
 {
 }
 
@@ -530,12 +559,12 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
   /* create and initialize the PETSc time integration object */
   TSCreate( MPI_COMM_WORLD, &m_ts );
   TSSetMaxSteps( m_ts, m_max_step );
-  TSSetTimeStep( m_ts, m_dt );
   TSSetMaxTime( m_ts, m_max_time );
   TSSetTime( m_ts, 0.0 );
   TSSetExactFinalTime( m_ts, TS_EXACTFINALTIME_MATCHSTEP );
 
   if (m_system->tiClass() == _TI_RK_) {
+
     TSSetType( m_ts, TSRK );
     if (m_system->tiMethod() == "1fe") {
       TSRKSetType( m_ts, TSRK1FE );
@@ -548,7 +577,9 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
     } else  if (m_system->tiMethod() == "4") {
       TSRKSetType( m_ts, TSRK4 );
     }
+
   } else if (m_system->tiClass() == _TI_ARK_) {
+
     TSSetType( m_ts, TSARKIMEX );
     if (m_system->tiMethod() == "1bee") {
       TSARKIMEXSetType( m_ts, TSARKIMEX1BEE );
@@ -563,7 +594,16 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
     } else if (m_system->tiMethod() == "5") {
       TSARKIMEXSetType( m_ts, TSARKIMEX5 );
     }
+
+    /* default: right preconditioning */
+    SNES  snes; 
+    TSGetSNES( m_ts, &snes );
+    KSP ksp;  
+    SNESGetKSP( snes, &ksp );
+    KSPSetPCSide(ksp, PC_RIGHT);
+
   } else {
+
     if (!procID()) {
       printf("--------\n");
       printf(" PETSc Interface: ");
@@ -575,7 +615,26 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
     }
     TSSetType( m_ts, TSRK );
     TSRKSetType( m_ts, TSRK4 );
+
   }
+
+  /* compute initial time step */
+  if (m_cfl > 0) {
+    Real dt_stable = 0.0;
+    if (m_system->tiClass() == _TI_ARK_) {
+      dt_stable = m_system->stableDt( m_cur_step, ti_imex );
+    } else if (m_system->tiClass() == _TI_RK_) {
+      dt_stable = m_system->stableDt( m_cur_step, ti_explicit );
+    } else {
+      MayDay::Error("PETSc interface: unknown time integrator!");
+    }
+    CH_assert( dt_stable > 1.0e-16 );
+    m_dt = dt_stable*m_cfl;
+  } 
+  if (m_dt <= 0.0) {
+    MayDay::Error("PETSc interface: non-positive dt!");
+  }
+  TSSetTimeStep( m_ts, m_dt );
 
   TSAdapt adapt; 
   TSGetAdapt( m_ts,&adapt );
@@ -628,19 +687,40 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
     SNESGetKSP( snes, &ksp );
     PC pc;   
     KSPGetPC( ksp, &pc );
+    PCType pc_type;
+    PCGetType( pc, &pc_type );
 
-    PCSetType( pc, PCSHELL );
-    PCShellSetApply(pc, PCFunctionIMEX);
-    PCShellSetContext(pc, this);
+    if (!strcmp(pc_type, PCNONE)) {
 
-    m_preCond = new MultiPhysicsPreconditioner<AppVec,System>;
-    m_preCond->define(  m_U,
-                        (void*) m_system,
-                        std::string("ARK.PC"),
-                        std::string("ark_pc"),
-                        true );
-    m_preCond->setJFNKEps(m_epsilon_jfnk);
-    m_preCond->setIsLinear(m_is_linear);
+      if (!procID()) {
+        printf("PETSc Interface: pc_type is set to \"none\" in ");
+        printf("PETSc options; not using a preconditioner.\n");
+      }
+      m_use_PC = false;
+
+    } else {
+
+      if (!procID()) {
+        printf("PETSc Interface: pc_type is set to \"%s\" in ", pc_type);
+        printf("PETSc options; ignoring and using COGENT's preconditioner.\n");
+        printf("\n");
+      }
+
+      PCSetType( pc, PCSHELL );
+      PCShellSetApply(pc, PCFunctionIMEX);
+      PCShellSetContext(pc, this);
+      m_use_PC = true;
+  
+      m_preCond = new MultiPhysicsPreconditioner<AppVec,System>;
+      m_preCond->define(  m_U,
+                          (void*) m_system,
+                          std::string("ARK.PC"),
+                          std::string("ark_pc"),
+                          true );
+      m_preCond->setJFNKEps(m_epsilon_jfnk);
+      m_preCond->setIsLinear(m_is_linear);
+
+    }
 
   } else {
 

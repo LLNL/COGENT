@@ -89,11 +89,17 @@ public:
    void solve( const LevelData<FArrayBox>& rhs,
                LevelData<FArrayBox>&       solution );
 
-   // Computes the face-centered (i.e., pointwise) poloidal field in the physical frame
+   // Computes the face-centered (i.e., pointwise) 3D field in the physical frame
    // utilizing boundary conditions/values
    void compute3DFieldWithBCs( const LevelData<FArrayBox>& phi,
                                      LevelData<FluxBox>&         field,
                                      const bool                  homogeneousBCs ) const;
+
+   // Computes the cell-centered (i.e., pointwise) 3D field in the physical frame
+   // utilizing boundary conditions/values
+   void compute3DFieldWithBCs(const LevelData<FArrayBox>& phi,
+                              LevelData<FArrayBox>&       field,
+                              const bool                  homogeneousBCs ) const;
 
 
    // Computes the face-centered (i.e., pointwise) poloidal field in the physical frame
@@ -104,11 +110,17 @@ public:
 
    // Computes the face-centered (i.e., pointwise) 3D field in the mapped frame
    // utilizing boundary conditions/values
-   void computeMapped3DFieldWithBCs( const LevelData<FArrayBox>& phi,
-                                           LevelData<FluxBox>&         field,
-                                           const bool                  homogeneousBCs ) const;
+   void computeMapped3DFieldWithBCs(const LevelData<FArrayBox>& phi,
+                                    LevelData<FluxBox>&         field,
+                                    const bool                  homogeneousBCs ) const;
 
+   // Computes the face-centered (i.e., pointwise) 3D field in the mapped frame
+   // utilizing boundary conditions/values
+   void computeMapped3DFieldWithBCs(const LevelData<FArrayBox>& phi,
+                                    LevelData<FArrayBox>&       field,
+                                    const bool                  homogeneousBCs ) const;
 
+   
    // Computes the face-centered (i.e., pointwise) poloidal field in the mapped frame
    // utilizing boundary conditions/values
    void computeMappedPoloidalFieldWithBCs( const LevelData<FArrayBox>& phi,

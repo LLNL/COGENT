@@ -135,6 +135,8 @@ void GlobalDOFFluidSpecies::define(
                                     const CFG::FluidSpecies&  a_fluid
                                   )
 {
+   long box_offset(0);
+
    for (int n=0; n<a_fluid.num_cell_vars(); ++n) {
       const CFG::LevelData<CFG::FArrayBox>& data  = a_fluid.cell_var(n);
       const CFG::DisjointBoxLayout&         grids = data.disjointBoxLayout();
@@ -143,7 +145,7 @@ void GlobalDOFFluidSpecies::define(
       CFG::LevelData<CFG::FArrayBox>* var_gdofs_ptr 
          = new CFG::LevelData<CFG::FArrayBox>(grids,ncomp,data.ghostVect());
       CFG::LevelData<CFG::FArrayBox>& var_gdofs = *var_gdofs_ptr;
-      long box_offset(0);
+
       for (CFG::DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
          var_gdofs[dit].setVal(-1);
     

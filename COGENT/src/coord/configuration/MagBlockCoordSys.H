@@ -398,6 +398,10 @@ void
       void  getToroidalCoords(FArrayBox&  coords,
                               const bool  use_flux_coord) const;
    
+      void  getToroidalCoords(FArrayBox&        coords,
+                              const FArrayBox&  real_coords,
+                              const bool        use_flux_coord) const;
+   
       void convertPhysicalCoordToToroidal(RealVect&   coord,
                                           const bool  use_flux_coord) const;
 

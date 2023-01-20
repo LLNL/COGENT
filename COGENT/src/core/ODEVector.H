@@ -1,6 +1,7 @@
 #ifndef _ODEVector_H_
 #define _ODEVector_H_
 
+#include <stdio.h>
 #include "SPMD.H"
 #include "GKTimeIntegration.H"
 
@@ -232,7 +233,7 @@ class ODEVector
     }
 
     inline
-    void copy(const ODEVector& a_vec, std::vector<int> a_idx_list)
+    void copy(const ODEVector& a_vec, const std::vector<int>& a_idx_list)
     {
       CH_assert(a_vec.isDefined());
       if (!isDefined()) {
@@ -455,6 +456,106 @@ class ODEVector
         }
         printf("  Total size: %12d\n\n", total_size);
       }
+    }
+
+    inline
+    void writeToFile( const std::string& a_fname_prefix,
+                      const bool a_flag_ascii = false ) const
+    {
+      int my_rank = (int) procID();
+      int num_procs = (int) numProc();
+
+      std::string filename;
+      if (a_flag_ascii) {
+        filename = a_fname_prefix + ".dat";
+      } else {
+        filename = a_fname_prefix + ".bin";
+      }
+
+      FILE* out;
+
+#ifdef CH_MPI
+
+      std::vector<int> local_sizes(num_procs, -1);
+      local_sizes[my_rank] = m_size;
+      MPI_Allreduce(  MPI_IN_PLACE,
+                      local_sizes.data(),
+                      num_procs,
+                      MPI_INT,
+                      MPI_MAX, 
+                      MPI_COMM_WORLD );
+      int total_size = 0;
+      for (int i = 0; i < num_procs; i++) {
+        total_size += local_sizes[i];
+      }
+
+      if (!my_rank) {
+
+        if (a_flag_ascii) {
+
+          out = fopen( filename.c_str(), "w");
+          fprintf(out, "%d\n", total_size);
+          for (int i=0; i<m_size; i++) {
+            fprintf(out, "%1.16e\n", m_data[i]);
+          }
+
+        } else {
+
+          out = fopen( filename.c_str(), "wb");
+          fwrite(&total_size,sizeof(int),1,out);
+          fwrite(m_data,sizeof(double),m_size,out);
+
+        }
+
+        for (int proc=1; proc<num_procs; proc++) {
+
+          Real* buffer = (Real*) calloc(local_sizes[proc], sizeof(Real));
+          MPI_Request req = MPI_REQUEST_NULL;
+          MPI_Irecv(buffer, local_sizes[proc], MPI_DOUBLE, proc, 1639, MPI_COMM_WORLD, &req);
+          MPI_Wait(&req,MPI_STATUS_IGNORE);
+          if (a_flag_ascii) {
+            for (int i=0; i<local_sizes[proc]; i++) {
+              fprintf(out, "%1.16e\n", buffer[i]);
+            }
+          } else {
+            fwrite(buffer,sizeof(double),local_sizes[proc],out);
+          }
+          free(buffer);
+
+        }
+
+        fclose(out);
+
+      } else {
+
+        MPI_Request req = MPI_REQUEST_NULL;
+        MPI_Isend(m_data, m_size, MPI_DOUBLE, 0, 1639, MPI_COMM_WORLD, &req);
+        MPI_Wait(&req,MPI_STATUS_IGNORE);
+
+      }
+
+#else
+
+      if (a_flag_ascii) {
+
+        out = fopen( filename.c_str(), "w");
+        fprintf(out, "%d\n", m_size);
+        for (int i=0; i<m_size; i++) {
+          fprintf(out, "%1.16e\n", m_data[i]);
+        }
+        fclose(out);
+
+      } else {
+
+        out = fopen( filename.c_str(), "wb");
+        fwrite(&m_size,sizeof(int),1,out);
+        fwrite(m_data,sizeof(double),m_size,out);
+        fclose(out);
+
+      }
+
+#endif
+
     }
 
   private:

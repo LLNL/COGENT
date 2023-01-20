@@ -54,7 +54,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -62,7 +62,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -106,7 +106,7 @@ public:
    virtual void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
                            const FluidSpeciesPtrVect&         fluid_species,
                            const PS::ScalarPtrVect&           scalars,
-                           const EField&                      E_field,
+                           const EMFields&                    EM_fields,
                            const double                       time );
 
    virtual bool trivialSolutionOp() const {return true;}
@@ -169,7 +169,7 @@ private:
                               const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                               const FluidSpeciesPtrVect&         fluid_species,
                               const PS::ScalarPtrVect&           scalars,
-                              const EField&                      E_field,
+                              const EMFields&                    EM_fields,
                               const int                          component,
                               const Real                         time);
 

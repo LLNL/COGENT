@@ -2,11 +2,14 @@
 #define _FLUIDOPVARFACTORY_H_
 
 #include "CellVar.H"
+#include "VorticityOp.H"
+#include "EMVorticityOp.H"
 #include "OneFieldNeutralsOp.H"
 #include "BurgersOp.H"
 #include "IdealMhdOp.H"
 #include "ExtendedMhdOp.H"
 #include "FullFluidOp.H"
+#include "DriftFluidOp.H"
 #include "TwoFieldNeutralsOp.H"
 #include "AmpereErAverageOp.H"
 
@@ -58,6 +61,10 @@ CFGVars* FluidOpVarFactory::create( const string&      a_pp_prefix,
       VorticityOp op(a_geometry);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
    }
+   else if ( a_op_type == "EMVorticityOp" ) {
+      EMVorticityOp op(a_geometry);
+      result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
+   }
    else if (a_op_type == "OneFieldNeutralsOp" ) {
       OneFieldNeutralsOp op(a_geometry);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
@@ -76,6 +83,10 @@ CFGVars* FluidOpVarFactory::create( const string&      a_pp_prefix,
    }
    else if (a_op_type == "FullFluidOp" ) {
       FullFluidOp op(a_geometry);
+      result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
+   }
+   else if (a_op_type == "DriftFluidOp" ) {
+      DriftFluidOp op(a_geometry);
       result = op.createStateVariable(a_pp_prefix, a_species_name, a_geometry, a_ghost_vect);
    }
    else if (a_op_type == "TwoFieldNeutralsOp" ) {

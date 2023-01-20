@@ -118,12 +118,13 @@ class CFGVars
        *                        initial LevelDatas are unititialized.
        */
       virtual
-      RefCountedPtr<CFGVars> clone( const IntVect& ghost_vect = IntVect::Zero, const bool copy_data = true ) const;
+      RefCountedPtr<CFGVars> clone( const IntVect& ghost_vect = IntVect::Zero,
+                                    const bool copy_data = true ) const = 0;
 
       virtual void convertToPhysical() {;}
       
       virtual void convertFromPhysical() {;}
-   
+
       /// Copy
       /**
        * @param[in] rhs CFGVars from which to copy.
@@ -277,6 +278,21 @@ class CFGVars
         return;
       }
 
+      void interpFaceVarToCell( LevelData<FArrayBox>&  cell_var,
+                                const string&          face_var_name ) const;
+
+      void interpEdgeVarToCell( LevelData<FArrayBox>&  cell_var,
+                                const string&          edge_var_name ) const;
+
+      int m_plotMemberVars = 0;
+      std::vector<string> m_plotMemberVarNames;
+
+   protected:
+
+      string m_pp_prefix;
+      string m_name;
+      const MagGeom& m_geometry;
+   
    private:
 
       Vector<RefCountedPtr<LevelData<FArrayBox> > >    m_cell_data;
@@ -286,10 +302,6 @@ class CFGVars
       Vector<string> m_cell_data_var_name;
       Vector<string> m_face_data_var_name;
       Vector<string> m_edge_data_var_name;
-
-      string m_pp_prefix;
-      string m_name;
-      const MagGeom& m_geometry;
 };
 
 typedef RefCountedPtr<CFGVars> FluidSpeciesPtr;

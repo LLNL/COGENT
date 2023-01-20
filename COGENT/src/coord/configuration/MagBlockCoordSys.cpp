@@ -1406,6 +1406,31 @@ MagBlockCoordSys::getToroidalCoords(FArrayBox&  a_coords,
 }
 
 void
+MagBlockCoordSys::getToroidalCoords(FArrayBox&        a_coords,
+                                    const FArrayBox&  a_real_coords,
+                                    const bool        a_use_flux_coord) const
+{
+  Box box = a_coords.box();
+
+  CH_assert((a_real_coords.box()).contains(box));
+   
+  RealVect coord;
+  for (BoxIterator bit(box); bit.ok(); ++bit) {
+    IntVect iv = bit();
+
+    for (int dir=0; dir<SpaceDim; ++dir) {
+      coord[dir] = a_real_coords(iv,dir);
+    }
+
+    convertPhysicalCoordToToroidal(coord, a_use_flux_coord);
+
+     for (int dir=0; dir<SpaceDim; ++dir) {
+      a_coords(iv,dir) = coord[dir];
+    }
+  }
+}
+
+void
 MagBlockCoordSys::convertPhysicalCoordToToroidal(RealVect&   a_coord,
                                                  const bool  a_use_flux_coord) const
 {

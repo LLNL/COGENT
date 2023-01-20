@@ -39,10 +39,10 @@ GKSystemParameters::GKSystemParameters()
 
   m_diagnostics_all_cfg_vars_kin_spec.clear();
   m_diagnostics_all_cfg_vars_kin_spec.push_back("density");
-  m_diagnostics_all_cfg_vars_kin_spec.push_back("momentum");
-  m_diagnostics_all_cfg_vars_kin_spec.push_back("ParallelMomentum");
-  m_diagnostics_all_cfg_vars_kin_spec.push_back("PoloidalMomentum");
-  m_diagnostics_all_cfg_vars_kin_spec.push_back("ParallelVelocity");
+  m_diagnostics_all_cfg_vars_kin_spec.push_back("fluidVelocity");
+  m_diagnostics_all_cfg_vars_kin_spec.push_back("parallelParticleFlux");
+  m_diagnostics_all_cfg_vars_kin_spec.push_back("poloidalParticleFlux");
+  m_diagnostics_all_cfg_vars_kin_spec.push_back("parallelVelocity");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("energyDensity");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("kineticEnergyDensity");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("parallelEnergyDensity");
@@ -50,16 +50,17 @@ GKSystemParameters::GKSystemParameters()
   m_diagnostics_all_cfg_vars_kin_spec.push_back("pressure");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("parallelPressure");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("perpPressure");
-  m_diagnostics_all_cfg_vars_kin_spec.push_back("gradPoverN");
+  m_diagnostics_all_cfg_vars_kin_spec.push_back("radialForceBalance");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("parallelHeatFlux");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("totalParallelHeatFlux");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("temperature");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("parallelTemperature");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("perpTemperature");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("fourthMoment");
-  m_diagnostics_all_cfg_vars_kin_spec.push_back("ParticleFlux");
-  m_diagnostics_all_cfg_vars_kin_spec.push_back("HeatFlux");
-  m_diagnostics_all_cfg_vars_kin_spec.push_back("ExBiHeatFlux");
+  m_diagnostics_all_cfg_vars_kin_spec.push_back("radialCurrent");
+  m_diagnostics_all_cfg_vars_kin_spec.push_back("radialParticleFlux");
+  m_diagnostics_all_cfg_vars_kin_spec.push_back("radialHeatFlux");
+  m_diagnostics_all_cfg_vars_kin_spec.push_back("ExBHeatFlux");
   m_diagnostics_all_cfg_vars_kin_spec.push_back("ExBKineticEnergyFlux");
 
   m_diagnostics_all_cfg_vars_total_kin_spec.clear();
@@ -75,6 +76,7 @@ GKSystemParameters::GKSystemParameters()
 
   m_enforce_stage_positivity = false;
   m_enforce_step_positivity = false;
+  m_enforce_positivity_pointwise = false;
 
   m_positivity_n_iter = 5;
   m_positivity_verbose = false;
@@ -84,6 +86,7 @@ GKSystemParameters::GKSystemParameters()
   m_absolute_floor = false;
 
   m_old_vorticity_model = false;
+  m_EM_effects = false;
   m_fixed_efield = false;
   m_no_efield = false;
 
@@ -105,6 +108,7 @@ GKSystemParameters::GKSystemParameters()
 
   m_enforce_quasineutrality = false;
   m_step_const_kin_coeff_fluidop = false;
+  m_enable_ti_optimizations = true;
 }
 
 void GKSystemParameters::readParams(const std::string&  a_parsekey)
@@ -252,7 +256,8 @@ void GKSystemParameters::readParams(const std::string&  a_parsekey)
     if (ppgksys.contains("positivity_verbose_output")) {
       ppgksys.get("positivity_verbose_output", m_positivity_verbose);
     }
-
+    
+    ppgksys.query( "enforce_positivity_pointwise", m_enforce_positivity_pointwise);
   }
   
   bool enforce_floor(false);
@@ -278,6 +283,8 @@ void GKSystemParameters::readParams(const std::string&  a_parsekey)
     m_old_vorticity_model = false;
   }
 
+  ppgksys.query( "include_EM_effects", m_EM_effects );
+   
   ppgksys.query( "zero_efield", m_no_efield );  // zero_efield is deprecated
   ppgksys.query( "no_efield", m_no_efield );
   if ( m_no_efield ) {
@@ -309,6 +316,7 @@ void GKSystemParameters::readParams(const std::string&  a_parsekey)
 
   ppgksys.query( "gksystem.enforce_quasineutrality", m_enforce_quasineutrality );
   ppgksys.query("step_const_coef", m_step_const_kin_coeff_fluidop);
+  ppgksys.query("enable_ti_optimizations", m_enable_ti_optimizations);
 
   return;
 }

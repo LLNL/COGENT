@@ -1,5 +1,6 @@
 #include "SpaceUtils.H.multidim"
 #include "SpaceUtilsF_F.H"
+#include "CONSTANTS.H"
 //#include "altFaceAveragesF_F.H"
 //#include "upwindSchemesF_F.H"
 
@@ -265,8 +266,43 @@ SpaceUtils::interpToFaces( LevelData<FluxBox>&    a_face_phi,
       const Box& this_dbl_box( grids[dit] ); // this box has no ghost cells
       interpToFaces( this_face_phi, this_cell_phi, this_cell_fun, this_norm_vel, this_dbl_box, a_method );
        
-   } 
+   }
+}
 
+
+void
+SpaceUtils::interpToFaces( LevelData<FluxBox>&    a_face_phi,
+                     const LevelData<FArrayBox>&  a_cell_phi,
+                     const int                    a_order )
+{
+   const DisjointBoxLayout& grids( a_face_phi.getBoxes() );
+
+   if (a_order == 4) {
+      CH_assert(a_cell_phi.ghostVect() >= 2*IntVect::Unit );
+   }
+   
+   for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
+
+       for (int dir=0; dir<SpaceDim; dir++) {
+       
+       Box box(grids[dit]);
+          
+       if (a_order == 4 && (a_face_phi.ghostVect() >= IntVect::Unit)) {
+          for (int tdir(0); tdir<SpaceDim; tdir++) {
+             if (tdir!=dir) {
+                const int TRANSVERSE_GROW(1);
+                box.grow( tdir, TRANSVERSE_GROW );
+             }
+          }
+       }
+       
+       SpaceUtils::faceInterpolate(dir,
+                                   surroundingNodes(box,dir),
+                                   a_order,
+                                   a_cell_phi[dit],
+                                   a_face_phi[dit][dir] );
+       }
+    }
 }
 
 void
@@ -1710,6 +1746,336 @@ SpaceUtils::incrementLevelData( LevelData<EdgeDataBox>&       a_dst,
       a_dst[dit][dim].plus(a_src[dit][dim], a_a);
     }
   }
+}
+
+void
+SpaceUtils::findMax( const LevelData<FArrayBox>& a,
+                    double&                     a_max_val,
+                    IntVect&                    a_max_iv )
+{
+   CH_assert(a.nComp()==1);
+   const DisjointBoxLayout& grids = a.disjointBoxLayout();
+   
+   double local_max = -DBL_MAX;
+   IntVect local_max_loc = IntVect::Zero;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      IntVect max_loc = a[dit].maxIndex(0);
+      double max_val = a[dit](max_loc,0);
+      if (max_val > local_max) {
+         local_max = max_val;
+         local_max_loc = max_loc;
+      }
+   }
+
+   struct {
+      double val;
+      int   rank;
+   } in, out;
+   int myrank;
+ 
+   MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+   in.val = local_max;
+   in.rank = myrank;
+   MPI_Allreduce( &in, &out, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD );
+
+   a_max_val = out.val;
+
+   int iv[CH_SPACEDIM];
+
+   if (myrank == out.rank) {
+      for (int i=0; i<SpaceDim; ++i) iv[i] = local_max_loc[i];
+   }
+
+   MPI_Bcast(iv, SpaceDim, MPI_INT, out.rank, MPI_COMM_WORLD);
+
+   for (int i=0; i<SpaceDim; ++i) a_max_iv[i] = iv[i];
+}
+
+
+Real
+SpaceUtils::MaxNorm( const LevelData<FArrayBox>& a )
+{
+   const DisjointBoxLayout& grids = a.disjointBoxLayout();
+
+   double local_max = -DBL_MAX;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      double this_max = a[dit].max();
+      if (this_max > local_max) local_max = this_max;
+   }
+
+   double global_max;
+#ifdef CH_MPI
+   MPI_Allreduce(&local_max, &global_max, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#else
+   global_max = local_max;
+#endif
+
+   return global_max;
+}
+
+
+Real
+SpaceUtils::MaxNorm( const LevelData<FluxBox>& a )
+{
+   const DisjointBoxLayout& grids = a.disjointBoxLayout();
+
+   double local_max = -DBL_MAX;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         double this_max = a[dit][dir].max();
+         if (this_max > local_max) local_max = this_max;
+      }
+   }
+
+   double global_max;
+#ifdef CH_MPI
+   MPI_Allreduce(&local_max, &global_max, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#else
+   global_max = local_max;
+#endif
+
+   return global_max;
+}
+
+
+void
+SpaceUtils::dotProduct(LevelData<FArrayBox>& a_dotProduct,
+                       const LevelData<FArrayBox>& a_data_1,
+                       const LevelData<FArrayBox>& a_data_2)
+{
+   CH_assert( a_data_1.nComp()==a_data_2.nComp() );
+
+   const DisjointBoxLayout& grids = a_dotProduct.getBoxes();
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+     
+      a_dotProduct[dit].setVal(0.);
+      FArrayBox tmp(a_dotProduct[dit].box(), 1);
+      for (int n=0; n<a_data_1.nComp(); ++n) {
+         tmp.copy(a_data_1[dit],n, 0, 1);
+         tmp.mult(a_data_2[dit],n, 0, 1);
+         a_dotProduct[dit].plus(tmp);
+      }
+   }
+}
+
+Real
+SpaceUtils::dotProduct( const LevelData<FArrayBox>&  a_1,
+                        const LevelData<FArrayBox>&  a_2 )
+{
+   const DisjointBoxLayout& grids = a_1.disjointBoxLayout();
+
+   double local_sum = 0.;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      local_sum += a_1[dit].dotProduct(a_2[dit],grids[dit]);
+   }
+
+   double global_sum;
+#ifdef CH_MPI
+   MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+#else
+   global_sum = local_sum;
+#endif
+
+   return global_sum;
+}
+
+void
+SpaceUtils::applyHarmonicFiltering(LevelData<FArrayBox>& a_phi,
+                                   const int& a_dir)
+{
+   CH_TIME("SpaceUtils::::applyHarmonicFiltering");
+  
+   const DisjointBoxLayout& grids = a_phi.getBoxes();
+   
+   LevelData<FArrayBox> tmp;
+   tmp.define(a_phi);
+   
+   Box domain_box = grids.physDomain().domainBox();
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      int Npts = grids[dit].size(a_dir);
+      
+      if (Npts != domain_box.size(a_dir)) {
+         MayDay::Error("SpaceUtils::applyHarmonicFiltering(): the direction of filtering must be single-block and has no domain decomposition");
+      }
+      
+      for (BoxIterator bit( grids[dit] ); bit.ok(); ++bit) {
+         IntVect iv( bit() );
+         
+         double A = 0.0;
+         double B = 0.0;
+         for (int n=0; n<Npts; ++n) {
+            IntVect ivSum(iv);
+            ivSum[a_dir] = n;
+            double phase = 2.0 * Pi * (n+0.5)/Npts;
+            A += (2.0/Npts) * tmp[dit](ivSum,0) * cos(phase);
+            B += (2.0/Npts) * tmp[dit](ivSum,0) * sin(phase);
+         }
+         double phase = 2.0 * Pi * (iv[a_dir]+0.5)/Npts;
+         a_phi[dit](iv,0) = A*cos(phase)+B*sin(phase);
+      }
+   }
+}
+
+void
+SpaceUtils::enforcePositivity(LevelData<FArrayBox>& a_phi)
+{
+   // Replaces all negative values with zeroes
+  
+   CH_TIME("SpaceUtils::::enforcePositivity");
+  
+   const DisjointBoxLayout& grids = a_phi.getBoxes();
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      FORT_ENFORCE_POSITIVITY(CHF_FRA( a_phi[dit] ),
+                              CHF_BOX( a_phi[dit].box() ));
+   }
+}
+
+
+unsigned long long int
+SpaceUtils::getLevelDataLocalSize( const LevelData<FArrayBox>& a_data )
+{
+   // Returns the number of bytes occupied by the data on the calling processor
+   unsigned long long int local = 0;
+
+   for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+      local += a_data[dit].box().numPts();
+   }
+
+   return local * a_data.nComp() * sizeof(Real);
+}
+
+unsigned long long int
+SpaceUtils::getLevelDataLocalSize( const LevelData<FluxBox>& a_data )
+{
+   // Returns the number of bytes occupied by the data on the calling processor
+   unsigned long long int local = 0;
+
+   for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         local += a_data[dit][dir].box().numPts();
+      }
+   }
+
+   return local * a_data.nComp() * sizeof(Real);
+}
+
+unsigned long long int
+SpaceUtils::getLevelDataLocalSize( const LevelData<EdgeDataBox>& a_data )
+{
+   // Returns the number of bytes occupied by the data on the calling processor
+   unsigned long long int local = 0;
+
+   for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         local += a_data[dit][dir].box().numPts();
+      }
+   }
+
+   return local * a_data.nComp() * sizeof(Real);
+}
+
+unsigned long long int
+SpaceUtils::getLevelDataLocalSize( const LevelData<NodeFArrayBox>& a_data )
+{
+   // Returns the number of bytes occupied by the data on the calling processor
+   unsigned long long int local = 0;
+
+   for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+      local += a_data[dit].getFab().box().numPts();
+   }
+
+   return local * a_data.nComp() * sizeof(Real);
+}
+
+unsigned long long int
+SpaceUtils::getBoxLayoutDataLocalSize( const BoxLayoutData<FArrayBox>& a_data )
+{
+   // Returns the number of bytes occupied by the data on the calling processor
+   unsigned long long int local = 0;
+
+   for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+      local += a_data[dit].box().numPts();
+   }
+
+   return local * a_data.nComp() * sizeof(Real);
+}
+
+unsigned long long int
+SpaceUtils::getBoxLayoutLocalSize( const BoxLayout& a_bl )
+{
+   // Returns the number of cells occupied by the data on the calling processor
+   unsigned long long int local = 0;
+
+   if ( a_bl.size() > 0 ) {
+      for (DataIterator dit(a_bl); dit.ok(); ++dit) {
+         local += a_bl[dit].numPts();
+      }
+   }
+
+   return local;
+}
+
+void
+SpaceUtils::getBoxLayoutDataMaxSize(const std::string&               a_name,
+                                    const BoxLayoutData<FArrayBox>&  a_data )
+{
+   // Returns the maximum number of bytes occupied by the data per processor
+   unsigned long long int local_bytes;
+   local_bytes = SpaceUtils::getBoxLayoutDataLocalSize(a_data);
+   
+   unsigned long long int max_bytes;
+#ifdef CH_MPI
+   MPI_Allreduce(&local_bytes, &max_bytes, 1, MPI_UNSIGNED_LONG_LONG, MPI_MAX, MPI_COMM_WORLD);
+#else
+   max_bytes = local_bytes;
+#endif
+   if ( procID() == 0 ) {
+      cout << a_name << " maximum per process memory = " << max_bytes << " bytes " << endl;
+   }
+}
+
+void
+SpaceUtils::getLevelDataMaxSize(const std::string&          a_name,
+                                const LevelData<FArrayBox>& a_data )
+{
+   // Returns the maximum number of bytes occupied by the data per processor
+   unsigned long long int local_bytes;
+   local_bytes = SpaceUtils::getLevelDataLocalSize(a_data);
+   
+   unsigned long long int max_bytes;
+#ifdef CH_MPI
+   MPI_Allreduce(&local_bytes, &max_bytes, 1, MPI_UNSIGNED_LONG_LONG, MPI_MAX, MPI_COMM_WORLD);
+#else
+   max_bytes = local_bytes;
+#endif
+   if ( procID() == 0 ) {
+      cout << a_name << " maximum per process memory = " << max_bytes << " bytes " << endl;
+   }
+}
+
+void
+SpaceUtils::getFArrayBoxMaxSize(const std::string& a_name,
+                                const FArrayBox&   a_data )
+{
+   // Returns the maximum number of bytes occupied by the data per processor
+   
+   unsigned long long int local_bytes;
+   local_bytes = a_data.box().numPts() * a_data.nComp() * sizeof(Real);
+   
+   unsigned long long int max_bytes;
+#ifdef CH_MPI
+   MPI_Allreduce(&local_bytes, &max_bytes, 1, MPI_UNSIGNED_LONG_LONG, MPI_MAX, MPI_COMM_WORLD);
+#else
+   max_bytes = local_bytes;
+#endif
+   if ( procID() == 0 ) {
+      cout << a_name << " maximum per process memory = " << max_bytes << " bytes " << endl;
+   }
 }
 
 #include "NamespaceFooter.H"

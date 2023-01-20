@@ -86,7 +86,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -94,7 +94,7 @@ public:
                                       const PS::KineticSpeciesPtrVect&   kinetic_species,
                                       const FluidSpeciesPtrVect&         fluid_species,
                                       const PS::ScalarPtrVect&           scalars,
-                                      const EField&                      E_field,
+                                      const EMFields&                    EM_fields,
                                       const int                          component,
                                       const Real                         time);
    
@@ -153,7 +153,7 @@ public:
                         const LevelData<FArrayBox>&  a_divMassFlux ) const;
    
    virtual void getMemberVar( LevelData<FArrayBox>&  a_Var,
-                        const FluidSpecies&          a_fluid_species,
+                        const CFGVars&               a_fluid_vars,
                         const string&                a_name ) const;
 
    virtual bool trivialSolutionOp() const {return true;}

@@ -156,16 +156,16 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   // the "conservative" value of the temeprature (see Justin's thesis for details).
   // This should not affect momentum conservation.
   if ((m_it_counter % m_update_freq == 0) || m_first_call) {
-    soln_species.numberDensity(m_dens);
-    soln_species.ParallelMomentum(m_ushift);
-    CFG::DataIterator cfg_dit = m_ushift.dataIterator();
-    for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit)
-      {
-	m_ushift[cfg_dit].divide(m_dens[cfg_dit]);
-      }
+     soln_species.numberDensity(m_dens);
+     soln_species.parallelParticleFlux(m_ushift);
+     CFG::DataIterator cfg_dit = m_ushift.dataIterator();
+     for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit)
+     {
+        m_ushift[cfg_dit].divide(m_dens[cfg_dit]);
+     }
   }
 
-  moment_op.compute(vpar_moms, soln_species, Jpsi, ParallelMomKernel<FArrayBox>());
+  moment_op.compute(vpar_moms, soln_species, Jpsi, ParallelVelKernel<FArrayBox>());
   moment_op.compute(pres_moms, soln_species, Jpsi, PressureKernel<FArrayBox>(m_ushift));
   LevelData<FArrayBox> inj_vpar_moms;
   LevelData<FArrayBox> inj_pres_moms;
@@ -348,13 +348,10 @@ inline void ConsDragDiff::printParameters( const KineticSpeciesPtrVect&  soln )
    CFG::LevelData<CFG::FArrayBox> Upar_cfg(mag_geom.grids(), 1, ghost_cfg);
 
    soln_species.numberDensity(dens_cfg);
-   soln_species.ParallelMomentum(Upar_cfg);
+   soln_species.parallelVelocity(Upar_cfg);
+   soln_species.pressure(temp_cfg,Upar_cfg);
+   
    CFG::DataIterator cfg_dit = Upar_cfg.dataIterator();
-   for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit)
-   {
-       Upar_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
-   }
-   soln_species.pressureMoment(temp_cfg,Upar_cfg);
    for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit)
    {
        temp_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
@@ -536,7 +533,7 @@ void ConsDragDiff::diagnostics(const LevelData<FArrayBox>& a_rhs,
   
   //Plot parallel momentum source
   CFG::LevelData<CFG::FArrayBox> parMom_src( mag_geom.grids(), 1, CFG::IntVect::Zero );
-  moment_op.compute(parMom_src, a_rhs_species, a_rhs, ParallelMomKernel<FArrayBox>());
+  moment_op.compute(parMom_src, a_rhs_species, a_rhs, ParallelVelKernel<FArrayBox>());
   phase_geom.plotConfigurationData( "parMom_src", parMom_src, a_time );
   
   //Plot energy source

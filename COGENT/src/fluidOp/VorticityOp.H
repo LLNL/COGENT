@@ -1,11 +1,13 @@
 #ifndef  _VORTICITYOP_H_
 #define  _VORTICITYOP_H_
 
+#undef ALFVEN_WAVE_TEST
+
 #include "FluidOpInterface.H"
 #include "GKFluidOp.H"
-#include "GKPoisson.H"
 #include "GKVorticity.H"
-#include "CellVar.H"
+#include "Potentials.H"
+#include "EMFields.H"
 
 #undef CH_SPACEDIM
 #define CH_SPACEDIM PDIM
@@ -15,8 +17,6 @@
 #define CH_SPACEDIM CFG_DIM
 
 #include <string>
-
-
 #include "NamespaceHeader.H"
 
 /**
@@ -29,7 +29,14 @@ public:
 
   /// Null constructor (used for state variable creation) 
   VorticityOp( const MagGeom&  geometry )
-     : m_geometry(geometry) {};
+     : m_geometry(geometry),
+       m_vlasov(NULL),
+       m_gyropoisson_op(NULL),
+       m_imex_pc_op(NULL),
+       m_par_cond_op(NULL),
+       m_parallel_current_divergence_op(NULL),
+       m_vorticity_diffusion_op(NULL),
+       m_potential_bcs(NULL) {};
    
   /// Constructor with initialization.
   /**
@@ -61,7 +68,7 @@ public:
                                        const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                                        const FluidSpeciesPtrVect&         fluid_species,
                                        const PS::ScalarPtrVect&           scalars,
-                                       const EField&                      E_field,
+                                       const EMFields&                    EM_fields,
                                        const int                          fluid_vec_comp,
                                        const Real                         time );
 
@@ -69,20 +76,20 @@ public:
                                        const PS::KineticSpeciesPtrVect&   kinetic_species,
                                        const FluidSpeciesPtrVect&         fluid_species,
                                        const PS::ScalarPtrVect&           scalars,
-                                       const EField&                      E_field,
+                                       const EMFields&                    EM_fields,
                                        const int                          fluid_vec_comp,
                                        const Real                         time );
 
    virtual void preSolutionOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
                                    const FluidSpeciesPtrVect&         fluid_species,
                                    const PS::ScalarPtrVect&           scalars,
-                                   const EField&                      E_field,
+                                   const EMFields&                    EM_fields,
                                    const double                       time );
 
    virtual void preOpEval( const PS::KineticSpeciesPtrVect&   kinetic_species,
                            const FluidSpeciesPtrVect&         fluid_species,
                            const PS::ScalarPtrVect&           scalars,
-                           const EField&                      E_field,
+                           const EMFields&                    EM_fields,
                            const double                       time );
 
    virtual void defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>&,
@@ -136,6 +143,12 @@ public:
                              const std::string&                op_name,
                              const int                         component );
 
+   virtual void postStageEval( FluidSpecies&  species_comp,
+                               FluidSpecies&  species_phys,
+                               const Real     dt,
+                               const Real     time,
+                               const int      stage );
+   
    virtual bool trivialSolutionOp() const {return false;}
 
    virtual void setStepConstKinCoeff(const bool a_step_const_kin_coeff)
@@ -156,7 +169,7 @@ public:
                                          const MagGeom&      a_geometry,
                                          const IntVect&      a_ghost_vect ) const
    {
-      return new CellVar(a_pp_prefix, a_name, a_geometry, 1, a_ghost_vect);
+      return new Potentials(a_pp_prefix, a_name, a_geometry, a_ghost_vect, false);
    }
 
    virtual void fillGhostCells( FluidSpecies&  species_phys,
@@ -164,54 +177,94 @@ public:
 
    // Compute the divergence of the perpedicular ion current due solely to magnetic drifts
    void computeDivPerpIonMagCurrentDensity( LevelData<FArrayBox>&             div_Jperp_mag,
-                                            const EField&                     E_field,
+                                            const EMFields&                   EM_fields,
                                             const PS::KineticSpeciesPtrVect&  species,
                                             const Real&                       time );
 
    void computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&             div_Jperp,
-                                            const EField&                     E_field,
+                                            const EMFields&                   EM_fields,
                                             const PS::KineticSpeciesPtrVect&  species,
                                             const LevelData<FArrayBox>&       ion_charge_density,
                                             const Real&                       time);
 
-   void computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&             div_Jperp,
-						 const LevelData<FArrayBox>&       ion_charge_density,
-						 const LevelData<FArrayBox>&       negative_vorticity,
-						 const Real&                       time);
+   void computeDivPerpElectronMagCurrentDensity(LevelData<FArrayBox>&             div_Jperp,
+                                                const LevelData<FArrayBox>&       ion_charge_density,
+                                                const LevelData<FArrayBox>&       negative_vorticity,
+                                                const Real&                       time);
 
   
    void computeReynoldsStressTerm( LevelData<FArrayBox>&             div_ExB_times_vorticity,
                                    const LevelData<FArrayBox>&       vorticity,
-                                   const EField&                     E_field) const;
+                                   const EMFields&                   EM_fields ) const;
+   
+   
+   void addPerpTermsRHS(LevelData<FArrayBox>&              rhs,
+                        const LevelData<FArrayBox>&        soln,
+                        const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
+                        const EMFields&                    EM_fields,
+                        const Real                         time);
 
-   void initializeOldModel( const PS::KineticSpeciesPtrVect&  kinetic_species,
-                            const Vector<Real>&               scalar_data );
+   static const char* pp_name;
 
-   void updatePotentialOldModel( LevelData<FArrayBox>&             phi,
-                                 EField&                           E_field,
-                                 const PS::KineticSpeciesPtrVect&  kinetic_species,
-                                 const Vector<Real>&               scalar_data,
-                                 const Real                        dt,
-                                 const Real                        time );
-
-static const char* pp_name;
-
-private:
+protected:
 
    /// Computes ion mass density
-   void computeIonMassDensity( LevelData<FArrayBox>&             mass_density,
-                               const PS::KineticSpeciesPtrVect&  species ) const;
+   void computeIonMassDensity(LevelData<FArrayBox>&             ion_mass_density,
+                              const PS::KineticSpeciesPtrVect&  kinetic_species_phys,
+                              const FluidSpeciesPtrVect&        fluid_species_comp) const;
 
    /// Computes ion charge density
-   void computeIonChargeDensity( LevelData<FArrayBox>&            ion_charge_density,
-                                const PS::KineticSpeciesPtrVect&  species ) const;
+   void computeIonChargeDensity(LevelData<FArrayBox>&            ion_charge_density,
+                                const PS::KineticSpeciesPtrVect& kinetic_species_phys,
+                                const FluidSpeciesPtrVect&       fluid_species_comp ) const;
 
    void setCoreBC( const double   core_inner_bv,
                    const double   core_outer_bv,
                    EllipticOpBC&  bc ) const ;
 
+   
    void setZero( LevelData<FArrayBox>& data ) const;
+   void setZero( LevelData<FluxBox>& data ) const;
 
+   GKPoisson*    m_gyropoisson_op;
+   EllipticOpBC* m_potential_bcs;
+   
+   GKVorticity*   m_vorticity_diffusion_op;
+   RefCountedPtr<EllipticOpBC>  m_vorticity_bcs;
+   
+   GKVorticity*   m_parallel_current_divergence_op;
+   RefCountedPtr<EllipticOpBC>  m_parallel_current_divergence_op_bcs;
+   
+   const MagGeom& m_geometry;
+
+   LevelData<FArrayBox> m_ion_charge_density;
+   LevelData<FArrayBox> m_ion_mass_density;
+   LevelData<FArrayBox> m_electron_temperature;
+   LevelData<FArrayBox> m_negativeDivJpar;
+   LevelData<FluxBox> m_pol_diffusion_face;
+   LevelData<FluxBox> m_perp_diffusion_face;
+   LevelData<FArrayBox> m_divJperp_mag_e;
+   LevelData<FArrayBox> m_divJperp_mag_i;
+   
+   Vector<int> m_harmonic_filtering;
+   
+   int m_verbosity;
+   int m_it_counter;
+   
+   bool m_reynolds_stress;
+   bool m_ExB_current_model;
+   bool m_remove_axisymmetric_phi;
+   bool m_second_order;
+   bool m_low_pollution;
+   bool m_include_pol_den_correction;
+   bool m_use_vorticity_bcs;
+   bool m_include_diffusion;
+   
+private:
+   
+   void initializeDiffusionProfiles(LevelData<FluxBox>& pol_diffusion_face,
+                                    LevelData<FluxBox>& perp_diffusion_face);
+   
 
    /// Parse parameters.
    void parseParameters( const ParmParse& pp );
@@ -219,60 +272,45 @@ private:
    /// Print parameters.
    void printParameters();
   
-   int m_verbosity;
-   const MagGeom& m_geometry;
-   double m_larmor;
-   bool m_par_cond_op_coefs_defined;
   
-   GKVorticity*    m_parallel_current_divergence_op;
    GKVorticity*    m_par_cond_op;
    GKVorticity*    m_imex_pc_op;
-   GKVorticity*    m_vorticity_diffusion_op;
-   GKPoisson*      m_gyropoisson_op;
 
    PS::GKVlasov*  m_vlasov;
 
    std::string m_opt_string;
-   int m_my_pc_idx_e;
-  
-   int m_num_pc_rhs;
    std::vector<int> m_my_pc_idx_i;
    std::vector<std::string> m_pc_names;
 
-   EllipticOpBC* m_parallel_current_divergence_op_bcs;
-   EllipticOpBC* m_par_cond_op_bcs;
-   EllipticOpBC* m_imex_pc_op_bcs;
-   EllipticOpBC* m_vorticity_diffusion_op_bcs;
-   EllipticOpBC* m_gyropoisson_op_bcs;
+   RefCountedPtr<EllipticOpBC> m_imex_pc_op_bcs;
+   RefCountedPtr<EllipticOpBC> m_gyropoisson_op_bcs;
+   RefCountedPtr<EllipticOpBC> m_par_cond_op_bcs;
 
    LevelData<FArrayBox> m_volume;
-   LevelData<FArrayBox> m_negativeDivJpar;
-   LevelData<FArrayBox> m_divJperp_mag_i;
-   LevelData<FArrayBox> m_divJperp_mag_e;
    LevelData<FluxBox> m_face_bXE_integrals;
-   LevelData<FArrayBox> m_ion_charge_density;
-   LevelData<FArrayBox> m_ion_mass_density;
-   LevelData<FArrayBox> m_electron_temperature;
-
+   
    bool m_sigma_div_e_coefs_set;
-   bool	m_reynolds_stress;
-   bool m_ExB_current_model;
-   bool m_include_pol_den_correction;
-   bool m_include_vorticity_diffusion;
+   bool m_multiphysics_precond;
    bool m_include_pol_den_correction_precond;
+   bool m_include_diffusion_precond;
    bool m_include_pol_den_correction_to_pe;
-   bool m_second_order;
-   bool m_low_pollution;
-   bool m_remove_axisymmetric_phi;
    bool m_consistent_lower_bc_only;
    bool m_consistent_upper_bc_only;
-   int m_update_pc_freq_oldmodel;
-   int m_it_counter;
+   bool m_par_cond_op_coefs_defined;
+   bool m_update_pc_skip_stage_e;
+   bool m_update_pc_skip_stage_i;
+   
+   int m_my_pc_idx_e;
+   int m_num_pc_rhs;
+   int m_update_pc_freq_e;
+   int m_update_pc_freq_i;
+
+   Real m_alpha_loc;
+   double m_larmor;
 
    RefCountedPtr<GridFunction> m_electron_temperature_func;
-
-   int m_update_pc_freq_e, m_update_pc_freq_i;
-   bool m_update_pc_skip_stage_e, m_update_pc_skip_stage_i;
+   RefCountedPtr<GridFunction> m_pol_diffusion_func;
+   RefCountedPtr<GridFunction> m_perp_diffusion_func;
 };
 
 

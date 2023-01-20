@@ -520,8 +520,10 @@ class GKSystem : public AppCtxt
       void getTimeScales( std::vector<std::pair<std::string,Real> >& a_T) const
       {
         a_T.clear();
-        a_T.push_back( std::pair<std::string,Real>( "Vlasov", 
-                                                    m_dt_vlasov) );
+        for (int i = 0; i < m_dt_vlasov.size(); i++) {
+          std::string name_str = "Vlasov (" + m_dt_vlasov[i].first + ")"; 
+          a_T.push_back( std::pair<std::string,Real>( name_str, m_dt_vlasov[i].second ) );
+        }
         a_T.push_back( std::pair<std::string,Real>( "Collisions", 
                                                     m_dt_collisions) );
         a_T.push_back( std::pair<std::string,Real>( "Transport", 
@@ -618,6 +620,7 @@ class GKSystem : public AppCtxt
       bool m_using_electrons; // true for either boltzmann or kinetic
       bool m_enforce_stage_positivity;
       bool m_enforce_step_positivity;
+      bool m_enforce_positivity_pointwise;
       bool m_enforce_step_floor;
    
       int               m_max_grid_size;
@@ -682,7 +685,8 @@ class GKSystem : public AppCtxt
       ODEVector m_scale_u, m_scale_rhsop, m_scale_lhsop;
 
       /* Time scales */
-      Real m_dt_vlasov, m_dt_collisions, m_dt_transport, m_dt_neutrals;
+      std::vector<std::pair<std::string,Real> > m_dt_vlasov;
+      Real m_dt_collisions, m_dt_transport, m_dt_neutrals;
 };
 
 #include "NamespaceFooter.H"

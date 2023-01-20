@@ -40,7 +40,8 @@ class NullScalarOp
                                           const KineticSpeciesPtrVect&       kinetic_species,
                                           const CFG::FluidSpeciesPtrVect&    fluid_species,
                                           const ScalarPtrVect&               scalars,
-                                          const CFG::EField&                 E_field,
+                                          const CFG::EMFields&               EM_fields,
+                                          const CFG::PhiOps&                 phi_ops,
                                           const int                          component,
                                           const Real                         time) {;}
 
@@ -48,7 +49,7 @@ class NullScalarOp
                                           const KineticSpeciesPtrVect&       kinetic_species,
                                           const CFG::FluidSpeciesPtrVect&    fluid_species,
                                           const ScalarPtrVect&               scalars,
-                                          const CFG::EField&                 E_field,
+                                          const CFG::EMFields&               EM_fields,
                                           const int                          component,
                                           const bool                         recompute_kinetic_terms,
                                           const Real                         time) {;}

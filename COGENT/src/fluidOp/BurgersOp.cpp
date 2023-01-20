@@ -75,7 +75,7 @@ void BurgersOp::accumulateRHS(  FluidSpeciesPtrVect&               a_rhs,
                                 const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                 const FluidSpeciesPtrVect&         a_fluid_species,
                                 const PS::ScalarPtrVect&           a_scalars,
-                                const EField&                      a_E_field,
+                                const EMFields&                    a_EM_fields,
                                 const int                          a_fluidVecComp,
                                 const Real                         a_time)
 {
@@ -116,7 +116,7 @@ void BurgersOp::accumulateExplicitRHS(  FluidSpeciesPtrVect&               a_rhs
                                         const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                         const FluidSpeciesPtrVect&         a_fluid_species,
                                         const PS::ScalarPtrVect&           a_scalars,
-                                        const EField&                      a_E_field,
+                                        const EMFields&                    a_EM_fields,
                                         const int                          a_fluidVecComp,
                                         const Real                         a_time)
 {
@@ -254,7 +254,7 @@ void BurgersOp::accumulateExplicitRHS(  FluidSpeciesPtrVect&               a_rhs
 
    /*
    if (!m_is_time_implicit) {
-      accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
+      accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_fluidVecComp, a_time);
    }
    */
 
@@ -265,12 +265,12 @@ void BurgersOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rhs,
                                        const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                        const FluidSpeciesPtrVect&         a_fluid_species,
                                        const PS::ScalarPtrVect&           a_scalars,
-                                       const EField&                      a_E_field,
+                                       const EMFields&                    a_EM_fields,
                                        const int                          a_fluidVecComp,
                                        const Real                         a_time)
 {
   if (m_is_time_implicit) {
-    accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_E_field, a_fluidVecComp, a_time);
+     accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_EM_fields, a_fluidVecComp, a_time);
   }
 }
 

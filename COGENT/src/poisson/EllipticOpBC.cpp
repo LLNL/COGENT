@@ -12,20 +12,24 @@ EllipticOpBC::EllipticOpBC(const int a_num_boundaries,
    m_bdry_name.resize(a_num_boundaries);
    m_bc_type.resize(a_num_boundaries);
    m_bc_value.resize(a_num_boundaries);
+   m_bc_subtype.resize(a_num_boundaries);
 
    for (int i=0; i<a_num_boundaries; ++i) {
+      CH_assert(m_bc_function[i].isNull());
+      m_bdry_name[i] = "";
       m_bc_type[i] = UNDEFINED;
       m_bc_value[i] = 0.;
-      CH_assert(m_bc_function[i].isNull());
+      m_bc_subtype[i] = "";
    }
    
-   m_bc_subtype.resize(2*a_num_blocks*SpaceDim);
    m_bc_block_data.resize(2*a_num_blocks*SpaceDim);
-   m_bc_neu_nat_factor.resize(2*a_num_blocks*SpaceDim);
-   
-   for (int i=0; i<a_num_blocks; ++i) {
-      m_bc_subtype[i] = "";
+   for (int i=0; i<m_bc_block_data.size(); ++i) {
       CH_assert(m_bc_block_data[i].isNull());
+   }
+
+   m_bc_neu_nat_factor.resize(2*a_num_blocks*SpaceDim);
+   for (int i=0; i<m_bc_neu_nat_factor.size(); ++i) {
+      CH_assert(m_bc_neu_nat_factor[i].isNull());
    }
 }
 

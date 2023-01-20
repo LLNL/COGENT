@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright 1998-2019 Lawrence Livermore National Security, LLC and other
+ * Copyright (c) 1998 Lawrence Livermore National Security, LLC and other
  * HYPRE Project Developers. See the top-level COPYRIGHT file for details.
  *
  * SPDX-License-Identifier: (Apache-2.0 OR MIT)
@@ -91,8 +91,8 @@ int HYPRE_LSI_DSuperLUDestroy( HYPRE_Solver solver )
          dSolveFinalize(&(sluPtr->options_), &(sluPtr->SOLVEstruct_));
       superlu_gridexit(&(sluPtr->sluGrid_));
    }
-   free(sluPtr->berr_);
-   free(sluPtr);
+   hypre_TFree(sluPtr->berr_, HYPRE_MEMORY_HOST);
+   hypre_TFree(sluPtr, HYPRE_MEMORY_HOST);
    return 0;
 }
 
@@ -314,7 +314,7 @@ int HYPRE_LSI_DSuperLUGenMatrix(HYPRE_Solver solver)
    dCreate_CompRowLoc_Matrix_dist(&(sluPtr->sluAmat_), sluPtr->globalNRows_,
             sluPtr->globalNRows_, localNNZ, localNRows, startRow, csrAA,
             csrJA, csrIA, SLU_NR_loc, SLU_D, SLU_GE);
-   free(procNRows);
+   hypre_TFree(procNRows, HYPRE_MEMORY_HOST);
    return 0;
 }
 #else

@@ -12,12 +12,12 @@
 #define CH_SPACEDIM PDIM
 #include "PhaseGeom.H"
 #include "MomentOp.H"
-#include "FluidOpPreconditioner.H"
 #undef CH_SPACEDIM
 #define CH_SPACEDIM CFG_DIM
 
 #undef OLD_DIVJPERP
 #undef FULL_DIAMAG_CURRENT
+#undef LINEAR_BALOONING_DRIVE
 
 #include "NamespaceHeader.H" 
 
@@ -35,33 +35,32 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
      m_reynolds_stress(false),
      m_ExB_current_model(true),
      m_include_pol_den_correction(false),
-     m_include_vorticity_diffusion(false),
+     m_multiphysics_precond(false),
+     m_use_vorticity_bcs(false),
+     m_include_diffusion(false),
+     m_include_diffusion_precond(false),
      m_include_pol_den_correction_precond(false),
      m_include_pol_den_correction_to_pe(false),
      m_second_order(false),
      m_low_pollution(false),
      m_remove_axisymmetric_phi(false),
-     m_update_pc_freq_oldmodel(1),
+     m_harmonic_filtering(SpaceDim, 0),
      m_it_counter(0),
      m_electron_temperature_func(NULL),
+     m_pol_diffusion_func(NULL),
+     m_perp_diffusion_func(NULL),
      m_update_pc_freq_e(1),
      m_update_pc_freq_i(1),
      m_update_pc_skip_stage_e(false),
      m_update_pc_skip_stage_i(false)
 {
-   const std::string name("potential");
-   const std::string prefix( "BC." + name );
-   ParmParse ppsp( prefix.c_str() );
-   EllipticOpBCFactory elliptic_op_bc_factory;
-
+   
    m_num_pc_rhs = 0;
    m_my_pc_idx_i.clear();
    m_pc_names.clear();
 
    // This might be needed for seetin up fluid preconditioner  
    m_opt_string = "gksystem";
-
-   bool old_model = (string(a_pp.prefix()) == "vorticity_op");
    
    // Input the initial conditions
    parseInitialConditions("", "potential");
@@ -71,103 +70,142 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
    if (m_verbosity) {
      printParameters();
    }
+       
+   // Create potential BCs
+   const std::string name("potential");
+   const std::string prefix( "BC." + name );
+   ParmParse ppsp( prefix.c_str() );
+   EllipticOpBCFactory elliptic_op_bc_factory;
 
-   // Set up parallel current divergence operator
-   m_parallel_current_divergence_op = new GKVorticity(a_pp, a_pp, a_geometry, a_larmor, 0., m_second_order,
-                                                      m_low_pollution, false,"ParallelCurrent" );
+   m_potential_bcs = elliptic_op_bc_factory.create(name,
+                                                   ppsp,
+                                                   *(a_geometry.getCoordSys()),
+                                                   false);
+    
    
-   m_parallel_current_divergence_op_bcs = elliptic_op_bc_factory.create( name,
-                                                                         ppsp,
-                                                                         *(a_geometry.getCoordSys()),
-                                                                         false );
+   
+   // Set up parallel current divergence operator
+   m_parallel_current_divergence_op = new GKVorticity(a_pp,
+                                                      a_pp,
+                                                      a_geometry,
+                                                      a_larmor,
+                                                      0.,
+                                                      m_second_order,
+                                                      m_low_pollution,
+                                                      false,
+                                                      false,
+                                                      "ParallelCurrent" );
+   
+   // Create BC object with EXTRAPOLATED BC type
+   m_parallel_current_divergence_op_bcs =  m_potential_bcs->clone(true);
 
    // Set up parallel conductivity divergence operator
-   m_par_cond_op = new GKVorticity(a_pp, a_pp, a_geometry, 0., 0., m_second_order, m_low_pollution,
+   m_par_cond_op = new GKVorticity(a_pp,
+                                   a_pp,
+                                   a_geometry,
+                                   0.,
+                                   0.,
+                                   m_second_order,
+                                   m_low_pollution,
+                                   false,
                                    false);
-   m_par_cond_op_bcs = elliptic_op_bc_factory.create(name, ppsp, *(a_geometry.getCoordSys()), false);
+   
+   m_par_cond_op_bcs = m_potential_bcs->clone();
 
    // Set up ImEx preconditioner operator
-   if ( old_model ) {
-      m_imex_pc_op = new GKVorticity( a_pp, 
-                                      a_pp, 
-                                      a_geometry, 
-                                      a_larmor, 
-                                      0., 
-                                      m_second_order, 
-                                      m_low_pollution,
-                                      m_include_pol_den_correction_precond );
-   }
-   else {
-      string s_pp_base = string(a_pp.prefix()) + ".pc_imex";
-      ParmParse pp_base( s_pp_base.c_str() );
+   string s_pp_base = string(a_pp.prefix()) + ".pc_imex";
+   ParmParse pp_base( s_pp_base.c_str() );
 
-      m_imex_pc_op = new GKVorticity( a_pp, 
-                                      pp_base, 
-                                      a_geometry, 
-                                      a_larmor, 
-                                      0., 
-                                      m_second_order, 
-                                      m_low_pollution,
-                                      m_include_pol_den_correction_precond );
+   m_imex_pc_op = new GKVorticity(a_pp,
+                                  pp_base,
+                                  a_geometry,
+                                  a_larmor,
+                                  0.,
+                                  m_second_order,
+                                  m_low_pollution,
+                                  m_include_pol_den_correction_precond,
+                                  m_include_diffusion_precond);
 
-      m_num_pc_rhs++;
-      m_my_pc_idx_i.push_back(-1);
-      m_pc_names.push_back("VorticityOp");
-   }
-   m_imex_pc_op_bcs = elliptic_op_bc_factory.create(name, ppsp, *(a_geometry.getCoordSys()), false);
-
+   m_num_pc_rhs++;
+   m_my_pc_idx_i.push_back(-1);
+   m_pc_names.push_back("VorticityOp");
+ 
+   m_imex_pc_op_bcs = m_potential_bcs->clone();
+   
+   
    // Set up gyrokinetic Poisson operator
-   if ( old_model ) {
-      m_gyropoisson_op = new GKPoisson( a_pp, 
-                                        a_geometry, 
-                                        a_larmor, 
-                                        0., 
-                                        true, 
-                                        m_second_order, 
-                                        m_low_pollution );
-   }
-   else {
-      string s_pp_base = string(a_pp.prefix()) + ".soln_op";
-      ParmParse pp_base( s_pp_base.c_str() );
+   s_pp_base = string(a_pp.prefix()) + ".soln_op";
+   pp_base = s_pp_base.c_str();
 
-      m_gyropoisson_op = new GKPoisson( pp_base, 
-                                        a_geometry, 
-                                        a_larmor, 
-                                        0., 
-                                        true, 
-                                        m_second_order, 
-                                        m_low_pollution );
-   }
-   m_gyropoisson_op_bcs = elliptic_op_bc_factory.create(name, ppsp, *(a_geometry.getCoordSys()), false);
+   m_gyropoisson_op = new GKPoisson(pp_base,
+                                    a_geometry,
+                                    a_larmor,
+                                    0.,
+                                    true,
+                                    m_second_order,
+                                    m_low_pollution );
+
+   m_gyropoisson_op_bcs = m_potential_bcs->clone();
    
    // Set up vorticity diffusion (i.e., high-order polarization density correction and viscosity terms)
-   if (m_include_vorticity_diffusion) {
+   if (m_include_diffusion || m_include_pol_den_correction) {
+      
+      s_pp_base = string(a_pp.prefix()) + ".diffusion_op";
+      pp_base = s_pp_base.c_str();
+      
       m_vorticity_diffusion_op = new GKVorticity( a_pp, 
-                                                  a_pp, 
+                                                  pp_base, 
                                                   a_geometry, 
                                                   a_larmor, 
                                                   0., 
                                                   m_second_order,
                                                   m_low_pollution, 
-                                                  false, 
+                                                  m_include_pol_den_correction,
+                                                  m_include_diffusion,
                                                   "VorticityDiffusion" );
+
+      // Set vorticity bcs
+      if (m_use_vorticity_bcs) {
+         const std::string name_high_order("vorticity");
+         const std::string prefix_high_order( "BC." + name_high_order );
+         ParmParse pp_high_order( prefix_high_order.c_str() );
+         m_vorticity_bcs = RefCountedPtr<EllipticOpBC>(elliptic_op_bc_factory.create(name_high_order,
+                                                                                     pp_high_order,
+                                                                                     *(a_geometry.getCoordSys()),
+                                                                                     false));
+         m_imex_pc_op->setVorticityBc(*m_vorticity_bcs);
+      }
+      else {
+         // Create BC object with EXTRAPOLATED BC type
+         m_vorticity_bcs = m_potential_bcs->clone(true);
+      }
+
+      if (m_include_diffusion) {
+         // Initialize vorticity diffusion profiles
+         const DisjointBoxLayout& grids( m_geometry.grids() );
+         m_pol_diffusion_face.define( grids, 1, IntVect::Zero );
+         m_perp_diffusion_face.define( grids, 1, IntVect::Zero );
+         initializeDiffusionProfiles(m_pol_diffusion_face, m_perp_diffusion_face);
+         m_vorticity_diffusion_op->setDiffusionOperatorCoeff(m_pol_diffusion_face,
+                                                             m_perp_diffusion_face);
+      }
+
+      if (m_include_diffusion_precond) {
+         m_imex_pc_op->setDiffusionOperatorCoeff(m_pol_diffusion_face,
+                                                 m_perp_diffusion_face);
+      }
       
-      const std::string name_high_order("vorticity");
-      const std::string prefix_high_order( "BC." + name_high_order );
-      ParmParse pp_high_order( prefix_high_order.c_str() );
-
-      m_vorticity_diffusion_op_bcs = elliptic_op_bc_factory.create( name_high_order, 
-                                                                    pp_high_order,
-                                                                    *(a_geometry.getCoordSys()), 
-                                                                    false );
-
-      m_num_pc_rhs++;
-      m_my_pc_idx_i.push_back(-1);
-      m_pc_names.push_back("VorticityDiffusionOp");
+      if (m_multiphysics_precond) {
+         if (m_include_diffusion_precond || m_include_pol_den_correction_precond) {
+            MayDay::Error("VorticityOp::multiphysics preconditioner assumes that high-order corrections should not be included in the imex preconditioner ");
+         }
+         m_num_pc_rhs++;
+         m_my_pc_idx_i.push_back(-1);
+         m_pc_names.push_back("VorticityDiffusionOp");
+      }
    }
    else {
       m_vorticity_diffusion_op = NULL;
-      m_vorticity_diffusion_op_bcs = NULL;
    }
 
    ParmParse pp_vlasov("vorticity_vlasov");
@@ -185,7 +223,7 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
    m_divJperp_mag_i.define(grids, 1, IntVect::Zero);
    m_divJperp_mag_e.define(grids, 1, IntVect::Zero);
    
-   // Assign electron temperature
+   // Assign electron temperature profile
    m_electron_temperature.define(grids, 1, 2*IntVect::Unit);
    if (m_electron_temperature_func == NULL) {
      for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
@@ -202,17 +240,13 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
 
 VorticityOp::~VorticityOp()
 {
-   delete m_vlasov;
-   delete m_gyropoisson_op;
-   delete m_imex_pc_op;
-   delete m_par_cond_op;
-   delete m_parallel_current_divergence_op;
-   delete m_vorticity_diffusion_op;
-   delete m_parallel_current_divergence_op_bcs;
-   delete m_par_cond_op_bcs;
-   delete m_imex_pc_op_bcs;
-   delete m_gyropoisson_op_bcs;
-   delete m_vorticity_diffusion_op_bcs;
+   if (m_vlasov) delete m_vlasov;
+   if (m_gyropoisson_op) delete m_gyropoisson_op;
+   if (m_imex_pc_op) delete m_imex_pc_op;
+   if (m_par_cond_op) delete m_par_cond_op;
+   if (m_parallel_current_divergence_op) delete m_parallel_current_divergence_op;
+   if (m_vorticity_diffusion_op) delete m_vorticity_diffusion_op;
+   if (m_potential_bcs) delete m_potential_bcs;
 }
 
 
@@ -220,7 +254,7 @@ void VorticityOp::accumulateExplicitRHS( FluidSpeciesPtrVect&               a_rh
                                          const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                          const FluidSpeciesPtrVect&         a_fluid_species,
                                          const PS::ScalarPtrVect&           a_scalars,
-                                         const EField&                      a_E_field,
+                                         const EMFields&                    a_EM_fields,
                                          const int                          a_fluid_vec_comp,
                                          const Real                         a_time )
 {
@@ -231,7 +265,7 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
                                          const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                          const FluidSpeciesPtrVect&         a_fluid_species,
                                          const PS::ScalarPtrVect&           a_scalars,
-                                         const EField&                      a_E_field,
+                                         const EMFields&                    a_EM_fields,
                                          const int                          a_fluid_vec_comp,
                                          const Real                         a_time )
 {
@@ -259,8 +293,7 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
    }
 
    if ( m_sigma_div_e_coefs_set ) {
-      LevelData<FluxBox> dummy;
-      m_par_cond_op->updateBoundaryData(dummy, *m_par_cond_op_bcs);
+      m_par_cond_op->updateBoundaryDataAddingCoefs(*m_par_cond_op_bcs);
    }
    else {
       m_par_cond_op->setVorticityOperatorCoefficients( zero, zero, zero, *m_par_cond_op_bcs, false );
@@ -282,21 +315,51 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
       
    CH_STOP(t_div_jpar);
 
-   CH_START(t_div_jperp);
-
-   // Compute the divergence of the perpendicular ExB ion current
-   LevelData<FArrayBox> divJperp_ExB(grids, 1, IntVect::Zero);
-   computeDivPerpIonExBCurrentDensity(divJperp_ExB, a_E_field, a_kinetic_species_phys, m_ion_charge_density, a_time);
-
-   CH_STOP(t_div_jperp);
-
    // Compute rhs_data that describe time evolution of the negative vorticity
    
-   // Add divergence of total parallel and perpendicular ion currents
+   // Add divergence of total parallel current
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       rhs_data[dit] += m_negativeDivJpar[dit];
-      rhs_data[dit] -= m_divJperp_mag_i[dit];
    }
+   
+   // Add divergence of perpendicular currents and RS term
+   addPerpTermsRHS(rhs_data, sol_data, a_kinetic_species_phys, a_EM_fields, a_time);
+   
+   // Add higher-order corrections
+   if (m_include_diffusion || m_include_pol_den_correction) {
+      
+      // Compute negative vorticity
+      LevelData<FArrayBox> negative_vorticity(grids, 1, IntVect::Zero);
+      m_gyropoisson_op->computeFluxDivergence(sol_data, negative_vorticity, false);
+      
+      // Compute (-par_grad * sigma * par_grad -perp_grad * D * perp_grad) of negative_vorticity
+      LevelData<FArrayBox> pol_dens_correction(grids, 1, IntVect::Zero);
+      m_vorticity_diffusion_op->computeFluxDivergence(negative_vorticity, pol_dens_correction, false, !m_use_vorticity_bcs);
+      
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         rhs_data[dit] -= pol_dens_correction[dit];
+      }
+   }
+   
+}
+
+void VorticityOp::addPerpTermsRHS(LevelData<FArrayBox>&              a_rhs,
+                                  const LevelData<FArrayBox>&        a_soln,
+                                  const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
+                                  const EMFields&                    a_EM_fields,
+                                  const Real                         a_time)
+{
+   CH_TIMERS("VorticityOp::addPerpTermsRHS");
+   CH_TIMER("div_jperp",t_div_jperp);
+
+   const DisjointBoxLayout& grids = m_geometry.gridsFull();
+
+#ifndef ALFVEN_WAVE_TEST
+   // Add divergence of perpendicular ion currents
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+       a_rhs[dit] -= m_divJperp_mag_i[dit];
+   }
+#endif
 
    // Add divergence of perpendicular electron current
    if (m_ExB_current_model) {
@@ -304,17 +367,17 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
      CH_START(t_div_jperp);
      // Compute the divergence of the perpendicular ExB ion current
      LevelData<FArrayBox> divJperp_ExB(grids, 1, IntVect::Zero);
-     computeDivPerpIonExBCurrentDensity(divJperp_ExB, a_E_field, a_kinetic_species_phys, m_ion_charge_density, a_time);
+     computeDivPerpIonExBCurrentDensity(divJperp_ExB, a_EM_fields, a_kinetic_species_phys, m_ion_charge_density, a_time);
      CH_STOP(t_div_jperp);
 
      for (DataIterator dit(grids); dit.ok(); ++dit) {
-       rhs_data[dit] -= divJperp_ExB[dit];
+       a_rhs[dit] -= divJperp_ExB[dit];
      }
    }
 
    else {
-     for (DataIterator dit(grids); dit.ok(); ++dit) {
-       rhs_data[dit] -= m_divJperp_mag_e[dit];
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+       a_rhs[dit] -= m_divJperp_mag_e[dit];
      }
    }
 
@@ -322,43 +385,26 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
    if (m_reynolds_stress) {
 
      LevelData<FArrayBox> negative_vorticity(grids, 1, IntVect::Zero);
-     m_gyropoisson_op->computeFluxDivergence(sol_data, negative_vorticity, false);
+     m_gyropoisson_op->computeFluxDivergence(a_soln, negative_vorticity, false);
 
      LevelData<FArrayBox> negative_div_ExB_vorticity(grids, 1, IntVect::Zero);
-     computeReynoldsStressTerm(negative_div_ExB_vorticity, negative_vorticity, a_E_field);
+     computeReynoldsStressTerm(negative_div_ExB_vorticity, negative_vorticity, a_EM_fields);
      for (DataIterator dit(grids); dit.ok(); ++dit) {
-       rhs_data[dit] -= negative_div_ExB_vorticity[dit];
+       a_rhs[dit] -= negative_div_ExB_vorticity[dit];
      }
    }
 
-   // Add polarization density correction into electron pressure
-   if (m_include_pol_den_correction) {
-      
-      // Compute negative vorticity
-      LevelData<FArrayBox> negative_vorticity(grids, 1, IntVect::Zero);
-      m_gyropoisson_op->computeFluxDivergence(sol_data, negative_vorticity, false);
-      
-      // Compute par_grad * sigma * par_grad of negative_vorticity
-      LevelData<FArrayBox> pol_dens_correction(grids, 1, IntVect::Zero);
-      //m_par_cond_op->computeFluxDivergence(negative_vorticity, pol_dens_correction, false, true);
-      m_parallel_current_divergence_op->computeFluxDivergence(negative_vorticity, pol_dens_correction, false, true);
-      
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         rhs_data[dit] -= pol_dens_correction[dit];
-      }
-   }
 }
-
 
 void VorticityOp::preSolutionOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_species,
                                      const FluidSpeciesPtrVect&         a_fluid_species,
                                      const PS::ScalarPtrVect&           a_scalars,
-                                     const EField&                      a_E_field,
+                                     const EMFields&                    a_EM_fields,
                                      const double                       a_time )
 {
    CH_TIME("VorticityOp::preSolutionOpEval");
 
-   computeIonMassDensity( m_ion_mass_density, a_kinetic_species );
+   computeIonMassDensity( m_ion_mass_density, a_kinetic_species, a_fluid_species );
    
    m_gyropoisson_op->setOperatorCoefficients(m_ion_mass_density, *m_gyropoisson_op_bcs, true );
 }
@@ -367,12 +413,12 @@ void VorticityOp::preSolutionOpEval( const PS::KineticSpeciesPtrVect&   a_kineti
 void VorticityOp::preOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_species,
                              const FluidSpeciesPtrVect&         a_fluid_species,
                              const PS::ScalarPtrVect&           a_scalars,
-                             const EField&                      a_E_field,
+                             const EMFields&                    a_EM_fields,
                              const double                       a_time )
 {
    CH_TIME("VorticityOp::preOpEval");
 
-   preSolutionOpEval(a_kinetic_species, a_fluid_species, a_scalars, a_E_field, a_time);
+   preSolutionOpEval(a_kinetic_species, a_fluid_species, a_scalars, a_EM_fields, a_time);
 
    // Make sure there are enough ghost cells to compute the charge density in the ghost cells
    // of m_ion_charge_density
@@ -382,7 +428,7 @@ void VorticityOp::preOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_specie
       CH_assert(phase_geom.config_restrict(dfn.ghostVect()) >= m_ion_charge_density.ghostVect());
    }
 
-   computeIonChargeDensity( m_ion_charge_density, a_kinetic_species );
+   computeIonChargeDensity( m_ion_charge_density, a_kinetic_species, a_fluid_species );
 
    const DisjointBoxLayout& grids = m_ion_charge_density.disjointBoxLayout();
    LevelData<FArrayBox> zero(grids, 1, IntVect::Zero);
@@ -393,8 +439,16 @@ void VorticityOp::preOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_specie
                                                                       m_electron_temperature,
                                                                       *m_parallel_current_divergence_op_bcs,
                                                                       false );
+   
+   if (m_include_diffusion || m_include_pol_den_correction) {
+     m_vorticity_diffusion_op->setVorticityOperatorCoefficients(zero,
+                                                                m_ion_charge_density,
+                                                                m_electron_temperature,
+                                                                *m_vorticity_bcs,
+                                                                false);
+   }
 
-   computeDivPerpIonMagCurrentDensity(m_divJperp_mag_i, a_E_field, a_kinetic_species, a_time);
+   computeDivPerpIonMagCurrentDensity(m_divJperp_mag_i, a_EM_fields, a_kinetic_species, a_time);
 
    if (!m_include_pol_den_correction_to_pe) {
      computeDivPerpElectronMagCurrentDensity(m_divJperp_mag_e, m_ion_charge_density, zero, a_time);
@@ -422,14 +476,14 @@ void VorticityOp::evalSolutionOp( FluidSpeciesPtrVect&               a_rhs,
       //      if (procID()==0) cout << "Er_lo = " << scalar_data[0] << ", Er_hi = " << scalar_data[1] << endl;
    }
 
-   LevelData<FluxBox> dummy;
-   m_gyropoisson_op->updateBoundaryData(dummy, *m_gyropoisson_op_bcs);
-
+   // Because core BC is updated we need to updateBoundary data
+   m_gyropoisson_op->updateBoundaryDataAddingCoefs(*m_gyropoisson_op_bcs);
+   
    const FluidSpecies& sol_species = static_cast<const FluidSpecies&>(*a_fluid_species_phys[a_component]);
    FluidSpecies& rhs_species = static_cast<FluidSpecies&>(*a_rhs[a_component]);
 
-   const LevelData<FArrayBox>& sol = sol_species.cell_var(0);
-   LevelData<FArrayBox>& rhs = rhs_species.cell_var(0);
+   const LevelData<FArrayBox>& sol = sol_species.cell_var("potential");
+   LevelData<FArrayBox>& rhs = rhs_species.cell_var("potential");
 
    m_gyropoisson_op->computeFluxDivergence(sol, rhs, false, false);
 }
@@ -456,7 +510,7 @@ void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,P
       if (!procID()) {
         std::cout << "  Fluid Species " << a_species_idx
                   << " : "
-                  << " creating " << _FLUID_OP_PC_ 
+                  << " creating " << _FLUID_OP_PC_
                   << " preconditioner for " << m_pc_names[n]
                   << " (index = " << a_pc.size() << ").\n";
       }
@@ -478,7 +532,7 @@ void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,P
          const LevelData<FArrayBox>& soln_data   (a_fluid_species.cell_var(var));
          const DisjointBoxLayout&    grids       (soln_data.disjointBoxLayout());
          const int                   n_comp      (soln_data.nComp());
-         const LevelData<FArrayBox>& pMapping    (a_global_dofs.data(var)); 
+         const LevelData<FArrayBox>& pMapping    (a_global_dofs.data(var));
     
          for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
             const Box& grid = grids[dit];
@@ -521,7 +575,7 @@ void VorticityOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,P
        const LevelData<FArrayBox>& soln_data   (a_fluid_species.cell_var(var));
        const DisjointBoxLayout&    grids       (soln_data.disjointBoxLayout());
        const int                   n_comp      (soln_data.nComp());
-       const LevelData<FArrayBox>& pMapping    (a_global_dofs.data(var)); 
+       const LevelData<FArrayBox>& pMapping    (a_global_dofs.data(var));
   
        for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
           const Box& grid = grids[dit];
@@ -632,8 +686,8 @@ void VorticityOp::solveSolutionPC( FluidSpeciesPtrVect&              a_fluid_spe
    FluidSpecies& sol_species = static_cast<FluidSpecies&>(*a_fluid_species_solution[a_component]);
    const FluidSpecies& rhs_species = static_cast<const FluidSpecies&>(*a_fluid_species_rhs[a_component]);
 
-   const LevelData<FArrayBox>& r = rhs_species.cell_var(0);
-   LevelData<FArrayBox>& z = sol_species.cell_var(0);
+   const LevelData<FArrayBox>& r = rhs_species.cell_var("potential");
+   LevelData<FArrayBox>& z = sol_species.cell_var("potential");
 
    setZero(z);
    m_gyropoisson_op->solvePreconditioner(r, z);
@@ -657,13 +711,16 @@ void VorticityOp::updatePCImEx( const FluidSpeciesPtrVect&       a_fluid_species
                                                      m_electron_temperature,
                                                      *m_imex_pc_op_bcs,
                                                      true);
-   } else if (a_op_name == "VorticityDiffusionOp") {
-     // Diffusion op preconditioner update
-     //m_imex_pc_op->m_alpha = a_shift;
-     //m_imex_pc_op->setDiffusionOperatorCoefficients(  m_ion_mass_density, 
-     //                                                 m_ion_charge_density,
-     //                                                 *m_imex_pc_op_bcs, 
-     //                                                 true );
+      
+   } else if (m_multiphysics_precond && a_op_name == "VorticityDiffusionOp") {
+      // Diffusion op preconditioner update; we also need m_gyropoisson_op
+      // to be updated, but that already happened in preSolutionOpEval()
+      m_vorticity_diffusion_op->setBeta(a_shift);
+      m_vorticity_diffusion_op->setVorticityOperatorCoefficients(m_ion_mass_density,
+                                                                 m_ion_charge_density,
+                                                                 m_electron_temperature,
+                                                                 *m_vorticity_bcs,
+                                                                 true);
    }
 }
 
@@ -688,19 +745,25 @@ void VorticityOp::solvePCImEx( FluidSpeciesPtrVect&              a_fluid_species
      setZero(z);
      m_imex_pc_op->solvePreconditioner(r, z);
 
-   } else if (a_op_name == "VorticityDiffusionOp") {
+   } else if (m_multiphysics_precond && a_op_name == "VorticityDiffusionOp") {
 
      // solve diffusion op system
 
-//     const FluidSpecies& rhs_species 
-//          = static_cast<const FluidSpecies&>(*a_fluid_species_rhs[a_component]);
-//     const LevelData<FArrayBox>& r = rhs_species.cell_var(0);
-//
-//     FluidSpecies& sol_species = static_cast<FluidSpecies&>(*a_fluid_species_solution[a_component]);
-//     LevelData<FArrayBox>& z = sol_species.cell_var(0);
-//
-     //setZero(z);
-     //m_imex_pc_op->solvePreconditioner(r, z);
+     const FluidSpecies& rhs_species
+          = static_cast<const FluidSpecies&>(*a_fluid_species_rhs[a_component]);
+     const LevelData<FArrayBox>& r = rhs_species.cell_var(0);
+
+     FluidSpecies& sol_species = static_cast<FluidSpecies&>(*a_fluid_species_solution[a_component]);
+     LevelData<FArrayBox>& z = sol_species.cell_var(0);
+
+     const DisjointBoxLayout& grids = m_geometry.gridsFull();
+     LevelData<FArrayBox> neg_vort(grids, 1, IntVect::Zero);
+          
+     setZero(neg_vort);
+     m_vorticity_diffusion_op->solvePreconditioner(r, neg_vort);
+      
+     setZero(z);
+     m_gyropoisson_op->solvePreconditioner(neg_vort, z);
 
    }
 }
@@ -711,9 +774,25 @@ void VorticityOp::fillGhostCells( FluidSpecies&  a_species_phys,
 {
 }
 
+void VorticityOp::postStageEval(FluidSpecies&  a_species_comp,
+                                FluidSpecies&  a_species_phys,
+                                const Real     a_dt,
+                                const Real     a_time,
+                                const int      a_stage )
+{
+   LevelData<FArrayBox>& phi_comp = a_species_comp.cell_var("potential");
+   LevelData<FArrayBox>& phi_phys = a_species_phys.cell_var("potential");
+   
+   for (int dir=0; dir<SpaceDim; dir++) {
+      if (m_harmonic_filtering[dir] == 1) {
+         SpaceUtils::applyHarmonicFiltering(phi_comp, dir);
+         SpaceUtils::applyHarmonicFiltering(phi_phys, dir);
+      }
+   }
+}
 
 void VorticityOp::computeDivPerpIonMagCurrentDensity( LevelData<FArrayBox>&             a_divJperp_mag,
-                                                      const EField&                     a_E_field,
+                                                      const EMFields&                   a_EM_fields,
                                                       const PS::KineticSpeciesPtrVect&  a_species_phys,
                                                       const Real&                       a_time )
 {
@@ -737,11 +816,7 @@ void VorticityOp::computeDivPerpIonMagCurrentDensity( LevelData<FArrayBox>&     
       rhs_dfn.define( this_species.distributionFunction().getBoxes(), 1, PS::IntVect::Zero);
       
       // Compute the divergence of -Jperp due to magnetic drifts for this species
-      
-      //Gyroaverage calculation requires phi. Pass zero phi for now. Fix later
-      LevelData<FArrayBox> phi_tmp(grids, 1, IntVect::Zero);
-      setZero(phi_tmp);
-      m_vlasov->evalRHS(tmp_rhs_species, this_species, phi_tmp, a_E_field,
+      m_vlasov->evalRHS(tmp_rhs_species, this_species, a_EM_fields,
                         PS::PhaseGeom::MAGNETIC_DRIFT_VELOCITY, a_time);
 
       // Divide by J to get physical cell averages
@@ -756,7 +831,7 @@ void VorticityOp::computeDivPerpIonMagCurrentDensity( LevelData<FArrayBox>&     
 }
 
 void VorticityOp::computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&             a_div_Jperp,
-                                                      const EField&                     a_E_field,
+                                                      const EMFields&                   a_EM_fields,
                                                       const PS::KineticSpeciesPtrVect&  a_species_phys,
                                                       const LevelData<FArrayBox>&       a_ion_charge_density,
                                                       const Real&                       a_time)
@@ -784,17 +859,22 @@ void VorticityOp::computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&     
 
    // Compute the current due to ExB drifts
    if (divFreeVelocity) {
-
+   
       LevelData<FluxBox> J_ExB(grids, 1, IntVect::Unit);
-      m_geometry.computeBxEIntegrals(a_E_field.getPhiNode(), true, J_ExB);
+
+      // Compute 2pi*RBtor*Edl
+      m_geometry.computeBxEIntegrals(a_EM_fields.getPhiNode(), true, J_ExB);
       
       LevelData<FluxBox> charge_density_face(grids, 1, IntVect::Zero);
       fourthOrderCellToFace(charge_density_face, a_ion_charge_density);
-      
+
+      const LevelData<FluxBox>& FCBFieldMag = m_geometry.getFCBFieldMag();
+	
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          for (int dir=0, sign=-1; dir<SpaceDim; ++dir, sign*=-1) {
             J_ExB[dit][dir] *= sign * m_larmor;
             J_ExB[dit][dir] *= charge_density_face[dit][dir];
+	    J_ExB[dit][dir] /= FCBFieldMag[dit][dir];
          }
       }
       
@@ -808,7 +888,7 @@ void VorticityOp::computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&     
       
       // Compute the ExB drift on face centers
       LevelData<FluxBox> ExB_drift(grids, 3, IntVect::Unit);
-      m_geometry.computeEXBDrift(a_E_field.getFaceCenteredField(), ExB_drift);
+      m_geometry.computeEXBDrift(a_EM_fields.getEFieldFace(), ExB_drift);
       
       LevelData<FluxBox> charge_density_face(grids, 1, IntVect::Unit);
       fourthOrderCellToFace(charge_density_face, a_ion_charge_density);
@@ -861,10 +941,7 @@ void VorticityOp::computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&     
       // Compute the divergence of -Jperp due to ExB drifts for this species
       bool fourth_order = !m_parallel_current_divergence_op->secondOrder();
       
-      //Gyroaverage calculation requires phi. Pass zero phi for now. Fix later
-      LevelData<FArrayBox> phi_tmp(grids, 1, IntVect::Zero);
-      setZero(phi_tmp);
-      m_vlasov->evalRHS(tmp_rhs_species, this_species, phi_tmp, a_E_field,
+      m_vlasov->evalRHS(tmp_rhs_species, this_species, a_EM_fields,
                         PS::PhaseGeom::MAGNETIC_DRIFT_VELOCITY, a_time);
      
       // Divide by J to get physical cell averages      
@@ -907,20 +984,22 @@ void VorticityOp::computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&
    }
 
 #ifdef FULL_DIAMAG_CURRENT
-   // Compute -grad(n) [the calculation below extrapolates n in ghosts]
-   LevelData<FArrayBox> ne(grids, 1, IntVect::Zero);
-   for (DataIterator dit(ne.dataIterator()); dit.ok(); ++dit) {
-     ne[dit].copy(a_ion_charge_density[dit]);
+   // Compute -grad(Pe) [the calculation below extrapolates n in ghosts]
+   LevelData<FArrayBox> pe(grids, 1, IntVect::Zero);
+   for (DataIterator dit(pe.dataIterator()); dit.ok(); ++dit) {
+     pe[dit].copy(a_ion_charge_density[dit]);
      if (m_include_pol_den_correction_to_pe) {
-       ne[dit].minus(a_negative_vorticity[dit]);
+       pe[dit].minus(a_negative_vorticity[dit]);
      }
+     pe[dit].mult(m_electron_temperature[dit]);
+     
    }
-   LevelData<FluxBox> neg_grad_n(grids, 3, IntVect::Unit);
-   m_gyropoisson_op->computeField(ne, neg_grad_n);
+   LevelData<FluxBox> neg_grad_pe(grids, 3, IntVect::Unit);
+   m_gyropoisson_op->computeField(pe, neg_grad_pe);
 
    
    // Compute -grad(n)xB/B^2
-   m_geometry.computeEXBDrift(neg_grad_n, adv_vel);
+   m_geometry.computeEXBDrift(neg_grad_pe, adv_vel);
 #endif
 
    // Compute scalar advective quantity (u)
@@ -975,13 +1054,43 @@ void VorticityOp::computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&
       
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       a_div_Jperp[dit] /= m_volume[dit];
-   }   
+   }
+
+#ifdef LINEAR_BALOONING_DRIVE
+   //Balooning drive
+   LevelData<FArrayBox> ne(grids, 1, IntVect::Zero);
+   for (DataIterator dit(ne.dataIterator()); dit.ok(); ++dit) {
+      ne[dit].copy(a_ion_charge_density[dit]);
+   }
+      
+   LevelData<FArrayBox> neg_grad_n(grids, 3, IntVect::Unit);
+   m_gyropoisson_op->computeField(ne, neg_grad_n);
+      
+   LevelData<FArrayBox> bXCurvature(grids, 3, IntVect::Zero);
+   m_geometry.computeBFieldDirXCurvature(bXCurvature);
+      
+   for (DataIterator dit(u.dataIterator()); dit.ok(); ++dit) {
+      a_div_Jperp[dit].setVal(0.);
+      for (int n=0; n<SpaceDim; n++) {
+         if (SpaceDim == 3) {
+            bXCurvature[dit].mult(neg_grad_n[dit],n,n,1);
+            a_div_Jperp[dit].plus(bXCurvature[dit],n,0,1);
+         }
+         if (SpaceDim == 2) {
+            MayDay::Error("Balooning drive not yet implemented for 2D");
+         }
+      }
+      a_div_Jperp[dit].mult(m_electron_temperature[dit]);
+      a_div_Jperp[dit].divide(Bfield[dit]);
+      a_div_Jperp[dit].mult(-2.0*m_larmor);
+   }
+#endif
 }
 
 
 void VorticityOp::computeReynoldsStressTerm( LevelData<FArrayBox>&             a_div_ExB_times_vorticity,
                                              const LevelData<FArrayBox>&       a_vorticity,
-                                             const EField&                     a_E_field) const
+                                             const EMFields&                   a_EM_fields ) const
 {
    CH_TIME("VorticityOp::computeReynoldsStressTerm");
    
@@ -994,7 +1103,7 @@ void VorticityOp::computeReynoldsStressTerm( LevelData<FArrayBox>&             a
    
    // Compute the ExB drift on face centers
    LevelData<FluxBox> ExB_drift(grids, 3, IntVect::Unit);
-   m_geometry.computeEXBDrift(a_E_field.getFaceCenteredField(), ExB_drift);
+   m_geometry.computeEXBDrift(a_EM_fields.getEFieldFace(), ExB_drift);
 
    // Fill ghost cells (currently use 4th order extrapolation)
    LevelData<FArrayBox> vorticity_grown(grids, 1, 2*IntVect::Unit);
@@ -1063,7 +1172,8 @@ void VorticityOp::computeReynoldsStressTerm( LevelData<FArrayBox>&             a
 
 
 void VorticityOp::computeIonMassDensity( LevelData<FArrayBox>&             a_mass_density,
-                                         const PS::KineticSpeciesPtrVect&  a_species ) const
+                                         const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
+                                         const FluidSpeciesPtrVect&        a_fluid_species_comp) const
 {
    CH_TIME("VorticityOp::computeIonMassDensity");
       
@@ -1073,9 +1183,10 @@ void VorticityOp::computeIonMassDensity( LevelData<FArrayBox>&             a_mas
 
    setZero( a_mass_density );
 
-   for (int species(0); species<a_species.size(); species++) {
+   // Accumulate contribution from kinetic species
+   for (int species(0); species<a_kinetic_species_phys.size(); species++) {
          
-      const PS::KineticSpecies& this_species( *(a_species[species]) );
+      const PS::KineticSpecies& this_species( *(a_kinetic_species_phys[species]) );
       if ( this_species.charge() < 0.0 ) continue;
 
       // Compute the mass density for this species including ghost cells
@@ -1085,30 +1196,68 @@ void VorticityOp::computeIonMassDensity( LevelData<FArrayBox>&             a_mas
          a_mass_density[dit] += species_mass_density[dit];
       }
    }
+   
+   // Accumulate constribution from fluid species
+   for (int species(0); species<a_fluid_species_comp.size(); species++) {
+
+      if (typeid(*(a_fluid_species_comp[species])) == typeid(FluidSpecies)) {
+         const FluidSpecies& this_species( static_cast<FluidSpecies&>(*(a_fluid_species_comp[species])) );
+
+         if ( this_species.charge() < 0.0 ) continue;
+         
+         this_species.massDensity( species_mass_density );
+         m_geometry.divideJonValid(species_mass_density);
+      
+         DataIterator dit( a_mass_density.dataIterator() );
+         for (dit.begin(); dit.ok(); ++dit) {
+            a_mass_density[dit].plus( species_mass_density[dit] );
+         }
+      }
+   }
 }
 
 
 void VorticityOp::computeIonChargeDensity( LevelData<FArrayBox>&               a_ion_charge_density,
-                                           const PS::KineticSpeciesPtrVect&    a_species ) const
+                                           const PS::KineticSpeciesPtrVect&    a_kinetic_species_phys,
+                                           const FluidSpeciesPtrVect&          a_fluid_species_comp) const
 {
    CH_TIME("VorticityOp::computeIonChargeDensity");
    
    // Container for individual species charge density
-   LevelData<FArrayBox> ion_species_charge;
-   ion_species_charge.define(a_ion_charge_density);
+   LevelData<FArrayBox> species_charge_density;
+   species_charge_density.define(a_ion_charge_density);
    
    setZero( a_ion_charge_density );
    
-   for (int species(0); species<a_species.size(); species++) {
+   // Accumulate contribution from kinetic species
+   for (int species(0); species<a_kinetic_species_phys.size(); species++) {
       
-      const PS::KineticSpecies& this_species( *(a_species[species]) );
+      const PS::KineticSpecies& this_species( *(a_kinetic_species_phys[species]) );
       if ( this_species.charge() < 0.0 ) continue;
       
       // Compute the charge density for this species including ghost cells
-      this_species.chargeDensity( ion_species_charge );
+      this_species.chargeDensity( species_charge_density );
       
       for (DataIterator dit(a_ion_charge_density.dataIterator()); dit.ok(); ++dit) {
-         a_ion_charge_density[dit] += ion_species_charge[dit];
+         a_ion_charge_density[dit] += species_charge_density[dit];
+      }
+   }
+   
+   // Accumulate constribution from fluid species
+   for (int species(0); species<a_fluid_species_comp.size(); species++) {
+
+      if (typeid(*(a_fluid_species_comp[species])) == typeid(FluidSpecies)) {
+         const FluidSpecies& this_species( static_cast<FluidSpecies&>(*(a_fluid_species_comp[species])) );
+
+         if ( this_species.charge() < 0.0 ) continue;
+         
+         this_species.chargeDensity( species_charge_density );
+         m_geometry.divideJonValid(species_charge_density);
+      
+         DataIterator dit( a_ion_charge_density.dataIterator() );
+         for (dit.begin(); dit.ok(); ++dit) {
+            a_ion_charge_density[dit].plus( species_charge_density[dit] );
+         }
       }
    }
 }
@@ -1138,12 +1287,11 @@ void VorticityOp::setCoreBC( const double   a_core_inner_bv,
       a_bc.setBCValue(SingleNullBlockCoordSys::LCORE,RADIAL_DIR,0,a_core_inner_bv);
    }
    else {
-      MayDay::Error("EField::setCoreBC(): unknown geometry with consistent bcs");
+      MayDay::Error("VorticityOp::setCoreBC(): unknown geometry with consistent bcs");
    }
 }
 
 
-inline
 void VorticityOp::setZero( LevelData<FArrayBox>& a_data ) const
 {
    for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
@@ -1151,156 +1299,50 @@ void VorticityOp::setZero( LevelData<FArrayBox>& a_data ) const
    }
 }
 
-
-void VorticityOp::initializeOldModel( const PS::KineticSpeciesPtrVect&  a_kinetic_species,
-                                      const Vector<Real>&               a_scalar_data )
+void VorticityOp::setZero( LevelData<FluxBox>& a_data ) const
 {
-   computeIonMassDensity(m_ion_mass_density, a_kinetic_species);
-
-   if (a_scalar_data.size() > 0) {
-      setCoreBC( a_scalar_data[0], -a_scalar_data[1], *m_gyropoisson_op_bcs );
+   for (DataIterator dit(a_data.dataIterator()); dit.ok(); ++dit) {
+      a_data[dit].setVal(0.);
    }
-   
-   m_gyropoisson_op->setOperatorCoefficients(m_ion_mass_density, *m_gyropoisson_op_bcs, false);
 }
 
 
-void VorticityOp::updatePotentialOldModel( LevelData<FArrayBox>&             a_phi,
-                                           EField&                           a_E_field,
-                                           const PS::KineticSpeciesPtrVect&  a_kinetic_species,
-                                           const Vector<Real>&               a_scalar_data,
-                                           const Real                        a_dt,
-                                           const Real                        a_time )
+void VorticityOp::initializeDiffusionProfiles(LevelData<FluxBox>& a_pol_diffusion_face,
+                                              LevelData<FluxBox>& a_perp_diffusion_face)
 {
-   CH_TIME("VorticityOp::updatePotentialOldModel");
-   const DisjointBoxLayout& grids = m_geometry.gridsFull();
+   // Get distjoint box layout
+   const DisjointBoxLayout& grids( m_geometry.grids() );
    
-   LevelData<FArrayBox> zero(grids, 1, IntVect::Zero);
-   setZero(zero);
-
-   // Compute the polarization density term (at the old time) using the operator and boundary
-   // conditions set in the previous call of this function or initializeOldModel().
-   // NB: gkPoissonRHS = -vorticity
-   LevelData<FArrayBox> gkPoissonRHS(grids, 1, IntVect::Zero);
-   m_gyropoisson_op->computeFluxDivergence(a_phi, gkPoissonRHS, false);
-   
-   // Compute the Reynolds stress term (at the old time)
-   // NB: -div(ExB*vorticity) = div(ExB*gkPoissonRHS)
-   LevelData<FArrayBox> negative_div_ExB_vorticity(grids, 1, IntVect::Zero);
-   if (m_reynolds_stress) {
-     computeReynoldsStressTerm(negative_div_ExB_vorticity, gkPoissonRHS, a_E_field);
+   // Assign perendicular diffusion profile
+   if (m_pol_diffusion_func != NULL) {
+      LevelData<FArrayBox> pol_diffusion_cell( grids, 1, 2*IntVect::Unit );
+      m_pol_diffusion_func->assign( pol_diffusion_cell, m_geometry, 0.0);
+      m_geometry.fillInternalGhosts( pol_diffusion_cell );
+      fourthOrderCellToFaceCenters(a_pol_diffusion_face, pol_diffusion_cell);
+   }
+   else {
+      setZero(a_pol_diffusion_face);
    }
    
-   // Compute the parallel current divergence
-   computeIonChargeDensity(m_ion_charge_density, a_kinetic_species);
-   m_parallel_current_divergence_op->setImplicitDt(a_dt);
-   m_parallel_current_divergence_op->setVorticityOperatorCoefficients(zero,
-                                                                      m_ion_charge_density,
-                                                                      m_electron_temperature,
-                                                                      *m_parallel_current_divergence_op_bcs,
-                                                                      false);
-   m_parallel_current_divergence_op->computeFluxDivergence(m_ion_charge_density, m_negativeDivJpar, false, true);
-    
-   // Compute the perpendicular current divergence
-   LevelData<FArrayBox> div_J_electron_mag(grids, 1, IntVect::Zero);
-   if (m_ExB_current_model) {
-     computeDivPerpIonExBCurrentDensity(div_J_electron_mag, a_E_field, a_kinetic_species, m_ion_charge_density, a_time);
+   // Assign poloidal diffusion profile
+   if (m_perp_diffusion_func != NULL) {
+      LevelData<FArrayBox> perp_diffusion_cell( grids, 1, 2*IntVect::Unit );
+      m_perp_diffusion_func->assign( perp_diffusion_cell, m_geometry, 0.0);
+      m_geometry.fillInternalGhosts( perp_diffusion_cell );
+      fourthOrderCellToFaceCenters(a_perp_diffusion_face, perp_diffusion_cell);
    }
-   else{
-     computeDivPerpElectronMagCurrentDensity(div_J_electron_mag, m_ion_charge_density, gkPoissonRHS, a_time);
+   else {
+      setZero(a_perp_diffusion_face);
    }
-   
-   LevelData<FArrayBox> div_J_ion_mag(grids, 1, IntVect::Zero);
-   computeDivPerpIonMagCurrentDensity(div_J_ion_mag, a_E_field, a_kinetic_species, a_time);
-
-   // Get the RHS for the implicit vorticity solve
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      gkPoissonRHS[dit] += m_negativeDivJpar[dit];
-      
-      div_J_electron_mag[dit] *= a_dt;
-      gkPoissonRHS[dit] -= div_J_electron_mag[dit];
-
-      div_J_ion_mag[dit] *= a_dt;
-      gkPoissonRHS[dit] -= div_J_ion_mag[dit];
-
-      if (m_reynolds_stress) {
-         negative_div_ExB_vorticity[dit] *= a_dt;
-         gkPoissonRHS[dit] -= negative_div_ExB_vorticity[dit];
-      }
-   }
-      
-   // Do the implicit vorticity solve
-   computeIonMassDensity(m_ion_mass_density, a_kinetic_species);
-   m_imex_pc_op->setImplicitDt(a_dt);
-      
-   if (a_scalar_data.size() > 0) setCoreBC( a_scalar_data[0], -a_scalar_data[1], *m_imex_pc_op_bcs );
-
-   bool update_precond = (m_it_counter % m_update_pc_freq_oldmodel == 0) ? true : false;
-   m_imex_pc_op->setVorticityOperatorCoefficients(m_ion_mass_density,
-                                                  m_ion_charge_density,
-                                                  m_electron_temperature,
-                                                  *m_imex_pc_op_bcs,
-                                                  update_precond);
-
-   m_imex_pc_op->solveWithBCs( a_phi, gkPoissonRHS );
-   
-   if (m_include_vorticity_diffusion) {
-      LevelData<FArrayBox> negativeVortOld(grids, 1, IntVect::Zero);
-      m_gyropoisson_op->computeFluxDivergence(a_phi, negativeVortOld, false);
-   
-      //Advance the high-order operator to update negative vorticity
-      LevelData<FArrayBox> diffusionRHS(grids, 1, IntVect::Zero);
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         diffusionRHS[dit].copy(negativeVortOld[dit]);
-         diffusionRHS[dit].divide(a_dt);
-         //diffusionRHS[dit].negate();
-      }
-   
-      m_vorticity_diffusion_op->setImplicitDt(a_dt);
-      m_vorticity_diffusion_op->setVorticityOperatorCoefficients(zero,
-                                                                 m_ion_charge_density,
-                                                                 m_electron_temperature,
-                                                                 *m_vorticity_diffusion_op_bcs,
-                                                                 update_precond);
-   
-      LevelData<FArrayBox> negativeVortNew(grids, 1, IntVect::Zero);
-      m_vorticity_diffusion_op->solveWithBCs( negativeVortNew, diffusionRHS );
-   
-      //Obtain potential from the vorticity at the end of the step
-      m_gyropoisson_op->setOperatorCoefficients(m_ion_mass_density, *m_gyropoisson_op_bcs, update_precond);
-      m_gyropoisson_op->solveWithBCs( a_phi, negativeVortNew );
-   }
-   
-   m_imex_pc_op->fillInternalGhosts( a_phi );
-
-   // Update nodal phi if supporting the calculation of a divergence-free phase velocity
-   a_E_field.interpToNodes(a_phi);
-
-   // Set up the polarization density operator for the next step
-   if (a_scalar_data.size() > 0) setCoreBC( a_scalar_data[0], -a_scalar_data[1], *m_gyropoisson_op_bcs );
-   m_gyropoisson_op->setOperatorCoefficients(m_ion_mass_density, *m_gyropoisson_op_bcs, false);
-
-   // Optional phi post-processing to remove the axisymmetric component
-   if (m_remove_axisymmetric_phi) {
-     FluxSurface flux_surface(m_geometry);
-     LevelData<FArrayBox> phi_fs(grids, 1, IntVect::Zero);
-     flux_surface.averageAndSpread(a_phi, phi_fs);
-
-     for (DataIterator dit(grids); dit.ok(); ++dit) {
-       a_phi[dit] -= phi_fs[dit];
-     }
-   }
-
-   m_it_counter++;
 }
-
 
 void VorticityOp::parseParameters( const ParmParse& a_pp )
 {
    a_pp.query( "include_reynolds_stress", m_reynolds_stress);
    a_pp.query( "ExB_current_model", m_ExB_current_model );
    a_pp.query( "include_pol_den_correction", m_include_pol_den_correction );
-   a_pp.query( "include_vorticity_diffusion", m_include_vorticity_diffusion );
+   a_pp.query( "use_vorticity_bcs", m_use_vorticity_bcs );
+   a_pp.query( "use_multiphysics_precond", m_multiphysics_precond );
 
    m_include_pol_den_correction_precond = m_include_pol_den_correction; // default precond value to operator value
    a_pp.query( "include_pol_den_correction_precond", m_include_pol_den_correction_precond );
@@ -1309,11 +1351,11 @@ void VorticityOp::parseParameters( const ParmParse& a_pp )
    a_pp.query( "second_order", m_second_order );
    a_pp.query( "low_pollution", m_low_pollution );
    a_pp.query( "remove_axisymmetric_phi", m_remove_axisymmetric_phi );
+   a_pp.queryarr( "harmonic_filtering", m_harmonic_filtering, 0, SpaceDim );
 
    if (a_pp.contains("update_precond_interval")) {
-      a_pp.get( "update_precond_interval", m_update_pc_freq_oldmodel );
-      m_update_pc_freq_e = m_update_pc_freq_oldmodel;
-      m_update_pc_freq_i = m_update_pc_freq_oldmodel;
+      a_pp.get( "update_precond_interval", m_update_pc_freq_e );
+      a_pp.get( "update_precond_interval", m_update_pc_freq_i );
    } else {
       a_pp.query( "update_precond_interval_LHS", m_update_pc_freq_e);
       a_pp.query( "update_precond_interval_RHS", m_update_pc_freq_i);
@@ -1346,6 +1388,27 @@ void VorticityOp::parseParameters( const ParmParse& a_pp )
       std::string grid_function_name;
       a_pp.get("electron_temperature", grid_function_name );
       m_electron_temperature_func = grid_library->find( grid_function_name );
+   }
+  
+  if (a_pp.contains("poloidal_diffusion_coefficient")) {
+     GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
+     std::string grid_function_name;
+     a_pp.get("poloidal_diffusion_coefficient", grid_function_name );
+     m_pol_diffusion_func = grid_library->find( grid_function_name );
+     m_include_diffusion = true;
+  }
+
+  if (a_pp.contains("perpendicular_diffusion_coefficient")) {
+     GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
+     std::string grid_function_name;
+     a_pp.get("perpendicular_diffusion_coefficient", grid_function_name );
+     m_perp_diffusion_func = grid_library->find( grid_function_name );
+     m_include_diffusion = true;
+  }
+   
+   if (m_include_diffusion) {
+      m_include_diffusion_precond = m_include_diffusion;
+      a_pp.query( "include_diffusion_precond", m_include_diffusion_precond );
    }
 }
 

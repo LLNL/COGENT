@@ -8,6 +8,7 @@ c  NOTE in this file CH_SPACEDIM is total phase space dimension
      &     CHF_CONST_REAL[Z],
      &     CHF_CONST_REAL[mass],
      &     CHF_CONST_REAL[larmor],
+     &     CHF_CONST_INT[include_Apar],
      &     CHF_CONST_INT[include_drifts],
      &     CHF_CONST_INT[include_par_streaming],
      &     CHF_CONST_INT[include_gradB_par_force],
@@ -16,6 +17,7 @@ c  NOTE in this file CH_SPACEDIM is total phase space dimension
      &     CHF_CONST_INT[use_field_alignment],
      &     CHF_CONST_INT[use_locnormalized_vels],
      &     CHF_CONST_FRA[E],
+     &     CHF_CONST_FRA[Apar_derivs],
      &     CHF_CONST_FRA[Bvec],
      &     CHF_CONST_FRA[gradB],
      &     CHF_CONST_FRA[curlb],
@@ -23,7 +25,8 @@ c  NOTE in this file CH_SPACEDIM is total phase space dimension
      &     CHF_CONST_FRA[gradlogvparn],
      &     CHF_CONST_FRA[gradlogmun],
      &     CHF_FRA[velocity],
-     &     CHF_CONST_INT[is_gyrokinetic]
+     &     CHF_CONST_INT[is_gyrokinetic],
+     &     CHF_CONST_INT[is_toroidal]
      &     )
 
 c    For spatial normalization of vpar, mu, use_normalized_coords = 1 (true),
@@ -34,6 +37,7 @@ c    normalization functions.
 c     local variables
       double precision vpar, mu, Bmag, Bstar_par, G(0:2), b(0:2), Bstar(0:2),
      &     bxG(0:2), mag_drift_fac(0:2), Bstar_dot_G, fac, this_Bvec(0:2),
+     &     dApar_dt, delta_B_perp(0:2), grad_Apar(0:2),
      &     this_curlb(0:2), this_gradB(0:2), this_E(0:2), this_vparnorm, this_munorm,
      &     this_gradlogvparn(0:2),this_gradlogmun(0:2),gradvn_dot_rdot,gradmun_dot_rdot,
      &	   vparcomp,mucomp
@@ -110,6 +114,11 @@ c     vparcomp, mucomp are the computational (mapped) components
             else
               this_E(n) = E(i0,i1,CHF_LBOUND[E;2],i3,n)
             endif
+            if (include_Apar .NE. 0) then
+               grad_Apar(n) = Apar_derivs(i0,i1,CHF_LBOUND[Apar_derivs;2] ,CHF_LBOUND[Apar_derivs;3],n)
+            else
+               grad_Apar(n) = zero
+            endif
 #endif
 #if CH_SPACEDIM==5
             this_Bvec(n)  =  Bvec(i0,i1,i2,CHF_LBOUND[Bvec;3] ,CHF_LBOUND[Bvec;4] ,n)
@@ -120,10 +129,36 @@ c     vparcomp, mucomp are the computational (mapped) components
             else
               this_E(n) = E(i0,i1,i2,CHF_LBOUND[E;3],i4,n)
             endif
+            if (include_Apar .NE. 0) then
+               grad_Apar(n) = Apar_derivs(i0,i1,i2,CHF_LBOUND[Apar_derivs;3] ,CHF_LBOUND[Apar_derivs;4],n)
+            else
+               grad_Apar(n) = zero
+            endif
 #endif
             Bmag = Bmag + this_Bvec(n)**2
          enddo
          Bmag = dsqrt(Bmag)
+
+         do n = 0, 2
+            b(n) = this_Bvec(n) / Bmag
+         enddo
+
+         if (include_Apar .NE. 0) then
+            delta_B_perp(0) = grad_Apar(1)*b(2) - grad_Apar(2)*b(1)
+            delta_B_perp(1) = grad_Apar(2)*b(0) - grad_Apar(0)*b(2)
+            delta_B_perp(2) = grad_Apar(0)*b(1) - grad_Apar(1)*b(0)
+#if CH_SPACEDIM==4
+            dApar_dt = Apar_derivs(i0,i1,CHF_LBOUND[Apar_derivs;2] ,CHF_LBOUND[Apar_derivs;3],3)
+#endif
+#if CH_SPACEDIM==5
+            dApar_dt = Apar_derivs(i0,i1,i2,CHF_LBOUND[Apar_derivs;3] ,CHF_LBOUND[Apar_derivs;4],3)
+#endif         
+         else
+            do n = 0, 2
+               delta_B_perp(n) = zero
+            enddo
+            dApar_dt = zero
+         endif
 
          Bstar_par = zero
          do n = 0, 2
@@ -133,9 +168,8 @@ c     vparcomp, mucomp are the computational (mapped) components
                G(n) = 0.0
             endif 
 
-            b(n) = this_Bvec(n) / Bmag
             mag_drift_fac(n) = fac * mass * vpar * this_curlb(n)
-            Bstar(n) = this_Bvec(n) + mag_drift_fac(n)
+            Bstar(n) = this_Bvec(n) + mag_drift_fac(n) 
 
             Bstar_par = Bstar_par + b(n) * Bstar(n)
          enddo
@@ -157,7 +191,7 @@ c        R_dot
 
             if (include_mag_drifts .ne. 0) then
                velocity(CHF_AUTOIX[i],n) = velocity(CHF_AUTOIX[i],n) 
-     &              + vpar * mag_drift_fac(phys_comp(n))
+     &              + vpar * (mag_drift_fac(phys_comp(n)) + delta_B_perp(phys_comp(n)))
             endif 
 
 
@@ -174,14 +208,14 @@ c        vpar_dot
          Bstar_dot_G = zero
          do n = 0, 2
 
-            Bstar_dot_G = Bstar_dot_G + Bstar(n) * G(n)
+            Bstar_dot_G = Bstar_dot_G + (Bstar(n) + delta_B_perp(n)) * G(n)
 
             if (include_gradB_par_force .eq. 0) then
               Bstar_dot_G = Bstar_dot_G - this_Bvec(n) * half * mu * this_gradB(n)   
             endif
          enddo
 
-         velocity(CHF_AUTOIX[i],dimless2) = - Bstar_dot_G / (mass * Bstar_par)
+         velocity(CHF_AUTOIX[i],dimless2) = - Bstar_dot_G / (mass * Bstar_par) - (Z/mass) * dApar_dt
 
          if (use_locnormalized_vels .EQ. 1) then
            gradvn_dot_rdot = zero
@@ -203,6 +237,29 @@ c        mu_dot
            enddo
            velocity(CHF_AUTOIX[i],dimless1) =velocity(CHF_AUTOIX[i],dimless1) - mucomp*gradmun_dot_rdot
          endif
+
+
+c        compute toroidal velocity; only works for the 2D case
+ 
+         if (is_toroidal .ne. 0) then
+
+          do n = 0, dimless2 
+            velocity(CHF_AUTOIX[i],n)  = fac*bxG(1)
+
+            if (include_mag_drifts .ne. 0) then
+                velocity(CHF_AUTOIX[i],n) = velocity(CHF_AUTOIX[i],n) + vpar * mag_drift_fac(1)
+            endif 
+
+            velocity(CHF_AUTOIX[i],n) = velocity(CHF_AUTOIX[i],n) + vpar * (this_Bvec(1) + delta_B_perp(1))
+
+            velocity(CHF_AUTOIX[i],n)  = velocity(CHF_AUTOIX[i],n) / Bstar_par
+           enddo
+
+          velocity(CHF_AUTOIX[i],dimless2) = zero 
+          velocity(CHF_AUTOIX[i],dimless1) = zero
+
+        endif 
+
 
       CHF_ENDDO
 

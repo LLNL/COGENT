@@ -62,7 +62,7 @@ class GKSystemIC
 
       const CFG::GridFunction& fluidSpeciesIC( const std::string& a_name ) const;
 
-      void parsePotential( ParmParse& a_pp );
+      void parsePotentials( ParmParse& a_pp );
 
       void parseKineticSpecies( ParmParse& a_pp,
                                 const KineticSpeciesPtrVect& a_species );

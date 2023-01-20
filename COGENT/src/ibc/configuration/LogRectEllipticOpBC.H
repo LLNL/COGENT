@@ -17,6 +17,7 @@ public:
 
    LogRectEllipticOpBC( const std::string&  name,
                         ParmParse&          pp,
+                        const int           nblocks,
                         const bool*         is_periodic,
                         const int&          verbosity );
 

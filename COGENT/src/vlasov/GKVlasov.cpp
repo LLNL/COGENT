@@ -1,8 +1,6 @@
 #include "GKVlasov.H"
 #include "CONSTANTS.H"
 #include "Directions.H"
-#include "MomentOp.H"
-#include "Kernels.H"
 
 #include "FourthOrderUtil.H"
 #include "CellToEdge.H"
@@ -180,6 +178,7 @@ GKVlasov::GKVlasov( ParmParse&                      a_pp,
    m_useSG = false;  //Don't use sparse grids by default
    ppsg.query( "useSGstencils", m_useSG );
 
+   m_timescales.clear();
 }
 
 
@@ -206,8 +205,8 @@ GKVlasov::~GKVlasov()
 
 void GKVlasov::accumulateRHS( GKRHSData&                            a_rhs,
                               const KineticSpeciesPtrVect&          a_kinetic_phys,
-                              const CFG::LevelData<CFG::FArrayBox>& a_phi,
-                              const CFG::EField&                    a_E_field,
+                              const CFG::EMFields&                  a_EM_fields,
+                              const CFG::PhiOps&                    a_phi_ops,
                               const bool                            a_implicit,
                               const Real&                           a_time )
 {
@@ -223,16 +222,14 @@ void GKVlasov::accumulateRHS( GKRHSData&                            a_rhs,
       if (a_implicit) {
          evalRHSImplicit(rhs_species,
                          soln_species,
-                         a_phi,
-                         a_E_field,
+                         a_EM_fields,
                          PhaseGeom::FULL_VELOCITY,
                          a_time );
          
       } else {
          evalRHSExplicit(rhs_species,
                          soln_species,
-                         a_phi,
-                         a_E_field,
+                         a_EM_fields,
                          PhaseGeom::FULL_VELOCITY,
                          a_time );
       }
@@ -243,8 +240,7 @@ void GKVlasov::accumulateRHS( GKRHSData&                            a_rhs,
 void
 GKVlasov::evalRHSExplicit( KineticSpecies&                        a_rhs_species,
                            const KineticSpecies&                  a_soln_species,
-                           const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                           const CFG::EField&                     a_E_field,
+                           const CFG::EMFields&                   a_EM_fields,
                            const int                              a_velocity_option,
                            const Real                             a_time )
 {
@@ -257,7 +253,7 @@ GKVlasov::evalRHSExplicit( KineticSpecies&                        a_rhs_species,
   }
 
   if (m_ti_op_type[name] == _explicit_op_) {
-    evalRHS(a_rhs_species, a_soln_species, a_phi, a_E_field, a_velocity_option, a_time);
+     evalRHS(a_rhs_species, a_soln_species, a_EM_fields, a_velocity_option, a_time);
   }
 }
 
@@ -265,8 +261,7 @@ GKVlasov::evalRHSExplicit( KineticSpecies&                        a_rhs_species,
 void
 GKVlasov::evalRHSImplicit( KineticSpecies&                        a_rhs_species,
                            const KineticSpecies&                  a_soln_species,
-                           const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                           const CFG::EField&                     a_E_field,
+                           const CFG::EMFields&                   a_EM_fields,
                            const int                              a_velocity_option,
                            const Real                             a_time )
 {
@@ -279,7 +274,7 @@ GKVlasov::evalRHSImplicit( KineticSpecies&                        a_rhs_species,
   }
 
   if (m_ti_op_type[name] == _implicit_op_) {
-    evalRHS(a_rhs_species, a_soln_species, a_phi, a_E_field, a_velocity_option, a_time);
+     evalRHS(a_rhs_species, a_soln_species, a_EM_fields, a_velocity_option, a_time);
   }
 }
 
@@ -287,8 +282,7 @@ GKVlasov::evalRHSImplicit( KineticSpecies&                        a_rhs_species,
 void
 GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
                    const KineticSpecies&                  a_soln_species,
-                   const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                   const CFG::EField&                     a_E_field,
+                   const CFG::EMFields&                   a_EM_fields,
                    const int                              a_velocity_option,
                    const Real                             a_time )
 {
@@ -307,7 +301,7 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
    IntVect ghostVect = (geometry.secondOrder()) ? IntVect::Zero : IntVect::Unit;
 
    if ( geometry.divFreeVelocity() ) {
-      bool fourth_order_Efield = !a_E_field.secondOrder();
+      bool fourth_order_Efield = !a_EM_fields.secondOrder();
       
       if ( !m_flux_normal.isDefined()) {
          m_flux_normal.define( dbl, 1, ghostVect );
@@ -315,9 +309,7 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
    
       computeIntegratedFluxNormals(m_flux_normal,
                                    a_soln_species,
-                                   a_phi,
-                                   a_E_field.getCellCenteredField(),
-                                   a_E_field.getPhiNode(),
+                                   a_EM_fields,
                                    fourth_order_Efield,
                                    a_velocity_option,
                                    a_time);
@@ -332,8 +324,7 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
    
       computePhysicalFlux(m_flux,
                           a_soln_species,
-                          a_phi,
-                          a_E_field,
+                          a_EM_fields,
                           a_velocity_option,
                           a_time,
                           true);
@@ -361,15 +352,14 @@ GKVlasov::evalRHS( KineticSpecies&                        a_rhs_species,
 #endif
 
 #ifdef TEST_ENERGY_CONSERVATION
-   testEnergyConservation(rhs_dfn, a_soln_species, a_phi, a_E_field);
+   testEnergyConservation(rhs_dfn, a_soln_species, a_EM_fields);
 #endif
 }
 
 void
 GKVlasov::computePhysicalFlux( LevelData<FluxBox>&                    a_flux,
                                const KineticSpecies&                  a_soln_species,
-                               const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                               const CFG::EField&                     a_E_field,
+                               const CFG::EMFields&                   a_EM_fields,
                                const int                              a_velocity_option,
                                const Real                             a_time,
                                const bool                             a_apply_axisymmetric_correction)
@@ -395,9 +385,10 @@ GKVlasov::computePhysicalFlux( LevelData<FluxBox>&                    a_flux,
    if (a_soln_species.isGyrokinetic() && m_include_FLR_effects) {
 
      LevelData<FluxBox> gyroaveraged_E_field;
-     getEFieldwFLR(gyroaveraged_E_field, a_soln_species, a_phi, a_E_field);
+     getEFieldwFLR(gyroaveraged_E_field, a_soln_species, a_EM_fields);
+     LevelData<FluxBox> gyroaveraged_Apar_derivatives;
      a_soln_species.computeVelocity(  m_velocity,
-                                      gyroaveraged_E_field,
+                                      a_EM_fields,
                                       true,
                                       a_velocity_option,
                                       a_time,
@@ -405,7 +396,7 @@ GKVlasov::computePhysicalFlux( LevelData<FluxBox>&                    a_flux,
 
    } else {
      a_soln_species.computeVelocity(  m_velocity,
-                                      a_E_field.getInjectedField(),
+                                      a_EM_fields,
                                       false,
                                       a_velocity_option,
                                       a_time,
@@ -448,9 +439,10 @@ GKVlasov::computePhysicalFlux( LevelData<FluxBox>&                    a_flux,
       if (a_soln_species.isGyrokinetic() && m_include_FLR_effects) {
 
         LevelData<FluxBox> gyroaveraged_E_field;
-        getEFieldwFLR(gyroaveraged_E_field, a_soln_species, a_phi, a_E_field);
+        getEFieldwFLR(gyroaveraged_E_field, a_soln_species, a_EM_fields);
+        LevelData<FluxBox> gyroaveraged_Apar_derivatives;
         a_soln_species.computeVelocity( m_velocity,
-                                        gyroaveraged_E_field,
+                                        a_EM_fields,
                                         true,
                                         PhaseGeom::NO_ZERO_ORDER_TERMS,
                                         a_time );
@@ -458,7 +450,7 @@ GKVlasov::computePhysicalFlux( LevelData<FluxBox>&                    a_flux,
       } else {
 
         a_soln_species.computeVelocity( m_velocity,
-                                        a_E_field.getInjectedField(),
+                                        a_EM_fields,
                                         false,
                                         PhaseGeom::NO_ZERO_ORDER_TERMS,
                                         a_time );
@@ -477,9 +469,7 @@ GKVlasov::computePhysicalFlux( LevelData<FluxBox>&                    a_flux,
 void
 GKVlasov::computeIntegratedFluxNormals(LevelData<FluxBox>&                    a_flux_normal,
                                        const KineticSpecies&                  a_soln_species,
-                                       const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                                       const CFG::LevelData<CFG::FArrayBox>&  a_Efield_cell,
-                                       const CFG::LevelData<CFG::FArrayBox>&  a_phi_node,
+                                       const CFG::EMFields&                   a_EM_fields,
                                        const bool                             a_fourth_order_Efield,
                                        const int                              a_velocity_option,
                                        const Real                             a_time )
@@ -513,8 +503,7 @@ GKVlasov::computeIntegratedFluxNormals(LevelData<FluxBox>&                    a_
    }
 
    a_soln_species.computeMappedVelocityNormals( m_velocity_normal,
-                                                a_Efield_cell,
-                                                a_phi_node,
+                                                a_EM_fields,
                                                 a_fourth_order_Efield,
                                                 a_velocity_option );
    
@@ -543,8 +532,7 @@ GKVlasov::computeIntegratedFluxNormals(LevelData<FluxBox>&                    a_
       computeAdvectionFluxMapped( m_delta_dfn, m_velocity_normal, m_delta_flux_normal, geometry );
        
       a_soln_species.computeMappedVelocityNormals(  m_velocity_normal,
-                                                    a_Efield_cell,
-                                                    a_phi_node,
+                                                    a_EM_fields,
                                                     a_fourth_order_Efield,
                                                     PhaseGeom::NO_ZERO_ORDER_TERMS );
 
@@ -762,19 +750,18 @@ GKVlasov::computeDeltaF(const KineticSpecies&         a_soln_species,
 }
 
 
-Real
-GKVlasov::computeDtExplicitTI( const CFG::EField&            a_E_field,
+const std::vector<std::pair<std::string,Real> >&
+GKVlasov::computeDtExplicitTI( const CFG::EMFields&          a_EM_fields,
                                const KineticSpeciesPtrVect&  a_species_vect,
                                const Real&                   a_time)
 {
    CH_TIME("GKVlasov::computeDtExplicitTI");
 
-   Real dt(BASEFAB_REAL_SETVAL);
+   m_dt.clear();
 
-   if ( a_E_field.supportsDivFreePhaseVel() ) {
+   bool div_free_phase_vel = (a_EM_fields.getPhiNode()).isDefined();
 
-      const CFG::LevelData<CFG::FArrayBox>& Efield_cell = a_E_field.getCellCenteredField();
-      const CFG::LevelData<CFG::FArrayBox>& phi_node = a_E_field.getPhiNode();
+   if ( div_free_phase_vel ) {
 
       for (int s(0); s<a_species_vect.size(); s++) {
 
@@ -783,8 +770,7 @@ GKVlasov::computeDtExplicitTI( const CFG::EField&            a_E_field,
 
          LevelData<FluxBox> velocity_normals( dfn.getBoxes(), 1, IntVect::Unit );
          species.computeMappedVelocityNormals(  velocity_normals, 
-                                                Efield_cell, 
-                                                phi_node, 
+                                                a_EM_fields,
                                                 false, 
                                                 PhaseGeom::FULL_VELOCITY );
 
@@ -794,13 +780,13 @@ GKVlasov::computeDtExplicitTI( const CFG::EField&            a_E_field,
                                                               geometry, 
                                                               UNIT_CFL ) );
          CH_assert(speciesDt >= 0);
-
-         dt = Min( dt, speciesDt );
+         m_dt.push_back(std::pair<std::string,Real>(species.name(), speciesDt) );
       }
    }
    else {
 
-      const LevelData<FluxBox>& injected_E_field = a_E_field.getInjectedField();
+      const LevelData<FluxBox>& injected_E_field = a_EM_fields.getEField();
+      const LevelData<FluxBox>& injected_Apar_derivatives = a_EM_fields.getAparDerivs();
 
       for (int s(0); s<a_species_vect.size(); s++) {
 
@@ -813,34 +799,32 @@ GKVlasov::computeDtExplicitTI( const CFG::EField&            a_E_field,
             m_velocity.define( dfn.getBoxes(), SpaceDim, ghostVect );
          }
          species.computeMappedVelocity( m_velocity, 
-                                        injected_E_field, 
+                                        a_EM_fields,
+                                        injected_Apar_derivatives, 
                                         false, 
                                         a_time );
 
          const Real UNIT_CFL(1.0);
          Real speciesDt( computeMappedDtSpecies( m_velocity, geometry, UNIT_CFL ) );
          CH_assert(speciesDt >= 0);
-
-         dt = Min( dt, speciesDt );
+         m_dt.push_back(std::pair<std::string,Real>(species.name(), speciesDt) );
       }
    }
 
-   return dt;
+   return m_dt;
 }
 
-Real
-GKVlasov::computeDtImExTI( const CFG::EField&            a_E_field,
+const std::vector<std::pair<std::string,Real> >&
+GKVlasov::computeDtImExTI( const CFG::EMFields&          a_EM_fields,
                            const KineticSpeciesPtrVect&  a_species_vect,
                            const Real&                   a_time)
 {
    CH_TIME("GKVlasov::computeDtImExTI");
   
-   Real dt(BASEFAB_REAL_SETVAL);
+   m_dt.clear();
 
-   if ( a_E_field.supportsDivFreePhaseVel() ) {
-
-      const CFG::LevelData<CFG::FArrayBox>& Efield_cell = a_E_field.getCellCenteredField();
-      const CFG::LevelData<CFG::FArrayBox>& phi_node = a_E_field.getPhiNode();
+   bool div_free_phase_vel = (a_EM_fields.getPhiNode()).isDefined();
+   if ( div_free_phase_vel ) {
 
       for (int s(0); s<a_species_vect.size(); s++) {
 
@@ -859,8 +843,7 @@ GKVlasov::computeDtImExTI( const CFG::EField&            a_E_field,
   
            LevelData<FluxBox> velocity_normals( dfn.getBoxes(), 1, IntVect::Unit );
            species.computeMappedVelocityNormals(  velocity_normals, 
-                                                  Efield_cell, 
-                                                  phi_node, 
+                                                  a_EM_fields,
                                                   false, 
                                                   PhaseGeom::FULL_VELOCITY );
   
@@ -868,14 +851,14 @@ GKVlasov::computeDtImExTI( const CFG::EField&            a_E_field,
            const PhaseGeom& geometry( species.phaseSpaceGeometry() );
            Real speciesDt( computeMappedDtSpeciesFromNormals( velocity_normals, geometry, UNIT_CFL ) );
            CH_assert(speciesDt >= 0);
-  
-           dt = Min( dt, speciesDt );
+           m_dt.push_back(std::pair<std::string,Real>(species.name(), speciesDt) );
          }
       }
    }
    else {
 
-      const LevelData<FluxBox>& injected_E_field = a_E_field.getInjectedField();
+      const LevelData<FluxBox>& injected_E_field = a_EM_fields.getEField();
+      const LevelData<FluxBox>& injected_Apar_derivatives = a_EM_fields.getAparDerivs();
       
       for (int s(0); s<a_species_vect.size(); s++) {
 
@@ -898,36 +881,34 @@ GKVlasov::computeDtImExTI( const CFG::EField&            a_E_field,
              m_velocity.define( dfn.getBoxes(), SpaceDim, ghostVect );
            }
            species.computeMappedVelocity( m_velocity, 
-                                          injected_E_field, 
+                                          a_EM_fields,
+                                          injected_Apar_derivatives, 
                                           false, 
                                           a_time );
             
            const Real UNIT_CFL(1.0);
            Real speciesDt( computeMappedDtSpecies( m_velocity, geometry, UNIT_CFL ) );
            CH_assert(speciesDt >= 0);
-  
-           dt = Min( dt, speciesDt );
+           m_dt.push_back(std::pair<std::string,Real>(species.name(), speciesDt) );
          }
       }
    }
 
-   return dt;
+   return m_dt;
 }
 
 
-Real
-GKVlasov::computeTimeScale( const CFG::EField&           a_E_field,
+const std::vector<std::pair<std::string,Real> >&
+GKVlasov::computeTimeScales(const CFG::EMFields&         a_EM_fields,
                             const KineticSpeciesPtrVect& a_species_vect,
                             const Real&                  a_time)
 {
-   CH_TIME("GKVlasov::computeTimeScale");
+   CH_TIME("GKVlasov::computeTimeScales");
 
-   Real dt(BASEFAB_REAL_SETVAL);
+   m_timescales.clear();
 
-   if ( a_E_field.supportsDivFreePhaseVel() ) {
-
-      const CFG::LevelData<CFG::FArrayBox>& Efield_cell = a_E_field.getCellCenteredField();
-      const CFG::LevelData<CFG::FArrayBox>& phi_node = a_E_field.getPhiNode();
+   bool div_free_phase_vel = (a_EM_fields.getPhiNode()).isDefined();
+   if ( div_free_phase_vel ) {
 
       for (int s(0); s<a_species_vect.size(); s++) {
 
@@ -936,22 +917,21 @@ GKVlasov::computeTimeScale( const CFG::EField&           a_E_field,
 
          LevelData<FluxBox> velocity_normals( dfn.getBoxes(), 1, IntVect::Unit );
          species.computeMappedVelocityNormals(  velocity_normals, 
-                                                Efield_cell, 
-                                                phi_node, 
+                                                a_EM_fields,
                                                 false,
                                                 PhaseGeom::FULL_VELOCITY);
 
-         //      const Real UNIT_CFL(1.0);
          const PhaseGeom& geometry( species.phaseSpaceGeometry() );
-         Real speciesDt( computeMappedTimeScaleSpeciesFromNormals( velocity_normals, geometry) );
+         Real speciesDt( computeMappedDtSpeciesFromNormals( velocity_normals, geometry, 1.0) );
          CH_assert(speciesDt >= 0);
 
-         dt = Min( dt, speciesDt );
+         m_timescales.push_back( std::pair<std::string,Real>(species.name(), speciesDt) );
       }
    }
    else {
 
-      const LevelData<FluxBox>& injected_E_field = a_E_field.getInjectedField();
+      const LevelData<FluxBox>& injected_E_field = a_EM_fields.getEField();
+      const LevelData<FluxBox>& injected_Apar_derivatives = a_EM_fields.getAparDerivs();
 
       for (int s(0); s<a_species_vect.size(); s++) {
 
@@ -964,21 +944,20 @@ GKVlasov::computeTimeScale( const CFG::EField&           a_E_field,
             m_velocity.define( dfn.getBoxes(), SpaceDim, ghostVect );
          }
          species.computeMappedVelocity( m_velocity, 
-                                        injected_E_field, 
+                                        a_EM_fields,
+                                        injected_Apar_derivatives, 
                                         false, 
                                         a_time );
          
-         //      const Real UNIT_CFL(1.0);
-         Real speciesDt( computeMappedTimeScaleSpecies( m_velocity, geometry) );
+         Real speciesDt( computeMappedDtSpecies( m_velocity, geometry, 1.0) );
          CH_assert(speciesDt >= 0);
          
-         dt = Min( dt, speciesDt );
+         m_timescales.push_back( std::pair<std::string,Real>(species.name(), speciesDt) );
       }
    }
 
-   return dt;
+   return m_timescales;
 }
-
 
 
 void
@@ -1360,241 +1339,6 @@ GKVlasov::computeMappedDtSpeciesFromNormals( const LevelData<FluxBox>& a_velocit
    return newDt;
 }
 
-Real
-GKVlasov::computeMappedTimeScaleSpecies( const LevelData<FluxBox>& a_faceVel,
-                                         const PhaseGeom&          a_geom )
-{
-   const DisjointBoxLayout grids = a_faceVel.getBoxes();
-   CH_assert(grids == a_geom.gridsFull());
-
-   MultiBlockCoordSys* coords = a_geom.coordSysPtr();
-
-   // Get velocities normal to cell faces and compute area-weighted normal
-   // velocities -- 2nd order should be good enough.
-   // Note: For axisymmetric 2-spatial-D configuration geometries, the area-weighted
-   // velocities returned by the following function call contain a factor
-   // of 2piR times major radius R; a consequence of the fact that this
-   // factor is included in all of the metric factors.  However, the
-   // physical cell volume being divided out below also contains
-   // a 2piR factor (having been derived from the metrics), and therefore
-   // this extra factor has no net effect (to second order).
-   // (Of course this is irrrelevant in 3D)
-
-   LevelData<FluxBox> faceNormalVel(grids, 1);
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      int block_number = coords->whichBlock(grids[dit]);
-      const PhaseBlockCoordSys* block_coord_sys
-         = static_cast<const PhaseBlockCoordSys*>(coords->getCoordSys(block_number));
-      RealVect face_area = block_coord_sys->getMappedFaceArea();
-
-      const FluxBox& thisFaceVel = a_faceVel[dit];
-      FluxBox& thisNormalVel = faceNormalVel[dit];
-      for (int dir=0; dir<SpaceDim; ++dir) {
-         FArrayBox& thisNormalVel_dir = thisNormalVel[dir];
-         thisNormalVel_dir.copy(thisFaceVel[dir],dir,0,1);
-         thisNormalVel_dir *= face_area[dir];
-      }
-   }
-
-   // now average back to cell-centers and divide by cell volumes
-   // instead of averaging face->cell we pick
-   // the max absolute value on the two opposing faces.
-   LevelData<FArrayBox> cellVolumes(grids, 1, IntVect::Zero);
-   a_geom.getCellVolumes(cellVolumes);
-
-   struct {
-      double val;
-      int rank;
-   } pair_in, pair_out;
-
-   Real maxVelLoc = -1.;
-   int maxblockLoc(-1);
-   IntVect maxindLoc;
-   int maxDirLoc(-1);
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      int block_number = coords->whichBlock(grids[dit]);
-
-      FArrayBox cellVel(grids[dit], 1);
-      FArrayBox cellVelDir(grids[dit],SpaceDim);
-      cellVel.setVal(0.);
-      for (int dir=0; dir<SpaceDim; dir++) {
-         // average face velocity on the two faces in this direction
-         int faceComp = 0;
-         int cellComp = dir;
-         EdgeToCell(faceNormalVel[dit], faceComp,
-                    cellVelDir, cellComp,
-                    dir);
-         cellVelDir.abs(dir,1);
-         cellVel.plus(cellVelDir, dir, 0, 1);
-      }
-
-      // Divide by the cell physical volume, which is J times the computational cell volume
-      cellVel.divide(cellVolumes[dit], 0, 0, 1);
-
-      // now compute maxVelLoc on this box
-      // note that this is essentially an estimate of max(vel/dx)
-      Real thisMax = cellVel.norm(0,0,1);
-      if (thisMax > maxVelLoc) {
-         maxVelLoc = thisMax;
-         if (m_time_step_diagnostics) {
-            maxblockLoc = block_number;
-            maxindLoc = cellVel.maxIndex();
-
-            // Figure out which direction made the biggest contribution
-            double max_cv = 0.;
-            for (int dir=0; dir<SpaceDim; ++dir) {
-               if (cellVelDir(maxindLoc,dir) > max_cv) {
-                  max_cv = cellVelDir(maxindLoc,dir);
-                  maxDirLoc = dir;
-               }
-            }
-         }
-      }
-   }
-
-   RealVect X;
-   if (m_time_step_diagnostics) {
-      RealVect dx = coords->getCoordSys(maxblockLoc)->dx();
-      RealVect xi = dx*maxindLoc;
-      xi += 0.5*dx;
-      X = coords->getCoordSys(maxblockLoc)->realCoord(xi);
-   }
-
-   Real maxVel = maxVelLoc;
-   IntVect maxind = maxindLoc;
-   int maxDir = maxDirLoc;
-#ifdef CH_MPI
-   if (m_time_step_diagnostics) {
-      pair_in.val = maxVel;
-      pair_in.rank = procID();
-      MPI_Allreduce(&pair_in, &pair_out, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
-      maxVel = pair_out.val;
-      MPI_Bcast(X.dataPtr(), SpaceDim, MPI_DOUBLE, pair_out.rank, MPI_COMM_WORLD);
-      MPI_Bcast(maxind.dataPtr(), SpaceDim, MPI_INT, pair_out.rank, MPI_COMM_WORLD);
-      MPI_Bcast(&maxDir, 1, MPI_INT, pair_out.rank, MPI_COMM_WORLD);
-   }
-   else {
-      MPI_Allreduce(&maxVelLoc, &maxVel, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-   }
-#endif
-
-   Real smallVal = 1.0e-15;
-   Real newDt = 0;
-   if (maxVel > smallVal) newDt = 1.0 / maxVel;
-
-   return newDt;
-}
-
-
-
-Real
-GKVlasov::computeMappedTimeScaleSpeciesFromNormals( const LevelData<FluxBox>& a_velocity_normal,
-                                                    const PhaseGeom&          a_geom )
-{
-   // N.B.: The velocity being passed in here is assumed to be the normal component of
-   // the mapped velocity integrated over cell faces.
-
-   const DisjointBoxLayout grids = a_velocity_normal.getBoxes();
-   CH_assert(grids == a_geom.gridsFull());
-
-   // now average back to cell-centers and divide by cell volumes times
-   // BStarParallel.  The physical cell volume is J times the mapped
-   // grid cell volume, so this division removes the J*BStarParallel
-   // factor carried in the computational unknown.  In the non-divergence-free
-   // velocity option, the velocities already include a 1/BStarParallel
-   // factor
-
-   // instead of averaging face->cell we pick
-   // the max absolute value on the two opposing faces.
-   LevelData<FArrayBox> cellVolumesBStarPar(grids, 1, IntVect::Zero);
-   a_geom.getCellVolumes(cellVolumesBStarPar);
-   a_geom.multBStarParallel(cellVolumesBStarPar);
-
-   MultiBlockCoordSys* coords = a_geom.coordSysPtr();
-
-   struct {
-      double val;
-      int rank;
-   } pair_in, pair_out;
-
-   Real maxVelLoc = 0.;
-   int maxblockLoc(-1);
-   IntVect maxindLoc;
-   int maxDirLoc(-1);
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      int block_number = coords->whichBlock(grids[dit]);
-
-      FArrayBox cellVel(grids[dit], 1);
-      FArrayBox cellVelDir(grids[dit],SpaceDim);
-      cellVel.setVal(0.);
-      for (int dir=0; dir<SpaceDim; dir++) {
-         // average face velocity on the two faces in this direction
-         int faceComp = 0;
-         int cellComp = dir;
-         EdgeToCell(a_velocity_normal[dit], faceComp,
-                    cellVelDir, cellComp,
-                    dir);
-         cellVelDir.abs(dir,1);
-         cellVel.plus(cellVelDir, dir, 0, 1);
-      }
-
-      cellVel.divide(cellVolumesBStarPar[dit], 0, 0, 1);
-
-      // now compute maxVelLoc on this box
-      // note that this is essentially an estimate of max(vel/dx)
-      Real thisMax = cellVel.norm(0,0,1);
-      if (thisMax > maxVelLoc) {
-         maxVelLoc = thisMax;
-         if (m_time_step_diagnostics) {
-            maxblockLoc = block_number;
-            maxindLoc = cellVel.maxIndex();
-
-            // Figure out which direction made the biggest contribution
-            double max_cv = 0.;
-            for (int dir=0; dir<SpaceDim; ++dir) {
-               if (cellVelDir(maxindLoc,dir) > max_cv) {
-                  max_cv = cellVelDir(maxindLoc,dir);
-                  maxDirLoc = dir;
-               }
-            }
-         }
-      }
-   }
-
-   RealVect X;
-   if (m_time_step_diagnostics) {
-      RealVect dx = coords->getCoordSys(maxblockLoc)->dx();
-      RealVect xi = dx*maxindLoc;
-      xi += 0.5*dx;
-      X = coords->getCoordSys(maxblockLoc)->realCoord(xi);
-   }
-
-   Real maxVel = maxVelLoc;
-   IntVect maxind = maxindLoc;
-   int maxDir = maxDirLoc;
-#ifdef CH_MPI
-   if (m_time_step_diagnostics) {
-      pair_in.val = maxVel;
-      pair_in.rank = procID();
-      MPI_Allreduce(&pair_in, &pair_out, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
-      maxVel = pair_out.val;
-      MPI_Bcast(X.dataPtr(), SpaceDim, MPI_DOUBLE, pair_out.rank, MPI_COMM_WORLD);
-      MPI_Bcast(maxind.dataPtr(), SpaceDim, MPI_INT, pair_out.rank, MPI_COMM_WORLD);
-      MPI_Bcast(&maxDir, 1, MPI_INT, pair_out.rank, MPI_COMM_WORLD);
-   }
-   else {
-      MPI_Allreduce(&maxVelLoc, &maxVel, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-   }
-#endif
-
-   Real smallVal = 1.0e-15;
-   Real newDt = 0;
-   if (maxVel > smallVal) newDt = 1.0 / maxVel;
-
-   return newDt;
-}
-
-
 
 void
 GKVlasov::applyMappedLimiter( LevelData<FluxBox>&         a_facePhi,
@@ -1933,8 +1677,7 @@ GKVlasov::defineBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
 void 
 GKVlasov::updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
                                const KineticSpeciesPtrVect&                     a_soln,
-                               const CFG::LevelData<CFG::FArrayBox>&            a_phi,
-                               const CFG::EField&                               a_E_field,
+                               const CFG::EMFields&                             a_EM_fields,
                                const GlobalDOFKineticSpeciesPtrVect&            a_gdofs,
                                const Real                                       a_time,
                                const int                                        a_step,
@@ -1942,6 +1685,8 @@ GKVlasov::updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>& 
                                const Real                                       a_shift,
                                const bool                                       a_im )
 {
+   const CFG::LevelData<CFG::FArrayBox>& phi = a_EM_fields.getPhi();
+
    for (int species(0); species<a_soln.size(); species++) {
       const KineticSpecies&           soln_species(*(a_soln[species]));
       const GlobalDOFKineticSpecies&  gdofs_species(*(a_gdofs[species]));
@@ -1949,8 +1694,8 @@ GKVlasov::updateMultiPhysicsPC(std::vector<Preconditioner<ODEVector,AppCtxt>*>& 
 
       updateBlockPC( a_pc, 
                      soln_species, 
-                     a_phi, 
-                     a_E_field, 
+                     phi, 
+                     a_EM_fields,
                      gdofs_species, 
                      a_time, 
                      a_step,
@@ -1966,7 +1711,7 @@ void
 GKVlasov::updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
                          const KineticSpecies&                            a_species,
                          const CFG::LevelData<CFG::FArrayBox>&            a_phi,
-                         const CFG::EField&                               a_E_field,
+                         const CFG::EMFields&                             a_EM_fields,
                          const GlobalDOFKineticSpecies&                   a_global_dofs,
                          const Real                                       a_time,
                          const int                                        a_step,
@@ -2027,15 +1772,16 @@ GKVlasov::updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>& a_pc,
      if (a_species.isGyrokinetic() && m_include_FLR_effects) {
   
         LevelData<FluxBox> gyroaveraged_E_field;
-        getEFieldwFLR(gyroaveraged_E_field, a_species, a_phi, a_E_field);
+        getEFieldwFLR(gyroaveraged_E_field, a_species, a_EM_fields);
+        LevelData<FluxBox> gyroaveraged_Apar_derivatives;
         a_species.computeVelocity(  m_velocity, 
-                                    gyroaveraged_E_field, 
+                                    a_EM_fields,
                                     true,
                                     PhaseGeom::FULL_VELOCITY, 
                                     0.);
      } else {
         a_species.computeVelocity(  m_velocity, 
-                                    a_E_field.getInjectedField(), 
+                                    a_EM_fields,
                                     false,
                                     PhaseGeom::FULL_VELOCITY, 
                                     0. );
@@ -2424,10 +2170,9 @@ GKVlasov::constructStencils( const LevelData<FluxBox>&               a_physical_
 void
 GKVlasov::computeIntegratedMomentFluxNormals(CFG::LevelData<CFG::FluxBox>&          a_flux_normal,
                                              const KineticSpecies&                  a_soln_species,
-                                             const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                                             const CFG::EField&                     a_E_field,
+                                             const CFG::EMFields&                   a_EM_fields,
                                              const int                              a_velocity_option,
-                                             const string&                          a_moment_type,
+                                             const Kernel<FluxBox>&                 a_kernel,
                                              const Real                             a_time)
 {
    /*
@@ -2446,7 +2191,7 @@ GKVlasov::computeIntegratedMomentFluxNormals(CFG::LevelData<CFG::FluxBox>&      
    MomentOp& moment_op = MomentOp::instance();
    
    if ( geometry.divFreeVelocity() ) {
-      bool fourth_order_Efield = !a_E_field.secondOrder();
+      bool fourth_order_Efield = !a_EM_fields.secondOrder();
       
       if ( !m_flux_normal.isDefined()) {
          m_flux_normal.define( dbl, 1, ghostVect );
@@ -2454,22 +2199,12 @@ GKVlasov::computeIntegratedMomentFluxNormals(CFG::LevelData<CFG::FluxBox>&      
    
       computeIntegratedFluxNormals(m_flux_normal,
                                    a_soln_species,
-                                   a_phi,
-                                   a_E_field.getCellCenteredField(),
-                                   a_E_field.getPhiNode(),
+                                   a_EM_fields,
                                    fourth_order_Efield,
                                    a_velocity_option,
                                    a_time);
 
-      if ( a_moment_type == "particle" ) {
-        moment_op.compute( a_flux_normal, a_soln_species, m_flux_normal, DensityKernel<FluxBox>() );
-      }
-      else if ( a_moment_type == "energy" ) {
-       moment_op.compute( a_flux_normal, a_soln_species, m_flux_normal, EnergyKernel<FluxBox>(a_phi) );
-      }
-      else {
-       MayDay::Error("GKVlasov::computeIntegratedMomentFluxNormals:: unknwn moment option");
-      }
+      moment_op.compute( a_flux_normal, a_soln_species, m_flux_normal, a_kernel );
 
       const VEL::VelCoordSys& vel_coords = geometry.velSpaceCoordSys();
       double vel_area = vel_coords.pointwiseJ(VEL::RealVect::Zero) * vel_coords.dx().product();
@@ -2486,8 +2221,7 @@ GKVlasov::computeIntegratedMomentFluxNormals(CFG::LevelData<CFG::FluxBox>&      
    
       computePhysicalFlux(m_flux,
                           a_soln_species,
-                          a_phi,
-                          a_E_field,
+                          a_EM_fields,
                           a_velocity_option,
                           a_time,
                           true);
@@ -2495,15 +2229,7 @@ GKVlasov::computeIntegratedMomentFluxNormals(CFG::LevelData<CFG::FluxBox>&      
       const CFG::IntVect& ghosts = a_flux_normal.ghostVect();
       
       CFG::LevelData<CFG::FluxBox> phys_flux(config_grids, SpaceDim, ghosts);
-      if ( a_moment_type == "particle" ) {
-        moment_op.compute( phys_flux, a_soln_species, m_flux, DensityKernel<FluxBox>() );
-      }
-      else if ( a_moment_type == "energy" ) {
-        moment_op.compute( phys_flux, a_soln_species, m_flux, EnergyKernel<FluxBox>(a_phi) );
-      }
-      else {
-        MayDay::Error("GKVlasov::computeIntegratedMomentFluxNormals:: unknwn moment option");
-      }
+      moment_op.compute( phys_flux, a_soln_species, m_flux, a_kernel );
       
       CFG::LevelData<CFG::FluxBox> phys_flux_cfg(config_grids, CFG_DIM, ghosts);
       for (CFG::DataIterator dit(config_grids); dit.ok(); ++dit) {
@@ -2560,8 +2286,7 @@ GKVlasov::testZeroDivergence(const LevelData<FluxBox>&  a_velocity,
 void
 GKVlasov::testEnergyConservation(const LevelData<FArrayBox>&            a_rhs,
                                  const KineticSpecies&                  a_soln_species,
-                                 const CFG::LevelData<CFG::FArrayBox>&  a_phi,
-                                 const CFG::EField&                     a_E_field)
+                                 const CFG::EMFields&                   a_EM_fields)
 {
   
   /*
@@ -2577,13 +2302,14 @@ GKVlasov::testEnergyConservation(const LevelData<FArrayBox>&            a_rhs,
   
   // Compute the configuration divergence of the transport power
   CFG::LevelData<CFG::FluxBox> flux_normal(grids_cfg, 1, ghostVect);
+
+  const CFG::LevelData<CFG::FArrayBox>& phi = a_EM_fields.getPhi();
   
   computeIntegratedMomentFluxNormals(flux_normal,
                                      a_soln_species,
-                                     a_phi,
-                                     a_E_field,
+                                     a_EM_fields,
                                      PhaseGeom::FULL_VELOCITY,
-                                     "energy",
+                                     EnergyKernel<FluxBox>(phi),
                                      0.);
   
   CFG::LevelData<CFG::FArrayBox> div_transport_power(grids_cfg, 1, CFG::IntVect::Zero);
@@ -2600,7 +2326,7 @@ GKVlasov::testEnergyConservation(const LevelData<FArrayBox>&            a_rhs,
   CFG::LevelData<CFG::FArrayBox> rhs_energy_mom(grids_cfg, 1, CFG::IntVect::Zero);
 
   MomentOp& moment_op = MomentOp::instance();
-  moment_op.compute( rhs_energy_mom, a_soln_species, a_rhs, EnergyKernel<FArrayBox>(a_phi) );
+  moment_op.compute( rhs_energy_mom, a_soln_species, a_rhs, EnergyKernel<FArrayBox>(phi) );
   mag_geom.divideJonValid(rhs_energy_mom);
   for (CFG::DataIterator dit(grids_cfg); dit.ok(); ++dit) {
     rhs_energy_mom[dit].mult(-1.0);
@@ -2666,15 +2392,16 @@ GKVlasov::testEnergyConservation(const LevelData<FArrayBox>&            a_rhs,
 void
 GKVlasov::getEFieldwFLR(  LevelData<FluxBox>&                   a_E_wFLR,
                           const KineticSpecies&                 a_species,
-                          const CFG::LevelData<CFG::FArrayBox>& a_phi,
-                          const CFG::EField&                    a_Efield )
+                          const CFG::EMFields&                  a_EM_fields)
 {
   CH_assert(  a_species.isGyrokinetic() && m_include_FLR_effects );
   static const int ncomp_Efield = 3;
 
-  int order (a_Efield.secondOrder() ? 2 : 4);
+  const CFG::LevelData<CFG::FArrayBox>& phi = a_EM_fields.getPhi();
+
+  int order (a_EM_fields.secondOrder() ? 2 : 4);
   const PhaseGeom& phase_geom( a_species.phaseSpaceGeometry() );
-  a_species.gyroaveragedEField( a_E_wFLR, a_phi, order );
+  a_species.gyroaveragedEField( a_E_wFLR, phi, order );
 
   if (m_FLR_switch_func != NULL) {
 
@@ -2696,7 +2423,7 @@ GKVlasov::getEFieldwFLR(  LevelData<FluxBox>&                   a_E_wFLR,
                                               m_FLR_bc_factor );
     }
 
-    const LevelData<FluxBox>& E_field_noFLR = a_Efield.getInjectedField();
+    const LevelData<FluxBox>& E_field_noFLR = a_EM_fields.getEField();
 
     for (DataIterator dit(a_E_wFLR.dataIterator()); dit.ok(); ++dit) {
       for (int dir = 0 ; dir < SpaceDim; dir++) {

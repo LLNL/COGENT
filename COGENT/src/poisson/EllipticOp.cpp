@@ -136,8 +136,11 @@ EllipticOp::defineSolver( const string&  a_method,
    if ( m_method == "BiCGStab" ) {
       m_Chombo_solver = new BiCGStabSolver< LevelData<FArrayBox> >;
    }
-   else {
+   else if ( m_method == "GMRES" ) {
       m_Chombo_solver = new GMRESSolver< LevelData<FArrayBox> >;
+   }
+   else {
+      MayDay::Error("EllipticOp::defineSolver(): a_method must be BiCGStab or GMRES");
    }
 
    m_Chombo_solver->define(this, true);
@@ -163,14 +166,17 @@ EllipticOp::solve( const LevelData<FArrayBox>&  a_rhs,
                    LevelData<FArrayBox>&        a_solution )
 {
    if ( m_method == "BiCGStab" ) {
-      ((BiCGStabSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_eps = m_tol;
+      ((BiCGStabSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_reps = m_tol;
       ((BiCGStabSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_imax = m_max_iter;
       ((BiCGStabSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_verbosity = m_verbose? 5: 0;
    }
-   else {
-      ((GMRESSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_eps = m_tol;
+   else if ( m_method == "GMRES" ) {
+      ((GMRESSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_reps = m_tol;
       ((GMRESSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_imax = m_max_iter;
       ((GMRESSolver< LevelData<FArrayBox> >*)m_Chombo_solver)->m_verbosity = m_verbose? 5: 0;
+   }
+   else {
+      MayDay::Error("EllipticOp::solve(): a_method must be BiCGStab or GMRES");
    }
 
    setToZero(a_solution);
@@ -220,6 +226,19 @@ EllipticOp::compute3DFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
    m_geometry.unmap3DGradient(mapped_field, a_field);
 }
 
+void
+EllipticOp::compute3DFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
+                                   LevelData<FArrayBox>&        a_field,
+                                   const bool                   a_homogeneousBCs ) const
+{
+   CH_assert(a_field.nComp() == 3);
+   CH_assert(a_field.ghostVect() == IntVect::Unit);
+
+   LevelData<FArrayBox> mapped_field(m_geometry.grids(), 3, a_field.ghostVect());
+   computeMapped3DFieldWithBCs(a_phi, mapped_field, a_homogeneousBCs);
+
+   m_geometry.unmap3DGradient(mapped_field, a_field);
+}
 
 void
 EllipticOp::computePoloidalFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
@@ -268,6 +287,37 @@ EllipticOp::computeMapped3DFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
 
 }
 
+void
+EllipticOp::computeMapped3DFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
+                                         LevelData<FArrayBox>&        a_field,
+                                         const bool                   a_homogeneousBCs ) const
+{
+   CH_assert(a_field.nComp() == 3);
+   CH_assert(a_field.ghostVect() == IntVect::Unit);
+
+   // Make a temporary with ghost cells and copy the potential on valid cells
+
+   const DisjointBoxLayout& grids = m_geometry.grids();
+   CH_assert(m_num_potential_ghosts >=2);
+   LevelData<FArrayBox> phi_cell(grids, 1, m_num_potential_ghosts*IntVect::Unit);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      phi_cell[dit].setVal(0.);
+      phi_cell[dit].copy(a_phi[dit],grids[dit]);
+   }
+
+   fillInternalGhosts(phi_cell);
+
+   // Fill the physical boundary ghost cells
+   bool extrapolate_from_interior = true;
+   bool include_bvs = !a_homogeneousBCs;
+   accumPhysicalGhosts( m_codim1_stencils, m_codim2_stencils, extrapolate_from_interior, include_bvs, phi_cell );
+
+   int order = m_second_order? 2: 4;
+
+   computeMapped3DFieldWithGhosts(phi_cell, a_field, order);
+
+}
 
 void
 EllipticOp::computeMappedPoloidalFieldWithBCs( const LevelData<FArrayBox>&  a_phi,
@@ -698,7 +748,7 @@ EllipticOp::computeFluxDivergence( const LevelData<FArrayBox>&  a_in,
 
 
 void
-EllipticOp::computeBcDivergence( LevelData<FArrayBox>& a_out ) 
+EllipticOp::computeBcDivergence( LevelData<FArrayBox>& a_out )
 {
    LevelData<FArrayBox> phi(m_geometry.grids(), 1, IntVect::Zero);
    setToZero(phi);
@@ -1488,24 +1538,24 @@ EllipticOp::constructBoundaryStencils( const bool                         a_four
 
 	       Box box_tmp = box;
                box_tmp.shiftHalf(dir,-sign(side));
-               FluxBox bv_tmp(box_tmp,1);
+               FArrayBox bv_tmp(box_tmp,1);
                
                RefCountedPtr<GridFunction> bc_func = a_bc.getBCFunction(block_number, dir, side );
                if (bc_func && !(typeid(*bc_func) == typeid(DataArray))) {
- 		  FluxBox real_coords(box_tmp,CFG_DIM);
-		  FluxBox norm_flux(box_tmp,1);
+ 		  FArrayBox real_coords(box_tmp,CFG_DIM);
+		  FArrayBox norm_flux(box_tmp,1);
 
 		  const MagBlockCoordSys& coord_sys( m_geometry.getBlockCoordSys( block_number ) );
 		  
-		  coord_sys.getFaceCenteredRealCoords(dir, real_coords[dir]);
-		  coord_sys.getNormMagneticFlux(real_coords[dir], norm_flux[dir]);
+		  coord_sys.getFaceCenteredRealCoords(dir, real_coords);
+		  coord_sys.getNormMagneticFlux(real_coords, norm_flux);
 		  
                   bc_func->assign(bv_tmp, m_geometry, real_coords, norm_flux, block_number, 0., false);
 
                   for (BoxIterator bit(box); bit.ok(); ++bit) {
                      IntVect iv = bit();
-                     iv[dir] = (bv_tmp[dir].box()).sideEnd(side)[dir];
-                     bv(bit(),0) = bv_tmp[dir](iv,0);
+                     iv[dir] = (bv_tmp.box()).sideEnd(side)[dir];
+                     bv(bit(),0) = bv_tmp(iv,0);
                   }
                }
 
