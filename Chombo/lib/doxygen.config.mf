@@ -791,6 +791,7 @@ INPUT                  = src/BaseTools \
                          src/HOMappedGeometry \
                          src/MOLAMRTimeDependent \
                          src/ParticleTools \
+                         src/Sundials \  
                          ../releasedExamples/AMRGodunov/srcAdvectDiffuse \
                          ../releasedExamples/AMRGodunov/srcPolytropic \
                          src/EBTools \

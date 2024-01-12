@@ -113,25 +113,29 @@ Copier& Copier::operator= (const Copier& b)
 {
   clear();
 
-  m_localMotionPlan.resize(b.m_localMotionPlan.size());
-  for (int i = 0; i < m_localMotionPlan.size(); ++i)
+  // only do any of this if the source is defined
+  if (b.isDefined() )
     {
-      m_localMotionPlan[i] = new (s_motionItemPool.getPtr()) MotionItem(*(b.m_localMotionPlan[i]));
+      m_localMotionPlan.resize(b.m_localMotionPlan.size());
+      for (int i = 0; i < m_localMotionPlan.size(); ++i)
+        {
+          m_localMotionPlan[i] = new (s_motionItemPool.getPtr()) MotionItem(*(b.m_localMotionPlan[i]));
+        }
+      
+      m_fromMotionPlan.resize(b.m_fromMotionPlan.size());
+      for (int i = 0; i < m_fromMotionPlan.size(); ++i)
+        {
+          m_fromMotionPlan[i] = new (s_motionItemPool.getPtr()) MotionItem(*(b.m_fromMotionPlan[i]));
+        }
+      
+      m_toMotionPlan.resize(b.m_toMotionPlan.size());
+      for (int i = 0; i < m_toMotionPlan.size(); ++i)
+        {
+          m_toMotionPlan[i] = new (s_motionItemPool.getPtr()) MotionItem(*(b.m_toMotionPlan[i]));
+        }
+      
+      m_isDefined = true;
     }
-
-  m_fromMotionPlan.resize(b.m_fromMotionPlan.size());
-  for (int i = 0; i < m_fromMotionPlan.size(); ++i)
-    {
-      m_fromMotionPlan[i] = new (s_motionItemPool.getPtr()) MotionItem(*(b.m_fromMotionPlan[i]));
-    }
-
-  m_toMotionPlan.resize(b.m_toMotionPlan.size());
-  for (int i = 0; i < m_toMotionPlan.size(); ++i)
-    {
-      m_toMotionPlan[i] = new (s_motionItemPool.getPtr()) MotionItem(*(b.m_toMotionPlan[i]));
-    }
-
-  m_isDefined = true;
   return *this;
 }
 
@@ -981,6 +985,7 @@ void Copier::define(const BoxLayout& a_level,
                       if ((destBox.bigEnd(dir) > singleWrapHi) ||
                           (destBox.smallEnd(dir) < singleWrapLo))
                         {
+                          MayDay::Warning("Copier::define -- multiple wraps required for valid-region copying");
                           multipleWraps = true;
                         } // end if box doesn't fit in single-wrapped domain
                     } // end loop over dest boxes
