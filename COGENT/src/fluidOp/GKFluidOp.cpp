@@ -435,16 +435,37 @@ void GKFluidOp::initialize( FluidSpeciesPtrVect&  a_fluid_species,
    }
 }
 
-void GKFluidOp::initializeWithBC( FluidSpeciesPtrVect&  a_fluid_comp,
-                                  FluidSpeciesPtrVect&  a_fluid_phys,
-                            const double                a_time )
+bool GKFluidOp::isInitializationConstrained(const FluidSpeciesPtrVect&  a_fluid_phys)
+{
+   bool isInitializationConstrained = false;
+   
+   for (int species(0); species<a_fluid_phys.size(); species++) {
+      const FluidSpecies& fluid_phys( static_cast<FluidSpecies&>(*(a_fluid_phys[species])) );
+      const std::string species_name( fluid_phys.name() );
+      FluidOpInterface& fluidOp( fluidModel( species_name ) );
+      bool isSpeciesInitializationConstrained = fluidOp.isInitializationConstrained(fluid_phys);
+      if (isSpeciesInitializationConstrained) isInitializationConstrained = true;
+   }
+   return isInitializationConstrained;
+}
+
+void GKFluidOp::applyInitializationConstraints(FluidSpeciesPtrVect&               a_fluid_comp,
+                                               FluidSpeciesPtrVect&               a_fluid_phys,
+                                               const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
+                                               const EMFields&                    a_EM_fields,
+                                               const double                       a_time )
 {
    for (int species(0); species<a_fluid_phys.size(); species++) {
       FluidSpecies& fluid_comp( static_cast<FluidSpecies&>(*(a_fluid_comp[species])) );
       FluidSpecies& fluid_phys( static_cast<FluidSpecies&>(*(a_fluid_phys[species])) );
       const std::string species_name( fluid_phys.name() );
       FluidOpInterface& fluidOp( fluidModel( species_name ) );
-      fluidOp.initializeWithBC(fluid_comp, fluid_phys, a_time);
+      fluidOp.applyInitializationConstraints(a_fluid_comp,
+                                             a_fluid_phys,
+                                             a_kinetic_species_phys,
+                                             a_EM_fields,
+                                             species,
+                                             a_time);
    }
 }
 

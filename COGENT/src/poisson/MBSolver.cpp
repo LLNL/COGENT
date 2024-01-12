@@ -600,8 +600,6 @@ MBSolver::constructAdvectionStencils( const string&                           a_
    CH_TIME("MBSolver::constructAdvectionStencils");
    CH_assert(a_mapped_normal_velocity.nComp() == 1);
    
-   string method = "C2";
-
    const DisjointBoxLayout& grids( m_geometry.gridsFull() );
 
    // The dimensioning of the following temporary arrays may need to be increased if other methods are added

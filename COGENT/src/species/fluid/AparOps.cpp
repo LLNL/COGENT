@@ -32,10 +32,10 @@ void AparOps::inject(PS::LevelData<PS::FluxBox>&       a_injected_data,
       }
       else {
          //Strip ghost since they are not needed for 2nd order
-	 //Work with assertions in field calculations later 
+         //Work with assertions in field calculations later
          const DisjointBoxLayout& grids = m_geometry.gridsFull();
-         LevelData<FArrayBox> cell_tmp(grids, 3, IntVect::Zero);
-         LevelData<FluxBox> face_tmp(grids, 3, IntVect::Zero);
+         LevelData<FArrayBox> cell_tmp(grids, 4, IntVect::Zero);
+         LevelData<FluxBox> face_tmp(grids, 4, IntVect::Zero);
          for (DataIterator dit( grids.dataIterator() ); dit.ok(); ++dit) {
             cell_tmp[dit].copy(a_data_cell[dit]);
             face_tmp[dit].copy(a_data_face[dit]);

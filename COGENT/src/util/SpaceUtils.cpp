@@ -143,6 +143,32 @@ SpaceUtils::upWindToFaces( FluxBox&      this_face_phi,
 
 }
 
+
+void
+SpaceUtils::upWindMappedGradient(FArrayBox&         a_grad_cc,
+                                 const FArrayBox&   a_cell_phi,
+                                 const FArrayBox&   a_norm_vel,
+                                 const RealVect&    a_dx,
+                                 const std::string& a_method)
+{
+   
+   CH_assert(a_grad_cc.nComp() == SpaceDim);
+   
+   for (int dir(0); dir<SpaceDim; dir++) {
+      if(a_method=="uw2") {
+         FORT_UW2_MAPPED_GRADIENT(CHF_FRA1( a_grad_cc,dir ),
+                                  CHF_CONST_FRA1( a_cell_phi,0 ),
+                                  CHF_CONST_FRA1( a_norm_vel, dir ),
+                                  CHF_BOX( a_grad_cc.box() ),
+                                  CHF_CONST_REAL(a_dx[dir]),
+                                  CHF_CONST_INT( dir ) );
+      }
+      else {
+         MayDay::Error("SpaceUtils::upWindGradient(): unknown method");
+      }
+   }
+}
+
 void
 SpaceUtils::constrainedCrossProductOnEdges( LevelData<EdgeDataBox>&  a_edge_E,
                                       const LevelData<FluxBox>&      a_face_B,
@@ -158,7 +184,6 @@ SpaceUtils::constrainedCrossProductOnEdges( LevelData<EdgeDataBox>&  a_edge_E,
    // 1) Interpolate non-dir components of vector V at cell center to dir face
    // 2) Multiply by dir component of vector B on face. 
    // 3) Upwind both VB terms on each face to the appropriate surrounding edges.
-   //
 
    //CH_assert( a_cell_V.ghostVect()>=2*IntVect::Unit );
    //CH_assert( a_face_B.ghostVect()>=2*IntVect::Unit );
@@ -169,7 +194,7 @@ SpaceUtils::constrainedCrossProductOnEdges( LevelData<EdgeDataBox>&  a_edge_E,
    int numGhosts = 2;
    if(a_method == "weno5" || a_method == "bweno" || a_method == "uw5") numGhosts = 3;
 
-   const DisjointBoxLayout& grids( a_cell_V.getBoxes() );
+   const DisjointBoxLayout& grids( a_edge_E.getBoxes() );
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       
             EdgeDataBox&  this_edge_E( a_edge_E[dit] );
@@ -244,6 +269,103 @@ SpaceUtils::constrainedCrossProductOnEdges( LevelData<EdgeDataBox>&  a_edge_E,
          }
       }
    } 
+
+}
+
+void
+SpaceUtils::constrainedCrossProductOnNodes( LevelData<NodeFArrayBox>&  a_node_E,
+                                      const LevelData<FluxBox>&        a_face_B,
+                                      const LevelData<FArrayBox>&      a_cell_V,
+                                      const LevelData<FArrayBox>&      a_cell_Cspeed,
+                                      const std::string&               a_method )
+{
+   CH_TIME("SpaceUtils::constrainedCrossProductOnNodes()");
+ 
+   // Compute the cross product, E=BxV, on cell nodes in such a way to ensure div of curl(E)
+   // is identically zero while properly upwinding. 
+   //
+   // Ey = -Vz*Bx + Vx*Bz (virtual E)
+   //
+   // 1) Interpolate non-dir components of vector V at cell center to dir face
+   // 2) Multiply by dir component of vector B on face. 
+   // 3) Upwind both VB terms on each face to the appropriate surrounding nodes.
+
+   //CH_assert( a_cell_V.ghostVect()>=2*IntVect::Unit );
+   //CH_assert( a_face_B.ghostVect()>=2*IntVect::Unit );
+   CH_assert( a_face_B.nComp()==1 );
+   CH_assert( a_cell_V.nComp()==SpaceDim );
+   CH_assert( a_node_E.nComp()==1 );
+
+   int numGhosts = 2;
+   if(a_method == "weno5" || a_method == "bweno" || a_method == "uw5") numGhosts = 3;
+
+   const DisjointBoxLayout& grids( a_cell_V.getBoxes() );
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+            FArrayBox& this_node_E( a_node_E[dit].getFab() );
+            this_node_E.setVal(0.0);
+      const FluxBox&   this_face_B( a_face_B[dit] );
+      const FArrayBox& this_cell_V( a_cell_V[dit] );
+      const FArrayBox& this_cell_Cspeed( a_cell_Cspeed[dit] );
+            FluxBox    VB_faces(this_face_B.box(),1); // container for face center VB comps
+      Box face_box; 
+      Box node_box = grids[dit];
+      node_box.surroundingNodes( );   // grow hi end by one in all dirs
+      int sign=1;
+      for(int Bdir=0; Bdir<SpaceDim; Bdir++) {
+         
+         sign= -1*sign;
+         for(int Vdir=0; Vdir<SpaceDim; Vdir++) {
+            if(Vdir!=Bdir) {
+               // Interpolate Vdir comp of V at cell to Bdir face and 
+               // multiply by Bdir comp of B
+               //
+               face_box = grids[dit];             // no ghosts
+               face_box.surroundingNodes(Bdir);   // grow hi end by one in Bdir direction
+               face_box.grow(Vdir,numGhosts);     // grow each end by numGhosts in Vdir direction
+               FORT_CELLFACEPRODUCT( CHF_BOX( face_box ),
+                                     CHF_CONST_INT( Bdir ),
+                                     CHF_CONST_FRA1( this_face_B[Bdir],0 ),
+                                     CHF_CONST_FRA1( this_cell_V,Vdir ),
+                                     CHF_FRA1( VB_faces[Bdir],0 ) );
+               
+               // perform Lax flux splitting
+               //
+               FArrayBox fluxR_face(face_box,1);  
+               FArrayBox fluxL_face(face_box,1);  
+               FArrayBox Cspeed_Vdir_face(face_box,1); 
+               fluxR_face.setVal(1.0); 
+               //Cspeed_Vdir_face.setVal(1.0); 
+               FORT_CELLFACEPRODUCT( CHF_BOX( face_box ),
+                                     CHF_CONST_INT( Bdir ), 
+                                     CHF_CONST_FRA1( fluxR_face,0 ), 
+                                     CHF_CONST_FRA1( this_cell_Cspeed,Vdir ), 
+                                     CHF_FRA1( Cspeed_Vdir_face,0 ) );
+               computeLaxSplitting( fluxR_face, fluxL_face, VB_faces[Bdir],
+                                    Cspeed_Vdir_face, this_face_B[Bdir] );
+
+               // upwind Left/Right VB on Bdir face in Vdir direction to Edir nodes
+               //
+               FArrayBox fluxR_edges(node_box,1); 
+               FArrayBox fluxL_edges(node_box,1); 
+               FArrayBox Cspeed_Vdir_edges(node_box,1); 
+               interpToEdges(Cspeed_Vdir_edges, Cspeed_Vdir_face, Cspeed_Vdir_edges, node_box, Vdir, "c2");
+               //Cspeed_Vdir_edges.setVal(1.0);
+               interpToEdges(fluxR_edges, fluxR_face, Cspeed_Vdir_edges, node_box, Vdir, a_method);
+               Cspeed_Vdir_edges.negate();
+               interpToEdges(fluxL_edges, fluxL_face, Cspeed_Vdir_edges, node_box, Vdir, a_method);
+               if(sign==1) {
+                  this_node_E.plus(fluxR_edges,0,0,1);
+                  this_node_E.plus(fluxL_edges,0,0,1);
+               }
+               if(sign==-1) {
+                  this_node_E.minus(fluxR_edges,0,0,1);
+                  this_node_E.minus(fluxL_edges,0,0,1);
+               }
+            }
+         } // end loop over Vdir
+      } // end loop over Bdir
+   } // end loop over boxes 
 
 }
 
@@ -427,6 +549,84 @@ SpaceUtils::interpToFacesWENO( FluxBox&      this_face_phi,
                          CHF_CONST_INT( dir ) );
       }
    }
+
+}
+
+void
+SpaceUtils::interpToFacesZIP( LevelData<FluxBox>&    a_face_fV,
+                        const LevelData<FArrayBox>&  a_cell_f,
+                        const LevelData<FArrayBox>&  a_cell_V )
+{
+   CH_TIME("SpaceUtils::interpToFacesZIP()");
+   CH_assert( a_cell_f.ghostVect()>=IntVect::Unit );
+   CH_assert( a_cell_V.ghostVect()>=IntVect::Unit );
+   CH_assert( a_cell_f.nComp() == 1 );
+
+   const int nVcomps = a_cell_V.nComp();
+   CH_assert( nVcomps == SpaceDim || nVcomps == 1 );
+
+   const DisjointBoxLayout& grids( a_cell_f.getBoxes() );
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      const FArrayBox& this_f( a_cell_f[dit] );
+      const FArrayBox& this_V( a_cell_V[dit] );
+       
+      int V_dir = 0;
+      for (int dir=0; dir<SpaceDim; dir++) {
+
+         FArrayBox& this_fV( a_face_fV[dit][dir] );
+
+         if(nVcomps==SpaceDim) V_dir = dir;
+
+         Box face_box = surroundingNodes(grids[dit],dir);
+         FORT_ZIP_TO_FACE( CHF_BOX( face_box ),
+                           CHF_CONST_INT( dir ),
+                           CHF_CONST_FRA1( this_f, 0 ),
+                           CHF_CONST_FRA1( this_V, V_dir ),
+                           CHF_FRA1( this_fV, 0 ) );
+
+      }
+
+   } 
+
+}
+
+void
+SpaceUtils::interpToFacesZIP( LevelData<FluxBox>&    a_face_fuV,
+                        const LevelData<FArrayBox>&  a_cell_u,
+                        const LevelData<FArrayBox>&  a_cell_fu,
+                        const LevelData<FArrayBox>&  a_cell_V,
+                        const LevelData<FArrayBox>&  a_cell_fV, 
+                        const int                    a_udir )
+{
+   CH_TIME("SpaceUtils::interpToFacesZIP() (antiskew) ");
+   CH_assert( a_cell_u.ghostVect()>=IntVect::Unit );
+   CH_assert( a_cell_fu.ghostVect()>=IntVect::Unit );
+   CH_assert( a_cell_V.ghostVect()>=IntVect::Unit );
+   CH_assert( a_cell_fV.ghostVect()>=IntVect::Unit );
+
+   const DisjointBoxLayout& grids( a_cell_fu.getBoxes() );
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      const FArrayBox& this_u( a_cell_u[dit] );
+      const FArrayBox& this_fu( a_cell_fu[dit] );
+      const FArrayBox& this_V( a_cell_V[dit] );
+      const FArrayBox& this_fV( a_cell_fV[dit] );
+       
+      for (int dir=0; dir<SpaceDim; dir++) {
+         FArrayBox& this_fuV( a_face_fuV[dit][dir] );
+
+         Box face_box = surroundingNodes(grids[dit],dir);
+         FORT_ZIP_TO_FACE_ANTISKEW( CHF_BOX( face_box ),
+                           CHF_CONST_INT( dir ),
+                           CHF_CONST_FRA1( this_u, a_udir ),
+                           CHF_CONST_FRA1( this_fu, a_udir ),
+                           CHF_CONST_FRA1( this_V, dir ),
+                           CHF_CONST_FRA1( this_fV, dir ),
+                           CHF_FRA1( this_fuV, 0 ) );
+      }
+
+   } 
 
 }
 
@@ -629,39 +829,88 @@ SpaceUtils::interpEdgesToCell( LevelData<FArrayBox>&    a_cell_phi,
 }
 
 void
-SpaceUtils::interpEdgesToEdges( LevelData<EdgeDataBox>&  a_edge_out,
-                          const LevelData<EdgeDataBox>&  a_edge_in,
+SpaceUtils::interpEdgesToEdges( LevelData<EdgeDataBox>&  a_Fout,
+                          const LevelData<EdgeDataBox>&  a_Fin,
                           const std::string&             a_method )
 {
    CH_TIME("SpaceUtils::interpEdgesToEdges()");
-   CH_assert( a_edge_in.nComp()==1 );
-   CH_assert( a_edge_in.ghostVect() >= 1*IntVect::Unit);
+   CH_assert( a_Fin.nComp()==1 );
+   CH_assert( a_Fout.nComp()==SpaceDim );
+   CH_assert( a_Fin.ghostVect() >= 1*IntVect::Unit);
    CH_assert( a_method=="c2" );
+   CH_assert( SpaceDim<=2 );
    
-   // interpolate values that live on one edge to the other edges
-   // example: Ein = [Ex_onz, Ez_onx], Eout = [Ex_onx, Ez_onz]
-   //
-   // Hack for 2D right now... need to think about 3D
-   //
+   // take 1-comp EdgeDataBox with dir comp of vector F on each edge 
+   // and copy/interpolate to a SpaceDim-comp EdgeDataBox with both
+   // vector comps of F on each edge
    
-   int dir0=1;
-   const DisjointBoxLayout& grids( a_edge_out.getBoxes() );
+   const DisjointBoxLayout& grids( a_Fout.getBoxes() );
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       
+      int dir0=1;
       for (int dir(0); dir<SpaceDim; dir++) {
+         
+         FArrayBox& Fout_dir( a_Fout[dit][dir] );
+      
+         // copy normal comp
+         Fout_dir.copy(a_Fin[dit][dir],0,dir,1);
          
          Box edge_box( grids[dit] ); // no ghosts
          edge_box.surroundingNodes( );  // grow hi end by one in all dirs
          edge_box.enclosedCells( dir ); // shrink hi end by 1 in dir
         
          if(dir==1) dir0=0;
-         const FArrayBox& this_edge_in(  a_edge_in[dit][dir0] );
-               FArrayBox& this_edge_out( a_edge_out[dit][dir] );
+         const FArrayBox& this_Fin(  a_Fin[dit][dir0] );
         
          FORT_C2_EDGES_TO_EDGES( CHF_BOX( edge_box ),
-                                 CHF_CONST_FRA1( this_edge_in,0 ),
-                                 CHF_FRA1( this_edge_out,0 ),
+                                 CHF_CONST_FRA1( this_Fin,0 ),
+                                 CHF_FRA1( Fout_dir,dir0 ),
                                  CHF_CONST_INT( dir ) );
+      }
+
+   }
+
+}
+
+void
+SpaceUtils::interpFacesToFaces( LevelData<FluxBox>&  a_Fout,
+                          const LevelData<FluxBox>&  a_Fin )
+{
+   CH_TIME("SpaceUtils::interpFacesToFaces()");
+   CH_assert( a_Fin.nComp()==1 );
+   CH_assert( a_Fout.nComp()==SpaceDim );
+   CH_assert( a_Fin.ghostVect() >= a_Fout.ghostVect() );
+   
+   // take 1-comp FluxBox with dir comp of vector F on each face 
+   // and copy/interpolate to a SpaceDim-comp FluxBox 
+   // to have the full vector on each face
+   
+   const DisjointBoxLayout& grids( a_Fout.getBoxes() );
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      for (int dir(0); dir<SpaceDim; dir++) {
+               
+         FArrayBox& Fout_dir( a_Fout[dit][dir] );
+      
+         // copy normal comp
+         Fout_dir.copy(a_Fin[dit][dir],0,dir,1);  
+       
+         // get face box for this dir and shrink by 1 on each side 
+         // in dir direction
+         Box face_box =  Fout_dir.box();
+         face_box.grow(dir,-1);
+
+         // interpolate F on adir face to dir face
+         for (int adir(0); adir<SpaceDim; adir++) {
+            if(adir==dir) continue;
+            const FArrayBox& this_Fin(  a_Fin[dit][adir] );
+            FORT_C2_FACES_TO_FACES( CHF_BOX( face_box ),
+                                    CHF_CONST_INT( adir ),
+                                    CHF_CONST_INT( dir ),
+                                    CHF_CONST_FRA1( this_Fin,0 ),
+                                    CHF_FRA1( Fout_dir,adir ) );
+         }
+
       }
 
    }
@@ -873,6 +1122,7 @@ SpaceUtils::interpFaceScalarToCell( LevelData<FArrayBox>&  a_cell_phi,
    for (DataIterator dit(grids); dit.ok(); ++dit) {
 
       FArrayBox& this_cell_phi( a_cell_phi[dit] );
+      this_cell_phi.setVal(0.0);
       Box cell_box( grids[dit] );
       if(a_face_phi.ghostVect()>=a_cell_phi.ghostVect()) {
          cell_box = this_cell_phi.box();
@@ -884,6 +1134,36 @@ SpaceUtils::interpFaceScalarToCell( LevelData<FArrayBox>&  a_cell_phi,
                                    CHF_CONST_FRA( this_face_phi_dir ),
                                    CHF_FRA( this_cell_phi ) );
       }  
+      this_cell_phi.divide(SpaceDim);
+      
+   } 
+
+}
+
+void
+SpaceUtils::interpFaceScalarToCell( LevelData<FArrayBox>&  a_cell_phi,
+                              const LevelData<FluxBox>&    a_face_phi,
+                              const int                    a_dir )
+{
+   CH_TIME("SpaceUtils::interpFaceScalarToCell()");
+   CH_assert( a_cell_phi.nComp() == a_face_phi.nComp() );
+   CH_assert( a_dir < SpaceDim );
+   const DisjointBoxLayout& grids( a_face_phi.getBoxes() );
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+
+      FArrayBox& this_cell_phi( a_cell_phi[dit] );
+      this_cell_phi.setVal(0.0);
+      Box cell_box( grids[dit] );
+      if(a_face_phi.ghostVect()>=a_cell_phi.ghostVect()) {
+         cell_box = this_cell_phi.box();
+      }
+      
+      const FArrayBox& this_face_phi_dir( a_face_phi[dit][a_dir] );
+      FORT_FACE_SCALAR_TO_CELL( CHF_BOX( cell_box ),
+                                CHF_CONST_INT( a_dir ),
+                                CHF_CONST_FRA( this_face_phi_dir ),
+                                CHF_FRA( this_cell_phi ) );
       
    } 
 
@@ -1047,16 +1327,18 @@ SpaceUtils::cellCenteredGradientComponent(  const Box&        a_box,
                                             const FArrayBox&  a_var,
                                             const RealVect&   a_dx,
                                             const int         a_order,
-                                            FArrayBox&        a_grad_var )
+                                            FArrayBox&        a_grad_var,
+                                            const int         a_var_comp )
 {
-  CH_assert(a_var.nComp() == 1);
+  CH_assert(a_var_comp < a_var.nComp());
+  //CH_assert(a_var.nComp() == 1);
   CH_assert(a_grad_var.nComp() > a_dir);
   CH_assert(a_order == 2 || a_order == 4);
   CH_assert(a_dir >= 0 && a_dir < SpaceDim);
 
   FORT_CELL_CENTERED_GRAD_COMPONENT(  CHF_BOX(a_box),
                                       CHF_CONST_INT(a_dir),
-                                      CHF_CONST_FRA1(a_var,0),
+                                      CHF_CONST_FRA1(a_var,a_var_comp),
                                       CHF_CONST_REALVECT(a_dx),
                                       CHF_CONST_INT(a_order),
                                       CHF_CONST_FRA1(a_grad_var, a_dir) );
@@ -1467,6 +1749,43 @@ SpaceUtils::copyAndFillGhostCellsSimple(  LevelData<EdgeDataBox>&       a_var_wg
   return;
 }
 
+void
+SpaceUtils::copyAndFillGhostCellsSimple(  LevelData<NodeFArrayBox>&       a_var_wg,
+                                          const LevelData<NodeFArrayBox>& a_var )
+{
+  const DisjointBoxLayout& var_dbl = a_var.disjointBoxLayout();
+
+  /* interior */
+  for (DataIterator dit(a_var.dataIterator()); dit.ok(); ++dit) {
+    a_var_wg[dit].getFab().setVal(0.0);
+    a_var_wg[dit].getFab().copy(a_var[dit].getFab(), var_dbl[dit]);
+  }
+  a_var_wg.exchange();
+
+  /* codim-1 boundaries */
+  for (DataIterator dit(a_var.dataIterator()); dit.ok(); ++dit) {
+    for (int dir=0; dir<SpaceDim; dir++) {
+      fillGhostCellsSimple(a_var_wg[dit].getFab(), var_dbl[dit], dir);
+    }
+  }
+  a_var_wg.exchange();
+
+  /* higher codim boundaries */
+  for (DataIterator dit(a_var.dataIterator()); dit.ok(); ++dit) {
+    Box bx_int(var_dbl[dit]);
+    const Box& bx_var(a_var_wg[dit].box());
+    for (int dir=0; dir<SpaceDim-1; dir++) {
+      bx_int.growLo(dir, (bx_int.smallEnd(dir)-bx_var.smallEnd(dir)) );
+      bx_int.growHi(dir, (bx_var.bigEnd(dir)-bx_int.bigEnd(dir)) );
+      fillGhostCellsSimple(a_var_wg[dit].getFab(), bx_int, dir+1);
+    }
+  }
+  a_var_wg.exchange();
+
+  /* done - hopefully! */
+  return;
+}
+
 void 
 SpaceUtils::inspectFArrayBox(const LevelData<FArrayBox>&  a_F0,
                              const int                    a_comp, 
@@ -1712,6 +2031,130 @@ SpaceUtils::exchangeEdgeDataBox( LevelData<EdgeDataBox>& a_Edge )
 
    } // end loop over grids on this level
 
+}
+
+void
+SpaceUtils::exchangeNodeFArrayBox( LevelData<NodeFArrayBox>& a_Node )
+{
+   CH_TIME("SpaceUtils::exchangeNodeFArrayBox()");
+  
+   // only tested/verified for 2D with doubly-periodic BCs
+
+   CH_assert(SpaceDim<3); // not generalized for 3D
+
+   const DisjointBoxLayout& grids( a_Node.getBoxes() );
+   DataIterator dit = grids.dataIterator();
+
+   // copy to a temporary
+   LevelData<NodeFArrayBox> tmp_Node(grids, a_Node.nComp());
+   for (dit.begin(); dit.ok(); ++dit) {
+      const FArrayBox& this_Node = a_Node[dit].getFab(); 
+            FArrayBox& this_tmp_Node = tmp_Node[dit].getFab(); 
+       Box NodeBox = grids[dit];
+       NodeBox.surroundingNodes();
+       this_tmp_Node.copy(this_Node,NodeBox);
+   }
+
+   // call exchange on passed NodeFArrayBox
+   a_Node.exchange();
+
+   // now use the original data stored in temp to modify
+   // the exchanged Node data such that all shared values are identical
+
+   const ProblemDomain& domain( grids.physDomain() ); 
+   Box domainNodeBox = domain.domainBox();
+   domainNodeBox.surroundingNodes();
+   const IntVect domainNodeHi = domainNodeBox.bigEnd();
+   const IntVect domainNodeLo = domainNodeBox.smallEnd();
+
+   for (dit.begin(); dit.ok(); ++dit) {
+      const Box& gridBox = grids[dit];
+      FArrayBox& this_Temp = tmp_Node[dit].getFab();
+      FArrayBox& this_Node = a_Node[dit].getFab();
+
+      // first copy all non-corner shared cells on low ends
+      for(int dir=0; dir<SpaceDim; dir++) {
+         Box loNodeBox = gridBox;
+         loNodeBox.surroundingNodes();                  // convert to node type
+         loNodeBox.setBig(dir,loNodeBox.smallEnd(dir)); // collapse to dir small end
+         for(int dir0=0; dir0<SpaceDim; dir0++) {       // remove corners
+            if(dir0!=dir) loNodeBox.growHi(dir0,-1);
+            if(dir0!=dir) loNodeBox.growLo(dir0,-1);
+         }
+         copy(this_Node,this_Temp,loNodeBox);
+      }
+   
+      //
+      // now focus on the corners
+      //
+      
+      Box NodeBox = gridBox;
+      NodeBox.surroundingNodes();
+
+      // check if low-low corner touchs any physical
+      // boundaries. If not, then do copy
+      int copyCorner00 = 1;
+      for(int dir=0; dir<SpaceDim; dir++) {
+         const int thisBoxLo = NodeBox.smallEnd(dir);
+         if(thisBoxLo==domainNodeLo[dir]) {
+            copyCorner00 = copyCorner00*0;
+         }
+      }
+      if(copyCorner00) {
+         Box corner00Box = NodeBox;
+         for(int dir=0; dir<SpaceDim; dir++) {
+            corner00Box.setBig(dir,NodeBox.smallEnd(dir));
+         }
+         copy(this_Node,this_Temp,corner00Box);
+      }
+
+      if(SpaceDim==2) { // this would need to be generalized for SpaceDim>2
+      
+         // check if high end touchs a physical in dir0, but 
+         // does not touch low end in dir1
+         const int thisBoxHi0 = NodeBox.bigEnd(0);
+         const int thisBoxLo1 = NodeBox.smallEnd(1);
+         if(domainNodeHi[0]==thisBoxHi0 && domainNodeLo[1]!=thisBoxLo1) {
+            Box corner10Box = NodeBox;
+            corner10Box.setSmall(0,NodeBox.bigEnd(0));
+            corner10Box.setBig(1,NodeBox.smallEnd(1));
+            copy(this_Node,this_Temp,corner10Box);
+         }
+      
+         // check if high end touchs a physical in dir1, but 
+         // does not touch low end in dir0
+         const int thisBoxHi1 = NodeBox.bigEnd(1);
+         const int thisBoxLo0 = NodeBox.smallEnd(0);
+         if(domainNodeHi[1]==thisBoxHi1 && domainNodeLo[0]!=thisBoxLo0) {
+            Box corner01Box = NodeBox;
+            corner01Box.setSmall(1,NodeBox.bigEnd(1));
+            corner01Box.setBig(0,NodeBox.smallEnd(0));
+            copy(this_Node,this_Temp,corner01Box);
+         }
+
+      }
+
+      // copy over upper domain corner
+      int copyCorner11 = 1;
+      Box corner11Box = NodeBox;
+      for(int dir=0; dir<SpaceDim; dir++) {
+         const int thisBoxHi = NodeBox.bigEnd(dir);
+         if(domainNodeHi[dir]==thisBoxHi) {
+            corner11Box.setSmall(dir,NodeBox.bigEnd(dir));
+         }
+         else {
+            copyCorner11 = copyCorner11*0;
+         }
+      }
+      if(copyCorner11) {
+         copy(this_Node,this_Temp,corner11Box);
+      }
+
+   }
+   
+   // exchange again is for the purpose of actual ghost cells (not shared cells)
+   a_Node.exchange();
+   
 }
 
 void

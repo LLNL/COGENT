@@ -120,6 +120,7 @@ public:
       m_dt_fluids_imex(DBL_MAX),
       m_dt_scalars_imex(DBL_MAX),
       m_dt_neutrals_imex(DBL_MAX),
+      m_ark_first_stage_explicit(true),
       m_time_scale_collisions(-1),
       m_time_scale_transport(-1),
       m_time_scale_fluids(-1),
@@ -234,6 +235,10 @@ public:
    void initializeFluidSpeciesPhysical( CFG::FluidSpeciesPtrVect&,
                                         const double );
 
+   void applyFluidInitializationConstraints(CFG::FluidSpeciesPtrVect&,
+                                            CFG::FluidSpeciesPtrVect&,
+                                            const double );
+   
    inline
    void initializeState(  GKState& a_state, 
                           const int a_cur_step, 
@@ -263,13 +268,15 @@ public:
                         GKRHSData&, 
                         const GKState&,
                         const GKState&  );
+      
+   inline 
+   void ARKFirstStageExplicit( const bool a_flag ) { m_ark_first_stage_explicit = a_flag; }
 
    void preTimeStep  (const int,const Real,const GKState&,const GKState&);
    void postTimeStep (const int,const Real, const Real, GKState&);
    void postTimeStage(const int, const Real, const Real, GKState&, const int);
 
    void setEMFields( const GKState&   state_comp,
-                     const int        step,
                      CFG::EMFields&   EM_fields,
                      const bool       phase_space_update = true) const;
 
@@ -585,28 +592,30 @@ private:
 
    bool m_is_defined;
    
-   int                            m_kinetic_ghosts;
-   int                            m_fluid_ghosts;
+   int  m_kinetic_ghosts;
+   int  m_fluid_ghosts;
       
-   bool                           m_consistent_potential_bcs;
-   bool                           m_use_vlasov_ampere_bcs;
-   bool                           m_ampere_post_step_update;
-   bool                           m_ampere_law;
-   bool                           m_ampere_cold_electrons;
-   bool                           m_fixed_efield;
-   bool                           m_no_efield;
-   bool                           m_transport_model_on;
-   bool                           m_neutrals_model_on;
-   bool                           m_enforce_quasineutrality;
-   bool                           m_Esol_extrapolation;
-   bool                           m_dealignment_corrections;
-   bool                           m_old_vorticity_model;
-   bool                           m_EM_effects;
-   bool                           m_skip_efield_stage_update;
+   bool m_consistent_potential_bcs;
+   bool m_use_vlasov_ampere_bcs;
+   bool m_ampere_post_step_update;
+   bool m_ampere_law;
+   bool m_ampere_cold_electrons;
+   bool m_fixed_efield;
+   bool m_no_efield;
+   bool m_transport_model_on;
+   bool m_neutrals_model_on;
+   bool m_enforce_quasineutrality;
+   bool m_Esol_extrapolation;
+   bool m_dealignment_corrections;
+   bool m_old_vorticity_model;
+   bool m_EM_effects;
+   bool m_skip_efield_stage_update;
    
    /* The following 4 flags are relevant only for IMEX time integration */
-   bool                           m_transport_imex_implicit;
-   bool                           m_neutrals_imex_implicit;
+   bool m_transport_imex_implicit;
+   bool m_neutrals_imex_implicit;
+
+   bool m_ark_first_stage_explicit;
 
    /* needs to be removed */
    GKState m_Y;

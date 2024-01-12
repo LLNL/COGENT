@@ -23,8 +23,7 @@ EMVorticityOp::EMVorticityOp(const ParmParse&    a_pp,
    : VorticityOp(a_pp, a_geometry, a_larmor, a_verbosity),
      m_geometry(a_geometry),
      m_is_time_implicit(false),
-     m_include_hyperviscosity(false),
-     m_use_hyperviscosity_bcs(false),
+     m_apply_initialization_constraints(false),
      m_ion_skin_depth(a_ion_skin_depth),
      m_electron_skin_depth(a_electron_skin_depth)
 {
@@ -94,44 +93,64 @@ EMVorticityOp::EMVorticityOp(const ParmParse&    a_pp,
                                                                           false));
    m_imex_pc_op->setJparallelBc(*m_jpar_bcs);
    
-   
-   // Set up hyperviscosity operator
-   if (m_include_hyperviscosity) {
-      s_pp_base = string(a_pp.prefix()) + ".hyperviscosity";
-      
-      m_hyperviscosity_op = new Diffusion(s_pp_base, a_geometry);
-      
-      // Set hyperviscosity bcs
-      if (m_use_hyperviscosity_bcs) {
-         const std::string name_high_order("EM_hyperviscosity");
-         const std::string prefix_high_order( "BC." + name_high_order );
-         ParmParse pp_high_order( prefix_high_order.c_str() );
-         m_hyperviscosity_bcs = RefCountedPtr<EllipticOpBC>(elliptic_op_bc_factory.create(name_high_order,
-                                                                                          pp_high_order,
-                                                                                          *(a_geometry.getCoordSys()),
-                                                                                          false));
-      }
-      else {
-         // Create BC object with EXTRAPOLATED BC type
-         m_hyperviscosity_bcs = m_potential_bcs->clone(true);
-      }
-      
-      const DisjointBoxLayout& grids = m_geometry.grids();
-      LevelData<FluxBox> D_tensor(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
-      LevelData<FluxBox> D_tensor_mapped(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
-
-      initializeHyperviscosityCoeff(D_tensor, D_tensor_mapped);
-
-      // The following assumes that neither coefficients nor BC-related stuff changes in time
-      m_hyperviscosity_op->setOperatorCoefficients(D_tensor, D_tensor_mapped, *m_hyperviscosity_bcs);
-   }
-   
-   else {
-      m_hyperviscosity_op = NULL;
-   }
-   
-   
+   // Set up negative perpendicular Laplacian operator for initialization and ALT_DIV_J option
    const DisjointBoxLayout& grids = m_geometry.grids();
+   
+   s_pp_base = string(a_pp.prefix()) + ".nlp_Apar_op";
+   pp_base =s_pp_base.c_str();
+   m_nlp_Apar_op = new Diffusion(pp_base, m_geometry);
+   
+   const LevelData<FluxBox>& perp_coeff = m_geometry.getEllipticOpPerpCoeff();
+   const LevelData<FluxBox>& perp_coeff_mapped = m_geometry.getEllipticOpPerpCoeffMapped();
+   LevelData<FluxBox> D_tensor(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+   LevelData<FluxBox> D_tensor_mapped(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+   double fac = pow(m_ion_skin_depth, 2);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      D_tensor[dit].copy(perp_coeff[dit]);
+      D_tensor_mapped[dit].copy(perp_coeff_mapped[dit]);
+      D_tensor[dit] *= fac;
+      D_tensor_mapped[dit] *= fac;
+   }
+   m_nlp_Apar_op->setOperatorCoefficients(D_tensor, D_tensor_mapped, *m_A_parallel_bcs);
+   m_nlp_Apar_op->updatePreconditioner(*m_A_parallel_bcs);
+   
+   
+   // Set up div(b...) operator for initialization and ALT_DIV_J option
+   s_pp_base = string(a_pp.prefix()) + ".div_jpar_op";
+   pp_base =s_pp_base.c_str();
+   m_div_jpar_op = new Advection(pp_base, m_geometry);
+
+   const LevelData<FluxBox>& bunit = m_geometry.getFCBFieldDir();
+   m_div_jpar_op->setOperatorCoefficients(bunit);
+   m_div_jpar_op->updatePreconditioner(*m_jpar_bcs);
+   
+   
+   // Set up vorticity diffusion; we cannot inherit this class from VorticityOp
+   // because the base class member could have polarization density corrections
+   // this class handles polarization density corrections separately from this diffusion op
+   if (m_include_diffusion) {
+       
+      s_pp_base = string(a_pp.prefix()) + ".diffusion_op";
+      pp_base = s_pp_base.c_str();
+       
+      m_vorticity_diffusion_op = new GKVorticity(a_pp,
+                                                 pp_base,
+                                                 a_geometry,
+                                                 a_larmor,
+                                                 0.,
+                                                 m_second_order,
+                                                 m_low_pollution,
+                                                 false,
+                                                 m_include_diffusion,
+                                                 "VorticityDiffusion" );
+
+      m_vorticity_diffusion_op->setDiffusionOperatorCoeff(m_pol_diffusion_face,
+                                                          m_perp_diffusion_face);
+   }
+   else {
+      m_vorticity_diffusion_op = NULL;
+   }
+   
    m_par_cond.define(grids, 1, IntVect::Zero);
    
    m_volume.define(grids, 1, IntVect::Zero);
@@ -143,6 +162,9 @@ EMVorticityOp::~EMVorticityOp()
 {
    if (m_imex_pc_op) delete m_imex_pc_op;
    if (m_Apar_soln_op) delete m_Apar_soln_op;
+   if (m_nlp_Apar_op) delete m_nlp_Apar_op;
+   if (m_div_jpar_op) delete m_div_jpar_op;
+   if (m_vorticity_diffusion_op) delete m_vorticity_diffusion_op;
    if (m_A_parallel_bcs) delete m_A_parallel_bcs;
  }
 
@@ -234,25 +256,17 @@ void EMVorticityOp::accumulatePhiRHS(LevelData<FArrayBox>&              a_rhs_ph
       j_par[dit].mult(fac);
    }
 
-   // Add divergence of total perpendicular current vorticity diffusion  and RS terms
-   //   VorticityOp::addPerpTermsRHS(a_rhs_phi, a_soln_phi, a_kinetic_species_phys, a_E_field, a_EM_fields, a_time);
-   VorticityOp::addPerpTermsRHS(a_rhs_phi, a_soln_phi, a_kinetic_species_phys, a_EM_fields, a_time);
+   // Add divergence of total perpendicular current
+   addDivJperpTerm(a_rhs_phi, a_soln_phi, a_kinetic_species_phys, a_EM_fields, a_time);
 
    // Add divergence of a parallel current
-   addDivJpar(a_rhs_phi, j_par);
+   addDivJpar(a_rhs_phi, a_soln_Apar, j_par);
 
-#ifdef ALT_DIV_JPAR
-   LevelData<FArrayBox> divAparb(grids, 1, IntVect::Zero);
-   m_imex_pc_op->applyDivbOperator(a_soln_Apar, divAparb);
-
-   LevelData<FArrayBox> nlpdivAparb(grids, 1, IntVect::Zero);
-   m_imex_pc_op->applyNegativePerpendicularLaplacian(divAparb, nlpdivAparb);   
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      nlpdivAparb[dit] *= fac;
-      a_rhs_phi[dit] -= nlpdivAparb[dit];
+   // Add Reynolds Stress term
+   if (m_reynolds_stress) {
+      addReynoldsStressTerm(a_rhs_phi, a_soln_phi, a_EM_fields);
    }
-#endif
-
+   
    // Add vorticity diffusion
    if (m_include_diffusion) {
 
@@ -269,14 +283,20 @@ void EMVorticityOp::accumulatePhiRHS(LevelData<FArrayBox>&              a_rhs_ph
       }
    }
 
-   if (m_include_hyperviscosity) {
-
-     LevelData<FArrayBox> negative_vorticity(grids, 1, IntVect::Zero);
-     m_gyropoisson_op->computeFluxDivergence(a_soln_phi, negative_vorticity, false);
-     
-     addHyperViscosity(a_rhs_phi, negative_vorticity);
+   // Add diamagnetic corrections
+   if (m_include_diam_correction) {
+      addDiamagneticCorrection(a_rhs_phi, a_soln_phi, a_EM_fields);
    }
+   
+   // Add stabilization terms
+   if (m_include_stabilization) {
+      
+      LevelData<FArrayBox> negative_vorticity(grids, 1, IntVect::Zero);
+      m_gyropoisson_op->computeFluxDivergence(a_soln_phi, negative_vorticity, false);
 
+      addStabilizationTerms(a_rhs_phi, negative_vorticity);
+   }
+   
 }
 
 
@@ -399,14 +419,16 @@ void EMVorticityOp::accumulateAparRHS(LevelData<FArrayBox>&              a_rhs_A
       a_rhs_Apar[dit].minus(j_par_over_sigma[dit]);
    }
 #endif
-   // Add hyperviscosity
-   if (m_include_hyperviscosity) {
-      addHyperViscosity(a_rhs_Apar, a_soln_Apar);
+   
+   // Add stabilization terms
+   if (m_include_stabilization) {
+      addStabilizationTerms(a_rhs_Apar, a_soln_Apar);
    }
 }
 
 
 void EMVorticityOp::addDivJpar(LevelData<FArrayBox>&        a_rhs,
+                               const LevelData<FArrayBox>&  a_Apar,
                                const LevelData<FArrayBox>&  a_jpar)
 {
 
@@ -470,9 +492,10 @@ void EMVorticityOp::addDivJpar(LevelData<FArrayBox>&        a_rhs,
       div_jpar[dit] /= m_volume[dit];
    }
 #else
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      div_jpar[dit].setVal(0.);
-   }
+   LevelData<FArrayBox> nlpApar(grids, 1, IntVect::Zero);
+   m_nlp_Apar_op->applyPCOp(a_Apar, nlpApar);
+
+   m_div_jpar_op->applyPCOp(nlpApar, div_jpar);
 #endif
 
 #ifndef ALFVEN_WAVE_TEST
@@ -496,27 +519,6 @@ void EMVorticityOp::addDivJpar(LevelData<FArrayBox>&        a_rhs,
       a_rhs[dit].minus(div_jpar[dit]);
    }
 
-}
-
-
-void EMVorticityOp::addHyperViscosity(LevelData<FArrayBox>&              a_rhs,
-                                      const LevelData<FArrayBox>&        a_soln)
-{
-  /*
-    Add parallel hyperviscosity terms in the RHS  
-   */
-
-  const DisjointBoxLayout& grids = m_geometry.gridsFull();
-
-  LevelData<FArrayBox> flux_div(grids, 1, IntVect::Zero);
-  m_hyperviscosity_op->computeFluxDivergence( a_soln, flux_div, false, !m_use_hyperviscosity_bcs);
-
-  LevelData<FArrayBox> hypervisc(grids, 1, IntVect::Zero);
-  m_hyperviscosity_op->computeFluxDivergence( flux_div, hypervisc, false, !m_use_hyperviscosity_bcs);
-
-  for (DataIterator dit(grids); dit.ok(); ++dit) {
-      a_rhs[dit] -= flux_div[dit];
-  }  
 }
 
 void EMVorticityOp::setAparDerivatives( const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
@@ -627,7 +629,7 @@ void EMVorticityOp::preOpEval(const PS::KineticSpeciesPtrVect&   a_kinetic_speci
    computeDivPerpElectronMagCurrentDensity(m_divJperp_mag_e, m_ion_charge_density, zero, a_time);
 
    // N.B. Diffusion operator only applies perpendicular diffision for
-   // the EM case parallel high-order terms are included elswehere
+   // the EM case; parallel high-order terms are included elswehere
    if (m_include_diffusion) {
      m_vorticity_diffusion_op->setVorticityOperatorCoefficients(zero,
                                                                 zero,
@@ -765,13 +767,13 @@ void EMVorticityOp::fillGhostCells(FluidSpecies&  a_species_phys,
 {
 }
 
-void EMVorticityOp::postStageEval(FluidSpecies&  a_species_comp,
-                                  FluidSpecies&  a_species_phys,
-                                  const Real     a_dt,
-                                  const Real     a_time,
-                                  const int      a_stage )
+void EMVorticityOp::postTimeEval(FluidSpecies&  a_species_comp,
+                                 FluidSpecies&  a_species_phys,
+                                 const Real     a_dt,
+                                 const Real     a_time,
+                                 const int      a_stage )
 {
-   VorticityOp::postStageEval(a_species_comp, a_species_phys, a_dt, a_time, a_stage);
+   VorticityOp::postTimeEval(a_species_comp, a_species_phys, a_dt, a_time, a_stage);
    
    LevelData<FArrayBox>& Apar_comp = a_species_comp.cell_var("A_parallel");
    LevelData<FArrayBox>& Apar_phys = a_species_phys.cell_var("A_parallel");
@@ -785,38 +787,66 @@ void EMVorticityOp::postStageEval(FluidSpecies&  a_species_comp,
 }
 
 
-void EMVorticityOp::initializeHyperviscosityCoeff(LevelData<FluxBox>& a_D_tensor,
-                                                  LevelData<FluxBox>& a_D_tensor_mapped)
+bool EMVorticityOp::isInitializationConstrained(const FluidSpecies& a_fluid_phys)
 {
-   // Get distjoint box layout
+   return m_apply_initialization_constraints;
+}
+
+void EMVorticityOp::applyInitializationConstraints(FluidSpeciesPtrVect&               a_fluid_comp,
+                                                   FluidSpeciesPtrVect&               a_fluid_phys,
+                                                   const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
+                                                   const EMFields&                    a_EM_fields,
+                                                   const int                          a_component,
+                                                   const double                       a_time )
+{
    const DisjointBoxLayout& grids( m_geometry.grids() );
-
-   // Get parallel coefficient profile function
-   LevelData<FArrayBox> D_par_cc(grids, 1, 2*IntVect::Unit);
-   m_D_par_func->assign( D_par_cc, m_geometry, 0.0);
-   m_geometry.fillInternalGhosts( D_par_cc );
-
-   // Get fc parallel coefficient profile function
-   LevelData<FluxBox> D_par_fc(grids, 1, IntVect::Zero);
-   fourthOrderCellToFaceCenters(D_par_fc, D_par_cc);
    
-   // Compute diffusion coefficient
-   LevelData<FluxBox> D_tensor(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
-   LevelData<FluxBox> D_tensor_mapped(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+   // Create RHS for j_par equation
+   PS::ScalarPtrVect  scalar_species_dummy; //zero lenght dummy
+   
+   VorticityOp::preOpEval(a_kinetic_species_phys,
+                          a_fluid_comp,
+                          scalar_species_dummy,
+                          a_EM_fields,
+                          a_time);
 
-   // Get parallel elliptic coefficients
-   const LevelData<FluxBox>& par_coeff = m_geometry.getEllipticOpParCoeff();
-   const LevelData<FluxBox>& par_coeff_mapped  = m_geometry.getEllipticOpParCoeffMapped();
-
+   LevelData<FArrayBox> neg_divJperp_mag(grids, 1, IntVect::Zero);
+   for (DataIterator dit( neg_divJperp_mag.dataIterator() ); dit.ok(); ++dit) {
+      neg_divJperp_mag[dit].copy(m_divJperp_mag_e[dit]);
+      neg_divJperp_mag[dit].plus(m_divJperp_mag_i[dit]);
+      neg_divJperp_mag[dit].mult(-1.0);
+   }
+   
+   // Subtract FS average to satisfy solvability constraints
+   FluxSurface flux_surface(m_geometry);
+   LevelData<FArrayBox> jperp_fs(grids, 1, IntVect::Zero);
+   flux_surface.averageAndSpread(neg_divJperp_mag, jperp_fs);
+   
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      a_D_tensor[dit].copy(par_coeff[dit]);
-      a_D_tensor_mapped[dit].copy(par_coeff_mapped[dit]);
-      for (int dir = 0; dir < SpaceDim; dir++) {
-         for (int n = 0; n < SpaceDim*SpaceDim; n++) {
-            a_D_tensor[dit][dir].mult(D_par_fc[dit][dir],0,n,1);
-            a_D_tensor_mapped[dit][dir].mult(D_par_fc[dit][dir],0,n,1);
-         }
-      }
+      neg_divJperp_mag[dit] -= jperp_fs[dit];
+   }
+      
+   // Solve for j_par
+   LevelData<FArrayBox> jpar(grids, 1, IntVect::Zero);
+   m_div_jpar_op->solveWithBCs(jpar, neg_divJperp_mag);
+      
+   // Solve for A_par
+   LevelData<FArrayBox> Apar(grids, 1, IntVect::Zero);
+   m_nlp_Apar_op->solveWithBCs(Apar, jpar);
+
+   // Revise the initial condition for Apar
+   CFGVars& sol_fluid_comp = *(a_fluid_comp[a_component]);
+   CFGVars& sol_fluid_phys = *(a_fluid_phys[a_component]);
+
+   LevelData<FArrayBox>& soln_Apar_comp = sol_fluid_comp.cell_var("A_parallel");
+   LevelData<FArrayBox>& soln_Apar_phys = sol_fluid_phys.cell_var("A_parallel");
+
+   setZero(soln_Apar_comp);
+   setZero(soln_Apar_phys);
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      soln_Apar_comp[dit].copy(Apar[dit]);
+      soln_Apar_phys[dit].copy(Apar[dit]);
    }
 }
 
@@ -824,23 +854,9 @@ void EMVorticityOp::parseParameters( const ParmParse& a_pp )
 {
 
    a_pp.query( "implicit", m_is_time_implicit);
-
-   a_pp.query( "include_parallel_hyperviscosity", m_include_hyperviscosity);
-   a_pp.query( "use_hyperviscosity_bcs", m_use_hyperviscosity_bcs );
    
-   GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-   std::string grid_function_name;
+   a_pp.query( "apply_initialization_constraints", m_apply_initialization_constraints );
    
-   if (m_include_hyperviscosity) {
-      if (a_pp.contains("D_par_hyperviscosity")) {
-         a_pp.get("D_par_hyperviscosity", grid_function_name );
-         m_D_par_func = grid_library->find( grid_function_name );
-      }
-      else {
-         MayDay::Error("parallel hyperviscosity coefficient must be specified");
-      }
-   }
-
 }
 
 

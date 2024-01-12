@@ -31,7 +31,7 @@
 if [ -f /usr/share/lmod/lmod/init/bash ]; then
    . /usr/share/lmod/lmod/init/bash
 fi
-module load gcc/4.9.3
+module load gcc/12.1.1
 
 MACHINE=quartz
 OPT=TRUE
@@ -43,8 +43,8 @@ XTRACXXFLAGS=-march=native
 CC=gcc
 FC=gfortran
 HYPRE_DIR=hypre
-HDF5_SERIAL_DIR=/usr/tce/packages/hdf5/hdf5-serial-1.8.18-gcc-4.9.3
-HDF5_PARALLEL_DIR=/usr/tce/packages/hdf5/hdf5-parallel-1.8.18-gcc-4.9.3-mvapich2-2.2
+HDF5_SERIAL_DIR=/usr/tce/packages/hdf5/hdf5-1.14.0-gcc-12.1.1
+HDF5_PARALLEL_DIR=/usr/tce/packages/hdf5/hdf5-1.14.0-mvapich2-2.3.6-gcc-12.1.1
 
 # You can set the following flag to true if you know that hypre is
 # already built.  Otherwise, the copying of headers performed by the

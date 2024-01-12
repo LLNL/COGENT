@@ -2,17 +2,31 @@
 #define _ONEBLOCKCOORDSYS_H_
 
 #include "MagBlockCoordSys.H"
-#include "RadialUtils.H"
+#include "Dimensions.H"
 
-#include "Interp.H"
+#if CFG_DIM==3
+#include "BSplineInterp3D.H"
+#include "LevelData.H"
+#endif
+
+#define POL_NAMESPACE D2
+#define POL_DIM 2
+
+#undef CH_SPACEDIM
+#define CH_SPACEDIM POL_DIM
+#include "SingleNullPoloidalUtil.H"
+#ifdef CH_SPACEDIM
+#undef CH_SPACEDIM
+#endif
+#define CH_SPACEDIM CFG_DIM
 
 #include "NamespaceHeader.H"
+namespace POL = POL_NAMESPACE;
 
-/// New arbitrary one block geometry class
 /**
- * Implements a(n?) one block geometry model via tables
+ * arbitrary one block geometry class
  *
- * Nomenclature: indices are still RADIAL_DIR <--> R, POLOIDAL_DIR <--> Z, TOROIDAL_DIR <--> Y
+ * Nomenclature: indices are still RADIAL_DIR <--> R,  TOROIDAL_DIR <--> Y,  POLOIDAL_DIR <--> Z,
  * to maintain contact with toroidal simulations
 */
 class OneBlockCoordSys
@@ -20,137 +34,204 @@ class OneBlockCoordSys
 {
    public:
 
-      /// Constructor
-      /**
-       * Constructor with initialization.  Input data is read from
-       * the parm_parse object, the cellSpacing is computed and
-       * the define() member is called.
-       *
-       * @param[in] parm_parse the ParmParse database.
-       * @param[in] domain the configuration space domain.
-       * @param[in] ghostVect vector of ghost cells stored for mapping.
-       */
-      OneBlockCoordSys( ParmParse&      parm_parse,
-                         const ProblemDomain&  domain );
+   // Constructor
+   OneBlockCoordSys(ParmParse&            parm_parse,
+                    const ProblemDomain&  domain,
+                    const int             numcells_toroidal,
+                    const int             toroidal_sector,
+                    const int             toroidal_block_separation);
 
-      /// Destructor
-      /**
-       */
-      virtual ~OneBlockCoordSys();
+   // Destructor
+   virtual ~OneBlockCoordSys();
 
-
-      void init( ParmParse& pp );
-      void readFiles( ParmParse& pp );
-      virtual RealVect mappedCoordNewton( const RealVect& x, const RealVect& xi_initial, const IntVect& iv_initial ) const;
-      void getCellCenterRealCoords();
-      bool isValid(const RealVect& xi) const;
-
-      /// Returns real coordinate.
-      /**
-       * Returns location \f$x\f$ in real-world coordinates of
-       * mapped-coordinate location \f$\xi\f$.
-       *
-       * @param[in] xi mapped grid coordinate.
-       */
-      virtual RealVect realCoord( const RealVect& xi ) const;
-
-      /// Returns computational coordinate.
-      /**
-       * Returns location \f$\xi\f$ in mapped coordinate space of real-world
-       * location \f$x\f$.
-       *
-       * @param[in] x physical space coordinate.
-       */
-      virtual RealVect mappedCoord( const RealVect& x ) const;
-
-      /// Returns the derivatives of the physical coordinates with respect to
-      /// the computational coordinate.
-      /**
-       * Returns the derivatives of the physical coordinates with respect to
-       * the computational coordinates at location \f$xi\f$.
-       *
-       * @param[in] xi mapped coordinate.
-       */
-      virtual Real  dXdXi(const RealVect& Xi, int dirX, int dirXi) const;
-
-      /// Fills the destComp component of a_dxdXi with the derivative of
-      /// x w/ respect to Xi in the dirX direction
-      /**
-       * Fills the destComp component of a_dxdXi with the derivative of
-       * x w/ respect to Xi in the dirX direction
-       *
-       * @param[in] Xi mapped coordinates
-       * @param[in] destComp destination component
-       * @param[in] dirX physical coordinate to be differentiated
-       * @param[in] dirXi computational coordinate
-       * @param[in] box box within which derivatives are computed
-       * @param[out] dxdXi output derivatives
-       */
-      virtual void dXdXi( FArrayBox&  dxdXi,
-                    const FArrayBox&  Xi,
-                          int         destComp,
-                          int         dirX,
-                          int         dirXi,
-                    const Box&        box ) const;
+   void readFiles( ParmParse& pp );
+      
+   virtual RealVect realCoord( const RealVect& Xi ) const;
    
-      virtual array<double,3> computeBField(const RealVect& a_X) const;
+   virtual RealVect mappedCoord( const RealVect& X ) const;
+   
+   void getCellCenterRealCoords();
+   
+   bool isValid(const RealVect& Xi, const bool omit_toroidal) const;									 
+   virtual Real dXdXi(const RealVect& Xi, int dirX, int dirXi) const;
+ 
+   virtual void dXdXi( FArrayBox&  dxdXi,
+                 const FArrayBox&  Xi,
+                       int         destComp,
+                       int         dirX,
+                       int         dirXi,
+                 const Box&        box ) const;
 
-      virtual void computeFieldData( const int  dir,
-                                     FArrayBox& BField,
-                                     FArrayBox& BFieldMag,
-                                     FArrayBox& BFieldDir,
-                                     FArrayBox& gradBFieldMag,
-                                     FArrayBox& curlBFieldDir,
-                                     FArrayBox& BFieldDirdotcurlBFieldDir,
-                                     const bool derived_data_only = false ) const;
-									 
-  /// Pointer to class methods
-  void (OneBlockCoordSys::*calcB)(double R, double Z, double* p_B) const;
-		
-  /// Magnetic field types: Const, Toroidal, Bennett, BRData (custom profile for B(r))
-  void calcBConst(double, double, double*) const;
+#if CFG_DIM==3
+   void setInterp( const ParmParse&       pp,
+                   const POL::FArrayBox&  interp_node_coords_pol,
+                   const POL::FArrayBox&  RZ_data );
 
-  virtual void getMagneticFlux( const FArrayBox& physical_coordinates,
-                                    FArrayBox&       magnetic_flux ) const;
+   RealVect traceField( const RealVect&  X,
+                        const double&    toroidal_increment ) const;
 
-  virtual double getMagneticFlux( const RealVect& a_physical_coordinate ) const;
+   RealVect mappedCoordNewton( const RealVect&  X,
+                               const RealVect&  xi_initial,
+                               const IntVect&   iv_initial ) const;
 
-  virtual void getNodalFieldData(FArrayBox& points, FArrayBox& A, FArrayBox& b, FArrayBox& Bmag) const;
+   void getPoloidalDisjointBoxLayout(DisjointBoxLayout&   a_grids,
+                                     Vector<Box>&         a_boxes,
+                                     int&                 a_decomp_num,
+                                     const Box&           a_box) const;
 
-  // Object ParmParse name.
-  static const std::string pp_name;
+   void assembleDecomposedData(FArrayBox&                    a_interp_node_data,
+                               FArrayBox&                    a_interp_node_coords,
+                               const LevelData<FArrayBox>&   a_interp_node_data_decomp,
+                               const LevelData<FArrayBox>&   a_interp_node_coords_decomp,
+                               const Vector<Box>&            a_grid_boxes,
+                               const int&                    a_decomp_num ) const;
+#endif
+   
+   //
+   //  below are functions related to the magnetic field 
+   //
+   
+   virtual array<double,3> computeBField(const RealVect& a_X) const;
+
+   virtual void computeFieldData( const int  dir,
+                                  FArrayBox& BField,
+                                  FArrayBox& BFieldMag,
+                                  FArrayBox& BFieldDir,
+                                  FArrayBox& gradBFieldMag,
+                                  FArrayBox& curlBFieldDir,
+                                  FArrayBox& BFieldDirdotcurlBFieldDir,
+                                  const bool derived_data_only = false ) const;
+
+
+   //Computes magnetic flux Psi
+   virtual void getMagneticFlux( const FArrayBox& a_physical_coordinates,
+                                 FArrayBox&       a_magnetic_flux ) const;
+
+   virtual double getMagneticFlux( const RealVect& a_physical_coordinate ) const;
+
+   virtual void getNodalFieldData(FArrayBox& points, FArrayBox& A, FArrayBox& b, FArrayBox& Bmag) const;
+
+   //Computes normalized magnetic flux
+   virtual void getNormMagneticFlux( const FArrayBox& a_physical_coordinates,
+                                     FArrayBox&       a_magnetic_flux ) const;
+
+   virtual double getNormMagneticFlux( const RealVect& a_physical_coordinate ) const;
+
+   //Returns the physical radial coordinate (R) for a given value of normalized psi
+   virtual double getOuterMidplaneCoord(const double psiNorm) const;
+
+   //Returns the radial coordinate of the separatrix at the outer midplane
+   virtual double getOuterRsep() const;
+
+   virtual double getRBtoroidal() const {return m_RB_toroidal;}
+
+#if CFG_DIM==3
+   double getToroidalMappedOffset() const {return m_toroidal_mapped_offset;}
+#endif
   
-  virtual bool isFieldAlignedMapping() const {return false;}
+   virtual bool isFieldAlignedMapping() const {return m_field_aligned_mapping;}
+   
   
-  virtual string geometryType() const {return "OneBlock";}
+   static const std::string pp_name;
   
-  double getRBtoroidal() const;
+   virtual string geometryType() const {return "OneBlock";}
 
-  double rmin() const {return m_rmin;}
-  double rmax() const {return m_rmax;}
+   double rmin() const {return m_rmin;}
+   double rmax() const {return m_rmax;}
+   
+   double thetamin() const {return m_thetamin;}
+   double thetamax() const {return m_thetamax;}
+   
+   virtual RealVect getMagAxis() const {return injectToroidal(m_poloidal_util->getMagAxis());}
+
+   virtual RealVect getXpoint() const {return injectToroidal(m_poloidal_util->getXpoint());}
+   
+   enum PhysCoordType {CYLINDRICAL, CARTESIAN};
+
+   void convertCylindricalToCartesian( const RealVect&   cartesian_vect,
+                                       array<double,3>&  vect ) const;
+
+   void convertCylindricalToCartesian( const FArrayBox&  cartesian_coord,
+                                       FArrayBox&        coord ) const;
+
+   // Removes the toroidal component of the input if there is one, otherwise just copies
+   virtual POL::IntVect restrictToPoloidal( const IntVect& v ) const;
+
+   // Removes the toroidal component of the input if there is one, otherwise just copies
+   virtual POL::RealVect restrictToPoloidal( const RealVect& v ) const;
+
+   // Returns a box with the toroidal dimension removed if there is one, otherwise just copies
+   virtual POL::Box restrictToPoloidal( const Box& box ) const;
+
+   // Restricts the input physical coordinate to the poloidal plane
+   virtual POL::RealVect restrictPhysCoordToPoloidal( const RealVect& a_X ) const;
+
+   // Restricts the input physical coordinates to the poloidal plane and returns
+   // the result in the second argument
+   virtual void restrictPhysCoordsToPoloidal( const FArrayBox&  coords,
+                                              POL::FArrayBox&   coords_pol ) const;
+
+   virtual void restrictPhysCoordsToPoloidal( const FArrayBox&  coords,
+                                              const int         toroidal_index,
+                                              POL::FArrayBox&   coords_pol ) const;
+
+   // Restricts the input mapped coordinates to the poloidal plane and returns
+   // the result in the second argument
+   virtual void restrictMappedCoordsToPoloidal( const FArrayBox&  coords,
+                                                POL::FArrayBox&   coords_pol ) const;
+
+   // Spreads the input in the toroidal direction if there is one; otherwise copies the input
+   // to the output
+   virtual RealVect injectToroidal( const POL::RealVect  a_v ) const;
+
+   void injectToroidal( const POL::FArrayBox&  fab_pol,
+                        const int              toroidal_index,
+                        FArrayBox&             fab ) const;
 
    protected:
 
+      int m_poloidal_block;
+      int m_toroidal_sector;
 
-   double m_rmin, m_rmax;
-   double m_thetamin, m_thetamax;
+      double m_rmin, m_rmax;
+      double m_thetamin, m_thetamax;
 #if CFG_DIM==3
-   double m_phimin, m_phimax;
+      double m_toroidal_width;
 #endif
-   double m_Btor_scale;	               /// Magnetic constant for toroidal model: B_0*r_0
-   double m_Btor_0;	               /// Magnetic field amplitude for constant and bennett models
-   double m_r0;	                       /// Radial size of Bennett model
-   HermiteSpline m_B_spline;   /// Hermite spline representation for magnetic field B(r)
+   
+#if CFG_DIM==2
+      POL::FArrayBox m_realPoloidalCoords;
+      POL::IntVect m_rpc_coarsen_ratio;
+#endif
+#if CFG_DIM==3
+      FArrayBox m_realCoords;
+      IntVect m_rc_coarsen_ratio;
+#endif
+   
+      double m_RB_toroidal;
 
-   FArrayBox m_realCoords;
-   int m_rc_coarsen_ratio;
+      bool m_spectral_field;
 
-   IntVect m_mapping_block_lo;
-   IntVect m_mapping_block_hi;
-   IntVect m_mapping_block_size;
+      POL::SingleNullPoloidalUtil* m_poloidal_util;
 
-   Interp* m_RZ_interp;
-	  
+      bool m_field_aligned_mapping;
+      bool m_mapping_includes_RBdata;
+   
+   private:
+   
+      PhysCoordType m_phys_coord_type;
+   
+#if CFG_DIM==3
+      Interp3D* m_interp;
+
+      double m_toroidal_mapped_offset;
+#endif
+
+      int m_toroidal_ghosts;   // Number of mapped ghost cells in the toroidal direction
+      int m_toroidal_mapping_refinement; //Refinemnt of mapping in toroidal dir relative to grid
+   
+      // Field tracing parameters; field lines are traced until they hit a prescribed poloidal plane.
+      int m_field_trace_step_num;     //Number of steps in toroidal dir used to ray trace field between poloidal planes
 };
 
 #include "NamespaceFooter.H"

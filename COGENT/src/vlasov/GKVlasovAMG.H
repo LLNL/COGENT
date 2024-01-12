@@ -72,7 +72,9 @@ class GKVlasovAMG
 
     void destroyHypreData();
 
-    void AMGSetup( const HYPRE_SStructMatrix&  matrix );
+   void AMGSetup( const HYPRE_SStructMatrix&  matrix,
+                  const HYPRE_SStructVector&  x,
+                  const HYPRE_SStructVector&  b );
 
     void AMG( const HYPRE_SStructMatrix&  matrix,
               const HYPRE_SStructVector&  b,
@@ -121,6 +123,8 @@ class GKVlasovAMG
    double m_tol;
    int m_max_iter;
    bool m_verbose;
+   int m_max_num_levels;
+   double m_threshold;
    bool m_convergence_params_set;
 
    bool m_flux_average[CFG_DIM];

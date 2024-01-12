@@ -59,10 +59,6 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
     domain_boxes[block_number] = Box(lo, hi);
   }
 
-  //  bool is_periodic[SpaceDim];
-  //  for (int dir=0; dir<SpaceDim; ++dir) {
-  //    is_periodic[dir] = a_is_periodic[dir];
-  //  }
   for (int dir=0; dir<SpaceDim; ++dir) {
     m_periodic[dir] = a_is_periodic[dir];
   }
@@ -91,7 +87,8 @@ LogRectCoordSys::LogRectCoordSys(ParmParse&               a_pp,
         m_coord_vec.push_back(block_coords);
      }
      else if (m_mag_geom_type == "oneblock") {
-        OneBlockCoordSys* block_coords = new OneBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], m_periodic));
+        OneBlockCoordSys* block_coords = new OneBlockCoordSys( a_pp, ProblemDomain(domain_boxes[block_number], m_periodic),
+                                                              a_numcells[m_mb_dir], block_number, BLOCK_SEPARATION);
         m_coord_vec.push_back(block_coords);
      }
   }
@@ -557,6 +554,30 @@ LogRectCoordSys::applyPeriodicity(RealVect& a_x,
   else if (m_mag_geom_type == "toroidal") {
     double phi_max = ((const ToroidalBlockCoordSys*)src_coord_0)->getToroidalWedgeFraction();
     phi_max *= 2. * Pi;
+    double phi = atan2(a_x[1], a_x[0]);
+    double r = sqrt(pow(a_x[0],2) + pow(a_x[1],2));
+    
+    // Correct for atan2 limits, since valid
+    // toroidal angle runs from 0 to phi_max
+    if (a_side == Side::LoHiSide::Hi && phi < 0.) {
+      phi += 2. * Pi;
+    }
+
+    if (phi < 0.0) {
+      double phi_reflected = phi + phi_max;
+      a_x[0] = r * cos(phi_reflected);
+      a_x[1] = r * sin(phi_reflected);
+    }
+
+    if (phi > phi_max) {
+      double phi_reflected = phi - phi_max;
+      a_x[0] = r * cos(phi_reflected);
+      a_x[1] = r * sin(phi_reflected);
+    }
+  }
+  
+  else if (m_mag_geom_type == "oneblock") {
+    double phi_max = ((const OneBlockCoordSys*)src_coord_0)->thetamax();
     double phi = atan2(a_x[1], a_x[0]);
     double r = sqrt(pow(a_x[0],2) + pow(a_x[1],2));
     

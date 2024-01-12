@@ -39,6 +39,14 @@ SingleNullConfigurationBC::setNames()
    m_bdry_name[RADIAL_PF] = "radial_pf";
    m_bdry_name[POLOIDAL_INNER_DIV] = "poloidal_inner_div";
    m_bdry_name[POLOIDAL_OUTER_DIV] = "poloidal_outer_div";
+#if CFG_DIM==3
+   m_bdry_name[TOROIDAL_CORE] = "toroidal_core";
+   m_bdry_name[TOROIDAL_SOL] = "toroidal_sol";
+   m_bdry_name[TOROIDAL_PF] = "toroidal_pf";
+   m_bdry_name[TOROIDAL_INNER_DIV] = "toroidal_inner_div";
+   m_bdry_name[TOROIDAL_OUTER_DIV] = "toroidal_outer_div";
+#endif
+
 }
 
 std::string

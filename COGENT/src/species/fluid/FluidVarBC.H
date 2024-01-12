@@ -37,6 +37,9 @@ class FluidVarBC
       virtual void applyCellBC( const FluidSpecies&  species_phys,
                                 LevelData<FArrayBox>&  dst,
                                 const Real&    time );
+      
+      virtual void applyPhysBC( const FluidSpecies&  species_phys,
+                                LevelData<FArrayBox>&  dst );
        
       virtual void applyFluxBC( const FluidSpecies&  species_phys,
                                 LevelData<FluxBox>&  dst,
@@ -45,6 +48,10 @@ class FluidVarBC
       virtual void applyEdgeBC( const FluidSpecies&      species_phys,
                                 LevelData<EdgeDataBox>&  dst,
                           const Real                     time );
+      
+      virtual void applyNodeBC( const FluidSpecies&        species_phys,
+                                LevelData<NodeFArrayBox>&  dst,
+                          const Real                       time );      
             
       virtual void setFluxBC( const FluidSpecies&  species_phys,
                               LevelData<FluxBox>&  dst,
@@ -54,6 +61,11 @@ class FluidVarBC
       virtual void setEdgeBC( const FluidSpecies&     species_phys,
                               LevelData<EdgeDataBox>& dst,
                         const LevelData<EdgeDataBox>& src,
+                        const Real                    time );
+      
+      virtual void setNodeBC( const FluidSpecies&     species_phys,
+                              LevelData<NodeFArrayBox>& dst,
+                        const LevelData<NodeFArrayBox>& src,
                         const Real                    time );
       
       virtual void setOnAxisCurlBC( LevelData<EdgeDataBox>&  a_curl_covar,

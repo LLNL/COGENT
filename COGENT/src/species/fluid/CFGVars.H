@@ -3,6 +3,7 @@
 
 #include "MagGeom.H"
 #include "EdgeDataBox.H"
+#include "NodeFArrayBox.H"
 #include "SGInterp.H.multidim"
 
 #include "NamespaceHeader.H"
@@ -67,6 +68,14 @@ class CFGVars
          m_edge_data_var_name.push_back(a_name);
       }
 
+      void addNodeVar( const std::string&  a_name,
+                       const int           a_ncomp,
+                       const IntVect&      a_nghost )
+      {
+         m_node_data.push_back(RefCountedPtr<LevelData<NodeFArrayBox> >
+                               (new LevelData<NodeFArrayBox>(m_geometry.gridsFull(), a_ncomp, a_nghost)));
+         m_node_data_var_name.push_back(a_name);
+      }
 
       /// Returns name.
       /**
@@ -84,6 +93,10 @@ class CFGVars
       virtual const std::string& edge_var_name(const int component) const 
             { CH_assert(component >=0 && component < num_edge_vars());
             return m_edge_data_var_name[component]; }
+
+      virtual const std::string& node_var_name(const int component) const
+            { CH_assert(component >=0 && component < num_node_vars());
+            return m_node_data_var_name[component]; }
 
       /// Zeros out the internal data.
       /**
@@ -257,6 +270,43 @@ class CFGVars
       // Const access a edge-centered variable by its name
       const LevelData<EdgeDataBox>& edge_var(const string& name) const {return *(m_edge_data[edge_var_component(name)]);}
 
+      // Node data accessors
+
+      const int num_node_vars() const {return m_node_data.size();}
+
+      inline int node_var_component(const string& name) const
+        {
+           int component = -1;
+           for (int n=0; n<num_node_vars(); ++n) {
+              if (name == m_node_data_var_name[n]) {
+                 component = n;
+                 break;
+              }
+           }
+
+           if (component == -1) {
+              MayDay::Error("CFGVars::node_var_component(): Variable name not found");
+           }
+
+           return component;
+        }
+
+      // Access a node-centered variable by its component
+      LevelData<NodeFArrayBox>& node_var(int component) {return *(m_node_data[component]);}
+
+      // Const access a node-centered variable by its component
+      const LevelData<NodeFArrayBox>& node_var(int component) const {return *(m_node_data[component]);}
+
+      // Access a node-centered variable by its name
+      LevelData<NodeFArrayBox>& node_var(const string& name) {return *(m_node_data[node_var_component(name)]);}
+
+      // Const access a node-centered variable by its name
+      const LevelData<NodeFArrayBox>& node_var(const string& name) const {return *(m_node_data[node_var_component(name)]);}
+
+      //
+      //
+      //
+
       int size( bool a_count_ghosts = false );
 
       string pp_prefix() const {return m_pp_prefix;}
@@ -275,6 +325,10 @@ class CFGVars
           SGInterp::interpolate<EdgeDataBox>( *m_edge_data[i],
                                               *a_src.m_edge_data[i] );
         }
+        for (int i = 0; i < m_node_data.size(); i++) {
+          //SGInterp::interpolate<NodeFArrayBox>( *m_node_data[i],
+          //                                      *a_src.m_node_data[i] );
+        }
         return;
       }
 
@@ -283,8 +337,17 @@ class CFGVars
 
       void interpEdgeVarToCell( LevelData<FArrayBox>&  cell_var,
                                 const string&          edge_var_name ) const;
+      
+      void interpNodeVarToCell( LevelData<FArrayBox>&  cell_var,
+                                const string&          node_var_name ) const;
+
+      bool plotMappedFaceVars() const { return m_plot_mapped_face_vars; }
+      bool plotMappedEdgeVars() const { return m_plot_mapped_edge_vars; }
 
       int m_plotMemberVars = 0;
+      bool m_plot_mapped_face_vars = false;
+      bool m_plot_mapped_edge_vars = false;
+
       std::vector<string> m_plotMemberVarNames;
 
    protected:
@@ -295,13 +358,15 @@ class CFGVars
    
    private:
 
-      Vector<RefCountedPtr<LevelData<FArrayBox> > >    m_cell_data;
-      Vector<RefCountedPtr<LevelData<FluxBox> > >      m_face_data;
-      Vector<RefCountedPtr<LevelData<EdgeDataBox> > >  m_edge_data;
+      Vector<RefCountedPtr<LevelData<FArrayBox> > >      m_cell_data;
+      Vector<RefCountedPtr<LevelData<FluxBox> > >        m_face_data;
+      Vector<RefCountedPtr<LevelData<EdgeDataBox> > >    m_edge_data;
+      Vector<RefCountedPtr<LevelData<NodeFArrayBox> > >  m_node_data;
 
       Vector<string> m_cell_data_var_name;
       Vector<string> m_face_data_var_name;
       Vector<string> m_edge_data_var_name;
+      Vector<string> m_node_data_var_name;
 };
 
 typedef RefCountedPtr<CFGVars> FluidSpeciesPtr;

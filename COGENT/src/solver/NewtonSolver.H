@@ -28,6 +28,7 @@ class NewtonSolver
          m_norm(DBL_MAX),
          m_norm0(DBL_MAX),
          m_norm_prev(DBL_MAX),
+         m_check_linear(false),
          m_Function(NULL),
          m_Jacobian(NULL),
          m_LinearSolver(NULL) {};
@@ -110,7 +111,7 @@ class NewtonSolver
     Real      m_norm, m_norm0, m_norm_prev,
               m_rtol, m_atol, m_stol;
     T         m_dY, m_F;
-    bool      m_verbose, m_isLinear;
+    bool      m_verbose, m_isLinear, m_check_linear;
 
     std::string           m_convergedReason,
                           m_outPrefix,
@@ -185,6 +186,10 @@ void NewtonSolver<T,Ops>::solve(T& a_Y, T& a_b)
 {
   CH_assert(isDefined());
   CH_assert(m_Function);
+
+  if (m_check_linear) {
+    bool is_linear = m_Function->checkLinearity( a_Y );
+  }
 
   m_its = 0;
   if (m_isLinear) m_maxits = 0; /* Take only 1 Newton iteration */
@@ -272,6 +277,7 @@ void NewtonSolver<T,Ops>::parseParameters( ParmParse& a_pp)
   a_pp.query("rtol",          m_rtol);           /* relative tolerance */
   a_pp.query("stol",          m_stol);           /* step size tolerance */
   a_pp.query("maxits",        m_maxits);         /* maximum iterations */
+  a_pp.query("check_linear",  m_check_linear);   /* check if function if linear */
   a_pp.query("linear_solver", m_linear_solver);  /* linear solver */
 }
 

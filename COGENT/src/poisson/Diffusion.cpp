@@ -101,6 +101,12 @@ Diffusion::setOperatorCoefficients( const LevelData<FluxBox>&  a_unmapped_coeffi
 
 
 void
+Diffusion::updatePreconditioner( const EllipticOpBC&  a_bc )
+{
+   m_preconditioner->constructMatrix(m_volume_reciprocal, m_mapped_coefficients, a_bc);
+}
+
+void
 Diffusion::updateImExPreconditioner( const LevelData<FArrayBox>&  a_mshift,
                                      const EllipticOpBC&          a_bc )
 {
@@ -113,6 +119,12 @@ Diffusion::updateImExPreconditioner( const LevelData<FArrayBox>&  a_mshift,
    m_imex_preconditioner->constructMatrix(m_volume_reciprocal, m_mapped_coefficients, beta, a_bc);
 }
 
+void
+Diffusion::applyPCOp(const LevelData<FArrayBox>& a_in_vec,
+                     LevelData<FArrayBox>&       a_matvec )
+{
+   m_preconditioner->multiplyMatrix(a_in_vec, a_matvec);
+}
 
 void
 Diffusion::setImExPreconditionerConvergenceParams( const double a_tol,

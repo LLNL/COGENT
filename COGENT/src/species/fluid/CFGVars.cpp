@@ -13,6 +13,9 @@ CFGVars::CFGVars( const string&       a_pp_prefix,
 {
    ParmParse pp(a_pp_prefix.c_str());
 
+   pp.query( "plot_mapped_face_vars" , m_plot_mapped_face_vars );
+   pp.query( "plot_mapped_edge_vars" , m_plot_mapped_edge_vars );
+
    if ( pp.contains("plotMemberVars") ) {
       pp.get("plotMemberVars", m_plotMemberVars);
       if(m_plotMemberVars) {
@@ -54,6 +57,14 @@ const CFGVars& CFGVars::operator=( const CFGVars& a_rhs )
          addEdgeVar(edge_var_name(i), data.nComp(), data.ghostVect());
          m_edge_data[i]->define(data);
       }
+
+      m_node_data.resize(0);
+      for (int i=0; i<a_rhs.num_node_vars(); ++i) {
+         const LevelData<NodeFArrayBox>& data = a_rhs.node_var(i);
+         addNodeVar(node_var_name(i), data.nComp(), data.ghostVect());
+         m_node_data[i]->define(data);
+      }
+
    }
    return *this;
 }
@@ -98,6 +109,18 @@ void CFGVars::copy( const CFGVars& a_rhs )
             SpaceUtils::copyEdgeDataBox(this_edge_data[dit],that_edge_data[dit]); 
          }
       }
+
+      int num_node_data = a_rhs.num_node_vars();
+      CH_assert(num_node_data == num_node_vars());
+      for (int i=0; i<num_node_data; ++i) {
+         LevelData<NodeFArrayBox>& this_node_data = node_var(i);
+         const LevelData<NodeFArrayBox>& that_node_data = a_rhs.node_var(i);
+         CH_assert( (this_node_data.disjointBoxLayout()).compatible( that_node_data.disjointBoxLayout() ) );
+         for (DataIterator dit( this_node_data.dataIterator() ); dit.ok(); ++dit) {
+            this_node_data[dit].getFab().copy(that_node_data[dit].getFab());
+         }
+      }
+
    }
 }
 
@@ -124,6 +147,14 @@ void CFGVars::zeroData()
          this_edge_data[dit].setVal(0.);
       }
    }
+
+   for (int i=0; i<num_node_vars(); ++i) {
+      LevelData<NodeFArrayBox>& this_node_data = node_var(i);
+      for (DataIterator dit( this_node_data.dataIterator() ); dit.ok(); ++dit) {
+         this_node_data[dit].getFab().setVal(0.);
+      }
+   }
+
 }
 
 
@@ -166,6 +197,18 @@ void CFGVars::addData( const CFGVars&  a_rhs,
          }
       }
    }
+
+   int num_node_data = a_rhs.num_node_vars();
+   CH_assert(num_node_data == num_node_vars());
+   for (int i=0; i<num_node_data; ++i) {
+      LevelData<NodeFArrayBox>& this_node_data = node_var(i);
+      const LevelData<NodeFArrayBox>& that_node_data = a_rhs.node_var(i);
+      CH_assert( (this_node_data.disjointBoxLayout()).compatible( that_node_data.disjointBoxLayout() ) );
+      for (DataIterator dit( this_node_data.dataIterator() ); dit.ok(); ++dit) {
+         this_node_data[dit].getFab().plus(that_node_data[dit].getFab(), a_factor);
+      }
+   }
+
 }
 
 
@@ -198,9 +241,18 @@ int CFGVars::size( bool a_count_ghosts )
       const DisjointBoxLayout& dbl( this_edge_data.disjointBoxLayout() );
       for (DataIterator dit( this_edge_data.dataIterator() ); dit.ok(); ++dit) {
          for (int dir=0; dir<SpaceDim; ++dir) {
-            const Box& box( a_count_ghosts ? this_edge_data[dit][dir].box() : surroundingNodes(dbl[dit],dir) );
+            const Box& box( a_count_ghosts ? this_edge_data[dit][dir].box() : enclosedCells(surroundingNodes(dbl[dit]),dir) );
             size += box.numPts() * this_edge_data.nComp();
          }
+      }
+   }
+
+   for (int i=0; i<num_node_vars(); ++i) {
+      LevelData<NodeFArrayBox>& this_node_data = node_var(i);
+      const DisjointBoxLayout& dbl( this_node_data.disjointBoxLayout() );
+      for (DataIterator dit( this_node_data.dataIterator() ); dit.ok(); ++dit) {
+         const Box& box( a_count_ghosts ? this_node_data[dit].getFab().box() : surroundingNodes(dbl[dit]) );
+         size += box.numPts() * this_node_data.nComp();
       }
    }
 
@@ -259,29 +311,48 @@ bool CFGVars::conformsTo( const CFGVars&  a_rhs,
       }
    }
 
+   for (int i=0; i<num_node_vars(); ++i) {
+      const LevelData<NodeFArrayBox>& this_node_data = node_var(i);
+      const LevelData<NodeFArrayBox>& that_node_data = a_rhs.node_var(i);
+
+      const DisjointBoxLayout& thisBoxes( this_node_data.disjointBoxLayout() );
+      const DisjointBoxLayout& rhsBoxes( that_node_data.disjointBoxLayout() );
+
+      status &= thisBoxes.compatible( rhsBoxes );
+      status &= ( this_node_data.nComp() == that_node_data.nComp() );
+
+      if ( a_include_ghost_cells ) {
+         status &= ( this_node_data.ghostVect() == that_node_data.ghostVect() );
+      }
+   }
+
    return status;
 }
 
 
 void
 CFGVars::interpFaceVarToCell( LevelData<FArrayBox>&  a_cell_var,
-                              const string&          a_face_var_name ) const
+                        const string&                a_face_var_name ) const
 {
-
    CH_assert( face_var(a_face_var_name).isDefined() );
    SpaceUtils::interpFaceVectorToCell(a_cell_var,face_var(a_face_var_name),"c2");
-
 }
 
 
 void
 CFGVars::interpEdgeVarToCell( LevelData<FArrayBox>&  a_cell_var,
-                              const string&          a_edge_var_name ) const
+                        const string&                a_edge_var_name ) const
 {
-
    CH_assert( edge_var(a_edge_var_name).isDefined() );
    SpaceUtils::interpEdgesToCell(a_cell_var,edge_var(a_edge_var_name),"c2");
+}
 
+void
+CFGVars::interpNodeVarToCell( LevelData<FArrayBox>&  a_cell_var,
+                        const string&                a_node_var_name ) const
+{
+   CH_assert( node_var(a_node_var_name).isDefined() );
+   SpaceUtils::interpNodesToCells(a_cell_var,node_var(a_node_var_name),"c2");
 }
 
 #include "NamespaceFooter.H"

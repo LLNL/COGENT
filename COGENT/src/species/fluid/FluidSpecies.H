@@ -45,7 +45,7 @@ class FluidSpecies
       /**
        */
       virtual Real charge() const { return m_charge; }
-
+      
       /// Returns species number density.
       /**
        */
@@ -101,7 +101,8 @@ class FluidSpecies
       /// Returns species magnetic pressure.
       /**
        */
-      virtual void Bpressure( LevelData<FArrayBox>& Bpressure ) const;
+      virtual void Bpressure( LevelData<FArrayBox>&  Bpressure,
+                        const bool                   a_is_mapped=false ) const;
 
       /// Returns species temperature.
       /**
@@ -160,6 +161,15 @@ class FluidSpecies
       Real m_gamma = 5.0/3.0;
       Real m_Zmin = 1.0;
       int  m_CGL = 0;
+   
+      enum EVOLVE_B_TYPE {
+         NONE,
+         TWOD_VIRTUAL_B,
+         TWOD_INPLANE_B,
+         TWOD_FULL_B,
+         THREED
+      };
+      EVOLVE_B_TYPE m_evolveB_type;
 
 private:
 
@@ -173,6 +183,9 @@ private:
       string m_op_type;
       Real m_mass;
       Real m_charge;
+
+      void setEvolveBType();
+
 };
 
 #include "NamespaceFooter.H"

@@ -538,6 +538,9 @@ class GKSystem : public AppCtxt
       inline
       const GKDiagnostics* getDiagnostics() const { return m_diagnostics; }
 
+      inline
+      void ARKFirstStageExplicit( const bool a_flag ) { m_gk_ops->ARKFirstStageExplicit(a_flag); }
+
    private:
 
       void define( const GKSystemParameters& );

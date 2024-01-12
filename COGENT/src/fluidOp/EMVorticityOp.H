@@ -3,6 +3,7 @@
 
 #include "VorticityOp.H"
 #include "Diffusion.H"
+#include "Advection.H"
 #include "GKEMVorticity.H"
 
 #undef CH_SPACEDIM
@@ -28,7 +29,11 @@ public:
       :VorticityOp(geometry),
        m_geometry(geometry),
        m_A_parallel_bcs(NULL),
-       m_imex_pc_op(NULL){};
+       m_imex_pc_op(NULL),
+       m_Apar_soln_op(NULL),
+       m_vorticity_diffusion_op(NULL),
+       m_nlp_Apar_op(NULL),
+       m_div_jpar_op(NULL) {};
    
   /// Constructor with initialization.
   /**
@@ -116,11 +121,11 @@ public:
                              const std::string&                op_name,
                              const int                         component );
    
-   virtual void postStageEval( FluidSpecies&  species_comp,
-                               FluidSpecies&  species_phys,
-                               const Real     dt,
-                               const Real     time,
-                               const int      stage );
+   virtual void postTimeEval( FluidSpecies&  species_comp,
+                              FluidSpecies&  species_phys,
+                              const Real     dt,
+                              const Real     time,
+                              const int      stage );
 
    void setAparDerivatives( const PS::KineticSpeciesPtrVect&  kinetic_species_phys,
                             const LevelData<FArrayBox>&       Apar,
@@ -140,6 +145,14 @@ public:
    virtual void fillGhostCells( FluidSpecies&  species_phys,
                                 const double   time );
 
+   virtual bool isInitializationConstrained(const FluidSpecies& fluid_phys);
+   
+   virtual void applyInitializationConstraints(FluidSpeciesPtrVect&               fluid_comp,
+                                               FluidSpeciesPtrVect&               fluid_phys,
+                                               const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
+                                               const EMFields&                    EM_fields,
+                                               const int                          component,
+                                               const double                       time );
 
    static const char* pp_name;
    
@@ -187,32 +200,26 @@ private:
    
    
    void addDivJpar(LevelData<FArrayBox>&        rhs,
+                   const LevelData<FArrayBox>&  Apar,
                    const LevelData<FArrayBox>&  jpar);
-   
-   
-   void addHyperViscosity(LevelData<FArrayBox>&              rhs,
-                          const LevelData<FArrayBox>&        soln);
-  
-   void initializeHyperviscosityCoeff(LevelData<FluxBox>& D_tensor,
-                                      LevelData<FluxBox>& D_tensor_mapped);
-   
+      
    void verifyMatrix(const double   shift );
       
    LevelData<FArrayBox> m_par_cond;
    
+   GKVorticity*    m_vorticity_diffusion_op;
+   
    GKEMVorticity* m_Apar_soln_op;
    GKEMVorticity* m_imex_pc_op;
 
-   Diffusion*   m_hyperviscosity_op;
-   RefCountedPtr<EllipticOpBC>  m_hyperviscosity_bcs;
+   Diffusion*   m_nlp_Apar_op;
+   Advection*   m_div_jpar_op;
    
    RefCountedPtr<EllipticOpBC>  m_jpar_bcs;
    
    bool m_is_time_implicit;
-   bool m_include_hyperviscosity;
-   bool m_use_hyperviscosity_bcs;
+   bool m_apply_initialization_constraints;
    
-   RefCountedPtr<GridFunction> m_D_par_func;
 };
 
 

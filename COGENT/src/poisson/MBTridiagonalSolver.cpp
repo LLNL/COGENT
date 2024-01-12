@@ -503,7 +503,7 @@ MBTridiagonalSolver::solveTridiagonalNeumann( const int            a_n,
                                               double *    a_fs_average,
                                               const double * a_weights ) const
 {
-  int n_augmented = a_n + 1;
+  long int n_augmented = a_n + 1;
   int num_mat_elems = n_augmented * n_augmented;
 
   double * A = new double[num_mat_elems];

@@ -63,11 +63,34 @@ namespace SpaceUtils {
                 const std::string&,
                 const bool& fourth_order = false);
 
+  void upWindMappedGradient(FArrayBox&,
+                            const FArrayBox&,
+                            const FArrayBox&,
+                            const RealVect&,
+                            const std::string&);
+  
+  void interpToFacesZIP( LevelData<FluxBox>&    a_face_fV,
+                   const LevelData<FArrayBox>&  a_cell_f,
+                   const LevelData<FArrayBox>&  a_cell_V );
+  
+  void interpToFacesZIP( LevelData<FluxBox>&    a_face_fuV,
+                   const LevelData<FArrayBox>&  a_cell_u,
+                   const LevelData<FArrayBox>&  a_cell_fu,
+                   const LevelData<FArrayBox>&  a_cell_V,
+                   const LevelData<FArrayBox>&  a_cell_fV, 
+                   const int                    a_udir );
+
   void constrainedCrossProductOnEdges( LevelData<EdgeDataBox>&  a_edge_E,
                                  const LevelData<FluxBox>&      a_face_B,
                                  const LevelData<FArrayBox>&    a_cell_V,
                                  const LevelData<FArrayBox>&    a_cell_Cspeed,
                                  const std::string&             a_method );
+
+  void constrainedCrossProductOnNodes( LevelData<NodeFArrayBox>&  a_node_E,
+                                 const LevelData<FluxBox>&        a_face_B,
+                                 const LevelData<FArrayBox>&      a_cell_V,
+                                 const LevelData<FArrayBox>&      a_cell_Cspeed,
+                                 const std::string&               a_method );
 
   void interpToEdges( FArrayBox&    a_Vphi,
                 const FArrayBox&    a_phi,
@@ -88,6 +111,9 @@ namespace SpaceUtils {
   void interpEdgesToEdges( LevelData<EdgeDataBox>&,
                      const LevelData<EdgeDataBox>&,
                      const std::string& );
+  
+  void interpFacesToFaces( LevelData<FluxBox>&,
+                     const LevelData<FluxBox>& );
 
   void interpNodesToEdges( LevelData<EdgeDataBox>&,
                      const LevelData<NodeFArrayBox>&,
@@ -121,6 +147,10 @@ namespace SpaceUtils {
                          const LevelData<FluxBox>&,
                          const std::string& );
   
+  void interpFaceScalarToCell( LevelData<FArrayBox>&,
+                         const LevelData<FluxBox>&,
+                         const int a_dir );
+  
   void interpToFacesWENO( LevelData<FluxBox>&,
                     const LevelData<FArrayBox>&,
                     const LevelData<FluxBox>&,
@@ -152,7 +182,8 @@ namespace SpaceUtils {
                                       const FArrayBox&,
                                       const RealVect&,
                                       const int,
-                                      FArrayBox& );
+                                      FArrayBox&,
+                                      const int a_var_comp = 0 );
 
   void faceCenteredGradientComponent( const Box&,
                                       const int,
@@ -192,6 +223,9 @@ namespace SpaceUtils {
   void copyAndFillGhostCellsSimple( LevelData<EdgeDataBox>&, 
                                     const LevelData<EdgeDataBox>& );
   
+  void copyAndFillGhostCellsSimple( LevelData<NodeFArrayBox>&, 
+                                    const LevelData<NodeFArrayBox>& );
+  
   void inspectFArrayBox( const LevelData<FArrayBox>&,
                          const int,
                          const int                   );
@@ -207,6 +241,8 @@ namespace SpaceUtils {
   void exchangeFluxBox( LevelData<FluxBox>& );
   
   void exchangeEdgeDataBox( LevelData<EdgeDataBox>& );
+  
+  void exchangeNodeFArrayBox( LevelData<NodeFArrayBox>& );
 
   void copyEdgeDataBox( EdgeDataBox&,
                   const EdgeDataBox& );

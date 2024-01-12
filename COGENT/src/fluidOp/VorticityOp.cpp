@@ -33,6 +33,7 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
      m_my_pc_idx_e(-1),
      m_sigma_div_e_coefs_set(false),
      m_reynolds_stress(false),
+     m_advection_scheme("uw3"),
      m_ExB_current_model(true),
      m_include_pol_den_correction(false),
      m_multiphysics_precond(false),
@@ -41,10 +42,16 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
      m_include_diffusion_precond(false),
      m_include_pol_den_correction_precond(false),
      m_include_pol_den_correction_to_pe(false),
+     m_include_hyperviscosity(false),
+     m_use_hyperviscosity_bcs(false),
+     m_include_diam_correction(false),
      m_second_order(false),
      m_low_pollution(false),
      m_remove_axisymmetric_phi(false),
+     m_suppress_non_zonal_comp_at_boundaries(false),
+     m_include_boundary_relaxation(false),
      m_harmonic_filtering(SpaceDim, 0),
+     m_minimal_implicit_model(false),
      m_it_counter(0),
      m_electron_temperature_func(NULL),
      m_pol_diffusion_func(NULL),
@@ -71,6 +78,9 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
      printParameters();
    }
        
+   // Create FluidOpUtils class that handles hyperviscosity and boundary buffers
+   m_fluid_op_utils = new FluidOpUtils(a_pp, m_geometry, m_larmor, m_verbosity);
+   
    // Create potential BCs
    const std::string name("potential");
    const std::string prefix( "BC." + name );
@@ -207,7 +217,63 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
    else {
       m_vorticity_diffusion_op = NULL;
    }
+   
+   
+   // Set up diamagnetic correction operator
+   if (m_include_diam_correction) {
+      s_pp_base = string(a_pp.prefix()) + ".diamagnetic_corr_op";
+      pp_base = s_pp_base.c_str();
+      
+      m_diamagnetic_correction_op = new Diffusion(pp_base, a_geometry);
 
+      // Create BC object with EXTRAPOLATED BC type
+      m_diamagnetic_correction_op_bcs = m_potential_bcs->clone(true);
+      
+      const DisjointBoxLayout& grids( m_geometry.grids() );
+      LevelData<FluxBox> D_tensor(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+      LevelData<FluxBox> D_tensor_mapped(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
+
+      initializeDiamagneticCoeff(D_tensor, D_tensor_mapped);
+
+      // The following assumes that neither coefficients nor BC-related stuff changes in time
+      m_diamagnetic_correction_op->setOperatorCoefficients(D_tensor, D_tensor_mapped, *m_diamagnetic_correction_op_bcs);
+   }
+   else {
+      m_diamagnetic_correction_op = NULL;
+   }
+   
+   
+   // Set up hyperviscosity
+   if (m_include_hyperviscosity) {
+      s_pp_base = string(a_pp.prefix()) + ".hyperviscosity";
+      pp_base = s_pp_base.c_str();
+      
+      // Set hyperviscosity bcs
+      if (m_use_hyperviscosity_bcs) {
+         const std::string name_high_order("vorticity_hyperviscosity");
+         const std::string prefix_high_order( "BC." + name_high_order );
+         ParmParse pp_high_order( prefix_high_order.c_str() );
+         m_hyperviscosity_op_bcs = RefCountedPtr<EllipticOpBC>(elliptic_op_bc_factory.create(name_high_order,
+                                                                                             pp_high_order,
+                                                                                             *(a_geometry.getCoordSys()),
+                                                                                             false));
+      }
+      else {
+         // Create BC object with EXTRAPOLATED BC type
+         m_hyperviscosity_op_bcs = m_potential_bcs->clone(true);
+      }
+      
+      m_fluid_op_utils->initializeHyperViscosityOp(pp_base,
+                                                   *m_hyperviscosity_op_bcs,
+                                                   m_use_hyperviscosity_bcs);
+   }
+   
+   // Initialize boundary buffers
+   if (m_suppress_non_zonal_comp_at_boundaries || m_include_boundary_relaxation) {
+      m_fluid_op_utils->initializeBoundaryBuffers(a_pp, m_include_boundary_relaxation);
+   }
+
+   
    ParmParse pp_vlasov("vorticity_vlasov");
    m_vlasov = new PS::GKVlasov(pp_vlasov, a_larmor);
 
@@ -234,6 +300,10 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
      m_electron_temperature_func->assign( m_electron_temperature, m_geometry, 0.0);     
    }
 
+   // Set the stabilization parameter
+   m_include_stabilization = (m_include_hyperviscosity || m_include_boundary_relaxation
+                              || m_suppress_non_zonal_comp_at_boundaries) ? true : false;
+   
    return;
 }
 
@@ -246,7 +316,9 @@ VorticityOp::~VorticityOp()
    if (m_par_cond_op) delete m_par_cond_op;
    if (m_parallel_current_divergence_op) delete m_parallel_current_divergence_op;
    if (m_vorticity_diffusion_op) delete m_vorticity_diffusion_op;
+   if (m_diamagnetic_correction_op) delete m_diamagnetic_correction_op;
    if (m_potential_bcs) delete m_potential_bcs;
+   if (m_fluid_op_utils) delete m_fluid_op_utils;
 }
 
 
@@ -258,6 +330,30 @@ void VorticityOp::accumulateExplicitRHS( FluidSpeciesPtrVect&               a_rh
                                          const int                          a_fluid_vec_comp,
                                          const Real                         a_time )
 {
+   
+   CFGVars& rhs_fluid_species = *(a_rhs[a_fluid_vec_comp]);
+   LevelData<FArrayBox>& rhs_data = rhs_fluid_species.cell_var("potential");
+
+   const CFGVars& sol_fluid_species = *(a_fluid_species[a_fluid_vec_comp]);
+   const LevelData<FArrayBox>& sol_data = sol_fluid_species.cell_var("potential");
+
+   const DisjointBoxLayout& grids = m_geometry.gridsFull();
+
+   // Add RS and stabilization terms
+   if (m_minimal_implicit_model == true) {
+
+      if (m_reynolds_stress) {
+         addReynoldsStressTerm(rhs_data, sol_data, a_EM_fields);
+      }
+      
+      if (m_include_stabilization) {
+         
+         LevelData<FArrayBox> negative_vorticity(grids, 1, IntVect::Zero);
+         m_gyropoisson_op->computeFluxDivergence(sol_data, negative_vorticity, false);
+
+         addStabilizationTerms(rhs_data, negative_vorticity);
+      }
+   }
 }
 
 
@@ -275,10 +371,10 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
    CH_TIMER("div_jperp",t_div_jperp);
 
    CFGVars& rhs_fluid_species = *(a_rhs[a_fluid_vec_comp]);
-   LevelData<FArrayBox>& rhs_data = rhs_fluid_species.cell_var(0);
+   LevelData<FArrayBox>& rhs_data = rhs_fluid_species.cell_var("potential");
 
    const CFGVars& sol_fluid_species = *(a_fluid_species[a_fluid_vec_comp]);
-   const LevelData<FArrayBox>& sol_data = sol_fluid_species.cell_var(0);
+   const LevelData<FArrayBox>& sol_data = sol_fluid_species.cell_var("potential");
 
    const DisjointBoxLayout& grids = m_geometry.gridsFull();
 
@@ -323,7 +419,7 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
    }
    
    // Add divergence of perpendicular currents and RS term
-   addPerpTermsRHS(rhs_data, sol_data, a_kinetic_species_phys, a_EM_fields, a_time);
+   addDivJperpTerm(rhs_data, sol_data, a_kinetic_species_phys, a_EM_fields, a_time);
    
    // Add higher-order corrections
    if (m_include_diffusion || m_include_pol_den_correction) {
@@ -341,9 +437,29 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
       }
    }
    
+   // Add diamagnetic corrections
+   if (m_include_diam_correction) {
+      addDiamagneticCorrection(rhs_data, sol_data, a_EM_fields);
+   }
+   
+   // Add RS and stabilization terms
+   if (m_minimal_implicit_model == false) {
+
+      if (m_reynolds_stress) {
+         addReynoldsStressTerm(rhs_data, sol_data, a_EM_fields);
+      }
+      
+      if (m_include_stabilization) {
+         
+         LevelData<FArrayBox> negative_vorticity(grids, 1, IntVect::Zero);
+         m_gyropoisson_op->computeFluxDivergence(sol_data, negative_vorticity, false);
+
+         addStabilizationTerms(rhs_data, negative_vorticity);
+      }
+   }
 }
 
-void VorticityOp::addPerpTermsRHS(LevelData<FArrayBox>&              a_rhs,
+void VorticityOp::addDivJperpTerm(LevelData<FArrayBox>&              a_rhs,
                                   const LevelData<FArrayBox>&        a_soln,
                                   const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
                                   const EMFields&                    a_EM_fields,
@@ -380,20 +496,28 @@ void VorticityOp::addPerpTermsRHS(LevelData<FArrayBox>&              a_rhs,
        a_rhs[dit] -= m_divJperp_mag_e[dit];
      }
    }
+}
 
-   // Add reynolds_stress term
-   if (m_reynolds_stress) {
+void VorticityOp::addReynoldsStressTerm(LevelData<FArrayBox>&              a_rhs,
+                                        const LevelData<FArrayBox>&        a_soln,
+                                        const EMFields&                    a_EM_fields)
+{
+   const DisjointBoxLayout& grids = m_geometry.gridsFull();
+   
+   LevelData<FArrayBox> negative_vorticity(grids, 1, IntVect::Zero);
+   m_gyropoisson_op->computeFluxDivergence(a_soln, negative_vorticity, false);
 
-     LevelData<FArrayBox> negative_vorticity(grids, 1, IntVect::Zero);
-     m_gyropoisson_op->computeFluxDivergence(a_soln, negative_vorticity, false);
+   LevelData<FArrayBox> negative_div_ExB_vorticity(grids, 1, IntVect::Zero);
 
-     LevelData<FArrayBox> negative_div_ExB_vorticity(grids, 1, IntVect::Zero);
-     computeReynoldsStressTerm(negative_div_ExB_vorticity, negative_vorticity, a_EM_fields);
-     for (DataIterator dit(grids); dit.ok(); ++dit) {
-       a_rhs[dit] -= negative_div_ExB_vorticity[dit];
-     }
+   m_fluid_op_utils->computeExBAdvection(negative_div_ExB_vorticity,
+                                         negative_vorticity,
+                                         a_EM_fields.getEFieldFace(),
+                                         m_advection_scheme,
+                                         true);
+     
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+     a_rhs[dit] -= negative_div_ExB_vorticity[dit];
    }
-
 }
 
 void VorticityOp::preSolutionOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_species,
@@ -774,21 +898,29 @@ void VorticityOp::fillGhostCells( FluidSpecies&  a_species_phys,
 {
 }
 
-void VorticityOp::postStageEval(FluidSpecies&  a_species_comp,
-                                FluidSpecies&  a_species_phys,
-                                const Real     a_dt,
-                                const Real     a_time,
-                                const int      a_stage )
+void VorticityOp::postTimeEval(FluidSpecies&  a_species_comp,
+                               FluidSpecies&  a_species_phys,
+                               const Real     a_dt,
+                               const Real     a_time,
+                               const int      a_stage )
 {
    LevelData<FArrayBox>& phi_comp = a_species_comp.cell_var("potential");
    LevelData<FArrayBox>& phi_phys = a_species_phys.cell_var("potential");
    
+   // Apply harmonic filtering
    for (int dir=0; dir<SpaceDim; dir++) {
       if (m_harmonic_filtering[dir] == 1) {
          SpaceUtils::applyHarmonicFiltering(phi_comp, dir);
          SpaceUtils::applyHarmonicFiltering(phi_phys, dir);
       }
    }
+   
+   // Remove the axisymmetric component
+   if (m_remove_axisymmetric_phi) {
+      m_fluid_op_utils->subtractFSaverage(phi_comp);
+      m_fluid_op_utils->subtractFSaverage(phi_phys);
+   }
+   
 }
 
 void VorticityOp::computeDivPerpIonMagCurrentDensity( LevelData<FArrayBox>&             a_divJperp_mag,
@@ -874,7 +1006,7 @@ void VorticityOp::computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&     
          for (int dir=0, sign=-1; dir<SpaceDim; ++dir, sign*=-1) {
             J_ExB[dit][dir] *= sign * m_larmor;
             J_ExB[dit][dir] *= charge_density_face[dit][dir];
-	    J_ExB[dit][dir] /= FCBFieldMag[dit][dir];
+            J_ExB[dit][dir] /= FCBFieldMag[dit][dir];
          }
       }
       
@@ -907,7 +1039,7 @@ void VorticityOp::computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&     
                J_ExB[dit][dir].mult(ExB_drift[dit][dir],1,1);
                J_ExB[dit][dir].mult(ExB_drift[dit][dir],2,2);
             }
-	    J_ExB[dit][dir] *= m_larmor;
+            J_ExB[dit][dir] *= m_larmor;
          }
       }
 
@@ -959,9 +1091,9 @@ void VorticityOp::computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&     
 
 
 void VorticityOp::computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&             a_div_Jperp,
-							   const LevelData<FArrayBox>&       a_ion_charge_density,
-							   const LevelData<FArrayBox>&       a_negative_vorticity,
-							   const Real&                       a_time)
+                                                          const LevelData<FArrayBox>&       a_ion_charge_density,
+                                                          const LevelData<FArrayBox>&       a_negative_vorticity,
+                                                          const Real&                       a_time)
 
 {
    CH_TIME("VorticityOp::computeDivPerpElectronMagCurrentDensity");
@@ -1087,86 +1219,87 @@ void VorticityOp::computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&
 #endif
 }
 
-
-void VorticityOp::computeReynoldsStressTerm( LevelData<FArrayBox>&             a_div_ExB_times_vorticity,
-                                             const LevelData<FArrayBox>&       a_vorticity,
-                                             const EMFields&                   a_EM_fields ) const
+void VorticityOp::addDiamagneticCorrection(LevelData<FArrayBox>&              a_rhs,
+                                           const LevelData<FArrayBox>&        a_soln,
+                                           const EMFields&                    a_EM_fields)
 {
-   CH_TIME("VorticityOp::computeReynoldsStressTerm");
-   
-   // The present implementation supports only the second-order option
-   // since vorticity_grown has only 2 layers of ghosts and
-   // we use fourthOrderCellToFace. Extend to 4th order later.
-   CH_assert(m_geometry.secondOrder());
-   
+   /*
+    Add diamagnetic correction term in the RHS for potential
+    */
+
+   // Present implementation assumes that there is a single ion species with
+   // Ti=1 and Zi = 1. Generalize later.
+   double Ti=1.0;
+   double Zi=1.0;
+
+   // Get grids
    const DisjointBoxLayout& grids = m_geometry.gridsFull();
-   
-   // Compute the ExB drift on face centers
-   LevelData<FluxBox> ExB_drift(grids, 3, IntVect::Unit);
-   m_geometry.computeEXBDrift(a_EM_fields.getEFieldFace(), ExB_drift);
 
-   // Fill ghost cells (currently use 4th order extrapolation)
-   LevelData<FArrayBox> vorticity_grown(grids, 1, 2*IntVect::Unit);
-   
-   for (DataIterator dit(a_vorticity.dataIterator()); dit.ok(); ++dit) {
-      vorticity_grown[dit].copy(a_vorticity[dit]);
-      fourthOrderCellExtrap(vorticity_grown[dit],grids[dit]);
-   }
+   // Compute div(ExB*P)
+   LevelData<FArrayBox> pressure(grids, 1, 2*IntVect::Unit);
   
-   m_imex_pc_op->fillInternalGhosts(vorticity_grown);
-
-   // Convert cell-averaged vorticity to face-averaged quantity
-   // presently, use centered scheme, update to high-order UW later
-   LevelData<FluxBox> faceVorticity(grids, 1, IntVect::Unit);
-   fourthOrderCellToFace(faceVorticity, vorticity_grown);
-
-#if 1
-   // Experimental option to use uw3 method for ExB vorticity advection
-   // Might not be useful, since cfl is likely dominated by stiff k^4 term
-   LevelData<FluxBox> ExB_drift_mapped(grids, SpaceDim, IntVect::Unit);
-   for (DataIterator dit(ExB_drift_mapped.dataIterator()); dit.ok(); ++dit) {
-      if (SpaceDim == 3) {
-         ExB_drift_mapped[dit].copy(ExB_drift[dit]);
-      }
-      if (SpaceDim == 2) {
-         ExB_drift_mapped[dit].copy(ExB_drift[dit],0,0,1);
-         ExB_drift_mapped[dit].copy(ExB_drift[dit],2,1,1);
-      }
-   }
-   m_geometry.multNTransposePointwise(ExB_drift_mapped);
-   
-   SpaceUtils::upWindToFaces(faceVorticity,
-                             vorticity_grown,
-                             ExB_drift_mapped,
-                             "uw3");
-#endif
-   
-   // Compute ExB times vorticity flux
-   LevelData<FluxBox> flux(grids, SpaceDim, IntVect::Unit);
-   for (DataIterator dit(a_vorticity.dataIterator()); dit.ok(); ++dit) {
-      for (int dir=0; dir<SpaceDim; dir++) {
-         for (int nComp=0; nComp<SpaceDim; nComp++) {
-            flux[dit][dir].copy(faceVorticity[dit][dir],0,nComp);
-         }
-         flux[dit][dir].mult(ExB_drift[dit][dir],0,0);
-         if (SpaceDim == 2) {
-            flux[dit][dir].mult(ExB_drift[dit][dir],2,1);
-         }
-         if (SpaceDim == 3) {
-            flux[dit][dir].mult(ExB_drift[dit][dir],1,1);
-            flux[dit][dir].mult(ExB_drift[dit][dir],2,2);
-         }
-         flux[dit][dir] *= m_larmor;
-      }
-   }
-
-   m_geometry.applyAxisymmetricCorrection(flux);
-
-   bool fourthOrder = !m_geometry.secondOrder();
-   m_geometry.computeMappedGridDivergence(flux, a_div_ExB_times_vorticity, fourthOrder);
-   
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      a_div_ExB_times_vorticity[dit] /= m_volume[dit];
+      pressure[dit].copy(m_ion_mass_density[dit]);
+      pressure[dit].divide(Zi);
+      pressure[dit].mult(Ti);
+   }
+
+    for (DataIterator dit(pressure.dataIterator()); dit.ok(); ++dit) {
+       fourthOrderCellExtrap(pressure[dit],grids[dit]);
+    }
+   
+    m_geometry.fillInternalGhosts(pressure);
+   
+#if 0
+   // This is numerically unstable branch; need to figure out why!!!
+   LevelData<FArrayBox> div_ExB_pressure(grids, 1, IntVect::Zero);
+   
+   m_fluid_op_utils->computeExBAdvection(div_ExB_pressure,
+                                         pressure,
+                                         a_EM_fields.getEFieldFace(),
+                                         m_advection_scheme,
+                                         true);
+    
+   LevelData<FArrayBox> diam_corr(grids, 1, IntVect::Zero);
+   m_diamagnetic_correction_op->computeFluxDivergence( div_ExB_pressure, diam_corr, false, true);
+
+#else
+   // This is numerically stable branch, but it replaces div([Exb]*n) with
+   // (EXb)*grad(n), which is inaccurate in a toroidal geom
+   if (SpaceDim == 2) {
+      MayDay::Error("VorticityOp::addDiamagnaticCorr(): is only implemented in 3D");
+   }
+   LevelData<FArrayBox> ExB_drift(grids, 3, IntVect::Zero);
+   m_geometry.computeEXBDrift(a_EM_fields.getEFieldCell(), ExB_drift);
+  
+   LevelData<FArrayBox> press_gradient_mapped(grids, CFG_DIM, IntVect::Unit);
+   m_geometry.computeMappedGradient(pressure, press_gradient_mapped, 2);
+   
+   LevelData<FArrayBox> press_gradient(grids, CFG_DIM, IntVect::Unit);
+   m_geometry.unmapGradient(press_gradient_mapped, press_gradient );
+
+   LevelData<FArrayBox> ExB_grad_p(grids, 1, IntVect::Zero);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+     
+      ExB_grad_p[dit].setVal(0.);
+      FArrayBox tmp(grids[dit],1);
+      
+      if (SpaceDim ==3) {
+         for (int n=0; n<SpaceDim; n++) {
+            tmp.copy(ExB_drift[dit],n,0,1);
+            tmp.mult(press_gradient[dit],n,0,1);
+            ExB_grad_p[dit].plus(tmp);
+         }
+      }
+      ExB_grad_p[dit].mult(m_larmor);
+   }
+
+   LevelData<FArrayBox> diam_corr(grids, 1, IntVect::Zero);
+   m_diamagnetic_correction_op->computeFluxDivergence( ExB_grad_p, diam_corr, false, true);
+#endif
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      a_rhs[dit] += diam_corr[dit];
    }
 }
 
@@ -1262,6 +1395,113 @@ void VorticityOp::computeIonChargeDensity( LevelData<FArrayBox>&               a
    }
 }
 
+void VorticityOp::computeIonMassOverChargeDensity( LevelData<FArrayBox>&              a_ion_density,
+                                                  const PS::KineticSpeciesPtrVect&    a_kinetic_species_phys,
+                                                  const FluidSpeciesPtrVect&          a_fluid_species_comp) const
+{
+   CH_TIME("VorticityOp::computeIonChargeDensity");
+   
+   // Container for individual species density
+   LevelData<FArrayBox> species_density;
+   species_density.define(a_ion_density);
+   
+   setZero( a_ion_density );
+   
+   // Accumulate contribution from kinetic species
+   for (int species(0); species<a_kinetic_species_phys.size(); species++) {
+      
+      const PS::KineticSpecies& this_species( *(a_kinetic_species_phys[species]) );
+      if ( this_species.charge() < 0.0 ) continue;
+      
+      // Compute the mass density for this species including ghost cells
+      this_species.massDensity( species_density );
+      
+      for (DataIterator dit(a_ion_density.dataIterator()); dit.ok(); ++dit) {
+         species_density[dit].divide(this_species.charge());
+         a_ion_density[dit] += species_density[dit];
+      }
+   }
+   
+   // Accumulate constribution from fluid species
+   for (int species(0); species<a_fluid_species_comp.size(); species++) {
+
+      if (typeid(*(a_fluid_species_comp[species])) == typeid(FluidSpecies)) {
+         const FluidSpecies& this_species( static_cast<FluidSpecies&>(*(a_fluid_species_comp[species])) );
+
+         if ( this_species.charge() < 0.0 ) continue;
+         
+         this_species.massDensity( species_density );
+         m_geometry.divideJonValid(species_density);
+      
+         DataIterator dit( a_ion_density.dataIterator() );
+         for (dit.begin(); dit.ok(); ++dit) {
+            species_density[dit].divide(this_species.charge());
+            a_ion_density[dit].plus( species_density[dit] );
+         }
+      }
+   }
+}
+
+
+void VorticityOp::addStabilizationTerms(LevelData<FArrayBox>&              a_rhs,
+                                        const LevelData<FArrayBox>&        a_soln)
+
+{
+   
+   // Add hyperviscosity
+   if (m_include_hyperviscosity) {
+     m_fluid_op_utils->addHyperViscosity(a_rhs, a_soln, false);
+   }
+
+   // Suppress non-zonal rhs component at bondaries
+   if (m_suppress_non_zonal_comp_at_boundaries) {
+      m_fluid_op_utils->suppressNonZonalCompInBoundaryBuffers(a_rhs);
+   }
+   
+   // Add relaxation to a reference solution in boundary buffers
+   if (m_include_boundary_relaxation) {
+      m_fluid_op_utils->addRelaxationInBoundaryBuffers(a_rhs,
+                                                       a_soln,
+                                                       false);
+   }
+   
+}
+
+
+void VorticityOp::initializeDiamagneticCoeff(LevelData<FluxBox>& a_D_tensor,
+                                             LevelData<FluxBox>& a_D_tensor_mapped)
+{
+   // Get distjoint box layout
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+
+   // Larmor number squared
+   double larmor_number2 = pow(m_larmor, 2);
+   
+   // Get face-centered Bmag
+   const LevelData<FluxBox>& BFieldMag = m_geometry.getFCBFieldMag();
+   
+   // Get perpendicular elliptic coefficients
+   const LevelData<FluxBox>& perp_coeff = m_geometry.getEllipticOpPerpCoeff();
+   const LevelData<FluxBox>& perp_coeff_mapped  = m_geometry.getEllipticOpPerpCoeffMapped();
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      FluxBox scalar_fac(BFieldMag[dit].box(), 1);
+      scalar_fac.setVal(1.0);
+      scalar_fac *= larmor_number2;
+      
+      a_D_tensor[dit].copy(perp_coeff[dit]);
+      a_D_tensor_mapped[dit].copy(perp_coeff_mapped[dit]);
+
+      for (int dir = 0; dir < SpaceDim; dir++) {
+         scalar_fac[dir].divide(BFieldMag[dit][dir]);
+         scalar_fac[dir].divide(BFieldMag[dit][dir]);
+         for (int n = 0; n < SpaceDim*SpaceDim; n++) {
+            a_D_tensor[dit][dir].mult(scalar_fac[dir],0,n,1);
+            a_D_tensor_mapped[dit][dir].mult(scalar_fac[dir],0,n,1);
+         }
+      }
+   }
+}
 
 void VorticityOp::setCoreBC( const double   a_core_inner_bv,
                              const double   a_core_outer_bv,
@@ -1352,6 +1592,8 @@ void VorticityOp::parseParameters( const ParmParse& a_pp )
    a_pp.query( "low_pollution", m_low_pollution );
    a_pp.query( "remove_axisymmetric_phi", m_remove_axisymmetric_phi );
    a_pp.queryarr( "harmonic_filtering", m_harmonic_filtering, 0, SpaceDim );
+   
+   a_pp.query( "include_diamagnetic_correction", m_include_diam_correction);
 
    if (a_pp.contains("update_precond_interval")) {
       a_pp.get( "update_precond_interval", m_update_pc_freq_e );
@@ -1367,7 +1609,6 @@ void VorticityOp::parseParameters( const ParmParse& a_pp )
       a_pp.query( "update_precond_skip_stage_LHS", m_update_pc_skip_stage_e );
       a_pp.query( "update_precond_skip_stage_RHS", m_update_pc_skip_stage_i );
    }
-   
    
    if (a_pp.contains("consistent_upper_bc_only")) {
      a_pp.get("consistent_upper_bc_only", m_consistent_upper_bc_only);
@@ -1410,6 +1651,14 @@ void VorticityOp::parseParameters( const ParmParse& a_pp )
       m_include_diffusion_precond = m_include_diffusion;
       a_pp.query( "include_diffusion_precond", m_include_diffusion_precond );
    }
+   
+   a_pp.query( "include_hyperviscosity", m_include_hyperviscosity);
+   a_pp.query( "use_hyperviscosity_bcs", m_use_hyperviscosity_bcs );
+   a_pp.query( "suppress_non_zonal_comp_at_boundaries", m_suppress_non_zonal_comp_at_boundaries );
+   a_pp.query( "include_boundary_relaxation",  m_include_boundary_relaxation);
+   
+   a_pp.query( "minimal_implicit_model", m_minimal_implicit_model);
+   a_pp.query( "advection_scheme", m_advection_scheme );
 }
 
 

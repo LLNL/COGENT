@@ -155,6 +155,8 @@ class AppCtxt
     virtual void getVec(  const ODEVector&,
                           const int,
                           ODEVector& ) const = 0;
+
+    virtual void ARKFirstStageExplicit( const bool ) = 0;
 };
 
 #include "NamespaceFooter.H"

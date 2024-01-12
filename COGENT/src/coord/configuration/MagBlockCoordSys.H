@@ -405,6 +405,13 @@ void
       void convertPhysicalCoordToToroidal(RealVect&   coord,
                                           const bool  use_flux_coord) const;
 
+      void  getCylindricalCoords(FArrayBox&  coords) const;
+
+      void  getCylindricalCoords(FArrayBox&        coords,
+                                 const FArrayBox&  real_coords) const;
+
+      void convertPhysicalCoordToCylindrical(RealVect&   coord) const;
+
    private:
    
       /// Inline method to compute difference of products needed for cofactors.

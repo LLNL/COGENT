@@ -43,7 +43,7 @@ GKVlasovAMG::GKVlasovAMG( const ParmParse&  a_pp,
       a_pp.get("max_iter", max_iter);
    }
    else {
-      max_iter = 2;
+      max_iter = 100;
    }
 
    bool verbose;
@@ -52,6 +52,20 @@ GKVlasovAMG::GKVlasovAMG( const ParmParse&  a_pp,
    }
    else {
       verbose = false;
+   }
+
+   if ( a_pp.contains("max_num_levels") ) {
+      a_pp.get("max_num_levels", m_max_num_levels);
+   }
+   else {
+      m_max_num_levels = 25;
+   }
+
+   if ( a_pp.contains("threshold") ) {
+      a_pp.get("threshold", m_threshold);
+   }
+   else {
+      m_threshold = 0.25;
    }
 
    setConvergenceParams(tol, max_iter, verbose);
@@ -297,7 +311,9 @@ void GKVlasovAMG::destroyHypreData()
 }
 
 
-void GKVlasovAMG::AMGSetup( const HYPRE_SStructMatrix& a_matrix )
+void GKVlasovAMG::AMGSetup( const HYPRE_SStructMatrix&  a_matrix,
+                            const HYPRE_SStructVector&  a_x,
+                            const HYPRE_SStructVector&  a_b )
 {
    CH_TIME("GKVlasovAMG::AMGSetup");
 
@@ -331,7 +347,7 @@ void GKVlasovAMG::AMGSetup( const HYPRE_SStructMatrix& a_matrix )
 
    HYPRE_Int **grid_relax_points = NULL;
    HYPRE_Int ns_down = 1;
-   HYPRE_Int ns_up = 3;
+   HYPRE_Int ns_up = 2;
    HYPRE_Int ns_coarse = 1;
    /* this is a 2-D 4-by-k array using Double pointers */
    grid_relax_points = hypre_CTAlloc(HYPRE_Int*, 4, HYPRE_MEMORY_HOST);
@@ -339,24 +355,16 @@ void GKVlasovAMG::AMGSetup( const HYPRE_SStructMatrix& a_matrix )
    grid_relax_points[1] = hypre_CTAlloc(HYPRE_Int, ns_down, HYPRE_MEMORY_HOST);
    grid_relax_points[2] = hypre_CTAlloc(HYPRE_Int, ns_up, HYPRE_MEMORY_HOST);
    grid_relax_points[3] = hypre_CTAlloc(HYPRE_Int, ns_coarse, HYPRE_MEMORY_HOST);
-   /* down cycle: C */
+   /* down cycle: relax all */
    for (int i=0; i<ns_down; i++) {
-      grid_relax_points[1][i] = 0;//1;
+      grid_relax_points[1][i] = 0;
    }
-   /* up cycle: F */
-   //for (int i=0; i<ns_up; i++)
-   //{
-   if (ns_up == 3) {
-      grid_relax_points[2][0] = -1; // F
-      grid_relax_points[2][1] = -1; // F
-      grid_relax_points[2][2] =  1; // C
+   /* up cycle */
+   for (int i=0; i<ns_up-1; ++i) {
+      grid_relax_points[2][i] = -1; // F
    }
-   else if (ns_up == 2) {
-      grid_relax_points[2][0] = -1; // F
-      grid_relax_points[2][1] = -1; // F
-   }
-   //}
-   /* coarse: all */
+   grid_relax_points[2][ns_up-1] = 1; // C
+   /* coarse: relax all */
    for (int i=0; i<ns_coarse; i++) {
       grid_relax_points[3][i] = 0;
    }
@@ -368,11 +376,11 @@ void GKVlasovAMG::AMGSetup( const HYPRE_SStructMatrix& a_matrix )
    HYPRE_BoomerAMGSetInterpType(m_par_AMG_solver, interp_type);
    
    HYPRE_BoomerAMGSetAggNumLevels(m_par_AMG_solver, 0);
-
    HYPRE_BoomerAMGSetMaxCoarseSize(m_par_AMG_solver, 0);
+   HYPRE_BoomerAMGSetMaxLevels(m_par_AMG_solver, m_max_num_levels);
+   HYPRE_BoomerAMGSetStrongThresholdR(m_par_AMG_solver, m_threshold);
 
    //   HYPRE_BoomerAMGSetStrongThreshold(m_par_AMG_solver, 0.25);
-   //   HYPRE_BoomerAMGSetStrongThresholdR(m_par_AMG_solver, 0.25);
    //   HYPRE_BoomerAMGSetCoarsenType(m_par_AMG_solver, 6);  // Falgout coarsening
    //   HYPRE_BoomerAMGSetCycleRelaxType(m_par_AMG_solver, 3, 3); // hybrid Gauss-Seidel on coarsest level
    //   HYPRE_BoomerAMGSetCycleRelaxType(m_par_AMG_solver, 9, 3); // Gaussian elimination on coarsest level
@@ -385,9 +393,10 @@ void GKVlasovAMG::AMGSetup( const HYPRE_SStructMatrix& a_matrix )
 
    HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
-
-   HYPRE_ParVector par_b;  // not used, but needs to be passed to HYPRE_BoomerAMGSetup
-   HYPRE_ParVector par_x;  // not used, but needs to be passed to HYPRE_BoomerAMGSetup
+   HYPRE_ParVector par_b;
+   HYPRE_SStructVectorGetObject(a_b, (void **) &par_b);
+   HYPRE_ParVector par_x;
+   HYPRE_SStructVectorGetObject(a_x, (void **) &par_x);
 
    HYPRE_BoomerAMGSetup(m_par_AMG_solver, par_A, par_b, par_x);
 }
@@ -527,7 +536,7 @@ void GKVlasovAMG::constructMatrix( const string&                                
    //   HYPRE_SStructMatrixPrint("HYPRE_MATRIX.A", m_A, 0);
 
    CH_START(t_amg_setup);
-   AMGSetup(m_A);
+   AMGSetup(m_A, m_x, m_b);
    CH_STOP(t_amg_setup);
 }
 

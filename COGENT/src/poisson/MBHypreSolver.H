@@ -50,6 +50,7 @@ public:
 
    void setBasicAMGMethod()
       {m_method = "AMG";
+       m_advection_scheme = "C2";
        m_AMG_coarsen_type = 6;
        m_AMG_strong_threshold = 0.25;
        m_AMG_old_setup = false;}
@@ -169,13 +170,19 @@ public:
                   const HYPRE_SStructVector& x,
                   const HYPRE_SStructVector& b);
 
-   void ILUSetup( const HYPRE_SStructMatrix& matrix );
+   void ILUSetup( const HYPRE_SStructMatrix& matrix,
+                  const HYPRE_SStructVector& x,
+                  const HYPRE_SStructVector& b);
 
-   void MGRSetup( const HYPRE_SStructMatrix& matrix );
+   void MGRSetup( const HYPRE_SStructMatrix& matrix,
+                  const HYPRE_SStructVector& x,
+                  const HYPRE_SStructVector& b);
 
    void setMGRCFIndexes( HYPRE_Int** CF_indexes );
 
-   void AIRSetup( const HYPRE_SStructMatrix& matrix );
+   void AIRSetup( const HYPRE_SStructMatrix& matrix,
+                  const HYPRE_SStructVector& x,
+                  const HYPRE_SStructVector& b);
 
    void AMG( const HYPRE_SStructMatrix&  matrix,
              const HYPRE_SStructVector&  b,
@@ -219,6 +226,7 @@ public:
 
    // Hypre data structures
 
+   string m_advection_scheme;
    int** m_advection_offsets;
    int m_advection_stencil_radius;
    int m_advection_stencil_size;

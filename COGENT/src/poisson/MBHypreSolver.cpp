@@ -137,6 +137,7 @@ MBHypreSolver::setMethodParams( const ParmParse&  a_pp )
 {
    if ( a_pp.query("method", m_method) == 0 ) m_method = "AMG";
    if ( a_pp.query("precond_method", m_precond_method) == 0 ) m_precond_method = "";
+   if ( a_pp.query("advection_scheme", m_advection_scheme) == 0 ) m_advection_scheme = "C2";
 
    if ( m_method == "AMG" ) {
       if ( a_pp.query("coarsen_type", m_AMG_coarsen_type) == 0 ) m_AMG_coarsen_type = 6;
@@ -325,13 +326,13 @@ MBHypreSolver::finalizeMatrix()
       AMGSetup(m_A, m_x, m_b);
    }
    else if ( m_method == "ILU" ) {
-      ILUSetup(m_A);
+      ILUSetup(m_A, m_x, m_b);
    }
    else if ( m_method == "MGR" ) {
-      MGRSetup(m_A);
+      MGRSetup(m_A, m_x, m_b);
    }
    else if ( m_method == "AIR" ) {
-      AIRSetup(m_A);
+      AIRSetup(m_A, m_x, m_b);
    }
 
    //   dumpMatrix("HYPRE_MATRIX.A");
@@ -1735,8 +1736,8 @@ void MBHypreSolver::addAdvectionMatrixBlockGeneral( const int                   
   }
 
   // Construct the stencils corresponding to second-order centered differencing.  First-order
-  // upwind ("UW1") is also a valid option here.  
-  constructAdvectionStencils("C2", a_vector_coefficient, couplings, weights, a_bc);
+  // upwind ("UW1") or second-order centered ("C2") are valid options here.
+  constructAdvectionStencils(m_advection_scheme, a_vector_coefficient, couplings, weights, a_bc);
 
   addAdvectionMatrixBlockCoupled(a_block_row,
                                  a_block_column,
@@ -1899,10 +1900,8 @@ MBHypreSolver::AMGSetup( const HYPRE_SStructMatrix&  a_matrix,
 
    HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
-
    HYPRE_ParVector par_b;
    HYPRE_SStructVectorGetObject(a_b, (void **) &par_b);
-
    HYPRE_ParVector par_x;
    HYPRE_SStructVectorGetObject(a_x, (void **) &par_x);
 
@@ -1913,7 +1912,9 @@ MBHypreSolver::AMGSetup( const HYPRE_SStructMatrix&  a_matrix,
 
 
 void
-MBHypreSolver::ILUSetup( const HYPRE_SStructMatrix& a_matrix )
+MBHypreSolver::ILUSetup( const HYPRE_SStructMatrix&  a_matrix,
+                         const HYPRE_SStructVector&  a_x,
+                         const HYPRE_SStructVector&  a_b )
 {
    CH_TIME("MBHypreSolver::ILUSetup");
    if ( !m_matrix_finalized ) {
@@ -1938,9 +1939,10 @@ MBHypreSolver::ILUSetup( const HYPRE_SStructMatrix& a_matrix )
 
    HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
-
-   HYPRE_ParVector par_b;  // not used, but needs to be passed to HYPRE_ILUSetup
-   HYPRE_ParVector par_x;  // not used, but needs to be passed to HYPRE_ILUSetup
+   HYPRE_ParVector par_b;
+   HYPRE_SStructVectorGetObject(a_b, (void **) &par_b);
+   HYPRE_ParVector par_x;
+   HYPRE_SStructVectorGetObject(a_x, (void **) &par_x);
 
    HYPRE_ILUSetup(m_par_ILU_solver, par_A, par_b, par_x);
 
@@ -1949,7 +1951,9 @@ MBHypreSolver::ILUSetup( const HYPRE_SStructMatrix& a_matrix )
 
 
 void
-MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
+MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix&  a_matrix,
+                         const HYPRE_SStructVector&  a_x,
+                         const HYPRE_SStructVector&  a_b )
 {
    CH_TIME("MBHypreSolver::MGRSetup");
    if ( !m_matrix_finalized ) {
@@ -2004,11 +2008,12 @@ MBHypreSolver::MGRSetup( const HYPRE_SStructMatrix& a_matrix )
       m_mgr_cindexes[i][0] = m_MGR_cpoint;
    }
 
-
    HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
-   HYPRE_ParVector par_b;  // apparently not used, but needs to be passed to HYPRE_*Setup
-   HYPRE_ParVector par_x;  // apparently not used, but needs to be passed to HYPRE_*Setup
+   HYPRE_ParVector par_b;
+   HYPRE_SStructVectorGetObject(a_b, (void **) &par_b);
+   HYPRE_ParVector par_x;
+   HYPRE_SStructVectorGetObject(a_x, (void **) &par_x);
 
    HYPRE_MGRCreate(&m_par_MGR_solver);
 
@@ -2106,7 +2111,9 @@ MBHypreSolver::setMGRCFIndexes( HYPRE_Int** a_CF_indexes )
 } 
 
 
-void MBHypreSolver::AIRSetup( const HYPRE_SStructMatrix& a_matrix )
+void MBHypreSolver::AIRSetup( const HYPRE_SStructMatrix&  a_matrix,
+                              const HYPRE_SStructVector&  a_x,
+                              const HYPRE_SStructVector&  a_b )
 {
    CH_TIME("MBHypreSolver::AIRSetup");
 
@@ -2194,9 +2201,10 @@ void MBHypreSolver::AIRSetup( const HYPRE_SStructMatrix& a_matrix )
 
    HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
-
-   HYPRE_ParVector par_b;  // not used, but needs to be passed to HYPRE_BoomerAMGSetup
-   HYPRE_ParVector par_x;  // not used, but needs to be passed to HYPRE_BoomerAMGSetup
+   HYPRE_ParVector par_b;
+   HYPRE_SStructVectorGetObject(a_b, (void **) &par_b);
+   HYPRE_ParVector par_x;
+   HYPRE_SStructVectorGetObject(a_x, (void **) &par_x);
 
    HYPRE_BoomerAMGSetup(m_par_AMG_solver, par_A, par_b, par_x);
 }
@@ -2212,11 +2220,11 @@ MBHypreSolver::AMG( const HYPRE_SStructMatrix&  a_matrix,
 {
    CH_TIMERS("MBHypreSolver::AMG");
 
-   HYPRE_ParCSRMatrix    par_A;
+   HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
-   HYPRE_ParVector       par_b;
+   HYPRE_ParVector par_b;
    HYPRE_SStructVectorGetObject(a_b, (void **) &par_b);
-   HYPRE_ParVector       par_x;
+   HYPRE_ParVector par_x;
    HYPRE_SStructVectorGetObject(a_x, (void **) &par_x);
 
    HYPRE_BoomerAMGSetTol(m_par_AMG_solver, a_tol);
@@ -2253,11 +2261,10 @@ MBHypreSolver::ILU( const HYPRE_SStructMatrix&  a_matrix,
    CH_TIMER("ILU_solve",t_ILU_solve);
 
    HYPRE_ParCSRMatrix    par_A;
-   HYPRE_ParVector       par_b;
-   HYPRE_ParVector       par_x;
-
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
+   HYPRE_ParVector       par_b;
    HYPRE_SStructVectorGetObject(a_b, (void **) &par_b);
+   HYPRE_ParVector       par_x;
    HYPRE_SStructVectorGetObject(a_x, (void **) &par_x);
 
    CH_START(t_ILU_solve);
@@ -2298,11 +2305,11 @@ MBHypreSolver::MGR( const HYPRE_SStructMatrix&  a_matrix,
    }
    HYPRE_MGRSetTol(m_par_MGR_solver, a_tol);
    
-   HYPRE_ParCSRMatrix    par_A;
+   HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
-   HYPRE_ParVector       par_b;
+   HYPRE_ParVector par_b;
    HYPRE_SStructVectorGetObject(a_b, (void **) &par_b);
-   HYPRE_ParVector       par_x;
+   HYPRE_ParVector par_x;
    HYPRE_SStructVectorGetObject(a_x, (void **) &par_x);
 
    // Do the solve
@@ -2354,16 +2361,16 @@ MBHypreSolver::AMG_preconditioned_GMRES( const HYPRE_SStructMatrix&  a_matrix,
                                          const bool                  a_verbose,
                                          const HYPRE_SStructVector&  a_x ) const
 {
-   HYPRE_Solver          par_solver;
-   HYPRE_Solver          par_precond;
-   HYPRE_ParCSRMatrix    par_A;
-   HYPRE_ParCSRMatrix    par_P;
-   HYPRE_ParVector       par_b;
-   HYPRE_ParVector       par_x;
+   HYPRE_Solver par_solver;
+   HYPRE_Solver par_precond;
 
+   HYPRE_ParCSRMatrix par_A;
    HYPRE_SStructMatrixGetObject(a_matrix, (void **) &par_A);
+   HYPRE_ParCSRMatrix par_P;
    HYPRE_SStructMatrixGetObject(a_precond, (void **) &par_P);
+   HYPRE_ParVector par_b;
    HYPRE_SStructVectorGetObject(a_b, (void **) &par_b);
+   HYPRE_ParVector par_x;
    HYPRE_SStructVectorGetObject(a_x, (void **) &par_x);
 
    HYPRE_ParCSRGMRESCreate(MPI_COMM_WORLD, &par_solver);

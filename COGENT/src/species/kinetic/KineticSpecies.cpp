@@ -32,9 +32,7 @@ KineticSpecies::KineticSpecies(
     m_gyroavg_op(NULL),
     m_is_gyrokinetic(a_is_gyrokinetic)
 {
-    int ghost = (m_geometry->secondOrder()) ? 0 : 1;
-    const DisjointBoxLayout& dbl = m_geometry->gridsFull();
-    m_velocity.define(dbl, SpaceDim, ghost * IntVect::Unit);
+  
 }
 
 
@@ -49,7 +47,6 @@ KineticSpecies::KineticSpecies( const KineticSpecies& a_foo )
 {
    gyroaverageOp(a_foo.gyroaverageOp());
    m_dist_func.define( a_foo.m_dist_func );
-   m_velocity.define( a_foo.m_velocity );
 }
 
 void KineticSpecies::numberDensity( CFG::LevelData<CFG::FArrayBox>& a_rho ) const
@@ -787,6 +784,12 @@ void KineticSpecies::computeVelocity(LevelData<FluxBox>&       a_velocity,
    CH_TIMERS("KineticSpecies::computeVelocity");
    CH_TIMER("copy_velocity_fort", t_copy_velocity_fort);
 
+   if (!m_velocity.isDefined()) {
+     int ghost = (m_geometry->secondOrder()) ? 0 : 1;
+     const DisjointBoxLayout& dbl = m_geometry->gridsFull();
+     m_velocity.define(dbl, SpaceDim, ghost * IntVect::Unit);
+   }
+   
    CH_assert(a_velocity.ghostVect() <= m_velocity.ghostVect());
    CH_assert(a_velocity.nComp() == m_velocity.nComp());
    

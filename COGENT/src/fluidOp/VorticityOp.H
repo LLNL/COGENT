@@ -5,6 +5,7 @@
 
 #include "FluidOpInterface.H"
 #include "GKFluidOp.H"
+#include "FluidOpUtils.H"
 #include "GKVorticity.H"
 #include "Potentials.H"
 #include "EMFields.H"
@@ -36,7 +37,9 @@ public:
        m_par_cond_op(NULL),
        m_parallel_current_divergence_op(NULL),
        m_vorticity_diffusion_op(NULL),
-       m_potential_bcs(NULL) {};
+       m_diamagnetic_correction_op(NULL),
+       m_potential_bcs(NULL),
+       m_fluid_op_utils(NULL) {};
    
   /// Constructor with initialization.
   /**
@@ -143,11 +146,11 @@ public:
                              const std::string&                op_name,
                              const int                         component );
 
-   virtual void postStageEval( FluidSpecies&  species_comp,
-                               FluidSpecies&  species_phys,
-                               const Real     dt,
-                               const Real     time,
-                               const int      stage );
+   virtual void postTimeEval( FluidSpecies&  species_comp,
+                              FluidSpecies&  species_phys,
+                              const Real     dt,
+                              const Real     time,
+                              const int      stage );
    
    virtual bool trivialSolutionOp() const {return false;}
 
@@ -193,16 +196,24 @@ public:
                                                 const Real&                       time);
 
   
-   void computeReynoldsStressTerm( LevelData<FArrayBox>&             div_ExB_times_vorticity,
-                                   const LevelData<FArrayBox>&       vorticity,
-                                   const EMFields&                   EM_fields ) const;
+   void  addDiamagneticCorrection(LevelData<FArrayBox>&              rhs,
+                                  const LevelData<FArrayBox>&        soln,
+                                  const EMFields&                    EM_fields);
    
-   
-   void addPerpTermsRHS(LevelData<FArrayBox>&              rhs,
+   void addDivJperpTerm(LevelData<FArrayBox>&              rhs,
                         const LevelData<FArrayBox>&        soln,
                         const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
                         const EMFields&                    EM_fields,
                         const Real                         time);
+   
+   void addReynoldsStressTerm(LevelData<FArrayBox>&              rhs,
+                              const LevelData<FArrayBox>&        soln,
+                              const EMFields&                    EM_fields);
+
+   void addStabilizationTerms(LevelData<FArrayBox>&              rhs,
+                              const LevelData<FArrayBox>&        soln);
+
+
 
    static const char* pp_name;
 
@@ -218,6 +229,11 @@ protected:
                                 const PS::KineticSpeciesPtrVect& kinetic_species_phys,
                                 const FluidSpeciesPtrVect&       fluid_species_comp ) const;
 
+   /// Computes ion mass over charge density
+    void computeIonMassOverChargeDensity(LevelData<FArrayBox>&            ion_charge_density,
+                                         const PS::KineticSpeciesPtrVect& kinetic_species_phys,
+                                         const FluidSpeciesPtrVect&       fluid_species_comp ) const;
+   
    void setCoreBC( const double   core_inner_bv,
                    const double   core_outer_bv,
                    EllipticOpBC&  bc ) const ;
@@ -225,15 +241,21 @@ protected:
    
    void setZero( LevelData<FArrayBox>& data ) const;
    void setZero( LevelData<FluxBox>& data ) const;
-
+   
    GKPoisson*    m_gyropoisson_op;
    EllipticOpBC* m_potential_bcs;
    
-   GKVorticity*   m_vorticity_diffusion_op;
+   GKVorticity*    m_vorticity_diffusion_op;
    RefCountedPtr<EllipticOpBC>  m_vorticity_bcs;
    
    GKVorticity*   m_parallel_current_divergence_op;
    RefCountedPtr<EllipticOpBC>  m_parallel_current_divergence_op_bcs;
+   
+   Diffusion* m_diamagnetic_correction_op;
+   RefCountedPtr<EllipticOpBC>  m_diamagnetic_correction_op_bcs;
+   
+   FluidOpUtils*      m_fluid_op_utils;
+   RefCountedPtr<EllipticOpBC>  m_hyperviscosity_op_bcs;
    
    const MagGeom& m_geometry;
 
@@ -257,13 +279,25 @@ protected:
    bool m_second_order;
    bool m_low_pollution;
    bool m_include_pol_den_correction;
+   bool m_include_diam_correction;
    bool m_use_vorticity_bcs;
    bool m_include_diffusion;
+   bool m_include_hyperviscosity;
+   bool m_use_hyperviscosity_bcs;
+   bool m_suppress_non_zonal_comp_at_boundaries;
+   bool m_include_boundary_relaxation;
+   bool m_include_stabilization;
+   bool m_minimal_implicit_model;
+   
+   std::string m_advection_scheme;
    
 private:
    
    void initializeDiffusionProfiles(LevelData<FluxBox>& pol_diffusion_face,
                                     LevelData<FluxBox>& perp_diffusion_face);
+   
+   void initializeDiamagneticCoeff(LevelData<FluxBox>& D_tensor,
+                                   LevelData<FluxBox>& D_tensor_mapped);
    
 
    /// Parse parameters.
@@ -271,7 +305,6 @@ private:
    
    /// Print parameters.
    void printParameters();
-  
   
    GKVorticity*    m_par_cond_op;
    GKVorticity*    m_imex_pc_op;
@@ -305,7 +338,6 @@ private:
    int m_update_pc_freq_e;
    int m_update_pc_freq_i;
 
-   Real m_alpha_loc;
    double m_larmor;
 
    RefCountedPtr<GridFunction> m_electron_temperature_func;

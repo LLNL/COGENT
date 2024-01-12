@@ -765,16 +765,16 @@ c  -------------------------------------------------------------
       CHF_DTERM[
       ii = CHF_ID(dir, 0);
       jj = CHF_ID(dir, 1);
-      kk = 0;
-      ll = 0;
-      mm = 0]
+      kk = CHF_ID(dir, 2);
+      ll = CHF_ID(dir, 3);
+      mm = CHF_ID(dir, 4)]
 
       CHF_MULTIDO[cellBox;i;j;k;l;m]
 
          do comp = 0, (CHF_NCOMP[cellPhi]-1)
-            val = half*( facePhi(CHF_IX[i+ii;j+jj;k;l;m],comp)
+            val = half*( facePhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm],comp)
      &          +        facePhi(CHF_IX[i;j;k;l;m],comp) )
-            cellPhi(CHF_IX[i;j;k;l;m],comp) = (cellPhi(CHF_IX[i;j;k;l;m],comp) + val)/(dir+1.0)
+            cellPhi(CHF_IX[i;j;k;l;m],comp) = cellPhi(CHF_IX[i;j;k;l;m],comp) + val
          enddo
 
       CHF_ENDDO
@@ -825,6 +825,51 @@ c        interp to cell on other side of idir
          val_down = val_down * half
 
          Eout(CHF_IX[i;j;k;l;m]) = ( val_down + val_up ) * half
+
+      CHF_ENDDO
+
+      return
+      end
+
+c ------------------------------------------------------------------
+c
+c  interp cell face values from one face to another using C2 method
+c
+c  -----------------------------------------------------------------
+      subroutine C2_FACES_TO_FACES( CHF_BOX[faceBox], 
+     &                              CHF_CONST_INT[adir],
+     &                              CHF_CONST_INT[dir],
+     &                              CHF_CONST_FRA1[Bin],
+     &                              CHF_FRA1[Bout] )
+
+
+      integer n, ncell, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii0;jj0;kk0;ll0;mm0]
+      integer CHF_DDECL[ii1;jj1;kk1;ll1;mm1]
+      REAL_T val
+
+      CHF_DTERM[
+      ii1 = CHF_ID(adir, 0);
+      jj1 = CHF_ID(adir, 1);
+      kk1 = CHF_ID(adir, 2);
+      ll1 = CHF_ID(adir, 3);
+      mm1 = CHF_ID(adir, 4)]
+      
+      CHF_DTERM[
+      ii0 = CHF_ID(dir, 0);
+      jj0 = CHF_ID(dir, 1);
+      kk0 = CHF_ID(dir, 2);
+      ll0 = CHF_ID(dir, 3);
+      mm0 = CHF_ID(dir, 4)]
+
+      CHF_MULTIDO[faceBox;i;j;k;l;m]
+
+         val = Bin(CHF_IX[i;j;k;l;m])
+     &       + Bin(CHF_IX[i-ii0;j-jj0;k-kk0;l-ll0;m-mm0])
+     &       + Bin(CHF_IX[i+ii1;j+jj1;k+kk1;l+ll1;m+mm1])
+     &       + Bin(CHF_IX[i-ii0+ii1;j-jj0+jj1;k-kk0+kk1;l-ll0+ll1;m-mm0+mm1])
+
+         Bout(CHF_IX[i;j;k;l;m]) = val * 0.25
 
       CHF_ENDDO
 
@@ -1306,6 +1351,85 @@ c.......assign face value
       end
 
 c ----------------------------------------------------------
+c  average face values based ZIP method
+c
+c  faceFG = face-centered phi value
+c  cellF  = cell-centered phi
+c  cellG  = cell-centered phi
+c  -------------------------------------------------------------
+      subroutine ZIP_TO_FACE( CHF_BOX[faceBox],
+     &                        CHF_CONST_INT[idir],
+     &                        CHF_CONST_FRA1[cellF],
+     &                        CHF_CONST_FRA1[cellG],
+     &                        CHF_FRA1[faceFG] )
+
+
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3);
+      mm = CHF_ID(idir, 4)]
+
+      CHF_MULTIDO[faceBox;i;j;k;l;m]
+
+        val = cellF(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm])*cellG(CHF_IX[i;j;k;l;m])
+     &      + cellG(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm])*cellF(CHF_IX[i;j;k;l;m])
+
+        faceFG(CHF_IX[i;j;k;l;m]) = val * half
+
+      CHF_ENDDO
+
+      return
+      end
+
+c ----------------------------------------------------------
+c  average face values based ZIP method
+c
+c  faceFG = face-centered phi value
+c  cellF  = cell-centered phi
+c  cellG  = cell-centered phi
+c  -------------------------------------------------------------
+      subroutine ZIP_TO_FACE_ANTISKEW( CHF_BOX[faceBox],
+     &                        CHF_CONST_INT[idir],
+     &                        CHF_CONST_FRA1[cellU],
+     &                        CHF_CONST_FRA1[cellFU],
+     &                        CHF_CONST_FRA1[cellV],
+     &                        CHF_CONST_FRA1[cellFV],
+     &                        CHF_FRA1[faceFUV] )
+
+
+      integer CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3);
+      mm = CHF_ID(idir, 4)]
+
+      CHF_MULTIDO[faceBox;i;j;k;l;m]
+
+        val = cellFU(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm])*cellV(CHF_IX[i;j;k;l;m])
+     &      + cellV(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm])*cellFU(CHF_IX[i;j;k;l;m])
+     &      + cellFV(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm])*cellU(CHF_IX[i;j;k;l;m])
+     &      + cellU(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm])*cellFV(CHF_IX[i;j;k;l;m])
+
+        faceFUV(CHF_IX[i;j;k;l;m]) = val / four
+
+      CHF_ENDDO
+
+      return
+      end
+
+
+c ----------------------------------------------------------
 c  Cross product VB on faces where B lives on faces
 c  and V lives on cells
 c
@@ -1345,6 +1469,61 @@ c  -------------------------------------------------------------
       CHF_ENDDO
 
       return
+      end
+
+c ----------------------------------------------------------
+c  mapped gradient, 2nd-order upwind
+c
+c  gradPhi <=> cell-centered gradient
+c  cellPhi  => cell-centered phi
+c  faceVel  => normal velocity on faces
+c  faceBox  =>
+c  idir     =>
+c  -------------------------------------------------------------
+      subroutine UW2_MAPPED_GRADIENT(CHF_FRA1[gradPhi],
+     &                               CHF_CONST_FRA1[cellPhi],
+     &                               CHF_CONST_FRA1[normVel],
+     &                               CHF_BOX[box],
+     &                               CHF_CONST_REAL[dX],
+     &                               CHF_CONST_INT[idir] )
+
+
+      integer n, ncell, CHF_DDECL[i;j;k;l;m]
+      integer CHF_DDECL[ii;jj;kk;ll;mm]
+      REAL_T val
+
+      CHF_DTERM[
+      ii = CHF_ID(idir, 0);
+      jj = CHF_ID(idir, 1);
+      kk = CHF_ID(idir, 2);
+      ll = CHF_ID(idir, 3);
+      mm = CHF_ID(idir, 4)]
+
+
+      CHF_MULTIDO[box;i;j;k;l;m]
+
+        if( normVel(CHF_IX[i;j;k;l;m]).gt.zero ) then
+          val = one         
+     &          * cellPhi(CHF_IX[i-2*ii;j-2*jj;k-2*kk;l-2*ll;m-2*mm])
+     &        - four    
+     &          * cellPhi(CHF_IX[i-ii;j-jj;k-kk;l-ll;m-mm])
+     &        + three
+     &          * cellPhi(CHF_IX[i;j;k;l;m])
+        else
+          val = - one         
+     &          * cellPhi(CHF_IX[i+2*ii;j+2*jj;k+2*kk;l+2*ll;m+2*mm])
+     &        + four  
+     &          * cellPhi(CHF_IX[i+ii;j+jj;k+kk;l+ll;m+mm])
+     &        - three
+     &          * cellPhi(CHF_IX[i;j;k;l;m])
+        end if
+
+c.......assign gradient value
+        gradPhi(CHF_IX[i;j;k;l;m]) = val / two / dX
+
+      CHF_ENDDO
+
+      return 
       end
 
 c ----------------------------------------------------------

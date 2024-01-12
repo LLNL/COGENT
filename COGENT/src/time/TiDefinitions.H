@@ -10,7 +10,6 @@ typedef enum {_explicit_op_, _implicit_op_} tiOpType;
 typedef enum {
   chkpt_naive,          /* no checkpoint-based optimizations */
   chkpt_pre_time_step,  /* pre-timestep */
-  chkpt_ti_init,        /* initializeing the time integrators */
   chkpt_ti_advance_1,   /* in time step, before stage calculation */
   chkpt_ti_advance_2,   /* in time step, after stage calculation */
   chkpt_ti_advance_3,   /* in time step, before step completion */

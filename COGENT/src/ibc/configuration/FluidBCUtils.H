@@ -144,13 +144,14 @@ namespace FluidBCUtils {
       a_geometry.setdXdxiOnCells( grids, a_BfJ.ghostVect());
       a_geometry.setPointwiseNJInverseOnCells( grids, a_BfJ.ghostVect() );
       const LevelData<FArrayBox>& Ja = a_geometry.getCellCenteredJacobian();
-      //const LevelData<FArrayBox>& Xphys = a_geometry.getCellCenteredRealCoords();
+      const LevelData<FArrayBox>& Xphys = a_geometry.getCellCenteredRealCoords();
       const LevelData<FArrayBox>& dxidX = a_geometry.getCellCentereddxidX();
       const LevelData<FArrayBox>& dXdxi = a_geometry.getCellCentereddXdxi();
 
       for (int b(0); b<a_all_bdry_layouts.size(); b++) {
          const BoundaryBoxLayout& bdry_layout( *(a_all_bdry_layouts[b]) );
          const DisjointBoxLayout& bdry_grids( bdry_layout.disjointBoxLayout() );
+         const int bdry_dir = bdry_layout.dir();
  
          const std::string this_bc_type (a_all_bc_type[b]);
          if(this_bc_type=="dirichlet" || this_bc_type=="fixed_ghosts") { // setBCs that use bdry_data
@@ -170,7 +171,7 @@ namespace FluidBCUtils {
             // grow fill box to include tranverse ghosts 
             const Box fill_box( bdry_grids[dit] );
             IntVect grow_vect = a_BfJ.ghostVect();
-            grow_vect[bdry_layout.dir()] = 0;
+            grow_vect[bdry_dir] = 0;
             Box fill_box_grown = grow(fill_box,grow_vect);
             
             // set the BCs according to the BC type
@@ -178,30 +179,43 @@ namespace FluidBCUtils {
                Box this_box = this_BfJ.box();
                FArrayBox this_BfJ_copy(this_box, a_BfJ.nComp());
                SpaceUtils::copy(this_BfJ_copy,this_BfJ,this_box);
-               projectOntoFluxSurfaceDir( this_BfJ_copy, dxidX[interior_dit], 
-                                          dXdxi[interior_dit], bdry_layout.dir(), 0 );
+               FORT_CONTRA_TO_COVAR( CHF_BOX(this_box),
+                                     CHF_CONST_FRA(dXdxi[interior_dit]),
+                                     CHF_FRA(this_BfJ_copy) );
+               //projectOntoFluxSurfaceDir( this_BfJ_copy, dxidX[interior_dit], 
+               //                           dXdxi[interior_dit], bdry_dir, 0 );
                FourthOrderBC::setCellBC( this_BfJ_copy,
                                          this_face_val,
                                          fill_box_grown,
                                          this_bc_type,
-                                         bdry_layout.dir(),
+                                         bdry_dir,
                                          bdry_layout.side() );
-               projectOntoFluxSurfaceDir( this_BfJ_copy, dxidX[interior_dit], 
-                                          dXdxi[interior_dit], bdry_layout.dir(), 1 );
+               FORT_COVAR_TO_CONTRA( CHF_BOX(this_box),
+                                     CHF_CONST_FRA(dxidX[interior_dit]),
+                                     CHF_FRA(this_BfJ_copy) );
+               //projectOntoFluxSurfaceDir( this_BfJ_copy, dxidX[interior_dit], 
+               //                           dXdxi[interior_dit], bdry_dir, 1 );
                SpaceUtils::copy(this_BfJ,this_BfJ_copy,fill_box_grown);
             }
-            else if(this_bc_type=="extrapolateJ" || this_bc_type=="neumannJ") {
+            else if(this_bc_type=="extrapolateJ" || this_bc_type=="neumannJ" 
+                 || this_bc_type=="extrapolateR" || this_bc_type=="neumannR") {
                Box this_box = this_BfJ.box();
                FArrayBox this_BfJ_copy(this_box, a_BfJ.nComp());
                SpaceUtils::copy(this_BfJ_copy,this_BfJ,this_box);
                const FArrayBox& this_Ja( Ja[interior_dit] );
-               //const FArrayBox& this_Xphys( Xphys[interior_dit] );
+               const FArrayBox& this_Xphys( Xphys[interior_dit] );
                const MagBlockCoordSys& coord_sys = a_geometry.getBlockCoordSys(grids[interior_dit]);
                bool twoDaxisymm = coord_sys.isAxisymmetric();
                if(twoDaxisymm) {
-                  for (int n=0; n<this_BfJ_copy.nComp(); n++) {
-                     this_BfJ_copy.mult(this_Ja,this_BfJ_copy.box(),0,n,1);
-                     //this_BfJ_copy.mult(this_Xphys,this_BfJ_copy.box(),0,n,1);
+                  if(this_bc_type=="neumannR") {
+                     for (int n=0; n<this_BfJ_copy.nComp(); n++) {
+                        this_BfJ_copy.mult(this_Xphys,this_BfJ_copy.box(),0,n,1);
+                     }
+                  }
+                  else { 
+                     for (int n=0; n<this_BfJ_copy.nComp(); n++) {
+                        this_BfJ_copy.mult(this_Ja,this_BfJ_copy.box(),0,n,1);
+                     }
                   }
                }
                
@@ -211,12 +225,18 @@ namespace FluidBCUtils {
                                          this_face_val,
                                          fill_box_grown,
                                          this_bc_type_sub,
-                                         bdry_layout.dir(),
+                                         bdry_dir,
                                          bdry_layout.side() );
                if(twoDaxisymm) {
-                  for (int n=0; n<this_BfJ_copy.nComp(); n++) {
-                     this_BfJ_copy.divide(this_Ja,this_BfJ_copy.box(),0,n,1);
-                     //this_BfJ_copy.divide(this_Xphys,this_BfJ_copy.box(),0,n,1);
+                  if(this_bc_type=="neumannR") {
+                     for (int n=0; n<this_BfJ_copy.nComp(); n++) {
+                        this_BfJ_copy.divide(this_Xphys,this_BfJ_copy.box(),0,n,1);
+                     }
+                  }
+                  else { 
+                     for (int n=0; n<this_BfJ_copy.nComp(); n++) {
+                        this_BfJ_copy.divide(this_Ja,this_BfJ_copy.box(),0,n,1);
+                     }
                   }
                }
                SpaceUtils::copy(this_BfJ,this_BfJ_copy,fill_box_grown);
@@ -225,18 +245,258 @@ namespace FluidBCUtils {
                // do nothing for this, as it will be set elsewhere
             } 
             else {
+               std::string bc_type = this_bc_type;
+               if(this_bc_type == "neumann_phys") bc_type = "extrapolate";
+               if(this_bc_type == "noStress_phys") bc_type = "extrapolate";
                FourthOrderBC::setCellBC( this_BfJ,
                                          this_face_val,
                                          fill_box_grown,
-                                         this_bc_type,
-                                         bdry_layout.dir(),
+                                         bc_type,
+                                         bdry_dir,
                                          bdry_layout.side() );
+               if(this_bc_type == "noStress_phys") { // zero value for normal
+                  bc_type = "odd";
+                  Box this_box = this_BfJ.box();
+                  FArrayBox this_BfJ_norm(this_box, 1);
+                  this_BfJ_norm.copy(this_BfJ,bdry_dir,0,1);
+                  FourthOrderBC::setCellBC( this_BfJ_norm,
+                                            this_face_val,
+                                            fill_box_grown,
+                                            bc_type,
+                                            bdry_dir,
+                                            bdry_layout.side() );
+                  this_BfJ.copy(this_BfJ_norm,fill_box_grown,0,
+                                              fill_box_grown,bdry_dir,1);
+             
+               }
             } 
          }
+
          }
       }
    }
-   
+    
+   inline
+   void setNeumannPhysBC( LevelData<FArrayBox>&  a_phi,
+                    const int                    a_phi_comp,
+                    const BoundaryBoxLayout&     a_bdry_layout,
+                    const MagGeom&               a_geometry )
+   {
+      CH_TIME("FluidBCUtils::setNeumannPhysBC");
+      // Note: a_phi is assumed to have all ghost cells pre-filled via extrapolation
+      //       (needed for computing derivative tangential to the surface)
+      //
+      // Fill ghost cells based on zero gradient normal to a physical boundary:
+      // n_i\cdot\nabla\phi = 0, with n_i the unit normal to the boundary surface. 
+      // The grid is assumed to be aligned with the physical boundary, thus n_i is 
+      // equal to the bdry_dir comp of the contravariant unit vector.
+      //
+      // n_i\cdot\nabla\phi = 0 ==> g^{ij}*dphi/dxi_j ==>
+      // dphi/dxi_i = -(g^{ij}*dphi/dxi_j + g^{ik}*dphi/dxi_k)/g^{ii}
+
+      const DisjointBoxLayout& grids = a_phi.getBoxes();
+      a_geometry.setPointwiseNJInverseOnFaces( grids, a_phi.ghostVect() );
+      const LevelData<FluxBox>& dxidX_fc = a_geometry.getFaceCentereddxidX();
+      const int bdry_dir = a_bdry_layout.dir();
+
+      const DisjointBoxLayout& bdry_grids( a_bdry_layout.disjointBoxLayout() );
+      for (DataIterator dit( bdry_grids ); dit.ok(); ++dit) {
+            
+         const DataIndex& interior_dit( a_bdry_layout.dataIndex(dit) );
+         FArrayBox& this_phi( a_phi[interior_dit] );
+        
+         const Box fill_box( bdry_grids[dit] );
+            
+         // create face box that lives on bdry and is
+         // 1 cell thick in the bdry_dir direction 
+         const int ISIDE(a_bdry_layout.side());
+         Box bdry_face_box( bdry_grids[dit] );
+         bdry_face_box.surroundingNodes(bdry_dir);
+         if(ISIDE==1) bdry_face_box.setBig(bdry_dir,bdry_face_box.smallEnd(bdry_dir));
+         if(ISIDE==0) bdry_face_box.setSmall(bdry_dir,bdry_face_box.bigEnd(bdry_dir));
+            
+         // interpolate phi to bdry face (including transverse ghosts)
+         IntVect grow_vect = a_phi.ghostVect();
+         grow_vect[bdry_dir] = 0;
+         Box bdry_face_box_grown = grow(bdry_face_box,grow_vect);
+         FArrayBox bdry_phi(bdry_face_box_grown,a_phi.nComp());
+         SpaceUtils::faceInterpolate( bdry_dir, bdry_face_box_grown, 2, this_phi, bdry_phi);
+
+         // compute tangential derivatives on valid boundary faces
+         const MagBlockCoordSys& coord_sys = a_geometry.getBlockCoordSys(grids[interior_dit]);
+         const RealVect dX = coord_sys.getMappedCellSize();
+         FArrayBox dfdXt(bdry_face_box, SpaceDim);
+         dfdXt.setVal(0.0,bdry_dir);
+         for (int t_dir=0; t_dir<SpaceDim; t_dir++) {
+            if(t_dir==bdry_dir) continue;
+            SpaceUtils::cellCenteredGradientComponent( bdry_face_box,
+                                                       t_dir,
+                                                       bdry_phi,
+                                                       dX,
+                                                       2,
+                                                       dfdXt,
+                                                       a_phi_comp );
+         }
+         
+         // convert df/dXt from covar to contravar (f^i = g^{ij}f_j)
+         const FArrayBox& this_dxidX_fc( dxidX_fc[interior_dit][bdry_dir] );
+         FORT_COVAR_TO_CONTRA( CHF_BOX(bdry_face_box),
+                               CHF_CONST_FRA(this_dxidX_fc),
+                               CHF_FRA(dfdXt) );
+
+         // compute the bdry value for the bdry_dir derivative
+         FArrayBox dfdxi_n(bdry_face_box,1);
+         Real bdry_val, en0, en1, en2, gnn;
+         int comp_n0 = bdry_dir;
+         int comp_n1 = SpaceDim + bdry_dir;
+         int comp_n2 = 2*SpaceDim + bdry_dir;
+         IntVect ib;
+         BoxIterator bit(bdry_face_box); 
+         for(bit.begin(); bit.ok(); ++bit) {
+            ib = bit();
+            en0 = this_dxidX_fc.get(ib,comp_n0);
+            en1 = this_dxidX_fc.get(ib,comp_n1);
+            en2 = this_dxidX_fc.get(ib,comp_n2);
+            gnn = en0*en0 + en1*en1 + en2*en2;
+            bdry_val = -dfdXt(ib,bdry_dir)/gnn;
+            dfdxi_n.set(ib,0,bdry_val);
+         } 
+         
+         // iterate over bdry_face_box to set ghost cell values
+         const int nG = a_phi.ghostVect()[bdry_dir];
+         int nG_start, nV_start;
+         if(ISIDE==0) nG_start = fill_box.bigEnd(bdry_dir);
+         if(ISIDE==1) nG_start = fill_box.smallEnd(bdry_dir);
+         const int sign = 2*ISIDE - 1;
+         nV_start = nG_start - sign;
+
+         IntVect ib_G, ib_V;
+         Real bdry_deriv;
+         const Real dXn = dX[bdry_dir];
+         for(bit.begin(); bit.ok(); ++bit) {
+            ib = bit();
+            bdry_deriv = dfdxi_n.get(ib,0);
+            for (int n=0; n<nG; n++) {
+               ib_G = ib;
+               ib_V = ib;
+               ib_G[bdry_dir] = nG_start + sign*n;
+               ib_V[bdry_dir] = nV_start - sign*n;
+               bdry_val = this_phi.get(ib_V,a_phi_comp) + sign*(2*n+1)*dXn*bdry_deriv;
+               this_phi.set(ib_G,a_phi_comp,bdry_val);
+            }
+         }
+      
+      } 
+
+   }
+
+   inline
+   void setNoStressPhysBC( LevelData<FArrayBox>&  a_V_contra,
+                     const BoundaryBoxLayout&     a_bdry_layout,
+                     const MagGeom&               a_geometry )
+   {
+      CH_TIME("FluidBCUtils::setNoStressPhysBC");
+      // Note: a_V_contra is assumed to have all ghost cells pre-filled via extrapolation
+      //       for dir neq bdry_dir and via zero value at bdry for dir = bdry_dir
+      //       (needed for computing derivative tangential to the surface)
+
+      // copy Vcontra to a new container and convet to covar
+      const DisjointBoxLayout& grids = a_V_contra.getBoxes();
+      a_geometry.setdXdxiOnCells( grids, a_V_contra.ghostVect() );
+      const LevelData<FArrayBox>& dXdxi = a_geometry.getCellCentereddXdxi();
+      LevelData<FArrayBox> V_covar(grids, a_V_contra.nComp(), a_V_contra.ghostVect());
+      
+      const DisjointBoxLayout& bdry_grids( a_bdry_layout.disjointBoxLayout() );
+      for (DataIterator dit( bdry_grids ); dit.ok(); ++dit) {
+            
+         const DataIndex& interior_dit( a_bdry_layout.dataIndex(dit) );
+         const FArrayBox& this_dXdxi( dXdxi[interior_dit] );
+         const FArrayBox& this_Vcontra( a_V_contra[interior_dit] );
+               FArrayBox& this_Vcovar( V_covar[interior_dit] );
+      
+         // copy Vcontra to new container and convert to covar
+         Box this_box = this_Vcontra.box();
+         this_Vcovar.copy(this_Vcontra,this_box);
+         
+         FORT_CONTRA_TO_COVAR( CHF_BOX(this_box),
+                               CHF_CONST_FRA(this_dXdxi),
+                               CHF_FRA(this_Vcovar) );
+
+      } 
+
+      // apply NeumannPhysBC to V_covar in tangential directions
+      const int bdry_dir = a_bdry_layout.dir();
+      const int dir_j = (bdry_dir + 1) % SpaceDim;
+      const int dir_k = (bdry_dir + 2) % SpaceDim;
+      setNeumannPhysBC( V_covar, dir_j, a_bdry_layout, a_geometry );  
+      setNeumannPhysBC( V_covar, dir_k, a_bdry_layout, a_geometry );  
+
+      // use algebra to compute contravariant V^j and V^k given 
+      // V^i, V_j, and V_k:
+      // V_j - g_ji*V^i = g_jj*V^j + g_jk*V^k
+      // V_k - g_ki*V^i = g_kj*V^j + g_kk*V^k
+
+      for (DataIterator dit( bdry_grids ); dit.ok(); ++dit) {
+            
+         const Box fill_box( bdry_grids[dit] );
+         const DataIndex& interior_dit( a_bdry_layout.dataIndex(dit) );
+         const FArrayBox& this_dXdxi = dXdxi[interior_dit];
+         const FArrayBox& this_Vcovar( V_covar[interior_dit] );
+         FArrayBox& this_Vcontra( a_V_contra[interior_dit] );
+
+         Real Vi, Vj, Vk, V_jmod, V_kmod;
+         Real e_i0, e_i1, e_i2, g_ji, g_ki;
+         Real e_j0, e_j1, e_j2, g_jj, g_jk;
+         Real e_k0, e_k1, e_k2, g_kj, g_kk;
+         const int SD2 = SpaceDim*SpaceDim;
+         const int comp_i0 = bdry_dir*SpaceDim;
+         const int comp_i1 = bdry_dir*SpaceDim + 1;
+         const int comp_i2 = bdry_dir*SpaceDim + 2;
+         const int comp_j0 = (comp_i0 + SpaceDim) % SD2;
+         const int comp_j1 = (comp_i1 + SpaceDim) % SD2;
+         const int comp_j2 = (comp_i2 + SpaceDim) % SD2;
+         const int comp_k0 = (comp_j0 + SpaceDim) % SD2;
+         const int comp_k1 = (comp_j1 + SpaceDim) % SD2;
+         const int comp_k2 = (comp_j2 + SpaceDim) % SD2;
+
+         IntVect ib;
+         BoxIterator bit(fill_box); 
+         for(bit.begin(); bit.ok(); ++bit) {
+            ib = bit();
+
+            e_i0 = this_dXdxi.get(ib,comp_i0);
+            e_i1 = this_dXdxi.get(ib,comp_i1);
+            e_i2 = this_dXdxi.get(ib,comp_i2);
+            e_j0 = this_dXdxi.get(ib,comp_j0);
+            e_j1 = this_dXdxi.get(ib,comp_j1);
+            e_j2 = this_dXdxi.get(ib,comp_j2);
+            e_k0 = this_dXdxi.get(ib,comp_k0);
+            e_k1 = this_dXdxi.get(ib,comp_k1);
+            e_k2 = this_dXdxi.get(ib,comp_k2);
+
+            g_ji = e_j0*e_i0 + e_j1*e_i1 + e_j2*e_i2;
+            g_jj = e_j0*e_j0 + e_j1*e_j1 + e_j2*e_j2;
+            g_jk = e_j0*e_k0 + e_j1*e_k1 + e_j2*e_k2;
+            g_ki = e_k0*e_i0 + e_k1*e_i1 + e_k2*e_i2;
+            g_kj = g_jk;
+            g_kk = e_k0*e_k0 + e_k1*e_k1 + e_k2*e_k2;
+
+            Vi = this_Vcontra.get(ib,bdry_dir);
+            V_jmod = this_Vcovar.get(ib,dir_j) - g_ji*Vi; 
+            V_kmod = this_Vcovar.get(ib,dir_k) - g_ki*Vi; 
+
+            Vj = (g_kk*V_jmod - g_jk*V_kmod)/(g_kk*g_jj - g_kj*g_jk);
+            Vk = (g_jj*V_kmod - g_kj*V_jmod)/(g_kk*g_jj - g_kj*g_jk);
+
+            this_Vcontra.set(ib,dir_j,Vj); 
+            this_Vcontra.set(ib,dir_k,Vk);
+
+         } 
+      
+      }
+      
+   }
+ 
    inline
    void convertContravarToCovar( FluxBox&    a_F,
                            const FluxBox&    a_dXdxi,
@@ -244,6 +504,8 @@ namespace FluidBCUtils {
    {
       CH_TIME("FluidBCUtils::convertContravarToCovar() on FluxBox");
    
+      // orthogonal coords assumed near boundaries
+
       // convert a_dir comp of contravariant vector a_F
       // to covariant or vice versa if a_inverse not zero
       CH_assert(a_F.nComp() == 1);
@@ -253,11 +515,11 @@ namespace FluidBCUtils {
          FArrayBox& this_F_on_dir = a_F[dir];
          const Box& thisbox = a_F.box();
         
-         FORT_CONTRA_TO_COVAR( CHF_BOX(thisbox),
-                               CHF_CONST_FRA(dXdxi_on_dir),
-                               CHF_CONST_INT(dir),
-                               CHF_CONST_INT(a_inverse),
-                               CHF_FRA1(this_F_on_dir,0) );
+         FORT_CONTRA_TO_COVAR_ORTHO( CHF_BOX(thisbox),
+                                     CHF_CONST_FRA(dXdxi_on_dir),
+                                     CHF_CONST_INT(dir),
+                                     CHF_CONST_INT(a_inverse),
+                                     CHF_FRA1(this_F_on_dir,0) );
       }
    }
    
@@ -276,6 +538,8 @@ namespace FluidBCUtils {
       for (int b(0); b<a_all_bdry_layouts.size(); b++) {
          const BoundaryBoxLayout& bdry_layout( *(a_all_bdry_layouts[b]) );
          const std::string this_bc_type (a_all_bc_type[b]);
+         
+         if(this_bc_type=="insulatorConductor_B") continue;
          
          const DisjointBoxLayout& bdry_grids( bdry_layout.disjointBoxLayout() );
          for (DataIterator dit( bdry_grids ); dit.ok(); ++dit) {
@@ -300,15 +564,25 @@ namespace FluidBCUtils {
                }
 
             } 
+            else if( this_bc_type=="extrapolate" ) {
+               
+               FourthOrderBC::setFluxBC( this_a_dst,
+                                         fill_box,
+                                         this_bc_type,
+                                         bdry_layout.dir(),
+                                         bdry_layout.side() );
+
+            }
             else if( this_bc_type=="symmetry" || this_bc_type=="wall" ) {
                
                // Passed FluxBox is contravariant on faces
                // Boundary condition is applied to covariant vector for non-dir directions
-               //
+
                Box this_box = this_a_dst.box();
                FluxBox this_a_dst_copy(this_box, a_dst.nComp());
                this_a_dst_copy.copy(this_a_dst,this_box);
                convertContravarToCovar( this_a_dst_copy, dXdxi[interior_dit], 0 );
+
                const int this_dir = bdry_layout.dir();
                Box this_box_dir = this_a_dst[this_dir].box();
                this_a_dst_copy[this_dir].copy(this_a_dst[this_dir],this_box_dir);
@@ -488,6 +762,47 @@ namespace FluidBCUtils {
                if(bdry_side==0) fill_box_grown.setSmall(bdry_dir,src_box.smallEnd(bdry_dir));
                this_dst.copy(fill_box_grown, a_dst.interval(), fill_box_grown, this_src, a_src.interval());
             }
+         }
+
+      }
+   }
+   
+   inline
+   void setNodeBC( LevelData<NodeFArrayBox>& a_dst,
+             const BoundaryBoxLayoutPtrVect& a_all_bdry_layouts,
+             const LevelData<NodeFArrayBox>& a_src )
+   {
+      CH_TIME("FluidBCUtils::setNodeBC() from setNodeBC()");
+      CH_assert(a_dst.nComp() == a_src.nComp());
+
+      for (int b(0); b<a_all_bdry_layouts.size(); b++) {
+         const BoundaryBoxLayout& bdry_layout( *(a_all_bdry_layouts[b]) );
+         const DisjointBoxLayout& bdry_grids( bdry_layout.disjointBoxLayout() );
+         const int bdry_dir = bdry_layout.dir();
+         const int bdry_side = bdry_layout.side();
+
+         for (DataIterator dit( bdry_grids ); dit.ok(); ++dit) {
+    
+            FArrayBox& this_dst( a_dst[bdry_layout.dataIndex(dit)].getFab() );
+            const FArrayBox& this_src( a_src[bdry_layout.dataIndex(dit)].getFab() );
+            
+            Box fill_box( bdry_grids[dit] );
+            if(a_src.ghostVect()==IntVect::Zero) {
+               Box fill_box = this_src.box();
+            } 
+            else {
+               fill_box.surroundingNodes();
+               IntVect grow_vect = a_dst.ghostVect();
+               grow_vect[bdry_dir] = 0;
+               //Box fill_box_grown = grow(fill_box,grow_vect);
+               fill_box.grow(grow_vect);
+               const Box& src_box = this_src.box();
+               if(bdry_side==1) fill_box.setBig(bdry_dir,src_box.bigEnd(bdry_dir));
+               if(bdry_side==0) fill_box.setSmall(bdry_dir,src_box.smallEnd(bdry_dir));
+            }
+
+            this_dst.copy(fill_box, a_dst.interval(), fill_box, this_src, a_src.interval());
+
          }
 
       }

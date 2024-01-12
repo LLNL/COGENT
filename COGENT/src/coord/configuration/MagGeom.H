@@ -126,6 +126,8 @@ public:
    void multJonFaces( LevelData<FluxBox>& dfn ) const;
    
    void multJonEdges( LevelData<EdgeDataBox>& dfn ) const;
+   
+   void multJonNodes( LevelData<NodeFArrayBox>& dfn ) const;
 
    void divideCellVolume( LevelData<FArrayBox>& a_data ) const;
 
@@ -134,6 +136,8 @@ public:
    void divideJonFaces( LevelData<FluxBox>& dfn ) const;
    
    void divideJonEdges( LevelData<EdgeDataBox>& dfn ) const;
+   
+   void divideJonNodes( LevelData<NodeFArrayBox>& dfn ) const;
 
    void multPointwiseJ( LevelData<FArrayBox>& dfn,
                         const BoundaryBoxLayout& bdry_layout ) const;
@@ -173,46 +177,59 @@ public:
    void PerpGradAtCellsFromEdges( LevelData<FArrayBox>&    a_gradF,
                             const LevelData<EdgeDataBox>&  a_F ) const;
 
-   void mappedGridCurlFromEdgeTans( const LevelData<EdgeDataBox>&  E,
-                                    const int                      face_dir,
-                                          LevelData<FArrayBox>&    face_curl) const;
-   
    void mappedCovarCurlofVirtComp( LevelData<EdgeDataBox>&  a_JaCurlF_covar,
                              const LevelData<FluxBox>&      a_gradF_covar) const;
    
-   void mappedGridCurlofVirtComp( LevelData<EdgeDataBox>&  edge_curl, 
-                            const LevelData<FArrayBox>&    F ) const;
+   void mappedCovarCurlVirt( LevelData<NodeFArrayBox>&  a_JaCurlFv_contra,
+                       const LevelData<FluxBox>&        a_Fvec_covar) const;
    
-   void mappedGridCurlofVirtComp( LevelData<FArrayBox>&  cell_curl,
-                            const LevelData<FArrayBox>&  F ) const;
+   void mappedGridCurlofVirtComp( LevelData<FArrayBox>&  a_JaCurlFy_contra,
+                            const LevelData<FArrayBox>&  a_Fy_covar ) const;
    
+   void mappedGridCurlofVirtComp( LevelData<EdgeDataBox>&  a_JaCurlFy_contra, 
+                            const LevelData<FArrayBox>&    a_Fy_covar ) const;
+
    void mappedGridCurl( LevelData<FArrayBox>&  a_JaCurlF_phys,
                   const LevelData<FArrayBox>&  a_F_covar ) const;
    
-   void mappedGridCurl3D( LevelData<EdgeDataBox>&  a_JaCurlB_ce,
-                    const LevelData<FluxBox>&      a_B_cf ) const;
-   
-   void mappedGridCurl3D( LevelData<FluxBox>&      a_JaCurlB_cf,
-                    const LevelData<EdgeDataBox>&  a_B_ce ) const;
-   
-   
+   void mappedGridCurl( LevelData<FArrayBox>&  a_JaCurlF_phys,
+                  const LevelData<FluxBox>&    a_F_covar ) const;
+
+   void mappedGridCurl3D( LevelData<FluxBox>&      a_JaCurlF_contra,
+                    const LevelData<EdgeDataBox>&  a_F_covar ) const;
+
+   void mappedGridCurl2D( LevelData<FluxBox>&        a_JaCurlF_contra,
+                    const LevelData<NodeFArrayBox>&  a_F_covar ) const;
+
+   void mappedGridCurl2D( LevelData<FArrayBox>&    a_JaCurlF_contra,
+                    const LevelData<EdgeDataBox>&  a_F_covar ) const;
+
    void convertPhysToCovar( LevelData<FArrayBox>&  a_F,
-                      const int                    a_inverse) const;
+                      const int                    a_inverse ) const;
    
    void convertPhysToCovar( LevelData<FluxBox>&  a_F,
-                      const int                  a_inverse) const;
+                      const int                  a_inverse ) const;
+   
+   void convertPhysToCovar( LevelData<EdgeDataBox>&  a_F,
+                      const int                      a_inverse ) const;
    
    void convertPhysToContravar( LevelData<FArrayBox>&  a_F,
-                          const int                    a_inverse) const;
+                          const int                    a_inverse ) const;
    
    void convertPhysToContravar( LevelData<FluxBox>&  a_F,
-                          const int                  a_inverse) const;
+                          const int                  a_inverse ) const;
    
-   void convertContravarToCovar( LevelData<EdgeDataBox>&  a_F,
-                           const int                      a_inverse ) const;
+   void convertPhysToContravar( LevelData<EdgeDataBox>&  a_F,
+                          const int                      a_inverse ) const;
+   
+   void convertContravarToCovar( LevelData<FArrayBox>&  a_F,
+                           const int                    a_inverse ) const;
    
    void convertContravarToCovar( LevelData<FluxBox>&  a_F,
                            const int                  a_inverse ) const;
+   
+   void convertContravarToCovar( LevelData<EdgeDataBox>&  a_F,
+                           const int                      a_inverse ) const;
    
    void computeJaStrainTensorPhys( LevelData<FluxBox>&    a_JaW_phys, 
                              const LevelData<FArrayBox>&  a_velocity_phys ) const;
@@ -247,12 +264,18 @@ public:
    const LevelData<FArrayBox>& getCellCentereddxidX() const {return m_NJinverse_cell_centered;}
 
    const LevelData<FluxBox>& getFaceCenteredRealCoords() const {return m_face_centered_real_coords;}
+   
+   const LevelData<FluxBox>& getFaceCenteredJacobian() const {return m_J_fc;}
 
-   const LevelData<FluxBox>& getFaceCentereddXdxi() const {return m_dXdxi_onFaces;}
+   const LevelData<FluxBox>& getFaceCentereddXdxi() const {return m_dXdxi_fc;}
+   
+   const LevelData<FluxBox>& getFaceCentereddxidX() const {return m_NJinverse_fc;}
 
    const LevelData<EdgeDataBox>& getEdgeCenteredRealCoords() const {return m_edge_centered_real_coords;}
 
-   const LevelData<EdgeDataBox>& getEdgeCentereddXdxi() const {return m_dXdxi_onEdges;}
+   const LevelData<EdgeDataBox>& getEdgeCentereddXdxi() const {return m_dXdxi_ec;}
+   
+   const LevelData<EdgeDataBox>& getEdgeCentereddxidX() const {return m_NJinverse_ec;}
 
    const LevelData<FArrayBox>& getNormalizedMagneticFluxCell() const {return m_normalized_magnetic_flux_cell;}
 
@@ -653,20 +676,20 @@ private:
    mutable LevelData<FArrayBox> m_face_areas_cc;
 
    mutable LevelData<FArrayBox> m_J;
-   mutable LevelData<FluxBox> m_JonFaces;
-   mutable LevelData<EdgeDataBox> m_JonEdges;
-   mutable LevelData<NodeFArrayBox> m_JonNodes;
+   mutable LevelData<FluxBox> m_J_fc;
+   mutable LevelData<EdgeDataBox> m_J_ec;
+   mutable LevelData<NodeFArrayBox> m_J_nc;
    mutable LevelData<FArrayBox> m_N;
    mutable LevelData<FArrayBox> m_dXdxi;
-   mutable LevelData<FluxBox> m_dXdxi_onFaces;
-   mutable LevelData<EdgeDataBox> m_dXdxi_onEdges;
+   mutable LevelData<FluxBox> m_dXdxi_fc;
+   mutable LevelData<EdgeDataBox> m_dXdxi_ec;
    mutable LevelData<FArrayBox> m_Xphys;
 
    mutable LevelData<FluxBox> m_metrics;
    mutable LevelData<FluxBox> m_tanGradN;
    mutable LevelData<FluxBox> m_N_face_centered;
-   mutable LevelData<FluxBox> m_NJinverse_face_centered;
-   mutable LevelData<EdgeDataBox> m_NJinverse_edge_centered;
+   mutable LevelData<FluxBox> m_NJinverse_fc;
+   mutable LevelData<EdgeDataBox> m_NJinverse_ec;
    mutable LevelData<FArrayBox> m_NJinverse_cell_centered;
    mutable LevelData<FArrayBox> m_poloidal_J;
 

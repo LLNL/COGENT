@@ -31,12 +31,22 @@ class InsulatorConductorBC
    void defineInsulatorConductorBinary( const LevelData<FArrayBox>&      a_data,
                                         const BoundaryBoxLayoutPtrVect&  a_all_bdry_layouts,
                                         const MagGeom&                   a_geometry ) const;
+  
+   void defineInsulatorConductorBinary( const LevelData<FluxBox>&        a_data,
+                                        const BoundaryBoxLayoutPtrVect&  a_all_bdry_layouts,
+                                        const MagGeom&                   a_geometry ) const;
    
    void defineInsulatorConductorBinary( const LevelData<EdgeDataBox>&    a_data,
                                         const BoundaryBoxLayoutPtrVect&  a_all_bdry_layouts,
                                         const MagGeom&                   a_geometry ) const;
    
    void applyBC( LevelData<FArrayBox>&      a_data,
+           const BoundaryBoxLayoutPtrVect&  a_all_bdry_layouts,
+           const Vector<string>&            a_all_bc_type,
+           const MagGeom&                   a_geometry,   
+           const Real                       a_time ) const;
+   
+   void applyFluxBC( LevelData<FluxBox>&    a_data,
            const BoundaryBoxLayoutPtrVect&  a_all_bdry_layouts,
            const Vector<string>&            a_all_bc_type,
            const MagGeom&                   a_geometry,   
@@ -66,7 +76,8 @@ private:
    RealVect m_Xmin_insulator;
    RealVect m_Xmax_insulator;
    mutable LevelData<FArrayBox> m_ICbinary;      // insulator conductor binary
-   mutable LevelData<EdgeDataBox> m_ICbinary_ce; // insulator conductor binary on edges
+   mutable LevelData<FluxBox> m_ICbinary_fc;     // insulator conductor binary on faces
+   mutable LevelData<EdgeDataBox> m_ICbinary_ec; // insulator conductor binary on edges
    RefCountedPtr<TimeFunction> m_timeFunction;
       
 };

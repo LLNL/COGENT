@@ -11,6 +11,11 @@ class Function
     virtual void evalFunction(T&, const T&, const T&, int) = 0;
     virtual void define(const T&, Ops&) = 0;
 
+    virtual bool checkLinearity(const T&)
+    {
+      return false;
+    }
+
     virtual Real computeStepNorm(const T&) const = 0;
 };
 

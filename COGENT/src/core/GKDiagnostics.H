@@ -82,6 +82,10 @@ class GKDiagnostics
                                  const CFG::CFGVars&,
                                  const string& ) const;
 
+    void getFluidNodeVarAtCell(  CFG::LevelData<CFG::FArrayBox>&,
+                                 const CFG::CFGVars&,
+                                 const string& ) const;
+
     void getFluidOpMember( CFG::LevelData<CFG::FArrayBox>&,
                            const CFG::CFGVars&,
                            const std::string& ) const;

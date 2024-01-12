@@ -49,6 +49,14 @@ namespace FourthOrderBC {
                            const int         a_dir,
                            const Side::LoHiSide&  a_side );
 
+   void setInsulatorConductorBC( FArrayBox&  a_Bdir,
+                           const FArrayBox&  a_ICbinary, 
+                           const int         a_dir,
+                           const Real        a_ft,
+                           const Box&        a_bdry_box,
+                           const int         a_bdry_dir,
+                           const Side::LoHiSide&  a_bdry_side );
+
    void setInsulatorConductorEdgeBC( EdgeDataBox&     a_dst,
                                const EdgeDataBox&     a_ICbinary_ce,
                                const Box&             a_fill_box,

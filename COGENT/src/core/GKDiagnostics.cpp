@@ -1103,8 +1103,10 @@ void GKDiagnostics::getFluidFaceVarAtCell(  CFG::LevelData<CFG::FArrayBox>&  a_v
                 CFG_DIM, ghostVect);
   a_fluid_vars.interpFaceVarToCell(a_var, a_var_name);
   
-  const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-  mag_geom.convertPhysToContravar(a_var,1); // 1 is for inverse
+  if(!a_fluid_vars.plotMappedFaceVars()) {
+     const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
+     mag_geom.convertPhysToContravar(a_var,1);
+  }
 
   return;   
 }
@@ -1120,8 +1122,24 @@ void GKDiagnostics::getFluidEdgeVarAtCell(  CFG::LevelData<CFG::FArrayBox>&  a_v
                  CFG_DIM, ghostVect );
   a_fluid_vars.interpEdgeVarToCell(a_var, a_var_name);
   
-  const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
-  mag_geom.convertPhysToCovar(a_var,1); // 1 is for inverse
+  if(!a_fluid_vars.plotMappedEdgeVars()) {
+     const CFG::MagGeom& mag_geom( m_phase_geometry->magGeom() );
+     mag_geom.convertPhysToCovar(a_var,1);
+  }
+
+  return;
+}
+
+void GKDiagnostics::getFluidNodeVarAtCell(  CFG::LevelData<CFG::FArrayBox>&  a_var,
+                                            const CFG::CFGVars&              a_fluid_vars,
+                                            const string&                    a_var_name ) const
+{
+  // convert var on node to var at cells
+  const CFG::IntVect& ghostVect
+     = a_fluid_vars.node_var(a_var_name).ghostVect();
+  a_var.define(  a_fluid_vars.node_var(a_var_name).getBoxes(),
+                 1, ghostVect );
+  a_fluid_vars.interpNodeVarToCell(a_var, a_var_name);
 
   return;
 }

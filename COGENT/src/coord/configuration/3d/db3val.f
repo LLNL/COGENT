@@ -533,10 +533,11 @@ C        ... GET COEFFICIENTS OF NONZERO BASIS FUNCTIONS IN (3)
 C
          IPOS = IXY - 1
          DO 50 K=KMIN,KMAX
-            DO 50 J=JMIN,JMAX
+            DO 51 J=JMIN,JMAX
                IPOS = IPOS + 1
                WORK(IPOS) = DB1VAL(XVAL,IDX,TX,NX,KX,FCN(1,J,K),INX,
-     +                            WORK(IW),IERR)
+     +              WORK(IW),IERR)
+   51       CONTINUE     
    50    CONTINUE
          IHAVEX = 1
 C

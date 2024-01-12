@@ -233,9 +233,13 @@ class COGENTTimeIntegration : public Simulation<Vector,System>
 
       int         m_plot_interval;
       Real        m_plot_time_interval;
+      Real        m_plot_time_tol_factor;
       Real        m_plot_time;
       int         m_last_plot;
       std::string m_plot_prefix;
+      
+      int m_pta_index;
+      std::vector<Real> m_plot_time_array;
       bool        m_write_odevec;
 
       System* m_system;
@@ -373,9 +377,11 @@ COGENTTimeIntegration<Vector,System>::COGENTTimeIntegration()
        m_checkpoint_prefix( "chk" ),
        m_plot_interval(0),
        m_plot_time_interval(0.0),
+       m_plot_time_tol_factor(1.0e-3),
        m_plot_time(0.0),
        m_last_plot(0),
        m_plot_prefix( "plt" ),
+       m_pta_index(0),
        m_write_odevec(false),
        m_system( NULL ),
        m_compute_op_matrices(false),
@@ -543,8 +549,9 @@ void COGENTTimeIntegration<Vector,System>::advance()
    }
    CH_STOP(t_print_diagnostcs);
 
-   if ( m_plot_time_interval>0.0 ) {
-      if ( m_cur_time>m_plot_time-m_cur_dt/1000.0 ) {
+   Real plot_time_tol = m_plot_time_tol_factor*m_cur_dt;
+   if ( m_plot_time_interval > 0.0 ) {
+      if ( m_cur_time > m_plot_time - plot_time_tol ) {
          writePlotFile();
          m_last_plot = m_cur_step;
          m_plot_time = m_plot_time + m_plot_time_interval;
@@ -554,6 +561,15 @@ void COGENTTimeIntegration<Vector,System>::advance()
       if ( (m_cur_step % m_plot_interval)==0 ) {
          writePlotFile();
          m_last_plot = m_cur_step;
+      }
+   }
+   
+   if (m_pta_index < m_plot_time_array.size() && m_last_plot != m_cur_step ) {
+      Real this_plot_time = m_plot_time_array.at(m_pta_index);
+      if ( m_cur_time > this_plot_time - plot_time_tol ) {
+         writePlotFile();
+         m_last_plot = m_cur_step;
+         m_pta_index = m_pta_index + 1;
       }
    }
 
@@ -693,10 +709,17 @@ void COGENTTimeIntegration<Vector,System>::parseParameters( ParmParse& a_ppsim )
    // Set up plot file writing
    a_ppsim.query( "plot_interval", m_plot_interval );
    a_ppsim.query( "plot_time_interval", m_plot_time_interval );
+   a_ppsim.query( "plot_time_tol_factor", m_plot_time_tol_factor );
    if( m_plot_time_interval>0.0 ) m_plot_interval = 0;
    a_ppsim.query( "plot_prefix", m_plot_prefix );
+   
+   if(m_plot_time_array.size()==0) {
+      int pta_length(0);
+      a_ppsim.query( "plot_time_array.number", pta_length );
+      m_plot_time_array.resize( pta_length );
+      if(pta_length>0) a_ppsim.getarr( "plot_time_array.list", m_plot_time_array, 0, pta_length );
+   }
    a_ppsim.query( "write_ode_vec", m_write_odevec );
-
 
    // compute linearized operator matrices?
    // Caution: a *very* slow process

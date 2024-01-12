@@ -154,7 +154,6 @@ void FourthOrderBC::setCellBC( FArrayBox&       a_this_soln,
    IntVect ghosts = a_boundary_box.size();
  
    if (a_bc_type == "odd") {
-
      int evenodd = -1; // -1 for odd
      FORT_FOURTH_ORDER_EVENODD_BC( CHF_FRA(a_this_soln),
                                CHF_BOX(a_boundary_box),
@@ -224,6 +223,42 @@ void FourthOrderBC::setInsulatorConductorBC( FArrayBox&  a_Bv,
                                 CHF_FRA1(a_Bv,0) );
 }
 
+void FourthOrderBC::setInsulatorConductorBC( FArrayBox&  a_Bdir,
+                                       const FArrayBox&  a_ICbinary, 
+                                       const int         a_dir,
+                                       const Real        a_ft,
+                                       const Box&        a_bdry_box,
+                                       const int         a_bdry_dir,
+                                       const Side::LoHiSide&  a_bdry_side )
+{
+   CH_TIMERS("FourthOrderBC::setInsulatorConductorBC()");
+   
+   //  insulator/conductor BC for in-plane magnetic field
+   //  a_ICbinary contains ones at insulator and zeros at conductor
+
+   const int ISIDE(a_bdry_side);
+   IntVect ghosts = a_bdry_box.size();
+      
+   if(a_dir==a_bdry_dir) {
+      int order = 4;
+      FORT_FOURTH_ORDER_EXTRAP_BC( CHF_FRA(a_Bdir),
+                                   CHF_BOX(a_bdry_box),
+                                   CHF_CONST_INT(a_bdry_dir),
+                                   CHF_CONST_INT(ISIDE),
+                                   CHF_CONST_INT(order) );
+   }
+   else {
+      FORT_INSULATOR_CONDUCTOR_BC( CHF_BOX(a_bdry_box),
+                                   CHF_CONST_INTVECT(ghosts),
+                                   CHF_CONST_INT(a_bdry_dir),
+                                   CHF_CONST_INT(ISIDE),
+                                   CHF_CONST_REAL(a_ft),
+                                   CHF_CONST_FRA1(a_ICbinary,0), 
+                                   CHF_FRA1(a_Bdir,0) );
+   }
+
+}
+
 void FourthOrderBC::setInsulatorConductorEdgeBC( EdgeDataBox&     a_dst,
                                            const EdgeDataBox&     a_ICbinary_ce,
                                            const Box&             a_fill_box,
@@ -280,8 +315,6 @@ void FourthOrderBC::setFluxBC( FluxBox&           a_dst,
    for (int dir=0; dir<SpaceDim; dir++) {
       
       // adjust box appropriately depending on dir
-      // Note that dir data is stag in dir direction for FluxBox
-      //
       FArrayBox& this_dst_dir(a_dst[dir]);
       const Box& this_dst_dir_box( this_dst_dir.box() );
       Box a_fill_box_grown = this_dst_dir_box;
@@ -323,6 +356,14 @@ void FourthOrderBC::setFluxBC( FluxBox&           a_dst,
                                           CHF_CONST_INT(ISIDE) );
          }
       }
+      if (a_bc_type == "extrapolate") {
+         int order = 4;
+         FORT_FOURTH_ORDER_EXTRAP_BC( CHF_FRA(this_dst_dir),
+                                      CHF_BOX(a_fill_box_grown),
+                                      CHF_CONST_INT(a_dir),
+                                      CHF_CONST_INT(ISIDE),
+                                      CHF_CONST_INT(order) );
+      } 
       
    }
 

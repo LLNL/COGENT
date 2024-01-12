@@ -1,4 +1,164 @@
 ------------------------------------------------------------------------
+r1937 | mdorf | 2024-01-02 17:26:09 -0800 (Tue, 02 Jan 2024) | 1 line
+
+Moved creation of the m_velocity member of the KineticSpecies class into the KineticSpecies::computeVelocity() function in order to reduce memory allocation in the BC classes
+------------------------------------------------------------------------
+r1936 | mdorr | 2023-12-14 17:06:40 -0800 (Thu, 14 Dec 2023) | 3 lines
+
+Adding some input parameters to increase control of some large CFL cases.
+
+
+------------------------------------------------------------------------
+r1935 | debo | 2023-12-08 23:19:24 -0800 (Fri, 08 Dec 2023) | 1 line
+
+PETSc: fixed erroneous initial dt when COGENT specifies CFL (instead of fixed_dt) and adaptive timestepping is being used
+------------------------------------------------------------------------
+r1934 | debo | 2023-12-08 16:54:21 -0800 (Fri, 08 Dec 2023) | 1 line
+
+PETSc: fixed the stage-counting code in postTimeStage for restart run
+------------------------------------------------------------------------
+r1933 | debo | 2023-12-06 20:10:27 -0800 (Wed, 06 Dec 2023) | 1 line
+
+Added restart capability to PETSc simulations; added two ARK methods for index-1 DAEs
+------------------------------------------------------------------------
+r1932 | mdorr | 2023-12-05 11:11:18 -0800 (Tue, 05 Dec 2023) | 3 lines
+
+Passing in non-null vector arguments to HYPRE_BoomerAMGSetup(), which for some reason don't seem to be needed when running optimized, but are when running debug.
+
+
+------------------------------------------------------------------------
+r1931 | mdorf | 2023-11-09 17:35:33 -0800 (Thu, 09 Nov 2023) | 1 line
+
+Updated OneBlockCoordSys class to follow SingleNullBlockCoordSys methods for computing Bfield and 3D mapping
+------------------------------------------------------------------------
+r1930 | mdorf | 2023-10-11 15:40:35 -0700 (Wed, 11 Oct 2023) | 1 line
+
+Fixed a decomposition bug in 3D grid construction
+------------------------------------------------------------------------
+r1929 | mdorf | 2023-07-31 20:17:18 -0700 (Mon, 31 Jul 2023) | 1 line
+
+Fixed a bug in the implementation of parallel mapped hyperviscosity, added ExB_gradN term with upwind discretization
+------------------------------------------------------------------------
+r1928 | angus1 | 2023-07-21 14:51:48 -0700 (Fri, 21 Jul 2023) | 1 line
+
+adding a 5D IdealMhd input deck in sample_inputs for doing interchange simulations in a toroidal geometry. This input deck is suitable for regression testing.
+------------------------------------------------------------------------
+r1927 | angus1 | 2023-07-21 14:49:49 -0700 (Fri, 21 Jul 2023) | 1 line
+
+fixed bug in ExtendedMhdOp related to NaNs in ghost layers. Multiple updates to IdealMhdOp related to different choices for Geometry/symmetry, and new additions for doing 3D tokamak simulations.
+------------------------------------------------------------------------
+r1926 | mdorf | 2023-07-20 12:23:19 -0700 (Thu, 20 Jul 2023) | 1 line
+
+Added an option for mapped hyperviscosity; added cylindrical coordinates option in 3D
+------------------------------------------------------------------------
+r1925 | debo | 2023-07-19 15:36:14 -0700 (Wed, 19 Jul 2023) | 1 line
+
+Implemented checking linearity of the function being solved by the Newton solver
+------------------------------------------------------------------------
+r1924 | mdorr | 2023-06-28 18:06:03 -0700 (Wed, 28 Jun 2023) | 3 lines
+
+Fixing printing of the relative residual and removing unused variables
+
+
+------------------------------------------------------------------------
+r1923 | mdorf | 2023-06-19 19:54:24 -0700 (Mon, 19 Jun 2023) | 1 line
+
+Fixed J factor for the hyperviscosity term; also miscellaneous refactoring/improvements in the vorticity model
+------------------------------------------------------------------------
+r1922 | mdorf | 2023-05-31 11:34:09 -0700 (Wed, 31 May 2023) | 1 line
+
+Updated fluid capabilities: added stable-dt calculation, refactored RS term evaluation, etc
+------------------------------------------------------------------------
+r1921 | mdorr | 2023-05-18 08:49:58 -0700 (Thu, 18 May 2023) | 3 lines
+
+Removing an unnecessary exclamation point in an error message string that breaks the NERSC build
+
+
+------------------------------------------------------------------------
+r1920 | mdorr | 2023-04-27 11:35:10 -0700 (Thu, 27 Apr 2023) | 3 lines
+
+Updating the build scripts to include the latest compiler and HDF5 libraries as the defaults/examples
+
+
+------------------------------------------------------------------------
+r1919 | mdorr | 2023-04-26 15:04:05 -0700 (Wed, 26 Apr 2023) | 3 lines
+
+Minor edits to remove the OPT=TRUE compiler warnings that appeared after the upgrade to gcc/gfortran 12.1.1
+
+
+------------------------------------------------------------------------
+r1918 | debo | 2023-04-17 18:14:35 -0700 (Mon, 17 Apr 2023) | 1 line
+
+Fix in initializeTI() - cannot call setEMFields at this stage
+------------------------------------------------------------------------
+r1917 | mdorr | 2023-04-05 23:03:32 -0700 (Wed, 05 Apr 2023) | 3 lines
+
+Moving the addition of the div(jpar) term when ALT_DIV_JPAR is defined back into the addDivJpar() member function.
+
+
+------------------------------------------------------------------------
+r1916 | mdorf | 2023-02-20 16:54:12 -0800 (Mon, 20 Feb 2023) | 1 line
+
+Added hyperviscosity and other useful utilities to be used with fluid models
+------------------------------------------------------------------------
+r1915 | debo | 2023-02-14 19:50:43 -0800 (Tue, 14 Feb 2023) | 1 line
+
+removed the requirement that ARK methods be first-stage-explicit; added two SSP IMEX methods with first stage implicit
+------------------------------------------------------------------------
+r1914 | angus1 | 2023-02-10 10:33:20 -0800 (Fri, 10 Feb 2023) | 1 line
+
+updating/refactoring of ghost cell filling for fluid variables as needed for properly handling general 3D geometries.
+------------------------------------------------------------------------
+r1913 | angus1 | 2023-02-09 15:58:31 -0800 (Thu, 09 Feb 2023) | 1 line
+
+removing my initials from some commented out exchange calls on metric quantities in MagGeom class.
+------------------------------------------------------------------------
+r1912 | angus1 | 2023-02-09 15:54:16 -0800 (Thu, 09 Feb 2023) | 1 line
+
+updated OneBlockCoordSys to use POL namespace. Can load 2D axisymmetric grids in 3D now.
+------------------------------------------------------------------------
+r1911 | angus1 | 2023-02-09 10:15:47 -0800 (Thu, 09 Feb 2023) | 1 line
+
+added some more infrastrucutre for fluid simulations with general non-orthogonal coordinates.
+------------------------------------------------------------------------
+r1910 | angus1 | 2023-02-08 15:08:15 -0800 (Wed, 08 Feb 2023) | 1 line
+
+adding infrastructure for using node-centered variables in fluid modules.
+------------------------------------------------------------------------
+r1909 | angus1 | 2023-02-08 12:36:18 -0800 (Wed, 08 Feb 2023) | 1 line
+
+added an ability to specify an array of output times in the input file. this is useful when the physical time scale of interest is dynamic.
+------------------------------------------------------------------------
+r1908 | angus1 | 2023-02-08 10:56:26 -0800 (Wed, 08 Feb 2023) | 1 line
+
+added some functions to SpaceUtils for 3D EMHD/MHD modules. this includes the ZIP interpolation method.
+------------------------------------------------------------------------
+r1907 | mdorf | 2023-02-06 15:20:40 -0800 (Mon, 06 Feb 2023) | 1 line
+
+Extended drift fluid model to include ExB nonlinearities; also fixed the order of hyperviscosity dissipation
+------------------------------------------------------------------------
+r1906 | debo | 2023-02-02 20:05:18 -0800 (Thu, 02 Feb 2023) | 1 line
+
+1) Skipping EM fields computation in implicitOpImEx when no fluid or scalars are present; 2) consistently update EM fields and physical species objects for time-accurate simulations; 3) small indentation fix in GMRES screen op
+------------------------------------------------------------------------
+r1905 | mdorf | 2023-02-01 10:34:08 -0800 (Wed, 01 Feb 2023) | 1 line
+
+Added code for the initialization of EMVorticity model, also fixed a few issues with the ALT_DIV_JPAR branch
+------------------------------------------------------------------------
+r1904 | mdorf | 2023-01-28 10:52:28 -0800 (Sat, 28 Jan 2023) | 1 line
+
+Generalized capability for applying initialization constraints in fluid models; also added a separate class for an advection operator solver
+------------------------------------------------------------------------
+r1903 | mdorr | 2023-01-26 09:34:15 -0800 (Thu, 26 Jan 2023) | 3 lines
+
+Setting previously unused vector arguments in the HYPRE_<solver name>Setup function calls
+
+
+------------------------------------------------------------------------
+r1902 | debo | 2023-01-23 11:31:33 -0800 (Mon, 23 Jan 2023) | 1 line
+
+Bugfix in updating EM fields when running time-accurate simulations
+------------------------------------------------------------------------
 r1901 | debo | 2023-01-20 13:51:40 -0800 (Fri, 20 Jan 2023) | 1 line
 
 Added an input flag to turn off performance-related optimizations that reduce time accuracy (on by default) ("gksystem.enable_ti_optimizations"); added the option to write out the serialized ODE vector to file (binary) at the same time as other solution outputs ("simulation.write_ode_vec"); added a utility code to compute diff between two ODE vector binary files (utils/odevec_diff.cpp); Newton solver prints reason convergence reason at exit

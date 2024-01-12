@@ -207,10 +207,15 @@ class FluidOpInterface
             (static_cast<FluidSpecies&>(a_species)).convertFromPhysical();
          }
       }
-      
-      virtual void initializeWithBC( FluidSpecies&  a_species_comp,
-                                     FluidSpecies&  a_species_phys,
-                               const double         a_time ) {;}
+
+      virtual bool isInitializationConstrained(const FluidSpecies& fluid_phys) {return false;}
+
+      virtual void applyInitializationConstraints(FluidSpeciesPtrVect&               fluid_comp,
+                                                  FluidSpeciesPtrVect&               fluid_phys,
+                                                  const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
+                                                  const EMFields&                    EM_fields,
+                                                  const int                          component,
+                                                  const double                       time ) {;}
 
       virtual void fillGhostCells( FluidSpecies&  a_species_phys,
                              const double         a_time ) = 0;

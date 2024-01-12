@@ -122,7 +122,11 @@ void VorticityBEOp::updatePotentialBEModel(EMFields&                         a_E
    // NB: -div(ExB*vorticity) = div(ExB*gkPoissonRHS)
    LevelData<FArrayBox> negative_div_ExB_vorticity(grids, 1, IntVect::Zero);
    if (m_reynolds_stress) {
-      computeReynoldsStressTerm(negative_div_ExB_vorticity, gkPoissonRHS, a_EM_fields);
+     m_fluid_op_utils->computeExBAdvection(negative_div_ExB_vorticity,
+                                           gkPoissonRHS,
+                                           a_EM_fields.getEFieldFace(),
+                                           m_advection_scheme,
+                                           true);
    }
    
    // Compute the parallel current divergence
@@ -164,6 +168,16 @@ void VorticityBEOp::updatePotentialBEModel(EMFields&                         a_E
       }
    }
 
+   // Add stablization terms
+   if (m_include_stabilization) {
+      LevelData<FArrayBox> negative_vorticity_times_dt(grids, 1, IntVect::Zero);
+      m_gyropoisson_op->computeFluxDivergence(current_phi, negative_vorticity_times_dt, false);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         negative_vorticity_times_dt[dit].mult(a_dt);
+      }
+      addStabilizationTerms(gkPoissonRHS, negative_vorticity_times_dt);
+   }
+   
    // Do the implicit vorticity solve
    computeIonMassDensity(m_ion_mass_density, a_kinetic_species_phys, a_fluid_species_comp);
    m_vorticity_op->setImplicitDt(a_dt);

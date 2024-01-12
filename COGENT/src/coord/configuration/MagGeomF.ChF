@@ -424,17 +424,17 @@ c     local variables
 ccccccccccccccccccccccccccccccccccccccccccccccc
 
       subroutine simple_curl(
-     &     CHF_BOX[facebox],
+     &     CHF_BOX[thisbox],
      &     CHF_CONST_INT[dir_j],
      &     CHF_CONST_INT[dir_k],
      &     CHF_CONST_REAL[dX_j],
      &     CHF_CONST_REAL[dX_k],
-     &     CHF_CONST_FRA[Edge_j],
-     &     CHF_CONST_FRA[Edge_k],
-     &     CHF_FRA[Face_i])
+     &     CHF_CONST_FRA1[F_j],
+     &     CHF_CONST_FRA1[F_k],
+     &     CHF_FRA1[curlF_i])
 c     local variables
-      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii_j;jj_j;kk_j], CHF_DDECL[ii_k;jj_k;kk_k]
-      double precision djEk, dkEj
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii_j;jj_j;kk_j], CHF_DDECL[ii_k;jj_k;kk_k] 
+      double precision djFk, dkFj
 
       CHF_DTERM[
       ii_j = CHF_ID(0,dir_j);
@@ -446,23 +446,19 @@ c     local variables
       jj_k = CHF_ID(1,dir_k);
       kk_k = CHF_ID(2,dir_k)]
 
-      do n=0, (CHF_NCOMP[Face_i]-1)
+      CHF_MULTIDO[thisbox;i;j;k]
 
-         CHF_MULTIDO[facebox;i;j;k]
+         djFk = (F_k(CHF_IX[i+ii_j;j+jj_j;k+kk_j]) - F_k(CHF_IX[i;j;k]))/dX_j
+         dkFj = (F_j(CHF_IX[i+ii_k;j+jj_k;k+kk_k]) - F_j(CHF_IX[i;j;k]))/dX_k
+         curlF_i(CHF_IX[i;j;k]) = djFk - dkFj
 
-            djEk = (Edge_k(CHF_IX[i+ii_j;j+jj_j;k+kk_j],n) - Edge_k(CHF_IX[i;j;k],n))/dX_j
-            dkEj = (Edge_j(CHF_IX[i+ii_k;j+jj_k;k+kk_k],n) - Edge_j(CHF_IX[i;j;k],n))/dX_k
-            Face_i(CHF_IX[i;j;k],n) = djEk - dkEj
-
-         CHF_ENDDO
-
-      enddo
+      CHF_ENDDO
 
       return
       end
 
 ccccccccccccccccccccccccccccccccccccccccccccccc
-
+ 
       subroutine simple_curl_cc(
      &     CHF_BOX[thisbox],
      &     CHF_CONST_INT[dir_j],
@@ -474,7 +470,7 @@ ccccccccccccccccccccccccccccccccccccccccccccccc
      &     CHF_FRA1[curlF_i])
 
 c     local variables
-      integer CHF_DDECL[i;j;k], CHF_DDECL[ii_j;jj_j;kk_j], CHF_DDECL[ii_k;jj_k;kk_k]
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii_j;jj_j;kk_j], CHF_DDECL[ii_k;jj_k;kk_k] 
       double precision djFk, dkFj
 
       CHF_DTERM[
@@ -498,56 +494,17 @@ c     local variables
       return
       end
 
-ccccccccccccccccccccccccccccccccccccccccccccccc
- 
-      subroutine simple_curl_face_to_edge(
-     &     CHF_BOX[edgebox],
-     &     CHF_CONST_INT[dir_j],
-     &     CHF_CONST_INT[dir_k],
-     &     CHF_CONST_REAL[dX_j],
-     &     CHF_CONST_REAL[dX_k],
-     &     CHF_CONST_FRA[face_j],
-     &     CHF_CONST_FRA[face_k],
-     &     CHF_FRA[Edge_i])
-c     local variables
-      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii_j;jj_j;kk_j], CHF_DDECL[ii_k;jj_k;kk_k] 
-      double precision djFk, dkFj
-
-      CHF_DTERM[
-      ii_j = CHF_ID(0,dir_j);
-      jj_j = CHF_ID(1,dir_j);
-      kk_j = CHF_ID(2,dir_j)]
-      
-      CHF_DTERM[
-      ii_k = CHF_ID(0,dir_k);
-      jj_k = CHF_ID(1,dir_k);
-      kk_k = CHF_ID(2,dir_k)]
-
-      do n=0, (CHF_NCOMP[Edge_i]-1)
-         
-         CHF_MULTIDO[edgebox;i;j;k]
-      
-            djFk = (Face_k(CHF_IX[i;j;k],n) - Face_k(CHF_IX[i-ii_j;j-jj_j;k-kk_j],n))/dX_j
-            dkFj = (Face_j(CHF_IX[i;j;k],n) - Face_j(CHF_IX[i-ii_k;j-jj_k;k-kk_k],n))/dX_k
-            Edge_i(CHF_IX[i;j;k],n) = djFk - dkFj
-
-         CHF_ENDDO
-
-      enddo
-
-      return
-      end
-
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       subroutine simple_curl_virt(
      &     CHF_BOX[box],
      &     CHF_CONST_INT[dir],
+     &     CHF_CONST_INT[Fstag],
      &     CHF_CONST_REAL[dXdir],
-     &     CHF_CONST_FRA[Fy],
-     &     CHF_FRA[Jdir])
+     &     CHF_CONST_FRA1[Fy],
+     &     CHF_FRA1[Jdir])
 c     local variables
-      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
       double precision val
 
       CHF_DTERM[
@@ -555,20 +512,16 @@ c     local variables
       jj = CHF_ID(1,0);
       kk = CHF_ID(2,0)]
 
-      do n=0, (CHF_NCOMP[Fy]-1)
+      CHF_MULTIDO[box;i;j;k]
 
-         CHF_MULTIDO[box;i;j;k]
+         if(dir==1) then
+            val =  (Fy(CHF_IX[i+Fstag;j;k]) - Fy(CHF_IX[i-1+Fstag;j;k]))/dXdir
+         else
+            val = -(Fy(CHF_IX[i;j+Fstag;k]) - Fy(CHF_IX[i;j-1+Fstag;k]))/dXdir
+         endif
+         Jdir(CHF_IX[i;j;k]) = val
 
-            if(dir==1) then
-               val = (Fy(CHF_IX[i;j;k],n) - Fy(CHF_IX[i-1;j;k],n))/dXdir
-            else
-               val = -(Fy(CHF_IX[i;j;k],n) - Fy(CHF_IX[i;j-1;k],n))/dXdir
-            endif
-            Jdir(CHF_IX[i;j;k],n) = val
-
-         CHF_ENDDO
-
-      enddo
+      CHF_ENDDO
 
       return
       end
@@ -580,9 +533,9 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
      &     CHF_CONST_INT[dir],
      &     CHF_CONST_REAL[dXdir],
      &     CHF_CONST_FRA1[Fy],
-     &     CHF_FRA[Jcurl])
+     &     CHF_FRA1[Jcurl])
 c     local variables
-      integer n, CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
+      integer CHF_DDECL[i;j;k], CHF_DDECL[ii;jj;kk]
       double precision val
   
       CHF_DTERM[
@@ -597,7 +550,7 @@ c     local variables
          else
             val = -(Fy(CHF_IX[i;j+1;k]) - Fy(CHF_IX[i;j-1;k]))/dXdir*half
          endif
-         Jcurl(CHF_IX[i;j;k],dir) = val
+         Jcurl(CHF_IX[i;j;k]) = val
 
       CHF_ENDDO
 
@@ -609,67 +562,48 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       subroutine phys_to_covar(
      &     CHF_BOX[box],
      &     CHF_CONST_FRA[dXdxi],
-     &     CHF_CONST_FRA[dxidX],
-     &     CHF_CONST_INT[inverse],
      &     CHF_FRA[F])
-      
-      integer CHF_DDECL[i;j;k] 
-      double precision Fnew0, Fnew1, Fnew2
-      double precision a0, a1, a2, a3, a4, a5, a6, a7, a8
+
+      integer CHF_DDECL[i;j;k]
+      double precision F0, F1, F2
+      double precision a00, a01, a02, a10, a11, a12, a20, a21, a22
 
       CHF_MULTIDO[box;i;j;k]
-      
+
          if (CH_SPACEDIM==3) then
 
-            if (inverse==0) then
-               a0 = dXdxi(CHF_IX[i;j;k],0)
-               a1 = dXdxi(CHF_IX[i;j;k],1)
-               a2 = dXdxi(CHF_IX[i;j;k],2)
-               a3 = dXdxi(CHF_IX[i;j;k],3)
-               a4 = dXdxi(CHF_IX[i;j;k],4)
-               a5 = dXdxi(CHF_IX[i;j;k],5)
-               a6 = dXdxi(CHF_IX[i;j;k],6)
-               a7 = dXdxi(CHF_IX[i;j;k],7)
-               a8 = dXdxi(CHF_IX[i;j;k],8)
-            else
-               a0 = dxidX(CHF_IX[i;j;k],0)
-               a1 = dxidX(CHF_IX[i;j;k],1)
-               a2 = dxidX(CHF_IX[i;j;k],2)
-               a3 = dxidX(CHF_IX[i;j;k],3)
-               a4 = dxidX(CHF_IX[i;j;k],4)
-               a5 = dxidX(CHF_IX[i;j;k],5)
-               a6 = dxidX(CHF_IX[i;j;k],6)
-               a7 = dxidX(CHF_IX[i;j;k],7)
-               a8 = dxidX(CHF_IX[i;j;k],8)
-            endif
-  
-            Fnew0 = a0*F(CHF_IX[i;j;k],0) + a1*F(CHF_IX[i;j;k],1) + a2*F(CHF_IX[i;j;k],2)
-            Fnew1 = a3*F(CHF_IX[i;j;k],0) + a4*F(CHF_IX[i;j;k],1) + a5*F(CHF_IX[i;j;k],2)
-            Fnew2 = a6*F(CHF_IX[i;j;k],0) + a7*F(CHF_IX[i;j;k],1) + a8*F(CHF_IX[i;j;k],2)
+            a00 = dXdxi(CHF_IX[i;j;k],0)
+            a01 = dXdxi(CHF_IX[i;j;k],1)
+            a02 = dXdxi(CHF_IX[i;j;k],2)
+            a10 = dXdxi(CHF_IX[i;j;k],3)
+            a11 = dXdxi(CHF_IX[i;j;k],4)
+            a12 = dXdxi(CHF_IX[i;j;k],5)
+            a20 = dXdxi(CHF_IX[i;j;k],6)
+            a21 = dXdxi(CHF_IX[i;j;k],7)
+            a22 = dXdxi(CHF_IX[i;j;k],8)
 
-            F(CHF_IX[i;j;k],0) = Fnew0
-            F(CHF_IX[i;j;k],1) = Fnew1
-            F(CHF_IX[i;j;k],2) = Fnew2
+            F0 = F(CHF_IX[i;j;k],0)
+            F1 = F(CHF_IX[i;j;k],1)
+            F2 = F(CHF_IX[i;j;k],2)
+
+c         multiply F by dX/dxi
+            F(CHF_IX[i;j;k],0) = a00*F0 + a01*F1 + a02*F2
+            F(CHF_IX[i;j;k],1) = a10*F0 + a11*F1 + a12*F2
+            F(CHF_IX[i;j;k],2) = a20*F0 + a21*F1 + a22*F2
 
          else
-            
-            if (inverse==0) then
-               a0 = dXdxi(CHF_IX[i;j;k],0)
-               a1 = dXdxi(CHF_IX[i;j;k],1)
-               a2 = dXdxi(CHF_IX[i;j;k],2)
-               a3 = dXdxi(CHF_IX[i;j;k],3)
-            else
-               a0 = dxidX(CHF_IX[i;j;k],0)
-               a1 = dxidX(CHF_IX[i;j;k],1)
-               a2 = dxidX(CHF_IX[i;j;k],2)
-               a3 = dxidX(CHF_IX[i;j;k],3)
-            endif
- 
-            Fnew0 = a0*F(CHF_IX[i;j;k],0) + a1*F(CHF_IX[i;j;k],1)
-            Fnew1 = a2*F(CHF_IX[i;j;k],0) + a3*F(CHF_IX[i;j;k],1)
 
-            F(CHF_IX[i;j;k],0) = Fnew0
-            F(CHF_IX[i;j;k],1) = Fnew1
+            a00 = dXdxi(CHF_IX[i;j;k],0)
+            a01 = dXdxi(CHF_IX[i;j;k],1)
+            a10 = dXdxi(CHF_IX[i;j;k],2)
+            a11 = dXdxi(CHF_IX[i;j;k],3)
+
+            F0 = F(CHF_IX[i;j;k],0)
+            F1 = F(CHF_IX[i;j;k],1)
+
+c         multiply F by dX/dxi
+            F(CHF_IX[i;j;k],0) = a00*F0 + a01*F1
+            F(CHF_IX[i;j;k],1) = a10*F0 + a11*F1
 
          endif
 
@@ -678,71 +612,163 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       return
       end
 
-      
-      subroutine phys_to_contravar(
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine covar_to_phys(
      &     CHF_BOX[box],
-     &     CHF_CONST_FRA[dXdxi],
      &     CHF_CONST_FRA[dxidX],
-     &     CHF_CONST_INT[inverse],
      &     CHF_FRA[F])
-      
-      integer CHF_DDECL[i;j;k] 
-      double precision Fnew0, Fnew1, Fnew2
-      double precision a0, a1, a2, a3, a4, a5, a6, a7, a8
+
+      integer CHF_DDECL[i;j;k]
+      double precision F0, F1, F2
+      double precision a00, a01, a02, a10, a11, a12, a20, a21, a22
 
       CHF_MULTIDO[box;i;j;k]
-      
-         if (CH_SPACEDIM==3) then
-            
-           if (inverse==0) then
-               a0 = dxidX(CHF_IX[i;j;k],0)
-               a1 = dxidX(CHF_IX[i;j;k],1)
-               a2 = dxidX(CHF_IX[i;j;k],2)
-               a3 = dxidX(CHF_IX[i;j;k],3)
-               a4 = dxidX(CHF_IX[i;j;k],4)
-               a5 = dxidX(CHF_IX[i;j;k],5)
-               a6 = dxidX(CHF_IX[i;j;k],6)
-               a7 = dxidX(CHF_IX[i;j;k],7)
-               a8 = dxidX(CHF_IX[i;j;k],8)
-            else
-               a0 = dXdxi(CHF_IX[i;j;k],0)
-               a1 = dXdxi(CHF_IX[i;j;k],1)
-               a2 = dXdxi(CHF_IX[i;j;k],2)
-               a3 = dXdxi(CHF_IX[i;j;k],3)
-               a4 = dXdxi(CHF_IX[i;j;k],4)
-               a5 = dXdxi(CHF_IX[i;j;k],5)
-               a6 = dXdxi(CHF_IX[i;j;k],6)
-               a7 = dXdxi(CHF_IX[i;j;k],7)
-               a8 = dXdxi(CHF_IX[i;j;k],8)
-            endif
-  
-            Fnew0 = a0*F(CHF_IX[i;j;k],0) + a3*F(CHF_IX[i;j;k],1) + a6*F(CHF_IX[i;j;k],2)
-            Fnew1 = a1*F(CHF_IX[i;j;k],0) + a4*F(CHF_IX[i;j;k],1) + a7*F(CHF_IX[i;j;k],2)
-            Fnew2 = a2*F(CHF_IX[i;j;k],0) + a5*F(CHF_IX[i;j;k],1) + a8*F(CHF_IX[i;j;k],2)
 
-            F(CHF_IX[i;j;k],0) = Fnew0
-            F(CHF_IX[i;j;k],1) = Fnew1
-            F(CHF_IX[i;j;k],2) = Fnew2
+         if (CH_SPACEDIM==3) then
+
+            a00 = dxidX(CHF_IX[i;j;k],0)
+            a01 = dxidX(CHF_IX[i;j;k],1)
+            a02 = dxidX(CHF_IX[i;j;k],2)
+            a10 = dxidX(CHF_IX[i;j;k],3)
+            a11 = dxidX(CHF_IX[i;j;k],4)
+            a12 = dxidX(CHF_IX[i;j;k],5)
+            a20 = dxidX(CHF_IX[i;j;k],6)
+            a21 = dxidX(CHF_IX[i;j;k],7)
+            a22 = dxidX(CHF_IX[i;j;k],8)
+
+            F0 = F(CHF_IX[i;j;k],0)
+            F1 = F(CHF_IX[i;j;k],1)
+            F2 = F(CHF_IX[i;j;k],2)
+
+c         multiply F by dxi/dX
+            F(CHF_IX[i;j;k],0) = a00*F0 + a01*F1 + a02*F2
+            F(CHF_IX[i;j;k],1) = a10*F0 + a11*F1 + a12*F2
+            F(CHF_IX[i;j;k],2) = a20*F0 + a21*F1 + a22*F2
 
          else
 
-            if (inverse==0) then
-               a0 = dxidX(CHF_IX[i;j;k],0)
-               a1 = dxidX(CHF_IX[i;j;k],1)
-               a2 = dxidX(CHF_IX[i;j;k],2)
-               a3 = dxidX(CHF_IX[i;j;k],3)
-            else
-               a0 = dXdxi(CHF_IX[i;j;k],0)
-               a1 = dXdxi(CHF_IX[i;j;k],1)
-               a2 = dXdxi(CHF_IX[i;j;k],2)
-               a3 = dXdxi(CHF_IX[i;j;k],3)
-            endif
-            
-            Fnew0 = a0*F(CHF_IX[i;j;k],0) + a2*F(CHF_IX[i;j;k],1)
-            Fnew1 = a1*F(CHF_IX[i;j;k],0) + a3*F(CHF_IX[i;j;k],1)
+            a00 = dxidX(CHF_IX[i;j;k],0)
+            a01 = dxidX(CHF_IX[i;j;k],1)
+            a10 = dxidX(CHF_IX[i;j;k],2)
+            a11 = dxidX(CHF_IX[i;j;k],3)
 
-            F(CHF_IX[i;j;k],0) = Fnew0
-            F(CHF_IX[i;j;k],1) = Fnew1
+            F0 = F(CHF_IX[i;j;k],0)
+            F1 = F(CHF_IX[i;j;k],1)
+
+c         multiply F by dxi/dX
+            F(CHF_IX[i;j;k],0) = a00*F0 + a01*F1
+            F(CHF_IX[i;j;k],1) = a10*F0 + a11*F1
+
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine phys_to_contravar(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dxidX],
+     &     CHF_FRA[F])
+
+      integer CHF_DDECL[i;j;k]
+      double precision F0, F1, F2
+      double precision a00, a01, a02, a10, a11, a12, a20, a21, a22
+
+      CHF_MULTIDO[box;i;j;k]
+
+         if (CH_SPACEDIM==3) then
+
+            a00 = dxidX(CHF_IX[i;j;k],0)
+            a01 = dxidX(CHF_IX[i;j;k],1)
+            a02 = dxidX(CHF_IX[i;j;k],2)
+            a10 = dxidX(CHF_IX[i;j;k],3)
+            a11 = dxidX(CHF_IX[i;j;k],4)
+            a12 = dxidX(CHF_IX[i;j;k],5)
+            a20 = dxidX(CHF_IX[i;j;k],6)
+            a21 = dxidX(CHF_IX[i;j;k],7)
+            a22 = dxidX(CHF_IX[i;j;k],8)
+
+            F0 = F(CHF_IX[i;j;k],0)
+            F1 = F(CHF_IX[i;j;k],1)
+            F2 = F(CHF_IX[i;j;k],2)
+
+c         multiply F by transpose of dxi/dX
+            F(CHF_IX[i;j;k],0) = a00*F0 + a10*F1 + a20*F2
+            F(CHF_IX[i;j;k],1) = a01*F0 + a11*F1 + a21*F2
+            F(CHF_IX[i;j;k],2) = a02*F0 + a12*F1 + a22*F2
+
+         else
+
+            a00 = dxidX(CHF_IX[i;j;k],0)
+            a01 = dxidX(CHF_IX[i;j;k],1)
+            a10 = dxidX(CHF_IX[i;j;k],2)
+            a11 = dxidX(CHF_IX[i;j;k],3)
+
+            F0 = F(CHF_IX[i;j;k],0)
+            F1 = F(CHF_IX[i;j;k],1)
+
+c         multiply F by transpose of dxi/dX
+            F(CHF_IX[i;j;k],0) = a00*F0 + a10*F1
+            F(CHF_IX[i;j;k],1) = a01*F0 + a11*F1
+
+         endif
+
+      CHF_ENDDO
+      
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine contravar_to_phys(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_FRA[F])
+
+      integer CHF_DDECL[i;j;k]
+      double precision F0, F1, F2
+      double precision a00, a01, a02, a10, a11, a12, a20, a21, a22
+
+      CHF_MULTIDO[box;i;j;k]
+
+         if (CH_SPACEDIM==3) then
+
+            a00 = dXdxi(CHF_IX[i;j;k],0)
+            a01 = dXdxi(CHF_IX[i;j;k],1)
+            a02 = dXdxi(CHF_IX[i;j;k],2)
+            a10 = dXdxi(CHF_IX[i;j;k],3)
+            a11 = dXdxi(CHF_IX[i;j;k],4)
+            a12 = dXdxi(CHF_IX[i;j;k],5)
+            a20 = dXdxi(CHF_IX[i;j;k],6)
+            a21 = dXdxi(CHF_IX[i;j;k],7)
+            a22 = dXdxi(CHF_IX[i;j;k],8)
+
+            F0 = F(CHF_IX[i;j;k],0)
+            F1 = F(CHF_IX[i;j;k],1)
+            F2 = F(CHF_IX[i;j;k],2)
+
+c         multiply F by transpose of dX/dxi
+            F(CHF_IX[i;j;k],0) = a00*F0 + a10*F1 + a20*F2
+            F(CHF_IX[i;j;k],1) = a01*F0 + a11*F1 + a21*F2
+            F(CHF_IX[i;j;k],2) = a02*F0 + a12*F1 + a22*F2
+
+         else
+
+            a00 = dXdxi(CHF_IX[i;j;k],0)
+            a01 = dXdxi(CHF_IX[i;j;k],1)
+            a10 = dXdxi(CHF_IX[i;j;k],2)
+            a11 = dXdxi(CHF_IX[i;j;k],3)
+
+            F0 = F(CHF_IX[i;j;k],0)
+            F1 = F(CHF_IX[i;j;k],1)
+
+c         multiply F by transpose of dX/dxi
+            F(CHF_IX[i;j;k],0) = a00*F0 + a10*F1
+            F(CHF_IX[i;j;k],1) = a01*F0 + a11*F1
 
          endif
 
@@ -855,10 +881,171 @@ c   convert contravariant to covariant
 
       return
       end
-      
+
 cccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       subroutine contra_to_covar(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dXdxi],
+     &     CHF_FRA[F] )
+      
+      integer CHF_DDECL[i;j;k]
+      double precision e_00, e_01, e_02
+      double precision e_10, e_11, e_12
+      double precision e_20, e_21, e_22
+      double precision g_00, g_01, g_02
+      double precision g_10, g_11, g_12
+      double precision g_20, g_21, g_22
+      double precision F0, F1, F2     
+
+      CHF_MULTIDO[box;i;j;k]
+         
+         if (CH_SPACEDIM==3) then
+
+c   compute metric terms
+           e_00 = dXdxi(CHF_IX[i;j;k],0)
+           e_01 = dXdxi(CHF_IX[i;j;k],1)
+           e_02 = dXdxi(CHF_IX[i;j;k],2)
+           e_10 = dXdxi(CHF_IX[i;j;k],3)
+           e_11 = dXdxi(CHF_IX[i;j;k],4)
+           e_12 = dXdxi(CHF_IX[i;j;k],5)
+           e_20 = dXdxi(CHF_IX[i;j;k],6)
+           e_21 = dXdxi(CHF_IX[i;j;k],7)
+           e_22 = dXdxi(CHF_IX[i;j;k],8)
+  
+           g_00 = e_00*e_00 + e_01*e_01 + e_02*e_02
+           g_01 = e_00*e_10 + e_01*e_11 + e_02*e_12
+           g_02 = e_00*e_20 + e_01*e_21 + e_02*e_22
+           g_10 = g_01
+           g_11 = e_10*e_10 + e_11*e_11 + e_12*e_12
+           g_12 = e_10*e_20 + e_11*e_21 + e_12*e_22
+           g_20 = g_02
+           g_21 = g_12
+           g_22 = e_20*e_20 + e_21*e_21 + e_22*e_22
+
+c   passed F is contravariant
+           F0 = F(CHF_IX[i;j;k],0)
+           F1 = F(CHF_IX[i;j;k],1)
+           F2 = F(CHF_IX[i;j;k],2)
+
+c   convert contravariant to covariant
+           F(CHF_IX[i;j;k],0) = g_00*F0 + g_01*F1 + g_02*F2
+           F(CHF_IX[i;j;k],1) = g_10*F0 + g_11*F1 + g_12*F2
+           F(CHF_IX[i;j;k],2) = g_20*F0 + g_21*F1 + g_22*F2
+         
+         else
+      
+c   compute metric terms
+           e_00 = dXdxi(CHF_IX[i;j;k],0)
+           e_01 = dXdxi(CHF_IX[i;j;k],1)
+           e_10 = dXdxi(CHF_IX[i;j;k],2)
+           e_11 = dXdxi(CHF_IX[i;j;k],3)
+  
+           g_00 = e_00*e_00 + e_01*e_01
+           g_01 = e_00*e_10 + e_01*e_11
+           g_10 = g_01
+           g_11 = e_10*e_10 + e_11*e_11
+
+c   passed F is contravariant
+           F0 = F(CHF_IX[i;j;k],0)
+           F1 = F(CHF_IX[i;j;k],1)
+
+c   convert contravariant to covariant
+           F(CHF_IX[i;j;k],0) = g_00*F0 + g_01*F1
+           F(CHF_IX[i;j;k],1) = g_10*F0 + g_11*F1
+
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine covar_to_contra(
+     &     CHF_BOX[box],
+     &     CHF_CONST_FRA[dxidX],
+     &     CHF_FRA[F] )
+      
+      integer CHF_DDECL[i;j;k]
+      double precision e00, e01, e02
+      double precision e10, e11, e12
+      double precision e20, e21, e22
+      double precision g00, g01, g02
+      double precision g10, g11, g12
+      double precision g20, g21, g22
+      double precision F_0, F_1, F_2     
+
+      CHF_MULTIDO[box;i;j;k]
+         
+         if (CH_SPACEDIM==3) then
+
+c   compute metric terms
+           e00 = dxidX(CHF_IX[i;j;k],0)
+           e01 = dxidX(CHF_IX[i;j;k],3)
+           e02 = dxidX(CHF_IX[i;j;k],6)
+
+           e10 = dxidX(CHF_IX[i;j;k],1)
+           e11 = dxidX(CHF_IX[i;j;k],4)
+           e12 = dxidX(CHF_IX[i;j;k],7)
+
+           e20 = dxidX(CHF_IX[i;j;k],2)
+           e21 = dxidX(CHF_IX[i;j;k],5)
+           e22 = dxidX(CHF_IX[i;j;k],8)
+  
+           g00 = e00*e00 + e01*e01 + e02*e02
+           g01 = e00*e10 + e01*e11 + e02*e12
+           g02 = e00*e20 + e01*e21 + e02*e22
+           g10 = g01
+           g11 = e10*e10 + e11*e11 + e12*e12
+           g12 = e10*e20 + e11*e21 + e12*e22
+           g20 = g02
+           g21 = g12
+           g22 = e20*e20 + e21*e21 + e22*e22
+
+c   passed F is covariant
+           F_0 = F(CHF_IX[i;j;k],0)
+           F_1 = F(CHF_IX[i;j;k],1)
+           F_2 = F(CHF_IX[i;j;k],2)
+
+c   convert covariant to contravariant
+           F(CHF_IX[i;j;k],0) = g00*F_0 + g01*F_1 + g02*F_2
+           F(CHF_IX[i;j;k],1) = g10*F_0 + g11*F_1 + g12*F_2
+           F(CHF_IX[i;j;k],2) = g20*F_0 + g21*F_1 + g22*F_2
+         
+         else
+      
+c   compute metric terms
+           e00 = dxidX(CHF_IX[i;j;k],0)
+           e01 = dxidX(CHF_IX[i;j;k],2)
+
+           e10 = dxidX(CHF_IX[i;j;k],1)
+           e11 = dxidX(CHF_IX[i;j;k],3)
+  
+           g00 = e00*e00 + e01*e01
+           g01 = e00*e10 + e01*e11
+           g10 = g01
+           g11 = e10*e10 + e11*e11
+
+c   passed F is covariant
+           F_0 = F(CHF_IX[i;j;k],0)
+           F_1 = F(CHF_IX[i;j;k],1)
+
+c   convert covariant to contravariant
+           F(CHF_IX[i;j;k],0) = g00*F_0 + g01*F_1
+           F(CHF_IX[i;j;k],1) = g10*F_0 + g11*F_1
+
+         endif
+
+      CHF_ENDDO
+
+      return
+      end
+      
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+      subroutine contra_to_covar_ortho(
      &     CHF_BOX[box],
      &     CHF_CONST_FRA[dXdxi],
      &     CHF_CONST_INT[dir],
@@ -1436,6 +1623,12 @@ c     local variables
       integer CHF_DDECL[i;j;k], comp, m, row, col
       double precision sum, Epol_mapped(0:1), Epol_phys(0:1), E_phys(0:2)
 
+      if (CH_SPACEDIM==3) then
+         write(*,*) 'compute_volume_B_dot_E_integrals_field_aligned not correct in 3d'
+         call exit(1)
+      endif
+
+#if CH_SPACEDIM==2         
       CHF_MULTIDO[box;i;j;k]
       
          Epol_mapped(0) = 0.0
@@ -1465,6 +1658,7 @@ c     local variables
          integral(CHF_IX[i;j;k]) = sum
 
       CHF_ENDDO
+#endif
 
       return
       end

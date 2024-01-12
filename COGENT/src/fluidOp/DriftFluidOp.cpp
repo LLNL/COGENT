@@ -3,6 +3,7 @@
 #include "FluidVarBCFactory.H"
 #include "FourthOrderUtil.H"
 #include "MagBlockCoordSys.H"
+#include "SpaceUtils.H.multidim"
 #include "CONSTANTS.H"
 
 #include "NodeFArrayBox.H"
@@ -30,14 +31,18 @@ DriftFluidOp::DriftFluidOp(const string&   a_pp_str,
      m_geometry(a_geometry),
      m_is_time_implicit(false),
      m_first_call(true),
+     m_is_linearized(true),
      m_include_hyperviscosity(false),
      m_use_hyperviscosity_bcs(false),
+     m_include_boundary_relaxation(false),
+     m_advection_scheme("uw3"),
+     m_harmonic_filtering(SpaceDim, 0),
      m_species_name(a_species_name),
      m_opt_string(a_pp_str),
      m_my_pc_idx(-1),
-     m_n0_func(NULL),
-     m_diffusion_op(NULL),
-     m_diffusion_op_bcs(NULL)
+     m_max_dt(DBL_MAX),
+     m_time_step_diagnostics(false),
+     m_n0_func(NULL)
 
 {
    ParmParse pp(a_pp_str.c_str());
@@ -46,6 +51,9 @@ DriftFluidOp::DriftFluidOp(const string&   a_pp_str,
       printParameters();
    }
 
+   // Create FluidOpUtils class that handles hyperviscosity and boundary buffers
+   m_fluid_op_utils = new FluidOpUtils(pp, m_geometry, m_larmor, m_verbosity);
+   
    string variable_name = "density";
 
    // Input the initial conditions
@@ -57,23 +65,33 @@ DriftFluidOp::DriftFluidOp(const string&   a_pp_str,
                                                      variable_name,
                                                      a_geometry.getCoordSys()->type(),
                                                      false);
- 
+
+      
    // Input the hyperviscosity parameters and bcs
    if (m_include_hyperviscosity) {
 
       const std::string prefixOp( a_pp_str + ".hyperviscosity");
       ParmParse ppOp( prefixOp.c_str() );
-      m_diffusion_op = new Diffusion(ppOp, a_geometry);
 
       const std::string name( m_species_name + ".hyperviscosity");
       const std::string prefixBC( "BC." + name);
       ParmParse ppOpBC( prefixBC.c_str() );
 
       EllipticOpBCFactory elliptic_op_bc_factory;
-      m_diffusion_op_bcs = elliptic_op_bc_factory.create(name,
-                                                         ppOpBC,
-                                                         *(a_geometry.getCoordSys()),
-                                                         false );
+      m_hyperviscosity_op_bcs = RefCountedPtr<EllipticOpBC>(elliptic_op_bc_factory.create(name,
+                                                                                          ppOpBC,
+                                                                                          *(a_geometry.getCoordSys()),
+                                                                                          false ));
+      
+      m_fluid_op_utils->initializeHyperViscosityOp(ppOp,
+                                                   *m_hyperviscosity_op_bcs,
+                                                   m_use_hyperviscosity_bcs);
+      
+   }
+   
+   // Initialize boundary buffers
+   if (m_include_boundary_relaxation) {
+      m_fluid_op_utils->initializeBoundaryBuffers(pp, m_include_boundary_relaxation);
    }
 }
 
@@ -81,8 +99,7 @@ DriftFluidOp::DriftFluidOp(const string&   a_pp_str,
 DriftFluidOp::~DriftFluidOp()
 {
    if (m_fluid_variable_bc) delete m_fluid_variable_bc;
-   if (m_diffusion_op_bcs) delete m_diffusion_op_bcs;
-   if (m_diffusion_op) delete m_diffusion_op;
+   if (m_fluid_op_utils) delete m_fluid_op_utils;
 }
 
 
@@ -96,8 +113,12 @@ void DriftFluidOp::accumulateRHS(FluidSpeciesPtrVect&              a_rhs,
 {
    /*
     This class computes the RHS for :
-      Physics model: d(n)/dt = -1/c * ExB/B^2 * nabla(n0)
-      COGENT equation: d(J*n)/dt = -J * Larmor * ExB/B^2 * nabla(n0)
+      Linearized model
+         Physics model: d(n)/dt = -1/c * ExB/B^2 * nabla(n0)
+         COGENT equation: d(J*n)/dt = -J * Larmor * ExB/B^2 * nabla(n0)
+      Nonlinear model
+         Physics model: d(n)/dt = -1/c div(n * ExB/B^2)
+         COGENT equation: d(J*n)/dt = -J * Larmor div(n * ExB/B^2)
    */
    
    // Get fluid rhs
@@ -109,27 +130,164 @@ void DriftFluidOp::accumulateRHS(FluidSpeciesPtrVect&              a_rhs,
    const LevelData<FArrayBox>& soln_data( soln_fluid.cell_var(0) );
 
 
-   // Get geoemtry parameters
-   int order = (m_geometry.secondOrder()) ? 2 : 4;
+   // Get geometry parameters
    const DisjointBoxLayout& grids( soln_data.getBoxes() );
 
+   // Add advection term
+   addAdvection(rhs_data, soln_data, a_EM_fields, a_time);
 
-   // Get backgruond density gradient
+   // Add hyperviscosity
+   if (m_include_hyperviscosity) {
+      m_fluid_op_utils->addHyperViscosity(rhs_data,
+                                          soln_data,
+                                          true);
+   }
+   
+   // Add relaxation to a reference solution in boundary buffers
+   if (m_include_boundary_relaxation) {
+       m_fluid_op_utils->addRelaxationInBoundaryBuffers(rhs_data,
+                                                        soln_data,
+                                                        true);
+    }
+   
+   // We keep a local copy of Efield to be used in CFL calculations
+   // This is a temporary approach;
+   m_E_field.define(a_EM_fields.getEFieldFace());
+
+   m_first_call = false;
+}
+
+
+void DriftFluidOp::accumulateExplicitRHS(FluidSpeciesPtrVect&               a_rhs,
+                                        const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
+                                        const FluidSpeciesPtrVect&         a_fluid_species,
+                                        const PS::ScalarPtrVect&           a_scalars,
+                                        const EMFields&                    a_EM_fields,
+                                        const int                          a_fluidVecComp,
+                                        const Real                         a_time)
+{
+   if (!m_is_time_implicit) {
+      accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_EM_fields, a_fluidVecComp, a_time);
+   }
+}
+
+
+void DriftFluidOp::accumulateImplicitRHS(FluidSpeciesPtrVect&              a_rhs,
+                                        const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
+                                        const FluidSpeciesPtrVect&        a_fluid_species,
+                                        const PS::ScalarPtrVect&          a_scalars,
+                                        const EMFields&                   a_EM_fields,
+                                        const int                         a_fluidVecComp,
+                                        const Real                        a_time )
+{
+   if (m_is_time_implicit) {
+      accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_EM_fields, a_fluidVecComp, a_time);
+   }
+}
+
+void DriftFluidOp::addAdvection(LevelData<FArrayBox>&       a_rhs,
+                                const LevelData<FArrayBox>& a_soln,
+                                const EMFields&             a_EM_fields,
+                                const Real                  a_time)
+{
+   // Get geometry parameters
+   const DisjointBoxLayout& grids = m_geometry.grids();
+
+   // Initialize background density
+   if (m_is_linearized && m_first_call) {
+     m_n0.define(grids, 1, 2*IntVect::Unit);
+     m_n0_func->assign( m_n0, m_geometry, a_time);
+   }
+
+   // Compute physical ExB advection term = div[V_ExB * n]
+   LevelData<FArrayBox> ExB_advection(grids, 1, IntVect::Zero);
+
+   if (m_is_linearized) {
+     m_fluid_op_utils->computeExBAdvection(ExB_advection,
+                                           m_n0,
+                                           a_EM_fields.getEFieldFace(),
+                                           m_advection_scheme,
+                                           false);
+   }
+   else {
+     m_fluid_op_utils->computeExBAdvection(ExB_advection,
+                                           a_soln,
+                                           a_EM_fields.getEFieldFace(),
+                                           m_advection_scheme,
+                                           false);
+   }
+
+   // Get mapped advection
+   m_geometry.multJonValid(ExB_advection);
+
+   // Update RHS
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+     a_rhs[dit] -= ExB_advection[dit];
+   }
+}
+
+
+void DriftFluidOp::subtractExBGradN(LevelData<FArrayBox>&  a_rhs,
+                                    const LevelData<FArrayBox>& a_soln,
+                                    const EMFields&        a_EM_fields,
+                                    const Real             a_time)
+{
+      
+   // Get geometry parameters
+   const DisjointBoxLayout& grids = m_geometry.grids();
+   int order = (m_geometry.secondOrder()) ? 2 : 4;
+   
+   LevelData<FArrayBox> ExB_grad_n(grids, 1, IntVect::Zero);
+   m_fluid_op_utils->computeExBGradData(ExB_grad_n,
+                                        a_soln,
+                                        a_EM_fields.getEFieldCell(),
+                                        "uw2",
+                                        false);
+   
+   // Get mapped ExBgradN
+   m_geometry.multJonValid(ExB_grad_n);
+
+   // Update RHS
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+     a_rhs[dit] -= ExB_grad_n[dit];
+   }
+}
+
+void DriftFluidOp::subtractExBGradN0(LevelData<FArrayBox>&  a_rhs,
+                                     const EMFields&        a_EM_fields,
+                                     const Real             a_time)
+{
+   /*
+    Because this term only represets a "source term" for the density equation
+    we compute gradN0 using centered scheme without worrying about stability
+    */
+   
+   // Get geometry parameters
+   const DisjointBoxLayout& grids = m_geometry.grids();
+   int order = (m_geometry.secondOrder()) ? 2 : 4;
+   
+   // Get background density gradient
    if (m_first_call) {
       LevelData<FArrayBox> n0(grids, 1, 2*IntVect::Unit);
       m_n0_func->assign( n0, m_geometry, a_time);
-      LevelData<FArrayBox> n0_gradient_mapped(grids, CFG_DIM, IntVect::Unit);
       
+      LevelData<FArrayBox> n0_gradient_mapped(grids, CFG_DIM, IntVect::Unit);
       if (SpaceDim == 3) {
          m_geometry.computeMappedGradient(n0, n0_gradient_mapped, order);
       }
       if (SpaceDim == 2) {
          m_geometry.computeMappedPoloidalGradientWithGhosts(n0, n0_gradient_mapped, order);
       }
-      m_n0_gradient.define(grids, CFG_DIM, IntVect::Unit);
-      m_geometry.unmapGradient(n0_gradient_mapped, m_n0_gradient );
-   }
 
+      m_n0_gradient.define(grids, CFG_DIM, IntVect::Unit);
+      if (SpaceDim == 3) {
+         m_geometry.unmapGradient(n0_gradient_mapped, m_n0_gradient );
+      }
+      if (SpaceDim == 2) {
+         m_geometry.unmapPoloidalGradient(n0_gradient_mapped, m_n0_gradient );
+      }
+   }
+   
    // Compute the ExB drift on cell centers
    LevelData<FArrayBox> ExB_drift(grids, 3, IntVect::Zero);
    m_geometry.computeEXBDrift(a_EM_fields.getEFieldCell(), ExB_drift);
@@ -163,91 +321,28 @@ void DriftFluidOp::accumulateRHS(FluidSpeciesPtrVect&              a_rhs,
    
    m_geometry.multJonValid(ExB_grad_n0);
 
-   // update RHS
+   // Update RHS
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-     rhs_data[dit] -= ExB_grad_n0[dit];
+     a_rhs[dit] -= ExB_grad_n0[dit];
    }
-
-   // Add parallel hyperviscosity
-   if (m_include_hyperviscosity) {
-
-      // Get Dshape function
-      if (m_first_call) {
-         LevelData<FArrayBox> D_par_cc(grids, 1, 2*IntVect::Unit);
-         m_D_par_func->assign( D_par_cc, m_geometry, a_time);
-         
-         m_geometry.fillInternalGhosts( D_par_cc );
-         
-         m_D_par_fc.define(grids, 1, IntVect::Zero);
-         fourthOrderCellToFaceCenters(m_D_par_fc, D_par_cc);
-      }
-   
-      // Compute diffusion coefficient
-      LevelData<FluxBox> D_tensor(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
-      LevelData<FluxBox> D_tensor_mapped(grids, SpaceDim*SpaceDim, 2*IntVect::Unit);
-
-      // Get parallel elliptic coefficients
-      const LevelData<FluxBox>& par_coeff = m_geometry.getEllipticOpParCoeff();
-      const LevelData<FluxBox>& par_coeff_mapped  = m_geometry.getEllipticOpParCoeffMapped();
-
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         D_tensor[dit].copy(par_coeff[dit]);
-         D_tensor_mapped[dit].copy(par_coeff_mapped[dit]);
-         for (int dir = 0; dir < SpaceDim; dir++) {
-            for (int n = 0; n < SpaceDim*SpaceDim; n++) {
-               D_tensor[dit][dir].mult(m_D_par_fc[dit][dir],0,n,1);
-               D_tensor_mapped[dit][dir].mult(m_D_par_fc[dit][dir],0,n,1);
-            }
-         }
-      }
-   
-      // Set diffisionOf coefficients
-      m_diffusion_op->setOperatorCoefficients(D_tensor, D_tensor_mapped, *m_diffusion_op_bcs);
-
-      // Compute diffusion flux divergence
-      LevelData<FArrayBox> flux_div(grids, 1, IntVect::Zero);
-      m_diffusion_op->computeFluxDivergence( soln_data, flux_div, false, !m_use_hyperviscosity_bcs);
-
-      LevelData<FArrayBox> hypervisc(grids, 1, IntVect::Zero);
-      m_diffusion_op->computeFluxDivergence( flux_div, hypervisc, false, !m_use_hyperviscosity_bcs);
-      m_geometry.multJonValid(hypervisc);
-   
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         rhs_data[dit] -= flux_div[dit];
-      }
-   }
-   
-   m_first_call = false;
 }
 
-
-void DriftFluidOp::accumulateExplicitRHS(FluidSpeciesPtrVect&               a_rhs,
-                                        const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
-                                        const FluidSpeciesPtrVect&         a_fluid_species,
-                                        const PS::ScalarPtrVect&           a_scalars,
-                                        const EMFields&                    a_EM_fields,
-                                        const int                          a_fluidVecComp,
-                                        const Real                         a_time)
+void DriftFluidOp::postTimeEval(FluidSpecies&  a_species_comp,
+                                FluidSpecies&  a_species_phys,
+                                const Real     a_dt,
+                                const Real     a_time,
+                                const int      a_stage )
 {
-   if (!m_is_time_implicit) {
-      accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_EM_fields, a_fluidVecComp, a_time);
+   LevelData<FArrayBox>& soln_comp = a_species_comp.cell_var(0);
+   LevelData<FArrayBox>& soln_phys = a_species_phys.cell_var(0);
+   
+   for (int dir=0; dir<SpaceDim; dir++) {
+      if (m_harmonic_filtering[dir] == 1) {
+         SpaceUtils::applyHarmonicFiltering(soln_comp, dir);
+         SpaceUtils::applyHarmonicFiltering(soln_phys, dir);
+      }
    }
 }
-
-
-void DriftFluidOp::accumulateImplicitRHS(FluidSpeciesPtrVect&              a_rhs,
-                                        const PS::KineticSpeciesPtrVect&  a_kinetic_species_phys,
-                                        const FluidSpeciesPtrVect&        a_fluid_species,
-                                        const PS::ScalarPtrVect&          a_scalars,
-                                        const EMFields&                   a_EM_fields,
-                                        const int                         a_fluidVecComp,
-                                        const Real                        a_time )
-{
-   if (m_is_time_implicit) {
-      accumulateRHS(a_rhs, a_kinetic_species_phys, a_fluid_species, a_scalars, a_EM_fields, a_fluidVecComp, a_time);
-   }
-}
-
 
 void DriftFluidOp::defineBlockPC( std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>& a_pc,
                                  std::vector<PS::DOFList>&                                    a_dof_list,
@@ -376,10 +471,9 @@ void DriftFluidOp::solvePCImEx(FluidSpeciesPtrVect&              a_fluid_species
 
 }
 
-void DriftFluidOp::fillGhostCells( FluidSpecies&  a_species_phys,
-                              const double   a_time )
+void DriftFluidOp::fillGhostCells(FluidSpecies&  a_species_phys,
+                                  const double   a_time )
 {
-#if 0
    CH_TIME("DriftFluidOp::fillGhostCells()");
    
    // Do we need it here, or we alredy pre-filled the ghosts
@@ -388,34 +482,99 @@ void DriftFluidOp::fillGhostCells( FluidSpecies&  a_species_phys,
    // Fill ghost cells except for those on physical boundaries
    LevelData<FArrayBox>& fld( a_species_phys.cell_var(0) );
    m_geometry.fillInternalGhosts( fld );
+
    // Fill ghost cells on physical boundaries
    m_fluid_variable_bc->apply( a_species_phys, a_time );
-#endif
+}
+
+
+Real DriftFluidOp::computeDtImExTI( const FluidSpeciesPtrVect&  a_fluid_comp )
+{
+   CH_TIME("DriftFluidOp::computeDtImExTI()");
+   
+   Real dt = computeCourantTimeStep( a_fluid_comp );
+   
+   if (dt>m_max_dt) dt=m_max_dt;
+   
+   return dt;
+}
+
+Real DriftFluidOp::computeDtExplicitTI( const FluidSpeciesPtrVect&  a_fluid_comp )
+{
+   CH_TIME("DriftFluidOp::computeDtExplicit()");
+   
+   Real dt = computeCourantTimeStep( a_fluid_comp );
+   
+   if (dt>m_max_dt) dt=m_max_dt;
+   
+   return dt;
+}
+
+Real DriftFluidOp::computeCourantTimeStep( const FluidSpeciesPtrVect&  a_fluid_comp )
+{
+   
+   const DisjointBoxLayout& grids = m_geometry.grids();
+   
+   // Compute physical ExB velocity drift on face centers
+   LevelData<FluxBox> ExB_drift(grids, 3, IntVect::Unit);
+   m_geometry.computeEXBDrift(m_E_field, ExB_drift);
+      
+   LevelData<FluxBox> vel_ExB(grids, SpaceDim, IntVect::Unit);
+   for (DataIterator dit(vel_ExB.dataIterator()); dit.ok(); ++dit) {
+      for (int dir=0; dir<SpaceDim; dir++) {
+         vel_ExB[dit][dir].copy(ExB_drift[dit][dir],0,0);
+         if (SpaceDim == 2) {
+            vel_ExB[dit][dir].copy(ExB_drift[dit][dir],2,1);
+         }
+         if (SpaceDim == 3) {
+            vel_ExB[dit][dir].copy(ExB_drift[dit][dir],1,1);
+            vel_ExB[dit][dir].copy(ExB_drift[dit][dir],2,2);
+         }
+         vel_ExB[dit][dir] *= m_larmor;
+      }
+   }
+   m_geometry.applyAxisymmetricCorrection(vel_ExB);
+   
+   // Transform to mapped ExB velocity
+   m_geometry.multNTransposePointwise( vel_ExB );
+   
+   Real dt = m_fluid_op_utils->computeAdvectionDt(vel_ExB,
+                                                  m_advection_scheme,
+                                                  m_time_step_diagnostics);
+   
+   return dt;
 }
 
 
 void DriftFluidOp::parseParameters( ParmParse& a_pp )
 {
    a_pp.query( "time_implicit", m_is_time_implicit);
+   
+   a_pp.query( "linearized_model", m_is_linearized);
       
    GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
    std::string grid_function_name;
-   a_pp.get("background_density", grid_function_name );
-   m_n0_func = grid_library->find( grid_function_name );
    
-   a_pp.query( "include_parallel_hyperviscosity", m_include_hyperviscosity);
-   a_pp.query( "use_hyperviscosity_bcs", m_use_hyperviscosity_bcs );
-   
-   if (m_include_hyperviscosity) {
-      if (a_pp.contains("D_par_hyperviscosity")) {
-         a_pp.get("D_par_hyperviscosity", grid_function_name );
-         m_D_par_func = grid_library->find( grid_function_name );
+   if (m_is_linearized) {
+      if (a_pp.contains("background_density")) {
+         a_pp.get("background_density", grid_function_name );
+         m_n0_func = grid_library->find( grid_function_name );
       }
       else {
-         MayDay::Error("parallel hyperviscosity coefficient must be specified");
+         MayDay::Error("DriftFluidOp::background density must be specified for the linearized model");
       }
    }
    
+   a_pp.query("advection_scheme", m_advection_scheme );
+   a_pp.query("max_dt", m_max_dt);
+   a_pp.query("time_step_diagnostics", m_time_step_diagnostics);
+   
+   a_pp.query( "include_hyperviscosity", m_include_hyperviscosity);
+   a_pp.query( "use_hyperviscosity_bcs", m_use_hyperviscosity_bcs );
+      
+   a_pp.query( "include_boundary_relaxation", m_include_boundary_relaxation);
+   
+   a_pp.queryarr( "harmonic_filtering", m_harmonic_filtering, 0, SpaceDim );
 }
 
 

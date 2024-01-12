@@ -412,6 +412,15 @@ class MultidomainSimulation : public AppCtxt
                                             a_im );
       }
     }
+
+    inline virtual
+    void ARKFirstStageExplicit( const bool a_flag )
+    {
+      CH_assert(isDefined());
+      for (int i = 0; i < m_num_systems; i++) {
+        m_systems[i]->ARKFirstStageExplicit(a_flag);
+      }
+    }
     
     inline virtual
     void solveSolutionPC( ODEVector&        a_Z, 

@@ -47,18 +47,18 @@ void InsulatorConductorBC::defineInsulatorConductorBinary( const LevelData<FArra
    }
 }
 
-void InsulatorConductorBC::defineInsulatorConductorBinary( const LevelData<EdgeDataBox>&    a_data,
+void InsulatorConductorBC::defineInsulatorConductorBinary( const LevelData<FluxBox>&        a_data,
                                                            const BoundaryBoxLayoutPtrVect&  a_all_bdry_layouts,
                                                            const MagGeom&                   a_geometry ) const
 {
-   CH_TIME("InsulatorConductorBC::defineInsulatorConductorBinary() for EdgeDataBox");
-   if( !m_ICbinary_ce.isDefined() || (m_ICbinary_ce.ghostVect() < a_data.ghostVect()) ) {
+   CH_TIME("InsulatorConductorBC::defineInsulatorConductorBinary() for FluxBox");
+   if( !m_ICbinary_fc.isDefined() || (m_ICbinary_fc.ghostVect() < a_data.ghostVect()) ) {
  
       const DisjointBoxLayout& grids( a_geometry.grids() );
-      m_ICbinary_ce.define(grids, 1, a_data.ghostVect());
+      m_ICbinary_fc.define(grids, 1, a_data.ghostVect());
       for (DataIterator dit( grids ); dit.ok(); ++dit) {
          for (int dir=0; dir<SpaceDim; dir++) {
-            m_ICbinary_ce[dit].setVal(0.0); // initialize to conductor everywhere
+            m_ICbinary_fc[dit][dir].setVal(0.0); // initialize to conductor everywhere
          }
       }
  
@@ -68,7 +68,38 @@ void InsulatorConductorBC::defineInsulatorConductorBinary( const LevelData<EdgeD
             //            EXISTS ON MORE THAN ONE BOUNDARY
             //            ALSO NEED TO SPECIFY WHICH BOUNDARIES ARE CONDUCTORS
             const BoundaryBoxLayout& bdry_layout( *(a_all_bdry_layouts[b]) );
-            InsulatorConductorBCUtils::defineInsulatorConductorBinary( m_ICbinary_ce,
+            InsulatorConductorBCUtils::defineInsulatorConductorBinary( m_ICbinary_fc,
+                                                                       bdry_layout,
+                                                                       m_Xmin_insulator,
+                                                                       m_Xmax_insulator,
+                                                                       a_geometry );
+         }
+      }
+   }
+}
+
+void InsulatorConductorBC::defineInsulatorConductorBinary( const LevelData<EdgeDataBox>&    a_data,
+                                                           const BoundaryBoxLayoutPtrVect&  a_all_bdry_layouts,
+                                                           const MagGeom&                   a_geometry ) const
+{
+   CH_TIME("InsulatorConductorBC::defineInsulatorConductorBinary() for EdgeDataBox");
+   if( !m_ICbinary_ec.isDefined() || (m_ICbinary_ec.ghostVect() < a_data.ghostVect()) ) {
+ 
+      const DisjointBoxLayout& grids( a_geometry.grids() );
+      m_ICbinary_ec.define(grids, 1, a_data.ghostVect());
+      for (DataIterator dit( grids ); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; dir++) {
+            m_ICbinary_ec[dit][dir].setVal(0.0); // initialize to conductor everywhere
+         }
+      }
+ 
+      for(int b(0); b<a_all_bdry_layouts.size(); b++) {
+         if(m_bdry_is_insulator_conductor[b]) {
+            // WARNING!!! THIS NEEDS TO BE MODIFIED IF INSULATOR 
+            //            EXISTS ON MORE THAN ONE BOUNDARY
+            //            ALSO NEED TO SPECIFY WHICH BOUNDARIES ARE CONDUCTORS
+            const BoundaryBoxLayout& bdry_layout( *(a_all_bdry_layouts[b]) );
+            InsulatorConductorBCUtils::defineInsulatorConductorBinary( m_ICbinary_ec,
                                                                        bdry_layout,
                                                                        m_Xmin_insulator,
                                                                        m_Xmax_insulator,
@@ -108,6 +139,36 @@ void InsulatorConductorBC::applyBC( LevelData<FArrayBox>&      a_data,
 
 }
 
+void InsulatorConductorBC::applyFluxBC( LevelData<FluxBox>&        a_data,
+                                  const BoundaryBoxLayoutPtrVect&  a_all_bdry_layouts,
+                                  const Vector<string>&            a_all_bc_type,
+                                  const MagGeom&                   a_geometry,   
+                                  const Real                       a_time ) const
+{
+   CH_TIME("InsulatorConductorBC::applyFluxBC()");
+      
+   defineInsulatorConductorBinary( a_data, a_all_bdry_layouts, a_geometry );
+   
+   for(int b(0); b<a_all_bdry_layouts.size(); b++) {
+      if(m_bdry_is_insulator_conductor[b] || m_bdry_is_conductor[b]) {
+      
+         const BoundaryBoxLayout& bdry_layout( *(a_all_bdry_layouts[b]) );
+         const std::string this_bc_type (a_all_bc_type[b]);
+         CH_assert(this_bc_type=="insulatorConductor_B"); 
+         Real this_ft = 0.0;
+         if(m_bdry_is_insulator_conductor[b]) m_timeFunction->getValue(this_ft,a_time);
+         InsulatorConductorBCUtils::setInsulatorConductorBC( a_data,
+                                                             m_ICbinary_fc,
+                                                             bdry_layout,
+                                                             this_bc_type,
+                                                             this_ft,
+                                                             m_Xmin_insulator,
+                                                             a_geometry );
+      }
+   }
+
+}
+
 void InsulatorConductorBC::setInsulatorBC( LevelData<FArrayBox>&      a_dst,
                                      const LevelData<FArrayBox>&      a_src,
                                      const BoundaryBoxLayoutPtrVect&  a_all_bdry_layouts,
@@ -115,7 +176,7 @@ void InsulatorConductorBC::setInsulatorBC( LevelData<FArrayBox>&      a_dst,
                                      const MagGeom&                   a_geometry,   
                                      const Real                       a_time ) const
 {
-   CH_TIME("InsulatorConductorBC::applyBC()");
+   CH_TIME("InsulatorConductorBC::setInsulatorBC()");
       
    defineInsulatorConductorBinary( a_dst, a_all_bdry_layouts, a_geometry );
    
@@ -149,7 +210,7 @@ void InsulatorConductorBC::applyEdgeBC( LevelData<EdgeDataBox>&    a_data,
          const std::string this_bc_type (a_all_bc_type[b]);
          if(this_bc_type=="insulatorConductor_currentDensity") {
             InsulatorConductorBCUtils::setInsulatorConductorBC( a_data,
-                                                                m_ICbinary_ce,
+                                                                m_ICbinary_ec,
                                                                 bdry_layout,
                                                                 this_bc_type );
          }

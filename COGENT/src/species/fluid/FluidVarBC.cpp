@@ -6,6 +6,7 @@
 
 #include "NamespaceHeader.H"
 
+//#define NEW_CODIM_CORNER_BC_METHOD
 
 FluidVarBC::FluidVarBC(const std::string&  a_species_name,
                        const std::string&  a_variable_name,
@@ -40,42 +41,10 @@ void FluidVarBC::apply(FluidSpecies&  a_species_phys,
                        const Real&    a_time )
 {
    CH_TIME("FluidVarBC::apply()");
-   const MagGeom& geometry( a_species_phys.configurationSpaceGeometry() );
-   const MagCoordSys& coord_sys( dynamic_cast<const MagCoordSys&>( *geometry.getCoordSys()) );
 
-   // define boundary Layout, Data, and bc Types
-   defineBoundaryLDT( a_species_phys );
-
-   // apply BCs to cell variable
    LevelData<FArrayBox>& cell_var( a_species_phys.cell_var( m_variable_name ) );
-   const LevelData<FluxBox>& velocity = a_species_phys.velocity();
-   FluidBCUtils::setCellBC( cell_var,
-                            velocity,
-                            m_block_bdry_layouts,
-                            m_block_bdry_data,
-                            m_block_bc_type,
-                            geometry );
-   
-   if(m_insulator_conductor_bc) { // apply InsulatorConductorBC if defined
-      m_InsulatorConductorBC->applyBC( cell_var, m_block_bdry_layouts, m_block_bc_type, geometry, a_time );
-   }
-   
-//#define NEW_CODIM_CORNER_BC_METHOD
-#ifdef NEW_CODIM_CORNER_BC_METHOD
-   // interpolate to fill physical corner boundaries
-   // JRA, something wrong here for multi-block? (see two_field_neutrals)
-   // JRA, Also, code is actually slower in 3D. While time spent here goes
-   //      down, for some reason time spent doing exchange in convertToPhysical
-   //      goes up by a lot. Don't understand this.
-   CodimBC::setCodimCornerValues( cell_var, coord_sys );
-#else
-   // fills both physical and internal corners with extrapolation
-   CodimBC::setCodimBoundaryValues( cell_var, coord_sys );
-   
-   // copy internal corners with non-corner values via exchange
-   geometry.fillCorners(cell_var, cell_var.ghostVect(), SpaceDim); 
-#endif
-  
+   applyCellBC( a_species_phys, cell_var, a_time );
+
 }
 
 void FluidVarBC::applyCellBC( const FluidSpecies&    a_species_phys,
@@ -102,8 +71,12 @@ void FluidVarBC::applyCellBC( const FluidSpecies&    a_species_phys,
       m_InsulatorConductorBC->applyBC( a_var, m_block_bdry_layouts, m_block_bc_type, geometry, a_time );
    }
    
-//#define NEW_CODIM_CORNER_BC_METHOD
 #ifdef NEW_CODIM_CORNER_BC_METHOD
+   // interpolate to fill physical corner boundaries
+   // JRA, something wrong here for multi-block? (see two_field_neutrals)
+   // JRA, Also, code is actually slower in 3D. While time spent here goes
+   //      down, for some reason time spent doing exchange in convertToPhysical
+   //      goes up by a lot. Don't understand this.
    CodimBC::setCodimCornerValues( a_var, coord_sys );
 #else
    // fills both physical and internal corners with extrapolation
@@ -112,7 +85,48 @@ void FluidVarBC::applyCellBC( const FluidSpecies&    a_species_phys,
    // copy internal corners with non-corner values via exchange
    geometry.fillCorners(a_var, a_var.ghostVect(), SpaceDim); 
 #endif
-  
+
+   applyPhysBC( a_species_phys, a_var ); 
+
+}
+
+void FluidVarBC::applyPhysBC( const FluidSpecies&    a_species_phys,
+                              LevelData<FArrayBox>&  a_var )
+{
+   CH_TIME("FluidVarBC::applyPhysBC()");
+   
+   const MagGeom& geometry( a_species_phys.configurationSpaceGeometry() );
+   const MagCoordSys& coord_sys( dynamic_cast<const MagCoordSys&>( *geometry.getCoordSys()) );
+   
+   // need to check for neumann_phys, which will have caused extrapolation to be
+   // used in setCellBC above, needed to compute tangential derivatives
+   int local_resetCorners = 0;
+   for(int b(0); b<m_block_bc_type.size(); b++) {
+      const std::string this_bc_type (m_block_bc_type[b]);
+      if(this_bc_type=="neumann_phys") {
+         local_resetCorners = 1;
+         const BoundaryBoxLayout& bdry_layout( *(m_block_bdry_layouts[b]) );
+         for (int n=0; n<a_var.nComp(); n++) {
+            FluidBCUtils::setNeumannPhysBC( a_var, n, bdry_layout, geometry );
+         }
+      }
+      if(this_bc_type=="noStress_phys") {
+         local_resetCorners = 1;
+         const BoundaryBoxLayout& bdry_layout( *(m_block_bdry_layouts[b]) );
+         FluidBCUtils::setNoStressPhysBC( a_var, bdry_layout, geometry );
+      }
+   }
+
+   int global_resetCorners = local_resetCorners;
+#ifdef CH_MPI
+   MPI_Allreduce( &local_resetCorners, &global_resetCorners, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD ); 
+#endif
+
+   if(global_resetCorners) {
+      CodimBC::setCodimBoundaryValues( a_var, coord_sys );
+      geometry.fillCorners(a_var, a_var.ghostVect(), SpaceDim); 
+   }
+
 }
 
 void FluidVarBC::applyFluxBC(const FluidSpecies&  a_species_phys,
@@ -130,6 +144,10 @@ void FluidVarBC::applyFluxBC(const FluidSpecies&  a_species_phys,
                             m_block_bdry_layouts,
                             m_block_bc_type,
                             geometry );
+   
+   if(m_insulator_conductor_bc) {
+      m_InsulatorConductorBC->applyFluxBC( a_dst, m_block_bdry_layouts, m_block_bc_type, geometry, a_time );
+   }
 
 }
 
@@ -152,6 +170,29 @@ void FluidVarBC::applyEdgeBC(const FluidSpecies&      a_species_phys,
    if(m_insulator_conductor_bc) {
       const MagGeom& geometry( a_species_phys.configurationSpaceGeometry() );
       m_InsulatorConductorBC->applyEdgeBC( a_dst, m_block_bdry_layouts, m_block_bc_type, geometry );
+   }
+
+}
+
+void FluidVarBC::applyNodeBC(const FluidSpecies&        a_species_phys,
+                             LevelData<NodeFArrayBox>&  a_dst,
+                             const Real                 a_time )
+{
+   CH_TIME("FluidVarBC::applyNodeBC()");
+   
+   // define boundary Layout, Data, and bc Types
+   defineBoundaryLDT( a_species_phys );
+   
+   const IntVect& dst_ghost_vect( a_dst.ghostVect() );
+   if(dst_ghost_vect > IntVect::Zero) {
+      //FluidBCUtils::setNodeBC( a_dst,
+      //                         m_block_bdry_layouts,
+      //                         m_block_bc_type );
+   }
+   
+   if(m_insulator_conductor_bc) {
+      //const MagGeom& geometry( a_species_phys.configurationSpaceGeometry() );
+      //m_InsulatorConductorBC->applyNodeBC( a_dst, m_block_bdry_layouts, m_block_bc_type, geometry );
    }
 
 }
@@ -195,6 +236,28 @@ void FluidVarBC::setEdgeBC(const FluidSpecies&            a_species_phys,
    
    // copy a_src to a_dst in boundary region
    FluidBCUtils::setEdgeBC( a_dst,
+                            m_block_bdry_layouts,
+                            a_src );
+   
+}
+
+void FluidVarBC::setNodeBC(const FluidSpecies&            a_species_phys,
+                           LevelData<NodeFArrayBox>&        a_dst,
+                           const LevelData<NodeFArrayBox>&  a_src,
+                           const Real                     a_time )
+{
+   CH_TIME("FluidVarBC::setNodeBC()");
+   
+   // check that src and dst ghost vects are what they need to be
+   const IntVect& dst_ghost_vect( a_dst.ghostVect() );
+   const IntVect& src_ghost_vect( a_src.ghostVect() );
+   CH_assert(dst_ghost_vect==src_ghost_vect || src_ghost_vect==IntVect::Zero);   
+   
+   // define boundary Layout, Data, and bc Types
+   defineBoundaryLDT( a_species_phys );
+   
+   // copy a_src to a_dst in boundary region
+   FluidBCUtils::setNodeBC( a_dst,
                             m_block_bdry_layouts,
                             a_src );
    

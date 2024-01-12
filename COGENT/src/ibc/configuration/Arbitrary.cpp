@@ -71,6 +71,9 @@ void Arbitrary::setPointwise( FArrayBox&                 a_data,
    if (m_coord_type == "physical") {
       cc_coords.copy(a_real_coords);
    }
+   else if (m_coord_type == "cylindrical") {
+      block_coord_sys.getCylindricalCoords( cc_coords, a_real_coords);
+   }
    else if (m_coord_type == "toroidal") {
       block_coord_sys.getToroidalCoords( cc_coords, a_real_coords, false);
    }

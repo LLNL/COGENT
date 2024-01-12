@@ -331,12 +331,29 @@ void GKOps::initializeFluidSpeciesPhysical( CFG::FluidSpeciesPtrVect&  a_species
       m_fluid_species_phys[species] = a_species_comp[species]->clone(ghost_vect_cfg, true);
       m_fluid_species_phys[species]->convertToPhysical();
    }   
-   m_fluidOp->fillGhostCells( m_fluid_species_phys, a_time );
-   if ( a_time == 0.0 ) {
-      m_fluidOp->initializeWithBC( a_species_comp, m_fluid_species_phys, a_time ); 
-   }
-
 }
+
+void GKOps::applyFluidInitializationConstraints(CFG::FluidSpeciesPtrVect&  a_species_comp,
+                                                CFG::FluidSpeciesPtrVect&  a_species_phys,
+                                                const double a_time )
+{
+
+
+   if (m_fluidOp->isInitializationConstrained(a_species_phys)) {
+      
+      fillPhysicalFluidSpeciesGhostCells( a_time );
+      fillPhysicalKineticSpeciesGhostCells( a_time );
+
+      m_fluidOp->applyInitializationConstraints(a_species_comp,
+                                                m_fluid_species_phys,
+                                                m_kinetic_species_phys,
+                                                m_EM_fields,
+                                                a_time);
+   
+      m_fluidOp->convertToPhysical( a_species_phys, a_species_comp );
+   }
+}
+
 
 GKOps::~GKOps()
 {
@@ -488,11 +505,21 @@ void GKOps::initializeTI  ( const int       a_step,
    const KineticSpeciesPtrVect& soln_phys( a_state_phys.dataKinetic() );
    m_collisions->preTimeStep( soln_comp, a_time, soln_phys );
 
-   preOpEval(a_state_comp, a_time, chkpt_ti_init);
+   updatePhysicalSpeciesVector( a_state_comp.dataKinetic(), a_time );
+   updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time );
+   m_fluidOp->preOpEval( m_kinetic_species_phys, 
+                         a_state_comp.dataFluid(), 
+                         a_state_comp.dataScalar(), 
+                         m_EM_fields, 
+                         a_time );
    explicitOp(a_rhs, a_time, a_state_comp);
 
    if (!trivialSolutionOp()) {
-     preSolutionOpEval(a_state_comp, a_time, chkpt_ti_init);
+     m_fluidOp->preSolutionOpEval( m_kinetic_species_phys, 
+                                   a_state_comp.dataFluid(), 
+                                   a_state_comp.dataScalar(), 
+                                   m_EM_fields, 
+                                   a_time );
      solutionOp(a_rhs, a_time, a_state_comp);
    }
    
@@ -511,7 +538,7 @@ void GKOps::preTimeStep (const int       a_step,
    if(!m_no_efield) {
       updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time);
       updatePhysicalSpeciesVector( a_state_comp.dataKinetic(), a_time, false);
-      setEMFields( a_state_comp, a_step, m_EM_fields );
+      setEMFields( a_state_comp, m_EM_fields );
    }
 
    const KineticSpeciesPtrVect& soln_comp( a_state_comp.dataKinetic() );
@@ -638,15 +665,17 @@ void GKOps::postTimeStage( const int   a_step,
    // has already been calculated to compute the velocity used in the
    // time step estimate.
 
+   bool ark_flag = a_stage || (!m_ark_first_stage_explicit);
+
    updatePhysicalSpeciesVector( a_state_comp.dataFluid(), a_time ); 
    updatePhysicalSpeciesVector( a_state_comp.dataKinetic(), a_time, false ); 
-   if (a_stage && !m_no_efield && !m_skip_efield_stage_update ) {
-      setEMFields( a_state_comp, a_step, m_EM_fields );
+   if (ark_flag && !m_no_efield && !m_skip_efield_stage_update ) {
+      setEMFields( a_state_comp, m_EM_fields );
    }
    fillPhysicalKineticSpeciesGhostCells(a_time);
 
    const KineticSpeciesPtrVect& soln( a_state_comp.dataKinetic() );
-   m_collisions->postTimeStage( soln, a_time, a_stage );
+   m_collisions->postTimeStage( soln, a_time, ark_flag );
 
    if ( !m_ampere_post_step_update && m_ampere_law ) {
 
@@ -689,77 +718,71 @@ void GKOps::preSolutionOpEval( const GKState&     a_state,
   // if it did, e.g., for an approximate preconditioner operator evaluation.
   // Dependence on class state like this is dangerous, but necessary for performance.
  
-  if ((!m_enable_ti_optimizations) && (!m_no_efield)) {
-    setEMFields( a_state, 
-                 -1, 
-                 m_EM_fields_ImOpImEx, 
-                 !m_step_const_kin_coeff_fluidop );
-  }
+  if (m_enable_ti_optimizations) {
 
-  if ((a_chkpt == chkpt_ti_init) || (!m_enable_ti_optimizations)) {
-
-    updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
-
-    CH_START(t_update_phys_vector);
-    updatePhysicalSpeciesVector( a_state.dataKinetic(), a_time );
-    CH_STOP(t_update_phys_vector);
-
-    CH_START(t_fluid_preop_eval);
-    m_fluidOp->preSolutionOpEval( m_kinetic_species_phys, 
-                                  a_state.dataFluid(), 
-                                  a_state.dataScalar(), 
-                                  m_EM_fields, 
-                                  a_time );
-    CH_STOP(t_fluid_preop_eval);
-
-  } else if (a_chkpt == chkpt_ti_advance_1) {
-
-    /* in time step, before stage calculation */
-
-    updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
-
-    if (!m_step_const_kin_coeff_fluidop) {
-
+    if (a_chkpt == chkpt_ti_advance_1) {
+  
+      /* in time step, before stage calculation */
+  
+      updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
+  
+      if (!m_step_const_kin_coeff_fluidop) {
+  
+        CH_START(t_update_phys_vector);
+        updatePhysicalSpeciesVector( a_state.dataKinetic(), a_time );
+        CH_STOP(t_update_phys_vector);
+    
+        CH_START(t_fluid_preop_eval);
+        m_fluidOp->preSolutionOpEval( m_kinetic_species_phys, 
+                                      a_state.dataFluid(), 
+                                      a_state.dataScalar(), 
+                                      m_EM_fields, 
+                                      a_time );
+        CH_STOP(t_fluid_preop_eval);
+  
+      }
+  
+    } else if (a_chkpt == chkpt_ti_advance_3) {
+  
+      /* in time step, before step completion */
+  
       CH_START(t_update_phys_vector);
       updatePhysicalSpeciesVector( a_state.dataKinetic(), a_time );
       CH_STOP(t_update_phys_vector);
+    
+      updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
   
-      CH_START(t_fluid_preop_eval);
-      m_fluidOp->preSolutionOpEval( m_kinetic_species_phys, 
-                                    a_state.dataFluid(), 
-                                    a_state.dataScalar(), 
-                                    m_EM_fields, 
-                                    a_time );
-      CH_STOP(t_fluid_preop_eval);
-
-    }
-
-  } else if (a_chkpt == chkpt_ti_advance_3) {
-
-    /* in time step, before step completion */
-
-    CH_START(t_update_phys_vector);
-    updatePhysicalSpeciesVector( a_state.dataKinetic(), a_time );
-    CH_STOP(t_update_phys_vector);
+      if (!m_step_const_kin_coeff_fluidop) {
   
-    updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
-
-    if (!m_step_const_kin_coeff_fluidop) {
-
-      CH_START(t_fluid_preop_eval);
-      m_fluidOp->preSolutionOpEval( m_kinetic_species_phys, 
-                                    a_state.dataFluid(), 
-                                    a_state.dataScalar(), 
-                                    m_EM_fields, 
-                                    a_time );
-      CH_STOP(t_fluid_preop_eval);
-
+        CH_START(t_fluid_preop_eval);
+        m_fluidOp->preSolutionOpEval( m_kinetic_species_phys, 
+                                      a_state.dataFluid(), 
+                                      a_state.dataScalar(), 
+                                      m_EM_fields, 
+                                      a_time );
+        CH_STOP(t_fluid_preop_eval);
+  
+      }
+  
+    } else {
+  
+      /* this function should not be called from any other location in the code */
+      MayDay::Error("GKOps::preSolutionOpEval() - invalid value for a_chkpt");
+  
     }
 
   } else {
 
-    /* this function should not be called from any other location in the code */
-    MayDay::Error("GKOps::preSolutionOpEval() - invalid value for a_chkpt");
+    updatePhysicalSpeciesVector( a_state.dataKinetic(), a_time, false );
+    updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
+    if (!m_no_efield) setEMFields( a_state, m_EM_fields );
+    fillPhysicalKineticSpeciesGhostCells( a_time );
+
+    m_fluidOp->preOpEval( m_kinetic_species_phys, 
+                          a_state.dataFluid(), 
+                          a_state.dataScalar(), 
+                          m_EM_fields, 
+                          a_time );
 
   }
 
@@ -786,23 +809,17 @@ void GKOps::preOpEval( const GKState&     a_state,
   // operator evaluation.  Dependence on class state like this is dangerous,
   // but necessary for performance.
   
-  bool  update_kinetic_phys(true),
-        update_fluid_phys(true),
-        compute_fluid_pre_op(true);
-
   if (m_enable_ti_optimizations) {
+
+    bool  update_kinetic_phys(true),
+          update_fluid_phys(true),
+          compute_fluid_pre_op(true);
 
     std::vector<std::string> implicit_vlasov_species(0);
     if (m_vlasov) m_vlasov->implicitSpecies(implicit_vlasov_species);
     bool is_vlasov_implicit = (implicit_vlasov_species.size() > 0);
   
     if (a_chkpt == chkpt_naive) {
-  
-      update_kinetic_phys   = true;
-      update_fluid_phys     = true;
-      compute_fluid_pre_op  = true;
-  
-    } else if (a_chkpt == chkpt_ti_init) {
   
       update_kinetic_phys   = true;
       update_fluid_phys     = true;
@@ -861,41 +878,41 @@ void GKOps::preOpEval( const GKState&     a_state,
   
     }
 
-  } else {
-  
-    update_kinetic_phys   = true;
-    update_fluid_phys     = true;
-    compute_fluid_pre_op  = true;
-
-    if(!m_no_efield) {
-      setEMFields( a_state, 
-                   -1, 
-                   m_EM_fields_ImOpImEx, 
-                   !m_step_const_kin_coeff_fluidop );
+    if ( update_kinetic_phys ) {
+      CH_START(t_update_phys_vector);
+      updatePhysicalSpeciesVector( a_state.dataKinetic(), a_time );
+      CH_STOP(t_update_phys_vector);
     }
 
-  }
+    if (update_fluid_phys) {
+      updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
+    }
 
-  if ( update_kinetic_phys ) {
-    CH_START(t_update_phys_vector);
-    updatePhysicalSpeciesVector( a_state.dataKinetic(), a_time );
-    CH_STOP(t_update_phys_vector);
-  }
-
-  if (update_fluid_phys) {
+    if (compute_fluid_pre_op) {
+      CH_START(t_fluid_preop_eval);
+      m_fluidOp->preOpEval( m_kinetic_species_phys, 
+                            a_state.dataFluid(), 
+                            a_state.dataScalar(), 
+                            m_EM_fields, 
+                            a_time );
+      CH_STOP(t_fluid_preop_eval);
+    }
+  
+  } else {
+  
+    updatePhysicalSpeciesVector( a_state.dataKinetic(), a_time, false );
     updatePhysicalSpeciesVector( a_state.dataFluid(), a_time );
-  }
+    if(!m_no_efield) setEMFields( a_state, m_EM_fields );
+    fillPhysicalKineticSpeciesGhostCells( a_time );
 
-  if (compute_fluid_pre_op) {
-    CH_START(t_fluid_preop_eval);
     m_fluidOp->preOpEval( m_kinetic_species_phys, 
                           a_state.dataFluid(), 
                           a_state.dataScalar(), 
                           m_EM_fields, 
                           a_time );
-    CH_STOP(t_fluid_preop_eval);
+
   }
-  
+
   return;
 }
 
@@ -984,13 +1001,16 @@ void GKOps::implicitOpImEx( GKRHSData&      a_rhs,
 {
    CH_TIME("GKOps::implicitOpImEx");
 
-   if ((!m_no_efield) && (m_enable_ti_optimizations)) {
+   bool update_EM_fields_ImOpImEx =     (     (a_state_comp.dataFluid().size() > 0) 
+                                          ||  (a_state_comp.dataScalar().size() > 0) )
+                                    &&  (!m_no_efield)
+                                    &&  (m_enable_ti_optimizations) ;
+
+   if (update_EM_fields_ImOpImEx) {
       // The last argument is for whether E_field will be injected or not;
       // If m_step_const_kin_coeff_fluidop = true, it means that kinietc distribution is not updated;
       // so we do not need to inject E_field
-
       setEMFields( a_state_comp, 
-                   -1, 
                    m_EM_fields_ImOpImEx, 
                    !m_step_const_kin_coeff_fluidop );
    }
@@ -1246,7 +1266,6 @@ void GKOps::solveVlasovOpPCImEx(Preconditioner<ODEVector,AppCtxt>* const a_pc,
 
 inline
 void GKOps::setEMFields( const GKState&   a_state_comp,
-                         const int        a_step,
                          CFG::EMFields&   a_EM_fields,
                          const bool       a_phase_space_update ) const
 {
@@ -1657,20 +1676,8 @@ void GKOps::convertToPhysical( const GKState& a_soln_mapped, GKState& a_soln_phy
    
    const CFG::FluidSpeciesPtrVect& soln_mapped_fluid = a_soln_mapped.dataFluid();
    CFG::FluidSpeciesPtrVect& soln_physical_fluid = a_soln_physical.dataFluid();
-   //for (int s=0; s<soln_mapped_fluid.size(); ++s) {
-   //   soln_physical_fluid[s]->copy(*soln_mapped_fluid[s]);
-   //   soln_physical_fluid[s]->convertToPhysical();
-   //}
    m_fluidOp->convertToPhysical( soln_physical_fluid, soln_mapped_fluid );
    
- 
-   //CFG::FluidSpeciesPtrVect& soln_physical_fluid = a_soln_physical.dataFluid();
-   //updatePhysicalSpeciesVector( a_soln_mapped.dataFluid(), a_cur_time );
-   //const CFG::FluidSpeciesPtrVect& soln_phys_fluid_wghosts = m_fluid_species_phys;
-   //for (int s=0; s<soln_physical_fluid.size(); ++s) {
-   //   soln_physical_fluid[s]->copy(*soln_phys_fluid_wghosts[s]);
-   //}
-
    const ScalarPtrVect& soln_mapped_scalar = a_soln_mapped.dataScalar();
    const ScalarPtrVect& soln_physical_scalar = a_soln_physical.dataScalar();
    for (int s=0; s<soln_mapped_scalar.size(); ++s) {

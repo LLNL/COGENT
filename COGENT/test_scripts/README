@@ -206,7 +206,7 @@ the beginning of the script.
 
 When the checkout_and_build script is run, it automatically constructs
 and installs the Make.defs.local file needed by the Chombo build
-system, as well as the the doconfig and doinstall scripts used to
+system, as well as the doconfig and doinstall scripts used to
 configure and build Hypre.  N.B.: This means that any existing
 Make.defs.local will be overwritten, so if you have one you treasure
 you'll need to save it elsewhere.  If any "dotkits" or "modules" are
@@ -226,23 +226,28 @@ those dotkits/modules following.  For example:
 
 # Set the master configuration parameters to be used in all
 # of the builds.  The options must, of course, be consistent
-# with the dotkits.  It dotkits are not available, the lines
-# below can just be commented out.
+# with the dotkits or modules.
 
-. /usr/local/tools/dotkit/init.sh
-use mvapich2-gnu-2.1
+# The following sets the compiler and MPI enviroment at Livermore Computing
+# using the Texas Advanced Computing Center LMOD system.  For other systems,
+# this will need to be replaced accordingly.
+if [ -f /usr/share/lmod/lmod/init/bash ]; then
+   . /usr/share/lmod/lmod/init/bash
+fi
+module load gcc/12.1.1
 
-MACHINE=cab
+MACHINE=quartz
 OPT=TRUE
 DEBUG=FALSE
 MPICXX=mpicxx
 MPICC=mpicc
 CXX=g++
+XTRACXXFLAGS=-march=native
 CC=gcc
 FC=gfortran
 HYPRE_DIR=hypre
-HDF5_SERIAL_DIR=/usr/local/tools/hdf5-gnu-serial-1.8.10
-HDF5_PARALLEL_DIR=/usr/local/tools/hdf5-gnu-parallel-mvapich2-1.8.10
+HDF5_SERIAL_DIR=/usr/tce/packages/hdf5/hdf5-1.14.0-gcc-12.1.1
+HDF5_PARALLEL_DIR=/usr/tce/packages/hdf5/hdf5-1.14.0-mvapich2-2.3.6-gcc-12.1.1
 
 # You can set the following flag to true if you know that hypre is
 # already built.  Otherwise, the copying of headers performed by the

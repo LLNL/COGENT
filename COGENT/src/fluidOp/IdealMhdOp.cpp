@@ -34,12 +34,31 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
      //m_is_time_implicit(true),
      m_implicitMhd(false),
      m_implicitViscosity(false),
+     m_energy_is_thermal(false),
+     m_energy_is_thermal_2(false),
+     m_isothermal(false),
+     m_enforceFluxBCs(false),
+     m_use_perturbative_form(false),
+     m_free_stream_preserving(false),
      m_advScheme("c2"),
      m_species_name(a_species_name),
      m_CGL(0),
+     m_magP(1),
+     m_blankN(false),
+     m_blankB(false),
+     m_magPforE0(1),
+     m_thermPforE0(1),
      m_initializeBfromVectorPotential(0),
+     m_initializeProfilesFromPSI(0),
+     m_initializeBackgroundPlusPert(0), 
+     m_addEnergyPerturbation(0),
+     m_perturbDensity(0),
+     m_perturbBtor(0),
+     m_rbtor_fact(1.0),
+     m_bpol_fact(1.0),
      m_opt_string(a_pp_str),
      m_my_pc_idx(-1),
+     m_relative_density_floor(0.0),
      m_tau(0.0),
      m_etaMin(0.0)
 {
@@ -50,14 +69,12 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
    }
 
    //  get initial conditions for cell variables and define boundary conditions instance
-   //
    const std::string icsn( "IC." + a_species_name);
    std:: string variable_name;
    ParmParse ppic( icsn.c_str() );
    FluidVarBCFactory fluid_var_bc_factory;
   
    // set IC and create BC for mass density
-   //
    variable_name = "density";
    CH_assert( ppic.contains("density.function") );
    m_density_cbc = m_fluid_bc.size();
@@ -66,7 +83,6 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
                          a_geometry.getCoordSys()->type(), false) );
  
    // set IC and create BC for momentum density
-   //
    variable_name = "momentumDensity";
    CH_assert( ppic.contains("momentumDensity_0.function") );
    CH_assert( ppic.contains("momentumDensity_1.function") );
@@ -79,45 +95,56 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
    m_fluid_bc.push_back( fluid_var_bc_factory.create(a_species_name, variable_name, 
                          a_geometry.getCoordSys()->type(), false) );
  
-
    
    // construct elliptic operators for viscosity
-   //
    std::string name, prefix, prefix_BC;
    EllipticOpBCFactory elliptic_op_bc_factory;
-   
-   name = "mom0_visc";
-   prefix = name;
-   ParmParse ppVisc_mom0( prefix.c_str() );
-   m_diffusionOp_mom0 = new Diffusion(ppVisc_mom0, a_geometry);
-   //
-   prefix_BC = "BC." + name;
-   ParmParse ppVisc_mom0_BC( prefix_BC.c_str() );
-   m_bc_mom0 = elliptic_op_bc_factory.create( name, ppVisc_mom0_BC,
-                                              *(a_geometry.getCoordSys()), false );
-   
-   name = "mom1_visc";
-   prefix = name;
-   ParmParse ppVisc_mom1( prefix.c_str() );
-   m_diffusionOp_mom1 = new Diffusion(ppVisc_mom1, a_geometry);
-   //
-   prefix_BC = "BC." + name;
-   ParmParse ppVisc_mom1_BC( prefix_BC.c_str() );
-   m_bc_mom1 = elliptic_op_bc_factory.create( name, ppVisc_mom1_BC,
-                                              *(a_geometry.getCoordSys()), false );
-   
-   if(SpaceDim==3) {
-      name = "mom2_visc";
+  
+   m_diffusionOp_mom0 = NULL;
+   m_diffusionOp_mom1 = NULL;
+   m_diffusionOp_mom2 = NULL;
+   m_bc_mom0 = NULL;
+   m_bc_mom1 = NULL;
+   m_bc_mom2 = NULL;
+   if(m_implicitViscosity) {
+ 
+      name = "mom0_visc";
       prefix = name;
-      ParmParse ppVisc_mom2( prefix.c_str() );
-      m_diffusionOp_mom2 = new Diffusion(ppVisc_mom2, a_geometry);
+      ParmParse ppVisc_mom0( prefix.c_str() );
+      m_diffusionOp_mom0 = new Diffusion(ppVisc_mom0, a_geometry);
       //
       prefix_BC = "BC." + name;
-      ParmParse ppVisc_mom2_BC( prefix_BC.c_str() );
-      m_bc_mom2 = elliptic_op_bc_factory.create( name, ppVisc_mom2_BC,
+      ParmParse ppVisc_mom0_BC( prefix_BC.c_str() );
+      m_bc_mom0 = elliptic_op_bc_factory.create( name, ppVisc_mom0_BC,
                                                  *(a_geometry.getCoordSys()), false );
+   
+      name = "mom1_visc";
+      prefix = name;
+      ParmParse ppVisc_mom1( prefix.c_str() );
+      m_diffusionOp_mom1 = new Diffusion(ppVisc_mom1, a_geometry);
       //
-      //
+      prefix_BC = "BC." + name;
+      ParmParse ppVisc_mom1_BC( prefix_BC.c_str() );
+      m_bc_mom1 = elliptic_op_bc_factory.create( name, ppVisc_mom1_BC,
+                                                 *(a_geometry.getCoordSys()), false );
+      
+      if(SpaceDim==3) {
+         name = "mom2_visc";
+         prefix = name;
+         ParmParse ppVisc_mom2( prefix.c_str() );
+         m_diffusionOp_mom2 = new Diffusion(ppVisc_mom2, a_geometry);
+         //
+         prefix_BC = "BC." + name;
+         ParmParse ppVisc_mom2_BC( prefix_BC.c_str() );
+         m_bc_mom2 = elliptic_op_bc_factory.create( name, ppVisc_mom2_BC,
+                                                    *(a_geometry.getCoordSys()), false );
+      }
+
+   }
+   
+   m_diffusionOp_Apar = NULL;
+   m_bc_Apar = NULL;
+   if(SpaceDim==3 && m_initializeBfromVectorPotential) {
       name = "Apar_init";
       prefix = name;
       ParmParse ppVisc_Apar( prefix.c_str() );
@@ -128,19 +155,8 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
       m_bc_Apar = elliptic_op_bc_factory.create( name, ppVisc_Apar_BC,
                                                  *(a_geometry.getCoordSys()), false );
    } 
-   else {
-      m_diffusionOp_mom2 = NULL;
-      m_bc_mom2 = NULL;
-      m_diffusionOp_Apar = NULL;
-      m_bc_Apar = NULL;
-   }
-
-   //
-   ///////////////////////
-
 
    // set IC and create BC for energy density
-   //
    variable_name = "energyDensity";
    CH_assert( ppic.contains("energyDensity.function") 
            || ppic.contains("energyDensity_0.function") );
@@ -158,7 +174,6 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
                          a_geometry.getCoordSys()->type(), false) );
    
    // set IC and create BC for in-plane magnetic field
-   //
    if (ppic.contains("magneticField_0.function")) {
       variable_name = "magneticField";
       CH_assert( ppic.contains("magneticField_0.function") );
@@ -174,7 +189,6 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
    }
 
    // set IC and create BC for virtual momentum density
-   //
    if (ppic.contains("momentumDensity_virtual.function")) {
       variable_name = "momentumDensity_virtual";
       parseInitialConditions(a_species_name, variable_name);
@@ -191,6 +205,42 @@ IdealMhdOp::IdealMhdOp( const string&   a_pp_str,
                             a_geometry.getCoordSys()->type(), false) );
    }
    
+   if (m_initializeProfilesFromPSI) {
+
+      variable_name = "RBTOR";
+      parseInitialConditions(a_species_name, variable_name);
+
+      variable_name = "PSI";
+      parseInitialConditions(a_species_name, variable_name);
+     
+      if(m_addEnergyPerturbation) { 
+         variable_name = "deltaE";
+         parseInitialConditions(a_species_name, variable_name);
+      }
+      
+      if(m_perturbBtor) { 
+         variable_name = "deltaB";
+         parseInitialConditions(a_species_name, variable_name);
+      }
+
+   }
+   
+   if (m_initializeBackgroundPlusPert) {
+
+      variable_name = "RHO0";
+      parseInitialConditions(a_species_name, variable_name);
+
+      variable_name = "T0";
+      parseInitialConditions(a_species_name, variable_name);
+       
+      variable_name = "BY0";
+      parseInitialConditions(a_species_name, variable_name);
+      
+      variable_name = "deltaRHO";
+      parseInitialConditions(a_species_name, variable_name);
+     
+   } 
+
    // get fluid ghost cells and define member LevelData's
    Real ghosts = 4;
    ParmParse ppgksys("gksystem");
@@ -236,51 +286,47 @@ void IdealMhdOp::accumulateMhdRHS( FluidSpecies&  a_rhs_fluid,
                              const Real           a_time )
 {
    CH_TIME("IdealMhdOp::accumulateMhdRHS()");
-   
-   // Get RHS fluid species
-   //
-   LevelData<FArrayBox>& rhs_data( a_rhs_fluid.cell_var(0) );
-   const DisjointBoxLayout& grids( rhs_data.getBoxes() );
-
-   // Get solution fluid species
-   //
-   //const LevelData<FArrayBox>& soln_data( a_soln_fluid.cell_var(0) );
-   //const IntVect& ghostVect( soln_data.ghostVect() );
-   //cout << "JRA: soln_data.ghostVect() = " << ghostVect << endl;   
-   
-   //CH_assert(soln_fluid.m_evolve_massDensity==1);
-   CH_assert(a_soln_fluid.m_evolve_momentumDensity==1);
-   CH_assert(a_soln_fluid.m_evolve_energyDensity==1);
-  
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+      
    setCellCenterValues( a_soln_fluid );
    
-   if(m_CGL) {
-      setCellCenterFluxesCGL( a_soln_fluid );
-   } 
+   if(m_advScheme=="ZIP") {
+ 
+      setFaceCenteredFluxes_ZIP( a_soln_fluid );
+      setMagneticFieldTerms( a_soln_fluid );
+      setCurlE( a_soln_fluid, a_time );
+  
+   }
    else {
-      setCellCenterFluxes( a_soln_fluid );
-   }
+   
+      if(m_CGL) setCellCenterFluxesCGL( a_soln_fluid );
+      else setCellCenterFluxes( a_soln_fluid );
 
-   // compute flux-freezing speed at cell-center for each direction
-   // Cspeed_i = |NTVdotqihat| + |N_i|sqrt(gamma*P/N); i = q0, q1, q2
-   //
-   const double gamma = a_soln_fluid.m_gamma;
-   setMappedCspeed( gamma, 1, 1 );
+      // compute flux-freezing speed at cell-center for each direction
+      // Cspeed_i = |NTVdotqihat| + |N_i|sqrt(gamma*P/N); i = q0, q1, q2
+      const double gamma = a_soln_fluid.m_gamma;
+      setMappedCspeed( gamma, 1, m_magP );
    
-   SpaceUtils::upWindToFaces(m_CspeedR_norm, m_Cspeed_cc, m_CspeedR_norm, "c2");
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      m_CspeedL_norm[dit].copy(m_CspeedR_norm[dit],m_CspeedL_norm[dit].box());
-      m_CspeedL_norm[dit].negate();
-   }
-   
-   setMagneticFieldTerms( a_soln_fluid );
-   
-   setFaceCenteredFluxes( a_soln_fluid );
+      SpaceUtils::upWindToFaces(m_CspeedR_norm, m_Cspeed_cc, m_CspeedR_norm, "c2");
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_CspeedL_norm[dit].copy(m_CspeedR_norm[dit],m_CspeedL_norm[dit].box());
+         m_CspeedL_norm[dit].negate();
+      }
 
-   enforceFluxBCs( a_soln_fluid, a_time );
+      setMagneticFieldTerms( a_soln_fluid );
+   
+      if(m_free_stream_preserving) setFaceCenteredFluxes_freestreamPreserving( a_soln_fluid );
+      else setFaceCenteredFluxes( a_soln_fluid );
+
+      enforceFluxBCs( a_soln_fluid, a_time );
+   
+      setMappedCspeed( gamma, m_thermPforE0, m_magPforE0 );
+      setCurlE( a_soln_fluid, a_time );
+
+   }
 
    updateRHSs( a_rhs_fluid, a_soln_fluid );
-    
+  
 }
 
 void IdealMhdOp::accumulateViscRHS( FluidSpecies&  a_rhs_fluid,
@@ -355,48 +401,157 @@ void IdealMhdOp::getMemberVar( LevelData<FArrayBox>&  a_Var,
    const FluidSpecies& fluid_species = static_cast<const FluidSpecies&>(a_fluid_vars);
 
    const DisjointBoxLayout& grids( m_geometry.grids() );
-   const IntVect ghostVect = 0*IntVect::Unit;
-   //const IntVect& ghostVect( soln_data.ghostVect() );
+   const IntVect ghostVect = 2*IntVect::Unit;
    
    if(a_name=="electricField") {
-      a_Var.define(grids, SpaceDim, ghostVect);
-      if(fluid_species.m_evolve_magneticField_virtual==1) {
-         const LevelData<FArrayBox>& magField_phys_cc( fluid_species.cell_var("magneticField_virtual") );
-         LevelData<FArrayBox>& vel_phys_cc = m_dummyFArray_spaceDim;
-         fluid_species.velocity(vel_phys_cc);  // in-plane velocity vector
-         computePhysicalElectricField( a_Var, vel_phys_cc, magField_phys_cc, 1 );
+      a_Var.define(grids, SpaceDim, 0*IntVect::Unit);
+   
+      switch(fluid_species.m_evolveB_type) {
+         case FluidSpecies::EVOLVE_B_TYPE::NONE : 
+            break;
+         case FluidSpecies::EVOLVE_B_TYPE::TWOD_VIRTUAL_B : 
+            getE0_2Dvirtual( a_Var, fluid_species );
+            break;
+         case FluidSpecies::EVOLVE_B_TYPE::TWOD_INPLANE_B : 
+            getE0_2DinPlane( a_Var, fluid_species );
+            break;
+         case FluidSpecies::EVOLVE_B_TYPE::TWOD_FULL_B : 
+            getE0_2Dfull( a_Var, fluid_species );
+            break;
+         case FluidSpecies::EVOLVE_B_TYPE::THREED : 
+            getE0_3D( a_Var, fluid_species );
+            break;
+         default :
+            MayDay::Error("Invalid evolve B type in getMemberVar");
       }
-      else if(fluid_species.m_evolve_magneticField==1) {
-         const LevelData<FluxBox>& magField_contra_cf( fluid_species.face_var("magneticField") );
-         LevelData<FArrayBox>& vel_phys_cc = m_dummyFArray_spaceDim;
-         fluid_species.velocity(vel_phys_cc);  // in-plane velocity vector
-         LevelData<FArrayBox> magField_phys_cc;
-         magField_phys_cc.define(grids, SpaceDim, ghostVect);
-         SpaceUtils::interpFaceVectorToCell(magField_phys_cc,magField_contra_cf,"c2");
-         m_geometry.convertPhysToContravar(magField_phys_cc,1);
-         computePhysicalElectricField( a_Var, vel_phys_cc, magField_phys_cc, 0 );
+   }
+   if(a_name=="electricField0") { // off by time stage from "electricField" above
+      a_Var.define(grids, SpaceDim, 2*IntVect::Unit);
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(m_E0_cc[dit]);
       }
-      //for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
-      //   a_Var[dit].copy(m_E0_cc[dit]); // off by time stage
-      //}
    }
    if(a_name=="electricField_upwinded") { // need ghost cells to calc here, so one stage out of sync 
-      a_Var.define(grids, SpaceDim, ghostVect);
+      a_Var.define(grids, SpaceDim, 2*IntVect::Unit);
       SpaceUtils::interpEdgesToCell(a_Var,m_E0_ce,"c2"); // covar at cell center
       m_geometry.convertPhysToCovar(a_Var,1);            // phys at cell center
    }
-   if(a_name=="currentDensity") {
-      a_Var.define(grids, SpaceDim, ghostVect);
-      if(fluid_species.m_evolve_magneticField_virtual==1) {
-         getJ0_2Dvirtual( a_Var, fluid_species );
+   if(a_name=="electricField0_virtual") { // off by time stage from "electricField" above
+      a_Var.define(grids, 1, ghostVect);
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(m_E0_virtual_cc[dit]);
       }
-      else if(fluid_species.m_evolve_magneticField==1) {
-         getJ0_3D( a_Var, fluid_species );
+   }
+   if(a_name=="electricField0_virtual_nc") { // off by time stage from "electricField" above
+      a_Var.define(grids, 1, ghostVect);
+      SpaceUtils::interpNodesToCells( a_Var, m_E0_virtual_nc, "c2" );
+      for (auto dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         if(m_twoDaxisymm) {
+            a_Var[dit].divide(m_g_y[dit],0,0,1); // convert to physical
+         }
+      }
+      a_Var.exchange();
+   }
+   if(a_name=="curlE_virtual") { // off by time stage from "electricField" above
+      a_Var.define(grids, 1, ghostVect);
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(m_curlE0_virtual[dit]);
+      }
+   }
+   if(a_name=="curlE") { // off by time stage
+      a_Var.define(grids, SpaceDim, IntVect::Zero);
+      SpaceUtils::interpFaceVectorToCell( a_Var, m_curlE0_cf, "c2" );
+      m_geometry.convertPhysToContravar(a_Var,1);
+      m_geometry.divideJonValid(a_Var); // physical curlE0
+   }
+   if(a_name=="currentDensity") {
+      //a_Var.define(grids, SpaceDim, ghostVect);
+      a_Var.define(grids, SpaceDim, 0*IntVect::Unit);
+      
+      switch(fluid_species.m_evolveB_type) {
+         case FluidSpecies::EVOLVE_B_TYPE::NONE : 
+            break;
+         case FluidSpecies::EVOLVE_B_TYPE::TWOD_VIRTUAL_B : 
+            getJ0_2Dvirtual( a_Var, fluid_species );
+            break;
+         case FluidSpecies::EVOLVE_B_TYPE::TWOD_INPLANE_B : 
+            getJ0_2DinPlane( a_Var, fluid_species );
+            break;
+         case FluidSpecies::EVOLVE_B_TYPE::TWOD_FULL_B : 
+            getJ0_2Dfull( a_Var, fluid_species );
+            break;
+         case FluidSpecies::EVOLVE_B_TYPE::THREED : 
+            getJ0_3D( a_Var, fluid_species );
+            break;
+         default :
+            MayDay::Error("Invalid evolve B type in getMemberVar");
       }
       //for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
       //   a_Var[dit].copy(m_JaJ0_cc[dit]); // off by time stage
       //}
       //m_geometry.divideJonValid(a_Var);
+   }
+   if(a_name=="currentDensity2") { // off by time stage from "electricField" above
+      a_Var.define(grids, SpaceDim, IntVect::Zero);
+      getJ0_3D2( a_Var, fluid_species );
+   }
+   if(a_name=="currentDensity_virtual") {
+      a_Var.define(grids, 1, ghostVect);
+   
+      const LevelData<FluxBox>& B_contra_cf( fluid_species.face_var("magneticField") );
+      LevelData<FluxBox>& B_contra_withBCs = m_dummyFlux_oneComp;
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         B_contra_withBCs[dit].copy(B_contra_cf[dit]);
+      }
+      SpaceUtils::exchangeFluxBox(B_contra_withBCs);
+   
+      const double dummy_time = 0.0;
+      int this_fbc = m_magneticField_fbc;
+      m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( fluid_species, B_contra_withBCs, dummy_time );
+   
+      LevelData<FArrayBox>& B_covar_cc = m_dummyFArray_spaceDim;
+      SpaceUtils::interpFaceVectorToCell(B_covar_cc, B_contra_withBCs,"c2");
+      m_geometry.convertPhysToContravar(B_covar_cc,1);
+      m_geometry.convertPhysToCovar(B_covar_cc,0);
+      
+      // JRA, fix this. Need correct BCs for B_covar_cc. What are they?
+      //int this_cbc = m_energyDensity_cbc;
+      //m_fluid_bc.at(this_cbc)->applyCellBC( fluid_species, B_covar_cc, dummy_time );
+
+      m_geometry.mappedGridCurl( a_Var, B_covar_cc ); // Ja*curl(B)_phys
+      m_geometry.divideJonValid(a_Var);
+            
+      // rebase dummy container
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         B_contra_withBCs[dit].setVal(1./0.);
+         B_covar_cc[dit].setVal(1./0.);
+      }
+  
+   }
+   if(a_name=="density_withBCs") {
+      a_Var.define(grids, 1, ghostVect);
+      const LevelData<FArrayBox>& N( fluid_species.cell_var(0) );
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(N[dit]);
+      }
+      a_Var.exchange();
+      int this_cbc = m_density_cbc;
+      const double dummy_time = 0.0;
+      m_fluid_bc.at(this_cbc)->applyCellBC( fluid_species, a_Var, dummy_time );
+   }
+   if(a_name=="momentumDensity_withBCs") {
+      a_Var.define(grids, SpaceDim, ghostVect);
+      const LevelData<FArrayBox>& rhoV( fluid_species.cell_var("momentumDensity") );
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(rhoV[dit]);
+      }
+      m_geometry.convertPhysToContravar(a_Var,0);
+      a_Var.exchange();
+      int this_cbc = m_momentumDensity_cbc;
+      const double dummy_time = 0.0;
+      m_fluid_bc.at(this_cbc)->applyCellBC( fluid_species, a_Var, dummy_time );
+      //m_geometry.convertContravarToCovar(a_Var,0); // output covar
+      m_geometry.convertPhysToContravar(a_Var,1); // output phys
    }
    if(a_name=="divB") {
       a_Var.define(grids, 1, IntVect::Zero);
@@ -413,6 +568,53 @@ void IdealMhdOp::getMemberVar( LevelData<FArrayBox>&  a_Var,
       for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
          a_Var[dit].copy(m_Bpressure[dit]);
       }
+   }
+   if(a_name=="pressure") {
+      a_Var.define(grids, 1+m_CGL, IntVect::Zero);
+      const double gamma = fluid_species.m_gamma;
+      if(m_energy_is_thermal || m_energy_is_thermal_2) {
+         const LevelData<FArrayBox>& eneDen( fluid_species.cell_var("energyDensity") );
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            a_Var[dit].copy(eneDen[dit],0,0,1+m_CGL);
+            a_Var[dit].mult(gamma-1.0);
+         }         
+      }
+      else if(m_isothermal) {
+         const LevelData<FArrayBox>& rhoDen( fluid_species.cell_var(0) );
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            a_Var[dit].copy(rhoDen[dit],0,0,1);
+            a_Var[dit].mult(m_T0[dit],0,0,1);
+            a_Var[dit].mult(2.0);
+         }
+      }
+      else {
+         fluid_species.pressure(a_Var);
+      }
+   }
+   if(a_name=="P0") {
+      a_Var.define(grids, 1, 2*IntVect::Unit);
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(m_P0[dit]);
+      }
+   }
+   if(a_name=="N0") {
+      a_Var.define(grids, 1, 2*IntVect::Unit);
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(m_N0[dit]);
+      }
+   }
+   if(a_name=="B0") {
+      a_Var.define(grids, SpaceDim, IntVect::Zero);
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(m_B0_phys[dit]);
+      }
+   }
+   if(a_name=="J00") {
+      a_Var.define(grids, SpaceDim, IntVect::Zero);
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(m_JaJ00[dit]);
+      }
+      m_geometry.divideJonValid(a_Var);
    }
    if(a_name=="Apar") {
       a_Var.define(grids, m_Apar_cc.nComp(), IntVect::Zero);
@@ -438,6 +640,270 @@ void IdealMhdOp::getMemberVar( LevelData<FArrayBox>&  a_Var,
          a_Var[dit].copy(m_JaJdotE[dit]);
       }
    }
+   if(a_name=="PSI") {
+      a_Var.define(grids, m_PSI.nComp(), IntVect::Zero);
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(m_PSI[dit]);
+      }
+   }
+   if(a_name=="gradPressure") {
+
+      a_Var.define(grids, SpaceDim, IntVect::Unit);
+
+      LevelData<FArrayBox>& pressure = m_dummyFArray_oneComp;
+      fluid_species.pressure(pressure);
+      pressure.exchange();
+
+      const double dummy_time = 0.0;
+      int this_cbc = m_energyDensity_cbc;
+      m_fluid_bc.at(this_cbc)->applyCellBC( fluid_species, pressure, dummy_time );
+
+      //m_geometry.computeMappedPoloidalGradientWithGhosts( pressure, a_Var, 2);
+      m_geometry.computeMappedGradient( pressure, a_Var, 2);
+      m_geometry.convertPhysToCovar(a_Var,1);
+
+   }
+   if(a_name=="forceDensity") {
+      a_Var.define(grids, SpaceDim, IntVect::Zero);
+      for (auto dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(m_forceDensity[dit]);
+      }
+      m_geometry.divideJonValid(a_Var);
+   }
+   if(a_name=="rhs_rho") {
+      a_Var.define(grids, 1, IntVect::Zero);
+      for (auto dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         a_Var[dit].copy(m_rhs_rho[dit]);
+      }
+      m_geometry.divideJonValid(a_Var);
+   }
+   if(a_name=="mxFlux") {
+      a_Var.define(grids, SpaceDim, 2*IntVect::Unit);
+      m_geometry.multiplyNTranspose(a_Var, m_mxFlux_cc);
+   }
+   if(a_name=="myFlux") {
+      a_Var.define(grids, SpaceDim, 2*IntVect::Unit);
+      m_geometry.multiplyNTranspose(a_Var, m_myFlux_cc);
+   }
+   if(a_name=="mzFlux") {
+      a_Var.define(grids, SpaceDim, 2*IntVect::Unit);
+      m_geometry.multiplyNTranspose(a_Var, m_mzFlux_cc);
+   }
+   if(a_name=="contravarB") {
+      a_Var.define(grids, SpaceDim, 2*IntVect::Unit);
+      const LevelData<FluxBox>& B_contra_cf( fluid_species.face_var("magneticField") );
+      LevelData<FluxBox>& B_contra_withBCs = m_dummyFlux_oneComp;
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         B_contra_withBCs[dit].copy(B_contra_cf[dit]);
+      }
+      SpaceUtils::exchangeFluxBox(B_contra_withBCs);
+      const double dummy_time = 0.0;
+      int this_fbc = m_magneticField_fbc;
+      m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( fluid_species, B_contra_withBCs, dummy_time );
+      SpaceUtils::interpFaceVectorToCell(a_Var, B_contra_withBCs,"c2");
+   }
+   if(a_name=="covarB") {
+      a_Var.define(grids, SpaceDim, 0*IntVect::Unit);
+      const LevelData<FluxBox>& B_contra_cf( fluid_species.face_var("magneticField") );
+      LevelData<FluxBox>& B_contra_withBCs = m_dummyFlux_oneComp;
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         B_contra_withBCs[dit].copy(B_contra_cf[dit]);
+      }
+      SpaceUtils::exchangeFluxBox(B_contra_withBCs);
+      const double dummy_time = 0.0;
+      int this_fbc = m_magneticField_fbc;
+      m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( fluid_species, B_contra_withBCs, dummy_time );
+      
+      SpaceUtils::interpFaceVectorToCell(a_Var, B_contra_withBCs, "c2");
+      m_geometry.convertContravarToCovar(a_Var,0);
+   }
+   if(a_name=="covarB2_0") {
+      a_Var.define(grids, SpaceDim, 0*IntVect::Unit);
+      const LevelData<FluxBox>& B_contra_cf( fluid_species.face_var("magneticField") );
+      LevelData<FluxBox>& B_contra_withBCs = m_dummyFlux_oneComp;
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         B_contra_withBCs[dit].copy(B_contra_cf[dit]);
+      }
+      SpaceUtils::exchangeFluxBox(B_contra_withBCs);
+      const double dummy_time = 0.0;
+      int this_fbc = m_magneticField_fbc;
+      m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( fluid_species, B_contra_withBCs, dummy_time );
+      
+      LevelData<FluxBox>& Bvec_covar = m_dummyFlux_spaceDim;
+      SpaceUtils::interpFacesToFaces(Bvec_covar, B_contra_withBCs);
+      m_geometry.convertContravarToCovar(Bvec_covar,0);
+      SpaceUtils::interpFaceScalarToCell(a_Var, Bvec_covar, 0);
+   }
+   if(a_name=="covarB2_1") {
+      a_Var.define(grids, SpaceDim, 0*IntVect::Unit);
+      const LevelData<FluxBox>& B_contra_cf( fluid_species.face_var("magneticField") );
+      LevelData<FluxBox>& B_contra_withBCs = m_dummyFlux_oneComp;
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         B_contra_withBCs[dit].copy(B_contra_cf[dit]);
+      }
+      SpaceUtils::exchangeFluxBox(B_contra_withBCs);
+      const double dummy_time = 0.0;
+      int this_fbc = m_magneticField_fbc;
+      m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( fluid_species, B_contra_withBCs, dummy_time );
+      
+      LevelData<FluxBox>& Bvec_covar = m_dummyFlux_spaceDim;
+      SpaceUtils::interpFacesToFaces(Bvec_covar, B_contra_withBCs);
+      m_geometry.convertContravarToCovar(Bvec_covar,0);
+      SpaceUtils::interpFaceScalarToCell(a_Var, Bvec_covar, 1);
+   }
+   if(a_name=="covarB2_2") {
+      a_Var.define(grids, SpaceDim, 0*IntVect::Unit);
+      const LevelData<FluxBox>& B_contra_cf( fluid_species.face_var("magneticField") );
+      LevelData<FluxBox>& B_contra_withBCs = m_dummyFlux_oneComp;
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         B_contra_withBCs[dit].copy(B_contra_cf[dit]);
+      }
+      SpaceUtils::exchangeFluxBox(B_contra_withBCs);
+      const double dummy_time = 0.0;
+      int this_fbc = m_magneticField_fbc;
+      m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( fluid_species, B_contra_withBCs, dummy_time );
+      
+      LevelData<FluxBox>& Bvec_covar = m_dummyFlux_spaceDim;
+      SpaceUtils::interpFacesToFaces(Bvec_covar, B_contra_withBCs);
+      m_geometry.convertContravarToCovar(Bvec_covar,0);
+      SpaceUtils::interpFaceScalarToCell(a_Var, Bvec_covar, 2);
+   }
+   if(a_name=="curlConst") {
+      a_Var.define(grids, SpaceDim, 0*IntVect::Unit);
+
+      // create constant vector on cells
+      LevelData<FArrayBox>& const_vect = m_dummyFArray_spaceDim;
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         const_vect[dit].setVal(1.0);
+      }
+      
+      // convert to covariant
+      m_geometry.convertPhysToCovar(const_vect,0);
+
+      // compute physical curl
+      m_geometry.mappedGridCurl(a_Var,const_vect);
+      m_geometry.convertPhysToContravar(a_Var,1);
+      m_geometry.divideJonValid(a_Var); // physical curl
+   }
+   if(a_name=="curlConst2") {
+      a_Var.define(grids, SpaceDim, 0*IntVect::Unit);
+
+      // create constant vector on faces
+      LevelData<FluxBox>& const_vect = m_dummyFlux_spaceDim;
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+         const_vect[dit].setVal(1.0);
+      }
+      
+      // convert to covariant
+      m_geometry.convertPhysToCovar(const_vect,0);
+
+      // compute physical curl
+      m_geometry.mappedGridCurl(a_Var,const_vect);
+      m_geometry.convertPhysToContravar(a_Var,1);
+      m_geometry.divideJonValid(a_Var); // physical curl
+   }
+   if(a_name=="contravarV") {
+      a_Var.define(grids, SpaceDim, 2*IntVect::Unit);
+      for (DataIterator dit(a_Var.dataIterator()); dit.ok(); ++dit) {
+        a_Var[dit].copy(m_velocity[dit]);
+      }
+      m_geometry.convertPhysToContravar(a_Var,0);
+   } 
+
+
+}
+
+void IdealMhdOp::getE0_2Dvirtual( LevelData<FArrayBox>&  a_E0,
+                            const FluidSpecies&          a_fluid_species ) const
+{
+
+   const LevelData<FArrayBox>& B_virtual( a_fluid_species.cell_var("magneticField_virtual") );
+   LevelData<FArrayBox>& V_inPlane = m_dummyFArray_spaceDim;
+   a_fluid_species.velocity(V_inPlane);
+   computeCrossProduct( a_E0, B_virtual, V_inPlane, 2 );
+      
+   // rebase dummy container
+   for (DataIterator dit(a_E0.dataIterator()); dit.ok(); ++dit) {
+      V_inPlane[dit].setVal(1./0.);
+   }
+
+}
+
+void IdealMhdOp::getE0_2DinPlane( LevelData<FArrayBox>&  a_E0,
+                            const FluidSpecies&          a_fluid_species ) const
+{
+            
+   const LevelData<FluxBox>& B_contra_cf( a_fluid_species.face_var("magneticField") );
+   LevelData<FArrayBox>& V_virtual = m_dummyFArray_oneComp;
+   a_fluid_species.velocity_virtual(V_virtual);
+   LevelData<FArrayBox>& B_inPlane = m_dummyFArray_spaceDim;
+   SpaceUtils::interpFaceVectorToCell(B_inPlane,B_contra_cf,"c2");
+   m_geometry.convertPhysToContravar(B_inPlane,1);
+   computeCrossProduct( a_E0, B_inPlane, V_virtual, 3 );
+
+   // rebase dummy container
+   for (DataIterator dit(a_E0.dataIterator()); dit.ok(); ++dit) {
+      B_inPlane[dit].setVal(1./0.);
+      V_virtual[dit].setVal(1./0.);
+   }
+
+}
+
+void IdealMhdOp::getE0_2Dfull( LevelData<FArrayBox>&  a_E0,
+                         const FluidSpecies&          a_fluid_species ) const
+{
+   
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   const IntVect ghostVect = a_E0.ghostVect();
+            
+   const LevelData<FArrayBox>& B_virtual( a_fluid_species.cell_var("magneticField_virtual") );
+   const LevelData<FluxBox>& B_contra_cf( a_fluid_species.face_var("magneticField") );
+   LevelData<FArrayBox>& V_inPlane = m_dummyFArray_spaceDim;
+   LevelData<FArrayBox>& V_virtual = m_dummyFArray_oneComp;
+   a_fluid_species.velocity(V_inPlane);
+   a_fluid_species.velocity_virtual(V_virtual);
+
+   LevelData<FArrayBox> B_inPlane;
+   B_inPlane.define(grids, SpaceDim, ghostVect);
+   SpaceUtils::interpFaceVectorToCell(B_inPlane,B_contra_cf,"c2");
+   m_geometry.convertPhysToContravar(B_inPlane,1);
+
+   computeCrossProduct( a_E0, B_inPlane, V_inPlane,  
+                              B_virtual, V_virtual );
+
+   // rebase dummy container
+   for (DataIterator dit(a_E0.dataIterator()); dit.ok(); ++dit) {
+      B_inPlane[dit].setVal(1./0.);
+      V_virtual[dit].setVal(1./0.);
+   }
+
+}
+
+void IdealMhdOp::getE0_3D( LevelData<FArrayBox>&  a_E0,
+                     const FluidSpecies&          a_fluid_species ) const
+{
+   
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   const IntVect ghostVect = a_E0.ghostVect();
+   
+   const LevelData<FluxBox>& B_contra_cf( a_fluid_species.face_var("magneticField") );
+
+   LevelData<FArrayBox>& V_inPlane = m_dummyFArray_spaceDim;
+   a_fluid_species.velocity(V_inPlane);
+
+   LevelData<FArrayBox> B_inPlane;
+   B_inPlane.define(grids, SpaceDim, ghostVect);
+   SpaceUtils::interpFaceVectorToCell(B_inPlane,B_contra_cf,"c2");
+   m_geometry.convertPhysToContravar(B_inPlane,1);
+
+   computeCrossProduct( a_E0, B_inPlane, V_inPlane, 0 ); 
+
+   // rebase dummy container
+   for (DataIterator dit(a_E0.dataIterator()); dit.ok(); ++dit) {
+      //a_E0[dit].copy(B_inPlane[dit]); // testing....
+      //a_E0[dit].copy(V_inPlane[dit]); // testing....
+      V_inPlane[dit].setVal(1./0.);
+   }
 
 }
 
@@ -451,17 +917,19 @@ void IdealMhdOp::getJ0_2Dvirtual( LevelData<FArrayBox>&  a_J0,
       By_covar[dit].copy(B_virtual[dit]);
    }
    By_covar.exchange();
-
+   
    const double dummy_time = 0.0;
    int this_cbc = m_magneticField_virtual_cbc;
    m_fluid_bc.at(this_cbc)->applyCellBC( a_fluid_species, By_covar, dummy_time );
    for (DataIterator dit(a_J0.dataIterator()); dit.ok(); ++dit) {
-      if(m_twoDaxisymm) By_covar[dit].mult(m_g_y[dit],0,0,1);
+      if(m_twoDaxisymm) {
+         By_covar[dit].mult(m_g_y[dit],0,0,1);
+      }
    }
    m_geometry.mappedGridCurlofVirtComp(a_J0,By_covar); // Ja*curl(By)\cdot g^perp
    m_geometry.convertPhysToContravar(a_J0,1);          // Ja*curlB_phys at cell center
    m_geometry.divideJonValid(a_J0);
-
+   
    // rebase dummy container
    for (DataIterator dit(a_J0.dataIterator()); dit.ok(); ++dit) {
       By_covar[dit].setVal(1./0.);
@@ -469,10 +937,26 @@ void IdealMhdOp::getJ0_2Dvirtual( LevelData<FArrayBox>&  a_J0,
 
 }
 
+void IdealMhdOp::getJ0_2DinPlane( LevelData<FArrayBox>&  a_J0,
+                            const FluidSpecies&          a_fluid_species ) const
+{
+
+   for (DataIterator dit(a_J0.dataIterator()); dit.ok(); ++dit) {
+      a_J0[dit].setVal(0.0);
+   }
+           
+}
+
+void IdealMhdOp::getJ0_2Dfull( LevelData<FArrayBox>&  a_J0,
+                         const FluidSpecies&          a_fluid_species ) const
+{
+   getJ0_2Dvirtual (a_J0, a_fluid_species );   
+}
+
 void IdealMhdOp::getJ0_3D( LevelData<FArrayBox>&  a_J0,
                      const FluidSpecies&          a_fluid_species ) const
 {
-
+   
    const LevelData<FluxBox>& B_contra_cf( a_fluid_species.face_var("magneticField") );
    LevelData<FluxBox>& B_contra_withBCs = m_dummyFlux_oneComp;
    for (DataIterator dit(a_J0.dataIterator()); dit.ok(); ++dit) {
@@ -482,22 +966,41 @@ void IdealMhdOp::getJ0_3D( LevelData<FArrayBox>&  a_J0,
    const double dummy_time = 0.0;
    int this_fbc = m_magneticField_fbc;
    m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( a_fluid_species, B_contra_withBCs, dummy_time );
-
+  
    LevelData<FArrayBox>& B_covar_cc = m_dummyFArray_spaceDim;
    SpaceUtils::interpFaceVectorToCell(B_covar_cc, B_contra_withBCs,"c2");
    m_geometry.convertPhysToContravar(B_covar_cc,1);
    m_geometry.convertPhysToCovar(B_covar_cc,0);
-
-   m_geometry.mappedGridCurl( a_J0, B_covar_cc); // Ja*curl(B)_phys
+   m_geometry.mappedGridCurl( a_J0, B_covar_cc); // Ja*curl(B)_contra
+   
+   m_geometry.convertPhysToContravar(a_J0,1);
    m_geometry.divideJonValid(a_J0);
 
-   // rebase dummy containers
-   for (DataIterator dit(a_J0.dataIterator()); dit.ok(); ++dit) {
-      B_contra_withBCs[dit].setVal(1./0.);
-      B_covar_cc[dit].setVal(1./0.);
-   }
+}  
 
-}
+void IdealMhdOp::getJ0_3D2( LevelData<FArrayBox>&  a_J0,
+                     const FluidSpecies&          a_fluid_species ) const
+{
+   
+   const LevelData<FluxBox>& B_contra_cf( a_fluid_species.face_var("magneticField") );
+   LevelData<FluxBox>& B_contra_withBCs = m_dummyFlux_oneComp;
+   for (DataIterator dit(a_J0.dataIterator()); dit.ok(); ++dit) {
+      B_contra_withBCs[dit].copy(B_contra_cf[dit]);
+   }
+   SpaceUtils::exchangeFluxBox(B_contra_withBCs);
+   const double dummy_time = 0.0;
+   int this_fbc = m_magneticField_fbc;
+   m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( a_fluid_species, B_contra_withBCs, dummy_time );
+  
+   LevelData<FluxBox>& Bvec_covar = m_dummyFlux_spaceDim;
+   SpaceUtils::interpFacesToFaces(Bvec_covar, B_contra_withBCs);
+   m_geometry.convertContravarToCovar(Bvec_covar,0);
+   m_geometry.mappedGridCurl( a_J0, Bvec_covar ); // Ja*curl(B)_contra
+
+   m_geometry.convertPhysToContravar(a_J0,1);
+   m_geometry.divideJonValid(a_J0);
+
+}  
 
 void IdealMhdOp::defineBlockPC(  std::vector<PS::Preconditioner<PS::ODEVector,PS::AppCtxt>*>& a_pc,
                                  std::vector<PS::DOFList>&                                    a_dof_list,
@@ -606,8 +1109,12 @@ void IdealMhdOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
 {
    CH_TIME("IdealMhdOp::updatePCImEx()");
    
+   if (!m_implicitViscosity) {
+     MayDay::Error("Error in IdealMhdOp::updatePCImEx(): m_implicitViscosity is false." 
+                   "This function shouldn't have been called at all!");
+   }
+   
    // Get computational fluid species data
-   //
    const FluidSpecies& fluid_species = static_cast<const FluidSpecies&>(*a_fluid_species[a_component]);
    const LevelData<FArrayBox>& Jrho( fluid_species.cell_var("density") );
    m_alpha_PC = a_shift;   
@@ -621,7 +1128,6 @@ void IdealMhdOp::updatePCImEx(const FluidSpeciesPtrVect&       a_fluid_species,
 
    // Create elliptic coefficients
    // Need to update m_etaVisc_cf ? careful, m_pressure above is mapped
-   //
    const double a_dummy_time=0.0;
    computeDiffusionCoefficients(m_ellip_coeff, m_ellip_coeff_mapped, m_etaVisc_cf, a_dummy_time);
    m_diffusionOp_mom0->setOperatorCoefficients(m_ellip_coeff, m_ellip_coeff_mapped, *m_bc_mom0);
@@ -650,7 +1156,6 @@ void IdealMhdOp::solvePCImEx( FluidSpeciesPtrVect&        a_fluid_species_soluti
    // alpha*y - Fi(y) = RHS, y is mapped state vector
    //
    // momentum density and energy density have implicit parts
-   // 
 
    if (!m_implicitViscosity) {
      MayDay::Error("Error in IdealMhdOp::solvePCImEx(): m_implicitViscosity is false." 
@@ -851,42 +1356,97 @@ void IdealMhdOp::computeNTFfaceArea( LevelData<FluxBox>&    a_Flux_norm,
          this_face.mult(faceArea[dir]);
       }
    }
-   //a_Flux_norm.exchange();
  
 }
 
-void IdealMhdOp::computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
+void IdealMhdOp::upwindFluxVector( LevelData<FluxBox>&    a_Flux_phys_fc,
+                             const LevelData<FArrayBox>&  a_Flux_phys_cc,
+                             const LevelData<FArrayBox>&  a_f_cc,
+                             const LevelData<FArrayBox>&  a_Cspeed_cc,
+                             const LevelData<FluxBox>&    a_CspeedR_norm,
+                             const LevelData<FluxBox>&    a_CspeedL_norm ) const
+{
+   CH_TIME("IdealMhdOp::upwindFluxVector()");
+   CH_assert(a_Flux_phys_fc.nComp() == SpaceDim);
+   CH_assert(a_Flux_phys_cc.nComp() == SpaceDim);
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      
+      // compute Lax splitting on mapped flux and interpolate FluxL and FluxR to face norms
+      //
+      //   get left and right going flux at cell-center
+      //   fluxR = 0.5*(flux + Cspeed*fun),
+      //   fluxL = 0.5*(flux - Cspeed*fun),
+      //   Cspeed = abs(max(eigenValue of Flux Jacobian))
+
+      const Box& cell_box( a_f_cc[dit].box() );
+      FArrayBox FluxL_cc(cell_box, SpaceDim);
+      FArrayBox FluxR_cc(cell_box, SpaceDim);
+      const FArrayBox& Flux_on_patch = a_Flux_phys_cc[dit];
+      const FArrayBox& Cspeed_on_patch = a_Cspeed_cc[dit];
+      const FArrayBox& f_on_patch = a_f_cc[dit];
+      for (int n=0; n<SpaceDim; n++) {
+         FORT_LAX_FLUX_SPLITTING_NEW( CHF_BOX(cell_box), 
+                                  CHF_FRA(FluxL_cc),
+                                  CHF_FRA(FluxR_cc),
+                                  CHF_CONST_FRA1(Flux_on_patch,n),
+                                  CHF_CONST_FRA(Cspeed_on_patch),
+                                  CHF_CONST_FRA1(f_on_patch,0) );
+
+         const Box& grid_box( grids[dit] );             // this box has no ghost
+         const Box& flux_box( a_Flux_phys_fc[dit].box() ); // this box has ghost
+         FluxBox thisFluxL( flux_box, 1 );  // need box with ghosts here
+         FluxBox thisFluxR( flux_box, 1 );
+         const FluxBox& thisCspeedL_norm = a_CspeedL_norm[dit];
+         const FluxBox& thisCspeedR_norm = a_CspeedR_norm[dit];
+         SpaceUtils::upWindToFaces(thisFluxL, FluxL_cc, thisCspeedL_norm, grid_box, m_advScheme);
+         SpaceUtils::upWindToFaces(thisFluxR, FluxR_cc, thisCspeedR_norm, grid_box, m_advScheme);
+
+         // compute total norm flux by adding left and right together 
+         thisFluxL += thisFluxR;
+         a_Flux_phys_fc[dit].copy(thisFluxL, 0, n, 1 );
+      }
+      
+   }
+
+}
+
+void IdealMhdOp::computeIdealEatEdges( LevelData<EdgeDataBox>&  a_E_covar,
                                  const LevelData<FArrayBox>&    a_V_phys_cc,
-                                 const LevelData<FluxBox>&      a_B_contra_cf,
+                                 const LevelData<FluxBox>&      a_B_contra,
                                  const LevelData<FArrayBox>&    a_Cspeed_cc ) const
 {
    CH_TIME("IdealMhdOp::computeIdealEatEdges()");
-   CH_assert(a_Edge_covar.nComp() == 1);
-   CH_assert(a_B_contra_cf.nComp() == 1);
+   CH_assert(a_E_covar.nComp() == 1);
+   CH_assert(a_B_contra.nComp() == 1);
    CH_assert(a_V_phys_cc.nComp() == SpaceDim);
    CH_assert(a_Cspeed_cc.nComp() == SpaceDim);
-  
-   // multiply contravariant B on faces by Jacobian
+   
    //
+   // compute covar E0 = -VxB on edges:
+   // E_i = Ja*(B^jV^k - B^kV^j)
+   //
+  
    const DisjointBoxLayout& grids( m_geometry.grids() );
-   LevelData<FArrayBox>& V_contra_cc = m_dummyFArray_spaceDim; 
+  
+   // multiply contravariant B on faces by Jacobian and convert
+   // physical velocity to contravariant
+   LevelData<FArrayBox>& V_contra_cc = m_dummyFArray_spaceDim;
    LevelData<FluxBox>& JaB_contra_cf(m_dummyFlux_oneComp);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      JaB_contra_cf[dit].copy(a_B_contra_cf[dit]);
+      JaB_contra_cf[dit].copy(a_B_contra[dit]);
       const Box& cell_box(a_V_phys_cc[dit].box());
       SpaceUtils::copy(V_contra_cc[dit],a_V_phys_cc[dit],cell_box);
    } 
    m_geometry.multJonFaces(JaB_contra_cf);
    m_geometry.convertPhysToContravar(V_contra_cc,0);
- 
+
    // compute constrained covariant E on cell edges
-   //
-   string this_advScheme = m_advScheme;
-   SpaceUtils::constrainedCrossProductOnEdges( a_Edge_covar, JaB_contra_cf,
-                                               V_contra_cc, a_Cspeed_cc, this_advScheme );
+   SpaceUtils::constrainedCrossProductOnEdges( a_E_covar, JaB_contra_cf,
+                                               V_contra_cc, a_Cspeed_cc, m_advScheme_B );
    
-   // redefine dummy to infty for safety
-   //
+   // rebase dummies
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       V_contra_cc[dit].setVal(1.0/0.0);
       JaB_contra_cf[dit].setVal(1.0/0.0);
@@ -894,22 +1454,41 @@ void IdealMhdOp::computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
 
 }
 
-void IdealMhdOp::computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
+void IdealMhdOp::computeIdealEatEdges( LevelData<EdgeDataBox>&  a_E_covar,
                                  const LevelData<FArrayBox>&    a_V_phys_cc,
                                  const LevelData<FArrayBox>&    a_B_contr_cc,
                                  const LevelData<FArrayBox>&    a_Cspeed_cc ) const
 {
    CH_TIME("IdealMhdOp::computeIdealEatEdges()");
-   CH_assert(a_Edge_covar.nComp() == 1);
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+
+   CH_assert(a_E_covar.nComp() == 1);
    CH_assert(a_V_phys_cc.nComp() == SpaceDim);
    CH_assert(a_Cspeed_cc.nComp() == SpaceDim);
   
-  
-   // interpolate components of Cspeed from cell-center to +/- face norms
-   //
-   const DisjointBoxLayout& grids( a_B_contr_cc.getBoxes() );
+   // compute covar E0=-VxB at cell center
+   // E_x =  Ja*V^z*B^y
+   // E_z = -Ja*V^x*B^y
+   LevelData<FArrayBox>& E0_covar_cc = m_dummyFArray_spaceDim;
+   LevelData<FArrayBox>& JaB_contr_cc = m_dummyFArray_oneComp;
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const Box& cell_box(a_V_phys_cc[dit].box());
+      SpaceUtils::copy(E0_covar_cc[dit],a_V_phys_cc[dit],cell_box);
+   }
+   m_geometry.convertPhysToContravar(E0_covar_cc,0); // contains contravar V
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const Box& cell_box(a_V_phys_cc[dit].box());
+      SpaceUtils::copy(JaB_contr_cc[dit],a_B_contr_cc[dit],cell_box);
+      JaB_contr_cc[dit].mult(m_Jacobian[dit]);
+      for (int n=0; n<SpaceDim; n++) {
+         E0_covar_cc[dit].mult(JaB_contr_cc[dit],cell_box,cell_box,0,n,1); // [Ja*V^x*B^y, Ja*V^z*B^y]
+      }
+   }
+
+   // upwind E0_covar_cc appropriately to cell edges
    for (DataIterator dit(grids); dit.ok(); ++dit) {
     
+      // Compute Left/Right Cspeeds
       const Box& grid_box( grids[dit] ); // this box has no ghosts
       const Box& cell_box(a_B_contr_cc[dit].box());
       FluxBox CspeedL_norm(cell_box, 1);
@@ -918,57 +1497,89 @@ void IdealMhdOp::computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
       CspeedL_norm.copy(CspeedR_norm, cell_box );
       CspeedL_norm.negate();
       
-      // convert cell-center Velocity from physical to contravariant 
-      // and multiply by contravariant B
-      //
-      FArrayBox JaVB_covar_cc(cell_box, a_V_phys_cc.nComp());
-      FArrayBox JaB_contr_cc(cell_box, a_B_contr_cc.nComp());
-      convertPhysFluxToMappedFlux(JaVB_covar_cc,a_V_phys_cc[dit],m_Nmatrix[dit]);
-      for (int n=0; n<SpaceDim; n++) {
-         JaVB_covar_cc.mult(a_B_contr_cc[dit],cell_box,cell_box,0,n,1);
-      }
-      JaB_contr_cc.copy(a_B_contr_cc[dit], cell_box );
-      JaB_contr_cc.mult(m_Jacobian[dit]);
-  
-      // compute Lax splitting and interpolate FluxL and FluxR to face norms
-      //
+      // Do Lax flux splitting
       FArrayBox FluxL_cc(cell_box, SpaceDim);
       FArrayBox FluxR_cc(cell_box, SpaceDim);
       const FArrayBox& Cspeed_on_patch = a_Cspeed_cc[dit];
 
-      FORT_LAX_FLUX_SPLITTING( CHF_BOX(cell_box), 
+      FORT_LAX_FLUX_SPLITTING( CHF_BOX(cell_box),
                                CHF_FRA(FluxL_cc),
                                CHF_FRA(FluxR_cc),
-                               CHF_CONST_FRA(JaVB_covar_cc),
+                               CHF_CONST_FRA(E0_covar_cc[dit]),
                                CHF_CONST_FRA(Cspeed_on_patch),
-                               CHF_CONST_FRA1(JaB_contr_cc,0) );
+                               CHF_CONST_FRA1(JaB_contr_cc[dit],0) );
      
-      const Box& flux_box( a_Edge_covar[dit].box() ); // this box has ghosts
+      // Upwind
+      const Box& flux_box( a_E_covar[dit].box() ); // this box has ghosts
       FluxBox FluxL_norm( flux_box, 1 );
       FluxBox FluxR_norm( flux_box, 1 );
       FluxBox VB_norm( flux_box, 1 );
-      if(m_advScheme=="weno5") {
-         const FArrayBox& thisN = m_Nmatrix[dit]; 
-         FArrayBox thisSmooth( cell_box, SpaceDim );
-
-         FORT_MAG_NT_ROW_SQ( CHF_BOX(cell_box), 
-                             CHF_CONST_FRA(thisN),
-                             CHF_FRA(thisSmooth) );
-         SpaceUtils::interpToFacesWENO(FluxL_norm, FluxL_cc, CspeedL_norm, thisSmooth, grid_box, m_advScheme);
-         SpaceUtils::interpToFacesWENO(FluxR_norm, FluxR_cc, CspeedR_norm, thisSmooth, grid_box, m_advScheme);
+      if(m_advScheme_B=="weno5") {
+         cout << "JRA: weno5 not working here !!!! " << endl;
+         //const FArrayBox& thisSmooth = m_NTrowSq[dit];
+         //SpaceUtils::interpToFacesWENO(FluxL_norm, FluxL_cc, CspeedL_norm, thisSmooth, grid_box, m_advScheme_B);
+         //SpaceUtils::interpToFacesWENO(FluxR_norm, FluxR_cc, CspeedR_norm, thisSmooth, grid_box, m_advScheme_B);
       } 
       else {
-         SpaceUtils::upWindToFaces(FluxL_norm, FluxL_cc, CspeedL_norm, grid_box, m_advScheme);
-         SpaceUtils::upWindToFaces(FluxR_norm, FluxR_cc, CspeedR_norm, grid_box, m_advScheme);
+         SpaceUtils::upWindToFaces(FluxL_norm, FluxL_cc, CspeedL_norm, grid_box, m_advScheme_B);
+         SpaceUtils::upWindToFaces(FluxR_norm, FluxR_cc, CspeedR_norm, grid_box, m_advScheme_B);
       }
 
       // compute total flux on faces by adding left and right together
-      //
       VB_norm.copy(FluxR_norm,VB_norm.box());
       VB_norm += FluxL_norm;
-      a_Edge_covar[dit][0].copy(VB_norm[1]);
-      a_Edge_covar[dit][1].copy(VB_norm[0]);
-      a_Edge_covar[dit][1].negate();
+      a_E_covar[dit][0].copy(VB_norm[1]);
+      a_E_covar[dit][1].copy(VB_norm[0]);
+      a_E_covar[dit][1].negate();
+   } 
+
+   // rebase all dummys
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      m_dummyFArray_oneComp[dit].setVal(1./0.);
+      m_dummyFArray_spaceDim[dit].setVal(1./0.);
+   }
+
+
+}
+
+void IdealMhdOp::computeIdealEatNodes( LevelData<NodeFArrayBox>&  a_E_covar,
+                                 const LevelData<FArrayBox>&      a_V_phys_cc,
+                                 const LevelData<FluxBox>&        a_B_contra,
+                                 const LevelData<FArrayBox>&      a_Cspeed_cc ) const
+{
+   CH_TIME("IdealMhdOp::computeIdealEatNodes() ");
+   CH_assert(a_E_covar.nComp() == 1);
+   CH_assert(a_B_contra.nComp() == 1);
+   CH_assert(a_V_phys_cc.nComp() == SpaceDim);
+   CH_assert(a_Cspeed_cc.nComp() == SpaceDim);
+  
+   //
+   // compute covar E0 = -VxB at nodes:
+   // E_i = Ja*(B^jV^k - B^kV^j)
+   //
+   
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+  
+   // multiply contravariant B on faces by Jacobian and convert
+   // physical velocity to contravariatn
+   LevelData<FArrayBox>& V_contra_cc = m_dummyFArray_spaceDim;
+   LevelData<FluxBox>& JaB_contra_cf(m_dummyFlux_oneComp);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      JaB_contra_cf[dit].copy(a_B_contra[dit]);
+      const Box& cell_box(a_V_phys_cc[dit].box());
+      SpaceUtils::copy(V_contra_cc[dit],a_V_phys_cc[dit],cell_box);
+   } 
+   m_geometry.multJonFaces(JaB_contra_cf);
+   m_geometry.convertPhysToContravar(V_contra_cc,0);
+ 
+   // compute constrained covariant E on cell edges
+   SpaceUtils::constrainedCrossProductOnNodes( a_E_covar, JaB_contra_cf,
+                                               V_contra_cc, a_Cspeed_cc, m_advScheme_B );
+   
+   // rebase dummies
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      V_contra_cc[dit].setVal(1.0/0.0);
+      JaB_contra_cf[dit].setVal(1.0/0.0);
    } 
 
 }
@@ -977,29 +1588,59 @@ void IdealMhdOp::fillGhostCells( FluidSpecies&  a_species_phys,
                            const double         a_time )
 {
    CH_TIME("IdealMhdOp::fillGhostCells()");
+   
    for (int n=0; n<a_species_phys.num_cell_vars(); ++n) {
+      LevelData<FArrayBox>& cellVar( a_species_phys.cell_var(n) );
+      const std::string& this_var_name = a_species_phys.cell_var_name(n);
+      if(this_var_name=="momentumDensity") m_geometry.convertPhysToContravar(cellVar,0);
+      m_geometry.fillInternalGhosts( cellVar );
       m_fluid_bc.at(n)->apply( a_species_phys, a_time );
+      if(this_var_name=="momentumDensity") m_geometry.convertPhysToContravar(cellVar,1);
    }
    
    for (int n=0; n<a_species_phys.num_face_vars(); ++n) {
       const std::string& this_var_name = a_species_phys.face_var_name(n);
       CH_assert(m_fluid_face_var_bc.at(n)->isForVariable(this_var_name));
       LevelData<FluxBox>& faceVar( a_species_phys.face_var(n) );
+      SpaceUtils::exchangeFluxBox( faceVar ); 
       m_fluid_face_var_bc.at(n)->applyFluxBC( a_species_phys, faceVar, a_time );
    }
-}
 
+}
 
 void IdealMhdOp::parseParameters( ParmParse& a_pp )
 {
+   a_pp.query( "verbosity", m_verbosity);
+
    a_pp.query( "implicitViscosity", m_implicitViscosity);
    a_pp.query( "implicitMhd", m_implicitMhd);
-
-   //GridFunctionLibrary* grid_library = GridFunctionLibrary::getInstance();
-   //std::string grid_function_name;
    
-   if (a_pp.contains("advScheme")) {
-      a_pp.get("advScheme", m_advScheme );
+   a_pp.query( "energy_is_thermal", m_energy_is_thermal);
+   if(!m_energy_is_thermal) a_pp.query( "energy_is_thermal_2", m_energy_is_thermal_2);
+   a_pp.query("isothermal", m_isothermal);
+   if(m_isothermal) {
+      m_energy_is_thermal = false;
+      m_energy_is_thermal_2 = false;
+   }
+   a_pp.query("enforceFluxBCs", m_enforceFluxBCs);
+   a_pp.query( "use_perturbative_form", m_use_perturbative_form);
+   a_pp.query( "free_stream_preserving", m_free_stream_preserving);
+
+   if (a_pp.contains("advScheme"))  a_pp.get("advScheme", m_advScheme );
+   m_advScheme_B = m_advScheme;
+   a_pp.query("advScheme_B", m_advScheme_B );
+   
+   if(m_advScheme=="ZIP") m_advScheme_B = "c2";
+   
+   a_pp.query( "magP_inCspeed", m_magP);
+   a_pp.query( "magPforE0_inCspeed", m_magPforE0);
+   a_pp.query( "thermPforE0_inCspeed", m_thermPforE0);
+   m_magPforE0 *= m_magP;
+   a_pp.query( "blankN", m_blankN);
+   a_pp.query( "blankB", m_blankB);
+   
+   if (a_pp.contains("relative_density_floor")) {
+      a_pp.get("relative_density_floor", m_relative_density_floor );
    }
    
    if (a_pp.contains("tau")) {
@@ -1011,7 +1652,19 @@ void IdealMhdOp::parseParameters( ParmParse& a_pp )
    }
 
    a_pp.query("initializeBfromVectorPotential", m_initializeBfromVectorPotential);
-   
+   a_pp.query("initializeProfilesFromPSI", m_initializeProfilesFromPSI);
+   a_pp.query("initializeBackgroundPlusPert", m_initializeBackgroundPlusPert);
+   a_pp.query("addEnergyPerturbation", m_addEnergyPerturbation);
+   a_pp.query("perturbDensity", m_perturbDensity);
+   a_pp.query("perturbBtor", m_perturbBtor);
+   if(m_addEnergyPerturbation && m_isothermal) CH_assert(m_perturbDensity);
+   a_pp.query("RBTOR_FACT", m_rbtor_fact);
+   a_pp.query("BPOL_FACT", m_bpol_fact);
+
+   int init_profiles = m_initializeBfromVectorPotential*m_initializeProfilesFromPSI;
+   init_profiles *= m_initializeBackgroundPlusPert;
+   CH_assert(init_profiles==0);
+  
 }
 
 
@@ -1019,12 +1672,32 @@ void IdealMhdOp::printParameters()
 {
    if (procID()==0) {
       std::cout << "IdealMhdOp parameters:" << std::endl;
-      std::cout << " advScheme  =  " << m_advScheme << std::endl;
+      std::cout << " advScheme    =  " << m_advScheme << std::endl;
+      std::cout << " advScheme_B  =  " << m_advScheme_B << std::endl;
+      std::cout << " blankN  =  " << m_blankN << std::endl;
+      std::cout << " blankB  =  " << m_blankB << std::endl;
+      std::cout << " magP_inCspeed =  " << m_magP << std::endl;
+      std::cout << " magPforE0_inCspeed =  " << m_magPforE0 << std::endl;
+      std::cout << " thermPforE0_inCspeed =  " << m_thermPforE0 << std::endl;
+      std::cout << " rel density floor  =  " << m_relative_density_floor << std::endl;
       std::cout << " tau     =  " << m_tau << std::endl;
       std::cout << " etaMin  =  " << m_etaMin << std::endl;
+      std::cout << " energy_is_thermal  =  " << m_energy_is_thermal << std::endl;
+      std::cout << " energy_is_thermal_2  =  " << m_energy_is_thermal_2 << std::endl;
+      std::cout << " isothermal = " << m_isothermal << std::endl;
+      std::cout << " enforceFluxBCs = " << m_enforceFluxBCs << std::endl;
+      std::cout << " use_perturbative_form  =  " << m_use_perturbative_form << std::endl;
+      std::cout << " free_stream_preserving  =  " << m_free_stream_preserving << std::endl;
       std::cout << " implicitMhd  =  " << m_implicitMhd << std::endl;
       std::cout << " implicitVisosity  =  " << m_implicitViscosity << std::endl;
       std::cout << " initializeBfromVectorPotential = " << m_initializeBfromVectorPotential << std::endl;
+      std::cout << " initializeProfilesFromPSI = " << m_initializeProfilesFromPSI << std::endl;
+      std::cout << " initializeBackgroundPlusPert = " << m_initializeBackgroundPlusPert << std::endl;
+      std::cout << " addEnergyPerturbation = " << m_addEnergyPerturbation << std::endl;
+      std::cout << " rbtor_fact = " << m_rbtor_fact << std::endl;
+      std::cout << " bpol_fact = " << m_bpol_fact << std::endl;
+      std::cout << " perturbBtor = " << m_perturbBtor << std::endl;
+      std::cout << " perturbDensity = " << m_perturbDensity << std::endl << std::endl;
    }
 }
 
@@ -1073,7 +1746,7 @@ void IdealMhdOp::setMappedCspeed( const double  a_gamma,
    CH_TIME("IdealMhdOp::setMappedCspeed()");
 
    // compute flux-freezing speed at cell-center for each direction
-   // Cspeed_i = |NTVdotqihot| + |N_i|sqrt(gamma*P/N + B^2/N); i = q0, q1, q2
+   // Cspeed_i = |NTVdotqihat| + |N_i|sqrt(gamma*P/N + B^2/N); i = q0, q1, q2
 
    CH_assert(m_Cspeed_cc.nComp() == SpaceDim);
    
@@ -1131,40 +1804,60 @@ Real IdealMhdOp::computeDtExplicitTI( const FluidSpeciesPtrVect&  a_fluid_comp )
 Real IdealMhdOp::computeDtMhd( const FluidSpeciesPtrVect&  a_fluid_comp )
 {
    CH_TIME("Real IdealMhdOp::computeDtMhd()");   
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+
    // get physical values for m_species_name and calculate freezing speed
    // Cspeed_i = |NTVdotqihat| + |N_i|sqrt(gamma*P/rho); i = q0, q1, q2
-   //
+   
    double gamma;
+   LevelData<FArrayBox>& velocity = m_dummyFArray_spaceDim;
    for (int species(0); species<a_fluid_comp.size(); species++) {
       const FluidSpecies& fluid_species( static_cast<FluidSpecies&>(*(a_fluid_comp[species])) );
       const std::string species_name( fluid_species.name() );
-      //species_name = fluid_species.name();
       if(species_name==m_species_name) {
          gamma = fluid_species.m_gamma;
          fluid_species.massDensity(m_rhoDen_cc);
-         fluid_species.velocity(m_velocity);  // in-plane velocity vector
-         fluid_species.pressure(m_pressure);
-         fluid_species.Bpressure(m_Bpressure);
+         fluid_species.velocity(velocity);  // in-plane velocity vector
+         if(m_energy_is_thermal || m_energy_is_thermal_2) {
+            for (DataIterator dit(grids); dit.ok(); ++dit) {
+               m_pressure[dit].copy(m_eneDen_cc[dit],0,0,1);
+               m_pressure[dit].mult(gamma-1.0);
+            }         
+         }
+         else if(m_isothermal) {
+            for (DataIterator dit(grids); dit.ok(); ++dit) {
+               m_pressure[dit].copy(m_rhoDen_cc[dit],0,0,1);
+               m_pressure[dit].mult(m_T0[dit]);
+               m_pressure[dit].mult(2.0);
+            }
+         }
+         else {
+            fluid_species.pressure(m_pressure);
+         }
+
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            m_temperature[dit].copy(m_pressure[dit]);
+            m_temperature[dit].divide(m_rhoDen_cc[dit],0,0,1);
+            m_temperature[dit].divide(2.0);
+         }
+
+         fluid_species.Bpressure(m_Bpressure,true);
          
          // Calls for physical variables abve are from mapped state
          // vector (has not been convertToPhysical )
          // and so need to divide by J
-         //
          m_geometry.divideJonValid(m_rhoDen_cc);
-         //m_geometry.divideJonValid(m_velocity);
          m_geometry.divideJonValid(m_pressure);
-         m_geometry.divideJonValid(m_Bpressure);
-         m_geometry.divideJonValid(m_Bpressure);
          
          break;
       }
    }
 
+   //setMappedCspeed( gamma, 1, m_magP );
    setMappedCspeed( gamma, 1, 1 );
    setCourantTimeStep(m_Cspeed_cc);   
    
    return m_courant_time_step;
-   //return DBL_MAX;
 
 }
 
@@ -1226,15 +1919,28 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
    m_momDen_cc.define(a_grids, SpaceDim, a_ghostVect);
    m_eneDen_cc.define(a_grids, 1+m_CGL, a_ghostVect);
    m_momDen_virtual_cc.define(a_grids, 1, a_ghostVect);
-   m_magField_virtual_cc.define(a_grids, 1, a_ghostVect);
+   m_By_phys_cc.define(a_grids, 1, a_ghostVect);
    //
+   m_By_contr_cc.define(a_grids, 1, a_ghostVect);
+   m_By_covar_cc.define(a_grids, 1, a_ghostVect);
    m_B_covar_cc.define(a_grids, SpaceDim, a_ghostVect);
+   m_B0_phys.define(a_grids, SpaceDim, a_ghostVect);
+   m_B1_phys.define(a_grids, SpaceDim, a_ghostVect);
    //
    m_pressure.define(a_grids, 1+m_CGL, a_ghostVect);
+   m_temperature.define(a_grids, 1+m_CGL, a_ghostVect);
+   m_P0.define(a_grids, 1+m_CGL, a_ghostVect);
+   m_N0.define(a_grids, 1, a_ghostVect);
+   m_T0.define(a_grids, 1+m_CGL, a_ghostVect);
+   m_deltaN.define(a_grids, 1, a_ghostVect);
+   m_deltaT.define(a_grids, 1+m_CGL, a_ghostVect);
    m_Bpressure.define(a_grids, 1, a_ghostVect);
    m_velocity.define(a_grids, SpaceDim, a_ghostVect);
    m_velocity_cf.define(a_grids, SpaceDim, a_ghostVect);
    m_velocity_virtual.define(a_grids, 1, a_ghostVect);
+   //
+   m_velocity_contra.define(a_grids, SpaceDim, a_ghostVect);
+   m_momDen_contra.define(a_grids, SpaceDim, a_ghostVect);
    //
    m_rhoFlux_cc.define(a_grids, SpaceDim, a_ghostVect);
    m_mxFlux_cc.define(a_grids, SpaceDim, a_ghostVect);
@@ -1283,15 +1989,31 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
       
    m_E0_ce.define(a_grids, 1, a_ghostVect);
    m_JaJ0_cc.define(a_grids, SpaceDim, a_ghostVect);
+   m_JaJ00.define(a_grids, SpaceDim, a_ghostVect);
+   m_JaJ01.define(a_grids, SpaceDim, a_ghostVect);
    m_Apar_cc.define(a_grids, 1, a_ghostVect);
    m_E0_cc.define(a_grids, SpaceDim, a_ghostVect);
    m_curlE0_virtual.define(a_grids, 1, IntVect::Zero);
    m_curlE0_cf.define(a_grids, 1, IntVect::Zero);
-   m_By_contr_cc.define(a_grids, 1, a_ghostVect);
    m_B_contr_cf.define(a_grids, 1, a_ghostVect);
-   m_JaJdotE.define(a_grids, 1, a_ghostVect); // Jacobian*J\cdotE
+   m_JaUdotGradP.define(a_grids, 1, IntVect::Zero); // Jacobian*U\cdot\grad(P)
+   m_JaPdivU.define(a_grids, 1, IntVect::Zero); // Jacobian*U\cdot\grad(P)
+   m_JaJdotE.define(a_grids, 1, IntVect::Zero); // Jacobian*J\cdotE
    m_JaJcrossB.define(a_grids, SpaceDim, a_ghostVect); // Jacobian*J\timesB
+   m_JaJcrossB_10.define(a_grids, SpaceDim, a_ghostVect); // Jacobian*J\timesB
    //
+   m_JaJ0_virtual_cc.define(a_grids,1,a_ghostVect);
+   m_JaJcrossB_virtual.define(a_grids,1,a_ghostVect);
+   m_E0_virtual_cc.define(a_grids,1,a_ghostVect);
+   m_E0_virtual_nc.define(a_grids,1,a_ghostVect);
+   for (DataIterator dit(a_grids); dit.ok(); ++dit) {
+      m_JaJ0_virtual_cc[dit].setVal(0.0);
+      m_JaJcrossB_virtual[dit].setVal(0.0);
+      m_velocity_virtual[dit].setVal(0.0);
+      m_E0_virtual_cc[dit].setVal(0.0);
+   }
+   //
+   m_NodeBC_zeros.define(a_grids, 1, a_ghostVect);
    m_EdgeBC_zeros.define(a_grids, 1, a_ghostVect);
    m_FluxBC_zeros.define(a_grids, 1, 0*a_ghostVect);
    m_rhoFluxBC_norm.define(a_grids, 1, 0*a_ghostVect);
@@ -1303,6 +2025,7 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
    m_mvFluxBC_norm.define(a_grids, 1, 0*IntVect::Unit);
    m_momFluxBC_norm.define(a_grids, SpaceDim, 0*a_ghostVect);
    for (DataIterator dit(a_grids); dit.ok(); ++dit) {
+      m_NodeBC_zeros[dit].setVal(0.0);
       m_EdgeBC_zeros[dit].setVal(0.0);
       m_FluxBC_zeros[dit].setVal(0.0);
    }
@@ -1311,9 +2034,14 @@ void IdealMhdOp::defineLevelDatas( const DisjointBoxLayout&  a_grids,
    m_dummyFArray_oneComp.define(a_grids, 1, a_ghostVect);
    m_dummyFArray_spaceDim.define(a_grids, SpaceDim, a_ghostVect);
    m_dummyDiv_mom.define(a_grids, SpaceDim, IntVect::Zero);
+   m_forceDensity.define(a_grids, SpaceDim, IntVect::Zero);
+   m_rhs_rho.define(a_grids, 1, IntVect::Zero);
    m_dummyFlux_oneComp.define(a_grids, 1, a_ghostVect);
    m_dummyFlux_spaceDim.define(a_grids, SpaceDim, a_ghostVect);
    m_dummyEdge_oneComp.define(a_grids, 1, a_ghostVect);
+   m_dummyNode_oneComp.define(a_grids, 1, a_ghostVect);
+   
+   m_PSI.define(a_grids, 1, a_ghostVect);
 
 }
 
@@ -1341,9 +2069,13 @@ void IdealMhdOp::setCellCenterValues( const FluidSpecies&  a_soln_fluid )
    if(a_soln_fluid.m_evolve_magneticField_virtual) {
       const LevelData<FArrayBox>& soln_magField_virtual( a_soln_fluid.cell_var("magneticField_virtual") );
       for (DataIterator dit(grids); dit.ok(); ++dit) {
-         m_magField_virtual_cc[dit].copy( soln_magField_virtual[dit] );
+         m_By_phys_cc[dit].copy( soln_magField_virtual[dit] );
+         m_By_contr_cc[dit].copy( soln_magField_virtual[dit] );
+         m_By_covar_cc[dit].copy( soln_magField_virtual[dit] );
+         if(m_twoDaxisymm) m_By_contr_cc[dit].divide(m_g_y[dit], 0,0,1);
+         if(m_twoDaxisymm) m_By_covar_cc[dit].mult(m_g_y[dit], 0,0,1);
       }
-   } 
+   }  
    if(a_soln_fluid.m_evolve_magneticField) {
       const LevelData<FluxBox>& soln_magField( a_soln_fluid.face_var("magneticField") );
       SpaceUtils::interpFaceVectorToCell(m_B_covar_cc,soln_magField,"c2");
@@ -1351,12 +2083,68 @@ void IdealMhdOp::setCellCenterValues( const FluidSpecies&  a_soln_fluid )
       m_geometry.convertPhysToCovar(m_B_covar_cc,0);
    }
    
-   // set physical derived variables for fluid species
-   a_soln_fluid.pressure(m_pressure);
    a_soln_fluid.Bpressure(m_Bpressure);
-   a_soln_fluid.velocity(m_velocity);                 // in-plane velocity vector
-   a_soln_fluid.velocity_virtual(m_velocity_virtual); // out-of-plane velocity vector
-  
+   a_soln_fluid.velocity(m_velocity);
+   if(a_soln_fluid.m_evolve_momentumDensity_virtual) {
+      a_soln_fluid.velocity_virtual(m_velocity_virtual);
+   }
+ 
+   // set physical derived variables for fluid species
+   const double gamma = a_soln_fluid.m_gamma;
+   if(m_energy_is_thermal || m_energy_is_thermal_2) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_pressure[dit].copy(m_eneDen_cc[dit],0,0,1);
+         m_pressure[dit].mult(gamma-1.0);
+      }         
+   }
+   else if(m_isothermal) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_pressure[dit].copy(m_rhoDen_cc[dit],0,0,1);
+         m_pressure[dit].mult(m_T0[dit],0,0,1);
+         m_pressure[dit].mult(2.0);
+      }
+   }
+   else {
+      a_soln_fluid.pressure(m_pressure);
+   }
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      m_temperature[dit].copy(m_pressure[dit]);
+      m_temperature[dit].divide(m_rhoDen_cc[dit],0,0,1);
+      m_temperature[dit].divide(2.0);
+   }
+ 
+   if(m_energy_is_thermal) { // compute Ja*U\cdotGradP_phys
+      LevelData<FArrayBox>& gradP_phys = m_dummyFArray_spaceDim;
+      m_geometry.computeMappedGradient( m_pressure, gradP_phys, 2);
+      m_geometry.convertPhysToCovar(gradP_phys,1);
+      
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+               FArrayBox& JaUdotGradP_on_patch = m_JaUdotGradP[dit];
+         const FArrayBox& gradP_on_patch       = gradP_phys[dit];
+         const FArrayBox& U_on_patch           = m_velocity[dit];
+
+         const Box& cellbox = JaUdotGradP_on_patch.box();
+         FORT_EVAL_DOT_PRODUCT( CHF_BOX(cellbox),
+                                CHF_CONST_FRA(gradP_on_patch),
+                                CHF_CONST_FRA(U_on_patch),
+                                CHF_FRA1(JaUdotGradP_on_patch,0) );
+      }
+      m_geometry.multJonValid(m_JaUdotGradP);
+   }
+   else if(m_energy_is_thermal_2) { // compute Ja*P*Div(U)
+      LevelData<FluxBox> velocity_norm(grids, 1, IntVect::Unit);
+      SpaceUtils::upWindToFaces(m_velocity_cf, m_velocity, m_velocity_cf, "c2");
+      m_geometry.computeMetricTermProductAverage( velocity_norm, m_velocity_cf, 0 );
+      m_geometry.mappedGridDivergenceFromFluxNorms( velocity_norm, m_JaPdivU );
+      for (DataIterator dit(m_JaPdivU.dataIterator()); dit.ok(); ++dit) {
+         const MagBlockCoordSys& coords( m_geometry.getBlockCoordSys( grids[dit] ) );
+         m_JaPdivU[dit].mult( 1.0/coords.getMappedCellVolume() );
+         m_JaPdivU[dit].mult(m_pressure[dit]);
+      }
+
+   }
+
 }   
 
 void IdealMhdOp::setCellCenterFluxes( const FluidSpecies&  a_soln_fluid )
@@ -1404,6 +2192,20 @@ void IdealMhdOp::setCellCenterFluxes( const FluidSpecies&  a_soln_fluid )
                                CHF_FRA(myFlux_on_patch),
                                CHF_FRA(mzFlux_on_patch),
                                CHF_FRA(enFlux_on_patch) );
+
+      if(m_use_perturbative_form) {
+         const FArrayBox& P0 = m_P0[dit];
+         mxFlux_on_patch.minus(P0,0,0,1);
+         myFlux_on_patch.minus(P0,0,1,1);
+         mzFlux_on_patch.minus(P0,0,2,1);
+      }
+ 
+      if(m_energy_is_thermal_2) {
+         for (int n=0; n<SpaceDim; ++n) {
+            m_enFlux_cc[dit].copy( eneDen_on_patch,0,n,1 );
+            m_enFlux_cc[dit].mult( m_velocity[dit],n,n,1);
+         }
+      }
       
    }
 
@@ -1469,94 +2271,276 @@ void IdealMhdOp::setMagneticFieldTerms( const FluidSpecies&  a_soln_fluid )
 {
    CH_TIME("IdealMhdOp::setMagneticFieldTerms()");
    
-   //  NEEDED FOR MAGNETIC FIELD ON CELL FACES AND ELECTRIC FIELD
-   //  AT CELL EDGES
-   //
-   //
-   const DisjointBoxLayout& grids( m_geometry.grids() );
-   if(a_soln_fluid.m_evolve_magneticField_virtual) {
-      
-      const LevelData<FArrayBox>& magField_virtual_cc( a_soln_fluid.cell_var("magneticField_virtual") );
+   //  set the magnetic field source terms for momentum density and 
+   //  energy density equations:
+   //  momentum source: Ja * J_phys x B_phys
+   //  energy source:   Ja * J_phys dot E_phys
 
-      // compute physical E=BxV
-      //
-      computePhysicalElectricField( m_E0_cc, m_velocity, magField_virtual_cc, 1 );
-
-      // compute Ja*curl(B)_phys (aka mapped)
-      // 
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         const Box& thisbox = m_By_contr_cc[dit].box();
-         m_By_contr_cc[dit].copy( magField_virtual_cc[dit], thisbox); // phys
-         if(m_twoDaxisymm) {
-            m_By_contr_cc[dit].divide(m_g_y[dit], thisbox, 0,0,1);
-         }
-      }
-      computeMappedCurrentDensity(m_JaJ0_cc,m_By_contr_cc);
-
-      // calculate source terms for energy density and momentum density equations
-      //
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         const Box& thisbox = m_JaJ0_cc[dit].box();
-         FArrayBox m_JaJdotE_comp(thisbox, SpaceDim);
-         m_JaJdotE_comp.copy(m_JaJ0_cc[dit], thisbox);
-         m_JaJdotE_comp.mult(m_E0_cc[dit]);
-         m_JaJdotE[dit].copy(m_JaJdotE_comp,0,0,1);
-         m_JaJdotE[dit].plus(m_JaJdotE_comp,thisbox,1,0,1);
-         //
-         m_JaJcrossB[dit].copy(m_JaJ0_cc[dit],1,0,1);
-         m_JaJcrossB[dit].mult(magField_virtual_cc[dit],thisbox,0,0,1);
-         m_JaJcrossB[dit].negate(0,1);
-         m_JaJcrossB[dit].copy(m_JaJ0_cc[dit],0,1,1);
-         m_JaJcrossB[dit].mult(magField_virtual_cc[dit],thisbox,0,1,1);
-      }
-   }
-
-   // if using in-plane magnetic field
-   if(a_soln_fluid.m_evolve_magneticField) {
-
-      CH_assert(!a_soln_fluid.m_evolve_magneticField_virtual); // don't work together yet !!!
-      CH_assert(SpaceDim==3); // only works in 3D for now !!!
-      
-      const LevelData<FluxBox>& soln_magField_cf( a_soln_fluid.face_var("magneticField") );
- 
-      // compute physical B at cell center
-      LevelData<FArrayBox>& B_phys_cc = m_dummyFArray_spaceDim;
-      SpaceUtils::interpFaceVectorToCell(B_phys_cc,soln_magField_cf,"c2");
-      m_geometry.convertPhysToContravar(B_phys_cc,1);
-      
-      // compute physical E=BxV at cell center
-      computePhysicalElectricField( m_E0_cc, m_velocity, B_phys_cc, 0 );
-      
-      // compute Ja*curl(B)_phys (aka mapped)
-      m_geometry.mappedGridCurl( m_JaJ0_cc, m_B_covar_cc ); // Ja*curl(B)_phys
-
-      // compute Ja*JxB and Ja*JdotE at cell center 
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         
-         const FArrayBox& JaJ_on_patch     = m_JaJ0_cc[dit];
-         const FArrayBox& E_on_patch       = m_E0_cc[dit];
-         const FArrayBox& B_on_patch       = B_phys_cc[dit];
-               FArrayBox& JaJdotE_on_patch = m_JaJdotE[dit];
-               FArrayBox& JaJxB_on_patch = m_JaJcrossB[dit];
-
-         const Box& cellbox = JaJdotE_on_patch.box();
-         FORT_EVAL_DOT_PRODUCT( CHF_BOX(cellbox),
-                                CHF_CONST_FRA(JaJ_on_patch),
-                                CHF_CONST_FRA(E_on_patch),
-                                CHF_FRA1(JaJdotE_on_patch,0) );
-         
-         FORT_EVAL_CROSS_PRODUCT( CHF_BOX(cellbox),
-                                  CHF_CONST_FRA(JaJ_on_patch),
-                                  CHF_CONST_FRA(B_on_patch),
-                                  CHF_FRA(JaJxB_on_patch) );
-
-         // reset dummy containers to infty
-         m_dummyFArray_spaceDim[dit].setVal(1./0.);
-      }
-      
+   switch(a_soln_fluid.m_evolveB_type) {
+      case FluidSpecies::EVOLVE_B_TYPE::NONE :
+          break;
+      case FluidSpecies::EVOLVE_B_TYPE::TWOD_VIRTUAL_B :
+          setMagneticFieldTerms_2Dvirtual( a_soln_fluid );
+          break;
+      case FluidSpecies::EVOLVE_B_TYPE::TWOD_INPLANE_B :
+          setMagneticFieldTerms_2DinPlane( a_soln_fluid );
+          break;
+      case FluidSpecies::EVOLVE_B_TYPE::TWOD_FULL_B :
+          setMagneticFieldTerms_2Dfull( a_soln_fluid );
+          break;
+      case FluidSpecies::EVOLVE_B_TYPE::THREED :
+          setMagneticFieldTerms_3D( a_soln_fluid );
+          break;
+      default :
+          cout << "m_evolveB_type = " << a_soln_fluid.m_evolveB_type << endl;
+          MayDay::Error("Invalid evolve B type in setMagneticFieldTerms() ");
    }
 
 }   
+
+void IdealMhdOp::setMagneticFieldTerms_2Dvirtual( const FluidSpecies&  a_soln_fluid )
+{
+   CH_TIME("IdealMhdOp::setMagneticFieldTerms_2Dvirtual()");
+   
+   //  E=BxV:   x: (By*Vz        )
+   //           y: (             ) (virtual)
+   //           z: (      - By*Vx)
+   //  J=curlB: x: (       - dBy/dz)
+   //           y: (               ) (virtual)
+   //           z: (dBy/dx         )
+   //  JxB:     x: (      - Jz*By)
+   //           y: (             ) (virtual)
+   //           z: (Jx*By        )
+   //  JdotE:  (Jx*Ex + Jz*Ez)
+   
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   const LevelData<FArrayBox>& B_virtual( a_soln_fluid.cell_var("magneticField_virtual") );
+
+   // compute E = BxV
+   computeCrossProduct( m_E0_cc, B_virtual, m_velocity, 2 );
+
+   // compute Ja*JxB      
+   m_geometry.mappedGridCurlofVirtComp(m_JaJ0_cc,m_By_covar_cc); // Ja*curl(By)\cdot g^perp
+   m_geometry.convertPhysToContravar(m_JaJ0_cc,1);          // Ja*curlB_phys at cell center
+   computeCrossProduct( m_JaJcrossB, m_JaJ0_cc, B_virtual, 3 );
+
+   // compute Ja*JdotE
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+         
+      const FArrayBox& JaJ_on_patch     = m_JaJ0_cc[dit];
+      const FArrayBox& E_on_patch       = m_E0_cc[dit];
+            FArrayBox& JaJdotE_on_patch = m_JaJdotE[dit];
+
+      const Box& cellbox = JaJdotE_on_patch.box();
+      FORT_EVAL_DOT_PRODUCT( CHF_BOX(cellbox),
+                             CHF_CONST_FRA(JaJ_on_patch),
+                             CHF_CONST_FRA(E_on_patch),
+                             CHF_FRA1(JaJdotE_on_patch,0) );
+         
+      // reset dummy containers to infty
+      m_dummyFArray_spaceDim[dit].setVal(1./0.);
+      
+   }
+
+}
+
+void IdealMhdOp::setMagneticFieldTerms_2DinPlane( const FluidSpecies&  a_soln_fluid )
+{
+   CH_TIME("IdealMhdOp::setMagneticFieldTerms_2DinPlane()");
+   
+   //  E=BxV:   x: (      - Bz*Vy)
+   //           y: (Bz*Vx - Bx*Vz) (virtual)
+   //           z: (Bx*Vy -      )
+   //  J=curlB: x: (               )
+   //           y: (dBx/dz - dBz/dx) (virtual)
+   //           z: (               )
+   //  JxB:     x: (Jy*Bz        )
+   //           y: (             ) (virtual)
+   //           z: (      - Jy*Bx)
+   //  JdotE:  (Jy*Ey)
+   
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   const LevelData<FluxBox>& soln_magField_cf( a_soln_fluid.face_var("magneticField") );
+ 
+   // compute physical B at cell center
+   LevelData<FArrayBox>& B_inPlane = m_dummyFArray_spaceDim;
+   SpaceUtils::interpFaceVectorToCell(B_inPlane,soln_magField_cf,"c2");
+   m_geometry.convertPhysToContravar(B_inPlane,1);
+      
+   // compute E = BxV
+   computeCrossProduct( m_E0_cc, B_inPlane, m_velocity_virtual, 3 );
+   computeCrossProduct( m_E0_virtual_cc, B_inPlane, m_velocity, 1 );
+   
+   // compute Ja*JxB
+   m_geometry.mappedGridCurl( m_JaJ0_virtual_cc, m_B_covar_cc ); // Ja*curl(B)_phys
+   computeCrossProduct( m_JaJcrossB, m_JaJ0_virtual_cc, B_inPlane, 2 );
+   
+   // compute Ja*JdotE
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+         
+            FArrayBox& JaJdotE_on_patch = m_JaJdotE[dit];
+      const FArrayBox& JaJv_on_patch = m_JaJ0_virtual_cc[dit];
+      const FArrayBox& Ev_on_patch   = m_E0_virtual_cc[dit];
+         
+      const Box& cellbox = JaJdotE_on_patch.box();
+      Real JaJ0v, E0v, JaJdotE;
+      for (BoxIterator bit(cellbox); bit.ok(); ++bit) {
+          IntVect ic = bit();
+          JaJ0v = JaJv_on_patch.get(ic,0);
+          E0v   = Ev_on_patch.get(ic,0);
+          JaJdotE = JaJ0v*E0v;
+          JaJdotE_on_patch.set(ic,0,JaJdotE);
+      }
+
+      // reset dummy containers to infty
+      m_dummyFArray_spaceDim[dit].setVal(1./0.);
+
+   }
+
+}
+
+void IdealMhdOp::setMagneticFieldTerms_2Dfull( const FluidSpecies&  a_soln_fluid )
+{
+   CH_TIME("IdealMhdOp::setMagneticFieldTerms_2Dfull()");
+   
+   //  E=BxV:   x: (By*Vz - Bz*Vy)
+   //           y: (Bz*Vx - Bx*Vz) (virtual)
+   //           z: (Bx*Vy - By*Vx)
+   //  J=curlB: x: (       - dBy/dz)
+   //           y: (dBx/dz - dBz/dx) (virtual)
+   //           z: (dBy/dx         )
+   //  JxB:     x: (Jy*Bz - Jz*By)
+   //           y: (Jz*Bx - Jx*Bz) (virtual)
+   //           z: (Jx*By - Jy*Bx)
+   //  JdotE:  (Jx*Ex + Jz*Ez + Jy*Ey)
+   
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   const LevelData<FluxBox>& soln_magField_cf( a_soln_fluid.face_var("magneticField") );
+   const LevelData<FArrayBox>& B_virtual( a_soln_fluid.cell_var("magneticField_virtual") );
+      
+   // compute B at cell center
+   LevelData<FArrayBox>& B_inPlane = m_dummyFArray_spaceDim;
+   SpaceUtils::interpFaceVectorToCell(B_inPlane,soln_magField_cf,"c2");
+   m_geometry.convertPhysToContravar(B_inPlane,1);
+      
+   // compute E = BxV
+   computeCrossProduct( m_E0_cc, B_inPlane, m_velocity,
+                        B_virtual, m_velocity_virtual );
+   computeCrossProduct( m_E0_virtual_cc, B_inPlane, m_velocity, 1);
+
+   // compute Ja*JxB
+   m_geometry.mappedGridCurlofVirtComp(m_JaJ0_cc,m_By_covar_cc); // Ja*curl(By)\cdot g^perp
+   m_geometry.convertPhysToContravar(m_JaJ0_cc,1);          // Ja*curlB_phys at cell center
+   m_geometry.mappedGridCurl( m_JaJ0_virtual_cc, m_B_covar_cc ); // Ja*curl(B)_phys
+   computeCrossProduct( m_JaJcrossB, m_JaJ0_cc, B_inPlane, 
+                        m_JaJ0_virtual_cc, B_virtual );
+   computeCrossProduct( m_JaJcrossB_virtual, m_JaJ0_cc, B_inPlane, 1 );
+   
+   // compute Ja*JdotE
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+         
+      const FArrayBox& JaJ_on_patch     = m_JaJ0_cc[dit];
+      const FArrayBox& E_on_patch       = m_E0_cc[dit];
+            FArrayBox& JaJdotE_on_patch = m_JaJdotE[dit];
+
+      const Box& cellbox = JaJdotE_on_patch.box();
+      FORT_EVAL_DOT_PRODUCT( CHF_BOX(cellbox),
+                             CHF_CONST_FRA(JaJ_on_patch),
+                             CHF_CONST_FRA(E_on_patch),
+                             CHF_FRA1(JaJdotE_on_patch,0) );
+     
+      // add virtual contribution to Ja*JdotE 
+      const FArrayBox& JaJv_on_patch = m_JaJ0_virtual_cc[dit];
+      const FArrayBox& Ev_on_patch   = m_E0_virtual_cc[dit];
+      
+      Real JaJ0v, E0v, JaJdotE;
+      for (BoxIterator bit(cellbox); bit.ok(); ++bit) {
+          IntVect ic = bit();
+          JaJ0v = JaJv_on_patch.get(ic,0);
+          E0v   = Ev_on_patch.get(ic,0);
+          JaJdotE  = JaJdotE_on_patch.get(ic,0);
+          JaJdotE += JaJ0v*E0v;
+          JaJdotE_on_patch.set(ic,0,JaJdotE);
+      }   
+         
+      // reset dummy containers to infty
+      m_dummyFArray_spaceDim[dit].setVal(1./0.);
+      
+   }
+   
+}
+
+void IdealMhdOp::setMagneticFieldTerms_3D( const FluidSpecies&  a_soln_fluid )
+{
+   CH_TIME("IdealMhdOp::setMagneticFieldTerms_3D()");
+   
+   //  E=BxV:   x: (By*Vz - Bz*Vy)
+   //           y: (Bz*Vx - Bx*Vz)
+   //           z: (Bx*Vy - By*Vx)
+   //  J=curlB: x: (dBz/dy - dBy/dz)
+   //           y: (dBx/dz - dBz/dx)
+   //           z: (dBy/dx - dBx/dy)
+   //  JxB:     x: (Jy*Bz - Jz*By)
+   //           y: (Jz*Bx - Jx*Bz)
+   //           z: (Jx*By - Jy*Bx)
+   //  JdotE:  (Jx*Ex + Jy*Ey + Jz*Ez)
+   
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   const LevelData<FluxBox>& soln_magField_cf( a_soln_fluid.face_var("magneticField") );
+ 
+   // compute physical B at cell center
+   LevelData<FArrayBox>& B_inPlane = m_dummyFArray_spaceDim;
+   SpaceUtils::interpFaceVectorToCell(B_inPlane,soln_magField_cf,"c2");
+   m_geometry.convertPhysToContravar(B_inPlane,1);
+      
+   // compute E = BxV
+   computeCrossProduct( m_E0_cc, B_inPlane, m_velocity, 0 );
+   
+   // compute Ja*JxB
+   //LevelData<FluxBox>& Bvec_covar = m_dummyFlux_spaceDim;
+   //SpaceUtils::interpFacesToFaces(Bvec_covar, soln_magField_cf);
+   //m_geometry.convertContravarToCovar(Bvec_covar,0);
+   //m_geometry.mappedGridCurl( m_JaJ0_cc, Bvec_covar ); // Ja*curl(B)_contra
+   m_geometry.mappedGridCurl( m_JaJ0_cc, m_B_covar_cc ); // Ja*curl(B)_contra
+   m_geometry.convertPhysToContravar(m_JaJ0_cc,1);
+
+   if(m_use_perturbative_form) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_JaJ01[dit].copy(m_JaJ0_cc[dit]);
+         m_JaJ01[dit].minus(m_JaJ00[dit]);
+         m_B1_phys[dit].copy(B_inPlane[dit]);
+         m_B1_phys[dit].minus(m_B0_phys[dit]);
+      }
+      computeCrossProduct( m_JaJcrossB, m_JaJ00, m_B1_phys, 0 );
+      computeCrossProduct( m_JaJcrossB_10, m_JaJ01, m_B0_phys, 0 );
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_JaJcrossB[dit].plus(m_JaJcrossB_10[dit]);
+      }
+   }  
+   else {
+      computeCrossProduct( m_JaJcrossB, m_JaJ0_cc, B_inPlane, 0 );
+   }
+
+   // compute Ja*JdotE
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+         
+      const FArrayBox& JaJ_on_patch     = m_JaJ0_cc[dit];
+      const FArrayBox& E_on_patch       = m_E0_cc[dit];
+            FArrayBox& JaJdotE_on_patch = m_JaJdotE[dit];
+
+      const Box& cellbox = JaJdotE_on_patch.box();
+      FORT_EVAL_DOT_PRODUCT( CHF_BOX(cellbox),
+                             CHF_CONST_FRA(JaJ_on_patch),
+                             CHF_CONST_FRA(E_on_patch),
+                             CHF_FRA1(JaJdotE_on_patch,0) );
+         
+      // reset dummy containers to infty
+      m_dummyFArray_spaceDim[dit].setVal(1./0.);
+      m_dummyFlux_spaceDim[dit].setVal(1./0.);
+      
+   }
+
+}
 
 void IdealMhdOp::setFaceCenteredFluxes( const FluidSpecies&  a_soln_fluid )
 {
@@ -1589,7 +2573,9 @@ void IdealMhdOp::setFaceCenteredFluxes( const FluidSpecies&  a_soln_fluid )
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       m_momFlux_norm[dit].copy( m_mxFlux_norm[dit],0,0,1 );
       m_momFlux_norm[dit].copy( m_myFlux_norm[dit],0,1,1 );
-      if(SpaceDim==3) m_momFlux_norm[dit].copy( m_mzFlux_norm[dit],0,2,1 );
+#if CH_SPACEDIM==3
+      m_momFlux_norm[dit].copy( m_mzFlux_norm[dit],0,2,1 );
+#endif
    }
 
    for (DataIterator dit(grids); dit.ok(); ++dit) {
@@ -1626,16 +2612,219 @@ void IdealMhdOp::setFaceCenteredFluxes( const FluidSpecies&  a_soln_fluid )
 
 }
 
+void IdealMhdOp::setFaceCenteredFluxes_freestreamPreserving( const FluidSpecies&  a_soln_fluid )
+{
+   CH_TIME("IdealMhdOp::setFaceCenteredFluxes_freestreamPreserving()");
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   
+   LevelData<FluxBox>& thisFlux_phys_fc = m_dummyFlux_spaceDim;
+   LevelData<FArrayBox>& thisf = m_dummyFArray_oneComp;
+  
+   // compute normal flux for mass density
+   upwindFluxVector(thisFlux_phys_fc,m_rhoFlux_cc,m_rhoDen_cc,m_Cspeed_cc,m_CspeedR_norm,m_CspeedL_norm);
+   m_geometry.computeMetricTermProductAverage(m_rhoFlux_norm, thisFlux_phys_fc, false);
+
+   // compute normal flux for momentum density vector 
+   for (int n=0; n<SpaceDim; ++n) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         thisf[dit].copy(m_momDen_cc[dit],n,0,1);
+      }
+      if(n==0) {
+         upwindFluxVector(thisFlux_phys_fc,m_mxFlux_cc,thisf,m_Cspeed_cc,m_CspeedR_norm,m_CspeedL_norm);
+         m_geometry.computeMetricTermProductAverage(m_mxFlux_norm, thisFlux_phys_fc, false);
+      }
+      if(n==1) {
+         upwindFluxVector(thisFlux_phys_fc,m_myFlux_cc,thisf,m_Cspeed_cc,m_CspeedR_norm,m_CspeedL_norm);
+         m_geometry.computeMetricTermProductAverage(m_myFlux_norm, thisFlux_phys_fc, false);
+      }
+      if(n==2) {
+         upwindFluxVector(thisFlux_phys_fc,m_mzFlux_cc,thisf,m_Cspeed_cc,m_CspeedR_norm,m_CspeedL_norm);
+         m_geometry.computeMetricTermProductAverage(m_mzFlux_norm, thisFlux_phys_fc, false);
+      }
+   }
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      m_momFlux_norm[dit].copy( m_mxFlux_norm[dit],0,0,1 );
+      m_momFlux_norm[dit].copy( m_myFlux_norm[dit],0,1,1 );
+#if CH_SPACEDIM==3
+      m_momFlux_norm[dit].copy( m_mzFlux_norm[dit],0,2,1 );
+#endif
+   }
+   
+   // compute normal flux for ion energy density
+   upwindFluxVector(thisFlux_phys_fc,m_enFlux_cc,m_eneDen_cc,m_Cspeed_cc,m_CspeedR_norm,m_CspeedL_norm);
+   m_geometry.computeMetricTermProductAverage(m_enFlux_norm, thisFlux_phys_fc, false);
+
+}
+
+void IdealMhdOp::setFaceCenteredFluxes_ZIP( const FluidSpecies&  a_soln_fluid )
+{
+   CH_TIME("IdealMhdOp::setFaceCenteredFluxes_ZIP()");
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+ 
+   const double dummy_time = 0.0;
+
+   // compute contravariant velocity and momentum density
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+       m_velocity_contra[dit].copy(m_velocity[dit]);
+       m_momDen_contra[dit].copy(m_momDen_cc[dit]);
+   }
+   m_geometry.convertPhysToContravar(m_velocity_contra, 0);
+   m_geometry.convertPhysToContravar(m_momDen_contra, 0);
+ 
+   // compute contraviant fluxes on cell faces for density and energy density
+   SpaceUtils::interpToFacesZIP( m_rhoFlux_norm, m_rhoDen_cc, m_velocity_contra );
+   
+   if(m_energy_is_thermal_2) {
+      SpaceUtils::interpToFacesZIP( m_enFlux_norm, m_eneDen_cc, m_velocity_contra );
+   }
+   else if(m_isothermal) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_enFlux_norm[dit].setVal(0.0);
+      }
+   }
+   else {
+      LevelData<FArrayBox>& eneP  = m_dummyFArray_oneComp;
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         eneP[dit].copy(m_eneDen_cc[dit]);
+         eneP[dit].plus(m_pressure[dit]);
+      }
+      SpaceUtils::interpToFacesZIP( m_enFlux_norm, eneP, m_velocity_contra );
+   }
+ 
+   // compute flux for momentum density vector 
+   //if(m_use_perturbative_form) {
+   //   for (DataIterator dit(grids); dit.ok(); ++dit) {
+   //      m_mxFlux_norm[dit].setVal(0.0);
+   //      m_myFlux_norm[dit].setVal(0.0);
+   //      m_mzFlux_norm[dit].setVal(0.0);
+   //   }
+   //} 
+   //else {
+      for (int dir=0; dir<SpaceDim; ++dir) {
+         if(dir==0) SpaceUtils::interpToFacesZIP( m_mxFlux_norm, m_velocity, m_momDen_cc, 
+                                                  m_velocity_contra, m_momDen_contra, dir );
+         if(dir==1) SpaceUtils::interpToFacesZIP( m_myFlux_norm, m_velocity, m_momDen_cc, 
+                                                  m_velocity_contra, m_momDen_contra, dir );
+         if(dir==2) SpaceUtils::interpToFacesZIP( m_mzFlux_norm, m_velocity, m_momDen_cc, 
+                                                  m_velocity_contra, m_momDen_contra, dir );
+      }
+
+      if(m_enforceFluxBCs) {
+         m_fluid_bc.at(0)->setFluxBC( a_soln_fluid, m_rhoFlux_norm, m_FluxBC_zeros, dummy_time );
+         m_fluid_bc.at(0)->setFluxBC( a_soln_fluid, m_enFlux_norm, m_FluxBC_zeros, dummy_time );
+         m_fluid_bc.at(0)->setFluxBC( a_soln_fluid, m_mxFlux_norm, m_FluxBC_zeros, dummy_time );
+         m_fluid_bc.at(0)->setFluxBC( a_soln_fluid, m_myFlux_norm, m_FluxBC_zeros, dummy_time );
+#if CH_SPACEDIM==3
+         m_fluid_bc.at(0)->setFluxBC( a_soln_fluid, m_mzFlux_norm, m_FluxBC_zeros, dummy_time );
+#endif
+      }
+   //}
+
+   // interpolate pressure to faces
+   LevelData<FluxBox>& pressure_fc = m_dummyFlux_oneComp;
+   if(m_use_perturbative_form) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_deltaN[dit].copy(m_rhoDen_cc[dit]);
+         m_deltaN[dit].minus(m_N0[dit]);
+         m_deltaT[dit].copy(m_temperature[dit]);
+         m_deltaT[dit].minus(m_T0[dit]);
+      }
+      LevelData<FluxBox> pressure_fc2(grids,1,m_rhoDen_cc.ghostVect());
+      SpaceUtils::interpToFacesZIP( pressure_fc, m_N0, m_deltaT );
+      SpaceUtils::interpToFacesZIP( pressure_fc2, m_deltaN, m_T0 );
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         for(int dir=0; dir<SpaceDim; dir++) {
+            pressure_fc[dit][dir].plus(pressure_fc2[dit][dir]);
+         }
+      }
+   }
+   else {
+      SpaceUtils::interpToFacesZIP( pressure_fc, m_rhoDen_cc, m_temperature );
+   }
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for(int dir=0; dir<SpaceDim; dir++) pressure_fc[dit][dir].mult(2.0);
+   }
+   LevelData<FluxBox>& Pcontra = m_dummyFlux_spaceDim;
+
+   // convert pressure flux to contravariant for x-momentum
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      Pcontra[dit].setVal(0.0);
+      for (int dir=0; dir<SpaceDim; dir++) {
+         Pcontra[dit][dir].copy(pressure_fc[dit][dir],0,0,1 );
+      }
+   }
+   m_geometry.convertPhysToContravar(Pcontra, 0);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for (int dir=0; dir<SpaceDim; dir++) {
+         m_mxFlux_norm[dit][dir].plus( Pcontra[dit][dir],dir,0,1 );
+      }
+   }
+   
+   // convert pressure flux to contravariant for y-momentum
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      Pcontra[dit].setVal(0.0);
+      for (int dir=0; dir<SpaceDim; dir++) {
+         Pcontra[dit][dir].copy(pressure_fc[dit][dir],0,1,1 );
+      }
+   }
+   m_geometry.convertPhysToContravar(Pcontra, 0);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for (int dir=0; dir<SpaceDim; dir++) {
+         m_myFlux_norm[dit][dir].plus( Pcontra[dit][dir],dir,0,1 );
+      }
+   }
+   
+#if CH_SPACEDIM==3
+   // convert pressure flux to contravariant for z-momentum
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      Pcontra[dit].setVal(0.0);
+      for (int dir=0; dir<SpaceDim; dir++) {
+         Pcontra[dit][dir].copy(pressure_fc[dit][dir],0,2,1 );
+      }
+   }
+   m_geometry.convertPhysToContravar(Pcontra, 0);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for (int dir=0; dir<SpaceDim; dir++) {
+         m_mzFlux_norm[dit][dir].plus( Pcontra[dit][dir],dir,0,1 );
+      }
+   }
+#endif
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      for (int dir=0; dir<SpaceDim; dir++) {
+         m_momFlux_norm[dit][dir].copy( m_mxFlux_norm[dit][dir],0,0,1 );
+         m_momFlux_norm[dit][dir].copy( m_myFlux_norm[dit][dir],0,1,1 );
+#if CH_SPACEDIM==3
+         m_momFlux_norm[dit][dir].copy( m_mzFlux_norm[dit][dir],0,2,1 );
+#endif
+      }
+   }
+   
+   // multiply fluxes by face area and Jacobian
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      const MagBlockCoordSys& coord_sys = m_geometry.getBlockCoordSys(grids[dit]);
+      const RealVect& faceArea = coord_sys.getMappedFaceArea();
+      for (int dir=0; dir<SpaceDim; dir++) {
+         m_rhoFlux_norm[dit][dir].mult(faceArea[dir]);
+         m_momFlux_norm[dit][dir].mult(faceArea[dir]);
+         m_enFlux_norm[dit][dir].mult(faceArea[dir]);
+      }
+   }
+   m_geometry.multJonFaces( m_rhoFlux_norm );
+   m_geometry.multJonFaces( m_momFlux_norm );
+   m_geometry.multJonFaces( m_enFlux_norm );
+   
+}
+
 void IdealMhdOp::setFaceCenteredFlux( LevelData<FluxBox>&    a_Flux_norm,
                                 const LevelData<FArrayBox>&  a_Flux_phys_cc )
 {
    CH_TIME("IdealMhdOp::setFaceCenteredFlux()");
    const DisjointBoxLayout& grids( m_geometry.grids() );
    
-   const int method = 2;
+   int method = 2;
+   if(m_free_stream_preserving) method = 0;
 
-   // original way
-   //
    if(method==0) {
       SpaceUtils::upWindToFaces( m_dummyFlux_spaceDim, a_Flux_phys_cc, m_dummyFlux_spaceDim, "c2" );
       m_geometry.applyAxisymmetricCorrection( m_dummyFlux_spaceDim );
@@ -1646,7 +2835,6 @@ void IdealMhdOp::setFaceCenteredFlux( LevelData<FluxBox>&    a_Flux_norm,
    }
    
    // convert cell-center flux from physical to mapped and interp to faces 
-   //
    if(method==1) {
       m_geometry.multiplyNTranspose(m_dummyFArray_spaceDim, a_Flux_phys_cc);
       SpaceUtils::upWindToFaces( a_Flux_norm, m_dummyFArray_spaceDim, a_Flux_norm, "c2" );
@@ -1663,7 +2851,6 @@ void IdealMhdOp::setFaceCenteredFlux( LevelData<FluxBox>&    a_Flux_norm,
    }
    
    // new method to be consistent with how symmetry BCs are applied
-   //
    if(method==2) {
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          m_dummyFArray_spaceDim[dit].copy(a_Flux_phys_cc[dit]);
@@ -1692,13 +2879,11 @@ void IdealMhdOp::enforceFluxBCs( const FluidSpecies&  a_soln_fluid,
    const DisjointBoxLayout& grids( m_geometry.grids() );
    
    // enforce flux BC for mass density flux
-   //
    setFaceCenteredFlux(m_rhoFluxBC_norm, m_rhoFlux_cc);
    m_fluid_bc.at(0)->setFluxBC( a_soln_fluid, m_rhoFlux_norm, m_rhoFluxBC_norm, a_time );
    //m_fluid_bc.at(0)->setFluxBC( a_soln_fluid, m_rhoFlux_norm, m_FluxBC_zeros, a_time );
    
    // enforce flux BC for momentum density flux
-   //
    int this_cbc;
    setFaceCenteredFlux(m_mxFluxBC_norm, m_mxFlux_cc);
    setFaceCenteredFlux(m_myFluxBC_norm, m_myFlux_cc);
@@ -1716,14 +2901,12 @@ void IdealMhdOp::enforceFluxBCs( const FluidSpecies&  a_soln_fluid,
    m_fluid_bc.at(this_cbc)->setFluxBC( a_soln_fluid, m_momFlux_norm, m_momFluxBC_norm, a_time );
   
    // enforce flux BC for energy density flux
-   //
    setFaceCenteredFlux(m_enFluxBC_norm, m_enFlux_cc);
    this_cbc = m_energyDensity_cbc;
    m_fluid_bc.at(this_cbc)->setFluxBC( a_soln_fluid, m_enFlux_norm, m_enFluxBC_norm, a_time );
    //m_fluid_bc.at(this_cbc)->setFluxBC( a_soln_fluid, m_enFlux_norm, m_FluxBC_zeros, a_time );
    
    // enforce flux BC for parallel energy density flux if using CGL
-   //
    if(m_CGL) {
       setFaceCenteredFlux(m_enParFluxBC_norm, m_enParFlux_cc);
       this_cbc = m_energyDensity_cbc;
@@ -1731,36 +2914,45 @@ void IdealMhdOp::enforceFluxBCs( const FluidSpecies&  a_soln_fluid,
    }
 
    // enforce flux BC for virtual momentum density flux
-   //
    if(a_soln_fluid.m_evolve_momentumDensity_virtual) {
       setFaceCenteredFlux(m_mvFluxBC_norm, m_mvFlux_cc);
       this_cbc = m_momentumDensity_virtual_cbc;
       m_fluid_bc.at(this_cbc)->setFluxBC( a_soln_fluid, m_mvFlux_norm, m_mvFluxBC_norm, a_time );
    }
+}
+
+void IdealMhdOp::setCurlE( const FluidSpecies&  a_soln_fluid, 
+                           const Real           a_time )
+{
+   CH_TIME("IdealMhdOp::computeCurlE()");
+   const DisjointBoxLayout& grids( m_geometry.grids() );  
    
-   // enforce edge BC for virtual magnetic field
-   //
    if(a_soln_fluid.m_evolve_magneticField_virtual) {
       computeIdealEatEdges(m_E0_ce,m_velocity,m_By_contr_cc,m_Cspeed_cc);
-      this_cbc = m_magneticField_virtual_cbc;
+      int this_cbc = m_magneticField_virtual_cbc;
       m_fluid_bc.at(this_cbc)->setEdgeBC( a_soln_fluid, m_E0_ce, m_EdgeBC_zeros, a_time );
-      m_geometry.mappedGridCurlFromEdgeTans(m_E0_ce,2,m_curlE0_virtual); // takes covar E and returns Ja*curl(E)dot(g^y)
+      m_geometry.mappedGridCurl2D(m_curlE0_virtual,m_E0_ce); // takes covar E and returns Ja*curl(E)dot(g^y)
       for (DataIterator dit(grids); dit.ok(); ++dit) {
-         if(m_twoDaxisymm) {
-            m_curlE0_virtual[dit].mult(m_g_y[dit]); // g^y*g_y = 1 (Ja*curlE_phys)
-         }
+         if(m_twoDaxisymm) m_curlE0_virtual[dit].mult(m_g_y[dit]); // g^y*g_y = 1 (Ja*curlE_phys)
       }
    }
    
-   // compute E0 (should do this elsewhere) and enforce boundary conditions
-   //
    if(a_soln_fluid.m_evolve_magneticField) {
       const LevelData<FluxBox>& soln_magField_cf( a_soln_fluid.face_var("magneticField") );
+#if CH_SPACEDIM==3
       computeIdealEatEdges(m_E0_ce,m_velocity,soln_magField_cf,m_Cspeed_cc);
       int this_fbc = m_magneticField_fbc;
       m_fluid_face_var_bc.at(this_fbc)->setEdgeBC( a_soln_fluid, m_E0_ce, m_EdgeBC_zeros, a_time );
       SpaceUtils::exchangeEdgeDataBox(m_E0_ce); // call exchange after setBC !!!!!
       m_geometry.mappedGridCurl3D(m_curlE0_cf,m_E0_ce);
+#else
+      // for 2D, only virtual E0 enters into curl for in-plane B
+      computeIdealEatNodes(m_E0_virtual_nc,m_velocity,soln_magField_cf,m_Cspeed_cc);
+      int this_fbc = m_magneticField_fbc;
+      m_fluid_face_var_bc.at(this_fbc)->setNodeBC( a_soln_fluid, m_E0_virtual_nc, m_NodeBC_zeros, a_time );
+      m_E0_virtual_nc.exchange();
+      m_geometry.mappedGridCurl2D(m_curlE0_cf,m_E0_virtual_nc);
+#endif
    }
 
 }   
@@ -1889,7 +3081,7 @@ void IdealMhdOp::updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
    // where viscosity tensor is Pi = -etaVis*W with 
    // rate of strain tensor W defined as
    // W = \nabla(V) + (\nabla(V))^T - 2/3*I\nabla\cdot V
-   //
+
    m_geometry.computeJaStrainTensorPhys( m_JaW_cf,
                                          m_velocity );
    
@@ -1913,7 +3105,7 @@ void IdealMhdOp::updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
 
    // calculate viscosity flux for energy density equation
    // and source term for momentum flux for axisymmetric
-   //
+
    SpaceUtils::upWindToFaces(m_velocity_cf, m_velocity, m_velocity_cf, "c2");
    if(m_twoDaxisymm) {
       computeViscSourceAxisymm( m_momVisc_source, m_velocity, m_velocity_cf );
@@ -1923,21 +3115,18 @@ void IdealMhdOp::updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
       }
    } 
    
-   computeViscosityEnergyFlux( m_enJaFluxVisc_cf,
-                               m_velocity_cf );
-
    //   update RHSs for momentum equation
-   //
-   if(a_accumulateMom) {
+   if(a_accumulateMom || m_energy_is_thermal || m_energy_is_thermal_2) {
 
       // convert physical Ja*Flux to contravar and mult by faceArea
       // (Result is same as applying N^T*Flux*faceArea as is done by 
       // computeMetricTermProductAverage), which is not done here 
       // since Flux is already multiplied by Jacobian
-      //
-      m_geometry.applyAxisymmetricCorrection( m_m0JaFluxVisc_cf );
-      m_geometry.applyAxisymmetricCorrection( m_m1JaFluxVisc_cf );
-      if(SpaceDim==3) m_geometry.applyAxisymmetricCorrection( m_m2JaFluxVisc_cf );
+
+      if(SpaceDim<3) {
+         m_geometry.applyAxisymmetricCorrection( m_m0JaFluxVisc_cf );
+         m_geometry.applyAxisymmetricCorrection( m_m1JaFluxVisc_cf );
+      }
       m_geometry.computedxidXProductNorm(m_m0JaFluxVisc_norm, m_m0JaFluxVisc_cf);
       m_geometry.computedxidXProductNorm(m_m1JaFluxVisc_norm, m_m1JaFluxVisc_cf);
       if(SpaceDim==3) m_geometry.computedxidXProductNorm(m_m2JaFluxVisc_norm, m_m2JaFluxVisc_cf);
@@ -1961,15 +3150,16 @@ void IdealMhdOp::updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
                m_dummyDiv_mom[dit].minus(JaPiyyOverR,0,0,1);
             }
          }
-         //rhs_mom[dit].minus(m_dummyDiv_mom[dit],1,1,1);
-         rhs_mom[dit].minus(m_dummyDiv_mom[dit]);
+         if(a_accumulateMom) rhs_mom[dit].minus(m_dummyDiv_mom[dit]);
       }
    
    }   
 
    //   update RHSs for energy density equation
-   //
    if(a_accumulateEne) {
+ 
+      computeViscosityEnergyFlux( m_enJaFluxVisc_cf,
+                                  m_velocity_cf );
 
       // convert physical Ja*Flux to contravar and mult by faceArea
       // (Result is same as applying N^T*Flux*faceArea as is done by 
@@ -1986,6 +3176,27 @@ void IdealMhdOp::updateRHSs_visc( FluidSpecies&  a_rhs_fluid,
          m_dummyDiv[dit].mult( 1.0/coords.getMappedCellVolume() );
          rhs_ene[dit].minus( m_dummyDiv[dit],0,0,1 ); // specify comp since can have two (CGL?)
       }
+      
+      if(m_energy_is_thermal || m_energy_is_thermal_2) {
+
+         LevelData<FArrayBox>& UdotDivMomFlux = m_dummyFArray_oneComp;
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+
+            const FArrayBox& this_velocity  = m_velocity[dit];
+            const FArrayBox& this_momDiv = m_dummyDiv_mom[dit];
+            FArrayBox& this_UdotMomDiv = UdotDivMomFlux[dit];
+
+            const Box& thisbox = this_UdotMomDiv.box();
+            FORT_EVAL_DOT_PRODUCT( CHF_BOX(thisbox),
+                                   CHF_CONST_FRA(this_velocity),
+                                   CHF_CONST_FRA(this_momDiv),
+                                   CHF_FRA1(this_UdotMomDiv,0) );
+
+            rhs_ene[dit].plus(this_UdotMomDiv,0,0,1); 
+
+         }
+
+      }
 
    }
 
@@ -1996,18 +3207,21 @@ void IdealMhdOp::updateRHSs( FluidSpecies&  a_rhs_fluid,
                        const FluidSpecies&  a_soln_fluid ) 
 {
    CH_TIME("IdealMhdOp::updateRHSs()");
+   const DisjointBoxLayout& grids( m_geometry.grids() );
    
    // compute divergence of Fluxes and add (subtract) to RHS 
    // Note that Ja/cellVol = 1/mapVol
 
    // update RHS for mass density
+   if(!m_blankN){
    LevelData<FArrayBox>& rhs_rho( a_rhs_fluid.cell_var(0) );
    m_geometry.mappedGridDivergenceFromFluxNorms(m_rhoFlux_norm, m_dummyDiv);
-   const DisjointBoxLayout& grids( m_geometry.grids() );
    for (DataIterator dit(rhs_rho.dataIterator()); dit.ok(); ++dit) {
       const MagBlockCoordSys& coords( m_geometry.getBlockCoordSys( grids[dit] ) );
       m_dummyDiv[dit].mult( 1.0/coords.getMappedCellVolume() );
       rhs_rho[dit].minus(m_dummyDiv[dit]);
+      m_rhs_rho[dit].copy(rhs_rho[dit]);
+   }
    }
   
    // update RHS for momentum density
@@ -2045,6 +3259,7 @@ void IdealMhdOp::updateRHSs( FluidSpecies&  a_rhs_fluid,
          a_soln_fluid.m_evolve_magneticField) {
          rhs_mom[dit].plus(m_JaJcrossB[dit]);
       }
+      m_forceDensity[dit].copy(rhs_mom[dit]);
    }
    
    // update RHS for energy density
@@ -2054,8 +3269,14 @@ void IdealMhdOp::updateRHSs( FluidSpecies&  a_rhs_fluid,
       const MagBlockCoordSys& coords( m_geometry.getBlockCoordSys( grids[dit] ) );
       m_dummyDiv[dit].mult( 1.0/coords.getMappedCellVolume() );
       rhs_ene[dit].minus( m_dummyDiv[dit],0,0,1 );
-      if(a_soln_fluid.m_evolve_magneticField_virtual ||
-         a_soln_fluid.m_evolve_magneticField) {
+      if(m_energy_is_thermal) {
+         rhs_ene[dit].plus( m_JaUdotGradP[dit],0,0,1 );
+      }
+      else if(m_energy_is_thermal_2) {
+         rhs_ene[dit].minus( m_JaPdivU[dit],0,0,1 );
+      }
+      else if(a_soln_fluid.m_evolve_magneticField_virtual ||
+              a_soln_fluid.m_evolve_magneticField) {
          rhs_ene[dit].plus( m_JaJdotE[dit],0,0,1 );
       }
    }
@@ -2101,6 +3322,7 @@ void IdealMhdOp::updateRHSs( FluidSpecies&  a_rhs_fluid,
             JaRhoVthVrOverR.divide(m_Xphys[dit],0,0,1);
             rhs_momV[dit].minus(JaRhoVthVrOverR,0,0,1);            
          }
+         rhs_momV[dit].plus(m_JaJcrossB_virtual[dit]);
       }
    }
 
@@ -2113,10 +3335,12 @@ void IdealMhdOp::updateRHSs( FluidSpecies&  a_rhs_fluid,
    }
    
    // update RHS for magnetic field
-   if(a_soln_fluid.m_evolve_magneticField){
+   if(a_soln_fluid.m_evolve_magneticField && !m_blankB){
       LevelData<FluxBox>& rhs_magField( a_rhs_fluid.face_var("magneticField") );
       for (DataIterator dit(grids); dit.ok(); ++dit) {
-         rhs_magField[dit].minus( m_curlE0_cf[dit],rhs_magField[dit].box(),0,0,1 );
+         for (int dir=0; dir<SpaceDim; dir++) {
+            rhs_magField[dit][dir].minus( m_curlE0_cf[dit][dir] );
+         }
       }
    }
 
@@ -2128,7 +3352,6 @@ void IdealMhdOp::initialize( CFGVars&    a_species,
    CH_TIME("IdealMhdOp::initialize()");
   
    // initilize cell center variables
-   //
    //m_CGL = a_species.m_CGL; // CFG var here rather than FluidSpecies...dynamic cast?
    for (int n=0; n<a_species.num_cell_vars(); ++n) {
 
@@ -2157,7 +3380,6 @@ void IdealMhdOp::initialize( CFGVars&    a_species,
    }
    
    // initilize face center variables
-   //
    for (int n=0; n<a_species.num_face_vars(); ++n) { // initialize contravar on faces from phys on cell
       string this_face_var_comp_name;
       LevelData<FArrayBox> this_face_var_on_cell( a_species.face_var(n).getBoxes(), SpaceDim,
@@ -2180,7 +3402,6 @@ void IdealMhdOp::initialize( CFGVars&    a_species,
    }
 
    // initilize edge center variables
-   // 
    for (int n=0; n<a_species.num_edge_vars(); ++n) { // initialize covar on edges from phys on cell
       string this_edge_var_comp_name;
       LevelData<FArrayBox> this_edge_var_on_cell( a_species.edge_var(n).getBoxes(), SpaceDim,
@@ -2208,24 +3429,440 @@ void IdealMhdOp::initialize( CFGVars&    a_species,
 
 }
 
-void IdealMhdOp::initializeWithBC( FluidSpecies&  a_species_comp,
-                                   FluidSpecies&  a_species_phys,
-                             const double         a_time )
+bool IdealMhdOp::isInitializationConstrained(const FluidSpecies& a_fluid_phys)
 {
-   CH_TIME("IdealMhdOp::initializeWithBC()");
+   return true;
+}
+
+void IdealMhdOp::applyInitializationConstraints(FluidSpeciesPtrVect&               a_fluid_comp,
+                                                FluidSpeciesPtrVect&               a_fluid_phys,
+                                                const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
+                                                const EMFields&                    a_EM_fields,
+                                                const int                          a_component,
+                                                const double                       a_time )
+{
+   CH_TIME("IdealMhdOp::applyInitializationConstraints()");
    const DisjointBoxLayout& grids( m_geometry.grids() );
-   
-   if(a_species_comp.m_evolve_magneticField && m_initializeBfromVectorPotential) {
-         
-      LevelData<FluxBox>& contravar_B_withBCs( a_species_phys.face_var("magneticField") );
-      int this_fbc = m_magneticField_fbc;
+     
+   FluidSpecies& species_phys( static_cast<FluidSpecies&>(*(a_fluid_phys[a_component])) );
+   FluidSpecies& species_comp( static_cast<FluidSpecies&>(*(a_fluid_comp[a_component])) );
+ 
+   if(m_initializeBackgroundPlusPert) { 
+
+      // set background profiles for fluid
+      const GridFunction& fsic_rho0( fluidSpeciesIC( "RHO0" ) );
+      fsic_rho0.assign( m_N0, species_phys.configurationSpaceGeometry(), a_time );
+      m_N0.exchange();
+     
+      const GridFunction& fsic_T0( fluidSpeciesIC( "T0" ) );
+      fsic_T0.assign( m_T0, species_phys.configurationSpaceGeometry(), a_time );
+      m_T0.exchange();
       
+      for (auto dit(m_P0.dataIterator()); dit.ok(); ++dit) {
+         m_P0[dit].copy(m_N0[dit]);
+         m_P0[dit].mult(m_T0[dit]);
+         m_P0[dit].mult(2.0);
+      }
+      
+      // get the perturbation for density
+      const GridFunction& fsic_deltaN( fluidSpeciesIC( "deltaRHO" ) );
+      LevelData<FArrayBox>& deltaN = m_dummyFArray_oneComp;
+      fsic_deltaN.assign( deltaN, species_phys.configurationSpaceGeometry(), a_time );
+      deltaN.exchange();
+
+      // now set the phys and comp vars
+      LevelData<FArrayBox>& rhoDen( species_phys.cell_var(0) );
+      LevelData<FArrayBox>& eneDen( species_phys.cell_var("energyDensity") );
+      LevelData<FArrayBox>& rhoDen_comp( species_comp.cell_var(0) );
+      LevelData<FArrayBox>& eneDen_comp( species_comp.cell_var("energyDensity") );
+      const double gamma = species_phys.m_gamma;
+      for (auto dit(eneDen.dataIterator()); dit.ok(); ++dit) {
+         rhoDen[dit].copy(m_N0[dit]);
+         rhoDen[dit].mult(deltaN[dit]);
+         eneDen[dit].copy(m_P0[dit]);
+         eneDen[dit].mult(deltaN[dit]);
+         eneDen[dit].divide(gamma-1.0);
+         rhoDen_comp[dit].copy(rhoDen[dit]);
+         eneDen_comp[dit].copy(eneDen[dit]);
+      }
+      m_geometry.multJonValid(rhoDen_comp);
+      m_geometry.multJonValid(eneDen_comp);
+
+      //
+      //   initialize magnetic field
+      //
+
+      // get By0 from input file
+      const GridFunction& fsic_By0( fluidSpeciesIC( "BY0" ) );
+      LevelData<FArrayBox>& By0 = m_dummyFArray_oneComp;
+      fsic_By0.assign( By0, species_phys.configurationSpaceGeometry(), a_time );
+      By0.exchange();
+      
+      // copy By0 to m_B0_phys tor_dir component
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         const int tor_dir = 1;
+         m_B0_phys[dit].setVal(0.0);
+         m_B0_phys[dit].copy(By0[dit],0,tor_dir,1);
+      }
+   
+      // convert to contravar and put it on cell faces
+      LevelData<FArrayBox>& B0_contra = m_dummyFArray_spaceDim;
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         B0_contra[dit].copy(m_B0_phys[dit]);
+      }
+      m_geometry.convertPhysToContravar(B0_contra,0);
+      LevelData<FluxBox>& B_withBCs(species_phys.face_var("magneticField"));
+      SpaceUtils::upWindToFaces(B_withBCs, B0_contra, B_withBCs, "c2");
+      
+      // apply BCs   
+      int this_fbc = m_magneticField_fbc;
+      SpaceUtils::exchangeFluxBox(B_withBCs);
+      m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( species_phys, B_withBCs, a_time );
+      
+      // compute Ja*J00_phys
+      LevelData<FArrayBox>& B0_covar = m_dummyFArray_spaceDim;
+      SpaceUtils::interpFaceVectorToCell(B0_covar,B_withBCs,"c2");
+      m_geometry.convertContravarToCovar(B0_covar,0);
+      //for (DataIterator dit(grids); dit.ok(); ++dit) {
+      //   B0_covar[dit].copy(m_B0_phys[dit]);
+      //}
+      //m_geometry.convertPhysToCovar(B0_covar,0);
+      m_geometry.mappedGridCurl( m_JaJ00, B0_covar ); // Ja*curl(B0)_contra
+      m_geometry.convertPhysToContravar(m_JaJ00,1);
+      
+      // set the comp B = Jacobian * B^q
+      LevelData<FluxBox>& B_noBCs( species_comp.face_var("magneticField") );
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            B_noBCs[dit][dir].copy(B_withBCs[dit][dir]);
+         }       
+      }
+      m_geometry.multJonFaces(B_noBCs);         
+   
+    
+   }
+
+#if CH_SPACEDIM==3 
+   if(m_initializeProfilesFromPSI && species_phys.m_evolve_magneticField) {
+ 
+      double rhoDen_floor = 0.0;   
+      double eneDen_floor = 0.0;   
+   
+      // do this before adding perturbation 
+      species_phys.pressure(m_P0);
+      m_P0.exchange();
+      
+      LevelData<FArrayBox>& rhoDen( species_phys.cell_var(0) );
+      LevelData<FArrayBox>& eneDen( species_phys.cell_var("energyDensity") );
+      for (auto dit(rhoDen.dataIterator()); dit.ok(); ++dit) {
+         m_N0[dit].copy(rhoDen[dit]);
+         m_T0[dit].copy(m_P0[dit]);
+         m_T0[dit].divide(m_N0[dit]);
+         m_T0[dit].divide(2.0);
+      }
+   
+      if(m_relative_density_floor > 0.0) {
+         double local_Nmax, local_Emax;
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            Box box( grids[dit] );
+            double box_Nmax( rhoDen[dit].max( box ) );
+            double box_Emax( eneDen[dit].max( box ) );
+            local_Nmax = Max( local_Nmax, box_Nmax );
+            local_Emax = Max( local_Emax, box_Emax );
+         }
+   
+         double Nmax = local_Nmax;
+         double Emax = local_Emax;
+#ifdef CH_MPI
+         MPI_Allreduce( &local_Nmax, &Nmax, 1, MPI_CH_REAL, MPI_MAX, MPI_COMM_WORLD );
+         MPI_Allreduce( &local_Emax, &Emax, 1, MPI_CH_REAL, MPI_MAX, MPI_COMM_WORLD );
+#endif
+         rhoDen_floor = m_relative_density_floor*Nmax;
+         eneDen_floor = m_relative_density_floor*Emax;
+      
+         // adjust background density and pressure to include density floor
+         for (auto dit(rhoDen.dataIterator()); dit.ok(); ++dit) {
+            m_N0[dit].plus(rhoDen_floor);
+            m_P0[dit].copy(m_N0[dit]);
+            m_P0[dit].mult(m_T0[dit]);
+            m_P0[dit].mult(2.0);
+         }
+      }
+ 
+      LevelData<FArrayBox>& deltaE = m_dummyFArray_oneComp;
+      if(m_addEnergyPerturbation) { 
+         const GridFunction& fsic_deltaE( fluidSpeciesIC( "deltaE" ) );
+         fsic_deltaE.assign( deltaE, species_phys.configurationSpaceGeometry(), a_time );
+         deltaE.exchange();
+      }
+      else {
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            deltaE[dit].setVal(1.0);
+         }
+      }
+
+      LevelData<FArrayBox>& eneDen_comp( species_comp.cell_var("energyDensity") );
+      for (auto dit(eneDen.dataIterator()); dit.ok(); ++dit) {
+         eneDen[dit].mult(deltaE[dit]);
+         eneDen[dit].plus(eneDen_floor); // do this after mult by perturbation
+         eneDen_comp[dit].copy(eneDen[dit]);
+      }
+      m_geometry.multJonValid(eneDen_comp);
+
+      LevelData<FArrayBox>& rhoDen_comp( species_comp.cell_var(0) );
+      for (auto dit(eneDen.dataIterator()); dit.ok(); ++dit) {
+         if(m_perturbDensity) rhoDen[dit].mult(deltaE[dit]);
+         rhoDen[dit].plus(rhoDen_floor); // do this after mult by perturbation
+         rhoDen_comp[dit].copy(rhoDen[dit]);
+      }
+      m_geometry.multJonValid(rhoDen_comp);
+
+      //
+      //
+      //
+
+      const GridFunction& fsic_RBTOR( fluidSpeciesIC( "RBTOR" ) );
+      LevelData<FArrayBox>& RBTOR = m_dummyFArray_oneComp;
+      fsic_RBTOR.assign( RBTOR, species_phys.configurationSpaceGeometry(), a_time );
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         RBTOR[dit].mult(m_rbtor_fact);
+      }
+      LevelData<FluxBox>& RBTOR_fc = m_dummyFlux_oneComp;
+      SpaceUtils::upWindToFaces(RBTOR_fc, RBTOR, RBTOR_fc, "c2");
+
+      const GridFunction& fsic_PSI( fluidSpeciesIC( "PSI" ) );
+      LevelData<FArrayBox>& PSI = m_PSI;
+      fsic_PSI.assign( PSI, species_phys.configurationSpaceGeometry(), a_time );
+      PSI.exchange();
+
+      // Need dxi0/dZ and dxi0/dR as in axisymmetric to compute Bcyl
+      m_geometry.setPointwiseNJInverseOnFaces(grids, m_Xphys.ghostVect());
+      const LevelData<FluxBox>& Xphys = m_geometry.getFaceCenteredRealCoords();
+      const LevelData<FluxBox>& dxidX = m_geometry.getFaceCentereddxidX();
+      LevelData<FluxBox> dxi0dR(grids,1,dxidX.ghostVect());
+      LevelData<FluxBox> dxi0dZ(grids,1,dxidX.ghostVect());
+      LevelData<FluxBox> Rcyl(grids,1,dxidX.ghostVect());
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         Real x, y, R, costh, sinth, dxi0dX, dxi0dY;
+         for (int dir = 0; dir<SpaceDim; dir++) {
+            const FArrayBox& Xcar = Xphys[dit][dir];
+            const Box& box = dxi0dR[dit][dir].box();
+            for (BoxIterator bit(box); bit.ok(); ++bit) {
+               IntVect iv = bit();
+
+               x = Xcar(iv,0);
+               y = Xcar(iv,1);
+               R = sqrt(x*x + y*y);
+               costh = x/R;
+               sinth = y/R;
+ 
+               dxi0dX = dxidX[dit][dir](iv,0);
+               dxi0dY = dxidX[dit][dir](iv,3);
+               dxi0dR[dit][dir](iv,0) = dxi0dX*costh + dxi0dY*sinth;
+               dxi0dZ[dit][dir](iv,0) = dxidX[dit][dir](iv,6);
+               Rcyl[dit][dir](iv,0) = R;
+
+            }
+         }
+      }
+       
+      // compute Bfield in cyl coords: 
+      // B_p = dPSi/dxi0/R
+      // B_R = -B_p*dxi0/dZ, B_Z = Bp*dxi0/dR
+      LevelData<FluxBox>& Bfield = m_dummyFlux_spaceDim;
+      m_geometry.computeMappedGradient( PSI, Bfield, 2);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         for (int dir = 0; dir<SpaceDim; dir++) {
+            Bfield[dit][dir].mult(m_bpol_fact);
+         }
+      }
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         for (int dir = 0; dir<SpaceDim; dir++) {
+            Bfield[dit][dir].copy(Bfield[dit][dir],0,2,1);
+            Bfield[dit][dir].mult(dxi0dR[dit][dir],0,2,1);
+            Bfield[dit][dir].divide(Rcyl[dit][dir],0,2,1);
+            //
+            Bfield[dit][dir].copy(RBTOR_fc[dit][dir],0,1,1);
+            Bfield[dit][dir].divide(Rcyl[dit][dir],0,1,1);
+            //
+            Bfield[dit][dir].mult(dxi0dZ[dit][dir],0,0,1);
+            Bfield[dit][dir].divide(Rcyl[dit][dir],0,0,1);
+            Bfield[dit][dir].negate(0);
+         }
+      }
+       
+      // convert Bfield from cyl to car
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+
+         Real x, y, R, costh, sinth, B_R, B_T;
+         for (int dir = 0; dir<SpaceDim; dir++) {
+            const FArrayBox& Xcar = Xphys[dit][dir];
+            const Box& box = Bfield[dit][dir].box();
+            for (BoxIterator bit(box); bit.ok(); ++bit) {
+               IntVect iv = bit();
+               x = Xcar(iv,0);
+               y = Xcar(iv,1);
+               R = sqrt(x*x + y*y); 
+               costh = x/R;
+               sinth = y/R;
+               B_R = Bfield[dit][dir](iv,0);
+               B_T = Bfield[dit][dir](iv,1);
+               Bfield[dit][dir](iv,0) = costh * B_R - sinth * B_T;
+               Bfield[dit][dir](iv,1) = sinth * B_R + costh * B_T;
+            }
+         }
+
+      }
+       
+      // convert Bield from car to contravariant
+      m_geometry.convertPhysToContravar(Bfield,0);
+       
+      // copy normal component on each dir to phys variables
+      LevelData<FluxBox>& B_withBCs(species_phys.face_var("magneticField"));
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         B_withBCs[dit][0].copy(Bfield[dit][0],0,0,1);
+         B_withBCs[dit][1].copy(Bfield[dit][1],1,0,1);
+         B_withBCs[dit][2].copy(Bfield[dit][2],2,0,1);
+      }
+      
+      // apply BCs   
+      int this_fbc = m_magneticField_fbc;
+      SpaceUtils::exchangeFluxBox(B_withBCs);
+      m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( species_phys, B_withBCs, a_time );
+   
+
+      // compute Ja*J00_phys and B0_phys
+      LevelData<FArrayBox>& B0_covar = m_dummyFArray_spaceDim;
+      SpaceUtils::interpFaceVectorToCell(B0_covar,B_withBCs,"c2");
+      m_geometry.convertPhysToContravar(B0_covar,1);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         m_B0_phys[dit].copy(B0_covar[dit]);
+      }
+      m_geometry.convertPhysToCovar(B0_covar,0);          
+      m_geometry.mappedGridCurl( m_JaJ00, B0_covar ); // Ja*curl(B0)_contra
+    
+      //LevelData<FluxBox>& Bvec_covar = m_dummyFlux_spaceDim;
+      //SpaceUtils::interpFacesToFaces(Bvec_covar, B_withBCs);
+      //m_geometry.convertContravarToCovar(Bvec_covar,0);
+      //m_geometry.mappedGridCurl( m_JaJ00, Bvec_covar ); // Ja*curl(B)_contra
+   
+      m_geometry.convertPhysToContravar(m_JaJ00,1);
+      
+      if(m_perturbBtor) {
+
+         const GridFunction& fsic_deltaB( fluidSpeciesIC( "deltaB" ) );
+         LevelData<FArrayBox>& deltaB = m_dummyFArray_oneComp;
+         fsic_deltaB.assign( deltaB, species_phys.configurationSpaceGeometry(), a_time );
+         deltaB.exchange();
+         
+         LevelData<FluxBox>& deltaB_fc = m_dummyFlux_oneComp;
+         SpaceUtils::upWindToFaces(deltaB_fc, deltaB, deltaB_fc, "c2");
+         for (DataIterator dit(grids); dit.ok(); ++dit) {
+            const int tor_dir = 1;
+            B_withBCs[dit][tor_dir].mult(deltaB_fc[dit][tor_dir]);
+         }
+
+      }
+ 
+      // set the comp B = Jacobian * B^q
+      LevelData<FluxBox>& B_noBCs( species_comp.face_var("magneticField") );
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            B_noBCs[dit][dir].copy(B_withBCs[dit][dir]);
+         }       
+      }
+      m_geometry.multJonFaces(B_noBCs);         
+   
+
+   }
+#else 
+   if(m_initializeProfilesFromPSI && species_phys.m_evolve_magneticField_virtual) {
+
+      // do this before adding perturbation 
+      species_phys.pressure(m_P0);
+      m_P0.exchange();
+      
+      if(m_addEnergyPerturbation) { 
+
+         const GridFunction& fsic_deltaE( fluidSpeciesIC( "deltaE" ) );
+         LevelData<FArrayBox>& deltaE = m_dummyFArray_oneComp;
+         fsic_deltaE.assign( deltaE, species_phys.configurationSpaceGeometry(), a_time );
+         deltaE.exchange();
+
+         LevelData<FArrayBox>& eneDen( species_phys.cell_var("energyDensity") );
+         LevelData<FArrayBox>& eneDen_comp( species_comp.cell_var("energyDensity") );
+         for (auto dit(eneDen.dataIterator()); dit.ok(); ++dit) {
+            eneDen[dit].mult(deltaE[dit]);
+            eneDen_comp[dit].copy(eneDen[dit]);
+         }
+         m_geometry.multJonValid(eneDen_comp);
+         
+         if(m_perturbDensity) {
+            LevelData<FArrayBox>& den( species_phys.cell_var(0) );
+            LevelData<FArrayBox>& den_comp( species_comp.cell_var(0) );
+            for (auto dit(eneDen.dataIterator()); dit.ok(); ++dit) {
+               den[dit].mult(deltaE[dit]);
+               den_comp[dit].copy(den[dit]);
+            }
+            m_geometry.multJonValid(den_comp);
+         }
+
+      }
+
+      // get the toroidal magnetic field profile from R*BT
+      const GridFunction& fsic_RBTOR( fluidSpeciesIC( "RBTOR" ) );
+      LevelData<FArrayBox>& BT_withBCs(species_phys.cell_var("magneticField_virtual"));
+      fsic_RBTOR.assign( BT_withBCs, species_phys.configurationSpaceGeometry(), a_time );
+      LevelData<FArrayBox>& BT_noBCs( species_comp.cell_var("magneticField_virtual") );
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         BT_withBCs[dit].divide(m_Xphys[dit],0,0,1);
+         BT_noBCs[dit].copy(BT_withBCs[dit]);
+      }
+      m_geometry.multJonValid(BT_noBCs);         
+       
+      // compute the contravariant poloidal magnetic field profile from PSI: 
+      // B^1 = d(PSI)/dxi0 / J_2D*R = 2*pi*d(PSI)/dxi0/Ja
+
+      const GridFunction& fsic_PSI( fluidSpeciesIC( "PSI" ) );
+      LevelData<FArrayBox>& PSI = m_PSI;
+      fsic_PSI.assign( PSI, species_phys.configurationSpaceGeometry(), a_time );
+      PSI.exchange();
+
+      LevelData<FluxBox>& Bp_tmp = m_dummyFlux_spaceDim;
+      m_geometry.computeMappedGradient( PSI, Bp_tmp, 2);
+
+      LevelData<FluxBox>& B_withBCs(species_phys.face_var("magneticField"));
+      LevelData<FluxBox>& B_noBCs( species_comp.face_var("magneticField") );
+      double twoPi = 2.0*Pi;
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         for (int dir=0; dir<SpaceDim; ++dir) {
+            if(dir==1) {
+               B_withBCs[dit][dir].copy(Bp_tmp[dit][dir],0,0,1);
+               B_withBCs[dit][dir].mult(twoPi);
+            } 
+            else {
+               B_withBCs[dit][dir].setVal(0.0);
+            }
+            B_noBCs[dit][dir].copy(B_withBCs[dit][dir]);
+         }
+      }
+      m_geometry.divideJonFaces(B_withBCs);         
+       
+   }
+#endif 
+ 
+   if(species_comp.m_evolve_magneticField && m_initializeBfromVectorPotential) {
+         
+      LevelData<FluxBox>& contravar_B_withBCs( species_phys.face_var("magneticField") );
+      int this_fbc = m_magneticField_fbc;
+     
       // compute Ja*curlB_phys at cell center using input B field
       SpaceUtils::interpFaceVectorToCell(m_B_covar_cc,contravar_B_withBCs,"c2");
       m_geometry.convertPhysToContravar(m_B_covar_cc,1);
       m_geometry.convertPhysToCovar(m_B_covar_cc,0);
-      m_geometry.mappedGridCurl( m_JaJ0_cc, m_B_covar_cc ); // Ja*curl(B)_phys
-      
+      m_geometry.mappedGridCurl( m_JaJ0_cc, m_B_covar_cc ); // Ja*curl(B)_contra
+      m_geometry.convertPhysToContravar(m_JaJ0_cc,1);
+
       //   B = nabla x (Apar z_hat) ==> nabla^2 Apar = -Jz
       if(SpaceDim==3) { // Solve for Apar
 
@@ -2254,15 +3891,15 @@ void IdealMhdOp::initializeWithBC( FluidSpecies&  a_species_comp,
          LevelData<EdgeDataBox> Az_ce;
          Az_ce.define(grids,1,m_dummyFArray_oneComp.ghostVect());
          SpaceUtils::interpCellToEdges(Az_ce,A_cc,Az_ce,"c2"); // covariant Apar at ce
-         m_fluid_face_var_bc.at(this_fbc)->setEdgeBC( a_species_phys, Az_ce, m_EdgeBC_zeros, a_time );
+         m_fluid_face_var_bc.at(this_fbc)->setEdgeBC( species_phys, Az_ce, m_EdgeBC_zeros, a_time );
          SpaceUtils::exchangeEdgeDataBox(Az_ce);
 
          // compute B = curlA (divergence free and satisfies BCs)
          m_geometry.mappedGridCurl3D(contravar_B_withBCs,Az_ce);
          m_geometry.divideJonFaces(contravar_B_withBCs);
          SpaceUtils::exchangeFluxBox(contravar_B_withBCs); // must exchange before applyBC !!!!
-         m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( a_species_phys, contravar_B_withBCs, a_time );
-         LevelData<FluxBox>& mapped_contravar_B_noBCs( a_species_comp.face_var("magneticField") );
+         m_fluid_face_var_bc.at(this_fbc)->applyFluxBC( species_phys, contravar_B_withBCs, a_time );
+         LevelData<FluxBox>& mapped_contravar_B_noBCs( species_comp.face_var("magneticField") );
          for (DataIterator dit(grids); dit.ok(); ++dit) {
             mapped_contravar_B_noBCs[dit].copy(contravar_B_withBCs[dit]);
          }
@@ -2271,13 +3908,13 @@ void IdealMhdOp::initializeWithBC( FluidSpecies&  a_species_comp,
       }
 
       // compute Ja time contravariant curlE0 on faces
-      setCellCenterValues( a_species_phys );
-      const double gamma = a_species_phys.m_gamma;
-      setMappedCspeed( gamma, 1, 1 );
+      setCellCenterValues( species_phys );
+      const double gamma = species_phys.m_gamma;
+      setMappedCspeed( gamma, m_thermPforE0, m_magPforE0 ); // JRA
       
       computeIdealEatEdges(m_E0_ce,m_velocity,contravar_B_withBCs,m_Cspeed_cc); // Ja*E0_covar
-      m_fluid_face_var_bc.at(this_fbc)->setEdgeBC( a_species_phys, m_E0_ce, m_EdgeBC_zeros, a_time );
-      SpaceUtils::exchangeEdgeDataBox(m_E0_ce); // call exchange after setBC !!!!!
+      m_fluid_face_var_bc.at(this_fbc)->setEdgeBC( species_phys, m_E0_ce, m_EdgeBC_zeros, a_time );
+      SpaceUtils::exchangeEdgeDataBox(m_E0_ce); // call exchange after setBC !!!!! 
       m_geometry.mappedGridCurl3D(m_curlE0_cf,m_E0_ce);
 
       // compute physical E0 at cell center
@@ -2285,7 +3922,6 @@ void IdealMhdOp::initializeWithBC( FluidSpecies&  a_species_comp,
       m_geometry.convertPhysToCovar(m_E0_cc,1);            // phys at cell center
       
    }
-   
 }     
 
 void IdealMhdOp::computePhysicalDivergence( LevelData<FArrayBox>&  a_divF_phys,
@@ -2322,75 +3958,102 @@ void IdealMhdOp::computePhysicalDivergence( LevelData<FArrayBox>&  a_divF_phys,
 
 }     
 
-void IdealMhdOp::computeMappedCurrentDensity( LevelData<FArrayBox>&  a_JaJ0_phys,
-                                        const LevelData<FArrayBox>&  a_By_contra ) const
+void IdealMhdOp::computeCrossProduct( LevelData<FArrayBox>&  a_A,
+                                const LevelData<FArrayBox>&  a_B,
+                                const LevelData<FArrayBox>&  a_C, 
+                                const int                    a_virtual_case ) const
 {
-   CH_TIME("IdealMhdOp::computeMappedCurrentDensity() (virtual B)");
+   CH_TIME("IdealMhdOp::computeCrossProduct()");
    const DisjointBoxLayout& grids( m_geometry.grids() );
  
-   // This function takes contravar By at cell center and returns 
-   // Ja*curl(B)_phys at cell center (aka mapped)
-   //
-   LevelData<FArrayBox>& By_covar = m_dummyFArray_oneComp;
-   LevelData<EdgeDataBox>& JaJ0_ce = m_dummyEdge_oneComp;
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      By_covar[dit].copy(a_By_contra[dit]);
-      if(m_twoDaxisymm) {
-         By_covar[dit].mult(m_g_y[dit]);
-         By_covar[dit].mult(m_g_y[dit]);
+   // compute A = BxC
+   
+   if(a_virtual_case==1) { // A is virtual: Ay = Bz*Cx - Bx*Cz
+      CH_assert(a_A.nComp()==1);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+               FArrayBox& A_on_patch = a_A[dit];
+         const FArrayBox& B_on_patch = a_B[dit];
+         const FArrayBox& C_on_patch = a_C[dit];
+
+         const Box& cellbox = A_on_patch.box();
+         Real Ay, Bx, Bz, Cx, Cz;
+         for (BoxIterator bit(cellbox); bit.ok(); ++bit) {
+             IntVect ic = bit();
+             Bx = B_on_patch.get(ic,0);
+             Bz = B_on_patch.get(ic,1);
+             Cx = C_on_patch.get(ic,0);
+             Cz = C_on_patch.get(ic,1);
+             Ay = Bz*Cx - Bx*Cz;
+             A_on_patch.set(ic,0,Ay);
+         }
       }
    }
- 
-   m_geometry.mappedGridCurlofVirtComp(JaJ0_ce,By_covar); // Jacobian * curl(By)\cdot g^perp
-   SpaceUtils::interpEdgesToCell(a_JaJ0_phys,JaJ0_ce,"c2");
-   m_geometry.convertPhysToContravar(a_JaJ0_phys,1); // Ja*curlB_phys at cell center
-   
-   // reset dummys to infinity
-   //
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      By_covar[dit].setVal(1./0.);
-      JaJ0_ce[dit].setVal(1./0.);
+   else if(a_virtual_case==2) { // B is virtual
+      CH_assert(a_B.nComp()==1);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         const Box& thisbox = a_A[dit].box();
+         for (int n=0; n<SpaceDim; ++n) a_A[dit].copy( a_B[dit],0,n,1 ); 
+         a_A[dit].mult( a_C[dit],thisbox,1,0,1 ); // Ax =  By*Cz
+         a_A[dit].mult( a_C[dit],thisbox,0,1,1 ); // Az = -By*Cx
+         a_A[dit].mult( -1.0,thisbox,1,1 );
+      }
+   }
+   else if(a_virtual_case==3) { // C is virtual   
+      CH_assert(a_C.nComp()==1);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         const Box& thisbox = a_A[dit].box();
+         for (int n=0; n<SpaceDim; ++n) a_A[dit].copy( a_C[dit],0,n,1 ); 
+         a_A[dit].mult( a_B[dit],thisbox,1,0,1 ); // Ax = -Bz*Cy
+         a_A[dit].mult( a_B[dit],thisbox,0,1,1 ); // Az =  Bx*Cy
+         a_A[dit].mult( -1.0,thisbox,0,1 );
+      }
+   }
+   else { // nothing is virtual
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         
+               FArrayBox& A_on_patch = a_A[dit];
+         const FArrayBox& B_on_patch = a_B[dit];
+         const FArrayBox& C_on_patch = a_C[dit];
+
+         const Box& cellbox = A_on_patch.box();
+         FORT_EVAL_CROSS_PRODUCT( CHF_BOX(cellbox),
+                                  CHF_CONST_FRA(B_on_patch),
+                                  CHF_CONST_FRA(C_on_patch),
+                                  CHF_FRA(A_on_patch) );
+      }
    }
    
 }     
 
-void IdealMhdOp::computePhysicalElectricField( LevelData<FArrayBox>&  a_E_phys,
-                                         const LevelData<FArrayBox>&  a_V_phys, 
-                                         const LevelData<FArrayBox>&  a_B_phys,
-                                         const int                    a_virtual ) const
+void IdealMhdOp::computeCrossProduct( LevelData<FArrayBox>&  a_A_inPlane,
+                                const LevelData<FArrayBox>&  a_B_inPlane, 
+                                const LevelData<FArrayBox>&  a_C_inPlane,
+                                const LevelData<FArrayBox>&  a_B_virtual, 
+                                const LevelData<FArrayBox>&  a_C_virtual ) const
 {
-   CH_TIME("IdealMhdOp::computePhysicalElectricField()");
+   CH_TIME("IdealMhdOp::computeCrossProduct()");
    const DisjointBoxLayout& grids( m_geometry.grids() );
+   CH_assert(SpaceDim==2);
  
-   // compute physical E=BxV at cell center
-   //
+   // general 2D cross product: A = BxC
+   // Ax = By*Cz - Bz*Cy
+   // Az = Bx*Cy - By*Cx
 
-   if(a_virtual==1) {   
-      CH_assert(a_B_phys.nComp()==1);
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         const Box& thisbox = a_E_phys[dit].box();
-         for (int n=0; n<SpaceDim; ++n) {
-            a_E_phys[dit].copy( a_B_phys[dit],0,n,1 ); 
-         }
-         a_E_phys[dit].mult( a_V_phys[dit],thisbox,1,0,1 ); // Ex =  Vz*By
-         a_E_phys[dit].mult( a_V_phys[dit],thisbox,0,1,1 ); // Ez = -Vx*By
-         a_E_phys[dit].mult( -1.0,thisbox,1,1 );
-      }
-   }
-   else {
-      CH_assert(a_B_phys.nComp()==SpaceDim);
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-         
-         const FArrayBox& B_on_patch = a_B_phys[dit];
-         const FArrayBox& V_on_patch = a_V_phys[dit];
-               FArrayBox& E_on_patch = a_E_phys[dit];
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
 
-         const Box& cellbox = E_on_patch.box();
-         FORT_EVAL_CROSS_PRODUCT( CHF_BOX(cellbox),
+            FArrayBox& A_on_patch = a_A_inPlane[dit];
+      const FArrayBox& B_on_patch = a_B_inPlane[dit];
+      const FArrayBox& C_on_patch = a_C_inPlane[dit];
+      const FArrayBox& Bv_on_patch = a_B_virtual[dit];
+      const FArrayBox& Cv_on_patch = a_C_virtual[dit];
+
+      const Box& cellbox = A_on_patch.box();
+      FORT_EVAL_CROSS_PRODUCT_2D( CHF_BOX(cellbox),
                                   CHF_CONST_FRA(B_on_patch),
-                                  CHF_CONST_FRA(V_on_patch),
-                                  CHF_FRA(E_on_patch) );
-      }
+                                  CHF_CONST_FRA(C_on_patch),
+                                  CHF_CONST_FRA1(Bv_on_patch,0),
+                                  CHF_CONST_FRA1(Cv_on_patch,0),
+                                  CHF_FRA(A_on_patch) );
    }
    
 }     

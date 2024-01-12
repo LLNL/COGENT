@@ -143,9 +143,14 @@ public:
    virtual void initialize( CFGVars&      a_species,
                             const double  a_time );
 
-   virtual void initializeWithBC( FluidSpecies&  species_comp,
-                                  FluidSpecies&  species_phys,
-                            const double         time );
+   virtual bool isInitializationConstrained(const FluidSpecies& fluid_phys);
+   
+   virtual void applyInitializationConstraints(FluidSpeciesPtrVect&               fluid_comp,
+                                               FluidSpeciesPtrVect&               fluid_phys,
+                                               const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
+                                               const EMFields&                    EM_fields,
+                                               const int                          component,
+                                               const double                       time );
 
    virtual void fillGhostCells( FluidSpecies&  species_phys,
                                 const double   time );
@@ -168,10 +173,20 @@ private:
    double m_courant_time_step;
    const MagGeom& m_geometry;
    int m_implicitMhd, m_implicitViscosity;
-   std::string m_advScheme;
+   std::string m_advScheme, m_advScheme_B;
    std::string m_species_name;
    int m_CGL;
+   int m_magP;
+   bool m_blankN, m_blankB;
+   int m_thermPforE0, m_magPforE0;
    int m_initializeBfromVectorPotential;
+   int m_initializeProfilesFromPSI;
+   int m_initializeBackgroundPlusPert; 
+   int m_addEnergyPerturbation;
+   int m_perturbDensity;
+   int m_perturbBtor;
+   Real m_rbtor_fact;
+   Real m_bpol_fact;
 
    std::string m_opt_string;
    int m_my_pc_idx;
@@ -185,6 +200,12 @@ private:
    LevelData<FArrayBox> m_Xphys;
    LevelData<FArrayBox> m_g_y; // used only when solving virtual B
    bool m_twoDaxisymm;
+   bool m_energy_is_thermal;
+   bool m_energy_is_thermal_2;
+   bool m_isothermal;
+   bool m_enforceFluxBCs;
+   bool m_use_perturbative_form;
+   bool m_free_stream_preserving;
    
    // allocate containers for species fluid variables
    //
@@ -197,20 +218,27 @@ private:
    LevelData<FArrayBox> m_momDen_cc;
    LevelData<FArrayBox> m_eneDen_cc;
    LevelData<FArrayBox> m_momDen_virtual_cc;
-   LevelData<FArrayBox> m_magField_virtual_cc;
+   LevelData<FArrayBox> m_By_phys_cc;
    //
-   LevelData<FArrayBox> m_B_covar_cc;   
+   LevelData<FArrayBox>  m_By_contr_cc;
+   LevelData<FArrayBox>  m_By_covar_cc;
+   LevelData<FArrayBox>  m_B_covar_cc;
+   LevelData<FArrayBox>  m_B0_phys, m_B1_phys;
 
    // allocate containers for derived variables
    //
-   LevelData<FArrayBox> m_pressure;
+   LevelData<FArrayBox> m_pressure, m_P0, m_N0, m_deltaN;
+   LevelData<FArrayBox> m_temperature, m_T0, m_deltaT;
    LevelData<FArrayBox> m_Bpressure;
    LevelData<FArrayBox> m_velocity;
    LevelData<FluxBox> m_velocity_cf;
    LevelData<FArrayBox> m_velocity_virtual;
    
+   LevelData<FArrayBox> m_velocity_contra, m_momDen_contra;
+   
    // allocate containers for viscosity tensor
    //
+   double m_relative_density_floor;
    double m_tau;
    double m_etaMin;
    LevelData<FArrayBox> m_etaVisc;
@@ -257,21 +285,25 @@ private:
    LevelData<FArrayBox> m_div_IdentFlux_Z;
    
    // allocate containers for magnetic field stuff
-   //
-   //LevelData<NodeFArrayBox> virtualEleField;
    LevelData<EdgeDataBox>  m_E0_ce;
-   LevelData<FArrayBox>  m_JaJ0_cc;
+   LevelData<FArrayBox>  m_JaJ0_cc, m_JaJ00, m_JaJ01;
    LevelData<FArrayBox>  m_Apar_cc;
    LevelData<FArrayBox>  m_E0_cc;
    LevelData<FArrayBox>  m_curlE0_virtual;
    LevelData<FluxBox>    m_curlE0_cf;
-   LevelData<FArrayBox>  m_By_contr_cc;
    LevelData<FluxBox>    m_B_contr_cf;
+   LevelData<FArrayBox>  m_JaUdotGradP, m_JaPdivU;
    LevelData<FArrayBox>  m_JaJdotE;   // Jacobian*J\cdotE
    LevelData<FArrayBox>  m_JaJcrossB; // Jacobian*J\timesB
+   LevelData<FArrayBox>  m_JaJcrossB_10; // Jacobian*J\timesB
+   //
+   LevelData<FArrayBox> m_JaJ0_virtual_cc;
+   LevelData<FArrayBox> m_JaJcrossB_virtual;
+   LevelData<FArrayBox> m_E0_virtual_cc;
+   LevelData<NodeFArrayBox> m_E0_virtual_nc;
    
    // allocate containers for stuff used to enforce flux BCs
-   //
+   LevelData<NodeFArrayBox> m_NodeBC_zeros;
    LevelData<EdgeDataBox> m_EdgeBC_zeros;
    LevelData<FluxBox> m_FluxBC_zeros;
    LevelData<FluxBox> m_rhoFluxBC_norm;
@@ -287,11 +319,15 @@ private:
    mutable LevelData<FArrayBox> m_dummyDiv;
    mutable LevelData<FArrayBox> m_dummyFArray_oneComp;
    mutable LevelData<FArrayBox> m_dummyFArray_spaceDim;
-   LevelData<FArrayBox> m_dummyDiv_mom;
+   LevelData<FArrayBox> m_dummyDiv_mom, m_forceDensity, m_rhs_rho;
    
    mutable LevelData<FluxBox> m_dummyFlux_oneComp;
    mutable LevelData<FluxBox> m_dummyFlux_spaceDim;
    mutable LevelData<EdgeDataBox> m_dummyEdge_oneComp;
+   
+   mutable LevelData<NodeFArrayBox> m_dummyNode_oneComp;
+
+   LevelData<FArrayBox> m_PSI;
 
    /// Parse parameters.
    /**
@@ -355,15 +391,27 @@ private:
                       const LevelData<FluxBox>&    a_CspeedR_norm,
                       const LevelData<FluxBox>&    a_CspeedL_norm ) const;
    
-   void computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
+   void upwindFluxVector( LevelData<FluxBox>&    a_Flux_phys_fc,
+                    const LevelData<FArrayBox>&  a_Flux_phys_cc,
+                    const LevelData<FArrayBox>&  a_fun_cc,
+                    const LevelData<FArrayBox>&  a_Cspeed_cc,
+                    const LevelData<FluxBox>&    a_CspeedR_norm,
+                    const LevelData<FluxBox>&    a_CspeedL_norm ) const;
+   
+   void computeIdealEatEdges( LevelData<EdgeDataBox>&  a_E_covar,
                         const LevelData<FArrayBox>&    a_V_phys_cc,
                         const LevelData<FArrayBox>&    a_B_contr_cc,
                         const LevelData<FArrayBox>&    a_Cspeed_cc ) const;
    
-   void computeIdealEatEdges( LevelData<EdgeDataBox>&  a_Edge_covar,
+   void computeIdealEatEdges( LevelData<EdgeDataBox>&  a_E_covar,
                         const LevelData<FArrayBox>&    a_V_phys_cc,
-                        const LevelData<FluxBox>&      a_B_contr_cc,
+                        const LevelData<FluxBox>&      a_B_contr,
                         const LevelData<FArrayBox>&    a_Cspeed_cc ) const;
+   
+   void computeIdealEatNodes( LevelData<NodeFArrayBox>&  a_E_covar,
+                        const LevelData<FArrayBox>&      a_V_phys_cc,
+                        const LevelData<FluxBox>&        a_B_contr,
+                        const LevelData<FArrayBox>&      a_Cspeed_cc ) const;
    
    void setCourantTimeStep(const LevelData<FArrayBox>& a_Cspeed);
 
@@ -377,14 +425,29 @@ private:
    void setCellCenterFluxesCGL( const FluidSpecies&  a_soln_fluid );
 
    void setMagneticFieldTerms( const FluidSpecies&  a_soln_fluid );
+   
+   void setMagneticFieldTerms_2Dvirtual( const FluidSpecies&  a_soln_fluid );
+   
+   void setMagneticFieldTerms_2DinPlane( const FluidSpecies&  a_soln_fluid );
+   
+   void setMagneticFieldTerms_2Dfull( const FluidSpecies&  a_soln_fluid );
+   
+   void setMagneticFieldTerms_3D( const FluidSpecies&  a_soln_fluid );
 
    void setFaceCenteredFluxes( const FluidSpecies&  a_soln_fluid );
+   
+   void setFaceCenteredFluxes_freestreamPreserving( const FluidSpecies&  a_soln_fluid );
+   
+   void setFaceCenteredFluxes_ZIP( const FluidSpecies&  a_soln_fluid );
 
    void setFaceCenteredFlux( LevelData<FluxBox>&    a_Flux_norm,
                        const LevelData<FArrayBox>&  a_Flux_phys_cc );
    
    void enforceFluxBCs( const FluidSpecies&  a_soln_fluid,
                         const Real           a_time );
+  
+   void setCurlE( const FluidSpecies&  a_soln_fluid,
+                  const Real           a_time );
    
    void setViscosityCoefficient( LevelData<FArrayBox>&  a_etaVisc,
                                  LevelData<FluxBox>&    a_etaVisc_cf,
@@ -412,22 +475,45 @@ private:
    void computePhysicalDivergence( LevelData<FArrayBox>&  a_divF_phys,
                              const LevelData<FluxBox>&    a_F_mapped,
                              const int                    a_mapped ) const;
-
-   void getJ0_2Dvirtual( LevelData<FArrayBox>&  a_J0,
+   
+   void getE0_2Dvirtual( LevelData<FArrayBox>&  a_E0, 
                    const FluidSpecies&          a_fluid_species ) const;
-
-   void getJ0_3D( LevelData<FArrayBox>&  a_J0,
+   
+   void getE0_2DinPlane( LevelData<FArrayBox>&  a_E0, 
+                   const FluidSpecies&          a_fluid_species ) const;
+   
+   void getE0_2Dfull( LevelData<FArrayBox>&  a_E0, 
+                const FluidSpecies&          a_fluid_species ) const;
+   
+   void getE0_3D( LevelData<FArrayBox>&  a_E0, 
             const FluidSpecies&          a_fluid_species ) const;
-
-   void computeMappedCurrentDensity( LevelData<FArrayBox>&  a_JaJ0_phys,
-                               const LevelData<FArrayBox>&  a_By_contra ) const;
    
-   void computePhysicalElectricField( LevelData<FArrayBox>&  a_E_phys,
-                                const LevelData<FArrayBox>&  a_V_phys, 
-                                const LevelData<FArrayBox>&  a_B_phys,
-                                const int                    a_virtual ) const;
+   void getJ0_2Dvirtual( LevelData<FArrayBox>&  a_J0, 
+                   const FluidSpecies&          a_fluid_species ) const;
    
-
+   void getJ0_2DinPlane( LevelData<FArrayBox>&  a_J0, 
+                   const FluidSpecies&          a_fluid_species ) const;
+   
+   void getJ0_2Dfull( LevelData<FArrayBox>&  a_J0, 
+                const FluidSpecies&          a_fluid_species ) const;
+   
+   void getJ0_3D( LevelData<FArrayBox>&  a_J0, 
+            const FluidSpecies&          a_fluid_species ) const;
+   
+   void getJ0_3D2( LevelData<FArrayBox>&  a_J0, 
+            const FluidSpecies&          a_fluid_species ) const;
+   
+   void computeCrossProduct( LevelData<FArrayBox>&  a_A,
+                       const LevelData<FArrayBox>&  a_B, 
+                       const LevelData<FArrayBox>&  a_C,
+                       const int                    a_virtual_case ) const;
+   
+   void computeCrossProduct( LevelData<FArrayBox>&  a_A_inPlane,
+                       const LevelData<FArrayBox>&  a_B_inPlane, 
+                       const LevelData<FArrayBox>&  a_C_inPlane,
+                       const LevelData<FArrayBox>&  a_B_virtual, 
+                       const LevelData<FArrayBox>&  a_C_virtual ) const;
+   
 };
 
 

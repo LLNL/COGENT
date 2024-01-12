@@ -1,6 +1,6 @@
 #!/bin/bash
-export COGENT_TEST_COGENT_DIR=/usr/workspace/wsa/dorr/ESL/current/COGENT
-export COGENT_TEST_CHOMBO_DIR=/usr/workspace/wsa/dorr/ESL/current/Chombo
+export COGENT_TEST_COGENT_DIR=/usr/workspace/wsa/dorr/ESL/regression_tests/COGENT
+export COGENT_TEST_CHOMBO_DIR=/usr/workspace/wsa/dorr/ESL/regression_tests/Chombo
 export COGENT_TEST_RESULTS_DIR=/p/lustre1/dorr/regression_tests/test_results
 export COGENT_TEST_TOLERANCE=1.e-15
 

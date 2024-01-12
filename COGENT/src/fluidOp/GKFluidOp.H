@@ -135,10 +135,14 @@ class GKFluidOp
       void initialize( FluidSpeciesPtrVect&  fluid_species,
                  const Real                  time );
       
-      void initializeWithBC( FluidSpeciesPtrVect&  fluid_comp,
-                             FluidSpeciesPtrVect&  fluid_phys,
-                       const Real                  time );
-
+      bool isInitializationConstrained(const FluidSpeciesPtrVect&  fluid_phys);
+   
+      void applyInitializationConstraints(FluidSpeciesPtrVect&               fluid_comp,
+                                          FluidSpeciesPtrVect&               fluid_phys,
+                                          const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
+                                          const EMFields&                    EM_fields,
+                                          const double                       time );
+   
       void fillGhostCells( FluidSpeciesPtrVect&  fluid_species,
                            const double          time );
 

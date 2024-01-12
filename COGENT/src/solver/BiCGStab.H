@@ -202,7 +202,6 @@ void BiCGStabSolver<T,Ops>::solve( T& a_phi, const T& a_rhs, int a_its )
   };
   Real norm[2];
   norm[0] = m_op->norm(r, m_normType);
-  Real initial_norm = 1.;
   Real initial_rnorm = norm[0];
   norm[1] = norm[0];
 
@@ -350,11 +349,10 @@ void BiCGStabSolver<T,Ops>::solve( T& a_phi, const T& a_rhs, int a_its )
       if (m_verbose_pout >= 4)
       {
         pout() << "norm[0] = " << norm[0]
-               << " initial_norm = " << initial_norm
                << " initial_rnorm = " << initial_rnorm << endl;
       }
 
-      if (norm[0] > m_eps*initial_norm && norm[0] > m_reps*initial_rnorm)
+      if (norm[0] > m_eps && norm[0] > m_reps*initial_rnorm)
         {
           m_op->preCond(s_tilde, r);
           m_op->setToZero(t); // added by petermc, 27 Nov 2013, to zero out ghosts
@@ -371,10 +369,10 @@ void BiCGStabSolver<T,Ops>::solve( T& a_phi, const T& a_rhs, int a_its )
         }
       if (m_verbose && procID()==0) {
          printf("      --> (%s) iteration %3d, residual = %1.6e (abs.), %1.6e (rel.)\n",
-                m_outPrefix.c_str(), i, norm[0], norm[0]/initial_norm);
+                m_outPrefix.c_str(), i, norm[0], norm[0]/initial_rnorm);
       }
 
-      if (norm[0] <= m_eps*initial_norm || norm[0] <= m_reps*initial_rnorm)
+      if (norm[0] <= m_eps || norm[0] <= m_reps*initial_rnorm)
         {
           // converged to tolerance
           m_exitStatus = 1;
@@ -397,7 +395,7 @@ void BiCGStabSolver<T,Ops>::solve( T& a_phi, const T& a_rhs, int a_its )
                   if (m_verbose_pout >= 4)
                     {
                       pout() << "      BiCGStab: max restarts reached" << endl;
-                      pout() << "                init  norm = " << initial_norm << endl;
+                      pout() << "                init  norm = " << initial_rnorm << endl;
                       pout() << "                final norm = " << norm[0] << endl;
                     }
 

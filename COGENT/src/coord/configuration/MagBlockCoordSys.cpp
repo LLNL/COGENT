@@ -1431,6 +1431,54 @@ MagBlockCoordSys::getToroidalCoords(FArrayBox&        a_coords,
 }
 
 void
+MagBlockCoordSys::getCylindricalCoords(FArrayBox&  a_coords) const
+{
+  Box box = a_coords.box();
+
+  FArrayBox X(box,SpaceDim);
+  getCellCenteredRealCoords(X);
+
+  RealVect coord;
+  for (BoxIterator bit(box); bit.ok(); ++bit) {
+    IntVect iv = bit();
+
+    for (int dir=0; dir<SpaceDim; ++dir) {
+      coord[dir] = X(iv,dir);
+    }
+
+    convertPhysicalCoordToCylindrical(coord);
+
+     for (int dir=0; dir<SpaceDim; ++dir) {
+      a_coords(iv,dir) = coord[dir];
+    }
+  }
+}
+
+void
+MagBlockCoordSys::getCylindricalCoords(FArrayBox&        a_coords,
+                                       const FArrayBox&  a_real_coords) const
+{
+  Box box = a_coords.box();
+
+  CH_assert((a_real_coords.box()).contains(box));
+   
+  RealVect coord;
+  for (BoxIterator bit(box); bit.ok(); ++bit) {
+    IntVect iv = bit();
+
+    for (int dir=0; dir<SpaceDim; ++dir) {
+      coord[dir] = a_real_coords(iv,dir);
+    }
+
+    convertPhysicalCoordToCylindrical(coord);
+
+     for (int dir=0; dir<SpaceDim; ++dir) {
+      a_coords(iv,dir) = coord[dir];
+    }
+  }
+}
+
+void
 MagBlockCoordSys::convertPhysicalCoordToToroidal(RealVect&   a_coord,
                                                  const bool  a_use_flux_coord) const
 {
@@ -1479,6 +1527,34 @@ MagBlockCoordSys::convertPhysicalCoordToToroidal(RealVect&   a_coord,
   a_coord[RADIAL_DIR] = radial_coord;
   a_coord[POLOIDAL_DIR] = theta;
 #endif
+  
+}
+
+void
+MagBlockCoordSys::convertPhysicalCoordToCylindrical(RealVect&   a_coord) const
+{
+
+  /* This function only makes sense for 3D where
+   we convert cartisian to cylindircal for axisymmetric system
+   For 2D axisymmetric systems physical coords are cylindrical coords
+   */
+  
+  if (SpaceDim == 3) {
+    
+    //get Cartesian (X,Y,Z) coordinates
+    Real x = a_coord[0];
+    Real y = a_coord[1];
+    
+    Real R = sqrt(x*x+y*y);
+    
+    // phi varies from -Pi to Pi
+    Real phi = asin(y/R);
+    if (x < 0 && y > 0) phi = Pi - phi;
+    if (x < 0 && y <0 ) phi = -Pi - phi;
+    
+    a_coord[0] = R;
+    a_coord[1] = phi;
+  }
   
 }
 

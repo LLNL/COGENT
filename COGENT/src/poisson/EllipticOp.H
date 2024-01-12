@@ -230,6 +230,7 @@ public:
    int numPotentialGhosts() const {return m_num_potential_ghosts;}
 
    bool secondOrder() const {return m_second_order;}
+   bool lowPollution() const {return m_low_pollution;}
 
    // ----> Begin *this virtuals
    

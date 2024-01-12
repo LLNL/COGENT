@@ -29,6 +29,7 @@ class PetscTimeIntegrator : public Simulation<AppVec,System>
     ~PetscTimeIntegrator<AppVec,System>();
 
     void initialize(ParmParse&, System* const);
+    void loadRestartFile( ParmParse& );
     void finalize();
     void solve() { TSSolve(m_ts, NULL); }
 
@@ -43,6 +44,7 @@ class PetscTimeIntegrator : public Simulation<AppVec,System>
     inline Real       getTime()                   { return m_cur_time; }
     inline Real       getOldTime()                { return m_old_time; }
     inline Real       getTimeStep()               { return m_dt; }
+    inline int        getStartStep()              { return m_start_step; } 
     inline Real       getEpsilonJFNK()            { return m_epsilon_jfnk; }
     inline bool       isLinear()                  { return m_is_linear; }
 
@@ -77,7 +79,7 @@ class PetscTimeIntegrator : public Simulation<AppVec,System>
     int     m_cur_step;
     int     m_newton_its;
     int     m_gmres_its;
-    int     m_max_step;
+    int     m_start_step, m_max_step;
     Real    m_cur_time, m_old_time;
     Real    m_max_time;
     Real    m_dt;
@@ -305,7 +307,7 @@ static PetscErrorCode PreTimeStep(TS ts)
   TSAdaptType ts_adapt_type;
   TSAdaptGetType(ts_adapt, &ts_adapt_type);
 
-  if (!strcmp(ts_adapt_type, TSADAPTNONE)) {
+  if ((!strcmp(ts_adapt_type, TSADAPTNONE) || (cur_step == 0))) {
 
     if (context->getCFL() > 0) {
   
@@ -422,7 +424,7 @@ static PetscErrorCode PostTimeStage(  TS        ts,
   TSGetTimeStep   ( ts, &dt );
   TSGetStepNumber ( ts, &cur_step );
 
-  static int step_number  = 0;
+  static int step_number  = context->getStartStep();
   static int stage_number = -1;
 
   if (cur_step == step_number+1) {
@@ -491,6 +493,7 @@ PetscTimeIntegrator<AppVec,System>::PetscTimeIntegrator( )
   : m_preCond(NULL),
     m_system(NULL),
     m_cur_step(0),
+    m_start_step(0),
     m_max_step(0),
     m_cur_time(0.0),
     m_old_time(0.0),
@@ -515,6 +518,18 @@ PetscTimeIntegrator<AppVec,System>::PetscTimeIntegrator( )
 }
 
 template <class AppVec, class System>
+void PetscTimeIntegrator<AppVec,System>::loadRestartFile( ParmParse& a_ppsim )
+{
+   std::string restartFile;
+   a_ppsim.query( "restart_file", restartFile );
+   m_system->readCheckpointFile(  restartFile, 
+                                  m_cur_step, 
+                                  m_cur_time, 
+                                  m_dt );
+   m_start_step = m_cur_step;
+}
+
+template <class AppVec, class System>
 void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
                                                     System* const a_sys ) 
 {
@@ -525,7 +540,7 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
   parseParametersSimulation( ppsim );
 
   if ( ppsim.contains( "restart_file" ) ) {
-     //loadRestartFile( ppsim );
+     loadRestartFile( ppsim );
   }
   m_system->initialize(m_cur_step, m_cur_time);
   m_old_time = m_cur_time;
@@ -560,7 +575,8 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
   TSCreate( MPI_COMM_WORLD, &m_ts );
   TSSetMaxSteps( m_ts, m_max_step );
   TSSetMaxTime( m_ts, m_max_time );
-  TSSetTime( m_ts, 0.0 );
+  TSSetTime( m_ts, m_cur_time );
+  TSSetStepNumber( m_ts, m_cur_step );
   TSSetExactFinalTime( m_ts, TS_EXACTFINALTIME_MATCHSTEP );
 
   if (m_system->tiClass() == _TI_RK_) {
@@ -618,23 +634,8 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
 
   }
 
-  /* compute initial time step */
-  if (m_cfl > 0) {
-    Real dt_stable = 0.0;
-    if (m_system->tiClass() == _TI_ARK_) {
-      dt_stable = m_system->stableDt( m_cur_step, ti_imex );
-    } else if (m_system->tiClass() == _TI_RK_) {
-      dt_stable = m_system->stableDt( m_cur_step, ti_explicit );
-    } else {
-      MayDay::Error("PETSc interface: unknown time integrator!");
-    }
-    CH_assert( dt_stable > 1.0e-16 );
-    m_dt = dt_stable*m_cfl;
-  } 
-  if (m_dt <= 0.0) {
-    MayDay::Error("PETSc interface: non-positive dt!");
-  }
-  TSSetTimeStep( m_ts, m_dt );
+  /* set initial time step if fixed dt or restart dt */
+  if (m_dt > 0) TSSetTimeStep( m_ts, m_dt );
 
   TSAdapt adapt; 
   TSGetAdapt( m_ts,&adapt );
@@ -655,8 +656,8 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
 
   if (!strcmp(ts_type,TSARKIMEX)) {
 
-    TSSetRHSFunction( m_ts, PETSC_NULL, RHSFunctionIMEX, this);
-    TSSetIFunction  ( m_ts, PETSC_NULL, IFunctionIMEX  , this);
+    TSSetRHSFunction( m_ts, NULL, RHSFunctionIMEX, this);
+    TSSetIFunction  ( m_ts, NULL, IFunctionIMEX  , this);
 
     MatCreateShell( MPI_COMM_WORLD,
                     m_local_size,
@@ -724,7 +725,7 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
 
   } else {
 
-    TSSetRHSFunction( m_ts, PETSC_NULL, RHSFunction, this );
+    TSSetRHSFunction( m_ts, NULL, RHSFunction, this );
 
   }
 

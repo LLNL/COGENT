@@ -201,6 +201,13 @@ GKSystem::initialize( const int     a_cur_step,
    //     associated field are computed.
    m_gk_ops->initializeElectricField( m_state_phys, a_cur_step, a_cur_time );
 
+   // Apply initialization constraints to fluid models (e.g., MHD equilibirum)
+   if ( a_cur_step == 0 ) {
+      m_gk_ops->applyFluidInitializationConstraints(m_state_comp.dataFluid(),
+                                                    m_state_phys.dataFluid(),
+                                                    a_cur_time);
+   }
+   
    m_gk_ops->initializeTI(  a_cur_step, 
                             a_cur_time, 
                             m_rhs,
@@ -1393,6 +1400,25 @@ void GKSystem::writePlotFile(const char    *prefix,
                                                 m_sys_id_str ));
 
             m_diagnostics->plotCfgVar( var, filename, cur_time );
+         }
+
+         for (int n=0; n<fluid_vars.num_node_vars(); ++n) {
+
+           CFG::LevelData<CFG::FArrayBox> var;
+           m_diagnostics->getFluidNodeVarAtCell( var,
+                                                 fluid_vars,
+                                                 fluid_vars.node_var_name(n) );
+
+           std::string filename (plotFileName( prefix,
+                                               fluid_vars.node_var_name(n),
+                                               fluid_vars.name(),
+                                               cur_step,
+                                               species + 1,
+                                               m_sys_id,
+                                               m_sys_id_str ));
+
+           m_diagnostics->plotCfgVar( var, filename, cur_time );
+
          }
          
          if ( fluid_vars.m_plotMemberVars == 1 ) {

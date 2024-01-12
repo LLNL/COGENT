@@ -40,6 +40,7 @@ class TiARK : public TimeIntegrator<Vector,Ops>
       m_Ifunction = NULL;
       m_EJacobian = NULL;
       m_IJacobian = NULL;
+      m_first_stage_explicit = true;
     }
 
     /// Destructor
@@ -171,6 +172,7 @@ class TiARK : public TimeIntegrator<Vector,Ops>
     Real          *m_Ai, *m_bi;
     Real          *m_be_emb, *m_bi_emb;
     Real          *m_binterpe, *m_binterpi;
+    bool          m_first_stage_explicit;
     Vector        m_YStage, m_YPrev,
                   *m_rhsStage_exp, *m_rhsStage_imp, 
                   *m_rhsStage_exp_prev, *m_rhsStage_imp_prev,
@@ -222,6 +224,8 @@ void TiARK<Vector,Ops>::define( ParmParse&          a_pp,
                                         &m_binterpi,
                                         &m_binterpe );
 
+  m_first_stage_explicit = (m_Ai[0] == 0.0);
+
   ParmParse ppARK("ark");
   parseParameters( ppARK );
   if ((m_pinterp == 0) && (m_stagePredictor)) {
@@ -248,6 +252,7 @@ void TiARK<Vector,Ops>::define( ParmParse&          a_pp,
   }
   m_Operators = a_ops;
   m_Operators->useScales(m_use_scaled_norms);
+  m_Operators->ARKFirstStageExplicit(m_first_stage_explicit);
 
   m_isLinear = m_Operators->isLinear();
 
@@ -404,10 +409,6 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
     m_EJacobian->setStageTime(a_time);
     m_EJacobian->updatePreCondMat(m_YStage, m_cur_step, -1);
   }
-
-  /* Assert explicit-first-stage - post-time-stage function implementation 
-   * in GKOps.cpp assumes that YStage(1) = y_n! */
-  CH_assert(m_Ai[0] == 0.0);
 
   /* Stage calculations */
   int i, j;

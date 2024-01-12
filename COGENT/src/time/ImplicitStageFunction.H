@@ -14,8 +14,10 @@ class ImplicitStageFunction: public Function<T,Ops>
     ImplicitStageFunction<T,Ops>() {m_is_Defined = false; m_shift = 0; }
     ~ImplicitStageFunction<T,Ops>() {}
 
-   void evalFunction(T& a_F, const T& a_Y, const T& a_b, int a_its );
+    void evalFunction(T& a_F, const T& a_Y, const T& a_b, int a_its );
     void define(const T& a_state, Ops& a_ops);
+
+    bool checkLinearity( const T& );
 
     inline void setShift        (Real a_shift )       { m_shift = a_shift;    }
     inline void setStageTime    (Real a_time  )       { m_StageTime = a_time; }
@@ -92,6 +94,50 @@ void ImplicitStageFunction<T,Ops>::evalFunction(  T&        a_F,
   m_ops->scaleRHSOp(a_F);
 
   return;
+}
+
+template <class T, class Ops>
+bool ImplicitStageFunction<T,Ops>::checkLinearity(  const T& a_Y)
+{
+  const double pi = 4.0*atan(1.0);
+
+  T rhsvec(a_Y);
+  rhsvec.zero();
+
+  double Ynorm = a_Y.computeNorm();
+  if (!procID()) {
+    printf("    |ImplicitStageFunction::checkLinearity():\n");
+  }
+
+  for (double eps = 1e-2; eps >= 1e-14; eps *= 1e-2) {
+    double reps = eps;
+    if (Ynorm > 1e-14) reps *= Ynorm;
+
+    T Z(a_Y), Fy(a_Y), Fz(a_Y), Fyz(a_Y);
+
+    Z = a_Y;
+    for (int i=0; i<Z.getVectorSize(); i++) {
+      Z[i] += reps * cos(2*pi*(((double)i)/((double)Z.getVectorSize())));
+    }
+
+    evalFunction(Fy, a_Y, rhsvec, 0);
+    evalFunction(Fz,   Z, rhsvec, 0);
+
+    Z += a_Y;
+    evalFunction(Fyz, Z, rhsvec, 0);
+
+    double Fnorm = Fy.computeNorm();
+    Fyz -= Fy;
+    Fyz -= Fz;
+    double deltaNorm = Fyz.computeNorm();
+
+    if (!procID()) {
+      printf("    |  eps=%1.1e, norm of F(Y): %1.4e, norm of F(Y+Z)-[F(Y)+F(Z)]: %1.4e\n",
+             reps, Fnorm, deltaNorm );
+    }
+  }
+
+  return false;
 }
 
 #include "NamespaceFooter.H"

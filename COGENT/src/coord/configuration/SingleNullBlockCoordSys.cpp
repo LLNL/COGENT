@@ -1634,8 +1634,7 @@ SingleNullBlockCoordSys::getPoloidalDisjointBoxLayout(DisjointBoxLayout&   a_gri
       n_loc_pol = n_opt;
    }
    
-   // Too few processors available (the approach below is a strating point; not
-   // very effective as we may end up not using about half of available proc)
+   // Too few processors available: start with an estimate 
    else {
       int num_iter = int(floor(log2(double(n_proc))));
       int num_iter_rad;
@@ -1672,7 +1671,24 @@ SingleNullBlockCoordSys::getPoloidalDisjointBoxLayout(DisjointBoxLayout&   a_gri
    int n_pol_dec = n_pol / n_loc_pol;
    
    a_decomp_num = n_rad_dec * n_pol_dec;
-   
+
+   //Now do fine tuning
+   if (a_decomp_num < numProc()) {
+     while (a_decomp_num < numProc()) {
+       n_loc_pol = n_loc_pol - 1;
+       n_pol_dec = n_pol / n_loc_pol;
+       a_decomp_num = n_rad_dec * n_pol_dec;
+     }
+   }
+
+   if (a_decomp_num > numProc()) {
+     while (a_decomp_num > numProc()) {
+       n_loc_rad = n_loc_rad + 1;
+       n_rad_dec = n_rad / n_loc_rad;
+       a_decomp_num = n_rad_dec * n_pol_dec;
+     }
+   }
+
    for(int j = 0; j < n_pol_dec; j++) {
       for(int i = 0; i < n_rad_dec; i++) {
 
@@ -1717,7 +1733,9 @@ SingleNullBlockCoordSys::assembleDecomposedData(FArrayBox&                    a_
    // Also, the processor IDs assigned to grids correspond to 0 .. a_decomp_num-1
 
    CH_TIME("SingleNullBlockCoordSys::assembleDecomposedData"); 
-  
+
+   CH_assert(numProc() >= a_decomp_num);
+
    FArrayBox this_interp_node_data;
    FArrayBox this_interp_node_coords;
    

@@ -167,9 +167,9 @@ c    COMPUTE DOT PRODUCT
 
       subroutine eval_dot_product(
      &     CHF_BOX[gridbox],
-     &     CHF_CONST_FRA[A],
      &     CHF_CONST_FRA[B],
-     &     CHF_FRA1[C]
+     &     CHF_CONST_FRA[C],
+     &     CHF_FRA1[A]
      &     )
 
 c     local variables
@@ -180,9 +180,9 @@ c     local variables
 
          sum = zero
          do m=0, (CH_SPACEDIM-1)
-            sum = sum + A(CHF_AUTOIX[i],m)*B(CHF_AUTOIX[i],m)
+            sum = sum + B(CHF_AUTOIX[i],m)*C(CHF_AUTOIX[i],m)
          enddo
-         C(CHF_AUTOIX[i]) = sum
+         A(CHF_AUTOIX[i]) = sum
 
       CHF_ENDDO
 
@@ -195,9 +195,9 @@ c    COMPUTE DOT PRODUCT
 
       subroutine eval_cross_product(
      &     CHF_BOX[cellbox],
-     &     CHF_CONST_FRA[A],
      &     CHF_CONST_FRA[B],
-     &     CHF_FRA[C]
+     &     CHF_CONST_FRA[C],
+     &     CHF_FRA[A]
      &     )
 
 c     local variables
@@ -210,9 +210,43 @@ c     local variables
             dir2 = dir0+2 
             dir1 = mod(dir1,CH_SPACEDIM)
             dir2 = mod(dir2,CH_SPACEDIM)
-            C(CHF_AUTOIX[i],dir0) = A(CHF_AUTOIX[i],dir1)*B(CHF_AUTOIX[i],dir2)
-     &                            - A(CHF_AUTOIX[i],dir2)*B(CHF_AUTOIX[i],dir1)
+            A(CHF_AUTOIX[i],dir0) = B(CHF_AUTOIX[i],dir1)*C(CHF_AUTOIX[i],dir2)
+     &                            - B(CHF_AUTOIX[i],dir2)*C(CHF_AUTOIX[i],dir1)
          enddo
+
+      CHF_ENDDO
+
+      return
+      end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE 2D CROSS PRODUCT
+
+      subroutine eval_cross_product_2D(
+     &     CHF_BOX[cellbox],
+     &     CHF_CONST_FRA[B],
+     &     CHF_CONST_FRA[C],
+     &     CHF_CONST_FRA1[Bv],
+     &     CHF_CONST_FRA1[Cv],
+     &     CHF_FRA[A]
+     &     )
+
+c     local variables
+      integer CHF_AUTODECL[i], dir0, dir1, dir2
+      double precision Bx, By, Bz, Cx, Cy, Cz
+
+      CHF_AUTOMULTIDO[cellbox;i]
+
+         Bx = B(CHF_AUTOIX[i],0)
+         By = Bv(CHF_AUTOIX[i])
+         Bz = B(CHF_AUTOIX[i],1)
+         Cx = C(CHF_AUTOIX[i],0)
+         Cy = Cv(CHF_AUTOIX[i])
+         Cz = C(CHF_AUTOIX[i],1)
+
+         A(CHF_AUTOIX[i],0) = By*Cz - Bz*Cy
+         A(CHF_AUTOIX[i],1) = Bx*Cy - By*Cx
 
       CHF_ENDDO
 
@@ -416,7 +450,7 @@ c    COMPUTE LAX FLUX SPLITTING
      &     CHF_FRA[fluxR],
      &     CHF_CONST_FRA[flux],
      &     CHF_CONST_FRA[C],
-     &     CHF_CONST_FRA1[Jf]
+     &     CHF_CONST_FRA1[fun]
      &     )
 
 c     local variables
@@ -426,8 +460,8 @@ c     local variables
       
          CHF_AUTOMULTIDO[gridbox;i]
           
-            fluxL(CHF_AUTOIX[i],n) = 0.5*(flux(CHF_AUTOIX[i],n) - C(CHF_AUTOIX[i],n)*Jf(CHF_AUTOIX[i]))
-            fluxR(CHF_AUTOIX[i],n) = 0.5*(flux(CHF_AUTOIX[i],n) + C(CHF_AUTOIX[i],n)*Jf(CHF_AUTOIX[i]))
+            fluxL(CHF_AUTOIX[i],n) = 0.5*(flux(CHF_AUTOIX[i],n) - C(CHF_AUTOIX[i],n)*fun(CHF_AUTOIX[i]))
+            fluxR(CHF_AUTOIX[i],n) = 0.5*(flux(CHF_AUTOIX[i],n) + C(CHF_AUTOIX[i],n)*fun(CHF_AUTOIX[i]))
  
          CHF_ENDDO
 
@@ -435,6 +469,37 @@ c     local variables
 
       return
       end
+
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c    COMPUTE LAX FLUX SPLITTING
+
+      subroutine lax_flux_splitting_new(
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA[fluxL],
+     &     CHF_FRA[fluxR],
+     &     CHF_CONST_FRA1[flux],
+     &     CHF_CONST_FRA[Cspeed],
+     &     CHF_CONST_FRA1[fun]
+     &     )
+
+c     local variables
+      integer n, CHF_AUTODECL[i]
+
+      do n=0, (CHF_NCOMP[Cspeed]-1)
+      
+         CHF_AUTOMULTIDO[gridbox;i]
+          
+            fluxL(CHF_AUTOIX[i],n) = 0.5*(flux(CHF_AUTOIX[i]) - Cspeed(CHF_AUTOIX[i],n)*fun(CHF_AUTOIX[i]))
+            fluxR(CHF_AUTOIX[i],n) = 0.5*(flux(CHF_AUTOIX[i]) + Cspeed(CHF_AUTOIX[i],n)*fun(CHF_AUTOIX[i]))
+ 
+         CHF_ENDDO
+
+      enddo
+
+      return
+      end
+
 
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 

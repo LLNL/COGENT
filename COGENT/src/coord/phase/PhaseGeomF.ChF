@@ -166,6 +166,7 @@ c     vparcomp, mucomp are the computational (mapped) components
 
             if (mag_drifts_only.ne.0) then
                G(n) = 0.0
+               dApar_dt = 0.0
             endif 
 
             mag_drift_fac(n) = fac * mass * vpar * this_curlb(n)
