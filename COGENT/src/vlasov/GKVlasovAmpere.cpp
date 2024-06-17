@@ -20,27 +20,6 @@
 const char* GKVlasovAmpere::pp_name = {"gkvlasovampere"};
 
 
-Real
-MaxNorm( const CFG::LevelData<CFG::FArrayBox>& a )
-{
-   const CFG::DisjointBoxLayout& grids = a.disjointBoxLayout();
-
-   double local_max = -DBL_MAX;
-   for (CFG::DataIterator dit(grids); dit.ok(); ++dit) {
-      double this_max = a[dit].max(grids[dit]);
-      if (this_max > local_max) local_max = this_max;
-   }
-
-   double global_max;
-#ifdef CH_MPI
-   MPI_Allreduce(&local_max, &global_max, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-#else
-   global_max = local_max;
-#endif
-
-   return global_max;
-}
-
 GKVlasovAmpere::GKVlasovAmpere( ParmParse&                      pp,
                                 const Real                      larmor_number,
                                 const bool                      self_consistent_bcs_only )

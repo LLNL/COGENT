@@ -290,8 +290,6 @@ public:
 
    // <---- End LinOp virtuals
 
-   double L2Norm( const LevelData<FArrayBox>& data );
-
 protected:
 
    // Computes the cell-centered (i.e., pointwise) field in the mapped frame. It assumes

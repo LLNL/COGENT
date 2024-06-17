@@ -28,8 +28,8 @@ class TiARK : public TimeIntegrator<Vector,Ops>
     /// Constructor
     /**
      * Constructor: set m_is_Defined to false.
-     */ 
-    TiARK<Vector,Ops>() : m_is_Defined(false) 
+     */
+    TiARK<Vector,Ops>() : m_is_Defined(false)
     {
       m_Ae = m_be = m_c = m_Ai = m_bi = NULL;
       m_be_emb = m_bi_emb = NULL;
@@ -55,9 +55,9 @@ class TiARK : public TimeIntegrator<Vector,Ops>
      *
      * @param[in] a_name string containing the method name
     */
-    virtual void define(  ParmParse&, 
-                          const std::string&, 
-                          const Vector&, 
+    virtual void define(  ParmParse&,
+                          const std::string&,
+                          const Vector&,
                           Ops* const );
 
     /// Initialize
@@ -78,7 +78,7 @@ class TiARK : public TimeIntegrator<Vector,Ops>
      * Returns the value of m_is_Defined
     */
     bool isDefined() const { return m_is_Defined; }
-    
+
     /// Get the operators for the time integrator
     /**
      * get the operators for the time integrator
@@ -98,10 +98,10 @@ class TiARK : public TimeIntegrator<Vector,Ops>
      * get the time step size of the time integrator
      *
      * @param[out] a_dt the time step size
-     */ 
+     */
      virtual void getTimeStepSize( Real& a_dt ) const { a_dt = m_dt; }
 
-    /// Set the time step 
+    /// Set the time step
     /**
      * set the time step for the time integrator
      *
@@ -114,15 +114,15 @@ class TiARK : public TimeIntegrator<Vector,Ops>
      * get the time step of the time integrator
      *
      * @param[out] a_n the time step
-     */ 
+     */
      virtual void getTimeStep( int& a_n ) const { a_n = m_cur_step; }
 
-    /// Set the current simulation time 
+    /// Set the current simulation time
     /**
      * set the current simulation time
      *
      * @param[in] a_time the specified simulation time
-     */ 
+     */
      virtual void setCurrentTime( const Real& a_time ) { m_time = a_time; }
 
     /// Get the current simulation time
@@ -130,7 +130,7 @@ class TiARK : public TimeIntegrator<Vector,Ops>
      * get the current simulation time
      *
      * @param[out] a_time the current simulation time
-     */ 
+     */
     virtual void getCurrentTime( Real& a_time ) const { a_time = m_time; }
 
     virtual TimeIntegratorType type() const { return ti_imex; }
@@ -141,17 +141,17 @@ class TiARK : public TimeIntegrator<Vector,Ops>
           cout << "  Time integrator counts:-\n";
           cout << "    Time steps          : " << m_count << "\n";
           if (m_Operators->trivialSolutionOp()) {
-            cout << "    Nonlinear iterations: " 
+            cout << "    Nonlinear iterations: "
                  << m_ImplicitStageSolver.getCount()
                  << "\n";
-            cout << "    Linear iterations   : " 
+            cout << "    Linear iterations   : "
                  << m_ImplicitStageSolver.getLinearCount()
                  << "\n";
           } else {
-            cout << "    Nonlinear iterations: " 
+            cout << "    Nonlinear iterations: "
                  << m_ImplicitStageSolver.getCount() + m_ExplicitStageSolver.getCount()
                  << "\n";
-            cout << "    Linear iterations   : " 
+            cout << "    Linear iterations   : "
                  << m_ImplicitStageSolver.getLinearCount() + m_ExplicitStageSolver.getLinearCount()
                  << "\n";
           }
@@ -174,9 +174,9 @@ class TiARK : public TimeIntegrator<Vector,Ops>
     Real          *m_binterpe, *m_binterpi;
     bool          m_first_stage_explicit;
     Vector        m_YStage, m_YPrev,
-                  *m_rhsStage_exp, *m_rhsStage_imp, 
+                  *m_rhsStage_exp, *m_rhsStage_imp,
                   *m_rhsStage_exp_prev, *m_rhsStage_imp_prev,
-                  m_R, m_Z, m_W;
+                   m_R, m_Z, m_W, m_Mu;
     Ops*          m_Operators;
     Real          m_time;
     Real          m_dt;
@@ -198,9 +198,9 @@ class TiARK : public TimeIntegrator<Vector,Ops>
 };
 
 template <class Vector, class Ops>
-void TiARK<Vector,Ops>::define( ParmParse&          a_pp, 
-                                const std::string&  a_name, 
-                                const Vector&       a_Y, 
+void TiARK<Vector,Ops>::define( ParmParse&          a_pp,
+                                const std::string&  a_name,
+                                const Vector&       a_Y,
                                 Ops* const          a_ops )
 {
   m_dt = 1.0;
@@ -213,7 +213,7 @@ void TiARK<Vector,Ops>::define( ParmParse&          a_pp,
                                         m_nstages,
                                         m_order,
                                         m_order_emb,
-                                        &m_Ai, 
+                                        &m_Ai,
                                         &m_Ae,
                                         &m_bi,
                                         &m_be,
@@ -246,6 +246,7 @@ void TiARK<Vector,Ops>::define( ParmParse&          a_pp,
   m_R.define(a_Y);
   m_Z.define(a_Y);
   m_W.define(a_Y);
+  m_Mu.define(a_Y);
   for (int i=0; i<m_nstages; i++) {
     m_rhsStage_exp[i].define(a_Y);
     m_rhsStage_imp[i].define(a_Y);
@@ -273,14 +274,14 @@ void TiARK<Vector,Ops>::define( ParmParse&          a_pp,
   std::string solverOptPrefix = "ark";
 
   /* define the Newton solvers */
-  Function<Vector,Ops>       
+  Function<Vector,Ops>
     **ImplicitStageSolverFunction = m_ImplicitStageSolver.getFunction();
-  LinearFunction<Vector,Ops> 
+  LinearFunction<Vector,Ops>
     **ImplicitStageSolverJacobian = m_ImplicitStageSolver.getJacobian();
 
   *ImplicitStageSolverFunction = new ImplicitStageFunction<Vector,Ops>;
   *ImplicitStageSolverJacobian = new ImplicitStageJacobian<Vector,Ops>;
-  
+
   m_Ifunction = dynamic_cast<ImplicitStageFunction<Vector,Ops>*>
                   (*ImplicitStageSolverFunction);
   m_IJacobian = dynamic_cast<ImplicitStageJacobian<Vector,Ops>*>
@@ -294,27 +295,27 @@ void TiARK<Vector,Ops>::define( ParmParse&          a_pp,
 
   m_ImplicitStageSolver.define(a_pp,m_R,isolverOutPrefix,solverOptPrefix);
   m_ImplicitStageSolver.setIsLinear(m_isLinear);
-  
+
   if (!m_Operators->trivialSolutionOp()) {
-    Function<Vector,Ops>       
+    Function<Vector,Ops>
       **ExplicitStageSolverFunction = m_ExplicitStageSolver.getFunction();
-    LinearFunction<Vector,Ops> 
+    LinearFunction<Vector,Ops>
       **ExplicitStageSolverJacobian = m_ExplicitStageSolver.getJacobian();
-  
+
     *ExplicitStageSolverFunction = new ExplicitStageFunction<Vector,Ops>;
     *ExplicitStageSolverJacobian = new ExplicitStageJacobian<Vector,Ops>;
-    
+
     m_Efunction = dynamic_cast<ExplicitStageFunction<Vector,Ops>*>
                     (*ExplicitStageSolverFunction);
     m_EJacobian = dynamic_cast<ExplicitStageJacobian<Vector,Ops>*>
                     (*ExplicitStageSolverJacobian);
-  
+
     m_Efunction->define(m_R,*m_Operators);
     m_EJacobian->define(m_R,*m_Operators,esolverOutPrefix,solverOptPrefix);
     m_Efunction->setJac(m_EJacobian);
     m_EJacobian->setIsLinear(m_isLinear);
     m_EJacobian->setJFNKEps(m_epsJFNK);
-  
+
     m_ExplicitStageSolver.define(a_pp,m_R,esolverOutPrefix,solverOptPrefix);
     m_ExplicitStageSolver.setIsLinear(m_isLinear);
   }
@@ -410,6 +411,12 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
     m_EJacobian->updatePreCondMat(m_YStage, m_cur_step, -1);
   }
 
+  /* Precompute M[Y] */
+  if (!m_Operators->trivialSolutionOp()) {
+    m_Operators->preSolutionOpEval(a_Y,m_time);
+    m_Operators->solutionOp(m_Mu,m_time,a_Y);
+  }
+
   /* Stage calculations */
   int i, j;
   for (i = 0; i < m_nstages; i++) {
@@ -424,8 +431,7 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
                                         (m_dt*m_Ai[i*m_nstages+j])  );
 
     if (!m_Operators->trivialSolutionOp()) {
-      m_Operators->preSolutionOpEval(a_Y,m_time,chkpt_ti_advance_1);
-      m_Operators->solutionOp(m_W,m_time,a_Y);
+      m_W = m_Mu;
       for (j=0; j<i; j++) m_W.increment(  m_rhsStage_exp[j],
                                           (m_dt*m_Ae[i*m_nstages+j])  );
       for (j=0; j<i; j++) m_W.increment(  m_rhsStage_imp[j],
@@ -433,7 +439,7 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
     }
 
     if (m_Ai[i*m_nstages+i] != 0.0) {
-      
+
       /* implicit stage */
       Real shift = 1.0 / (m_Ai[i*m_nstages+i] * m_dt);
 
@@ -457,8 +463,11 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
       m_R *= shift;
 
       /* Before the Newton solve begins, m_Z contains the
-       * initial guess. If using stage predictor, initial 
-       * guess is computed by extrapolating from previous step */
+       * initial guess. If using stage predictor, initial
+       * guess is computed by extrapolating from previous step.
+       * N.B. for optimized vorticity model the initial guess
+       * has to be consistent with the explicit stage solution,
+       * and the extrapolation method below should not be used*/
       if (m_stagePredictor && (m_cur_step > 0)) extrapolate(m_c[i],m_Z);
 
       CH_START(t_implicit_stage_solver);
@@ -522,21 +531,27 @@ void TiARK<Vector, Ops>::advance( const Real& a_time, Vector& a_Y )
     m_EJacobian->setStageTime(m_time+m_dt);
     m_EJacobian->updatePreCondMat(a_Y, m_cur_step, m_nstages);
 
-    m_Operators->preSolutionOpEval(a_Y,(m_time+m_dt),chkpt_ti_advance_3);
-    m_Operators->solutionOp(m_R,(m_time+m_dt),a_Y);
+    m_R = m_Mu;
     for (i = 0; i < m_nstages; i++) {
       m_R.increment(m_rhsStage_exp[i],(m_dt*m_be[i]));
       m_R.increment(m_rhsStage_imp[i],(m_dt*m_bi[i]));
     }
 
     CH_START(t_explicit_stage_solver);
+    /*
+     * N.B. for the optimized vorticity model the initial guess
+     * has to be consistent with the explicit stage solution*/
+    for (i = 0; i < m_nstages; i++) {
+      a_Y.increment(m_rhsStage_exp[i],(m_dt*m_be[i]));
+      a_Y.increment(m_rhsStage_imp[i],(m_dt*m_bi[i]));
+    }
     m_ExplicitStageSolver.solve(a_Y,m_R);
     CH_STOP(t_explicit_stage_solver);
   }
 
   /* update current time and step number */
   m_cur_step++;
-  m_time += m_dt; 
+  m_time += m_dt;
   m_count++;
 }
 
@@ -578,9 +593,9 @@ template <class Vector, class Ops>
 void TiARK<Vector,Ops>::parseParameters( ParmParse& a_pp)
 {
   /* use stage predictor based on dense output */
-  a_pp.query("stage_predictor", m_stagePredictor); 
-  a_pp.query("jfnk_epsilon", m_epsJFNK); 
-  a_pp.query("scaled_norms", m_use_scaled_norms); 
+  a_pp.query("stage_predictor", m_stagePredictor);
+  a_pp.query("jfnk_epsilon", m_epsJFNK);
+  a_pp.query("scaled_norms", m_use_scaled_norms);
 }
 
 #include "NamespaceFooter.H"

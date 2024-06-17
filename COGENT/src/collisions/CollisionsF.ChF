@@ -562,6 +562,97 @@ c     local variables
       end
 
 
+      subroutine compute_bgk_op(
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA1[bgk_op],
+     &     CHF_CONST_FRA1[ref_dfn],
+     &     CHF_CONST_FRA1[soln_dfn],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_FRA[coeff],
+     &     CCHF_CONST_FRA[vel_coord],
+     &     CHF_CONST_REAL[mass]
+     &     )
+
+      
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m], n
+      double precision mvperp2, vpar, energy, ref_func, this_coeff(0:2)
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+         mvperp2 = vel_coord(CHF_IX[i;j;k;l;m],1) * B(i,j,CHF_LBOUND[B;2],CHF_LBOUND[B;3])
+         do n = 0, 2
+           this_coeff(n) = coeff(i,j,CHF_LBOUND[coeff;2],CHF_LBOUND[coeff;3],n)
+         enddo
+#else
+         mvperp2 = vel_coord(CHF_IX[i;j;k;l;m],1) * B(i,j,k,CHF_LBOUND[B;3],CHF_LBOUND[B;4])
+         do n = 0, 2
+           this_coeff(n) = coeff(i,j,k,CHF_LBOUND[coeff;3],CHF_LBOUND[coeff;4],n)
+         enddo
+#endif
+
+         vpar = vel_coord(CHF_IX[i;j;k;l;m],0)
+         energy = (mass * vpar**2 + mvperp2)/3.0
+         ref_func = ref_dfn(CHF_IX[i;j;k;l;m])
+
+         bgk_op(CHF_IX[i;j;k;l;m]) = - (soln_dfn(CHF_IX[i;j;k;l;m])  
+     &                                   - this_coeff(0) * ref_func 
+     &                                   - this_coeff(1) * vpar * ref_func
+     &                                   - this_coeff(2) * energy * ref_func )
+
+     
+      CHF_ENDDO
+
+      return
+
+      end
+
+      subroutine compute_bgk_cons_kernels(
+     &     CHF_BOX[gridbox],
+     &     CHF_FRA[kernels],
+     &     CHF_CONST_FRA1[ref_dfn],
+     &     CHF_CONST_FRA1[B],
+     &     CHF_CONST_FRA[vel_coord],
+     &     CHF_CONST_REAL[mass]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m]
+      double precision mvperp2, vpar, energy, dfn
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m]
+
+#if CH_SPACEDIM==4
+         mvperp2 = vel_coord(CHF_IX[i;j;k;l;m],1) * B(i,j,CHF_LBOUND[B;2],CHF_LBOUND[B;3])
+#else
+         mvperp2 = vel_coord(CHF_IX[i;j;k;l;m],1) * B(i,j,k,CHF_LBOUND[B;3],CHF_LBOUND[B;4])
+#endif
+
+         vpar = vel_coord(CHF_IX[i;j;k;l;m],0)
+         energy = (mass * vpar**2 + mvperp2)/3.0
+         dfn = ref_dfn(CHF_IX[i;j;k;l;m])
+
+ 
+         kernels(CHF_IX[i;j;k;l;m],0) = 1.0 * dfn
+         kernels(CHF_IX[i;j;k;l;m],1) = vpar * dfn
+         kernels(CHF_IX[i;j;k;l;m],2) = energy * dfn 
+
+         kernels(CHF_IX[i;j;k;l;m],3) = vpar * dfn
+         kernels(CHF_IX[i;j;k;l;m],4) = vpar * vpar * dfn 
+         kernels(CHF_IX[i;j;k;l;m],5) = vpar * energy * dfn
+
+         kernels(CHF_IX[i;j;k;l;m],6) = energy * dfn
+         kernels(CHF_IX[i;j;k;l;m],7) = energy * vpar * dfn
+         kernels(CHF_IX[i;j;k;l;m],8) = energy * energy * dfn
+
+      CHF_ENDDO
+
+      return
+
+      end
+
+
       subroutine compute_sc_cls_freq(
      &     CHF_BOX[box],
      &     CHF_FRA1[cls_freq],

@@ -1200,7 +1200,8 @@ PhaseGeom::updateVelocityNormals( const CFG::EMFields&                  a_EM_fie
                this_vel_dir.negate();
             }
             else if (dir == VPARALLEL_DIR) {
-               if (a_velocity_option == DRIFT_VELOCITY) {
+               if (a_velocity_option == DRIFT_VELOCITY ||
+                   a_velocity_option == MAGNETIC_DRIFT_VELOCITY) {
                   this_vel_dir.setVal(0.);
                }
                else {
@@ -3131,6 +3132,7 @@ PhaseGeom::fillCorners( LevelData<FArrayBox>&  a_data,
 
 #if CFG_DIM == 3
 
+
 void
 PhaseGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
 {
@@ -3228,19 +3230,22 @@ PhaseGeom::interpolateFromShearedGhosts(LevelData<FArrayBox>& a_data) const
                   //(c) belongs to the poloidal interior (fac < 0)
                   
                   Real fac = (*m_sheared_interp_stencil)[dit](iv_inj,sheared_interp_order + 1);
-                  
+                      
                   if (fac < 1.0) {
                      for (int n=0; n<sheared_interp_order + 1; ++n) {
                         IntVect iv_offset(iv_ghost);
                         iv_offset[POLOIDAL_DIR] += (int)(*m_sheared_interp_stencil_offsets)[dit](iv_inj,n);
+
                         bool found_index = false;
                         for (int m=0; m<num_layouts; ++m) {
                            if ( ghosts[m][dit].box().contains(iv_offset) ) {
-                              ghost_val += ghosts[m][dit](iv_offset,comp) * (*m_sheared_interp_stencil)[dit](iv_inj,n);
+                              ghost_val += ghosts[m][dit](iv_offset,comp) 
+                                 * (*m_sheared_interp_stencil)[dit](iv_inj,n);
                               found_index = true;
                               break;
                            }
                         }
+
                         if ( !found_index ){
                            MayDay::Error("PhaseGeom::interpolateFromShearedGhosts(): Unable to find remapped index for interpolation");
                         }
@@ -3344,6 +3349,8 @@ PhaseGeom::getShearedGhostBoxLayouts()
             }
 
             Box remapped_box(loEnd_remapped, hiEnd_remapped);
+            Box grown_remapped_box(remapped_box);
+            grown_remapped_box.grow(POLOIDAL_DIR, max_offset);
 
             if ( single_null ) {
                // This branch avoids the memory-wasting "no man's land" created between multiple
@@ -3363,6 +3370,8 @@ PhaseGeom::getShearedGhostBoxLayouts()
                Box& new_box0 = *const_cast<Box*>(&((*raw_ptr0)[ivec].box));
                Box& new_box1 = *const_cast<Box*>(&((*raw_ptr1)[ivec].box));
                Box empty_box;
+               new_box0 = empty_box;
+               new_box1 = empty_box;
 
                int adjacent_block = this_block_boundaries[mb_dir + side*SpaceDim].neighbor();
                const PhaseBlockCoordSys& adjacent_coord_sys = *(m_phase_coords->getCoordSys(adjacent_block));
@@ -3371,9 +3380,10 @@ PhaseGeom::getShearedGhostBoxLayouts()
          
                int num_neighbors_intersected = 0;
 
-               Box overlap = adjacent_domain_box & remapped_box;
+               Box grown_adjacent_domain_box(adjacent_domain_box);
+               grown_adjacent_domain_box.grow(POLOIDAL_DIR, max_offset);
+               Box overlap = grown_adjacent_domain_box & grown_remapped_box;
                if ( overlap.ok() ) {
-                  overlap.grow(POLOIDAL_DIR, max_offset);
                   num_neighbors_intersected++;
                   new_box0 = overlap;
                   new_box1 = empty_box;
@@ -3387,10 +3397,11 @@ PhaseGeom::getShearedGhostBoxLayouts()
                   const PhaseBlockCoordSys& neighbor_coord_sys = *(m_phase_coords->getCoordSys(lo_poloidal_block));
                   Box neighbor_domain_box = neighbor_coord_sys.domain().domainBox();
                
-                  Box neighbor_overlap = neighbor_domain_box & remapped_box;
+                  Box grown_neighbor_domain_box(neighbor_domain_box);
+                  grown_neighbor_domain_box.grow(POLOIDAL_DIR, max_offset);
+                  Box neighbor_overlap = grown_neighbor_domain_box & grown_remapped_box;
                   if ( neighbor_overlap.ok() ) {
                      num_neighbors_intersected++;
-                     neighbor_overlap.grow(POLOIDAL_DIR, max_offset);
                      if ( num_neighbors_intersected == 1 ) {
                         new_box0 = neighbor_overlap;
                         new_box1 = empty_box;
@@ -3410,9 +3421,10 @@ PhaseGeom::getShearedGhostBoxLayouts()
                      const PhaseBlockCoordSys& neighbor_coord_sys = *(m_phase_coords->getCoordSys(hi_poloidal_block));
                      Box neighbor_domain_box = neighbor_coord_sys.domain().domainBox();
                   
-                     Box neighbor_overlap = neighbor_domain_box & remapped_box;
+                     Box grown_neighbor_domain_box(neighbor_domain_box);
+                     grown_neighbor_domain_box.grow(POLOIDAL_DIR, max_offset);
+                     Box neighbor_overlap = grown_neighbor_domain_box & grown_remapped_box;
                      if ( neighbor_overlap.ok() ) {
-                        neighbor_overlap.grow(POLOIDAL_DIR, max_offset);
                         num_neighbors_intersected++;
                         if ( num_neighbors_intersected == 1 ) {
                            new_box0 = neighbor_overlap;
@@ -3445,7 +3457,7 @@ PhaseGeom::getShearedGhostBoxLayouts()
          }
       }
    }
-   
+
    for (int part=0; part<m_shearedGhostBLLoEnd.size(); ++part) {
       m_shearedGhostBLLoEnd[part].closeNoSort();
       m_shearedGhostBLHiEnd[part].closeNoSort();

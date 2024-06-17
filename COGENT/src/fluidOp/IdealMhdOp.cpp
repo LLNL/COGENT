@@ -3429,9 +3429,12 @@ void IdealMhdOp::initialize( CFGVars&    a_species,
 
 }
 
-bool IdealMhdOp::isInitializationConstrained(const FluidSpecies& a_fluid_phys)
+bool IdealMhdOp::isInitializationConstrained(const FluidSpecies& a_fluid_phys,
+					     const int           a_step)
 {
-   return true;
+   bool is_constrained = (a_step == 0) ? true : false;
+
+   return is_constrained;
 }
 
 void IdealMhdOp::applyInitializationConstraints(FluidSpeciesPtrVect&               a_fluid_comp,

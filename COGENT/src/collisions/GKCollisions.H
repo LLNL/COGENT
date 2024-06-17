@@ -9,6 +9,7 @@
 #include "AppCtxt.H"
 
 #include "Krook.H"
+#include "BGK.H"
 #include "Lorentz.H"
 #include "Linearized.H"
 #include "LinearizedUnlike.H"
@@ -22,6 +23,7 @@
 #include "NamespaceHeader.H"
 
 #define _CLS_KROOK_              "Krook"
+#define _CLS_BGK_                "BGK"
 #define _CLS_LORENTZ_            "Lorentz"
 #define _CLS_LINEARIZED_         "Linearized"
 #define _CLS_LINEARIZEDUNLIKE_   "LinearizedUnlike"

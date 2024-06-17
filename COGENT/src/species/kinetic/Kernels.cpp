@@ -236,8 +236,9 @@ GuidingCenterVelocityKernel<FArrayBox>::eval(LevelData<FArrayBox>&  a_result,
   const LevelData<FArrayBox>& dfn = a_kinetic_species.distributionFunction();
   const DisjointBoxLayout & grids = dfn.getBoxes();
 
-  //Compute cell-centered velocity configurational components                                                                                                                                                     
-  LevelData<FArrayBox> cellVelCFG(grids, CFG_DIM, IntVect::Unit);
+  //Compute cell-centered velocity configurational components
+  IntVect ghosts = a_result.ghostVect();
+  LevelData<FArrayBox> cellVelCFG(grids, CFG_DIM, ghosts);
   computeVelCfgComp( cellVelCFG, phase_geom, m_EM_fields, m_velocity_option);
 
   DataIterator dit = dfn.dataIterator();

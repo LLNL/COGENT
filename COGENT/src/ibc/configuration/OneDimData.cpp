@@ -198,6 +198,12 @@ void OneDimData::createInterpolationRBF()
      string line;
      ifstream datafile(m_data_file.c_str());
         
+     if( !datafile.is_open() ){
+        stringstream error_msg;
+        error_msg << "OneDimData::createInterpolationRBF(): File " << m_data_file.c_str() << " not found";
+        MayDay::Error(error_msg.str().c_str());
+     }
+        
      while (std::getline(datafile, line))  ++npoints;
 
         m_data_npoints = npoints;
@@ -261,6 +267,12 @@ void OneDimData::createInterpolationMBA()
         int npoints = 0;
         string line;
         ifstream datafile(m_data_file.c_str());
+
+        if( !datafile.is_open() ){
+           stringstream error_msg;
+           error_msg << "OneDimData::createInterpolationMBA(): File " << m_data_file.c_str() << " not found";
+           MayDay::Error(error_msg.str().c_str());
+        }
         
         while (std::getline(datafile, line)) ++npoints;
         

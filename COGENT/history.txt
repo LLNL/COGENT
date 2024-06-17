@@ -1,4 +1,63 @@
 ------------------------------------------------------------------------
+r1949 | debo | 2024-06-17 12:56:56 -0700 (Mon, 17 Jun 2024) | 1 line
+
+Updated PETSc initial setup to fix seg faults caused by changes in PETSc defaults
+------------------------------------------------------------------------
+r1948 | mdorf | 2024-04-18 21:48:01 -0700 (Thu, 18 Apr 2024) | 1 line
+
+Added functionality to restart simulations for the case where initial dfn is used in the vorticity models
+------------------------------------------------------------------------
+r1947 | mdorr | 2024-03-26 10:56:59 -0700 (Tue, 26 Mar 2024) | 3 lines
+
+Removing an erroneous assertion check.
+
+
+------------------------------------------------------------------------
+r1946 | mdorf | 2024-03-25 12:06:18 -0700 (Mon, 25 Mar 2024) | 1 line
+
+Fixed a bug that was accidentally introduced in r1945
+------------------------------------------------------------------------
+r1945 | mdorf | 2024-03-25 11:47:06 -0700 (Mon, 25 Mar 2024) | 1 line
+
+Improved the BGK collision model to conserve three moments
+------------------------------------------------------------------------
+r1944 | mdorr | 2024-02-21 22:31:07 -0800 (Wed, 21 Feb 2024) | 3 lines
+
+Adding ghost box initialization as empty and adding an assert for non-empty adjacent block intersection in PhaseGeom::getShearedGhostBoxLayouts()
+
+
+------------------------------------------------------------------------
+r1943 | mdorr | 2024-02-20 19:07:38 -0800 (Tue, 20 Feb 2024) | 5 lines
+
+Modified the construction of the ghost BoxLayouts in PhaseGeom::getShearedGhostBoxLayouts() to fix a bug that can sometimes occur in single null geometries depending upon the box decomposition.
+
+Added checks in	OneDimData::createInterpolationRBF() and OneDimData::createInterpolationMBA() to make sure that the file being read actually exists.
+
+
+------------------------------------------------------------------------
+r1942 | mdorr | 2024-02-16 23:27:56 -0800 (Fri, 16 Feb 2024) | 4 lines
+
+Fixing a bug in SpaceUtils::MaxNorm and adding SpaceUtils::L2Norm.  Replacing all other local MaxNorm and L2Norm implementations in the code by the SpaceUtils versions
+
+
+
+------------------------------------------------------------------------
+r1941 | mdorf | 2024-02-12 17:39:23 -0800 (Mon, 12 Feb 2024) | 1 line
+
+Fixed a bug in the radial force balance diagnostics
+------------------------------------------------------------------------
+r1940 | mdorf | 2024-02-02 11:36:26 -0800 (Fri, 02 Feb 2024) | 1 line
+
+Added the BGK collisional model
+------------------------------------------------------------------------
+r1939 | debo | 2024-01-22 17:50:15 -0800 (Mon, 22 Jan 2024) | 1 line
+
+Removing checkpoint argument for preSolutionOpEval since it is called with only one checkpoint value
+------------------------------------------------------------------------
+r1938 | mdorf | 2024-01-12 11:49:39 -0800 (Fri, 12 Jan 2024) | 1 line
+
+Improved the optimized time-integration scheme for the vorticity model.
+------------------------------------------------------------------------
 r1937 | mdorf | 2024-01-02 17:26:09 -0800 (Tue, 02 Jan 2024) | 1 line
 
 Moved creation of the m_velocity member of the KineticSpecies class into the KineticSpecies::computeVelocity() function in order to reduce memory allocation in the BC classes

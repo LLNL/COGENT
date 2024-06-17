@@ -24,7 +24,7 @@
 template <class AppVec, class System>
 class PetscTimeIntegrator : public Simulation<AppVec,System>
 {
-  public: 
+  public:
     PetscTimeIntegrator<AppVec,System>();
     ~PetscTimeIntegrator<AppVec,System>();
 
@@ -44,12 +44,12 @@ class PetscTimeIntegrator : public Simulation<AppVec,System>
     inline Real       getTime()                   { return m_cur_time; }
     inline Real       getOldTime()                { return m_old_time; }
     inline Real       getTimeStep()               { return m_dt; }
-    inline int        getStartStep()              { return m_start_step; } 
+    inline int        getStartStep()              { return m_start_step; }
     inline Real       getEpsilonJFNK()            { return m_epsilon_jfnk; }
     inline bool       isLinear()                  { return m_is_linear; }
 
-    inline void    setLastPlot  (int a_int) { m_last_plot = a_int; }      
-    inline void    setLastChkpt (int a_int) { m_last_checkpoint = a_int; }      
+    inline void    setLastPlot  (int a_int) { m_last_plot = a_int; }
+    inline void    setLastChkpt (int a_int) { m_last_checkpoint = a_int; }
 
     inline void setTime           (Real a_t)    { m_cur_time = a_t; }
     inline void setOldTime        (Real a_t)    { m_old_time = a_t; }
@@ -112,13 +112,13 @@ class PetscTimeIntegrator : public Simulation<AppVec,System>
     clock_t m_main_start, m_solve_start, m_main_end, m_solve_end;
 };
 
-static PetscErrorCode RHSFunction(  TS        ts, 
-                                    PetscReal t, 
-                                    Vec       Y, 
-                                    Vec       F, 
+static PetscErrorCode RHSFunction(  TS        ts,
+                                    PetscReal t,
+                                    Vec       Y,
+                                    Vec       F,
                                     void*     ctxt  )
 {
-  PetscTimeIntegrator<ODEVector,AppCtxt> *context 
+  PetscTimeIntegrator<ODEVector,AppCtxt> *context
       = (PetscTimeIntegrator<ODEVector,AppCtxt>*) ctxt;
   AppCtxt* system = context->getSystem();
 
@@ -130,13 +130,13 @@ static PetscErrorCode RHSFunction(  TS        ts,
   return 0;
 }
 
-static PetscErrorCode RHSFunctionIMEX(  TS        ts, 
-                                        PetscReal t, 
-                                        Vec       Y, 
-                                        Vec       F, 
+static PetscErrorCode RHSFunctionIMEX(  TS        ts,
+                                        PetscReal t,
+                                        Vec       Y,
+                                        Vec       F,
                                         void*     ctxt )
 {
-  PetscTimeIntegrator<ODEVector,AppCtxt> *context 
+  PetscTimeIntegrator<ODEVector,AppCtxt> *context
       = (PetscTimeIntegrator<ODEVector,AppCtxt>*) ctxt;
   AppCtxt* system = context->getSystem();
 
@@ -148,14 +148,14 @@ static PetscErrorCode RHSFunctionIMEX(  TS        ts,
   return 0;
 }
 
-static PetscErrorCode IFunctionIMEX(  TS        ts, 
-                                      PetscReal t, 
-                                      Vec       Y, 
-                                      Vec       Ydot, 
-                                      Vec       F, 
+static PetscErrorCode IFunctionIMEX(  TS        ts,
+                                      PetscReal t,
+                                      Vec       Y,
+                                      Vec       Ydot,
+                                      Vec       F,
                                       void*     ctxt  )
 {
-  PetscTimeIntegrator<ODEVector,AppCtxt> *context 
+  PetscTimeIntegrator<ODEVector,AppCtxt> *context
       = (PetscTimeIntegrator<ODEVector,AppCtxt>*) ctxt;
   AppCtxt* system = context->getSystem();
 
@@ -176,16 +176,16 @@ static PetscErrorCode IFunctionIMEX(  TS        ts,
   return 0;
 }
 
-static PetscErrorCode IJacobianIMEX(  TS        ts, 
-                                      PetscReal t, 
-                                      Vec       Y, 
-                                      Vec       Ydot, 
+static PetscErrorCode IJacobianIMEX(  TS        ts,
+                                      PetscReal t,
+                                      Vec       Y,
+                                      Vec       Ydot,
                                       PetscReal a,
-                                      Mat       A, 
-                                      Mat       B, 
+                                      Mat       A,
+                                      Mat       B,
                                       void*     ctxt  )
 {
-  PetscTimeIntegrator<ODEVector,AppCtxt> *context 
+  PetscTimeIntegrator<ODEVector,AppCtxt> *context
       = (PetscTimeIntegrator<ODEVector,AppCtxt>*) ctxt;
 
   int cur_step, stage = 0;
@@ -206,8 +206,8 @@ static PetscErrorCode IJacobianIMEX(  TS        ts,
   return 0;
 }
 
-static PetscErrorCode JacobianFunctionIMEX( Mat A, 
-                                            Vec Y, 
+static PetscErrorCode JacobianFunctionIMEX( Mat A,
+                                            Vec Y,
                                             Vec F )
 {
   PetscTimeIntegrator<ODEVector,AppCtxt> *context;
@@ -237,18 +237,18 @@ static PetscErrorCode JacobianFunctionIMEX( Mat A,
     context->m_U *= epsilon;
     context->m_U += context->m_U0;
 
-    system->preOpEval(  context->m_U, 
-                        context->getTime(), 
+    system->preOpEval(  context->m_U,
+                        context->getTime(),
                         chkpt_naive );
-    system->implicitOpImEx( context->m_F, 
-                            context->getTime(), 
+    system->implicitOpImEx( context->m_F,
+                            context->getTime(),
                             context->m_U );
     context->m_F -= context->m_F0;
 
     context->cpAppVecToPetsc( F, context->m_F );
-    VecAXPBY( F, 
-              (PetscReal) context->getShift(), 
-              (-1.0/epsilon), 
+    VecAXPBY( F,
+              (PetscReal) context->getShift(),
+              (-1.0/epsilon),
               Y );
   }
 
@@ -293,10 +293,10 @@ static PetscErrorCode PreTimeStep(TS ts)
   TSGetTimeStep( ts, &dt );
   TSGetStepNumber( ts, &cur_step );
 
-  TSType ts_type; 
+  TSType ts_type;
   TSGetType( ts, &ts_type );
 
-  Vec Y; 
+  Vec Y;
   TSGetSolution( ts, &Y );
 
   context->cpAppVecFromPetsc( Y, context->m_U );
@@ -310,7 +310,7 @@ static PetscErrorCode PreTimeStep(TS ts)
   if ((!strcmp(ts_adapt_type, TSADAPTNONE) || (cur_step == 0))) {
 
     if (context->getCFL() > 0) {
-  
+
       Real dt_stable = 0.0;
       if (!strcmp(ts_type, TSARKIMEX)) {
         dt_stable = system->stableDt( cur_step, ti_imex );
@@ -320,13 +320,13 @@ static PetscErrorCode PreTimeStep(TS ts)
         MayDay::Error("PETSc interface: ts_type not supported!");
       }
       CH_assert( dt_stable > 1.0e-16 );
-  
+
       TSSetTimeStep( ts, dt_stable*context->getCFL() );
-  
+
     } else if (dt <= 0.0) {
-  
+
       MayDay::Error("PETSc interface: non-positive dt!");
-  
+
     }
 
   }
@@ -361,7 +361,7 @@ static PetscErrorCode PostTimeStep(TS ts)
 
   AppCtxt* system = context->getSystem();
 
-  int cur_step, 
+  int cur_step,
       verbosity = context->getVerbosity(),
       plot_interval = context->getPlotInterval();
   Real cur_time, dt;
@@ -375,19 +375,19 @@ static PetscErrorCode PostTimeStep(TS ts)
   context->setTimeStepNumber( cur_step );
   context->setTimeStep( dt );
 
-  Vec Y; 
+  Vec Y;
   TSGetSolution( ts, &Y );
 
   context->cpAppVecFromPetsc( Y, context->m_U );
-  system->postTimeStep( context->m_U, 
-                        cur_step, 
-                        dt, 
+  system->postTimeStep( context->m_U,
+                        cur_step,
+                        dt,
                         cur_time );
 
   if (verbosity >= 1) {
     system->printDiagnostics();
     if(procID()==0) {
-      printf("Step %d completed, simulation time is %f, dt is %lf, iteration wctime=%f (seconds).\n", 
+      printf("Step %d completed, simulation time is %f, dt is %lf, iteration wctime=%f (seconds).\n",
               cur_step, cur_time, dt, iter_walltime_g);
       printf("----\n");
     }
@@ -408,9 +408,9 @@ static PetscErrorCode PostTimeStep(TS ts)
   return 0;
 }
 
-static PetscErrorCode PostTimeStage(  TS        ts, 
-                                      PetscReal stagetime, 
-                                      PetscInt  stageindex, 
+static PetscErrorCode PostTimeStage(  TS        ts,
+                                      PetscReal stagetime,
+                                      PetscInt  stageindex,
                                       Vec* Y )
 {
   PetscTimeIntegrator<ODEVector,AppCtxt> *context;
@@ -434,9 +434,9 @@ static PetscErrorCode PostTimeStage(  TS        ts,
     stage_number++;
   } else {
     if (!procID()) {
-      std::cout << "Error in PostTimeStage() in src/driver/PETScTimeIntegration.H: cur_step=" 
-                << cur_step 
-                << ", step_number=" 
+      std::cout << "Error in PostTimeStage() in src/driver/PETScTimeIntegration.H: cur_step="
+                << cur_step
+                << ", step_number="
                 << step_number << "."
                 << " Something has caused stage-counting to go haywire.\n";
     }
@@ -459,16 +459,16 @@ inline void PetscTimeIntegrator<AppVec,System>::writeHistFile(bool flag)
   m_system->writeFieldHistory(m_cur_step, m_cur_time,flag);
 }
 
-template <class AppVec, class System> 
+template <class AppVec, class System>
 inline void PetscTimeIntegrator<AppVec,System>::writeCheckpointFile()
 {
-   m_system->writeCheckpointFile( m_checkpoint_prefix, 
-                                  m_cur_step, 
-                                  m_cur_time, 
+   m_system->writeCheckpointFile( m_checkpoint_prefix,
+                                  m_cur_step,
+                                  m_cur_time,
                                   m_dt );
 }
 
-template <class AppVec, class System> 
+template <class AppVec, class System>
 inline void PetscTimeIntegrator<AppVec,System>::writePlotFile()
 {
 #ifdef CH_USE_HDF5
@@ -522,16 +522,16 @@ void PetscTimeIntegrator<AppVec,System>::loadRestartFile( ParmParse& a_ppsim )
 {
    std::string restartFile;
    a_ppsim.query( "restart_file", restartFile );
-   m_system->readCheckpointFile(  restartFile, 
-                                  m_cur_step, 
-                                  m_cur_time, 
+   m_system->readCheckpointFile(  restartFile,
+                                  m_cur_step,
+                                  m_cur_time,
                                   m_dt );
    m_start_step = m_cur_step;
 }
 
 template <class AppVec, class System>
 void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
-                                                    System* const a_sys ) 
+                                                    System* const a_sys )
 {
   m_system = a_sys;
 
@@ -561,7 +561,7 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
   writeHistFile(true);
 
   m_is_linear = m_system->isLinear();
-  
+
   /* create and initialize the PETSc solution vector */
   m_local_size = m_system->getVectorSize();
   VecCreate( MPI_COMM_WORLD, &m_Y );
@@ -612,9 +612,9 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
     }
 
     /* default: right preconditioning */
-    SNES  snes; 
+    SNES  snes;
     TSGetSNES( m_ts, &snes );
-    KSP ksp;  
+    KSP ksp;
     SNESGetKSP( snes, &ksp );
     KSPSetPCSide(ksp, PC_RIGHT);
 
@@ -637,7 +637,7 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
   /* set initial time step if fixed dt or restart dt */
   if (m_dt > 0) TSSetTimeStep( m_ts, m_dt );
 
-  TSAdapt adapt; 
+  TSAdapt adapt;
   TSGetAdapt( m_ts,&adapt );
   TSAdaptSetType( adapt, TSADAPTNONE );
 
@@ -650,8 +650,8 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
   TSSetFromOptions( m_ts );
 
   PetscOptionsGetReal(NULL,NULL,"-jfnk_epsilon",&m_epsilon_jfnk,NULL);
-  
-  TSType ts_type; 
+
+  TSType ts_type;
   TSGetType( m_ts, &ts_type );
 
   if (!strcmp(ts_type,TSARKIMEX)) {
@@ -674,7 +674,7 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
     MatSetUp(m_Jac);
     m_is_Jac_allocated = true;
 
-    SNES  snes; 
+    SNES  snes;
     TSGetSNES( m_ts, &snes );
     if (m_is_linear) {
       SNESSetType( snes, SNESKSPONLY );
@@ -684,14 +684,35 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
     TSSetIJacobian( m_ts, m_Jac, m_Jac, IJacobianIMEX, this );
 
     /* Set PC (preconditioner) to PCSHELL */
-    KSP ksp;  
+    KSP ksp;
     SNESGetKSP( snes, &ksp );
-    PC pc;   
+    PC pc;
     KSPGetPC( ksp, &pc );
     PCType pc_type;
     PCGetType( pc, &pc_type );
 
-    if (!strcmp(pc_type, PCNONE)) {
+    if (!pc_type) {
+
+      if (!procID()) {
+        printf("PETSc options: using COGENT's preconditioner through PCSHELL.\n");
+        printf("\n");
+      }
+
+      PCSetType( pc, PCSHELL );
+      PCShellSetApply(pc, PCFunctionIMEX);
+      PCShellSetContext(pc, this);
+      m_use_PC = true;
+
+      m_preCond = new MultiPhysicsPreconditioner<AppVec,System>;
+      m_preCond->define(  m_U,
+                          (void*) m_system,
+                          std::string("ARK.PC"),
+                          std::string("ark_pc"),
+                          true );
+      m_preCond->setJFNKEps(m_epsilon_jfnk);
+      m_preCond->setIsLinear(m_is_linear);
+
+    } else if (!strcmp(pc_type, PCNONE)) {
 
       if (!procID()) {
         printf("PETSc Interface: pc_type is set to \"none\" in ");
@@ -711,7 +732,7 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
       PCShellSetApply(pc, PCFunctionIMEX);
       PCShellSetContext(pc, this);
       m_use_PC = true;
-  
+
       m_preCond = new MultiPhysicsPreconditioner<AppVec,System>;
       m_preCond->define(  m_U,
                           (void*) m_system,
@@ -740,7 +761,7 @@ void PetscTimeIntegrator<AppVec,System>::initialize(ParmParse&    a_pp,
 }
 
 template <class AppVec, class System>
-void PetscTimeIntegrator<AppVec,System>::cpAppVecToPetsc( Vec&          a_Y, 
+void PetscTimeIntegrator<AppVec,System>::cpAppVecToPetsc( Vec&          a_Y,
                                                           const AppVec& a_U )
 {
   PetscErrorCode  ierr;
@@ -752,7 +773,7 @@ void PetscTimeIntegrator<AppVec,System>::cpAppVecToPetsc( Vec&          a_Y,
 }
 
 template <class AppVec, class System>
-void PetscTimeIntegrator<AppVec,System>::cpAppVecFromPetsc( const Vec&  a_Y, 
+void PetscTimeIntegrator<AppVec,System>::cpAppVecFromPetsc( const Vec&  a_Y,
                                                             AppVec&     a_U )
 {
   PetscErrorCode    ierr;

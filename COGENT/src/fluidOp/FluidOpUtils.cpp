@@ -369,7 +369,12 @@ void FluidOpUtils::computeExBAdvection(LevelData<FArrayBox>& a_ExB_advection,
      ghosts = a_soln.ghostVect();
    }
    else {
-     ghosts = 2*IntVect::Unit;
+     if (m_geometry.secondOrder()) {
+       ghosts = 2*IntVect::Unit;
+     }
+     else {
+       ghosts = 3*IntVect::Unit;
+     }
    }
    LevelData<FArrayBox> soln_with_ghosts(grids, 1, ghosts);
 
@@ -378,9 +383,17 @@ void FluidOpUtils::computeExBAdvection(LevelData<FArrayBox>& a_ExB_advection,
    }
 
    if (a_extrap_to_ghosts) {
-     // Use 4th order here, because we need at least two ghost cells
-     // for most of our advection schemes (e.g., uw3)
-     m_geometry.extrapolateToPhysicalGhosts(soln_with_ghosts, true);     
+     if (m_geometry.secondOrder()) {
+       // Use 4th order here, because we need at least two ghost cells
+       // for most of our advection schemes (e.g., uw3)
+       m_geometry.extrapolateToPhysicalGhosts(soln_with_ghosts, true);
+     }
+     else {
+       // For 4th order we need information in corner ghosts.
+       // Presently use second-order extrapolation into all ghosts
+       m_geometry.fillInternalGhosts(soln_with_ghosts);
+       m_geometry.extrapolateAtPhysicalBoundaries(soln_with_ghosts, 4, 3);
+     }
    }
    
    LevelData<FluxBox> soln_face(grids, 1, IntVect::Unit);

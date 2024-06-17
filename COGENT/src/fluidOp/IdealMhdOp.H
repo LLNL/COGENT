@@ -143,7 +143,8 @@ public:
    virtual void initialize( CFGVars&      a_species,
                             const double  a_time );
 
-   virtual bool isInitializationConstrained(const FluidSpecies& fluid_phys);
+   virtual bool isInitializationConstrained(const FluidSpecies& fluid_phys,
+					    const int           step);
    
    virtual void applyInitializationConstraints(FluidSpeciesPtrVect&               fluid_comp,
                                                FluidSpeciesPtrVect&               fluid_phys,

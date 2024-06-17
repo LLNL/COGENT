@@ -100,7 +100,7 @@ public:
       m_fluid_ghosts(4),
       m_fixed_efield(false),
       m_no_efield(false),
-      m_transport_model_on(false),     
+      m_transport_model_on(false),
       m_enforce_quasineutrality(false),
       m_step_const_kin_coeff_fluidop(false),
       m_enable_ti_optimizations(true),
@@ -132,7 +132,7 @@ public:
       m_count_fluids(0),
       m_count_scalars(0),
       m_count_neutrals(0),
-      m_verbosity(0) {;}   
+      m_verbosity(0) {;}
 
    /// Destructor.
    /**
@@ -175,7 +175,7 @@ public:
    {
       return m_time_scale_fluids;
    }
-   
+
    /// Returns the time scale for the scalar components.
    /**
     * Returns the time scale for the scalar components.
@@ -184,7 +184,7 @@ public:
    {
       return m_time_scale_scalars;
    }
-   
+
    /// Returns the neutrals time scale.
    /**
     * Returns the neutrals time scale.
@@ -216,37 +216,38 @@ public:
     * @param[in] time current time.
     * @param[in] stage  stage number
     */
-   
+
    void define( const GKState&, const GKSystemParameters& );
    void defineShell( const GKState&, const GKSystemParameters& );
 
    bool isDefined() const { return m_is_defined; }
-   
-   void initializeElectricField(  const GKState& state, 
-                                  const int cur_step, 
+
+   void initializeElectricField(  const GKState& state,
+                                  const int cur_step,
                                   const double cur_time );
-   void initializeElectricFieldShell( const GKState& state, 
-                                      const int cur_step, 
+   void initializeElectricFieldShell( const GKState& state,
+                                      const int cur_step,
                                       const double cur_time );
- 
+
    void initializeKineticSpeciesPhysical( KineticSpeciesPtrVect&,
                                           const double );
 
    void initializeFluidSpeciesPhysical( CFG::FluidSpeciesPtrVect&,
                                         const double );
 
-   void applyFluidInitializationConstraints(CFG::FluidSpeciesPtrVect&,
-                                            CFG::FluidSpeciesPtrVect&,
+   void applyFluidInitializationConstraints(GKState&,
+                                            GKState&,
+                                            const double,
                                             const double );
-   
+
    inline
-   void initializeState(  GKState& a_state, 
-                          const int a_cur_step, 
+   void initializeState(  GKState& a_state,
+                          const int a_cur_step,
                           const Real a_time )
    {
       CH_TIME("GKOps::initializeState()");
       if ( a_cur_step > 0 ) {
-         // If restarting the old vorticity model, 
+         // If restarting the old vorticity model,
          // then the potential has already been set
          m_initial_conditions->initializeSystem( a_state, a_time );
       }
@@ -262,14 +263,14 @@ public:
    {
       m_initial_conditions->initializePotentialField( m_initial_phi, a_time );
    }
-   
+
    void initializeTI (  const int,
                         const Real,
-                        GKRHSData&, 
+                        GKRHSData&,
                         const GKState&,
                         const GKState&  );
-      
-   inline 
+
+   inline
    void ARKFirstStageExplicit( const bool a_flag ) { m_ark_first_stage_explicit = a_flag; }
 
    void preTimeStep  (const int,const Real,const GKState&,const GKState&);
@@ -283,7 +284,7 @@ public:
    inline bool trivialSolutionOp() const { return m_trivial_solution_op; }
 
    void preOpEval( const GKState&, const Real, const Checkpoint&);
-   void preSolutionOpEval( const GKState&, const Real, const Checkpoint&);
+   void preSolutionOpEval( const GKState&, const Real);
 
    void explicitOp( GKRHSData&, const Real, const GKState&);
    void explicitOpImEx( GKRHSData&, const Real, const GKState&);
@@ -307,7 +308,7 @@ public:
    void updateMultiPhysicsPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&,
                               const GKState&,
                               const Real,
-                              const int, 
+                              const int,
                               const int,
                               const Real,
                               const bool );
@@ -317,8 +318,8 @@ public:
    void solveFluidOpPCImEx( GKRHSData&, const GKState&, const std::string&, int a_idx=-1);
 
    void solveVlasovOpPCImEx(  Preconditioner<ODEVector,AppCtxt>* const,
-                              GKRHSData&, 
-                              const GKState&, 
+                              GKRHSData&,
+                              const GKState&,
                               int a_idx=-1 );
 
    void divideJ( const KineticSpeciesPtrVect& soln_mapped,
@@ -387,18 +388,18 @@ public:
    const CFG::EMFields& getEMFields() const {return m_EM_fields;}
 
    const CFG::PhiOps& getPhiOps() const {return *m_phi_ops;}
-  
+
    void getEField( CFG::LevelData<CFG::FArrayBox>& ) const;
    void getEField( CFG::LevelData<CFG::FluxBox>& ) const;
    void getEField( LevelData<FluxBox>& ) const;
 
    void setupFieldHistories( ParmParse& a_ppsim );
 
-   void writeFieldHistory(  int cur_step, 
-                            double cur_time, 
+   void writeFieldHistory(  int cur_step,
+                            double cur_time,
                             bool startup_flag,
                             const std::string& prefix = "");
-  
+
       /// Write checkpoint file.
       /**
        * Write checkpoint data to an output HDF5 file.
@@ -406,7 +407,7 @@ public:
        * @param[in] handle a reference to an HDF5 plot file.
        */
    void writeCheckpointFile( HDF5Handle& handle ) const;
-   
+
       /// Read checkpoint file.
       /**
        * Read checkpoint data from an output HDF5 file and reinitialize.
@@ -459,7 +460,7 @@ public:
    inline const CFG::GKFluidOp* fluidOp() const { return m_fluidOp; }
 
 private:
-   
+
    /// Parse parameters.
    /**
     * Private method to obtain control parameters from "gksystem" section
@@ -475,11 +476,11 @@ private:
    void updatePhysicalSpeciesVector( const KineticSpeciesPtrVect&  in,
                                      const double                  time,
                                      const bool                    fill_ghosts = true);
-   
+
    void updatePhysicalSpeciesVector( const CFG::FluidSpeciesPtrVect&  in,
                                      const double                     time,
                                      const bool                       fill_ghosts = true);
-   
+
    void applyVlasovOperator( GKRHSData&                    rhs,
                              const KineticSpeciesPtrVect&  kinetic_phys,
                              const opType                  op_type,
@@ -510,7 +511,7 @@ private:
                                const KineticSpeciesPtrVect&    kinetic_species_phys,
                                const CFG::FluidSpeciesPtrVect& fluid_species,
                                const Real&                     time );
-    
+
 
    void applyTransportOperator( KineticSpeciesPtrVect&       rhs,
                                 const KineticSpeciesPtrVect& soln,
@@ -523,7 +524,7 @@ private:
                             const CFG::EMFields&                 EM_fields,
                             const opType                         op_type,
                             const Real&                          time);
-   
+
    void applyScalarOperator( GKRHSData&                           rhs,
                              const KineticSpeciesPtrVect&         kinetic_species,
                              const CFG::FluidSpeciesPtrVect&      fluid_species,
@@ -549,16 +550,16 @@ private:
 
    void enforceQuasiNeutrality( KineticSpeciesPtrVect&          species,
                                 CFG::LevelData<CFG::FArrayBox>& potential ) const;
-   
+
    void computeEField( CFG::LevelData<CFG::FluxBox>& ) const;
 
    inline
    void computeQuasiNeutralElectronDensity(
       CFG::LevelData<CFG::FArrayBox>&       a_quasineutral_density,
       CFG::LevelData<CFG::FArrayBox>&       a_potential,
-      CFG::EllipticOpBC&                    a_bc, 
+      CFG::EllipticOpBC&                    a_bc,
       const CFG::LevelData<CFG::FArrayBox>& a_ion_density) const;
-   
+
    inline
    void renormalizeElectronDistributionFunction(
       KineticSpecies&                 a_electron_species,
@@ -591,10 +592,10 @@ private:
    RefCountedPtr<PhaseGeom>       m_phase_geometry;
 
    bool m_is_defined;
-   
+
    int  m_kinetic_ghosts;
    int  m_fluid_ghosts;
-      
+
    bool m_consistent_potential_bcs;
    bool m_use_vlasov_ampere_bcs;
    bool m_ampere_post_step_update;
@@ -610,7 +611,7 @@ private:
    bool m_old_vorticity_model;
    bool m_EM_effects;
    bool m_skip_efield_stage_update;
-   
+
    /* The following 4 flags are relevant only for IMEX time integration */
    bool m_transport_imex_implicit;
    bool m_neutrals_imex_implicit;
@@ -667,9 +668,9 @@ private:
       int cur_entry; //index into fieldvars and timevals
       string fieldname; // e.g., "potential"
    } FieldHist;
-   
+
    Vector<FieldHist> m_fieldHistLists; // for saving all histories internally
-   
+
    /* Function counters */
    int m_count_vlasov;
    int m_count_collision;

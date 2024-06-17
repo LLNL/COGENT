@@ -6184,10 +6184,10 @@ MagGeom::convertToFSProjections(LevelData<FArrayBox>& a_vector) const
    LevelData<FArrayBox> theta_comp(grids, 1, a_vector.ghostVect());
    computePoloidalProjection(theta_comp, a_vector);
 
-#if CFG_DIM == 3
    LevelData<FArrayBox> phi_comp(grids, 1, a_vector.ghostVect());
-   computeToroidalProjection(phi_comp, a_vector);
-#endif
+   if (a_vector.nComp()==3) {
+     computeToroidalProjection(phi_comp, a_vector);
+   }
    
    for (DataIterator dit(grids); dit.ok(); ++dit) {
      
@@ -6201,10 +6201,10 @@ MagGeom::convertToFSProjections(LevelData<FArrayBox>& a_vector) const
          //The last component is always theta
          a_vector[dit].copy(theta_comp[dit], 0, a_vector.nComp()-1, 1);
       
-         //Need to update the second component only for 3D case
-#if CFG_DIM == 3
-         a_vector[dit].copy(phi_comp[dit], 0, TOROIDAL_DIR, 1);
-#endif
+         //Update the toroidal component for a 3-component vector
+	 if (a_vector.nComp()==3) {
+	   a_vector[dit].copy(phi_comp[dit], 0, 1, 1);
+	 }
       }
    }
 }
@@ -6225,10 +6225,10 @@ MagGeom::convertToFSProjections(LevelData<FluxBox>& a_vector) const
    LevelData<FluxBox> theta_comp(grids, 1, a_vector.ghostVect());
    computePoloidalProjection(theta_comp, a_vector);
 
-#if CFG_DIM == 3
    LevelData<FluxBox> phi_comp(grids, 1, a_vector.ghostVect());
-   computeToroidalProjection(phi_comp, a_vector);
-#endif
+   if (a_vector.nComp()==3) {
+     computeToroidalProjection(phi_comp, a_vector);
+   }
    
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       const MagBlockCoordSys& block_coord_sys = getBlockCoordSys(m_gridsFull[dit]);
@@ -6241,10 +6241,10 @@ MagGeom::convertToFSProjections(LevelData<FluxBox>& a_vector) const
          //The last component is always theta
          a_vector[dit].copy(theta_comp[dit], 0, a_vector.nComp()-1, 1);
       
-         //Need to update the second component only for 3D case
-#if CFG_DIM == 3
-         a_vector[dit].copy(phi_comp[dit], 0, TOROIDAL_DIR, 1);
-#endif
+	 //Update the toroidal component for a 3-component vector
+	 if (a_vector.nComp()==3) {
+	   a_vector[dit].copy(phi_comp[dit], 0, 1, 1);
+	 }
       }
    }
 }

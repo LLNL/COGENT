@@ -78,8 +78,11 @@ GKCollisions::GKCollisions( const int a_verbose )
             if (cls_type == _CLS_KROOK_) {
                cls = new Krook( prefix, m_verbose );
             }
+            else if (cls_type == _CLS_BGK_) {
+               cls = new BGK( prefix, m_verbose );
+            }
             else if (cls_type == _CLS_LORENTZ_) {
-	       cls = new Lorentz( prefix, m_verbose );
+               cls = new Lorentz( prefix, m_verbose );
             }
             else if (cls_type == _CLS_LINEARIZED_) {
                cls = new Linearized( prefix, m_verbose );

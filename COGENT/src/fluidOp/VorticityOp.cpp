@@ -59,7 +59,8 @@ VorticityOp::VorticityOp( const ParmParse&    a_pp,
      m_update_pc_freq_e(1),
      m_update_pc_freq_i(1),
      m_update_pc_skip_stage_e(false),
-     m_update_pc_skip_stage_i(false)
+     m_update_pc_skip_stage_i(false),
+     m_apply_initialization_constraints(false)
 {
    
    m_num_pc_rhs = 0;
@@ -339,6 +340,40 @@ void VorticityOp::accumulateExplicitRHS( FluidSpeciesPtrVect&               a_rh
 
    const DisjointBoxLayout& grids = m_geometry.gridsFull();
 
+   // Add divergence of the perpendicular ion current
+   // N.B. if we ever decide to experiment with placing divJperp,i into implicitOpImEx
+   // we need to make sure that kinetic ghosts are filled at chkpt_stage_func_0
+   // default optimization implementation does not fill kinetic ghosts at chkpt_stage_func_0
+   computeDivPerpIonMagCurrentDensity(m_divJperp_mag_i, a_EM_fields, a_kinetic_species_phys, a_time);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+     rhs_data[dit] -= m_divJperp_mag_i[dit];
+   }
+   
+   // Add divergence of the perpendicular electron current
+   if (!m_ExB_current_model) {
+      //1. We do not yet include pol density correct to pressure in the new vorticity model
+      //2. EXB current model is unstable if included in explictOp
+      //3. m_ion_charge density used here comes from the previous call to preOpEval.
+      //   For the optimzied time integration that call corresponds to chkpt_stage_func_0,
+      //   that is prior to the implicit Newton solve.
+      //   This is fine for the case where the evolution of dfn is explicit and thus density
+      //   does not change within the implicit stage solve.
+      CH_assert(!m_include_pol_den_correction_to_pe);
+      LevelData<FArrayBox> zero(grids, 1, IntVect::Zero);
+      setZero(zero);
+      computeDivPerpElectronMagCurrentDensity(m_divJperp_mag_e, m_ion_charge_density, zero, a_time);
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         rhs_data[dit] -= m_divJperp_mag_e[dit];
+      }
+   }
+
+   //Subtract initial value of the negative divJperp
+   if (m_apply_initialization_constraints) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         rhs_data[dit].minus(m_negative_divJperp_0[dit]);
+      }
+   }
+   
    // Add RS and stabilization terms
    if (m_minimal_implicit_model == true) {
 
@@ -405,21 +440,24 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
       rhs_data[dit] -= sigma_E_div_par[dit];
    }
 
-   CH_START(t_div_jpar);
 
-   m_parallel_current_divergence_op->computeFluxDivergence(m_ion_charge_density, m_negativeDivJpar, false, true);
-      
-   CH_STOP(t_div_jpar);
-
-   // Compute rhs_data that describe time evolution of the negative vorticity
-   
    // Add divergence of total parallel current
+   m_parallel_current_divergence_op->computeFluxDivergence(m_ion_charge_density, m_negativeDivJpar, false, true);
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       rhs_data[dit] += m_negativeDivJpar[dit];
    }
    
-   // Add divergence of perpendicular currents and RS term
-   addDivJperpTerm(rhs_data, sol_data, a_kinetic_species_phys, a_EM_fields, a_time);
+   // Add divergence of perpendicular electron current for the ExB current model
+   if (m_ExB_current_model) {
+     
+     // Compute the divergence of the perpendicular ExB ion current
+     LevelData<FArrayBox> divJperp_ExB(grids, 1, IntVect::Zero);
+     computeDivPerpIonExBCurrentDensity(divJperp_ExB, a_EM_fields, a_kinetic_species_phys, m_ion_charge_density, a_time);
+
+     for (DataIterator dit(grids); dit.ok(); ++dit) {
+       rhs_data[dit] -= divJperp_ExB[dit];
+     }
+   }
    
    // Add higher-order corrections
    if (m_include_diffusion || m_include_pol_den_correction) {
@@ -456,45 +494,6 @@ void VorticityOp::accumulateImplicitRHS( FluidSpeciesPtrVect&               a_rh
 
          addStabilizationTerms(rhs_data, negative_vorticity);
       }
-   }
-}
-
-void VorticityOp::addDivJperpTerm(LevelData<FArrayBox>&              a_rhs,
-                                  const LevelData<FArrayBox>&        a_soln,
-                                  const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
-                                  const EMFields&                    a_EM_fields,
-                                  const Real                         a_time)
-{
-   CH_TIMERS("VorticityOp::addPerpTermsRHS");
-   CH_TIMER("div_jperp",t_div_jperp);
-
-   const DisjointBoxLayout& grids = m_geometry.gridsFull();
-
-#ifndef ALFVEN_WAVE_TEST
-   // Add divergence of perpendicular ion currents
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-       a_rhs[dit] -= m_divJperp_mag_i[dit];
-   }
-#endif
-
-   // Add divergence of perpendicular electron current
-   if (m_ExB_current_model) {
-
-     CH_START(t_div_jperp);
-     // Compute the divergence of the perpendicular ExB ion current
-     LevelData<FArrayBox> divJperp_ExB(grids, 1, IntVect::Zero);
-     computeDivPerpIonExBCurrentDensity(divJperp_ExB, a_EM_fields, a_kinetic_species_phys, m_ion_charge_density, a_time);
-     CH_STOP(t_div_jperp);
-
-     for (DataIterator dit(grids); dit.ok(); ++dit) {
-       a_rhs[dit] -= divJperp_ExB[dit];
-     }
-   }
-
-   else {
-      for (DataIterator dit(grids); dit.ok(); ++dit) {
-       a_rhs[dit] -= m_divJperp_mag_e[dit];
-     }
    }
 }
 
@@ -570,15 +569,6 @@ void VorticityOp::preOpEval( const PS::KineticSpeciesPtrVect&   a_kinetic_specie
                                                                 m_electron_temperature,
                                                                 *m_vorticity_bcs,
                                                                 false);
-   }
-
-   computeDivPerpIonMagCurrentDensity(m_divJperp_mag_i, a_EM_fields, a_kinetic_species, a_time);
-
-   if (!m_include_pol_den_correction_to_pe) {
-     computeDivPerpElectronMagCurrentDensity(m_divJperp_mag_e, m_ion_charge_density, zero, a_time);
-   }
-   else {
-     MayDay::Error("VorticityOp::preOpEval: polarization density corrections to electron pressure are not yet implemented for the new vorticity model ");
    }
 }
 
@@ -989,6 +979,31 @@ void VorticityOp::computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&     
    bool divFreeVelocity = phase_geometry->divFreeVelocity();
    bool fourthOrder = !m_geometry.secondOrder();
 
+   IntVect ghosts;
+   if (m_geometry.secondOrder()) {
+     ghosts = 2*IntVect::Unit;
+   }
+   else {
+     ghosts = 3*IntVect::Unit;
+   }
+   LevelData<FArrayBox> ion_charge_density_extrap(grids, 1, ghosts);
+   for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+     ion_charge_density_extrap[dit].copy(a_ion_charge_density[dit]);
+
+     // This does not take care of corner physical ghosts
+     // but we don't need them for second-order
+     // Presently use higher order extrapolation becasue we may need
+     // two layers of ghosts anyways (e.g., for UW schemes)
+     fourthOrderCellExtrap(ion_charge_density_extrap[dit], grids[dit]);
+   }
+
+   m_geometry.fillInternalGhosts(ion_charge_density_extrap);
+   // Extrapolate to corner physical ghosts for
+   // fourth-order calculations
+   if (!m_geometry.secondOrder()) {
+     m_geometry.extrapolateAtPhysicalBoundaries(ion_charge_density_extrap, 4, 3);
+   }
+
    // Compute the current due to ExB drifts
    if (divFreeVelocity) {
    
@@ -998,7 +1013,7 @@ void VorticityOp::computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&     
       m_geometry.computeBxEIntegrals(a_EM_fields.getPhiNode(), true, J_ExB);
       
       LevelData<FluxBox> charge_density_face(grids, 1, IntVect::Zero);
-      fourthOrderCellToFace(charge_density_face, a_ion_charge_density);
+      fourthOrderCellToFace(charge_density_face, ion_charge_density_extrap);
 
       const LevelData<FluxBox>& FCBFieldMag = m_geometry.getFCBFieldMag();
 	
@@ -1023,7 +1038,7 @@ void VorticityOp::computeDivPerpIonExBCurrentDensity( LevelData<FArrayBox>&     
       m_geometry.computeEXBDrift(a_EM_fields.getEFieldFace(), ExB_drift);
       
       LevelData<FluxBox> charge_density_face(grids, 1, IntVect::Unit);
-      fourthOrderCellToFace(charge_density_face, a_ion_charge_density);
+      fourthOrderCellToFace(charge_density_face, ion_charge_density_extrap);
       
       LevelData<FluxBox> J_ExB(grids, SpaceDim, IntVect::Unit);
       for (DataIterator dit(J_ExB.dataIterator()); dit.ok(); ++dit) {
@@ -1135,7 +1150,14 @@ void VorticityOp::computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&
 #endif
 
    // Compute scalar advective quantity (u)
-   LevelData<FArrayBox> u(grids, 1, 2*IntVect::Unit);
+   IntVect ghosts;
+   if (m_geometry.secondOrder()) {
+     ghosts = 2*IntVect::Unit;
+   }
+   else {
+     ghosts = 3*IntVect::Unit;
+   }
+   LevelData<FArrayBox> u(grids, 1, ghosts);
    for (DataIterator dit(u.dataIterator()); dit.ok(); ++dit) {
      u[dit].copy(a_ion_charge_density[dit]);
 
@@ -1145,8 +1167,13 @@ void VorticityOp::computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&
 
      u[dit].mult(m_electron_temperature[dit]);
      u[dit].divide(Bfield[dit]);
-     fourthOrderCellExtrap(u[dit],grids[dit]);
-     
+     if (m_geometry.secondOrder()) {
+       // This does not take care of corner physical ghosts
+       // but we don't need them for second-order
+       // Presently use higher order extrapolation becasue we may need
+       // two layers of ghosts anyways (e.g., for UW schemes)
+       fourthOrderCellExtrap(u[dit], grids[dit]);
+     }
 #ifdef FULL_DIAMAG_CURRENT
      u[dit].setVal(1.0);
 #endif     
@@ -1154,6 +1181,12 @@ void VorticityOp::computeDivPerpElectronMagCurrentDensity( LevelData<FArrayBox>&
 
    m_geometry.fillInternalGhosts(u);
 
+   // Extrapolate to corner physical ghosts for
+   // fourth-order calculations
+   if (!m_geometry.secondOrder()) {
+     m_geometry.extrapolateAtPhysicalBoundaries(u, 4, 3);
+   }
+   
    // Convert cell-averaged vorticity to face-averaged quantity
    // presently, use centered scheme, update to high-order UW later
    LevelData<FluxBox> u_fc(grids, 1, IntVect::Unit);
@@ -1576,6 +1609,49 @@ void VorticityOp::initializeDiffusionProfiles(LevelData<FluxBox>& a_pol_diffusio
    }
 }
 
+bool VorticityOp::isInitializationConstrained(const FluidSpecies& a_fluid_phys,
+					      const int           a_step)
+{
+   return m_apply_initialization_constraints;
+}
+
+void VorticityOp::applyInitializationConstraints(FluidSpeciesPtrVect&               a_fluid_comp,
+                                                 FluidSpeciesPtrVect&               a_fluid_phys,
+                                                 const PS::KineticSpeciesPtrVect&   a_kinetic_species_phys,
+                                                 const EMFields&                    a_EM_fields,
+                                                 const int                          a_component,
+                                                 const double                       a_time )
+{
+   //Computes the initial value of negative divJperp
+   //which is subtracted from phi RHS.
+   //Input parameters correspond to the initial
+   //distribution funciton extrapolated into ghosts
+   //Formally, this should not depend on Efield (especially since we extrapolate into ghosts)
+   //but, ion perp current involves vpar dot, which analytically should not contribute, but
+   //numerically might (at the velocity domain boundary). For more presice results, we should
+   //turn off vpar term in GKvelocity calcualtion when mag_drift option is true.
+   
+   const DisjointBoxLayout& grids( m_geometry.grids() );
+   
+   m_negative_divJperp_0.define(grids, 1, IntVect::Zero);
+   
+   computeDivPerpIonMagCurrentDensity(m_divJperp_mag_i, a_EM_fields, a_kinetic_species_phys, a_time);
+      
+   CH_assert(!m_include_pol_den_correction_to_pe);
+   LevelData<FArrayBox> zero(grids, 1, IntVect::Zero);
+   setZero(zero);
+   
+   //N.B. fluid species do not correpond to initial state !!!
+   computeIonChargeDensity( m_ion_charge_density, a_kinetic_species_phys, a_fluid_comp );
+   computeDivPerpElectronMagCurrentDensity(m_divJperp_mag_e, m_ion_charge_density, zero, a_time);
+
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      m_negative_divJperp_0[dit].copy(m_divJperp_mag_i[dit]);
+      m_negative_divJperp_0[dit] += m_divJperp_mag_e[dit];
+      m_negative_divJperp_0[dit].negate();
+   }
+}
+
 void VorticityOp::parseParameters( const ParmParse& a_pp )
 {
    a_pp.query( "include_reynolds_stress", m_reynolds_stress);
@@ -1659,6 +1735,8 @@ void VorticityOp::parseParameters( const ParmParse& a_pp )
    
    a_pp.query( "minimal_implicit_model", m_minimal_implicit_model);
    a_pp.query( "advection_scheme", m_advection_scheme );
+   
+   a_pp.query( "apply_initialization_constraints", m_apply_initialization_constraints );
 }
 
 

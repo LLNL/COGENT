@@ -2239,10 +2239,11 @@ Real
 SpaceUtils::MaxNorm( const LevelData<FArrayBox>& a )
 {
    const DisjointBoxLayout& grids = a.disjointBoxLayout();
+   int ncomp = a.nComp();
 
    double local_max = -DBL_MAX;
    for (DataIterator dit(grids); dit.ok(); ++dit) {
-      double this_max = a[dit].max();
+      double this_max = a[dit].norm(0, 0, ncomp);
       if (this_max > local_max) local_max = this_max;
    }
 
@@ -2261,11 +2262,12 @@ Real
 SpaceUtils::MaxNorm( const LevelData<FluxBox>& a )
 {
    const DisjointBoxLayout& grids = a.disjointBoxLayout();
+   int ncomp = a.nComp();
 
    double local_max = -DBL_MAX;
    for (DataIterator dit(grids); dit.ok(); ++dit) {
       for (int dir=0; dir<SpaceDim; ++dir) {
-         double this_max = a[dit][dir].max();
+         double this_max = a[dit][dir].norm(0, 0, ncomp);
          if (this_max > local_max) local_max = this_max;
       }
    }
@@ -2278,6 +2280,13 @@ SpaceUtils::MaxNorm( const LevelData<FluxBox>& a )
 #endif
 
    return global_max;
+}
+
+
+Real
+SpaceUtils::L2Norm( const LevelData<FArrayBox>& a )
+{
+   return sqrt( dotProduct(a, a) );
 }
 
 
@@ -2322,6 +2331,24 @@ SpaceUtils::dotProduct( const LevelData<FArrayBox>&  a_1,
 
    return global_sum;
 }
+
+void
+SpaceUtils::solveTrilinearSystem(LevelData<FArrayBox>&  a_x,
+                                 const LevelData<FArrayBox>&  a_M,
+                                 const LevelData<FArrayBox>&  a_b)
+{
+    const DisjointBoxLayout& grids = a_x.disjointBoxLayout();
+
+    for (DataIterator dit(grids); dit.ok(); ++dit) {
+
+        FORT_SOLVE_TRILINEAR_SYSTEM(CHF_FRA( a_x[dit] ),
+                                    CHF_CONST_FRA( a_M[dit] ),
+                                    CHF_CONST_FRA( a_b[dit] ),
+                                    CHF_BOX( a_x[dit].box() ));
+    }
+    
+}
+
 
 void
 SpaceUtils::applyHarmonicFiltering(LevelData<FArrayBox>& a_phi,

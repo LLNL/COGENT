@@ -23,7 +23,6 @@ EMVorticityOp::EMVorticityOp(const ParmParse&    a_pp,
    : VorticityOp(a_pp, a_geometry, a_larmor, a_verbosity),
      m_geometry(a_geometry),
      m_is_time_implicit(false),
-     m_apply_initialization_constraints(false),
      m_ion_skin_depth(a_ion_skin_depth),
      m_electron_skin_depth(a_electron_skin_depth)
 {
@@ -177,17 +176,51 @@ void EMVorticityOp::accumulateExplicitRHS(FluidSpeciesPtrVect&               a_r
                                           const int                          a_fluid_vec_comp,
                                           const Real                         a_time )
 {
-   if (!m_is_time_implicit) {
-      // Get soln data
-      const CFGVars& sol_fluid_species = *(a_fluid_species[a_fluid_vec_comp]);
-      const LevelData<FArrayBox>& soln_phi = sol_fluid_species.cell_var("potential");
-      const LevelData<FArrayBox>& soln_Apar = sol_fluid_species.cell_var("A_parallel");
+  
+   // Get soln data
+   const CFGVars& sol_fluid_species = *(a_fluid_species[a_fluid_vec_comp]);
+   const LevelData<FArrayBox>& soln_phi = sol_fluid_species.cell_var("potential");
+   const LevelData<FArrayBox>& soln_Apar = sol_fluid_species.cell_var("A_parallel");
 
-      // Get RHS data
-      CFGVars& rhs_fluid_species = *(a_rhs[a_fluid_vec_comp]);
-      LevelData<FArrayBox>& rhs_phi = rhs_fluid_species.cell_var("potential");
-      LevelData<FArrayBox>& rhs_Apar = rhs_fluid_species.cell_var("A_parallel");
-      
+   // Get RHS data
+   CFGVars& rhs_fluid_species = *(a_rhs[a_fluid_vec_comp]);
+   LevelData<FArrayBox>& rhs_phi = rhs_fluid_species.cell_var("potential");
+   LevelData<FArrayBox>& rhs_Apar = rhs_fluid_species.cell_var("A_parallel");
+  
+   const DisjointBoxLayout& grids = m_geometry.gridsFull();
+   
+#ifndef ALFVEN_WAVE_TEST
+   // Add divergence of the perpendicular ion current
+   // N.B. if we want to experiment with placing divJperp,i into implicitOpImEx
+   // we need to make sure that kinetic ghosts are filled at chkpt_stage_func_0
+   // default optimization implementation does not fill kinetic ghosts at chkpt_stage_func_0
+   computeDivPerpIonMagCurrentDensity(m_divJperp_mag_i, a_EM_fields, a_kinetic_species_phys, a_time);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+       rhs_phi[dit] -= m_divJperp_mag_i[dit];
+   }
+#endif
+   
+   // Add divergence of the perpendicular electron current
+   CH_assert(!m_include_pol_den_correction_to_pe);
+   LevelData<FArrayBox> zero(grids, 1, IntVect::Zero);
+   setZero(zero);
+   // N.B. m_ion_charge used ensity here comes from the previous call to preOpEval.
+   // For the optimzied time integration that call corresponds to chkpt_stage_func_0,
+   // which is fine for the case where the evolution of dfn is explicit and thus density
+   // does not change within the implicit stage solve.
+   computeDivPerpElectronMagCurrentDensity(m_divJperp_mag_e, m_ion_charge_density, zero, a_time);
+   for (DataIterator dit(grids); dit.ok(); ++dit) {
+      rhs_phi[dit] -= m_divJperp_mag_e[dit];
+   }
+   
+   //Subtract initial value of the negative divJperp
+   if (m_apply_initialization_constraints) {
+      for (DataIterator dit(grids); dit.ok(); ++dit) {
+         rhs_phi[dit].minus(m_negative_divJperp_0[dit]);
+      }
+   }
+   
+   if (!m_is_time_implicit) {
       accumulateRHS(rhs_phi, rhs_Apar, soln_phi, soln_Apar, a_kinetic_species_phys, a_EM_fields, a_time);
    }
 }
@@ -256,10 +289,8 @@ void EMVorticityOp::accumulatePhiRHS(LevelData<FArrayBox>&              a_rhs_ph
       j_par[dit].mult(fac);
    }
 
-   // Add divergence of total perpendicular current
-   addDivJperpTerm(a_rhs_phi, a_soln_phi, a_kinetic_species_phys, a_EM_fields, a_time);
-
-   // Add divergence of a parallel current
+   
+   // Add divergence of the parallel current
    addDivJpar(a_rhs_phi, a_soln_Apar, j_par);
 
    // Add Reynolds Stress term
@@ -622,12 +653,6 @@ void EMVorticityOp::preOpEval(const PS::KineticSpeciesPtrVect&   a_kinetic_speci
    // Get parallel conductivity
    m_parallel_current_divergence_op->updateParallelConductivity(m_electron_temperature, m_par_cond);
 
-   // Compute perpendicular ion current density
-   computeDivPerpIonMagCurrentDensity(m_divJperp_mag_i, a_EM_fields, a_kinetic_species, a_time);
-
-   // Compute perpendicular electron current density
-   computeDivPerpElectronMagCurrentDensity(m_divJperp_mag_e, m_ion_charge_density, zero, a_time);
-
    // N.B. Diffusion operator only applies perpendicular diffision for
    // the EM case; parallel high-order terms are included elswehere
    if (m_include_diffusion) {
@@ -787,7 +812,8 @@ void EMVorticityOp::postTimeEval(FluidSpecies&  a_species_comp,
 }
 
 
-bool EMVorticityOp::isInitializationConstrained(const FluidSpecies& a_fluid_phys)
+bool EMVorticityOp::isInitializationConstrained(const FluidSpecies& a_fluid_phys,
+						const int           a_step)
 {
    return m_apply_initialization_constraints;
 }
@@ -800,6 +826,19 @@ void EMVorticityOp::applyInitializationConstraints(FluidSpeciesPtrVect&         
                                                    const double                       a_time )
 {
    const DisjointBoxLayout& grids( m_geometry.grids() );
+
+   //Computes the initial value of negative divJperp
+   //m_negative_divJperp_0, which is subtracted from phi RHS
+   VorticityOp::applyInitializationConstraints(a_fluid_comp,
+                                               a_fluid_phys,
+                                               a_kinetic_species_phys,
+                                               a_EM_fields,
+                                               a_component,
+                                               a_time);
+   
+#if 0
+   
+   // This is a development version to initialize with proper jpar
    
    // Create RHS for j_par equation
    PS::ScalarPtrVect  scalar_species_dummy; //zero lenght dummy
@@ -848,14 +887,13 @@ void EMVorticityOp::applyInitializationConstraints(FluidSpeciesPtrVect&         
       soln_Apar_comp[dit].copy(Apar[dit]);
       soln_Apar_phys[dit].copy(Apar[dit]);
    }
+#endif
 }
 
 void EMVorticityOp::parseParameters( const ParmParse& a_pp )
 {
 
    a_pp.query( "implicit", m_is_time_implicit);
-   
-   a_pp.query( "apply_initialization_constraints", m_apply_initialization_constraints );
    
 }
 

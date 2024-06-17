@@ -1984,6 +1984,62 @@ c     local variables
       CHF_ENDDO
 
       return
+      end  
+
+
+      subroutine solve_trilinear_system(
+     &     CHF_FRA[x_soln],
+     &     CHF_CONST_FRA[M_matrix],
+     &     CHF_CONST_FRA[b_rhs],    
+     &     CHF_BOX[gridbox]
+     &     )
+
+c     local variables
+      integer CHF_DDECL[i;j;k;l;m;n], comp
+      double precision b(0:2), Mat(0:8), det, tmp
+
+      CHF_MULTIDO[gridbox;i;j;k;l;m;n]
+        
+c        Solves linear linear system
+c        a0*x + a1*y + a2*z == b0,
+c        a3*x + a4*y + a5*z == b1,
+c        a6*x + a7*y + a8*z == b2
+
+
+         do comp = 0, 2
+           b(comp)  =  b_rhs(CHF_IX[i;j;k;l;m;n],comp)   
+         enddo
+
+         do comp = 0, 8
+           Mat(comp)  =  M_matrix(CHF_IX[i;j;k;l;m;n],comp)   
+         enddo
+
+
+         det = Mat(2)*Mat(4)*Mat(6) - Mat(1)*Mat(5)*Mat(6)
+     &       - Mat(2)*Mat(3)*Mat(7) + Mat(0)*Mat(5)*Mat(7)
+     &       + Mat(1)*Mat(3)*Mat(8) - Mat(0)*Mat(4)*Mat(8)
+   
+         x_soln(CHF_IX[i;j;k;l;m;n],0) = -Mat(5)*Mat(7)*b(0) + Mat(4)*Mat(8)*b(0)
+     &                                 +  Mat(2)*Mat(7)*b(1) - Mat(1)*Mat(8)*b(1)
+     &                                 -  Mat(2)*Mat(4)*b(2) + Mat(1)*Mat(5)*b(2)
+   
+         x_soln(CHF_IX[i;j;k;l;m;n],1) = Mat(5)*Mat(6)*b(0) - Mat(3)*Mat(8)*b(0)
+     &                                 - Mat(2)*Mat(6)*b(1) + Mat(0)*Mat(8)*b(1)
+     &                                 + Mat(2)*Mat(3)*b(2) - Mat(0)*Mat(5)*b(2)
+
+         x_soln(CHF_IX[i;j;k;l;m;n],2) = -Mat(4)*Mat(6)*b(0) + Mat(3)*Mat(7)*b(0)
+     &                                 +  Mat(1)*Mat(6)*b(1) - Mat(0)*Mat(7)*b(1)
+     &                                 -  Mat(1)*Mat(3)*b(2) + Mat(0)*Mat(4)*b(2)
+   
+         do comp = 0, 2
+            tmp = x_soln(CHF_IX[i;j;k;l;m;n],comp) 
+            x_soln(CHF_IX[i;j;k;l;m;n],comp) = -tmp/det;
+         enddo
+
+
+      CHF_ENDDO
+
+      return
       end     
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
  

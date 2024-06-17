@@ -199,13 +199,7 @@ public:
    void  addDiamagneticCorrection(LevelData<FArrayBox>&              rhs,
                                   const LevelData<FArrayBox>&        soln,
                                   const EMFields&                    EM_fields);
-   
-   void addDivJperpTerm(LevelData<FArrayBox>&              rhs,
-                        const LevelData<FArrayBox>&        soln,
-                        const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
-                        const EMFields&                    EM_fields,
-                        const Real                         time);
-   
+      
    void addReynoldsStressTerm(LevelData<FArrayBox>&              rhs,
                               const LevelData<FArrayBox>&        soln,
                               const EMFields&                    EM_fields);
@@ -214,6 +208,16 @@ public:
                               const LevelData<FArrayBox>&        soln);
 
 
+   virtual bool isInitializationConstrained(const FluidSpecies& fluid_phys,
+					    const int           step);
+   
+   virtual void applyInitializationConstraints(FluidSpeciesPtrVect&               fluid_comp,
+                                               FluidSpeciesPtrVect&               fluid_phys,
+                                               const PS::KineticSpeciesPtrVect&   kinetic_species_phys,
+                                               const EMFields&                    EM_fields,
+                                               const int                          component,
+                                               const double                       time );
+   
 
    static const char* pp_name;
 
@@ -267,7 +271,8 @@ protected:
    LevelData<FluxBox> m_perp_diffusion_face;
    LevelData<FArrayBox> m_divJperp_mag_e;
    LevelData<FArrayBox> m_divJperp_mag_i;
-   
+   LevelData<FArrayBox> m_negative_divJperp_0;
+  
    Vector<int> m_harmonic_filtering;
    
    int m_verbosity;
@@ -279,6 +284,7 @@ protected:
    bool m_second_order;
    bool m_low_pollution;
    bool m_include_pol_den_correction;
+   bool m_include_pol_den_correction_to_pe;
    bool m_include_diam_correction;
    bool m_use_vorticity_bcs;
    bool m_include_diffusion;
@@ -288,6 +294,7 @@ protected:
    bool m_include_boundary_relaxation;
    bool m_include_stabilization;
    bool m_minimal_implicit_model;
+   bool m_apply_initialization_constraints;
    
    std::string m_advection_scheme;
    
@@ -326,7 +333,6 @@ private:
    bool m_multiphysics_precond;
    bool m_include_pol_den_correction_precond;
    bool m_include_diffusion_precond;
-   bool m_include_pol_den_correction_to_pe;
    bool m_consistent_lower_bc_only;
    bool m_consistent_upper_bc_only;
    bool m_par_cond_op_coefs_defined;
@@ -343,6 +349,7 @@ private:
    RefCountedPtr<GridFunction> m_electron_temperature_func;
    RefCountedPtr<GridFunction> m_pol_diffusion_func;
    RefCountedPtr<GridFunction> m_perp_diffusion_func;
+
 };
 
 

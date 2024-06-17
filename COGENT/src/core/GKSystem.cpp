@@ -202,11 +202,10 @@ GKSystem::initialize( const int     a_cur_step,
    m_gk_ops->initializeElectricField( m_state_phys, a_cur_step, a_cur_time );
 
    // Apply initialization constraints to fluid models (e.g., MHD equilibirum)
-   if ( a_cur_step == 0 ) {
-      m_gk_ops->applyFluidInitializationConstraints(m_state_comp.dataFluid(),
-                                                    m_state_phys.dataFluid(),
-                                                    a_cur_time);
-   }
+   m_gk_ops->applyFluidInitializationConstraints(m_state_comp,
+                                                 m_state_phys,
+                                                 a_cur_step,
+                                                 a_cur_time );
    
    m_gk_ops->initializeTI(  a_cur_step, 
                             a_cur_time, 

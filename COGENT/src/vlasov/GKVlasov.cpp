@@ -31,26 +31,6 @@ const char* GKVlasov::pp_name = {"gkvlasov"};
 
 Real GKVlasov::s_stability_bound[NUM_FLUX] = {2.06,2.8,2.7852,1.7453,1.7320,1.7320,1.7453};
 
-Real
-MaxNorm( const LevelData<FArrayBox>& a )
-{
-   const DisjointBoxLayout& grids = a.disjointBoxLayout();
-
-   double local_max = -DBL_MAX;
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      double this_max = a[dit].max();
-      if (this_max > local_max) local_max = this_max;
-   }
-
-   double global_max;
-#ifdef CH_MPI
-   MPI_Allreduce(&local_max, &global_max, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-#else
-   global_max = local_max;
-#endif
-
-   return global_max;
-}
 
 GKVlasov::GKVlasov( ParmParse&                      a_pp,
                     const Real                      a_larmor_number )
@@ -1989,7 +1969,7 @@ void GKVlasov::testPC( const GKVlasovAMG*         a_pc,
    a_geometry.plotAtVelocityIndex("diff", VEL::IntVect::Zero, diff, 0.);
 #endif
       
-   double relative_difference = MaxNorm(diff) / MaxNorm(pc_operator);
+   double relative_difference = SpaceUtils::MaxNorm(diff) / SpaceUtils::MaxNorm(pc_operator);
 
    if (procID()==0) {
       cout << "GKVlasov::testPC(): relative difference = " << relative_difference << " (using random input)" << endl;
@@ -2279,7 +2259,7 @@ GKVlasov::testZeroDivergence(const LevelData<FluxBox>&  a_velocity,
       velocity_divergence[dit].mult( fac );
    }
 
-   double veldiv_norm = MaxNorm(velocity_divergence);
+   double veldiv_norm = SpaceUtils::MaxNorm(velocity_divergence);
    if (procID()==0) cout << "velocity divergence norm = " << veldiv_norm << endl;
 }
 

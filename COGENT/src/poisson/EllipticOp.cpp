@@ -1076,21 +1076,8 @@ EllipticOp::dotProduct( const LevelData<FArrayBox>&  a_1,
                         const LevelData<FArrayBox>&  a_2 )
 {
    CH_TIME("EllipticOp::dotProduct");
-   const DisjointBoxLayout& grids = a_1.disjointBoxLayout();
 
-   double local_sum = 0.;
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      local_sum += a_1[dit].dotProduct(a_2[dit],grids[dit]);
-   }
-
-   double global_sum;
-#ifdef CH_MPI
-   MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-#else
-   global_sum = local_sum;
-#endif
-
-   return global_sum;
+   return SpaceUtils::dotProduct(a_1, a_2);
 }
 
 
@@ -2187,13 +2174,6 @@ EllipticOp::modifyForNeumannAndNaturalBCs( const EllipticOpBC&  a_bc,
          }
       }
    }
-}
-
-
-double
-EllipticOp::L2Norm( const LevelData<FArrayBox>& a_data )
-{
-   return sqrt(dotProduct(a_data, a_data));
 }
 
 

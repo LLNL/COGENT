@@ -135,7 +135,8 @@ class GKFluidOp
       void initialize( FluidSpeciesPtrVect&  fluid_species,
                  const Real                  time );
       
-      bool isInitializationConstrained(const FluidSpeciesPtrVect&  fluid_phys);
+      bool isInitializationConstrained(const FluidSpeciesPtrVect&  fluid_phys,
+				       const int step);
    
       void applyInitializationConstraints(FluidSpeciesPtrVect&               fluid_comp,
                                           FluidSpeciesPtrVect&               fluid_phys,

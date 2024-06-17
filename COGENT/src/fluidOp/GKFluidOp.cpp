@@ -435,7 +435,8 @@ void GKFluidOp::initialize( FluidSpeciesPtrVect&  a_fluid_species,
    }
 }
 
-bool GKFluidOp::isInitializationConstrained(const FluidSpeciesPtrVect&  a_fluid_phys)
+bool GKFluidOp::isInitializationConstrained(const FluidSpeciesPtrVect&  a_fluid_phys,
+					    const int a_step)
 {
    bool isInitializationConstrained = false;
    
@@ -443,7 +444,7 @@ bool GKFluidOp::isInitializationConstrained(const FluidSpeciesPtrVect&  a_fluid_
       const FluidSpecies& fluid_phys( static_cast<FluidSpecies&>(*(a_fluid_phys[species])) );
       const std::string species_name( fluid_phys.name() );
       FluidOpInterface& fluidOp( fluidModel( species_name ) );
-      bool isSpeciesInitializationConstrained = fluidOp.isInitializationConstrained(fluid_phys);
+      bool isSpeciesInitializationConstrained = fluidOp.isInitializationConstrained(fluid_phys, a_step);
       if (isSpeciesInitializationConstrained) isInitializationConstrained = true;
    }
    return isInitializationConstrained;

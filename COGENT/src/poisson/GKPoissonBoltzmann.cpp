@@ -374,7 +374,7 @@ GKPoissonBoltzmann::solve( const LevelData<FArrayBox>&  a_Zni,
    LevelData<FArrayBox> old_phi(grids, 1, IntVect::Zero);
 
    // Compute the norm of the right-hand side and absolute tolerance
-   double rhs_norm = L2Norm(a_Zni);
+   double rhs_norm = SpaceUtils::L2Norm(a_Zni);
    double change_norm = DBL_MAX;
    double res_tol = m_nonlinear_relative_tolerance * rhs_norm;
    double change_tol = m_nonlinear_change_tolerance;
@@ -399,7 +399,7 @@ GKPoissonBoltzmann::solve( const LevelData<FArrayBox>&  a_Zni,
    for (dit.begin(); dit.ok(); ++dit) {
       old_phi[dit].copy(a_phi[dit]);
    }
-   double old_norm = L2Norm(old_phi);
+   double old_norm = SpaceUtils::L2Norm(old_phi);
 
    if (m_gkp_verbose && procID()==0) {
 #if 0
@@ -445,8 +445,8 @@ GKPoissonBoltzmann::solve( const LevelData<FArrayBox>&  a_Zni,
       for (dit.begin(); dit.ok(); ++dit) {
          old_phi[dit].minus(a_phi[dit]);
       }
-      double diff_norm = L2Norm(old_phi);
-      double new_norm = L2Norm(a_phi);
+      double diff_norm = SpaceUtils::L2Norm(old_phi);
+      double new_norm = SpaceUtils::L2Norm(a_phi);
 
       change_norm = 2. * diff_norm / (old_norm + new_norm);
 
@@ -595,7 +595,7 @@ GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
 
    LevelData<FArrayBox> phi_old;
    phi_old.define(a_phi);
-   double norm_phi_old = L2Norm(phi_old);
+   double norm_phi_old = SpaceUtils::L2Norm(phi_old);
    CH_STOP(t_define_phi);
 
    computeElectronDensity(a_phi, a_Zni, a_ne);
@@ -675,7 +675,7 @@ GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
       }
       fillInternalGhosts(a_phi);
 
-      double norm_phi_new = L2Norm(a_phi);
+      double norm_phi_new = SpaceUtils::L2Norm(a_phi);
 
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          temp[dit].copy(a_phi[dit]);
@@ -683,7 +683,7 @@ GKPoissonBoltzmann::solveSubspaceIteration( const LevelData<FArrayBox>&  a_Zni,
          phi_old[dit].copy(a_phi[dit]);
       }
 
-      change_norm = L2Norm(temp) / ( 0.5 * (norm_phi_old + norm_phi_new) );
+      change_norm = SpaceUtils::L2Norm(temp) / ( 0.5 * (norm_phi_old + norm_phi_new) );
 
       converged = change_norm < m_subspace_iteration_tol;
 
@@ -802,7 +802,7 @@ GKPoissonBoltzmann::computeResidual( const LevelData<FArrayBox>& a_Zni,
    }
 
    // Return the residual L2 norm
-   return L2Norm(a_residual);
+   return SpaceUtils::L2Norm(a_residual);
 }
 
 
@@ -1003,12 +1003,12 @@ GKPoissonBoltzmann::getPhiTilde( const LevelData<FArrayBox>& a_Zni,
    LevelData<FArrayBox> phi(grids, 1, IntVect::Zero);
    LevelData<FArrayBox> phi_tilde_new(grids, 1, IntVect::Zero);
 
-   double Zni_norm = L2Norm(a_Zni);
+   double Zni_norm = SpaceUtils::L2Norm(a_Zni);
 
    BoltzmannElectron ne( a_ne );
 
    const LevelData<FArrayBox>& Te = a_ne.temperature();
-   double Te_norm = L2Norm(Te);
+   double Te_norm = SpaceUtils::L2Norm(Te);
 
    double fp_convergence_rate = 1.e-3;
 
@@ -1033,7 +1033,7 @@ GKPoissonBoltzmann::getPhiTilde( const LevelData<FArrayBox>& a_Zni,
       computeChargeDensity(a_Zni, a_phi_tilde, ne, gval);
       applyQ(gval);
 
-      double res_norm = L2Norm(gval);
+      double res_norm = SpaceUtils::L2Norm(gval);
 
       for (DataIterator dit(grids); dit.ok(); ++dit) {
          gval[dit] *= omega;
@@ -1054,7 +1054,8 @@ GKPoissonBoltzmann::getPhiTilde( const LevelData<FArrayBox>& a_Zni,
          change[dit] -= a_phi_tilde[dit];
       }
 
-      change_norm = L2Norm(change) / (0.5 * (L2Norm(phi_tilde_new) + L2Norm(a_phi_tilde)));
+      change_norm = SpaceUtils::L2Norm(change) 
+         / (0.5 * (SpaceUtils::L2Norm(phi_tilde_new) + SpaceUtils::L2Norm(a_phi_tilde)));
 
       if (m_gkp_verbose && (procID()==0)) {
          cout << "     iter = " << num_iters << ", change_norm = " << change_norm << ", relative res_norm = " << res_norm / Zni_norm << endl;

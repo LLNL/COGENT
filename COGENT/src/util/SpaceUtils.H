@@ -285,10 +285,16 @@ namespace SpaceUtils {
    Real dotProduct( const LevelData<FArrayBox>&  data_1,
                     const LevelData<FArrayBox>&  data_2 );
 
-   Real  MaxNorm( const LevelData<FArrayBox>& a );
+   Real MaxNorm( const LevelData<FArrayBox>& a );
    
-   Real  MaxNorm( const LevelData<FluxBox>& a );
+   Real MaxNorm( const LevelData<FluxBox>& a );
    
+   Real L2Norm( const LevelData<FArrayBox>& a );
+
+   void solveTrilinearSystem(LevelData<FArrayBox>&  x,
+                             const LevelData<FArrayBox>&  M,
+                             const LevelData<FArrayBox>&  b);
+
    void applyHarmonicFiltering(LevelData<FArrayBox>& phi,
                                const int& dir);
 

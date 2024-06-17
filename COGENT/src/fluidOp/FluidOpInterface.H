@@ -208,7 +208,8 @@ class FluidOpInterface
          }
       }
 
-      virtual bool isInitializationConstrained(const FluidSpecies& fluid_phys) {return false;}
+      virtual bool isInitializationConstrained(const FluidSpecies& fluid_phys,
+					       const int           step) {return false;}
 
       virtual void applyInitializationConstraints(FluidSpeciesPtrVect&               fluid_comp,
                                                   FluidSpeciesPtrVect&               fluid_phys,

@@ -145,7 +145,8 @@ public:
    virtual void fillGhostCells( FluidSpecies&  species_phys,
                                 const double   time );
 
-   virtual bool isInitializationConstrained(const FluidSpecies& fluid_phys);
+   virtual bool isInitializationConstrained(const FluidSpecies& fluid_phys,
+					    const int           step);
    
    virtual void applyInitializationConstraints(FluidSpeciesPtrVect&               fluid_comp,
                                                FluidSpeciesPtrVect&               fluid_phys,
@@ -218,7 +219,6 @@ private:
    RefCountedPtr<EllipticOpBC>  m_jpar_bcs;
    
    bool m_is_time_implicit;
-   bool m_apply_initialization_constraints;
    
 };
 

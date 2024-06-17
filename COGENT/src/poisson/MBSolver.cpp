@@ -12,28 +12,6 @@
 #include "NamespaceHeader.H"
 
 
-
-double
-L2Norm( const LevelData<FArrayBox>&  a_data )
-{
-   const DisjointBoxLayout& grids = a_data.getBoxes();
-
-   double local_sum = 0.;
-   for (DataIterator dit(grids); dit.ok(); ++dit) {
-      local_sum += a_data[dit].dotProduct(a_data[dit],grids[dit]);
-   }
-
-   double global_sum;
-#ifdef CH_MPI
-   MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-#else
-   global_sum = local_sum;
-#endif
-
-   return sqrt(global_sum);
-}
-
-
 MBSolver::MBSolver( const MultiBlockLevelGeom&      a_geom,
                     const int                       a_discretization_order,
                     MultiBlockLevelExchangeCenter*  a_mblex_ptr )
@@ -1493,7 +1471,7 @@ MBSolver::testMatrixConstruct( LevelData<FArrayBox>&                            
    }
    plot("diff", diff, 0.);
 
-   double diff_norm = L2Norm(diff);
+   double diff_norm = SpaceUtils::L2Norm(diff);
 
    if (procID()==0) {
       cout << "Matrix diff = " << diff_norm << " (using random input)" << endl;

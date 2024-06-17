@@ -23,13 +23,13 @@ class MultidomainSimulation : public AppCtxt
     {
       m_num_systems = 0;
       m_states.clear();
-    
+
       ParmParse ppmultidomain("multidomain");
       parseParameters( ppmultidomain );
       printParameters();
 
       createGKSystems(a_pp);
-    
+
       return;
     }
 
@@ -41,8 +41,8 @@ class MultidomainSimulation : public AppCtxt
       m_systems.clear();
       m_states.clear();
     }
-    
-    inline virtual void initialize( const int     a_step, 
+
+    inline virtual void initialize( const int     a_step,
                                     const double  a_time )
     {
       CH_assert(isDefined());
@@ -51,20 +51,20 @@ class MultidomainSimulation : public AppCtxt
       }
     }
 
-    inline virtual Real stableDt( const int                 a_step_number, 
+    inline virtual Real stableDt( const int                 a_step_number,
                                   const TimeIntegratorType  a_ti_type )
     {
       CH_assert(isDefined());
       Real retval = m_systems[0]->stableDt( a_step_number, a_ti_type );
       for (int i = 1; i < m_num_systems; i++) {
-        retval = std::min(  retval, 
-                            m_systems[i]->stableDt( a_step_number, 
+        retval = std::min(  retval,
+                            m_systems[i]->stableDt( a_step_number,
                                                     a_ti_type) );
       }
-    
+
       return retval;
     }
-   
+
     inline virtual
     void writePlotFile(  const char*   a_prefix,
                          const int     a_cur_step,
@@ -76,7 +76,7 @@ class MultidomainSimulation : public AppCtxt
       }
       return;
     }
-    
+
     inline virtual
     void writeFieldHistory(  int     a_cur_step,
                              double  a_cur_time,
@@ -84,13 +84,13 @@ class MultidomainSimulation : public AppCtxt
     {
       CH_assert(isDefined());
       for (int i = 0; i < m_num_systems; i++) {
-        m_systems[i]->writeFieldHistory(  a_cur_step, 
-                                          a_cur_time, 
+        m_systems[i]->writeFieldHistory(  a_cur_step,
+                                          a_cur_time,
                                           a_startup_flag );
       }
       return;
     }
-    
+
     inline virtual
     void writeCheckpointFile(  const std::string& a_prefix,
                                const int          a_step,
@@ -99,14 +99,14 @@ class MultidomainSimulation : public AppCtxt
     {
       CH_assert(isDefined());
       for (int i = 0; i < m_num_systems; i++) {
-        m_systems[i]->writeCheckpointFile(  a_prefix, 
-                                            a_step, 
-                                            a_time, 
+        m_systems[i]->writeCheckpointFile(  a_prefix,
+                                            a_step,
+                                            a_time,
                                             a_dt );
       }
       return;
     }
-    
+
     inline virtual
     void readCheckpointFile(const std::string& a_fname,
                             int&               a_step,
@@ -128,18 +128,18 @@ class MultidomainSimulation : public AppCtxt
       }
       return;
     }
-    
+
     inline virtual
     void getVec(  const ODEVector&  a_X,
                   const int         a_i,
                   ODEVector&        a_Y ) const
     {
       CH_assert(!a_Y.isDefined());
-      a_Y.define( m_vec_sizes[a_i], 
-                  a_X.dataAt(m_vec_offsets[a_i]), 
+      a_Y.define( m_vec_sizes[a_i],
+                  a_X.dataAt(m_vec_offsets[a_i]),
                   a_X.getState(a_i) );
     }
-    
+
     inline virtual
     void preTimeStep(  const ODEVector&  a_vec,
                        int               a_step,
@@ -168,7 +168,7 @@ class MultidomainSimulation : public AppCtxt
       }
       return;
     }
-    
+
     inline virtual
     void postTimeStage( const int     a_step,
                         const Real    a_time,
@@ -230,8 +230,8 @@ class MultidomainSimulation : public AppCtxt
         m_systems[i]->copyRHSFromArray( tvec );
       }
     }
-    
-    inline virtual 
+
+    inline virtual
     void preOpEval( const ODEVector&  a_Y,
                     const Real        a_time,
                     const Checkpoint& a_chkpt )
@@ -243,23 +243,22 @@ class MultidomainSimulation : public AppCtxt
         m_systems[i]->preOpEval( Y, a_time, a_chkpt );
       }
     }
-    
-    inline virtual 
+
+    inline virtual
     void preSolutionOpEval( const ODEVector&  a_Y,
-                            const Real        a_time,
-                            const Checkpoint& a_chkpt )
+                            const Real        a_time )
     {
       CH_assert(isDefined());
       for (int i = 0; i < m_num_systems; i++) {
         ODEVector Y;
         getVec( a_Y, i, Y);
-        m_systems[i]->preSolutionOpEval( Y, a_time, a_chkpt );
+        m_systems[i]->preSolutionOpEval( Y, a_time );
       }
     }
-    
-    inline virtual 
-    void explicitOp(ODEVector&        a_F, 
-                    const Real        a_time, 
+
+    inline virtual
+    void explicitOp(ODEVector&        a_F,
+                    const Real        a_time,
                     const ODEVector&  a_Y )
     {
       CH_assert(isDefined());
@@ -270,10 +269,10 @@ class MultidomainSimulation : public AppCtxt
         m_systems[i]->explicitOp( F, a_time, Y );
       }
     }
-    
-    inline virtual 
-    void explicitOpImEx(ODEVector&        a_F, 
-                        const Real        a_time, 
+
+    inline virtual
+    void explicitOpImEx(ODEVector&        a_F,
+                        const Real        a_time,
                         const ODEVector&  a_Y )
     {
       CH_assert(isDefined());
@@ -284,10 +283,10 @@ class MultidomainSimulation : public AppCtxt
         m_systems[i]->explicitOpImEx( F, a_time, Y );
       }
     }
-    
-    inline virtual 
-    void implicitOpImEx(ODEVector&        a_F, 
-                        const Real        a_time, 
+
+    inline virtual
+    void implicitOpImEx(ODEVector&        a_F,
+                        const Real        a_time,
                         const ODEVector&  a_Y )
     {
       CH_assert(isDefined());
@@ -298,10 +297,10 @@ class MultidomainSimulation : public AppCtxt
         m_systems[i]->implicitOpImEx( F, a_time, Y );
       }
     }
-    
-    inline virtual 
-    void solutionOp(ODEVector&        a_F, 
-                    const Real        a_time, 
+
+    inline virtual
+    void solutionOp(ODEVector&        a_F,
+                    const Real        a_time,
                     const ODEVector&  a_Y )
     {
       CH_assert(isDefined());
@@ -312,10 +311,10 @@ class MultidomainSimulation : public AppCtxt
         m_systems[i]->solutionOp( F, a_time, Y );
       }
     }
-    
-    inline virtual 
-    void explicitPC(ODEVector&        a_F, 
-                    const Real        a_time, 
+
+    inline virtual
+    void explicitPC(ODEVector&        a_F,
+                    const Real        a_time,
                     const ODEVector&  a_Y )
     {
       CH_assert(isDefined());
@@ -326,10 +325,10 @@ class MultidomainSimulation : public AppCtxt
         m_systems[i]->explicitPC( F, a_time, Y );
       }
     }
-    
-    inline virtual 
-    void implicitPCImEx(ODEVector&        a_F, 
-                        const Real        a_time, 
+
+    inline virtual
+    void implicitPCImEx(ODEVector&        a_F,
+                        const Real        a_time,
                         const ODEVector&  a_Y )
     {
       CH_assert(isDefined());
@@ -340,10 +339,10 @@ class MultidomainSimulation : public AppCtxt
         m_systems[i]->implicitPCImEx( F, a_time, Y );
       }
     }
-    
-    inline virtual 
-    void solutionPC(ODEVector&        a_F, 
-                    const Real        a_time, 
+
+    inline virtual
+    void solutionPC(ODEVector&        a_F,
+                    const Real        a_time,
                     const ODEVector&  a_Y )
     {
       CH_assert(isDefined());
@@ -354,8 +353,8 @@ class MultidomainSimulation : public AppCtxt
         m_systems[i]->solutionPC( F, a_time, Y );
       }
     }
-    
-    inline virtual 
+
+    inline virtual
     void defineMultiPhysicsPC(  std::vector<Preconditioner< ODEVector,AppCtxt>*>& a_pc,
                                 std::vector<DOFList>& a_dof_list,
                                 const ODEVector&      a_Y,
@@ -373,8 +372,8 @@ class MultidomainSimulation : public AppCtxt
         ODEVector Y;
         getVec( a_Y, i, Y);
 
-        m_systems[i]->defineMultiPhysicsPC( a_pc, 
-                                            a_dof_list, 
+        m_systems[i]->defineMultiPhysicsPC( a_pc,
+                                            a_dof_list,
                                             Y,
                                             (void*) this,
                                             a_out_string,
@@ -383,16 +382,16 @@ class MultidomainSimulation : public AppCtxt
                                             i );
       }
       if (!procID()) {
-        printf("Total number of block preconditioners: %d\n", 
+        printf("Total number of block preconditioners: %d\n",
                 (int)a_pc.size() );
       }
     }
-    
-    inline virtual 
+
+    inline virtual
     void updateMultiPhysicsPC(  std::vector<Preconditioner< ODEVector,AppCtxt>*>& a_pc,
                                 const ODEVector&  a_Y,
                                 const Real        a_time,
-                                const int         a_step, 
+                                const int         a_step,
                                 const int         a_stage,
                                 const Real        a_shift,
                                 const bool        a_im)
@@ -403,7 +402,7 @@ class MultidomainSimulation : public AppCtxt
         ODEVector Y;
         getVec( a_Y, i, Y);
 
-        m_systems[i]->updateMultiPhysicsPC( a_pc, 
+        m_systems[i]->updateMultiPhysicsPC( a_pc,
                                             Y,
                                             a_time,
                                             a_step,
@@ -421,10 +420,10 @@ class MultidomainSimulation : public AppCtxt
         m_systems[i]->ARKFirstStageExplicit(a_flag);
       }
     }
-    
+
     inline virtual
-    void solveSolutionPC( ODEVector&        a_Z, 
-                          const ODEVector&  a_R, 
+    void solveSolutionPC( ODEVector&        a_Z,
+                          const ODEVector&  a_R,
                           const int         a_sys_id,
                           int               a_i = -1 )
     {
@@ -445,10 +444,10 @@ class MultidomainSimulation : public AppCtxt
         m_systems[a_sys_id]->solveSolutionPC( Z, R, a_sys_id, a_i );
       }
     }
-   
+
     inline virtual
-    void solveFluidOpPCImEx(ODEVector&          a_Z, 
-                            const ODEVector&    a_R, 
+    void solveFluidOpPCImEx(ODEVector&          a_Z,
+                            const ODEVector&    a_R,
                             const std::string&  a_name,
                             const int           a_sys_id,
                             int                 a_i = -1 )
@@ -462,11 +461,11 @@ class MultidomainSimulation : public AppCtxt
 
       m_systems[a_sys_id]->solveFluidOpPCImEx( Z, R, a_name, a_sys_id, a_i );
     }
-    
+
     inline virtual
     void solveVlasovOpPCImEx( Preconditioner<ODEVector,AppCtxt>* const  a_pc,
-                              ODEVector&                                a_Z, 
-                              const ODEVector&                          a_R, 
+                              ODEVector&                                a_Z,
+                              const ODEVector&                          a_R,
                               const int                                 a_sid,
                               int                                       a_i = -1 )
     {
@@ -479,7 +478,7 @@ class MultidomainSimulation : public AppCtxt
 
       m_systems[a_sid]->solveVlasovOpPCImEx( a_pc, Z, R, a_sid, a_i );
     }
-    
+
     inline virtual bool isLinear()
     {
       CH_assert(isDefined());
@@ -497,7 +496,7 @@ class MultidomainSimulation : public AppCtxt
         m_systems[i]->printFunctionCounts();
       }
     }
-    
+
     inline virtual void defineODEVector( ODEVector& a_vec )
     {
       if (m_states.size() != m_num_systems) {
@@ -508,7 +507,7 @@ class MultidomainSimulation : public AppCtxt
       }
       a_vec.define(m_states);
     }
-    
+
     inline virtual void useScales( const bool a_val )
     {
       CH_assert(isDefined());
@@ -583,50 +582,50 @@ class MultidomainSimulation : public AppCtxt
     }
 
     inline virtual void scaleU(ODEVector& a_vec )
-    { 
-      a_vec.elementwiseMultiply(m_scale_u); 
+    {
+      a_vec.elementwiseMultiply(m_scale_u);
     }
     inline virtual void scaleRHSOp(ODEVector& a_vec )
-    { 
-      a_vec.elementwiseMultiply(m_scale_rhsop); 
+    {
+      a_vec.elementwiseMultiply(m_scale_rhsop);
     }
     inline virtual void scaleLHSOp(ODEVector& a_vec )
-    { 
-      a_vec.elementwiseMultiply(m_scale_lhsop); 
+    {
+      a_vec.elementwiseMultiply(m_scale_lhsop);
     }
 
     inline virtual void deScaleU(ODEVector& a_vec )
-    { 
-      a_vec.elementwiseDivide(m_scale_u); 
+    {
+      a_vec.elementwiseDivide(m_scale_u);
     }
     inline virtual void deScaleRHSOp(ODEVector& a_vec )
-    { 
-      a_vec.elementwiseDivide(m_scale_rhsop); 
+    {
+      a_vec.elementwiseDivide(m_scale_rhsop);
     }
     inline virtual void deScaleLHSOp(ODEVector& a_vec )
-    { 
-      a_vec.elementwiseDivide(m_scale_lhsop); 
+    {
+      a_vec.elementwiseDivide(m_scale_lhsop);
     }
 
     inline virtual const ODEVector& uScale() { return m_scale_u; }
     inline virtual const ODEVector& rhsOpScale() { return m_scale_rhsop; }
     inline virtual const ODEVector& lhsOpScale() { return m_scale_lhsop; }
 
-    inline virtual Real scaledVecNormU( const ODEVector& a_vec ) 
+    inline virtual Real scaledVecNormU( const ODEVector& a_vec )
     {
-      return a_vec.computeNorm(m_scale_u); 
+      return a_vec.computeNorm(m_scale_u);
     }
 
-    inline virtual Real scaledVecNormRHSOp( const ODEVector& a_vec ) 
+    inline virtual Real scaledVecNormRHSOp( const ODEVector& a_vec )
     {
-      return a_vec.computeNorm(m_scale_rhsop); 
+      return a_vec.computeNorm(m_scale_rhsop);
     }
 
     inline virtual Real scaledVecNormLHSOp( const ODEVector& a_vec )
     {
-      return a_vec.computeNorm(m_scale_lhsop); 
+      return a_vec.computeNorm(m_scale_lhsop);
     }
-    
+
     inline virtual bool trivialSolutionOp() const
     {
       CH_assert(isDefined());
@@ -648,10 +647,10 @@ class MultidomainSimulation : public AppCtxt
       return m_systems[0]->tiMethod();
     }
 
-    inline bool isDefined() const 
-    { 
-      return (      (m_num_systems>0) 
-                &&  (m_systems.size()==m_num_systems) ); 
+    inline bool isDefined() const
+    {
+      return (      (m_num_systems>0)
+                &&  (m_systems.size()==m_num_systems) );
     }
 
     inline void copyDOFs( ODEVector&        a_Y,
@@ -686,7 +685,7 @@ class MultidomainSimulation : public AppCtxt
         m_systems.push_back( gksys );
       }
       CH_assert( m_systems.size() == m_num_systems );
-    
+
       m_total_vec_size = 0;
       m_vec_sizes.resize(m_num_systems);
       m_vec_offsets.resize(m_num_systems);
@@ -696,7 +695,7 @@ class MultidomainSimulation : public AppCtxt
         m_vec_sizes[i] = sys_size;
         m_total_vec_size += sys_size;
       }
-    
+
       return;
     }
 
