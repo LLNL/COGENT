@@ -8,7 +8,7 @@ USE_SUNDIALS=TRUE
 MPI=TRUE
 
 # Point to extra Sundials libraries needed for this example
-XTRALIBFLAGS += -lsundials_arkode -lsundials_sunnonlinsolnewton -lsundials_ida -lsundials_sunlinsolpcg
+XTRALIBFLAGS += -lsundials_arkode -lsundials_sunnonlinsolnewton -lsundials_ida -lsundials_sunlinsolpcg -lsundials_core
 
 # the base name(s) of the application(s) in this directory
 ebase = testSundialsPDE

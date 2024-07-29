@@ -89,8 +89,8 @@ endif
 #  USE_64 = FALSE
 #endif
 
-syslibflags =  -llapack_atlas -lblas -llapack
-LAPACKLIBS =  -llapack_atlas -lblas -llapack
+syslibflags =  -llapack_atlas -lblas -llapack -ldl
+LAPACKLIBS =  -llapack_atlas -lblas -llapack -ldl
 
 ifneq ($(USE_HDF),FALSE)
   # if an ANAG HDF5 module is loaded, use its variables
@@ -114,9 +114,9 @@ ifneq ($(USE_HDF),FALSE)
       endif
     endif
 
-    HDFINCFLAGS=-I$(_hdf_root)/include 
+    HDFINCFLAGS=-I$(_hdf_root)/include -DH5_USE_110_API
     HDFLIBFLAGS=-L$(_hdf_root)/lib -lhdf5_hl -lhdf5 -lz 
-    HDFMPIINCFLAGS=-I$(_hdf_root)/include 
+    HDFMPIINCFLAGS=-I$(_hdf_root)/include -DH5_USE_110_API
     HDFMPILIBFLAGS=-L$(_hdf_root)/lib -lhdf5_hl -lhdf5 -lz 
   else
     $(error No HDF5 module is loaded.)

@@ -76,9 +76,9 @@ main(int argc ,char* argv[])
   MPI_Init(&argc, &argv);
   // int comm = MPI_COMM_WORLD;
   // SUNContext_Create(&comm, &ctx);
-  SUNContext_Create(NULL, &ctx);
+  SUNContext_Create(Chombo_MPI::comm, &ctx);
 #else
-  SUNContext_Create(NULL, &ctx);
+  SUNContext_Create(SUN_COMM_NULL, &ctx);
 #endif
 
   pout() << indent2 << "Beginning " << pgmname << " ..." << endl ;

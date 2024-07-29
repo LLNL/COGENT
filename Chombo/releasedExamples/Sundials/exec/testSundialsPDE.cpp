@@ -134,10 +134,10 @@ void run() {
   const Real tspan[] = {0, 1};
   SUNContext ctx;
 #ifdef CH_MPI
-  void* mpi_comm_ptr = (void*)(&Chombo_MPI::comm);
-  SUNContext_Create(mpi_comm_ptr, &ctx);
+  //void* mpi_comm_ptr = (void*)(&Chombo_MPI::comm);
+  SUNContext_Create(Chombo_MPI::comm, &ctx);
 #else
-  SUNContext_Create(nullptr, &ctx);
+  SUNContext_Create(SUN_COMM_NULL, &ctx);
 #endif
   N_Vector y = N_VNew_Ch(ctx, &adaptor);
   setExactSolution(y, tspan[0], &ud);

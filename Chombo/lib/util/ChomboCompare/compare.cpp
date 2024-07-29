@@ -277,13 +277,23 @@ int main(int argc, char* argv[])
     {
       pout() << "done reading computed solution" << endl;
     }
-
+    
     // reality check
     if ((computedDomain != exactDomain) && isSameSize)
     {
       MayDay::Error("Incompatible exact and computed domains for sameSize comparison");
     }
 
+    // kluge for when one of the dx variables is zero
+    if ((computedDx == 0) || (exactDx == 0))
+      {
+        // compute dx for a unit domain
+        Real tempNcells = computedDomain.size(0);
+        computedDx = 1.0/tempNcells;
+        tempNcells = exactDomain.size(0);
+        exactDx = 1.0/tempNcells;
+      }
+    
     int numExact    = exactVars.size();
     int numComputed = computedVars.size();
 
