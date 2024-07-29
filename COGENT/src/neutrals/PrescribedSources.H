@@ -74,6 +74,10 @@ private:
    void computeRelaxationSrc(LevelData<FArrayBox>&  src,
                             const KineticSpecies&  kinetic_species,
                             const Real&            time);
+  
+   void computePrescribedSrc(LevelData<FArrayBox>&  src,
+                            const KineticSpecies&  kinetic_species,
+                            const Real&            time);
 
    void computeThermalizationSrc(LevelData<FArrayBox>&  src,
                                  const KineticSpecies&  kinetic_species,
@@ -85,6 +89,7 @@ private:
    int m_it_counter;
    int m_update_freq;
    bool m_first_call;
+   bool m_include_prescribed_src;
    bool m_include_relaxation;
    bool m_include_thermalization;
    bool m_include_heat_src;
@@ -95,6 +100,7 @@ private:
    double m_heat_src_norm;
    
    RefCountedPtr<KineticFunction>   m_ref_func;
+   RefCountedPtr<KineticFunction>   m_src_func;
    RefCountedPtr<CFG::GridFunction> m_heat_src_profile_func;
    RefCountedPtr<CFG::GridFunction> m_relaxation_profile_func;
    RefCountedPtr<CFG::GridFunction> m_thermalization_profile_func;
@@ -103,8 +109,10 @@ private:
   
    LevelData<FArrayBox> m_heat_src;
    LevelData<FArrayBox> m_relaxation_src;
+   LevelData<FArrayBox> m_prescribed_src;
    LevelData<FArrayBox> m_thermalization_src;
    LevelData<FArrayBox> m_ref_dfn;
+   LevelData<FArrayBox> m_src_dfn;
    LevelData<FArrayBox> m_maxw_dfn;
    LevelData<FArrayBox> m_relaxation_profile_inj;
    LevelData<FArrayBox> m_thermalization_profile_inj;

@@ -20,6 +20,7 @@ PrescribedSources::PrescribedSources( ParmParse& a_ppntr, const int a_verbosity 
      m_include_relaxation(false),
      m_include_thermalization(false),
      m_include_heat_src(false),
+     m_include_prescribed_src(false),
      m_it_counter(0),
      m_update_freq(1),
      m_diagnostics(false)
@@ -73,6 +74,7 @@ void PrescribedSources::evalNtrRHS(KineticSpecies&                   a_rhs_speci
   // Create source objects
   if (!m_heat_src.isDefined()) m_heat_src.define(grids, 1, IntVect::Zero);
   if (!m_relaxation_src.isDefined()) m_relaxation_src.define(grids, 1, IntVect::Zero);
+  if (!m_prescribed_src.isDefined()) m_prescribed_src.define(grids, 1, IntVect::Zero);
   if (!m_thermalization_src.isDefined()) m_thermalization_src.define(grids, 1, IntVect::Zero);
   
   // Compute heat source
@@ -92,12 +94,19 @@ void PrescribedSources::evalNtrRHS(KineticSpecies&                   a_rhs_speci
     const KineticSpecies& soln_species( *(a_soln[a_species]) );
     computeRelaxationSrc(m_relaxation_src, soln_species, a_time);
   }
+
+  // Compute prescribed source
+  if (m_include_prescribed_src){
+    const KineticSpecies& soln_species( *(a_soln[a_species]) );
+    computePrescribedSrc(m_prescribed_src, soln_species, a_time);
+  }
   
   //Add source terms to the GKSystem RHS
   for (DataIterator dit(rhs_dfn.dataIterator()); dit.ok(); ++dit) {
     if (m_include_heat_src)       rhs_dfn[dit].plus( m_heat_src[dit] );
     if (m_include_thermalization) rhs_dfn[dit].plus( m_thermalization_src[dit] );
     if (m_include_relaxation)     rhs_dfn[dit].plus( m_relaxation_src[dit] );
+    if (m_include_prescribed_src) rhs_dfn[dit].plus( m_prescribed_src[dit] );
   }
 
   // Diagnostics
@@ -108,6 +117,7 @@ void PrescribedSources::evalNtrRHS(KineticSpecies&                   a_rhs_speci
       if (m_include_heat_src)       src[dit].plus(m_heat_src[dit]);
       if (m_include_thermalization) src[dit].plus( m_thermalization_src[dit] );
       if (m_include_relaxation)     src[dit].plus( m_relaxation_src[dit] );
+      if (m_include_prescribed_src) src[dit].plus( m_prescribed_src[dit] );
     }
     diagnostics(src, a_rhs_species, a_time);
   }
@@ -331,6 +341,33 @@ void PrescribedSources::computeRelaxationSrc(LevelData<FArrayBox>&  a_src,
   }
 }
 
+void PrescribedSources::computePrescribedSrc(LevelData<FArrayBox>&  a_src,
+                                             const KineticSpecies&  a_kinetic_species,
+                                             const Real&            a_time)
+{
+  
+  // Get geometry objects
+  const PhaseGeom& phase_geom = a_kinetic_species.phaseSpaceGeometry();
+  const DisjointBoxLayout& dbl = a_src.getBoxes();
+  
+  if (m_first_call) {
+    
+    //Define the reference function object
+    m_src_dfn.define(dbl, 1, IntVect::Zero);
+    
+    // Create reference (J*Bstar_par*src_function) distribution if defined
+    KineticSpeciesPtr src_species( a_kinetic_species.clone( IntVect::Zero, false ) );
+    m_src_func->assign( *src_species, a_time );
+    const LevelData<FArrayBox>& src_dfn( src_species->distributionFunction() );
+    m_src_dfn.define(src_dfn);
+  }
+  
+  const LevelData<FArrayBox>& soln_dfn( a_kinetic_species.distributionFunction() );
+  for (DataIterator dit(a_src.dataIterator()); dit.ok(); ++dit) {
+    a_src[dit].copy(m_src_dfn[dit]);
+  }
+}
+
 void PrescribedSources::getNormalizationFactors()
 
 {
@@ -357,6 +394,7 @@ void PrescribedSources::parseParameters( ParmParse& a_pp )
   std::string function_name;
   
   a_pp.query( "include_relaxation", m_include_relaxation );
+  a_pp.query( "include_prescribed_src", m_include_prescribed_src );
   a_pp.query( "include_heat_source", m_include_heat_src );
   a_pp.query( "include_thermalization", m_include_thermalization );
 
@@ -377,6 +415,17 @@ void PrescribedSources::parseParameters( ParmParse& a_pp )
     }
     else {
       MayDay::Error("PrescribedSources:: relaxation profile must be specified ");
+    }
+  }
+  
+  if (m_include_prescribed_src) {
+    
+    if (a_pp.contains("src_function")) {
+      a_pp.get("src_function", function_name );
+      m_src_func = phase_library->find( function_name );
+    }
+    else {
+      MayDay::Error("PrescribedSources:: src_function must be specified for the prescribed src model ");
     }
   }
   
@@ -434,16 +483,19 @@ void PrescribedSources::parseParameters( ParmParse& a_pp )
 inline
 void PrescribedSources::printParameters()
 {
-   if (procID()==0) {
-      std::cout << "PrescribedSources neutral parameters:" << std::endl;
-      if (m_include_heat_src) {
-	std::cout << "  source_power_MW  =  " << m_power;
-	std::cout << "  source_temperature = " << m_T_src;
-	std::cout << "  heat source spatial function:" << std::endl;
-	m_heat_src_profile_func->printParameters();
-      }
-      if (m_include_relaxation) m_relaxation_profile_func->printParameters();
-      if (m_include_thermalization) m_thermalization_profile_func->printParameters();
+  if (procID()==0) {
+    std::cout << "Prescribed sources parameters:" << std::endl;
+    if (m_include_heat_src) {
+      std::cout << "  source_power_MW  =  " << m_power;
+      std::cout << "  source_temperature = " << m_T_src;
+      std::cout << "  heat source spatial function:" << std::endl;
+      m_heat_src_profile_func->printParameters();
+    }
+    if (m_include_relaxation) m_relaxation_profile_func->printParameters();
+    if (m_include_thermalization) m_thermalization_profile_func->printParameters();
+    if (m_include_prescribed_src) {
+      m_src_func->printParameters();
+     }
    }
 }
 
@@ -481,27 +533,55 @@ void PrescribedSources::diagnostics(const LevelData<FArrayBox>& a_rhs,
 
   //Get moment operator
   MomentOp& moment_op = MomentOp::instance();
+
+  //Get a flux-surface object (with shell averaging)
+  CFG::FluxSurface flux_surface(mag_geom);
   
-  //Plot particle source
+  //Plot particle source data
   CFG::LevelData<CFG::FArrayBox> particle_src( mag_geom.grids(), 1, CFG::IntVect::Zero );
   moment_op.compute(particle_src, a_rhs_species, a_rhs, DensityKernel<FArrayBox>());
+  mag_geom.divideJonValid(particle_src);
   phase_geom.plotConfigurationData( "particle_src", particle_src, a_time );
+
+  CFG::LevelData<CFG::FArrayBox> particle_src_fs( mag_geom.grids(), 1, CFG::IntVect::Zero );
+  flux_surface.averageAndSpread(particle_src, particle_src_fs);
+  phase_geom.plotConfigurationData( "particle_src_fs_averaged", particle_src_fs, a_time );
   
-  //Plot parallel momentum source
+  Real total_particle_src = mag_geom.volumeIntegrate(particle_src);
+  if (procID()==0) {
+    std::cout << "Total particle source = " << total_particle_src <<std::endl;
+  }
+  
+  //Plot parallel momentum source data (nVpar source)
   CFG::LevelData<CFG::FArrayBox> parMom_src( mag_geom.grids(), 1, CFG::IntVect::Zero );
   moment_op.compute(parMom_src, a_rhs_species, a_rhs, ParallelVelKernel<FArrayBox>());
+  mag_geom.divideJonValid(parMom_src);
   phase_geom.plotConfigurationData( "parMom_src", parMom_src, a_time );
+
+  CFG::LevelData<CFG::FArrayBox> parMom_src_fs( mag_geom.grids(), 1, CFG::IntVect::Zero );
+  flux_surface.averageAndSpread(parMom_src, parMom_src_fs);
+  phase_geom.plotConfigurationData( "parMom_src_fs_averaged", parMom_src_fs, a_time );
+
+  Real total_parMom_src = mag_geom.volumeIntegrate(parMom_src);
+  if (procID()==0) {
+    std::cout << "Total parallel momentum source = " << total_parMom_src <<std::endl;
+  }
   
-  //Plot energy source
+  //Plot kinetic energy source data
   CFG::LevelData<CFG::FArrayBox> energy_src( mag_geom.grids(), 1, CFG::IntVect::Zero );
   moment_op.compute(energy_src, a_rhs_species, a_rhs, KineticEnergyKernel<FArrayBox>());
+  mag_geom.divideJonValid(energy_src);
+  phase_geom.plotConfigurationData( "energy_src", energy_src, a_time );
 
   CFG::LevelData<CFG::FArrayBox> energy_src_fs( mag_geom.grids(), 1, CFG::IntVect::Zero );
-  CFG::FluxSurface flux_surface(mag_geom);
-  mag_geom.divideJonValid(energy_src);
   flux_surface.averageAndSpread(energy_src, energy_src_fs);
+  phase_geom.plotConfigurationData( "energy_src_fs_averaged", energy_src_fs, a_time );
   
-  phase_geom.plotConfigurationData( "energy_src_fs", energy_src_fs, a_time );
+  Real total_energy_src = mag_geom.volumeIntegrate(energy_src);
+  if (procID()==0) {
+    std::cout << "Total energy source = " << total_energy_src <<std::endl;
+  }
+
 }
 
 #include "NamespaceFooter.H"

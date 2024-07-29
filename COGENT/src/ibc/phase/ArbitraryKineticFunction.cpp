@@ -137,10 +137,6 @@ void ArbitraryKineticFunction::setPointValues( FArrayBox&                a_dfn,
                                          const Real&               a_time) const
 {
    const Box& box( a_dfn.box() );
-//   FArrayBox cell_center_coords( box, PDIM );
-//   a_coord_sys.getCellCenteredRealCoords( cell_center_coords );
-
-   //RealVect a_amrDx = a_coord_sys.dx();
 
    FArrayBox cc_mapped_coords( box, PDIM);
    a_coord_sys.getCellCenteredMappedCoords( cc_mapped_coords );
@@ -148,11 +144,6 @@ void ArbitraryKineticFunction::setPointValues( FArrayBox&                a_dfn,
    FArrayBox cc_phys_coords( box, PDIM);
    a_coord_sys.getCellCenteredRealCoords( cc_phys_coords );
  
-// rescale a_amrDx so that x, y, z, vpar and mu span from 0 to 2*pi
-//   IntVect hi_index = a_coord_sys.domain().domainBox().bigEnd();
-//   hi_index = hi_index+1;
-//   a_amrDx = a_amrDx*2.0*M_PI/(a_amrDx*hi_index); 
-
    a_dfn.setVal(0.0);
 
    BoxIterator bit(a_dfn.box());
@@ -160,15 +151,16 @@ void ArbitraryKineticFunction::setPointValues( FArrayBox&                a_dfn,
    {
        IntVect iv = bit();
        RealVect loc(iv);
-//       RealVect phys_coordinate(iv);
-       //loc *= a_amrDx;
        for (int dir=0; dir<SpaceDim; dir++) {
-//         phys_coordinate[dir] = cc_phys_coords(iv, dir);
-//         if (m_coord_type == "physical"){
-//             loc[dir] = cc_phys_coords(iv, dir);
-//         }
-         if (m_coord_type == "mapped" || m_coord_type == "flux" || m_coord_type == "outer_midplane"){
+         if (m_coord_type == "physical"){
+             loc[dir] = cc_phys_coords(iv, dir);
+         }
+         else if (m_coord_type == "mapped" || m_coord_type == "flux" || m_coord_type == "outer_midplane"){
              loc[dir] = cc_mapped_coords(iv, dir);
+         }
+         else {
+           const std::string msg( "ArbitraryKineticFunction: Attempt to use unknown coordinate type. ");
+           MayDay::Error( msg.c_str() );
          }
        }
 

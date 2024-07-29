@@ -18,16 +18,22 @@ ConsDragDiff::ConsDragDiff( const string& a_species_name, const string& a_ppcls_
       moment_op( MomentOp::instance() ),
       m_first_call(true),
       m_it_counter(0),
-      m_update_freq(1),
+      m_update_cls_freq(1),
+      m_update_operator_coeff(1),
+      m_nbands(5),
+      m_my_pc_idx(-1),
+      m_skip_stage_update(false),
       m_time_implicit(true),
       m_diagnostics(false),
       m_verbosity(a_verbosity),
       m_cls_freq_func(NULL)
 {
-   m_ppcls = ParmParse(a_ppcls_str.c_str());
-   m_species_name = a_species_name;
+   
+  m_opt_string = a_ppcls_str;
+  m_ppcls = ParmParse(a_ppcls_str.c_str());
+  m_species_name = a_species_name;
   
-   ParseParameters(m_ppcls);
+  ParseParameters(m_ppcls);
 }
 
 ConsDragDiff::~ConsDragDiff()
@@ -43,9 +49,10 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   /*
     Evaluates the like-like species fully conservative drag-diffusion
     velocity space collision operator (a.k.a. Lenard & Bernstain 1958 model):
-    df/dt_coll=div(flux_coll), where flux_coll = coll_freq*[(v-U)*f+vth*dfdv].
+    df/dt_coll=div(flux_coll), where flux_coll = coll_freq*[(v-U)*f+vth^2*dfdv].
     Note that this operator exactly conservs density, momentum,
     and thermal energy while also relaxing the species to a Maxwellian state.
+    Details of the implementation can be found in Justin's thesis (Chapter 4).
   */
 
   CH_TIME("ConsDragDiff::evalClsRHS");
@@ -58,11 +65,12 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   const KineticSpecies& soln_species( *(a_soln[a_species]) );
   const LevelData<FArrayBox>& soln_fBJ = soln_species.distributionFunction();
   double mass = soln_species.mass();
-  const DisjointBoxLayout& dbl = soln_fBJ.getBoxes();
+  double charge = soln_species.charge();
 
   // get coordinate system parameters
   const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
   const CFG::MagGeom & mag_geom = phase_geom.magGeom();
+  const DisjointBoxLayout& dbl = soln_fBJ.getBoxes();
   
   // copy soln_fBJ so can perform exchange to ghost cells
   // we need to do so because we pass here a computational dfn
@@ -82,30 +90,97 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   // use simple exchange, instead of fillInternalGhosts
   m_fBJ_vel_ghost.exchange();
   
+  // compute the divergence of individual velocity space fluxes
+  // i.e., Psi quantities from Justin's thesis Chapter 4 (multiplied by J)
+  // these terms are then combined with self-consistenly computed
+  // Upar and Temp that provide discrete conservation of momentum and energy
+  if (!m_Jpsi.isDefined()) m_Jpsi.define(dbl, 3, IntVect::Zero);
+  computeVelFluxesDiv(m_Jpsi, m_fBJ_vel_ghost, phase_geom, mass);
+  
+  if (!m_skip_stage_update) {
+    // compute conservative values of Upar and Temp
+    if ((m_it_counter % m_update_operator_coeff == 0) || m_first_call) {
+      computeConsUparTemp(m_Jpsi, soln_species, phase_geom);
+    }
+    
+    // compute conservative values of Upar and Temp
+    if ((m_it_counter % m_update_cls_freq == 0) || m_first_call) {
+      computeClsFreq(soln_species, phase_geom, dbl, a_time);
+    }
+  }
+    
+  // create conservative drag-diffusion collisional RHS
+  if (!m_rhs_cls.isDefined()) m_rhs_cls.define(dbl, 1, IntVect::Zero);
+  DataIterator cdit = m_rhs_cls.dataIterator();
+  for (cdit.begin(); cdit.ok(); ++cdit)
+  {
+    const FArrayBox& this_Upar = m_Upar[cdit];
+    const FArrayBox& this_Temp = m_Temp[cdit];
+    const FArrayBox& this_Jpsi = m_Jpsi[cdit];
+
+    FORT_EVAL_CONSDRAGDIFF_RHS( CHF_BOX(m_rhs_cls[cdit].box()),
+                                CHF_FRA1(m_rhs_cls[cdit],0),
+                                CHF_CONST_FRA1(m_cls_freq[cdit],0),
+                                CHF_CONST_FRA1(this_Upar,0),
+                                CHF_CONST_FRA1(this_Temp,0),
+                                CHF_CONST_FRA(this_Jpsi) );
+  }
+
+  // add (or overwrite) collision RHS to Vlasov RHS
+  for (cdit.begin(); cdit.ok(); ++cdit)
+  {
+    if(m_cls_only){
+      rhs_dfn[cdit].copy(m_rhs_cls[cdit]);}
+    else{
+      rhs_dfn[cdit].plus(m_rhs_cls[cdit]);}
+  }
+
+  // print parameters (e.g., stable dt) at the first time step
+  if ((m_verbosity) && (m_first_call)) {printParameters(a_soln, a_species);}
+
+  // check conservation properties
+  if (m_first_call && m_diagnostics) {
+    diagnostics(m_rhs_cls, rhs_species, a_time);
+    exit(1);
+  }
+  
+  m_first_call = false;
+}
+
+
+void ConsDragDiff::computeVelFluxesDiv(LevelData<FArrayBox>&        a_Jpsi,
+                                       const LevelData<FArrayBox>&  a_fBJ,
+                                       const PhaseGeom&             a_phase_geom,
+                                       const double                 a_mass)
+{
+  /*This computes Jpsi divergence quantities.
+   See Justin's thesis Chapter 4*/
+  
   // get injected magnetic field
-  const LevelData<FArrayBox>& inj_B = phase_geom.getBFieldMagnitude();
+  const LevelData<FArrayBox>& inj_B = a_phase_geom.getBFieldMagnitude();
   
   // get injected cell-centered velocity spatial normalization
-  const int use_spatial_vel_norm = phase_geom.spatialVelNorm();
-  const LevelData<FArrayBox>& inj_vel_norm = phase_geom.getVelNorm();
+  const int use_spatial_vel_norm = a_phase_geom.spatialVelNorm();
+  const LevelData<FArrayBox>& inj_vel_norm = a_phase_geom.getVelNorm();
       
   // get problem domain and number of vpar and mu cells
-  const ProblemDomain& phase_domain = phase_geom.domain();
+  const ProblemDomain& phase_domain = a_phase_geom.domain();
   const Box& domain_box = phase_domain.domainBox();
   int num_vp_cells = domain_box.size(VPARALLEL_DIR);
   int num_mu_cells = domain_box.size(MU_DIR);
 
   // create the temporary fluxes needed to compute the conservative
   // mean velocity and conservative temperature
-  LevelData<FluxBox> fluxes(dbl, 3, IntVect::Zero);
-  DataIterator dit = fluxes.dataIterator();
+  const DisjointBoxLayout& dbl = a_fBJ.getBoxes();
+  if (!m_fluxes.isDefined())  m_fluxes.define(dbl, 3, IntVect::Zero);
+  DataIterator dit = m_fluxes.dataIterator();
   for (dit.begin(); dit.ok(); ++dit)
   {
     // get phase space dx
-    const PhaseBlockCoordSys& block_coord_sys = phase_geom.getBlockCoordSys(dbl[dit]);
+    const PhaseBlockCoordSys& block_coord_sys = a_phase_geom.getBlockCoordSys(dbl[dit]);
     const RealVect& phase_dx =  block_coord_sys.dx();
     
-    const FArrayBox& fBJ_on_patch = m_fBJ_vel_ghost[dit];
+    const FArrayBox& fBJ_on_patch = a_fBJ[dit];
     const FArrayBox& B_on_patch   = inj_B[dit];
         
     const FArrayBox* this_velnormptr;
@@ -122,12 +197,12 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
         
     for (int dir=0; dir<SpaceDim; dir++)
     {
-      FORT_EVAL_CONSDRAGDIFF_FLUX(CHF_BOX(fluxes[dit][dir].box()),
-                                  CHF_FRA(fluxes[dit][dir]),
+      FORT_EVAL_CONSDRAGDIFF_FLUX(CHF_BOX(m_fluxes[dit][dir].box()),
+                                  CHF_FRA(m_fluxes[dit][dir]),
                                   CHF_CONST_FRA1(fBJ_on_patch,0),
                                   CHF_CONST_FRA1(B_on_patch,0),
                                   CHF_CONST_FRA((*this_velnormptr)),
-                                  CHF_CONST_REAL(mass),
+                                  CHF_CONST_REAL(a_mass),
                                   CHF_CONST_REALVECT(phase_dx),
                                   CHF_CONST_INT(dir),
                                   CHF_CONST_INT(num_vp_cells),
@@ -138,124 +213,88 @@ void ConsDragDiff::evalClsRHS( KineticSpeciesPtrVect&        a_rhs,
   }
 
   // compute the divergence of the velocity space fluxes
-  LevelData<FArrayBox> Jpsi(dbl, 3, IntVect::Zero);
-  phase_geom.mappedGridDivergenceFromFluxNormals(Jpsi, fluxes);
+  a_phase_geom.mappedGridDivergenceFromFluxNormals(a_Jpsi, m_fluxes);
+  
+}
 
-  // take momentum needed to compute conservative Upar and Temperature
+
+void ConsDragDiff::computeConsUparTemp(LevelData<FArrayBox>&  a_Jpsi,
+                                       const KineticSpecies&  a_soln_species,
+                                       const PhaseGeom&       a_phase_geom )
+{
+  
+  const CFG::MagGeom & mag_geom = a_phase_geom.magGeom();
+  
+  // evaluate moments needed to compute conservative Upar and Temperature
   CFG::LevelData<CFG::FArrayBox> vpar_moms(mag_geom.grids(), 3, CFG::IntVect::Zero);
   CFG::LevelData<CFG::FArrayBox> pres_moms(mag_geom.grids(), 3, CFG::IntVect::Zero);
 
   //need actual Upar for pressure moment
-  if (!m_dens.isDefined()) m_dens.define(mag_geom.grids(), 1, CFG::IntVect::Zero);
-  if (!m_ushift.isDefined()) m_ushift.define(mag_geom.grids(), 1, CFG::IntVect::Zero);
+  CFG::LevelData<CFG::FArrayBox> ushift(mag_geom.grids(), 1, CFG::IntVect::Zero);
+  a_soln_species.parallelVelocity(ushift);
 
-  // optimize performace by cashing m_ushift variable and only updating it
-  // every so often. In the results we degrade energy conservation a bit,
-  // becasue the mean velocity used in the calculation of the distribution temeprature
-  // will be slightly out of sink with the m_ushift variable that is used to evaluate
-  // the "conservative" value of the temeprature (see Justin's thesis for details).
-  // This should not affect momentum conservation.
-  if ((m_it_counter % m_update_freq == 0) || m_first_call) {
-     soln_species.numberDensity(m_dens);
-     soln_species.parallelParticleFlux(m_ushift);
-     CFG::DataIterator cfg_dit = m_ushift.dataIterator();
-     for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit)
-     {
-        m_ushift[cfg_dit].divide(m_dens[cfg_dit]);
-     }
-  }
-
-  moment_op.compute(vpar_moms, soln_species, Jpsi, ParallelVelKernel<FArrayBox>());
-  moment_op.compute(pres_moms, soln_species, Jpsi, PressureKernel<FArrayBox>(m_ushift));
-  LevelData<FArrayBox> inj_vpar_moms;
-  LevelData<FArrayBox> inj_pres_moms;
-  phase_geom.injectConfigurationToPhase(vpar_moms, inj_vpar_moms);
-  phase_geom.injectConfigurationToPhase(pres_moms, inj_pres_moms);
+  moment_op.compute(vpar_moms, a_soln_species, a_Jpsi, ParallelVelKernel<FArrayBox>());
+  moment_op.compute(pres_moms, a_soln_species, a_Jpsi, PressureKernel<FArrayBox>(ushift));
+  
+  // this will also define m_inj_vpar_moms and m_inj_pres_moms during the first call
+  a_phase_geom.injectConfigurationToPhase(vpar_moms, m_inj_vpar_moms);
+  a_phase_geom.injectConfigurationToPhase(pres_moms, m_inj_pres_moms);
 
   // create conservative mean parallel velocity and Temperature
-  LevelData<FArrayBox> Upar(inj_vpar_moms.getBoxes(), 1, IntVect::Zero);
-  LevelData<FArrayBox> Temp(inj_vpar_moms.getBoxes(), 1, IntVect::Zero);
-  DataIterator mdit = Upar.dataIterator();
+  if (!m_Upar.isDefined()) m_Upar.define(m_inj_vpar_moms.getBoxes(), 1, IntVect::Zero);
+  if (!m_Temp.isDefined()) m_Temp.define(m_inj_vpar_moms.getBoxes(), 1, IntVect::Zero);
+  DataIterator mdit = m_Upar.dataIterator();
   for (mdit.begin(); mdit.ok(); ++mdit)
   {
-    const FArrayBox& this_vpar_moms = inj_vpar_moms[mdit];
-    const FArrayBox& this_pres_moms = inj_pres_moms[mdit];
+    const FArrayBox& this_vpar_moms = m_inj_vpar_moms[mdit];
+    const FArrayBox& this_pres_moms = m_inj_pres_moms[mdit];
 
-    FORT_EVAL_CONS_UPAR_TEMP( CHF_BOX(Upar[mdit].box()),
-                              CHF_FRA1(Upar[mdit],0),
-                              CHF_FRA1(Temp[mdit],0),
+    FORT_EVAL_CONS_UPAR_TEMP( CHF_BOX(m_Upar[mdit].box()),
+                              CHF_FRA1(m_Upar[mdit],0),
+                              CHF_FRA1(m_Temp[mdit],0),
                               CHF_CONST_FRA(this_vpar_moms),
                               CHF_CONST_FRA(this_pres_moms) );
   }
+}
 
+
+void ConsDragDiff::computeClsFreq(const KineticSpecies&     a_soln_species,
+                                  const PhaseGeom&          a_phase_geom,
+                                  const DisjointBoxLayout&  a_grids,
+                                  const Real                a_time)
+{
   
-  // get collision frequency
-  if (m_first_call) m_cls_freq.define(dbl, 1, IntVect::Zero);
-    
+  // define collision frequency
+  if (!m_cls_freq.isDefined()) m_cls_freq.define(a_grids, 1, IntVect::Zero);
+  
+  const CFG::MagGeom & mag_geom = a_phase_geom.magGeom();
+  
+  // set prescribed collision frequency
   if (m_cls_freq_func != NULL && m_first_call) {
     CFG::LevelData<CFG::FArrayBox> cls_freq_cfg(mag_geom.grids(), 1, CFG::IntVect::Zero);
     m_cls_freq_func->assign( cls_freq_cfg, mag_geom, a_time);
-    phase_geom.injectAndExpandConfigurationToPhase(cls_freq_cfg, m_cls_freq);
+    a_phase_geom.injectAndExpandConfigurationToPhase(cls_freq_cfg, m_cls_freq);
   }
   
+  // compute self-consistent collision frequency
   if (m_cls_freq_func == NULL) {
-    if ((m_it_counter % m_update_freq == 0) || m_first_call) {
-      mag_geom.divideJonValid(m_dens);
-      LevelData<FArrayBox> dens_inj;
-      phase_geom.injectConfigurationToPhase(m_dens, dens_inj);
-
-      CFG::LevelData<CFG::FArrayBox> temperature(mag_geom.grids(), 1, CFG::IntVect::Zero);
-      soln_species.temperature(temperature);
-      mag_geom.divideJonValid(temperature);
-      
-      LevelData<FArrayBox> temp_inj;
-      phase_geom.injectConfigurationToPhase(temperature, temp_inj);
-      
-      double mass = soln_species.mass();
-      double charge = soln_species.charge();
-          
-      computeSelfConsistFreq(m_cls_freq, dens_inj, temp_inj, mass, charge);
-    }
-  }
     
-  // create conservative drag-diffusion collisional RHS
-  LevelData<FArrayBox> rhs_cls(dbl, 1, IntVect::Zero);
-  DataIterator cdit = rhs_cls.dataIterator();
-  for (cdit.begin(); cdit.ok(); ++cdit)
-  {
-    const FArrayBox& this_Upar = Upar[cdit];
-    const FArrayBox& this_Temp = Temp[cdit];
-    const FArrayBox& this_Jpsi = Jpsi[cdit];
+    CFG::LevelData<CFG::FArrayBox> density(mag_geom.grids(), 1, CFG::IntVect::Zero);
+    a_soln_species.numberDensity(density);
+    mag_geom.divideJonValid(density);
+    a_phase_geom.injectConfigurationToPhase(density, m_dens_inj);
 
-    FORT_EVAL_CONSDRAGDIFF_RHS( CHF_BOX(rhs_cls[cdit].box()),
-                                CHF_FRA1(rhs_cls[cdit],0),
-                                CHF_CONST_FRA1(m_cls_freq[cdit],0),
-                                CHF_CONST_FRA1(this_Upar,0),
-                                CHF_CONST_FRA1(this_Temp,0),
-                                CHF_CONST_FRA(this_Jpsi) );
-  }
-
-  // add (or overwrite) collision RHS to Vlasov RHS
-  for (cdit.begin(); cdit.ok(); ++cdit)
-  {
-    if(m_cls_only){
-      rhs_dfn[cdit].copy(rhs_cls[cdit]);}
-    else{
-      rhs_dfn[cdit].plus(rhs_cls[cdit]);}
-  }
-
-  // print parameters (e.g., stable dt) at the first time step
-  if ((m_verbosity) && (m_first_call)) {printParameters(a_soln);}
-
-   
-  if (m_first_call && m_diagnostics) {
-    diagnostics(rhs_cls, rhs_species, a_time);
-    exit(1);
+    CFG::LevelData<CFG::FArrayBox> temperature(mag_geom.grids(), 1, CFG::IntVect::Zero);
+    a_soln_species.temperature(temperature);
+    a_phase_geom.injectConfigurationToPhase(temperature, m_temp_inj);
+          
+    double mass = a_soln_species.mass();
+    double charge = a_soln_species.charge();
+    
+    computeSelfConsistFreq(m_cls_freq, m_dens_inj, m_temp_inj, mass, charge);
   }
   
-  m_first_call = false;
 }
-
 
 void ConsDragDiff::computeSelfConsistFreq(LevelData<FArrayBox>&       a_cls_freq,
                                           const LevelData<FArrayBox>& a_density,
@@ -300,6 +339,292 @@ void ConsDragDiff::computeSelfConsistFreq(LevelData<FArrayBox>&       a_cls_freq
     }
 }
 
+
+void ConsDragDiff::defineBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&  a_pc,
+                                  std::vector<DOFList>&                             a_dof_list,
+                                  const ODEVector&                                  a_X,
+                                  void*                                             a_ops,
+                                  const std::string&                                a_out_string,
+                                  const std::string&                                a_opt_string,
+                                  bool                                              a_im,
+                                  const KineticSpecies&                             a_species,
+                                  const GlobalDOFKineticSpecies&                    a_global_dofs,
+                                  const int                                         a_species_index,
+                                  const int                                         a_id )
+{
+  if (a_im && m_time_implicit) {
+ 
+    CH_assert(a_pc.size() == a_dof_list.size());
+
+    if (!procID()) {
+      std::cout << "  Kinetic Species " << a_species_index
+                << " - ConsDragDiff collision term: "
+                << " creating " << _BASIC_GK_PC_ << " preconditioner "
+                << " (index = " << a_pc.size() << ").\n";
+    }
+
+    Preconditioner<ODEVector,AppCtxt> *pc;
+    pc = new BasicGKPreconditioner<ODEVector,AppCtxt>;
+    pc->setSysID(a_id);
+    DOFList dof_list(0);
+
+    const LevelData<FArrayBox>& soln_dfn    (a_species.distributionFunction());
+    const DisjointBoxLayout&    grids       (soln_dfn.disjointBoxLayout());
+    const int                   n_comp      (soln_dfn.nComp());
+    const LevelData<FArrayBox>& pMapping    (a_global_dofs.data());
+  
+    for (DataIterator dit(grids.dataIterator()); dit.ok(); ++dit) {
+      const Box& grid = grids[dit];
+      const FArrayBox& pMap = pMapping[dit];
+      for (BoxIterator bit(grid); bit.ok(); ++bit) {
+        IntVect ic = bit();
+        for (int n(0); n < n_comp; n++) {
+          dof_list.push_back((int) pMap.get(ic ,n) - a_global_dofs.mpiOffset());
+        }
+      }
+    }
+
+    m_my_pc_idx = a_pc.size();
+
+    {
+      BasicGKPreconditioner<ODEVector,AppCtxt>* this_pc
+        = dynamic_cast< BasicGKPreconditioner<ODEVector,AppCtxt>* > (pc);
+      this_pc->define(a_X, a_ops, m_opt_string, m_opt_string, a_im, dof_list);
+      
+      const GlobalDOF* global_dof = a_X.getGlobalDOF();
+      int n_local = a_X.getVectorSize();
+      int n_total = n_local;
+#ifdef CH_MPI
+      MPI_Allreduce(  &n_local,
+                      &n_total,
+                      1,
+                      MPI_INT,
+                      MPI_SUM,
+                      MPI_COMM_WORLD );
+#endif
+      if (!procID()) {
+        std::cout << "    Setting up banded matrix with " << n_total << " rows ";
+        std::cout << "and " << m_nbands << " bands for the preconditioner.\n";
+      }
+      BandedMatrix& pc_mat(this_pc->getBandedMatrix());
+      pc_mat.define(n_local, m_nbands, global_dof->mpiOffset());
+    }
+
+    a_pc.push_back(pc);
+    a_dof_list.push_back(dof_list);
+
+  }
+
+  return;
+}
+
+void ConsDragDiff::updateBlockPC( std::vector<Preconditioner<ODEVector,AppCtxt>*>&  a_pc,
+                                  const KineticSpecies&                             a_species,
+                                  const GlobalDOFKineticSpecies&                    a_global_dofs,
+                                  const Real                                        a_time,
+                                  const int                                         a_step,
+                                  const int                                         a_stage,
+                                  const Real                                        a_shift,
+                                  const bool                                        a_im,
+                                  const int                                         a_species_index )
+{
+  if (a_im && m_time_implicit) {
+    CH_assert(m_my_pc_idx >= 0);
+    CH_assert(a_pc.size() > m_my_pc_idx);
+
+    if (!procID()) {
+      std::cout << "    ==> Updating " <<_BASIC_GK_PC_ << " preconditioner "
+                << " for FP collision term of kinetic species " << a_species_index << ".\n";
+    }
+
+    BasicGKPreconditioner<ODEVector,AppCtxt> *pc
+      = dynamic_cast<BasicGKPreconditioner<ODEVector,AppCtxt>*>
+        (a_pc[m_my_pc_idx]);
+    CH_assert(pc != NULL);
+
+    BandedMatrix& pc_mat(pc->getBandedMatrix());
+    pc_mat.setToIdentityMatrix();
+    assemblePrecondMatrix(  pc_mat,
+                            a_species,
+                            a_global_dofs,
+                            a_step,
+                            a_stage,
+                            a_shift);
+    pc_mat.finalAssembly();
+  }
+  return;
+}
+
+void ConsDragDiff::assemblePrecondMatrix( BandedMatrix&                   a_P,
+                                          const KineticSpecies&           a_species,
+                                          const GlobalDOFKineticSpecies&  a_global_dofs,
+                                          const int                       a_step,
+                                          const int                       a_stage,
+                                          const Real                      a_shift )
+{
+
+  if (m_time_implicit) {
+
+    const LevelData<FArrayBox>& soln_dfn    (a_species.distributionFunction());
+    const DisjointBoxLayout&    grids       (soln_dfn.disjointBoxLayout());
+    const PhaseGeom&            phase_geom  (a_species.phaseSpaceGeometry());
+    const int                   n_comp      (soln_dfn.nComp());
+    const VEL::VelCoordSys&     vel_coords  (phase_geom.velSpaceCoordSys());
+    const VEL::RealVect&        vel_dx      (vel_coords.dx());
+    const double                mass        (a_species.mass());
+    const LevelData<FArrayBox>& pMapping    (a_global_dofs.data());
+    
+    Real  dv = 1.0/vel_dx[0], dmu = 1.0/vel_dx[1], dv_sq = dv*dv, dmu_sq = dmu*dmu;
+
+    // get injected B-field
+    const LevelData<FArrayBox>& inj_B = phase_geom.getBFieldMagnitude();
+    
+    // get injected cell-centered velocity spatial normalization
+    const int use_spatial_vel_norm = phase_geom.spatialVelNorm();
+    //const LevelData<FArrayBox>& inj_vel_norm = phase_geom.getVelNorm();
+
+    // iterate over box to set PC matrix coefficients
+    DataIterator dit = grids.dataIterator();
+    for (dit.begin(); dit.ok(); ++dit) {
+      const Box& grid = grids[dit];
+      const FArrayBox& pMap = pMapping[dit];
+  
+      const Box& Bbox = inj_B[dit].box();
+      int vp_inj = Bbox.smallEnd(VPARALLEL_DIR);
+      int mu_inj = Bbox.smallEnd(MU_DIR);
+              
+      BoxIterator bit(grid);
+      for (bit.begin(); bit.ok(); ++bit) {
+        /* this point */
+        IntVect ic = bit();
+        /* neighboring points */
+        IntVect ie(ic);
+        IntVect iw(ic);
+        IntVect in(ic);
+        IntVect is(ic);
+        /* north-south is along mu; east-west is along v|| */
+        ie[VPARALLEL_DIR]++;                     /* east  */
+        iw[VPARALLEL_DIR]--;                     /* west  */
+        in[MU_DIR]++;                            /* north */
+        is[MU_DIR]--;                            /* south */
+  
+        /* iv index for injected quantities*/
+        IntVect iv_inj(ic);
+        iv_inj[VPARALLEL_DIR] = vp_inj;
+        iv_inj[MU_DIR] = mu_inj;
+        
+        /* collision frequency */
+        Real nu = m_cls_freq[dit](iv_inj);
+        //Real spatial_vel_norm = inj_vel_norm[dit](iv_inj);
+        
+        Real DvL, DvR, DmuL, DmuR, DvvL, DvvR, DmumuL, DmumuR;
+
+        /* Dv = nu * (vpar - m_Upar) */
+        Real u_par = m_Upar[dit](iv_inj);
+        Real vparL = ic[VPARALLEL_DIR]*vel_dx[0];
+        Real vparR = ie[VPARALLEL_DIR]*vel_dx[0];
+        DvL = nu * (vparL - u_par);
+        DvR = nu * (vparR - u_par);
+        
+        /* Dmu = 2.0 * nu * mu*/
+        Real muL = ic[MU_DIR]*vel_dx[1];
+        Real muR = in[MU_DIR]*vel_dx[1];
+        DmuL = 2.0 * nu * muL;
+        DmuR = 2.0 * nu * muR;
+
+        /* Dvv = nu * m_Temp/mass */
+        Real temperature = m_Temp[dit](iv_inj);
+        DvvL = nu * temperature/mass;
+        DvvR = nu * temperature/mass;
+        
+        /* Dmumu = 4 * nu * mu * m_Temp/Bmag */
+        Real Bmag = inj_B[dit](iv_inj);
+        DmumuL = 4.0 * nu * muL * temperature / Bmag;
+        DmumuR = 4.0 * nu * muR * temperature / Bmag;
+  
+        for (int n(0); n < n_comp; n++) {
+          /* global row/column numbers */
+          int pc, pe, pw, pn, ps, pne, pnw, pse, psw;//, pee, pww, pnn, pss;
+          pc  = (int) pMap.get(ic ,n);
+          pn  = (int) pMap.get(in ,n);
+          ps  = (int) pMap.get(is ,n);
+          pe  = (int) pMap.get(ie ,n);
+          pw  = (int) pMap.get(iw ,n);
+  
+          /* coefficients */
+          
+          Real ac = 0;
+          Real an = 0;
+          Real as = 0;
+          Real ae = 0;
+          Real aw = 0;
+
+          /* Advection terms along vpar */
+          ae += 0.5 * DvR * dv;
+          aw -= 0.5 * DvL * dv;
+          ac += 0.5 * (-DvL + DvR) * dv;
+          
+          /* Advection terms along mu */
+          an += 0.5 * DmuR * dmu;
+          as -= 0.5 * DmuL * dmu;
+          ac += 0.5 * (-DmuL + DmuR) * dmu;
+
+          /* Laplacian term along vpar */
+          ae += DvvR * dv_sq;
+          aw += DvvL * dv_sq;
+          ac -= (DvvR + DvvL) * dv_sq;
+
+          /* Laplacian term along mu */
+          an += DmumuR * dmu_sq;
+          as += DmumuL * dmu_sq;
+          ac -= (DmumuR + DmumuL) * dmu_sq;
+
+          int  ncols = m_nbands, ix = 0;
+          int  *icols = (int*)  calloc (ncols,sizeof(int));
+          Real *data  = (Real*) calloc (ncols,sizeof(Real));
+  
+          /* center element */
+          icols[ix] = pc;
+          data[ix] = a_shift - ac;
+          ix++;
+  
+          /* east element */
+          if (pe >= 0) {
+            icols[ix] = pe;
+            data[ix] = -ae;
+            ix++;
+          }
+          /* west element */
+          if (pw >= 0) {
+            icols[ix] = pw;
+            data[ix] = -aw;
+            ix++;
+          }
+          /* north element */
+          if (pn >= 0) {
+            icols[ix] = pn;
+            data[ix] = -an;
+            ix++;
+          }
+          /* south element */
+          if (ps >= 0) {
+            icols[ix] = ps;
+            data[ix] = -as;
+            ix++;
+          }
+  
+          CH_assert(ix <= m_nbands);
+          CH_assert(ix <= a_P.getNBands());
+          a_P.setRowValues(pc,ix,icols,data);
+          free(data);
+          free(icols);
+        }
+      }
+    }
+  }
+  return;
+}
+
 void ConsDragDiff::ParseParameters(const ParmParse& a_pp) {
 
   a_pp.query("cls_only",m_cls_only);
@@ -315,13 +640,17 @@ void ConsDragDiff::ParseParameters(const ParmParse& a_pp) {
     m_cls_freq_func = grid_library->find( grid_function_name );
   }
 
-  a_pp.query("update_cls_freq", m_update_freq );
+  a_pp.query("update_cls_freq", m_update_cls_freq );
+  a_pp.query("update_operator_coeff", m_update_operator_coeff );
+  a_pp.query("skip_stage_update", m_skip_stage_update );
+  
 }
 
-inline void ConsDragDiff::printParameters( const KineticSpeciesPtrVect&  soln )
+inline void ConsDragDiff::printParameters(const KineticSpeciesPtrVect&  a_soln_mapped,
+                                          const int                     a_species)
 {
    // get stuff to calculate stability parameters on time step
-   const KineticSpecies& soln_species( *(soln[0]) );
+   const KineticSpecies& soln_species( *(a_soln_mapped[a_species]) );
    const LevelData<FArrayBox>& soln_dfn = soln_species.distributionFunction();
    double mass = soln_species.mass();
    const DisjointBoxLayout& dbl = soln_dfn.getBoxes();
@@ -356,16 +685,6 @@ inline void ConsDragDiff::printParameters( const KineticSpeciesPtrVect&  soln )
    {
        temp_cfg[cfg_dit].divide(dens_cfg[cfg_dit]);
    }
-
-   //Introduce a zero-valued vpar-shift, to make Justin old calculations consistent with the 
-   //new pressure diagnostics, that now subtract v_par_shift from v_par --MD 02/28/14
-   //CFG::LevelData<CFG::FArrayBox> vpar_zero(mag_geom.grids(), 3, CFG::IntVect::Zero);
-   //CFG::DataIterator cfg_dit = vpar_zero.dataIterator();
-   //for (cfg_dit.begin(); cfg_dit.ok(); ++cfg_dit)
-   //{
-   //   vpar_zero[cfg_dit].setVal(0.0);
-   //}
-
 
    LevelData<FArrayBox> density;
    LevelData<FArrayBox> Temp;
@@ -450,7 +769,7 @@ inline void ConsDragDiff::printParameters( const KineticSpeciesPtrVect&  soln )
 
    // calculate min time step set by advective-diffusive
    // dt*sum_i( U_i^2/D_i ) << 2;
-   const Real beta_vp = max_Nu*(vp_max-min_Upar)*(vp_max-min_Upar)/min_Temp/mass;
+   const Real beta_vp = max_Nu*(vp_max-min_Upar)*(vp_max-min_Upar)/(min_Temp/mass);
    const Real beta_mu = 2.0*max_Nu*mu_max/min_TonB;
    const Real dt_stable_beta = 2.0/(beta_vp+beta_mu);
 
@@ -490,7 +809,77 @@ void ConsDragDiff::preTimeStep(const KineticSpeciesPtrVect& a_soln_mapped,
                                const Real a_time,
                                const KineticSpeciesPtrVect& a_soln_physical )
 {
-   m_it_counter+=1;
+  
+  m_it_counter+=1;
+  
+  /*
+   The collision operator is nonlinear: both {Upar, T} coefficients and
+   the self-consisten collision frequency depends of dfn. The skip_stage_update
+   option pre-computes Upar, T, and cls_freq in preTimeStep() and freezes them
+   during a time step, thereby making the operator "linear" for implicit
+   solve puropses. This, however, may degrade conservative and time integration
+   properties.
+   
+   If skip_stage_update is not used that may cause issues during the implicit solve.
+   Indeed, at some iterations we can have a largely negative dfn, which can result in negative
+   values of the temeprature. In this case the evaluation of a self_consistent frequency
+   that involves T^(3/2) will cause the code to crash. N.B. we can think of introducing
+   abs(T^(3/2)) in the self-consisistent frequency evaluation to possibly mitigate this issue.
+   */
+  
+  if (m_skip_stage_update) {
+  
+    // get solution distribution function (f*J*Bstarpar) for the current species
+    const KineticSpecies& soln_species( *(a_soln_mapped[a_species]) );
+    const LevelData<FArrayBox>& soln_fBJ = soln_species.distributionFunction();
+    double mass = soln_species.mass();
+
+    // get coordinate system parameters
+    const PhaseGeom& phase_geom = soln_species.phaseSpaceGeometry();
+    const DisjointBoxLayout& dbl = soln_fBJ.getBoxes();
+    
+    // copy soln_fBJ so can perform exchange to ghost cells
+    // we need to do so because we pass here a computational dfn
+    // that does not have ghost cells filled
+    if (!m_fBJ_vel_ghost.isDefined()) {
+      IntVect velGhost = 2*IntVect::Unit;
+      for (int dir=0; dir<CFG_DIM; dir++) {
+        velGhost[dir] = 0;
+      }
+      m_fBJ_vel_ghost.define(dbl, 1, velGhost);
+    }
+
+    for (DataIterator dit(soln_fBJ.dataIterator()); dit.ok(); ++dit) {
+      m_fBJ_vel_ghost[dit].copy(soln_fBJ[dit], dbl[dit]);
+    }
+    //since we only need ghost information in velocity space only
+    // use simple exchange, instead of fillInternalGhosts
+    m_fBJ_vel_ghost.exchange();
+    
+    // compute the divergence of individual velocity space fluxes
+    // i.e., Psi quantities from Justin's thesis Chapter 4 (multiplied by J)
+    // these terms are then combined with self-consistenly computed
+    // Upar and Temp that provide discrete conservation of momentum and energy
+    if (!m_Jpsi.isDefined()) m_Jpsi.define(dbl, 3, IntVect::Zero);
+    computeVelFluxesDiv(m_Jpsi, m_fBJ_vel_ghost, phase_geom, mass);
+    
+    // compute conservative values of Upar and Temp
+    if ((m_it_counter % m_update_operator_coeff == 0) || m_first_call) {
+      computeConsUparTemp(m_Jpsi, soln_species, phase_geom);
+    }
+
+    // compute conservative values of Upar and Temp
+    if ((m_it_counter % m_update_cls_freq == 0) || m_first_call) {
+      computeClsFreq(soln_species, phase_geom, dbl, a_time);
+    }
+
+    
+    // print parameters (e.g., stable dt) at the first time step
+    if ((m_verbosity) && (m_first_call)) {printParameters(a_soln_mapped, a_species);}
+    
+    m_first_call = false;
+  }
+  
 }
 
 Real ConsDragDiff::computeTimeScale( const KineticSpeciesPtrVect&  soln, const int a_idx )

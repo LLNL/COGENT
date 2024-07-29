@@ -37,6 +37,27 @@ RosenbluthPotentials::RosenbluthPotentials( LevelData<FArrayBox>&            a_p
      m_pcg_maxiter(a_pcg_maxiter),
      m_mult_num(a_mult_num)
 {
+   
+   /*
+    This class solves two equations (in COGENT-normalized variables):
+    
+    d^2(phi_1/dv^2) + (m/B) d/dmu (4 mu dphi_1/dmu) = a_rho
+    d^2(phi_2/dv^2) + (m/B) d/dmu (4 mu dphi_2/dmu) = phi_1
+    
+    These equations are supposed to be solved on an anbounded velocity domain.
+    Here, we use the multipole expansion to set Dirichlet boundary conditions at
+    the computatational domain boundaries. (N.B. we actually, we set BCs at
+    a half-cell outside the domain boundary. By doing so we don't have to
+    modify the operator matrix entries at the last velid cells.)
+    
+    Derivation of the multipole-expansion BCs is given in
+    Dorf et al, Contribution to Plasma Physics 54, 517 (2014).
+    */
+   
+   if ( procID() == 0 && a_mult_num > 8 ) {
+     MayDay::Error( "RosenbluthPotentials: reduce the multipole_number parameter to 8" );
+   }
+   
    const DisjointBoxLayout& grids( a_rho.getBoxes() );
    const int n_comp( a_rho.nComp() );
    LevelData<FArrayBox> rhs_withBC( grids, n_comp, IntVect::Zero );
@@ -522,6 +543,10 @@ void RosenbluthPotentials::constructMatrix( const VEL::ProblemDomain&  a_domain,
          values[i+4] = -mu_coeff_HiFace * dx_inv2[1];
 
          // Homogeneous Dirichlet boundary condition modifications
+         // N.B. because we actually impose multiple dirichlet BC
+         // (computed with the multiple approximation) at the
+         // half-cell outside the domain, we don't need to modify the
+         // matrix entries at the last valid cells
          if (iv[0] == domain_lo[0]) {
              values[i+1] = 0.;         
          }

@@ -1,4 +1,18 @@
 ------------------------------------------------------------------------
+r1952 | mdorr | 2024-07-29 13:40:04 -0700 (Mon, 29 Jul 2024) | 3 lines
+
+Adding a LICENSE file
+
+
+------------------------------------------------------------------------
+r1951 | mdorf | 2024-07-11 17:25:50 -0700 (Thu, 11 Jul 2024) | 1 line
+
+1. Added a PC (basicGKPreconditioner) for ConsDragDiffusion collision model. 2. Fixed parameters parsing for the BasicGKPrecondtioner model. 3. Added clarifying comments to RosenbluthPotentials calculations.
+------------------------------------------------------------------------
+r1950 | mdorf | 2024-06-30 15:04:36 -0700 (Sun, 30 Jun 2024) | 1 line
+
+1. Fixed two bugs in the ConsDragDiff model (stable dt calculation and self-consistent frequency calculation), also miscellaneous performance improvements. 2. Added a new model for a prescribed source. 3. Added the physical coordinate option for arbitrary kinetic function
+------------------------------------------------------------------------
 r1949 | debo | 2024-06-17 12:56:56 -0700 (Mon, 17 Jun 2024) | 1 line
 
 Updated PETSc initial setup to fix seg faults caused by changes in PETSc defaults

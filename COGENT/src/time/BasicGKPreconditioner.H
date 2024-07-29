@@ -144,6 +144,10 @@ void BasicGKPreconditioner<T,Ops>::define(const T&            a_x,
 
   /* read inputs */
   m_pc_type = "gauss_seidel";
+  
+  m_opt_string = a_opt_string + "_basicGKPC";
+  m_out_string = a_out_string + ".basicGKPC";
+  
   ParmParse pp_pc(m_opt_string.c_str());
   pp_pc.query("solver_type", m_pc_type);
 
