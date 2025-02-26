@@ -21,9 +21,8 @@ if [[ $HOSTNAME == "quartz"* ]]; then
   export MPIF90=$(which mpif90)
   export MACHINE="quartz"
 else
-  if [[ $HOSTNAME == "cori"* || $HOSTNAME == "edison"* ]]; then
-    echo "Loading GNU compilers for Cori/Edison (NERSC)"
-    module swap PrgEnv-intel PrgEnv-gnu
+  if [[ $HOSTNAME == "perlmutter"* ]]; then
+    echo "Loading GNU compilers for Perlmutter (NERSC)"
     export CC=$(which cc)
     export CXX=$(which CC)
     export CPP=$(which cpp)
@@ -64,9 +63,9 @@ if [[ $HOSTNAME == "quartz"* ]]; then
   export HDF5_DIR_PARALLEL="${HDF5_DIR}"
   echo "Parallel HDF5: $HDF5_DIR_PARALLEL"
 else
-  if [[ $HOSTNAME == "cori"* || $HOSTNAME == "edison"* ]]; then
+  if [[ $HOSTNAME == "perlmutter"* ]]; then
     echo "Loading HDF5 for Cori/Edison (NERSC)"
-    export HDF5_DIR="/opt/cray/pe/hdf5-parallel/1.10.0.3/GNU/5.1"
+    export HDF5_DIR="/opt/cray/pe/hdf5-parallel/1.12.2.9/gnu/12.3"
     echo "HDF5: $HDF5_DIR"
   fi
 fi
