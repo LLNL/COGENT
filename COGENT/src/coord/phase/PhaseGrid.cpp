@@ -47,12 +47,6 @@ PhaseGrid::PhaseGrid(const Vector<ProblemDomain>&      a_domains,
 
          IntVect box_size(n_loc);
 
-         for (int dir=0; dir<PDIM; ++dir) {
-            if (box_size[dir] < 4) {
-               MayDay::Error( "Phase space box is less than 4 cells wide" );
-            }
-         }
-
          Box patch(domain_box.smallEnd(), domain_box.smallEnd() + box_size - IntVect::Unit);
 
          IntVect lo = IntVect::Zero;

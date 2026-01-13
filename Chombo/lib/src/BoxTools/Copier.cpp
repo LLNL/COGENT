@@ -967,7 +967,7 @@ void Copier::define(const BoxLayout& a_level,
               // first, check to see if ghost cells require multiple wraps
               if (a_ghost[dir] > domainBox.size(dir))
                 {
-                  MayDay::Warning("nGhost > domainBox size in periodic direction - requires multiple wraps");
+                  //MayDay::Warning("nGhost > domainBox size in periodic direction - requires multiple wraps");
                   multipleWraps = true;
                 }
               // then, check to see if valid regions require multiple shifts
@@ -987,7 +987,7 @@ void Copier::define(const BoxLayout& a_level,
                       if ((destBox.bigEnd(dir) > singleWrapHi) ||
                           (destBox.smallEnd(dir) < singleWrapLo))
                         {
-                          MayDay::Warning("Copier::define -- multiple wraps required for valid-region copying");
+                          //MayDay::Warning("Copier::define -- multiple wraps required for valid-region copying");
                           multipleWraps = true;
                         } // end if box doesn't fit in single-wrapped domain
                     } // end loop over dest boxes
